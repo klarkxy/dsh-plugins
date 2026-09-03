@@ -27,15 +27,19 @@ dsh plugin --profile web add "github:klarkxy/dsh-plugins#path:/plugins/dsh-curre
 Git 安装获取的是源码，随后通过本包的 `prepare` 脚本构建 `lib/`。pnpm 10 默认禁止依赖包执行构建脚本；如果首次安装被拒绝，请在目标 profile 的 `$DSH_HOME/profiles/web/pnpm-workspace.yaml` 中加入授权，然后重新执行安装命令：
 
 ```yaml
-allowBuilds:
-  dsh-current-title: true
+onlyBuiltDependencies:
+  - dsh-current-title
 ```
 
-这个授权允许插件构建代码在本机执行。请先审查源码；需要可复现安装时，应锁定可信提交：
+请以当前 pnpm 错误信息打印的字段名和包名为准。这个授权允许插件构建代码在本机执行。
+
+在 macOS 和 Linux 上，可以把可信提交与子目录选择器组合使用：
 
 ```sh
 dsh plugin --profile web add "github:klarkxy/dsh-plugins#<commit>&path:/plugins/dsh-current-title"
 ```
+
+DSH `0.1.2-rc.1` 在 Windows 上通过 `cmd.exe` 转发插件参数，组合选择器会在 `&` 处被截断。在上游修复前，Windows 请使用前面的默认分支 `#path:` 命令；如需不可变安装，则应改用预构建的 release 压缩包。
 
 ## 从当前仓库安装
 

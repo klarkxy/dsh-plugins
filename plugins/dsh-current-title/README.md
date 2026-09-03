@@ -27,15 +27,19 @@ dsh plugin --profile web add "github:klarkxy/dsh-plugins#path:/plugins/dsh-curre
 A Git install fetches source code and runs this package's `prepare` script to build `lib/`. pnpm 10 blocks dependency build scripts until the user explicitly allows them. If the first installation is rejected, add the package to the target profile's `$DSH_HOME/profiles/web/pnpm-workspace.yaml` and run the command again:
 
 ```yaml
-allowBuilds:
-  dsh-current-title: true
+onlyBuiltDependencies:
+  - dsh-current-title
 ```
 
-This permission executes the package build on the local machine. Review the source and pin a trusted commit when reproducibility matters:
+Use the exact field and package key printed by the installed pnpm version. This permission executes the package build on the local machine.
+
+On macOS and Linux, a trusted commit can be combined with the subdirectory selector:
 
 ```sh
 dsh plugin --profile web add "github:klarkxy/dsh-plugins#<commit>&path:/plugins/dsh-current-title"
 ```
+
+DSH `0.1.2-rc.1` forwards plugin arguments through `cmd.exe` on Windows, which truncates a combined selector at `&`. On Windows, use the default-branch `#path:` command above until that launcher bug is fixed, or install a prebuilt release archive when an immutable install is required.
 
 ## Install from this checkout
 

@@ -16,6 +16,8 @@
 dsh plugin --profile web add "github:klarkxy/dsh-plugins#path:/plugins/dsh-current-title"
 ```
 
+Git 源码安装需要一次性加入 pnpm 构建白名单；具体 profile 配置和平台说明请查看插件文档。
+
 ## 开发
 
 需要 Node.js 22+ 与 pnpm 10。

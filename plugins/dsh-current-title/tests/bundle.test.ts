@@ -6,6 +6,8 @@ const packageJson = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 ) as Record<string, unknown>;
 const patch = readFileSync(new URL("../cordis.patch.yml", import.meta.url), "utf8");
+const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+const readmeZh = readFileSync(new URL("../README.zh-CN.md", import.meta.url), "utf8");
 
 describe("bundle contract", () => {
   it("declares the DSH bundle patch", () => {
@@ -32,6 +34,14 @@ describe("bundle contract", () => {
       "timeoutMs: 60000",
     ]) {
       expect(patch).toContain(entry);
+    }
+  });
+
+  it("documents the pnpm 10 git-build allowlist used by the tested install", () => {
+    for (const document of [readme, readmeZh]) {
+      expect(document).toContain("onlyBuiltDependencies:");
+      expect(document).toContain("- dsh-current-title");
+      expect(document).not.toContain("allowBuilds:");
     }
   });
 });

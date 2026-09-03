@@ -16,6 +16,8 @@ Install one plugin directly from its GitHub subdirectory:
 dsh plugin --profile web add "github:klarkxy/dsh-plugins#path:/plugins/dsh-current-title"
 ```
 
+Git source installs require a one-time pnpm build allowlist. See the plugin documentation for the exact profile setting and platform notes.
+
 ## Development
 
 Requires Node.js 22 or newer and pnpm 10.
