@@ -19,10 +19,6 @@ importers:
         version: 3.2.7(@types/node@24.13.3)
 
   plugins/dsh-current-title:
-    dependencies:
-      '@deepseek-ai/schemastery':
-        specifier: ^3.18.2
-        version: 3.18.2
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: 4.0.2
@@ -48,6 +44,9 @@ importers:
       '@deepseek-ai/dsh-timeout':
         specifier: 0.1.2-rc.1
         version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/schemastery':
+        specifier: 3.18.2
+        version: 3.18.2
 
 packages:
 

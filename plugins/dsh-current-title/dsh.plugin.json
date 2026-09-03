@@ -1,0 +1,13 @@
+{
+  "id": "dsh-current-title",
+  "version": "0.1.0",
+  "main": "lib/index.js",
+  "description": "Keep DeepSeek Harness session titles aligned with the current task.",
+  "engines": {
+    "dsh": ">=0.1.2-rc.1"
+  },
+  "contributes": {
+    "tools": [],
+    "skills": []
+  }
+}

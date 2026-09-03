@@ -2,6 +2,26 @@
   "name": "dsh-current-title",
   "version": "0.1.0",
   "description": "Keep DeepSeek Harness session titles aligned with the current task.",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh-plugins",
+    "session-title",
+    "session-management"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klarkxy/dsh-plugins.git",
+    "directory": "plugins/dsh-current-title"
+  },
+  "homepage": "https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title#readme",
+  "bugs": {
+    "url": "https://github.com/klarkxy/dsh-plugins/issues"
+  },
+  "author": {
+    "name": "klarkxy",
+    "url": "https://github.com/klarkxy"
+  },
   "type": "module",
   "packageManager": "pnpm@10.29.2",
   "main": "lib/index.js",
@@ -17,6 +37,7 @@
     "lib/**/*.js",
     "lib/**/*.d.ts",
     "cordis.patch.yml",
+    "dsh.plugin.json",
     "README*.md",
     "LICENSE"
   ],
@@ -28,7 +49,8 @@
     "test": "vitest run"
   },
   "engines": {
-    "node": ">=22"
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.1.2-rc.1"
   },
   "license": "SEE LICENSE IN LICENSE",
   "dsh": {
@@ -36,16 +58,14 @@
       "patch": "./cordis.patch.yml"
     }
   },
-  "dependencies": {
-    "@deepseek-ai/schemastery": "^3.18.2"
-  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
     "@deepseek-ai/dsh-llm": ">=0.1.2-rc.1 <0.2.0",
     "@deepseek-ai/dsh-session": ">=0.1.2-rc.1 <0.2.0",
     "@deepseek-ai/dsh-session-title": ">=0.1.2-rc.1 <0.2.0",
     "@deepseek-ai/dsh-session-title-llm": ">=0.1.2-rc.1 <0.2.0",
-    "@deepseek-ai/dsh-timeout": ">=0.1.2-rc.1 <0.2.0"
+    "@deepseek-ai/dsh-timeout": ">=0.1.2-rc.1 <0.2.0",
+    "@deepseek-ai/schemastery": "^3.18.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.2",
@@ -55,6 +75,7 @@
     "@deepseek-ai/dsh-session-projection": "0.1.2-rc.1",
     "@deepseek-ai/dsh-session-title": "0.1.2-rc.1",
     "@deepseek-ai/dsh-session-title-llm": "0.1.2-rc.1",
-    "@deepseek-ai/dsh-timeout": "0.1.2-rc.1"
+    "@deepseek-ai/dsh-timeout": "0.1.2-rc.1",
+    "@deepseek-ai/schemastery": "3.18.2"
   }
 }
