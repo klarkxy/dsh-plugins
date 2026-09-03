@@ -16,6 +16,27 @@ The provider runs asynchronously after every eligible human prompt, selects the 
 
 Built and tested against the DSH `0.1.2-rc.1` provider and patch contracts. It disables the profile's built-in `session-title-llm` row and inserts `current-session-title-llm`, so do not install another bundle that owns the automatic title-provider slot.
 
+## Install from GitHub
+
+Install only this package from the monorepo:
+
+```sh
+dsh plugin --profile web add "github:klarkxy/dsh-plugins#path:/plugins/dsh-current-title"
+```
+
+A Git install fetches source code and runs this package's `prepare` script to build `lib/`. pnpm 10 blocks dependency build scripts until the user explicitly allows them. If the first installation is rejected, add the package to the target profile's `$DSH_HOME/profiles/web/pnpm-workspace.yaml` and run the command again:
+
+```yaml
+allowBuilds:
+  dsh-current-title: true
+```
+
+This permission executes the package build on the local machine. Review the source and pin a trusted commit when reproducibility matters:
+
+```sh
+dsh plugin --profile web add "github:klarkxy/dsh-plugins#<commit>&path:/plugins/dsh-current-title"
+```
+
 ## Install from this checkout
 
 Build first, then add the package to the chosen profile:

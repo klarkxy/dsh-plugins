@@ -10,6 +10,12 @@ A small pnpm monorepo for focused DeepSeek Harness plugins that do not need a re
 | --- | --- |
 | [`dsh-current-title`](plugins/dsh-current-title/README.md) | Keeps a session title aligned with the current task using `MMDD | localized type | summary`. |
 
+Install one plugin directly from its GitHub subdirectory:
+
+```sh
+dsh plugin --profile web add "github:klarkxy/dsh-plugins#path:/plugins/dsh-current-title"
+```
+
 ## Development
 
 Requires Node.js 22 or newer and pnpm 10.

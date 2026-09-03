@@ -16,6 +16,27 @@
 
 基于 DSH `0.1.2-rc.1` 的提供器与 patch 协议开发和测试。插件会禁用内置的 `session-title-llm` 行并插入 `current-session-title-llm`，因此不要同时安装其他占用自动标题提供器位置的 bundle。
 
+## 从 GitHub 安装
+
+只安装 monorepo 中的这个子包：
+
+```sh
+dsh plugin --profile web add "github:klarkxy/dsh-plugins#path:/plugins/dsh-current-title"
+```
+
+Git 安装获取的是源码，随后通过本包的 `prepare` 脚本构建 `lib/`。pnpm 10 默认禁止依赖包执行构建脚本；如果首次安装被拒绝，请在目标 profile 的 `$DSH_HOME/profiles/web/pnpm-workspace.yaml` 中加入授权，然后重新执行安装命令：
+
+```yaml
+allowBuilds:
+  dsh-current-title: true
+```
+
+这个授权允许插件构建代码在本机执行。请先审查源码；需要可复现安装时，应锁定可信提交：
+
+```sh
+dsh plugin --profile web add "github:klarkxy/dsh-plugins#<commit>&path:/plugins/dsh-current-title"
+```
+
 ## 从当前仓库安装
 
 先构建，再把插件加入目标 profile：

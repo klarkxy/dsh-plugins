@@ -10,6 +10,8 @@ const patch = readFileSync(new URL("../cordis.patch.yml", import.meta.url), "utf
 describe("bundle contract", () => {
   it("declares the DSH bundle patch", () => {
     expect(packageJson.name).toBe("dsh-current-title");
+    expect(packageJson.packageManager).toBe("pnpm@10.29.2");
+    expect(packageJson.scripts).toMatchObject({ prepare: "pnpm build" });
     expect(packageJson.dsh).toEqual({ bundle: { patch: "./cordis.patch.yml" } });
   });
 

@@ -10,6 +10,12 @@
 | --- | --- |
 | [`dsh-current-title`](plugins/dsh-current-title/README.zh-CN.md) | 用 `MMDD | 本地化类型 | 摘要` 让会话标题持续反映当前任务。 |
 
+可以直接从 GitHub 仓库的指定子目录安装单个插件：
+
+```sh
+dsh plugin --profile web add "github:klarkxy/dsh-plugins#path:/plugins/dsh-current-title"
+```
+
 ## 开发
 
 需要 Node.js 22+ 与 pnpm 10。
