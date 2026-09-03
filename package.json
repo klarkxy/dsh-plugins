@@ -1,0 +1,23 @@
+{
+  "name": "dsh-plugins",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "packageManager": "pnpm@10.29.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm --filter \"{plugins/*}\" build",
+    "typecheck": "pnpm --filter \"{plugins/*}\" typecheck",
+    "test": "pnpm --filter \"{plugins/*}\" test",
+    "pack:check": "pnpm --filter dsh-current-title exec npm pack --dry-run --cache .npm-cache",
+    "check": "pnpm typecheck && pnpm test && pnpm build && pnpm pack:check"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

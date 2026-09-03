@@ -1,0 +1,8 @@
+node_modules/
+.pnpm-store/
+.npm-cache/
+lib/
+coverage/
+*.tgz
+.scratch/
+.artifacts/

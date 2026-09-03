@@ -1,0 +1,15 @@
+- id: session-title-llm
+  name: '@deepseek-ai/dsh-session-title-first-prompt-llm'
+  disabled: true
+
+- insert:
+    - id: current-session-title-llm
+      name: 'dsh-current-title'
+      config:
+        maxRecentMessages: 8
+        locale: auto
+        targetWords: 5
+        targetCjkCharacters: 10
+        maxInputBytes: 4096
+        maxOutputTokens: 64
+        timeoutMs: 60000
