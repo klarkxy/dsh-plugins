@@ -48,6 +48,8 @@ importers:
         specifier: 3.18.2
         version: 3.18.2
 
+  plugins/dsh-pruner: {}
+
 packages:
 
   '@deepseek-ai/cordis@4.0.2':

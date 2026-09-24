@@ -1,0 +1,17 @@
+{
+  "name": "dsh-pruner",
+  "version": "0.1.0",
+  "description": "Pruner: a subtractive engineering preset for DeepSeek Harness.",
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klarkxy/dsh-plugins.git",
+    "directory": "plugins/dsh-pruner"
+  },
+  "keywords": ["deepseek-harness", "dsh-preset", "simplification"],
+  "bin": { "dsh-pruner-install": "./install.mjs" },
+  "files": ["install.mjs", "presets", "README*.md", "ACCEPTANCE.md", "LICENSE"],
+  "engines": { "node": ">=22.19.0", "dsh": ">=0.1.5-rc.2 <0.2.0" },
+  "scripts": { "test": "vitest run" }
+}

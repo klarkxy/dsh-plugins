@@ -12,7 +12,7 @@
     "build": "pnpm --filter \"{plugins/*}\" build",
     "typecheck": "pnpm --filter \"{plugins/*}\" typecheck",
     "test": "pnpm --filter \"{plugins/*}\" test",
-    "pack:check": "pnpm --filter dsh-current-title exec npm pack --dry-run --cache .npm-cache",
+    "pack:check": "pnpm --filter \"{plugins/*}\" exec npm pack --dry-run --cache .npm-cache",
     "check": "pnpm typecheck && pnpm test && pnpm build && pnpm pack:check"
   },
   "devDependencies": {

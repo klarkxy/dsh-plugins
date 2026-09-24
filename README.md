@@ -2,15 +2,16 @@
 
 [Chinese documentation](README.zh-CN.md)
 
-A small pnpm monorepo for focused DeepSeek Harness plugins that do not need a repository of their own. Every directory under `plugins/` is an independently installable DSH bundle.
+A small pnpm monorepo for focused DeepSeek Harness plugins that do not need a repository of their own. Each package under `plugins/` is an independently installable DSH bundle or native preset; see its installation instructions.
 
-## Plugins
+## Plugins and presets
 
 | Package | Purpose |
 | --- | --- |
 | [`dsh-current-title`](plugins/dsh-current-title/README.md) | Keeps a session title aligned with the current task using `MMDD | localized type | summary`. |
+| [`dsh-pruner`](plugins/dsh-pruner/README.md) | Evidence-driven concept deletion and collapse through the native 删繁 / Pruner preset. |
 
-Install one plugin directly from its GitHub subdirectory:
+Install the current-title plugin directly from its GitHub subdirectory:
 
 ```sh
 dsh plugin --profile web add "github:klarkxy/dsh-plugins#path:/plugins/dsh-current-title"
@@ -27,7 +28,7 @@ pnpm install
 pnpm check
 ```
 
-Each package owns its bundle patch, runtime code, tests, and release version. The repository root is not itself a DSH bundle.
+Each package owns its assets, tests, and release version. Native presets need no runtime plugin or build. The repository root is not itself a DSH bundle.
 
 ## License
 
