@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plugin module</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="plugin-module.md">markdown</a></p>
+<article>
+<h1 id="plugin-module">Plugin module</h1>
+<p>中文：一个插件是导出 <code>apply</code> 的模块。需要的服务写在 <code>inject</code> 里；可调参数用同名的 Schemastery <code>Config</code> 声明。通过 <code>ctx</code> 注册的资源会在卸载时自动清理。</p>
+<p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
+<h2 id="what-it-is">What it is</h2>
+<p>A Harness plugin is a module the Cordis loader calls when its dependencies are ready. The usual form is a named function plugin:</p>
+<pre><code>import type { Context } from '@deepseek-ai/cordis'
+
+export const name = 'my-plugin'
+export const inject = ['tools']
+
+export function apply(ctx: Context) {
+  // ctx.tools is ready here.
+}</code></pre>
+<p><code>inject</code> lists required service keys. The framework waits for every one of them before <code>apply</code> runs. If a required service disappears, the plugin unloads and loads again when the service returns.</p>
+<p>Two other forms exist. An object plugin is <code>{ name, inject, apply }</code>. A class plugin is <code>export default class X extends Service</code> with <code>static inject</code> and <code>super(ctx, 'serviceKey')</code> in the constructor. Use the class form when other plugins must call your service. Function form is enough for most contributions.</p>
+<h2 id="where-it-lives">Where it lives</h2>
+<ul><li>First plugin, three forms, <code>ctx.effect</code>: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/index.md">docs/user/develop/basic/index.md</a></li><li><code>Config</code> schema: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/config.md">docs/user/develop/basic/config.md</a></li><li>Fiber states and cleanup: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/index.md">docs/user/develop/framework/index.md</a></li><li>Providing a service: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/service.md">docs/user/develop/framework/service.md</a></li><li>Events: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/events.md">docs/user/develop/framework/events.md</a></li><li>Loader <code>config</code> and <code>disabled</code> interpolation: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cordis-primer.md">docs/cordis-primer.md</a></li></ul>
+<h2 id="contract">Contract</h2>
+<p>Fiber states are <code>PENDING</code>, <code>LOADING</code>, <code>ACTIVE</code>, <code>FAILED</code>, <code>UNLOADING</code>, and <code>DISPOSED</code>.</p>
+<p>Registrations made through <code>ctx</code> are undone on unload, including <code>ctx.on</code>, <code>ctx.tools.register</code>, <code>ctx.llm.registerAdapter</code>, and <code>ctx.effect(() =&gt; cleanup)</code>. During unload, disposer invocation starts in reverse registration order, but multiple async disposers run concurrently. Put order-dependent cleanup in one disposer returned from a single <code>ctx.effect()</code>.</p>
+<p><code>ctx.plugin(child)</code> creates a child Fiber that unloads with its parent.</p>
+<p>Event dispatch methods are <code>ctx.emit</code>, <code>ctx.bail</code>, <code>ctx.serial</code>, and <code>ctx.waterfall</code>. A waterfall listener receives <code>next</code> and must call it unless it intentionally short-circuits.</p>
+<p>Configuration is a Schemastery schema exported as <code>Config</code>, paired with a TypeScript <code>Config</code> type of the same name. Put defaults on the schema fields (<code>Schema.string().default('Hello')</code>). Do not export a plain object as <code>Config</code>; Cordis requires the Standard Schema interface. Invalid configuration fails the load. A configuration edit hot-replaces the plugin: the old instance unloads and a new one loads.</p>
+<p>Anything two deployments may want to set differently must be a configuration field. The test is whether <code>cordis.yml</code> can change the value without a code edit.</p>
+<p>A service class augments Cordis context so callers see a typed key:</p>
+<pre><code>declare module '@deepseek-ai/cordis' {
+  interface Context {
+    metrics: MetricsService
+  }
+}</code></pre>
+<p>The constructor name passed to <code>super(ctx, 'metrics')</code> is that key.</p>
+<h2 id="how-a-plugin-author-uses-it">How a plugin author uses it</h2>
+<ul><li>Export <code>name</code> so logs and inventory can identify the plugin.</li><li>Declare <code>inject</code> for every <code>ctx.*</code> service <code>apply</code> uses. Do not reach for a service that is not injected.</li><li>Export <code>Config</code> when the patch row has a <code>config</code> object. Query <code>Config.listConfigs</code> on a running host before writing a row you have not already read.</li><li>Register tools, skills, listeners, and timers inside <code>apply</code> (or the service constructor) so unload removes them.</li><li>For a network socket or other external resource, return its closer from <code>ctx.effect</code>.</li></ul>
+<p>Display text for Plugin Manager cards is not part of <code>apply</code>. See <a href="bundle-profile-patch.html">Bundles, profiles, and patches</a> for <code>locale/en.json</code>.</p>
+<h2 id="sources">Sources</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/index.md">docs/user/develop/basic/index.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/config.md">docs/user/develop/basic/config.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/index.md">docs/user/develop/framework/index.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/service.md">docs/user/develop/framework/service.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/events.md">docs/user/develop/framework/events.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cordis-primer.md">docs/cordis-primer.md</a></li></ul>
+</article>
+</body>
+</html>

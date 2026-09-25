@@ -1,0 +1,29 @@
+# DSH development index
+
+> Feature and extension-point index for DeepSeek Harness dsh-v0.1.7-rc.2 (477b4f420553e8a52c2fbccc464d7561b239c443). For agents writing plugins, presets, patches, profiles, and providers. Do not invent APIs.
+
+Source: https://github.com/deepseek-ai/deepseek-harness
+Commit: 477b4f420553e8a52c2fbccc464d7561b239c443
+Tag: dsh-v0.1.7-rc.2
+
+## Docs
+
+- [Index JSON](https://klarkxy.github.io/dsh-plugins/index.json): Machine-readable catalog of every area, summary, and official source path.
+- [Index](https://klarkxy.github.io/dsh-plugins/index.html): Area list with stable anchors.
+- [Orientation](https://klarkxy.github.io/dsh-plugins/areas/orientation.md): What DeepSeek Harness is, where package groups live, and the rule that extensions depend on service definitions.
+- [Plugin module](https://klarkxy.github.io/dsh-plugins/areas/plugin-module.md): The apply/inject/Config plugin contract, Fiber lifecycle, services, and events.
+- [Bundles, profiles, and patches](https://klarkxy.github.io/dsh-plugins/areas/bundle-profile-patch.md): dsh.bundle versus dsh.profile, layer order, whole-config replacement, and display metadata.
+- [CLI](https://klarkxy.github.io/dsh-plugins/areas/cli.md): dsh profiles, dump-config, dsh plugin, version exemptions, and git install allowBuilds.
+- [Tools](https://klarkxy.github.io/dsh-plugins/areas/tools.md): defineTool, ctx.tools.register, the execution policy events, and PTC versus native mode.
+- [Skills](https://klarkxy.github.io/dsh-plugins/areas/skills.md): ctx.skills.register, SKILL.md frontmatter, discovery ranks, and the skill tool.
+- [Agent presets and persona](https://klarkxy.github.io/dsh-plugins/areas/presets-persona.md): Declarative agent presets, the unread legacy .agent-presets directory, and dsh-persona.
+- [System prompt and request context](https://klarkxy.github.io/dsh-plugins/areas/system-prompt.md): ctx.systemPrompt sections, variables, context, and tool schema order.
+- [Sessions and titles](https://klarkxy.github.io/dsh-plugins/areas/sessions-titles.md): The append-only session log and the single ctx.sessionTitle provider.
+- [LLM providers](https://klarkxy.github.io/dsh-plugins/areas/llm-providers.md): ctx.llm, LlmAdapter, and registerAdapter.
+- [Hook bridges](https://klarkxy.github.io/dsh-plugins/areas/hooks.md): Claude Code and Codex command-hook bridges and the events they actually run.
+- [MCP servers](https://klarkxy.github.io/dsh-plugins/areas/mcp.md): Configuration-only dsh-mcp-client bundles and mcp__server__tool names.
+- [UI slots](https://klarkxy.github.io/dsh-plugins/areas/ui-slots.md): ctx.slots.inject, slot cardinality, and the dsh.client bundle entry.
+- [Settings, approval, and permission presets](https://klarkxy.github.io/dsh-plugins/areas/settings-approval.md): Settings forms, ctx.approval outcomes, and /permission presets.
+- [Plugin manager and live inspection](https://klarkxy.github.io/dsh-plugins/areas/plugin-manager-inspect.md): plugin_manager actions and cordis_inspect_query.
+- [Compaction, subagents, jobs, and catalogs](https://klarkxy.github.io/dsh-plugins/areas/other-seams.md): Compaction backends, subagent providers, background jobs, and the generated config catalog.
+

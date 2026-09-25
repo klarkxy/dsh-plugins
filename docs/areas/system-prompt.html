@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System prompt and request context</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="system-prompt.md">markdown</a></p>
+<article>
+<h1 id="system-prompt-and-request-context">System prompt and request context</h1>
+<p>中文：模型看到的系统提示由 <code>ctx.systemPrompt</code> 按顺序拼装。插件用 <code>section</code>、<code>variable</code>、<code>context</code> 和 <code>tools</code> 贡献内容。同名注册在 agent scope 上会盖住全局项。</p>
+<p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
+<h2 id="what-it-is">What it is</h2>
+<p><code>@deepseek-ai/dsh-system-prompt</code> provides <code>ctx.systemPrompt</code>. It assembles one ordered system prompt and the visible tool schemas for each model step. Contributions registered through <code>agent.ctx</code> affect that agent alone and shadow a same-named global contribution.</p>
+<p><code>packages/context</code> is a different family: workspace instructions, <code>@file</code> references, session references, time, and tmux. Those plugins feed request context. They are not the assembler.</p>
+<h2 id="where-it-lives">Where it lives</h2>
+<ul><li>Assembler: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/system-prompt/README.md">packages/core/system-prompt/README.md</a></li><li>Types and Cordis surface: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md">docs/subsystems/system-prompt.md</a></li><li>Request-context plugins: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/context/README.md">packages/context/README.md</a></li></ul>
+<p>Persona sections are the usual way to set prefix and suffix for one preset. See <a href="presets-persona.html">Agent presets and persona</a>.</p>
+<h2 id="contract">Contract</h2>
+<p>Assembler config:</p>
+<table><thead><tr><th>Field</th><th>Default</th><th>Meaning</th></tr></thead><tbody><tr><td><code>includeHarnessIdentity</code></td><td><code>true</code></td><td>Fixed opener <code>You are an AI agent powered by DeepSeek Harness.</code> at order −1000.</td></tr><tr><td><code>includeRuntimeContext</code></td><td><code>true</code></td><td>Include ordered dynamic runtime context.</td></tr><tr><td><code>personaPrefix</code></td><td><code>''</code></td><td>Global persona prefix at order <code>0</code>.</td></tr><tr><td><code>personaSuffix</code></td><td><code>''</code></td><td>Global <code>deployment:persona-suffix</code> at order <code>10200</code>.</td></tr><tr><td><code>toolOrder</code></td><td>—</td><td>Explicit tool order containing exactly one <code>'&lt;unlisted-tools&gt;'</code> rest entry.</td></tr></tbody></table>
+<p>A <code>toolOrder</code> list without exactly one rest entry, or with duplicates, fails at load. A listed name with no registered tool rejects every <code>assemble()</code>.</p>
+<p>Contributions:</p>
+<pre><code>ctx.systemPrompt.section({
+  name: 'tool:bash',
+  order: 100,
+  text: 'Prefer bash for file and process operations.',
+})
+
+ctx.systemPrompt.variable('cwd', ({ agent }) =&gt; agent?.session.header.cwd)
+
+ctx.systemPrompt.context({ name: 'clock', order: 100, text: '...' })
+
+ctx.systemPrompt.tools(provider)</code></pre>
+<ul><li><code>section</code> text is static or <code>(context) =&gt; string</code>. Sections concatenate by ascending <code>order</code>, then by code-unit name. <code>interpolate: false</code> keeps <code>{{…}}</code> literal. Other sections interpolate variables. A <code>complete: true</code> section becomes the exact complete prompt. More than one effective complete section fails assembly.</li><li><code>variable</code> supplies <code>{{name}}</code>. The loop provides <code>model</code> and <code>cwd</code>. Unresolved variables fail assembly.</li><li><code>context</code> contributes dynamic facts that become durable user-role snapshots.</li><li><code>tools</code> contributes the model-visible <code>ToolSchema</code> set for one assembly. <code>ToolRuntime</code> registers itself, so most tools need no manual wiring.</li><li>Repository-owned placement uses <code>getSectionOrder(name)</code> and <code>getContextOrder(name)</code>. External contributions may use any finite order.</li></ul>
+<p>Persona section names documented with the types include <code>deployment:persona-prefix</code> and <code>deployment:persona-suffix</code>.</p>
+<h2 id="how-a-plugin-author-uses-it">How a plugin author uses it</h2>
+<ul><li>Add a short instruction with <code>section</code> on the host when every agent should see it, or on <code>agent.ctx</code> / inside a preset when only one agent should.</li><li>Do not set <code>complete: true</code> unless that plugin owns the entire prompt. It fails the step when another complete section is also effective.</li><li>Do not fork the assembler. Register a contribution.</li><li>Keep long procedures in a skill. A system-prompt section is on every step and is the wrong place for an index.</li></ul>
+<h2 id="sources">Sources</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/system-prompt/README.md">packages/core/system-prompt/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md">docs/subsystems/system-prompt.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/context/README.md">packages/context/README.md</a></li></ul>
+</article>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLI</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="cli.md">markdown</a></p>
+<article>
+<h1 id="cli">CLI</h1>
+<p>中文：<code>dsh</code> 是唯一支持的 Node 启动器。<code>dsh plugin --profile &lt;name&gt;</code> 把参数转给该 profile 目录里的 pnpm。<code>--dump-config</code> 只打印组合结果，不启动应用。</p>
+<p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
+<h2 id="what-it-is">What it is</h2>
+<p><code>@deepseek-ai/dsh</code> parses launcher flags, stacks profile bundle patches, then either boots that tree, dumps configuration, or forwards <code>dsh plugin</code> to pnpm. SDK and ACP are profiles, not separate public binaries. Unrecognized tokens become <code>ctx.cmdlineArgs</code> for the booted app.</p>
+<h2 id="where-it-lives">Where it lives</h2>
+<ul><li>Command table: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/apps/cli/README.md">apps/cli/README.md</a></li><li>Flags, layers, schema dump: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/apps/cli/reference/README.md">apps/cli/reference/README.md</a></li><li>Flag parser: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/apps/cli/src/args.ts">apps/cli/src/args.ts</a></li><li>Plugin subcommands: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/apps/cli/src/plugin.ts">apps/cli/src/plugin.ts</a></li><li>App-owned argv: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/boot/cmdline/README.md">packages/boot/cmdline/README.md</a></li></ul>
+<h2 id="contract">Contract</h2>
+<table><thead><tr><th>Command</th><th>Purpose</th></tr></thead><tbody><tr><td><code>dsh &lt;name&gt;</code> / <code>dsh --profile &lt;name&gt;</code></td><td>Boot <code>$DSH_HOME/profiles/&lt;name&gt;</code>.</td></tr><tr><td><code>dsh --profile &lt;name&gt; --from-default-profile &lt;template&gt;</code></td><td>Create a custom profile from a shipped template, then boot it.</td></tr><tr><td><code>dsh web</code></td><td>Boot the Web profile. Shorthand for <code>--profile web</code>.</td></tr><tr><td><code>dsh --profile headless "job"</code></td><td>One persisted session, print the final answer, exit.</td></tr><tr><td><code>dsh --profile sdk</code></td><td>SDK JSON-RPC stdio.</td></tr><tr><td><code>dsh --profile sdk-minimal</code></td><td>Minimal agent tree over the same protocol.</td></tr><tr><td><code>dsh --profile acp</code></td><td>ACP stdio until disconnect.</td></tr><tr><td><code>dsh plugin --profile &lt;name&gt; &lt;pnpm args&gt;</code></td><td>pnpm in the profile directory.</td></tr></tbody></table>
+<p>Profiles that auto-initialize on first use: <code>web</code>, <code>headless</code>, <code>sdk</code>, <code>sdk-minimal</code>, <code>acp</code>. Those names are also the valid <code>--from-default-profile</code> templates. The name <code>desktop</code> is reserved and rejected. <code>dsh plugin</code> is the package manager, not a profile boot. To boot a profile literally named <code>plugin</code>, use <code>dsh --profile plugin</code>.</p>
+<p>Launcher flags include <code>--profile</code>, <code>--from-default-profile</code>, repeatable <code>--patch</code>, <code>--dump-config</code>, <code>--dump-default-config</code>, <code>--dump-config-schema</code>, and <code>-V</code> / <code>--version</code>. Dump flags are mutually exclusive and reject app arguments.</p>
+<p>App arguments are not another patch layer. The Web profile accepts <code>--host</code>, <code>--port</code>, repeatable <code>--trusted-host</code>, and <code>--no-open</code>. Headless takes the task as a positional argument. A bundle that wants its own flags exports a plugin with <code>inject = ['cmdlineArgs']</code> and calls <code>parseCmdline</code> from <code>@deepseek-ai/dsh-cmdline</code>.</p>
+<p><code>dsh plugin</code> forwards ordinary pnpm verbs (<code>add</code>, <code>remove</code>, <code>update</code>, <code>why</code>, …) after reconciling <code>dsh.profile.bundles</code> with packages that declare <code>dsh.bundle</code>. It also owns:</p>
+<ul><li><code>dsh plugin --profile &lt;profile&gt; version-exemptions</code></li><li><code>dsh plugin --profile &lt;profile&gt; allow-version &lt;package@version&gt; --dsh-version &lt;runtime&gt; --accept-risk</code></li><li><code>dsh plugin --profile &lt;profile&gt; revoke-version &lt;package@version&gt; --dsh-version &lt;runtime&gt;</code></li></ul>
+<p>Before a profile imports a plugin, DSH checks <code>peerDependencies</code> on <code>@deepseek-ai/dsh</code> and <code>@deepseek-ai/dsh-*</code> against the single runtime version from <code>getDshRuntimeVersion()</code>. Every declared range must match. Prereleases participate. Missing DSH peers impose no constraint. An incompatible bundle without an exact exemption in the profile's <code>compatibility.json</code> is skipped and listed in <code>skippedBundles</code>. <code>--dump-config</code> still shows a denied plugin row when the row itself is configured, while a denied bundle contributes no rows.</p>
+<p>Git installs fetch sources. The publish tutorial requires a <code>prepare</code> script that builds entry points without assuming a monorepo. pnpm blocks that script until the user allowlists it. The CLI tells the user to add the exact key pnpm printed under <code>allowBuilds</code> in the profile's <code>pnpm-workspace.yaml</code>:</p>
+<pre><code>allowBuilds:
+  dsh-hello-plugin: true</code></pre>
+<p>That allowance executes package code on the machine at install time. Pin a commit (<code>github:you/plugin#&lt;sha&gt;</code>) when the source must not move. A subdirectory selector uses <code>#path:</code> as documented for git hosts; combine a commit and a path only on platforms whose shell does not swallow <code>&amp;</code>.</p>
+<p>From a source checkout, <code>pnpm run build</code> then <code>pnpm dsh &lt;args...&gt;</code> runs the TypeScript entry.</p>
+<h2 id="how-a-plugin-author-uses-it">How a plugin author uses it</h2>
+<pre><code>dsh plugin --profile web add ./your-bundle
+dsh --profile web --dump-config</code></pre>
+<p>Install from git with <code>dsh plugin --profile web add github:you/repo</code>. If pnpm refuses the build, copy the printed <code>allowBuilds</code> key and run the add again. Publish to npm or <code>pnpm pack</code> a tarball when you do not want users to allow a build script.</p>
+<p>Do not hand-edit the profile <code>package.json</code> bundles list when <code>dsh plugin</code> or <code>plugin_manager</code> can do it. Those writers share the profile lock.</p>
+<p>A surface bundle reads app flags through <code>ctx.cmdlineArgs</code> inside its own startup plugin. It does not add launcher flags.</p>
+<h2 id="sources">Sources</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/apps/cli/README.md">apps/cli/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/apps/cli/reference/README.md">apps/cli/reference/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/apps/cli/src/args.ts">apps/cli/src/args.ts</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/apps/cli/src/plugin.ts">apps/cli/src/plugin.ts</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/boot/cmdline/README.md">packages/boot/cmdline/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/publish.md">docs/user/develop/basic/publish.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/boot/app-boot/README.md">packages/boot/app-boot/README.md</a></li></ul>
+</article>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings, approval, and permission presets</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="settings-approval.md">markdown</a></p>
+<article>
+<h1 id="settings-approval-and-permission-presets">Settings, approval, and permission presets</h1>
+<p>中文：业务插件读自己的 Config，不存在文档化的 <code>ctx.settings.get</code> / <code>set</code>。设置表单通过 <code>ctx.settings</code> 的 <code>describe</code>、<code>update</code>、<code>replace</code> 和 <code>mutate</code> 改 profile 补丁。审批问的是「这一次动作能否继续」，权限预设把 sandbox 和 approval 绑在一起。</p>
+<p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
+<h2 id="what-it-is">What it is</h2>
+<p>Settings are schema-derived forms for volatile configuration. Edits persist by rewriting profile Cordis patches. A form namespace is the local id of a uniquely addressed entry in the active profile.</p>
+<p>Approval asks whether one specific action may proceed. Permission presets bundle a sandbox policy and an approval policy so a user can switch them together.</p>
+<h2 id="where-it-lives">Where it lives</h2>
+<ul><li>Settings subsystem: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md">docs/subsystems/settings.md</a></li><li>Settings package: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/settings/settings/README.md">packages/settings/settings/README.md</a></li><li>Approval: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md">docs/subsystems/approval.md</a></li><li>Permission presets: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/interaction/permission-presets/README.md">packages/interaction/permission-presets/README.md</a></li></ul>
+<h2 id="contract">Contract</h2>
+<p>Business consumers read <code>.get()</code> on their own Config references. The settings service is not a generic key-value store. <code>ctx.settings</code> (<code>SettingsForms</code>) exposes <code>configure</code>, <code>prepareDocument</code>, <code>describe</code>, <code>update</code>, <code>replace</code>, and <code>mutate</code>. Writes carry <code>expectedRevision</code> from <code>describe</code>. The remote mirror is <code>ctx.settingsController</code> / <code>ctx.remote.settings</code>.</p>
+<p><code>@deepseek-ai/dsh-user-approval</code> provides <code>ctx.approval</code>. <code>ctx.approval.request(req)</code> issues an <code>ApprovalRequestId</code> and runs the <code>approval/request</code> waterfall. <code>ApprovalOutcome</code> is <code>'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'</code>. The outcome fails closed except <code>allowed-once</code>. <code>ApprovalPolicy</code> is <code>'ask' | 'never'</code>, read with <code>effectivePolicy(session)</code> and changed with <code>setApprovalPolicy</code>.</p>
+<p><code>@deepseek-ai/dsh-permission-presets</code> config includes <code>presets</code> and <code>defaultPreset</code>. The shipped default presets include <code>workspace-write</code> and <code>danger-full-access</code>. Each preset bundles <code>sandbox</code> and <code>approval</code>. Users switch with <code>/permission</code>, which records a <code>permission/preset</code> event.</p>
+<p>Tool policy should use <code>tools/pre-execute</code> (allow, deny, or ask) and call into approval when a human must decide. Do not hide a prompt inside <code>execute</code>.</p>
+<h2 id="how-a-plugin-author-uses-it">How a plugin author uses it</h2>
+<ul><li>Add a user-facing setting by exporting <code>Config</code> on the plugin row, then letting the settings service render that schema. A new settings card in the official client follows <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md">docs/cookbook/adding-a-settings-card.md</a>.</li><li>Request approval through <code>ctx.approval.request</code>. Treat every outcome other than <code>allowed-once</code> as a refusal.</li><li>Do not invent a second permission mode. Compose a permission preset when the product needs a named sandbox plus approval pair.</li><li><code>danger-full-access</code> is an existing preset name. Requiring it for a management tool is a host policy, not something a plugin should bypass.</li></ul>
+<h2 id="sources">Sources</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md">docs/subsystems/settings.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/settings/settings/README.md">packages/settings/settings/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md">docs/subsystems/approval.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/interaction/permission-presets/README.md">packages/interaction/permission-presets/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md">docs/cookbook/adding-a-settings-card.md</a></li></ul>
+</article>
+</body>
+</html>

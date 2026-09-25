@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hook bridges</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="hooks.md">markdown</a></p>
+<article>
+<h1 id="hook-bridges">Hook bridges</h1>
+<p>中文：这一组不是通用的原生 hook API。它把已有的 Claude Code 或 Codex <code>hooks.json</code> 命令钩子接到 Harness 的拦截点上。<code>{"continue": false}</code> 会被记录，但不会停止运行。</p>
+<p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
+<h2 id="what-it-is">What it is</h2>
+<p>The hooks group runs command hooks written for Claude Code or Codex during a Harness agent run. Each integration supports only the command-hook subset documented by its source tool. <code>@deepseek-ai/dsh-hook-protocol</code> is the shared engine. Deployments do not configure it directly.</p>
+<h2 id="where-it-lives">Where it lives</h2>
+<ul><li>Group: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/README.md">packages/hooks/README.md</a></li><li>Claude Code bridge: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/hooks-claude-code/README.md">packages/hooks/hooks-claude-code/README.md</a></li><li>Codex bridge: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/hooks-codex/README.md">packages/hooks/hooks-codex/README.md</a></li><li>Shared library: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/hook-protocol/README.md">packages/hooks/hook-protocol/README.md</a></li></ul>
+<p>Exhaustive config fields are in <code>docs/config-catalog.md</code> under the anchors for <code>@deepseek-ai/dsh-hooks-claude-code</code> and <code>@deepseek-ai/dsh-hooks-codex</code>.</p>
+<h2 id="contract">Contract</h2>
+<p>Both plugins require <code>configPath</code>. Other documented keys:</p>
+<table><thead><tr><th>Package</th><th>Keys</th></tr></thead><tbody><tr><td><code>@deepseek-ai/dsh-hooks-claude-code</code></td><td><code>configPath</code>, <code>pluginRoot</code>, <code>projectDir</code>, <code>defaultTimeoutMs</code>, <code>stderrSummaryMaxChars</code></td></tr><tr><td><code>@deepseek-ai/dsh-hooks-codex</code></td><td><code>configPath</code>, <code>model</code>, <code>defaultTimeoutMs</code>, <code>stderrSummaryMaxChars</code></td></tr></tbody></table>
+<p>Claude Code events the bridge documents:</p>
+<table><thead><tr><th>Event</th><th>Effect the README describes</th></tr></thead><tbody><tr><td><code>SessionStart</code></td><td>Attach context.</td></tr><tr><td><code>UserPromptSubmit</code></td><td>Block the prompt, or attach context.</td></tr><tr><td><code>PreToolUse</code></td><td>Block the tool, or ask for approval.</td></tr><tr><td><code>PostToolUse</code></td><td>Block the result with feedback, or attach context.</td></tr><tr><td><code>Stop</code></td><td>Force another step with a reason.</td></tr><tr><td><code>SubagentStart</code></td><td>Attach context, in-process only.</td></tr><tr><td><code>SubagentStop</code></td><td>Observe only. It cannot block or add context.</td></tr></tbody></table>
+<p>Codex events the bridge documents: <code>SessionStart</code>, <code>UserPromptSubmit</code>, <code>PreToolUse</code>, <code>PostToolUse</code>, and <code>Stop</code>. The Codex README does not list an ask outcome for <code>PreToolUse</code>.</p>
+<p>Documented model-visible outcomes include: a denied tool as <code>Error: blocked by PreToolUse hook</code>; a post-tool block as <code>blocked by PostToolUse hook</code>; a blocking <code>Stop</code> as steering <code>continue: blocked by Stop hook</code>; a blocked prompt discarded so the turn ends as <code>blocked</code>. Context is attached as source-attributed messages where the event allows it. A blocking <code>Stop</code> forces another model turn via <code>steer()</code>.</p>
+<p>Both bridges' limitations sections state that <code>{"continue": false}</code> is logged and does not halt the run.</p>
+<p>The Claude bridge README maps events onto harness interception points: <code>SessionStart</code> adds context through <code>agent/created</code>; <code>UserPromptSubmit</code> and <code>PreToolUse</code> are waterfalls on <code>agent/pre-step</code> and <code>tools/pre-execute</code>; <code>PostToolUse</code> is a waterfall on <code>tools/post-execute</code>; <code>Stop</code> is a serial listener on <code>agent/turn-stopping</code> whose blocking result calls <code>steer()</code>; subagent events emit on <code>subagent/start</code> and <code>subagent/end</code>. The same README also says <code>SessionStart</code>, <code>SubagentStart</code>, and <code>SubagentStop</code> run detached, so <code>SessionStart</code> context can miss the first request. Read the limitations section before relying on a hook to block the opening turn.</p>
+<p>A plugin that needs its own policy should listen to those harness events, or use <code>tools/pre-execute</code>, rather than inventing a third hook file format. See <a href="tools.html">Tools</a>.</p>
+<h2 id="how-a-plugin-author-uses-it">How a plugin author uses it</h2>
+<ul><li>To reuse an existing <code>hooks.json</code>, insert the matching bridge row and set <code>configPath</code>. Do not rewrite the foreign file into Cordis YAML.</li><li>To enforce a new policy inside Harness, register a <code>tools/pre-execute</code> or <code>agent/pre-step</code> listener in your plugin. Do not add an undocumented event name to <code>hooks.json</code> and expect the bridge to run it.</li><li>Treat hook commands as code execution on the host. They are not a sandbox boundary.</li></ul>
+<h2 id="sources">Sources</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/README.md">packages/hooks/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/hooks-claude-code/README.md">packages/hooks/hooks-claude-code/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/hooks-codex/README.md">packages/hooks/hooks-codex/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/hook-protocol/README.md">packages/hooks/hook-protocol/README.md</a></li></ul>
+</article>
+</body>
+</html>

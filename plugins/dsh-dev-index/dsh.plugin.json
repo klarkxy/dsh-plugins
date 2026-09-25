@@ -1,0 +1,13 @@
+{
+  "id": "dsh-dev-index",
+  "version": "0.1.0",
+  "main": "lib/index.js",
+  "description": "DeepSeek Harness feature index for agents doing DSH secondary development.",
+  "engines": {
+    "dsh": ">=0.1.7-rc.2 <0.2.0"
+  },
+  "contributes": {
+    "tools": [],
+    "skills": ["dsh-dev-index"]
+  }
+}
