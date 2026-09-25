@@ -1,0 +1,5 @@
+- insert:
+    - id: dsh-dev-index
+      name: 'dsh-dev-index'
+      config:
+        pagesBaseUrl: https://klarkxy.github.io/dsh-plugins/

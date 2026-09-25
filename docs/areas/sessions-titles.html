@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sessions and titles</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="sessions-titles.md">markdown</a></p>
+<article>
+<h1 id="sessions-and-titles">Sessions and titles</h1>
+<p>中文：会话是只追加的 <code>SessionEvent</code> 日志，消息历史从日志派生。标题服务是 <code>ctx.sessionTitle</code>。同一进程只能注册一个自动标题 provider；第二个 <code>register</code> 会抛错。</p>
+<p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
+<h2 id="what-it-is">What it is</h2>
+<p>A <code>Session</code> is an append-only log of typed <code>SessionEvent</code>s. That log is the source of truth for an agent's interaction history. The LLM message history is derived from the log, not stored separately. The in-memory store is <code>ctx.sessions</code> (<code>SessionStore</code>) from <code>@deepseek-ai/dsh-session</code>. Durability is a separate persistence seam.</p>
+<p>Titles are durable log events (<code>session/title</code>). They are client-visible and never enter model input. <code>@deepseek-ai/dsh-session-title</code> owns scheduling and acceptance. One optional provider owns generation.</p>
+<h2 id="where-it-lives">Where it lives</h2>
+<ul><li>Session log: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md">docs/subsystems/session.md</a></li><li>Persistence seam: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/persistence.md">docs/subsystems/persistence.md</a></li><li>Title subsystem: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-title.md">docs/subsystems/session-title.md</a></li><li>Title service: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title/README.md">packages/session/session-title/README.md</a></li><li>Shipped providers: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title-first-prompt-llm/README.md">packages/session/session-title-first-prompt-llm/README.md</a> and <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title-all-prompts-llm/README.md">packages/session/session-title-all-prompts-llm/README.md</a></li><li>Shipped rows: <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/bundle/base/cordis.patch.yml">packages/bundle/base/cordis.patch.yml</a></li></ul>
+<h2 id="contract">Contract</h2>
+<p>Title service methods:</p>
+<ul><li><code>ctx.sessionTitle.get(session)</code> reads the latest folded title.</li><li><code>ctx.sessionTitle.rename(session, title)</code> pins a user title.</li><li><code>ctx.sessionTitle.refresh(session, signal?)</code> explicitly regenerates.</li><li><code>ctx.sessionTitle.register(provider)</code> registers the single provider and returns a disposer. A second registration throws.</li></ul>
+<p>Provider shape:</p>
+<pre><code>ctx.sessionTitle.register({
+  id, // SessionTitleProviderId
+  automatic, // 'first-prompt' | 'all-prompts'
+  generate(request) {
+    return { title, messageSeqs, model }
+  },
+})</code></pre>
+<p><code>automatic: 'first-prompt'</code> generates from the opening eligible prompt. <code>automatic: 'all-prompts'</code> may revise after later eligible prompts. Only text blocks from human <code>user/message</code> events are eligible. A user rename pins the session: later user messages do not schedule an automatic revision. <code>refresh()</code> is the deliberate unpin path.</p>
+<p>The service has no library defaults. All three limits are required:</p>
+<table><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody><tr><td><code>fallbackMaxWords</code></td><td>Maximum whitespace-delimited words in the deterministic fallback.</td></tr><tr><td><code>fallbackMaxBytes</code></td><td>Maximum UTF-8 bytes in the fallback. Must not exceed <code>maxTitleBytes</code>.</td></tr><tr><td><code>maxTitleBytes</code></td><td>Maximum UTF-8 bytes accepted from any source.</td></tr></tbody></table>
+<p>The base bundle ships:</p>
+<pre><code>- id: session-title
+  name: '@deepseek-ai/dsh-session-title'
+  config:
+    fallbackMaxWords: 5
+    fallbackMaxBytes: 40
+    maxTitleBytes: 80
+- id: session-title-llm
+  name: '@deepseek-ai/dsh-session-title-first-prompt-llm'
+  config:
+    targetWords: 5
+    targetCjkCharacters: 10
+    maxInputBytes: 4096
+    maxOutputTokens: 64
+    timeoutMs: 60000</code></pre>
+<p>The alternate package is <code>@deepseek-ai/dsh-session-title-all-prompts-llm</code>. Shared LLM generation policy lives in <code>@deepseek-ai/dsh-session-title-llm</code> (see the service README's link to that package). A provider starts only after a marked loop-built request's route matches the logged <code>request/header</code>. Newer revisions supersede and abort older work. Automatic failures warn and keep the latest title. Automatic work never delays the main agent response.</p>
+<p><code>foldSessionTitle(events)</code> is the pure fold. Forks inherit title events in their seed unchanged.</p>
+<h2 id="how-a-plugin-author-uses-it">How a plugin author uses it</h2>
+<ul><li>Inject <code>sessionTitle</code>. Call <code>register</code> once.</li><li>Disable the shipped <code>session-title-llm</code> row in your patch and insert your own row. Because a patch replaces <code>config</code> wholesale, restate every limit you still need if you override <code>session-title</code> itself.</li><li>Do not write the title by appending a raw log event unless you are implementing the service. Go through <code>register</code>, <code>rename</code>, or <code>refresh</code>.</li><li>Return <code>title</code>, the <code>messageSeqs</code> you actually used, and <code>model</code> provenance when the provider called a model.</li><li>Titles must stay out of model input. Do not also copy them into a system-prompt section.</li></ul>
+<h2 id="sources">Sources</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md">docs/subsystems/session.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/persistence.md">docs/subsystems/persistence.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-title.md">docs/subsystems/session-title.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title/README.md">packages/session/session-title/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title-first-prompt-llm/README.md">packages/session/session-title-first-prompt-llm/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title-all-prompts-llm/README.md">packages/session/session-title-all-prompts-llm/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/bundle/base/cordis.patch.yml">packages/bundle/base/cordis.patch.yml</a></li></ul>
+</article>
+</body>
+</html>
