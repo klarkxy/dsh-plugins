@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="../assets/site.css">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="llm-providers.md">markdown</a></p>
+<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="llm-providers.md">markdown</a></p>
 <article>
 <h1 id="llm-providers">LLM providers</h1>
 <p>中文：所有模型调用都走 <code>ctx.llm</code>。新供应商实现 <code>LlmAdapter</code> 并 <code>ctx.llm.registerAdapter</code>。不要在插件里直接请求供应商 HTTP。</p>

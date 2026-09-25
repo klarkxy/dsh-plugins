@@ -34,12 +34,26 @@ export interface Catalog {
   readonly areas: readonly Area[];
 }
 
-export const contentDirUrl = new URL("../content/", import.meta.url);
-export const contentDir = fileURLToPath(contentDirUrl);
+export interface IndexMeta {
+  readonly officialRepository: string;
+  readonly officialTag: string;
+  readonly officialCommit: string;
+}
 
-export function loadCatalog(dir: URL = contentDirUrl): Catalog {
+export const docsDirUrl = new URL("../../../docs/", import.meta.url);
+export const docsDir = fileURLToPath(docsDirUrl);
+
+export function loadCatalog(dir: URL = docsDirUrl): Catalog {
   const raw = readFileSync(new URL("index.json", dir), "utf8");
   return parseCatalog(raw);
+}
+
+export function metaFromCatalog(catalog: Catalog): IndexMeta {
+  return {
+    officialRepository: catalog.indexed.repository,
+    officialTag: catalog.indexed.tag,
+    officialCommit: catalog.indexed.commit,
+  };
 }
 
 export function parseCatalog(raw: string): Catalog {

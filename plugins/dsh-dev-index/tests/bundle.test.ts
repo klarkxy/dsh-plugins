@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const packageJson = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-) as Record<string, unknown>;
+) as { files: string[] } & Record<string, unknown>;
 const registryManifest = JSON.parse(
   readFileSync(new URL("../dsh.plugin.json", import.meta.url), "utf8"),
 ) as Record<string, unknown>;
@@ -19,11 +19,10 @@ describe("bundle contract", () => {
     expect(packageJson.scripts).toMatchObject({ prepare: "pnpm build" });
     expect(packageJson.dsh).toEqual({ bundle: { patch: "./cordis.patch.yml" } });
     expect(packageJson.files).toEqual(expect.arrayContaining([
-      "content/**/*.md",
-      "content/**/*.json",
       "dsh.plugin.json",
       "locale/*.json",
     ]));
+    expect(packageJson.files.join("\n")).not.toMatch(/content\/|REFRESH\.md/);
   });
 
   it("records the skill contribution for this monorepo", () => {
@@ -51,8 +50,11 @@ describe("bundle contract", () => {
       expect(document).toContain("allowBuilds:");
       expect(document).toContain("dsh-dev-index: true");
       expect(document).toContain("https://klarkxy.github.io/dsh-plugins/");
+      expect(document).toContain("https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/");
       expect(document).toContain("dsh-dev-index");
       expect(document).toContain("ctx.skills.register");
+      expect(document).not.toContain("resourceBase");
+      expect(document).not.toContain("content/");
     }
   });
 });

@@ -11,28 +11,46 @@ nav ul{padding-left:1.2rem} header{margin-bottom:1rem}
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(here, "..");
 const repoRoot = resolve(packageRoot, "../..");
-const contentDir = resolve(packageRoot, "content");
-const outDir = resolve(process.argv[2] ?? resolve(repoRoot, "docs"));
+const docsDir = resolve(repoRoot, "docs");
+const outDir = resolve(process.argv[2] ?? docsDir);
+const inPlace = outDir === docsDir;
 
-const catalog = JSON.parse(await readFile(resolve(contentDir, "index.json"), "utf8"));
+const catalog = JSON.parse(await readFile(resolve(docsDir, "index.json"), "utf8"));
+if (!/^[0-9a-f]{40}$/.test(catalog.indexed?.commit ?? "")) {
+  throw new Error("docs/index.json indexed.commit must be a 40-character hex sha");
+}
 const commitUrl = `${catalog.indexed.repository}/tree/${catalog.indexed.commit}`;
+const meta = {
+  officialRepository: catalog.indexed.repository,
+  officialTag: catalog.indexed.tag,
+  officialCommit: catalog.indexed.commit,
+};
 
-await rm(outDir, { recursive: true, force: true });
+if (!inPlace) {
+  await rm(outDir, { recursive: true, force: true });
+}
 await mkdir(resolve(outDir, "areas"), { recursive: true });
 await mkdir(resolve(outDir, "assets"), { recursive: true });
 
+if (!inPlace) {
+  await writeFile(resolve(outDir, "index.json"), `${JSON.stringify(catalog, null, 2)}\n`);
+  for (const area of catalog.areas) {
+    const markdown = await readFile(resolve(docsDir, area.file), "utf8");
+    await writeFile(resolve(outDir, area.file), markdown);
+  }
+}
+
 await writeFile(resolve(outDir, ".nojekyll"), "");
-await writeFile(resolve(outDir, "index.json"), `${JSON.stringify(catalog, null, 2)}\n`);
+await writeFile(resolve(outDir, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
 await writeFile(resolve(outDir, "llms.txt"), renderLlms(catalog));
 await writeFile(resolve(outDir, "assets/site.css"), CSS);
 await writeFile(resolve(outDir, "index.html"), renderIndex(catalog));
 
 for (const area of catalog.areas) {
-  const markdown = await readFile(resolve(contentDir, area.file), "utf8");
-  await writeFile(resolve(outDir, area.file), markdown);
+  const markdown = await readFile(resolve(docsDir, area.file), "utf8");
   await writeFile(
     resolve(outDir, `areas/${area.id}.html`),
-    renderArea(catalog, area, markdown),
+    renderArea(area, markdown),
   );
 }
 
@@ -49,6 +67,7 @@ function renderLlms(value) {
     "## Docs",
     "",
     `- [Index JSON](${value.pagesBaseUrl}index.json): Machine-readable catalog of every area, summary, and official source path.`,
+    `- [Recorded revision](${value.pagesBaseUrl}meta.json): officialRepository, officialTag, and officialCommit for the daily comparator.`,
     `- [Index](${value.pagesBaseUrl}index.html): Area list with stable anchors.`,
   ];
   for (const area of value.areas) {
@@ -71,15 +90,15 @@ function renderIndex(value) {
     title: "DSH development index",
     css: "assets/site.css",
     body: [
-      "<!-- agent: prefer index.json, llms.txt, and areas/*.md -->",
+      "<!-- agent: prefer index.json, llms.txt, meta.json, and areas/*.md -->",
       `<script type="application/json" id="dsh-dev-index">${JSON.stringify(value).replaceAll("<", "\\u003c")}</script>`,
       "<header>",
       `<p>Indexed against <a href="${escapeAttr(commitUrl)}">${escapeText(value.indexed.tag)}</a> <code>${escapeText(value.indexed.commit)}</code>.</p>`,
-      `<p>Machine-readable: <a href="index.json">index.json</a> · <a href="llms.txt">llms.txt</a></p>`,
+      `<p>Machine-readable: <a href="index.json">index.json</a> · <a href="meta.json">meta.json</a> · <a href="llms.txt">llms.txt</a></p>`,
       "</header>",
       "<main>",
       "<h1>DSH development index</h1>",
-      "<p>DeepSeek Harness features and extension points for an agent doing secondary development. Each area cites official files at the pinned commit.</p>",
+      "<p>DeepSeek Harness features and extension points for an agent doing secondary development. Each area cites official files at the pinned commit. The recorded revision is <a href=\"meta.json\">meta.json</a>.</p>",
       `<p lang="zh">给做 DSH 二次开发的 agent：先读索引，再打开对应章节。不要发明 API。</p>`,
       "<nav><ul>",
       ...items,
@@ -89,12 +108,12 @@ function renderIndex(value) {
   });
 }
 
-function renderArea(value, area, markdown) {
+function renderArea(area, markdown) {
   return page({
     title: area.title,
     css: "../assets/site.css",
     body: [
-      `<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="${escapeAttr(area.file.slice("areas/".length))}">markdown</a></p>`,
+      `<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="${escapeAttr(area.file.slice("areas/".length))}">markdown</a></p>`,
       "<article>",
       renderMarkdown(markdown),
       "</article>",

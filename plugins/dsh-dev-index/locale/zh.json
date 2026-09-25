@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "DSH 开发索引",
-    "description": "给插件作者的 DeepSeek Harness 功能与扩展点索引，可离线阅读，也可打开 Pages 站点。"
+    "description": "把 agent 指向 GitHub Pages 上始终最新的 DeepSeek Harness 功能索引。"
   }
 }

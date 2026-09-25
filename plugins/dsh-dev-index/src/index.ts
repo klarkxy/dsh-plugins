@@ -1,19 +1,19 @@
-import { readFileSync } from "node:fs";
 import type { Context } from "@deepseek-ai/cordis";
 import z from "@deepseek-ai/schemastery";
 
-import { contentDir, contentDirUrl, loadCatalog, normalizePagesBaseUrl, type Catalog } from "./catalog.js";
-import { renderSkillBody } from "./skill-body.js";
+import { renderSkillBody, SKILL_DESCRIPTION, SKILL_NAME, SKILL_WHEN_TO_USE } from "./skill-body.js";
 
 export const name = "dsh-dev-index";
 export const inject = ["skills"];
+
+export const DEFAULT_PAGES_BASE_URL = "https://klarkxy.github.io/dsh-plugins/";
 
 export interface Config {
   pagesBaseUrl: string;
 }
 
 export const Config: z<Config> = z.object({
-  pagesBaseUrl: z.string().default("https://klarkxy.github.io/dsh-plugins/"),
+  pagesBaseUrl: z.string().default(DEFAULT_PAGES_BASE_URL),
 });
 
 export interface ResolvedConfig {
@@ -32,16 +32,25 @@ export interface IndexedSkill {
     readonly modelInvocable: true;
     readonly userInvocable: true;
   };
-  readonly resourceBase: {
-    readonly kind: "directory";
-    readonly path: string;
-  };
 }
 
 export interface SkillHost {
   skills: {
     register(skill: IndexedSkill): () => void;
   };
+}
+
+export function normalizePagesBaseUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("dsh-dev-index: pagesBaseUrl must be an absolute http(s) URL");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("dsh-dev-index: pagesBaseUrl must be an absolute http(s) URL");
+  }
+  return value.endsWith("/") ? value : `${value}/`;
 }
 
 export function resolveConfig(config: Config): ResolvedConfig {
@@ -56,26 +65,18 @@ export function resolveConfig(config: Config): ResolvedConfig {
   });
 }
 
-export function createSkill(catalog: Catalog, pagesBaseUrl: string, baseDir = contentDir): IndexedSkill {
+export function createSkill(pagesBaseUrl: string): IndexedSkill {
   return {
-    name: catalog.skill.name,
-    description: catalog.skill.description,
-    whenToUse: catalog.skill.whenToUse,
+    name: SKILL_NAME,
+    description: SKILL_DESCRIPTION,
+    whenToUse: SKILL_WHEN_TO_USE,
     source: "bundled",
     invocation: { modelInvocable: true, userInvocable: true },
-    resourceBase: { kind: "directory", path: baseDir },
-    content: renderSkillBody(catalog, pagesBaseUrl),
+    content: renderSkillBody(pagesBaseUrl),
   };
-}
-
-export function readArea(catalog: Catalog, id: string, dir: URL = contentDirUrl): string {
-  const area = catalog.areas.find((candidate) => candidate.id === id);
-  if (area === undefined) throw new Error(`dsh-dev-index: unknown area "${id}"`);
-  return readFileSync(new URL(area.file, dir), "utf8");
 }
 
 export function apply(ctx: Context & SkillHost, config: Config): void {
   const resolved = resolveConfig(config);
-  const catalog = loadCatalog();
-  ctx.skills.register(createSkill(catalog, resolved.pagesBaseUrl));
+  ctx.skills.register(createSkill(resolved.pagesBaseUrl));
 }

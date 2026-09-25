@@ -1,10 +1,13 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
-import { contentDir, loadCatalog } from "../src/catalog.js";
+import { metaFromCatalog, loadCatalog } from "../site/catalog.js";
 import { apply, createSkill, resolveConfig, type IndexedSkill } from "../src/index.js";
-import { renderSkillBody } from "../src/skill-body.js";
+import { AREA_IDS, RAW_DOCS_BASE, renderSkillBody } from "../src/skill-body.js";
 
 const catalog = loadCatalog();
+const meta = metaFromCatalog(catalog);
 
 describe("plugin", () => {
   it("normalizes the pages URL and rejects unknown keys", () => {
@@ -17,8 +20,8 @@ describe("plugin", () => {
     ).toThrow(/unknown config key/);
   });
 
-  it("registers one runtime skill whose body names every area", () => {
-    const registered: unknown[] = [];
+  it("registers a pointer skill and does not embed the indexed revision", () => {
+    const registered: IndexedSkill[] = [];
     apply(
       {
         skills: {
@@ -31,16 +34,24 @@ describe("plugin", () => {
       { pagesBaseUrl: "https://klarkxy.github.io/dsh-plugins/" },
     );
     expect(registered).toHaveLength(1);
-    const skill = createSkill(catalog, "https://klarkxy.github.io/dsh-plugins/");
+    const skill = registered[0];
+    expect(skill).toEqual(createSkill("https://klarkxy.github.io/dsh-plugins/"));
     expect(skill.name).toBe("dsh-dev-index");
     expect(skill.invocation).toEqual({ modelInvocable: true, userInvocable: true });
-    expect(skill.resourceBase).toEqual({ kind: "directory", path: contentDir });
-    expect(skill.content).toBe(renderSkillBody(catalog, "https://klarkxy.github.io/dsh-plugins/"));
+    expect(skill).not.toHaveProperty("resourceBase");
+    expect(skill.content).toBe(renderSkillBody("https://klarkxy.github.io/dsh-plugins/"));
     expect(skill.content.length).toBeLessThanOrEqual(7500);
-    expect(skill.content).toContain(catalog.indexed.commit);
-    for (const area of catalog.areas) {
-      expect(skill.content).toContain(area.id);
-      expect(skill.content).toContain(area.file);
-    }
+    expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/llms.txt");
+    expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/index.json");
+    expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/areas/<id>.md");
+    expect(skill.content).toContain(`${RAW_DOCS_BASE}llms.txt`);
+    expect(skill.content).toContain(`${RAW_DOCS_BASE}index.json`);
+    expect(skill.content).toContain(`${RAW_DOCS_BASE}areas/<id>.md`);
+    expect(skill.content).not.toContain(meta.officialCommit);
+    expect(skill.content).not.toContain(meta.officialTag);
+    expect(AREA_IDS).toEqual(catalog.areas.map((area) => area.id));
+    for (const id of AREA_IDS) expect(skill.content).toContain(`- ${id}`);
+    const packed = readFileSync(new URL("../package.json", import.meta.url), "utf8");
+    expect(packed).not.toContain("content/");
   });
 });

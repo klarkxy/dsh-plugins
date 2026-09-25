@@ -37,13 +37,10 @@
   "files": [
     "lib/**/*.js",
     "lib/**/*.d.ts",
-    "content/**/*.json",
-    "content/**/*.md",
     "cordis.patch.yml",
     "dsh.plugin.json",
     "locale/*.json",
     "README*.md",
-    "REFRESH.md",
     "LICENSE"
   ],
   "scripts": {

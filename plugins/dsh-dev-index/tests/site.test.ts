@@ -5,18 +5,20 @@ import { execFileSync } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
-import { loadCatalog } from "../src/catalog.js";
+import { loadCatalog, metaFromCatalog } from "../site/catalog.js";
 
 const catalog = loadCatalog();
 
 describe("pages site", () => {
-  it("emits html, raw markdown, index.json, and llms.txt", () => {
+  it("emits html, raw markdown, index.json, meta.json, and llms.txt", () => {
     const out = mkdtempSync(join(tmpdir(), "dsh-dev-index-"));
     execFileSync(process.execPath, ["scripts/build-site.mjs", out], {
       cwd: new URL("..", import.meta.url),
     });
     const published = JSON.parse(readFileSync(join(out, "index.json"), "utf8")) as typeof catalog;
     expect(published).toEqual(catalog);
+    const meta = JSON.parse(readFileSync(join(out, "meta.json"), "utf8")) as ReturnType<typeof metaFromCatalog>;
+    expect(meta).toEqual(metaFromCatalog(catalog));
     const llms = readFileSync(join(out, "llms.txt"), "utf8");
     const index = readFileSync(join(out, "index.html"), "utf8");
     expect(readFileSync(join(out, ".nojekyll"), "utf8")).toBe("");

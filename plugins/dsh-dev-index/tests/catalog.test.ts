@@ -3,25 +3,34 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { loadCatalog, parseCatalog } from "../src/catalog.js";
-import { readArea } from "../src/index.js";
+import { docsDir, loadCatalog, metaFromCatalog, parseCatalog } from "../site/catalog.js";
+import { AREA_IDS, SKILL_DESCRIPTION, SKILL_WHEN_TO_USE } from "../src/skill-body.js";
 
 const catalog = loadCatalog();
 
 describe("catalog", () => {
-  it("pins the indexed DeepSeek Harness commit", () => {
+  it("pins the indexed DeepSeek Harness commit in meta.json", () => {
+    const meta = JSON.parse(readFileSync(resolve(docsDir, "meta.json"), "utf8")) as {
+      officialRepository: string;
+      officialTag: string;
+      officialCommit: string;
+    };
+    expect(meta).toEqual(metaFromCatalog(catalog));
     expect(catalog.indexed.commit).toMatch(/^[0-9a-f]{40}$/);
-    expect(catalog.indexed.tag).toBe("dsh-v0.1.7-rc.2");
+    expect(catalog.indexed.tag).toMatch(/^dsh-v/);
     expect(catalog.indexed.repository).toBe("https://github.com/deepseek-ai/deepseek-harness");
     expect(catalog.pagesBaseUrl).toBe("https://klarkxy.github.io/dsh-plugins/");
     expect(catalog.skill.name).toBe("dsh-dev-index");
+    expect(catalog.skill.description).toBe(SKILL_DESCRIPTION);
+    expect(catalog.skill.whenToUse).toBe(SKILL_WHEN_TO_USE);
     expect(catalog.skill.description.length).toBeLessThanOrEqual(500);
+    expect(catalog.areas.map((area) => area.id)).toEqual([...AREA_IDS]);
   });
 
   it("keeps every area traceable to official paths named in that page", () => {
     expect(catalog.areas.length).toBeGreaterThan(0);
     for (const area of catalog.areas) {
-      const markdown = readArea(catalog, area.id);
+      const markdown = readFileSync(new URL(area.file, new URL("../../../docs/", import.meta.url)), "utf8");
       expect(markdown.startsWith(`# ${area.title}\n`)).toBe(true);
       expect(markdown).toContain(catalog.indexed.commit);
       expect(area.sources.length).toBeGreaterThan(0);
