@@ -44,15 +44,26 @@ export function contentHash(files, read) {
   return hash.digest('hex');
 }
 
-export async function readRegistry(name, fetcher = fetch) {
-  const response = await fetcher(`${registry}${encodeURIComponent(name)}`, {
-    signal: AbortSignal.timeout(30_000),
-    headers: { Accept: 'application/json' },
-  });
-  if (response.status === 404) return { versions: {}, 'dist-tags': {} };
-  if (!response.ok) throw new Error(`npm registry ${name}: HTTP ${response.status}`);
-  const metadata = await response.json();
+export async function readRegistry(name, fetcher = fetch, knownVersion) {
+  const get = async suffix => {
+    const response = await fetcher(`${registry}${encodeURIComponent(name)}${suffix}`, {
+      signal: AbortSignal.timeout(30_000), headers: { Accept: 'application/json' },
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`npm registry ${name}: HTTP ${response.status}`);
+    return response.json();
+  };
+  const metadata = await get('') ?? { versions: {}, 'dist-tags': {} };
   if (!metadata.versions || !metadata['dist-tags']) throw new Error(`Invalid registry metadata for ${name}`);
+  // During npm scanning, exact-version metadata can appear before the packument.
+  // Recognize accepted versions so a retry never blindly republishes them.
+  if (knownVersion && !metadata.versions[knownVersion]) {
+    const pending = await get(`/${knownVersion}`);
+    if (pending) {
+      if (pending.name !== name || pending.version !== knownVersion) throw new Error(`Invalid version metadata for ${name}`);
+      metadata.versions[knownVersion] = pending;
+    }
+  }
   return metadata;
 }
 
@@ -62,8 +73,7 @@ export function selectRelease(pkg, hash, metadata) {
   const versions = Object.keys(metadata.versions).filter(version => semver.valid(version));
   const channelVersions = versions.filter(version => prerelease || !semver.prerelease(version));
   const highest = channelVersions.sort(semver.rcompare)[0];
-  const tagged = metadata.versions[metadata['dist-tags'][distTag]];
-  const previous = tagged ?? metadata.versions[highest];
+  const previous = metadata.versions[highest];
   if (previous?.dshRelease?.contentHash === hash && semver.lte(pkg.version, previous.version)) {
     return { ...pkg, version: previous.version, hash, distTag, publish: false };
   }
@@ -108,7 +118,7 @@ async function plan(root) {
     const directory = join(root, pkg.directory);
     const [packed] = JSON.parse(npm(['pack', '--dry-run', '--ignore-scripts', '--json'], directory));
     const hash = contentHash(packed.files, path => readFileSync(join(directory, path)));
-    const release = selectRelease(pkg, hash, await readRegistry(pkg.name));
+    const release = selectRelease(pkg, hash, await readRegistry(pkg.name, fetch, pkg.version));
     changedFiles.push(...writeVersion(root, release));
     releases.push(release);
     console.log(`${release.publish ? 'Publish' : 'Unchanged'} ${release.name}@${release.version}`);
@@ -119,32 +129,51 @@ async function plan(root) {
 
 async function publish(root) {
   const { releases } = JSON.parse(readFileSync(join(root, planFile), 'utf8'));
-  for (const release of releases.filter(item => item.publish)) {
+  const pending = [];
+  // Submit every changed package before waiting for npm's publish-time scanning.
+  for (const release of releases) {
     const directory = join(root, release.directory);
     const [packed] = JSON.parse(npm(['pack', '--ignore-scripts', '--json', '--pack-destination', join(root, '.artifacts/npm-release')], directory));
     const currentHash = contentHash(packed.files, path => readFileSync(join(directory, path)));
     if (currentHash !== release.hash) throw new Error(`Package changed after planning: ${release.name}`);
     const archive = join(root, '.artifacts/npm-release', packed.filename);
-    const before = await readRegistry(release.name);
-    if (before.versions[release.version]) {
-      if (before.versions[release.version].dist?.integrity !== packed.integrity) {
+    const before = await readRegistry(release.name, fetch, release.version);
+    const existing = before.versions[release.version];
+    if (existing) {
+      if (existing.dist?.integrity !== packed.integrity) {
         throw new Error(`Already published with different contents: ${release.name}@${release.version}`);
       }
-      console.log(`Already published: ${release.name}@${release.version}`);
+      console.log(`Already accepted: ${release.name}@${release.version}`);
+    } else if (release.publish) {
+      console.log(npm(['publish', archive, '--ignore-scripts', '--access', 'public', '--provenance', '--tag', release.distTag, '--registry', registry], root));
     } else {
-      npm(['publish', archive, '--ignore-scripts', '--access', 'public', '--provenance', '--tag', release.distTag, '--registry', registry], root);
+      throw new Error(`Previously published version is unavailable: ${release.name}@${release.version}`);
     }
-    // Verify the anonymous registry serves exactly the archive we sent.
-    let verified = false;
-    for (let attempt = 0; attempt < 6; attempt++) {
+    pending.push({ release, integrity: packed.integrity });
+  }
+  // npm documents a typical 5-minute scan, sometimes 15+ minutes. Verify actual
+  // anonymous tarball availability, not just acceptance of the publish request.
+  const deadline = Date.now() + 20 * 60_000;
+  while (pending.length) {
+    for (let index = pending.length - 1; index >= 0; index--) {
+      const { release, integrity } = pending[index];
       const remote = (await readRegistry(release.name)).versions[release.version];
-      if (remote?.dist?.integrity === packed.integrity) { verified = true; break; }
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      if (!remote) continue;
+      if (remote.dist?.integrity !== integrity) throw new Error(`Registry integrity mismatch: ${release.name}@${release.version}`);
+      const archive = await fetch(remote.dist.tarball, { signal: AbortSignal.timeout(30_000) });
+      if (archive.status === 404) continue;
+      if (!archive.ok) throw new Error(`Archive download failed: HTTP ${archive.status}`);
+      const actual = 'sha512-' + createHash('sha512').update(Buffer.from(await archive.arrayBuffer())).digest('base64');
+      if (actual !== integrity) throw new Error(`Downloaded archive mismatch: ${release.name}@${release.version}`);
+      const line = `Verified ${release.name}@${release.version} (${release.distTag}); anonymous archive integrity matched.\n`;
+      console.log(line);
+      if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, line);
+      pending.splice(index, 1);
     }
-    if (!verified) throw new Error(`Registry archive verification failed: ${release.name}@${release.version}`);
-    const line = `Published ${release.name}@${release.version} (${release.distTag}); archive integrity verified.\n`;
-    console.log(line);
-    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, line);
+    if (!pending.length) break;
+    if (Date.now() >= deadline) throw new Error(`npm scanning/availability still pending: ${pending.map(item => item.release.name).join(', ')}; retry from latest main after npm makes the packages available`);
+    console.log(`Waiting for npm scanning/availability: ${pending.map(item => item.release.name).join(', ')}`);
+    await new Promise(resolve => setTimeout(resolve, 20_000));
   }
 }
 

@@ -41,6 +41,8 @@ pnpm check
 
 发布串行执行，旧提交会跳过，版本写回使用普通快进推送；不会覆盖并发提交。机器人提交不会递归触发工作流。npm 返回的归档完整性必须与本次产物一致才算成功。失败后可在最新 `main` 上重跑；已成功发布且内容未变的包会跳过。
 
+npm 发布后可能先进行扫描。CI 先提交所有变更包，再等待最多 20 分钟，并匿名下载归档校验；超时会明确失败，已被接受的版本不会在重试时重复提交。
+
 仓库 Actions secret `NPM_TOKEN` 用于首次发布。之后可为每个包配置 [Trusted Publisher](https://docs.npmjs.com/trusted-publishers/)：GitHub 用户 `klarkxy`、仓库 `dsh-plugins`、工作流 `npm-publish.yml`、环境名留空，并允许直接发布；绑定后可移除 token。版本回写需要工作流的 `contents: write` 权限，以及允许机器人推送 `main` 的分支规则。
 
 ## 许可证

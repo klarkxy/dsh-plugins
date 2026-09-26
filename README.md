@@ -41,6 +41,8 @@ First releases keep the source version; an explicitly higher version takes prece
 
 Publishing runs are serialized. Superseded commits are skipped and version writeback uses a normal fast-forward push, preserving concurrent commits. Bot commits do not recursively trigger workflows. Success requires the registry archive integrity to match the local archive. Retry failures from the latest `main`; unchanged packages already published successfully are skipped.
 
+npm may scan packages before making them available. CI submits all changed packages first, then waits up to 20 minutes and verifies anonymous archive downloads. A timeout fails explicitly; retries recognize already accepted versions.
+
 Use the repository Actions secret `NPM_TOKEN` for first publication. Then configure a [Trusted Publisher](https://docs.npmjs.com/trusted-publishers/) per package: owner `klarkxy`, repository `dsh-plugins`, workflow `npm-publish.yml`, no environment, and direct publishing allowed. The token can then be removed. Version writeback needs the workflow's `contents: write` permission and branch rules that allow the bot to push to `main`.
 
 ## License

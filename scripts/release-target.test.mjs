@@ -92,3 +92,12 @@ test('only registry 404 means first publication; authentication/server failures 
     await assert.rejects(readRegistry(pkg.name, async () => ({ status, ok: false })), /HTTP/);
   }
 });
+
+test('pending scanned version is recognized even while public package metadata is 404', async () => {
+  const accepted = { name: pkg.name, version: pkg.version, dshRelease: { contentHash: 'same' } };
+  const metadata = await readRegistry(pkg.name, async url => url.endsWith('/1.2.3')
+    ? { status: 200, ok: true, json: async () => accepted }
+    : { status: 404 }, pkg.version);
+  assert.equal(selectRelease(pkg, 'same', metadata).publish, false);
+  assert.equal(selectRelease(pkg, 'changed', metadata).version, '1.2.4');
+});
