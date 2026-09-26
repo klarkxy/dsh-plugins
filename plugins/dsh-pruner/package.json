@@ -45,6 +45,6 @@
     "test": "vitest run"
   },
   "dshRelease": {
-    "contentHash": "a567bd6ac8608382e9bd80261774c2a7a0cb07848d520fc3ef3bb15c680360bc"
+    "contentHash": "518fa79dc420e646b5ce5d6dcc34fab662cb2e236597b8ac5b00adcf551fc579"
   }
 }
