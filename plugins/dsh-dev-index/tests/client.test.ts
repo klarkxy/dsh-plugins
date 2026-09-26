@@ -54,13 +54,13 @@ function descendants(node: unknown): Array<{ type: unknown; props: Record<string
 
 describe("Plugins page documentation browser", () => {
   it.each([
-    ["zh-CN", "https://klarkxy.github.io/dsh-plugins/zh/index.html"],
-    ["en", "https://klarkxy.github.io/dsh-plugins/index.html"],
+    ["zh-CN", "https://deepseek-harness.github.io/deepseek-harness/"],
+    ["en", "https://deepseek-harness.github.io/deepseek-harness/en/"],
   ])("opens the live Pages site for %s", (locale, url) => {
     const elements = descendants(loadBrowser(locale));
     const frame = elements.find(element => element.type === "iframe");
     expect(frame?.props.src).toBe(url);
-    expect(frame?.props.sandbox).toBe("allow-same-origin allow-popups allow-popups-to-escape-sandbox");
+    expect(frame?.props.sandbox).toBe("allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox");
     expect(elements.find(element => element.type === "a")?.props.href).toBe(url);
   });
 });

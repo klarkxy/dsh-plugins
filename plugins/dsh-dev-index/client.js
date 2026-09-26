@@ -3,14 +3,14 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react');
     const h = React.createElement;
-    const pages = 'https://klarkxy.github.io/dsh-plugins/';
+    const pages = 'https://deepseek-harness.github.io/deepseek-harness/';
 
     function DocumentationBrowser({ hostLocale }) {
       const [language, setLanguage] = React.useState(() =>
         hostLocale.getSnapshot().active.startsWith('zh') ? 'zh' : 'en');
       const [revision, setRevision] = React.useState(0);
       const [loaded, setLoaded] = React.useState(false);
-      const url = language === 'zh' ? `${pages}zh/index.html` : `${pages}index.html`;
+      const url = language === 'zh' ? pages : `${pages}en/`;
       const chinese = language === 'zh';
 
       React.useEffect(() => hostLocale.subscribe(() => {
@@ -51,14 +51,14 @@ window.__ModuleLoader__.load({
       }, chinese ? '在浏览器中打开' : 'Open in browser')),
       h('div', {
         style: { marginBottom: 8, opacity: 0.65, fontSize: 12, overflowWrap: 'anywhere' },
-      }, chinese ? '来源：GitHub Pages' : 'Source: GitHub Pages'),
+      }, chinese ? '来源：DSH 官方文档' : 'Source: official DSH docs'),
       !loaded && h('p', { role: 'status', style: { opacity: 0.7, margin: '8px 0' } },
         chinese ? '正在加载文档…' : 'Loading documentation…'),
       h('iframe', {
         key: `${language}-${revision}`,
         src: url,
         title: chinese ? 'DSH 开发文档' : 'DSH development documentation',
-        sandbox: 'allow-same-origin allow-popups allow-popups-to-escape-sandbox',
+        sandbox: 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox',
         referrerPolicy: 'no-referrer',
         onLoad: () => setLoaded(true),
         style: {

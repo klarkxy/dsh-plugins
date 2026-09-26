@@ -2,17 +2,17 @@
 
 [Chinese documentation](README.zh-CN.md)
 
-The plugin page embeds this repository's GitHub Pages documentation for readers. Its lightweight skill points agents at official DSH material and runtime inspection.
+The plugin page embeds the official DSH documentation for readers. Its lightweight skill points agents at official DSH material and runtime inspection.
 
 Inside a running DSH, prefer the official `cordis-plugin-development` skill and the read-only inspect tools `cordis_inspect_list` and `cordis_inspect_query`. Every `plugin_manager` action needs `danger-full-access` or a one-off approval. The environment's own tool policy still applies.
 
 Readable docs are the official site [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/) (Chinese at the site root, English under `/en/`) and [llms.txt](https://deepseek-harness.github.io/deepseek-harness/llms.txt). That site is the latest published release. Source and type declarations default to [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) `master`. When the target version differs, use the matching `dsh-v*` tag and do not mix versions.
 
-[https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) hosts the human-readable index. Its chapters describe the pinned source revision recorded in `docs/meta.json`; use the official site above for the latest published release.
+This repository keeps a pinned human-readable index in `docs/`, describing the source revision recorded in `docs/meta.json`. The currently published [klarkxy Pages address](https://klarkxy.github.io/dsh-plugins/) redirects to the official site. The browser opens the official site directly so it works with that redirect.
 
 ## Read in the Plugins page
 
-In DSH Web, open **Plugins → DSH development index**. The page displays the GitHub Pages index in a browser panel. It follows the DSH interface language, offers Chinese and English, and links to the site in a separate tab. If the embedded page cannot load, choose **Open in browser**. The browser is for people; the skill below uses official sources for agents.
+In DSH Web, open **Plugins → DSH development index**. The page displays the official GitHub Pages documentation in a browser panel. It follows the DSH interface language, offers Chinese and English, and links to the site in a separate tab. If the embedded page cannot load, choose **Open in browser**. The browser is for people; the skill below uses official sources for agents.
 
 ## Why a skill
 

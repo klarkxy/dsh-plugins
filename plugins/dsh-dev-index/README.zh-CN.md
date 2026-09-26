@@ -2,17 +2,17 @@
 
 [English documentation](README.md)
 
-插件页会嵌入本仓库 GitHub Pages 上供人阅读的文档；轻量 skill 则把智能体指向官方 DSH 资料和运行时检查。
+插件页会嵌入 DSH 官方文档供人阅读；轻量 skill 则把智能体指向官方 DSH 资料和运行时检查。
 
 在正在运行的 DSH 里，优先用官方技能 `cordis-plugin-development`，以及只读的 `cordis_inspect_list` 和 `cordis_inspect_query`。`plugin_manager` 的每个动作都需要 `danger-full-access` 或一次性审批。环境自己的工具策略仍然适用。
 
 给人读的文档在官方站点 [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)（简体中文在根路径，英文在 `/en/`）和 [llms.txt](https://deepseek-harness.github.io/deepseek-harness/llms.txt)。该站点是最近发布的版本。源码和类型声明默认看 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的 `master`。目标版本不同时，改用对应的 `dsh-v*` 标签，不要混用版本。
 
-[https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) 提供供人阅读的索引，各章节对应 `docs/meta.json` 记录的固定源码修订。需要最新发布版的信息时看上面的官方站点。
+本仓库的 `docs/` 保留一份固定修订的阅读索引，对应 `docs/meta.json` 记录的源码。目前已发布的 [klarkxy Pages 地址](https://klarkxy.github.io/dsh-plugins/) 会跳转到官方站点；阅读器直接打开官方站点，因此不依赖内嵌跳转。
 
 ## 在插件页阅读
 
-在 DSH Web 打开 **插件 → DSH 开发索引**，即可在页面中浏览 GitHub Pages 文档。阅读器按 DSH 界面语言打开中文或英文首页，也能手动切换语言、返回文档首页，或在独立标签页中打开。如果内嵌页面未显示，使用“在浏览器中打开”。阅读界面供用户使用；下方的 skill 为智能体提供官方资料指针。
+在 DSH Web 打开 **插件 → DSH 开发索引**，即可在页面中浏览官方 GitHub Pages 文档。阅读器按 DSH 界面语言打开中文或英文首页，也能手动切换语言、返回文档首页，或在独立标签页中打开。如果内嵌页面未显示，使用“在浏览器中打开”。阅读界面供用户使用；下方的 skill 为智能体提供官方资料指针。
 
 ## 为什么用 skill
 
