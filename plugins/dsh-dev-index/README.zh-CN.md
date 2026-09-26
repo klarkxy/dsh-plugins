@@ -6,7 +6,7 @@
 
 在正在运行的 DSH 里，优先用官方技能 `cordis-plugin-development`，以及只读的 `cordis_inspect_list` 和 `cordis_inspect_query`。`plugin_manager` 的每个动作都需要 `danger-full-access` 或一次性审批。环境自己的工具策略仍然适用。
 
-给人读的文档在官方站点 [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)（简体中文在根路径，英文在 `/en/`）和 [llms.txt](https://deepseek-harness.github.io/deepseek-harness/llms.txt)。该站点是最近发布的版本。源码和类型声明默认看 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的 `master`。目标版本不同时，改用对应的 `dsh-v*` 标签，不要混用版本。
+给人读的文档在[官方站点](https://deepseek-harness.github.io/deepseek-harness/)（简体中文在根路径，英文在 `/en/`）。智能体先读官方 [llms.txt](https://deepseek-harness.github.io/deepseek-harness/llms.txt) 索引，再按需读取原始 Markdown 页面。站点对应最近发布的版本。查特定版本的文档、源码和类型声明时，只有目标版本与 `master` 一致才用 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的 `master`，否则使用对应的 `dsh-v*` 标签，不混用版本。
 
 本仓库的 `docs/` 保留一份固定修订的阅读索引，对应 `docs/meta.json` 记录的源码。目前已发布的 [klarkxy Pages 地址](https://klarkxy.github.io/dsh-plugins/) 会跳转到官方站点；阅读器直接打开官方站点，因此不依赖内嵌跳转。
 

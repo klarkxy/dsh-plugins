@@ -46,14 +46,15 @@ describe("plugin", () => {
     expect(skill.content).toContain(OFFICIAL_DOCS_SITE);
     expect(skill.content).toContain("/en/");
     expect(skill.content).toContain(OFFICIAL_LLMS_TXT);
-    expect(skill.content).toContain("latest published release");
+    expect(skill.content).toContain("fetch " + OFFICIAL_LLMS_TXT + " first");
+    expect(skill.content).toContain("relevant raw .md pages");
+    expect(skill.content).toContain("latest published documentation");
     expect(skill.content).toContain(OFFICIAL_REPOSITORY);
     expect(skill.content).toContain(OFFICIAL_RAW_DOCS);
     expect(skill.content).toContain("dsh-v*");
     expect(skill.content).toContain("Never silently mix versions");
     expect(skill.content).toContain("docs/cookbook/extension-cookbook.md");
-    expect(skill.content).toContain("docs/cookbook/");
-    expect(skill.content).toContain("docs/subsystems/");
+    expect(skill.content).toContain("docs/subsystems/skills.md");
     expect(skill.content).toContain("docs/tool-catalog.md");
     expect(skill.content).toContain("docs/config-catalog.md");
     expect(skill.content).toContain("references/practices.md");
