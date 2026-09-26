@@ -34,6 +34,11 @@ describe("pages site", () => {
     expect(zhLlms).toContain("[English](");
     expect(llms).toContain("tasks/index.md");
     expect(index).toContain('href="tasks/index.html"');
+    expect(index).toContain("Official documentation");
+    expect(index).toContain(`${catalog.officialDocsSite}en/`);
+    expect(zhIndex).toContain("官方文档");
+    expect(zhIndex).toContain(`href="${catalog.officialDocsSite}">`);
+    expect(llms).toContain(`${catalog.officialDocsSite}llms.txt`);
     expect(zhLlms).toContain("zh/tasks/index.md");
     for (const task of [...catalog.tasks, ...catalog.guides]) {
       expect(index).toContain(`tasks/${task.id}.html`);

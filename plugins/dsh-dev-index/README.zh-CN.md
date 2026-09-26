@@ -4,13 +4,13 @@
 
 这是一个 DeepSeek Harness bundle。它给 agent 一段短流程：确认目标 DSH 版本，在官方插件开发技能和运行时检查可用时优先使用它们，再选一个任务并验证插件。文档不在这个包里。
 
-索引正文不在这个包里。[klarkxy/dsh-plugins](https://github.com/klarkxy/dsh-plugins) 仓库的 `docs/` 是唯一副本，并发布在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/)。`docs/meta.json` 记录这些页面所描述的 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 修订：`officialTag` 与 `officialCommit`。每个 area、任务和架构规则页都标明官方文件路径。索引不发明 API。
+索引正文不在这个包里。[klarkxy/dsh-plugins](https://github.com/klarkxy/dsh-plugins) 仓库的 `docs/` 是唯一副本，并发布在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/)。`docs/meta.json` 记录这些页面所描述的 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 修订：`officialTag` 与 `officialCommit`，另有 `officialDocsSite`，即给人读的官方文档站点。该站点是最近发布的版本。英文在 `/en/` 下，简体中文在根路径。每个 area、任务和架构规则页都标明官方文件路径；已发布到官方站点的文档页会附上阅读链接。核对仍用钉住的提交。索引不发明 API。
 
 ## 为什么用 skill
 
 DSH 面向 agent 的知识契约是 `ctx.skills` 上的 skill。`@deepseek-ai/dsh-skill` 用 `ctx.skills.register` 登记嵌入式说明，`@deepseek-ai/dsh-tool-skill` 把模型可调用的 skill 放进会话目录，并用 `skill` 工具加载。Preset 会换掉 agent 的组合。工具必须先被调用，agent 才知道索引存在。宿主层 skill 会和其他 skill 一起出现在目录里，base 上的 profile 都能用。
 
-`apply` 时本插件登记 skill `dsh-dev-index`。正文先是一段短流程，再列出读取地址。它让 agent 把 `meta.json` 的 `officialTag`、`officialCommit` 和目标 DSH 版本比较；不一致时把页面当作未经核实。正文不写入该修订，因此每天刷新 `docs/` 不需要发布新的插件包。
+`apply` 时本插件登记 skill `dsh-dev-index`。正文先是一段短流程，再列出读取地址。它让 agent 把 `meta.json` 的 `officialTag`、`officialCommit` 和目标 DSH 版本比较；不一致时把页面当作未经核实。正文指出官方文档站点和它的 `llms.txt`，并说明该站点是最近发布的版本。正文不写入索引修订，因此每天刷新 `docs/` 不需要发布新的插件包。
 
 - `https://klarkxy.github.io/dsh-plugins/llms.txt`
 - `https://klarkxy.github.io/dsh-plugins/index.json`

@@ -12,14 +12,14 @@
 
 ## 怎么选
 
-[packages/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/README.md) 写了依赖规则：扩展插件依赖服务定义，从不依赖具体提供者。[docs/capability-seams.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/capability-seams.md) 标出声明服务的包、已知实现包和直接消费者。先在这张图里找到你要进入的缝，再读包说明。不要另造第二份注册表。
+[packages/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/README.md) 写了依赖规则：扩展插件依赖服务定义，从不依赖具体提供者。[docs/capability-seams.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/capability-seams.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/capability-seams)） 标出声明服务的包、已知实现包和直接消费者。先在这张图里找到你要进入的缝，再读包说明。不要另造第二份注册表。
 
-[docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) 把模型适配器映射为通过 `registerAdapter` 登记的 `LlmAdapter` 子类。同一张表把子代理委托映射到 `ctx.subagents`，把压缩映射到 `ctx.compaction`。
+[docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/extension-cookbook)） 把模型适配器映射为通过 `registerAdapter` 登记的 `LlmAdapter` 子类。同一张表把子代理委托映射到 `ctx.subagents`，把压缩映射到 `ctx.compaction`。
 
 | 缝 | 登记或替换 | 为什么 |
 | --- | --- | --- |
-| 模型路由 | 实现 `LlmAdapter.stream`，并调用 `ctx.llm.registerAdapter` | [docs/user/develop/practice/llm-adapter.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/llm-adapter.md) 说，第一个参数是提供者路由列表。调用方用 `ctx.llm.stream`。他们不再开第二个 HTTP 客户端。无法兑现的字段抛出带稳定代码的 `LlmError`。选择器要显示模型时实现 `listModels()`。 |
-| 子代理运行时 | `ctx.subagents.registerProvider` | [docs/subsystems/subagent.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/subagent.md) 把定义、提供者和面向模型的消费者分开。`provider.name` 在这一层里唯一。把工具行指向这个名字。见[压缩、子代理、任务与目录](../areas/other-seams.md)。 |
+| 模型路由 | 实现 `LlmAdapter.stream`，并调用 `ctx.llm.registerAdapter` | [docs/user/develop/practice/llm-adapter.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/llm-adapter.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/practice/llm-adapter)） 说，第一个参数是提供者路由列表。调用方用 `ctx.llm.stream`。他们不再开第二个 HTTP 客户端。无法兑现的字段抛出带稳定代码的 `LlmError`。选择器要显示模型时实现 `listModels()`。 |
+| 子代理运行时 | `ctx.subagents.registerProvider` | [docs/subsystems/subagent.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/subagent.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/subagent)） 把定义、提供者和面向模型的消费者分开。`provider.name` 在这一层里唯一。把工具行指向这个名字。见[压缩、子代理、任务与目录](../areas/other-seams.md)。 |
 | 压缩 | 在压缩缝上实现 `compactIfNeeded`、`compactNow` 和 `compactRegion` | [packages/compaction/compaction/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/compaction/compaction/README.md) 说，定义本身不做浓缩。不要靠删除会话事件来做摘要。度量是 `ctx.tokenMeter`。 |
 | 会话标题 | `ctx.sessionTitle.register` 只登记一次 | 第二次 `register` 会抛错。禁用随发行的提供者行，再插入你的行。覆盖服务行时要重写配置，因为补丁会整份替换 `config`。见[会话与标题](../areas/sessions-titles.md)。 |
 
@@ -34,10 +34,10 @@
 钉住提交上的官方文件：
 
 - [packages/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/README.md)
-- [docs/capability-seams.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/capability-seams.md)
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
-- [docs/user/develop/practice/llm-adapter.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/llm-adapter.md)
-- [docs/subsystems/subagent.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/subagent.md)
+- [docs/capability-seams.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/capability-seams.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/capability-seams)）
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/extension-cookbook)）
+- [docs/user/develop/practice/llm-adapter.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/llm-adapter.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/practice/llm-adapter)）
+- [docs/subsystems/subagent.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/subagent.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/subagent)）
 - [packages/compaction/compaction/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/compaction/compaction/README.md)
 
 ## 事前检查
@@ -73,8 +73,8 @@
 ## 来源
 
 - [packages/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/README.md)
-- [docs/capability-seams.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/capability-seams.md)
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
-- [docs/user/develop/practice/llm-adapter.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/llm-adapter.md)
-- [docs/subsystems/subagent.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/subagent.md)
+- [docs/capability-seams.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/capability-seams.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/capability-seams)）
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/extension-cookbook)）
+- [docs/user/develop/practice/llm-adapter.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/llm-adapter.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/practice/llm-adapter)）
+- [docs/subsystems/subagent.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/subagent.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/subagent)）
 - [packages/compaction/compaction/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/compaction/compaction/README.md)

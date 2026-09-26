@@ -14,7 +14,7 @@ Clients, or later host code, need the current value of something the log already
 
 [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md) principle 1: the session log is the only source of truth. Fork, resume, and replay derive from the log. Principle 3: do not subscribe, rescan, or write DOM yourself. The performance section says to keep per-session state in a `ctx.sessionProjections` unit instead of subscribing to `session/event` and rescanning `session.events`.
 
-[docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md) says a `Session` is an append-only log. `ctx.sessions.create(id, { seed })` replays or forks. `fork(source, boundary?)` copies a prefix that must end outside an open turn, and the child receives the exact `inheritedEventCount`. That prefix is the branch. Do not invent a second history store.
+[docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session)) says a `Session` is an append-only log. `ctx.sessions.create(id, { seed })` replays or forks. `fork(source, boundary?)` copies a prefix that must end outside an open turn, and the child receives the exact `inheritedEventCount`. That prefix is the branch. Do not invent a second history store.
 
 | Need | Mechanism | Why this one |
 | --- | --- | --- |
@@ -37,8 +37,8 @@ Official files at the pinned commit:
 
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)
 - [packages/session/session-projection/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection/README.md)
-- [docs/subsystems/session-projection.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md)
-- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)
+- [docs/subsystems/session-projection.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session-projection))
+- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session))
 - [packages/session/session-projection-cache/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection-cache/README.md)
 
 ## Pre-checks
@@ -75,6 +75,6 @@ Runnable example: not yet (planned). This page has no copy-paste package and no 
 
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)
 - [packages/session/session-projection/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection/README.md)
-- [docs/subsystems/session-projection.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md)
-- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)
+- [docs/subsystems/session-projection.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session-projection))
+- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session))
 - [packages/session/session-projection-cache/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection-cache/README.md)

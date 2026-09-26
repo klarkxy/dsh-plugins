@@ -51,6 +51,10 @@ describe("plugin", () => {
     expect(skill.content).toContain(`${RAW_DOCS_BASE}areas/<id>.md`);
     expect(skill.content).toContain(`${RAW_DOCS_BASE}tasks/index.md`);
     expect(skill.content).toContain("officialTag");
+    expect(skill.content).toContain("officialDocsSite");
+    expect(skill.content).toContain(catalog.officialDocsSite);
+    expect(skill.content).toContain(`${catalog.officialDocsSite}llms.txt`);
+    expect(skill.content).toContain("latest published release");
     expect(skill.content).toContain("Do not silently substitute");
     expect(skill.content).toContain("could not be runtime-verified");
     expect(skill.content).toContain("/deepseek-ai/deepseek-harness");

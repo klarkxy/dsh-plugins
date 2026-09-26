@@ -12,7 +12,7 @@ slot 是 Web 客户端带类型的 React 组合系统。`@deepseek-ai/dsh-client
 
 ## 它在哪里
 
-- 子系统：[docs/subsystems/slots.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/slots.md)
+- 子系统：[docs/subsystems/slots.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/slots.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/slots)）
 - 注册表包：[packages/client/ui-slots/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/client/ui-slots/README.md)
 - 编写笔记：[packages/preset/agent-preset/skills/cordis-plugin-development/references/ui-plugin.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/ui-plugin.md)
 - 装饰模板：[packages/preset/agent-preset/skills/cordis-plugin-development/templates/decoration/package.json](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/templates/decoration/package.json)
@@ -65,7 +65,7 @@ export function apply(ctx) {
 
 ## 来源
 
-- [docs/subsystems/slots.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/slots.md)
+- [docs/subsystems/slots.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/slots.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/slots)）
 - [packages/client/ui-slots/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/client/ui-slots/README.md)
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/ui-plugin.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/ui-plugin.md)
 - [packages/preset/agent-preset/skills/cordis-plugin-development/templates/decoration/package.json](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/templates/decoration/package.json)

@@ -27,12 +27,12 @@ export function apply(ctx: Context) {
 
 ## 它在哪里
 
-- 第一个插件、三种形式，以及 `ctx.effect`：[docs/user/develop/basic/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/index.md)
-- `Config` 模式：[docs/user/develop/basic/config.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/config.md)
-- Fiber 状态与清理：[docs/user/develop/framework/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/index.md)
-- 提供一项服务：[docs/user/develop/framework/service.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/service.md)
-- 事件：[docs/user/develop/framework/events.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/events.md)
-- 加载器对 `config` 和 `disabled` 的插值：[docs/cordis-primer.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cordis-primer.md)
+- 第一个插件、三种形式，以及 `ctx.effect`：[docs/user/develop/basic/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/index.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/basic/)）
+- `Config` 模式：[docs/user/develop/basic/config.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/config.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/basic/config)）
+- Fiber 状态与清理：[docs/user/develop/framework/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/index.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/framework/)）
+- 提供一项服务：[docs/user/develop/framework/service.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/service.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/framework/service)）
+- 事件：[docs/user/develop/framework/events.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/events.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/framework/events)）
+- 加载器对 `config` 和 `disabled` 的插值：[docs/cordis-primer.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cordis-primer.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cordis-primer)）
 
 ## 约定
 
@@ -72,9 +72,9 @@ declare module '@deepseek-ai/cordis' {
 
 ## 来源
 
-- [docs/user/develop/basic/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/index.md)
-- [docs/user/develop/basic/config.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/config.md)
-- [docs/user/develop/framework/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/index.md)
-- [docs/user/develop/framework/service.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/service.md)
-- [docs/user/develop/framework/events.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/events.md)
-- [docs/cordis-primer.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cordis-primer.md)
+- [docs/user/develop/basic/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/index.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/basic/)）
+- [docs/user/develop/basic/config.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/config.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/basic/config)）
+- [docs/user/develop/framework/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/index.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/framework/)）
+- [docs/user/develop/framework/service.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/service.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/framework/service)）
+- [docs/user/develop/framework/events.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/events.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/framework/events)）
+- [docs/cordis-primer.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cordis-primer.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cordis-primer)）

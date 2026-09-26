@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { docsDir, loadCatalog, metaFromCatalog, parseCatalog } from "../site/catalog.js";
+import { loadOfficialRoutes, siteLinkErrors } from "../scripts/official-site.mjs";
 import { AREA_IDS, SKILL_DESCRIPTION, SKILL_WHEN_TO_USE, TASK_IDS } from "../src/skill-body.js";
 
 const catalog = loadCatalog();
@@ -14,8 +15,10 @@ describe("catalog", () => {
       officialRepository: string;
       officialTag: string;
       officialCommit: string;
+      officialDocsSite: string;
     };
     expect(meta).toEqual(metaFromCatalog(catalog));
+    expect(catalog.officialDocsSite).toBe("https://deepseek-harness.github.io/deepseek-harness/");
     expect(catalog.indexed.commit).toMatch(/^[0-9a-f]{40}$/);
     expect(catalog.indexed.tag).toMatch(/^dsh-v/);
     expect(catalog.indexed.repository).toBe("https://github.com/deepseek-ai/deepseek-harness");
@@ -86,6 +89,24 @@ describe("catalog", () => {
     }
   });
 
+  it("keeps official documentation links on the configured site and locale", () => {
+    const pages = [...catalog.areas, ...catalog.tasks, ...catalog.guides];
+    const files = [
+      "index.html",
+      "zh/index.html",
+      "llms.txt",
+      "zh/llms.txt",
+      "tasks/index.md",
+      "zh/tasks/index.md",
+      ...pages.flatMap((page) => [page.file, page.fileZh, page.file.replace(/\.md$/, ".html"), page.fileZh.replace(/\.md$/, ".html")]),
+    ];
+    const errors = files.flatMap((rel) => {
+      const text = readFileSync(resolve(docsDir, rel), "utf8");
+      return siteLinkErrors(text, rel, { base: catalog.officialDocsSite, routes: null });
+    });
+    expect(errors).toEqual([]);
+  });
+
   const checkout = process.env.DSH_CHECKOUT ?? "/tmp/deepseek-harness";
   const checkoutReady = existsSync(resolve(checkout, "packages/README.md"));
   const skipReason =
@@ -114,6 +135,20 @@ describe("catalog", () => {
         }
       }
       expect(missing).toEqual([]);
+      const routes = loadOfficialRoutes(checkout);
+      if (!routes) {
+        throw new Error(
+          `official site link check did not run: website/docs.ts is missing from ${checkout}. Refusing to skip silently.`,
+        );
+      }
+      const linkErrors: string[] = [];
+      for (const page of [...catalog.areas, ...catalog.tasks, ...catalog.guides]) {
+        for (const rel of [page.file, page.fileZh]) {
+          const text = readFileSync(resolve(docsDir, rel), "utf8");
+          linkErrors.push(...siteLinkErrors(text, rel, { base: catalog.officialDocsSite, routes }));
+        }
+      }
+      expect(linkErrors).toEqual([]);
       const head = readFileSync(resolve(checkout, ".git/HEAD"), "utf8").trim();
       if (/^[0-9a-f]{40}$/.test(head)) expect(head).toBe(catalog.indexed.commit);
     },

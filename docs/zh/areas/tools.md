@@ -12,11 +12,11 @@
 
 ## 它在哪里
 
-- 第一个工具：[docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md)
-- 编写参考：[docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)
+- 第一个工具：[docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/basic/tool)）
+- 编写参考：[docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/adding-a-tool)）
 - 包：[packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md)
-- 子系统：[docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)
-- 生成的名字：[docs/tool-catalog.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/tool-catalog.md)
+- 子系统：[docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/tools)）
+- 生成的名字：[docs/tool-catalog.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/tool-catalog.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/tool-catalog)）
 
 `defineTool` 从 `@deepseek-ai/dsh-tools` 导出。
 
@@ -85,8 +85,8 @@ export function apply(ctx: Context) {
 
 ## 来源
 
-- [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md)
-- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)
+- [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/basic/tool)）
+- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/adding-a-tool)）
 - [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md)
-- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)
-- [docs/tool-catalog.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/tool-catalog.md)
+- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/tools)）
+- [docs/tool-catalog.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/tool-catalog.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/tool-catalog)）

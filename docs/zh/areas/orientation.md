@@ -10,7 +10,7 @@ DeepSeek Harness 是「一切皆插件」的 agent harness。二次开发先定�
 
 DeepSeek Harness（`dsh`）是开源的 agent harness。它建立在 [Cordis](https://github.com/cordiverse/cordis) 驱动的「一切皆插件」架构上。产品行为由 `packages/` 下的 npm 包拼装而成，每个包的作用域都是 `@deepseek-ai/dsh-*`，并且只属于一个分组。分组 README 就是该家族的包地图。
 
-官方渲染文档：[https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)。
+官方文档：[https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)。该站点是最近发布的版本。本页引用仍钉在记录的提交上。
 
 项目处于开发者预览。README 写明后续会有破坏兼容的变更。本索引固定在一个提交上，因此上游之后的改动不会悄悄改写这些页面。
 
@@ -20,11 +20,11 @@ DeepSeek Harness（`dsh`）是开源的 agent harness。它建立在 [Cordis](ht
 | --- | --- |
 | 产品是什么？ | [README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/README.md) |
 | 哪一个包拥有这项能力？ | [packages/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/README.md) |
-| 服务、实现和消费者如何关联？ | [docs/capability-seams.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/capability-seams.md) |
-| 仓库如何开发？ | [docs/development.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/development.md) 和 [docs/architecture.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/architecture.md) |
+| 服务、实现和消费者如何关联？ | [docs/capability-seams.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/capability-seams.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/capability-seams)） |
+| 仓库如何开发？ | [docs/development.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/development.md) 和 [docs/architecture.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/architecture.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/)） |
 | 在官方检出里工作的 agent 应该做什么？ | [AGENTS.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/AGENTS.md) |
 
-`docs/capability-seams.md` 由 `scripts/gen-doc-graphs.ts` 生成。一项服务可以是核心脊柱服务、可替换的能力缝、bundle 或组合点，或者独立服务。图中标出声明该服务的包、已知实现包，以及直接消费该服务的包。「服务定义 / 服务提供者 / 消费者」的说法写在子系统页面上，例如 [docs/subsystems/subagent.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/subagent.md)，不在生成图的开头。
+`docs/capability-seams.md` 由 `scripts/gen-doc-graphs.ts` 生成。一项服务可以是核心脊柱服务、可替换的能力缝、bundle 或组合点，或者独立服务。图中标出声明该服务的包、已知实现包，以及直接消费该服务的包。「服务定义 / 服务提供者 / 消费者」的说法写在子系统页面上，例如 [docs/subsystems/subagent.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/subagent.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/subagent)），不在生成图的开头。
 
 `packages/README.md` 给扩展作者的依赖规则是：扩展插件依赖服务定义，绝不依赖具体提供者。
 
@@ -40,7 +40,7 @@ DeepSeek Harness（`dsh`）是开源的 agent harness。它建立在 [Cordis](ht
 
 - [README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/README.md)
 - [packages/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/README.md)
-- [docs/capability-seams.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/capability-seams.md)
-- [docs/architecture.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/architecture.md)
+- [docs/capability-seams.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/capability-seams.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/capability-seams)）
+- [docs/architecture.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/architecture.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/)）
 - [docs/development.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/development.md)
 - [AGENTS.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/AGENTS.md)

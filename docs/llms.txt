@@ -9,7 +9,8 @@ Tag: dsh-v0.1.7-rc.2
 ## Docs
 
 - [Index JSON](https://klarkxy.github.io/dsh-plugins/index.json): Machine-readable catalog of every area, summary, and official source path.
-- [Recorded revision](https://klarkxy.github.io/dsh-plugins/meta.json): officialRepository, officialTag, and officialCommit for the daily comparator.
+- [Recorded revision](https://klarkxy.github.io/dsh-plugins/meta.json): officialRepository, officialTag, and officialCommit for the daily comparator. officialDocsSite is the human-readable official documentation.
+- [Official documentation](https://deepseek-harness.github.io/deepseek-harness/en/): Latest published release. English lives under /en/. Chinese is the site root. [llms.txt](https://deepseek-harness.github.io/deepseek-harness/llms.txt) lists both. Compare it with the target version. Pinned citations in this index are what you verify.
 - [Index](https://klarkxy.github.io/dsh-plugins/index.html): Area list with stable anchors.
 - [中文](https://klarkxy.github.io/dsh-plugins/zh/llms.txt): Simplified Chinese mirror of the human-readable pages.
 - [Task index](https://klarkxy.github.io/dsh-plugins/tasks/index.md): Which extension task to open before the area reference.

@@ -27,12 +27,12 @@ Two other forms exist. An object plugin is `{ name, inject, apply }`. A class pl
 
 ## Where it lives
 
-- First plugin, three forms, `ctx.effect`: [docs/user/develop/basic/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/index.md)
-- `Config` schema: [docs/user/develop/basic/config.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/config.md)
-- Fiber states and cleanup: [docs/user/develop/framework/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/index.md)
-- Providing a service: [docs/user/develop/framework/service.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/service.md)
-- Events: [docs/user/develop/framework/events.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/events.md)
-- Loader `config` and `disabled` interpolation: [docs/cordis-primer.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cordis-primer.md)
+- First plugin, three forms, `ctx.effect`: [docs/user/develop/basic/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/index.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/))
+- `Config` schema: [docs/user/develop/basic/config.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/config.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/config))
+- Fiber states and cleanup: [docs/user/develop/framework/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/index.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/framework/))
+- Providing a service: [docs/user/develop/framework/service.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/service.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/framework/service))
+- Events: [docs/user/develop/framework/events.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/events.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/framework/events))
+- Loader `config` and `disabled` interpolation: [docs/cordis-primer.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cordis-primer.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cordis-primer))
 
 ## Contract
 
@@ -72,9 +72,9 @@ Display text for Plugin Manager cards is not part of `apply`. See [Bundles, prof
 
 ## Sources
 
-- [docs/user/develop/basic/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/index.md)
-- [docs/user/develop/basic/config.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/config.md)
-- [docs/user/develop/framework/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/index.md)
-- [docs/user/develop/framework/service.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/service.md)
-- [docs/user/develop/framework/events.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/events.md)
-- [docs/cordis-primer.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cordis-primer.md)
+- [docs/user/develop/basic/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/index.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/))
+- [docs/user/develop/basic/config.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/config.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/config))
+- [docs/user/develop/framework/index.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/index.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/framework/))
+- [docs/user/develop/framework/service.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/service.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/framework/service))
+- [docs/user/develop/framework/events.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/events.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/framework/events))
+- [docs/cordis-primer.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cordis-primer.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cordis-primer))

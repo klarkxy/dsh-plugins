@@ -26,9 +26,9 @@ Host and client stay split. The host entry holds services. The client file only 
 
 The inject callback's registrations dispose when the owning declaration collapses and reinstall when it returns. Register styles, timers, and listeners inside `apply` with `ctx.effect` or `ctx.on`. Do not append to `document.body` or replace the app root.
 
-Theme: use the tokens `cordis_inspect_query` `Theme` lists (`--dsw-alias-*`). Literal colors are for artwork only. Route visible text through the client locale service. Read slot props with the smallest selector. Cardinality and scope are fixed by the declaration; see [UI slots](../areas/ui-slots.md) and [docs/subsystems/slots.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/slots.md).
+Theme: use the tokens `cordis_inspect_query` `Theme` lists (`--dsw-alias-*`). Literal colors are for artwork only. Route visible text through the client locale service. Read slot props with the smallest selector. Cardinality and scope are fixed by the declaration; see [UI slots](../areas/ui-slots.md) and [docs/subsystems/slots.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/slots.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/slots)).
 
-[docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) also describes a protocol-driver UI that listens to `agent/assistant-stream` and `session/event`. That shape is for a client you own, not for a panel inside the built-in Web page. A Web chat business node uses the Conversation registration above.
+[docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/extension-cookbook)) also describes a protocol-driver UI that listens to `agent/assistant-stream` and `session/event`. That shape is for a client you own, not for a panel inside the built-in Web page. A Web chat business node uses the Conversation registration above.
 
 ## Read together
 
@@ -38,9 +38,9 @@ Official files at the pinned commit:
 
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/ui-plugin.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/ui-plugin.md)
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)
-- [docs/subsystems/slots.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/slots.md)
+- [docs/subsystems/slots.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/slots.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/slots))
 - [packages/client/ui-slots/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/client/ui-slots/README.md)
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/extension-cookbook))
 
 ## Pre-checks
 
@@ -77,6 +77,6 @@ Runnable example: not yet (planned). This page has no copy-paste package and no 
 
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/ui-plugin.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/ui-plugin.md)
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)
-- [docs/subsystems/slots.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/slots.md)
+- [docs/subsystems/slots.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/slots.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/slots))
 - [packages/client/ui-slots/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/client/ui-slots/README.md)
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/extension-cookbook))

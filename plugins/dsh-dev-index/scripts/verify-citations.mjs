@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadOfficialRoutes, siteLinkErrors } from "./official-site.mjs";
 
 const checkout = resolve(process.argv[2] ?? "");
 if (!checkout || !existsSync(resolve(checkout, "packages"))) {
@@ -27,6 +28,18 @@ if (meta.officialTag !== catalog.indexed.tag) {
 if (meta.officialCommit !== catalog.indexed.commit) {
   missing.push("meta.json officialCommit does not match index.json indexed.commit");
 }
+if (meta.officialDocsSite !== catalog.officialDocsSite) {
+  missing.push("meta.json officialDocsSite does not match index.json officialDocsSite");
+}
+
+const routes = loadOfficialRoutes(checkout);
+if (!routes) {
+  process.stderr.write(
+    "WARNING: official site link check did not run. Refusing to skip silently.\n" +
+    `website/docs.ts is missing from ${checkout}.\n`,
+  );
+  process.exit(2);
+}
 
 const pages = [
   ...catalog.areas,
@@ -43,6 +56,7 @@ for (const page of pages) {
     for (const source of page.sources) {
       if (!markdown.includes(source)) missing.push(`${file} does not mention ${source}`);
     }
+    missing.push(...siteLinkErrors(markdown, file, { base: catalog.officialDocsSite, routes }));
     const blobs = markdown.matchAll(/https:\/\/github\.com\/deepseek-ai\/deepseek-harness\/blob\/([0-9a-f]{40})\/([^)\s]+)/g);
     for (const match of blobs) {
       if (match[1] !== catalog.indexed.commit) {
@@ -63,6 +77,11 @@ for (const page of pages) {
       }
     }
   }
+}
+
+for (const file of ["index.html", "zh/index.html", "llms.txt", "zh/llms.txt", "tasks/index.md", "zh/tasks/index.md"]) {
+  const text = await readFile(resolve(docsDir, file), "utf8");
+  missing.push(...siteLinkErrors(text, file, { base: catalog.officialDocsSite, routes }));
 }
 
 if (missing.length > 0) {

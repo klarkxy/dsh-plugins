@@ -4,13 +4,13 @@
 
 A DeepSeek Harness bundle that walks an agent through a short workflow: confirm the target DSH version, prefer the official plugin-development skill and runtime inspection when they exist, pick a task, then verify the plugin. The docs stay outside this package.
 
-The index itself is not in this package. `docs/` in [klarkxy/dsh-plugins](https://github.com/klarkxy/dsh-plugins) is the only copy, and it is published at [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/). `docs/meta.json` records `officialTag` and `officialCommit` for the [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) revision those pages describe. Every area, task, and architecture-rules page names the official file it came from. The index does not invent APIs.
+The index itself is not in this package. `docs/` in [klarkxy/dsh-plugins](https://github.com/klarkxy/dsh-plugins) is the only copy, and it is published at [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/). `docs/meta.json` records `officialTag` and `officialCommit` for the [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) revision those pages describe, plus `officialDocsSite` for the human-readable official documentation. That site is the latest published release. English pages on it live under `/en/`. Simplified Chinese is the site root. Every area, task, and architecture-rules page names the official file it came from and, when that file is a published docs page, links the official site for reading. The pinned commit stays the source you verify. The index does not invent APIs.
 
 ## Why a skill
 
 DSH's agent-facing knowledge contract is a skill on `ctx.skills`. `@deepseek-ai/dsh-skill` documents `ctx.skills.register` for an embedded instruction set, and `@deepseek-ai/dsh-tool-skill` puts model-invocable skills in the session catalog and loads them with the `skill` tool. A preset would replace the agent's composition. A tool would have to be called before the agent knew the index existed. A host-level skill is listed beside the agent's other skills and stays available in every base-backed profile.
 
-On `apply`, this plugin registers the skill `dsh-dev-index`. The body is a short workflow, then the fetch list. It tells the agent to compare `meta.json` `officialTag` and `officialCommit` with the target DSH version and, on a mismatch, to treat the pages as unverified. It does not embed that revision, so a daily docs refresh does not require a new package release.
+On `apply`, this plugin registers the skill `dsh-dev-index`. The body is a short workflow, then the fetch list. It tells the agent to compare `meta.json` `officialTag` and `officialCommit` with the target DSH version and, on a mismatch, to treat the pages as unverified. It points at the official documentation site and its `llms.txt`, and says that site is the latest published release. It does not embed the indexed revision, so a daily docs refresh does not require a new package release.
 
 - `https://klarkxy.github.io/dsh-plugins/llms.txt`
 - `https://klarkxy.github.io/dsh-plugins/index.json`

@@ -17,7 +17,7 @@ Skill 是按需加载的说明，不是会话事件。嵌入式说明用 `ctx.sk
 - 分组地图：[packages/skill/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/README.md)
 - 注册表：[packages/skill/skill/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/skill/README.md) 和 [packages/skill/skill/src/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/skill/src/index.ts)
 - 文件系统提供者：[packages/skill/skill-filesystem/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/skill-filesystem/README.md)
-- 子系统类型：[docs/subsystems/skills.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/skills.md)
+- 子系统类型：[docs/subsystems/skills.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/skills.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/skills)）
 - 模型侧消费者：[packages/skill/tool-skill/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/tool-skill/README.md)
 
 base bundle 挂载 `skill`、`skill-filesystem` 和 `skill-badge`（badge 那一行默认禁用）。`sdk-minimal` 不挂载注册表；只 `inject` `skills` 的插件在那里会一直等待。
@@ -79,5 +79,5 @@ ctx.skills.register({
 - [packages/skill/skill/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/skill/README.md)
 - [packages/skill/skill/src/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/skill/src/index.ts)
 - [packages/skill/skill-filesystem/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/skill-filesystem/README.md)
-- [docs/subsystems/skills.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/skills.md)
+- [docs/subsystems/skills.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/skills.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/skills)）
 - [packages/skill/tool-skill/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/tool-skill/README.md)

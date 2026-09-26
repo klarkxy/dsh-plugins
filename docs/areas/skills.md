@@ -17,7 +17,7 @@ This index plugin uses `ctx.skills.register` for the same reason: a host-level r
 - Group map: [packages/skill/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/README.md)
 - Registry: [packages/skill/skill/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/skill/README.md) and [packages/skill/skill/src/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/skill/src/index.ts)
 - Filesystem provider: [packages/skill/skill-filesystem/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/skill-filesystem/README.md)
-- Subsystem types: [docs/subsystems/skills.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/skills.md)
+- Subsystem types: [docs/subsystems/skills.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/skills.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/skills))
 - Model consumer: [packages/skill/tool-skill/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/tool-skill/README.md)
 
 The base bundle mounts `skill`, `skill-filesystem`, and `skill-badge` (the badge row ships disabled). `sdk-minimal` does not mount the registry; a plugin that only `inject`s `skills` stays pending there.
@@ -79,5 +79,5 @@ Providers that are not a single embedded skill use `ctx.skills.registerProvider(
 - [packages/skill/skill/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/skill/README.md)
 - [packages/skill/skill/src/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/skill/src/index.ts)
 - [packages/skill/skill-filesystem/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/skill-filesystem/README.md)
-- [docs/subsystems/skills.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/skills.md)
+- [docs/subsystems/skills.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/skills.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/skills))
 - [packages/skill/tool-skill/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/skill/tool-skill/README.md)

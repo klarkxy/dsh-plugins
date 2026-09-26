@@ -14,9 +14,9 @@
 
 ## 它在哪里
 
-- 设置子系统：[docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md)
+- 设置子系统：[docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/settings)）
 - 设置包：[packages/settings/settings/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/settings/settings/README.md)
-- 审批：[docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)
+- 审批：[docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/approval)）
 - 权限预设：[packages/interaction/permission-presets/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/interaction/permission-presets/README.md)
 
 ## 约定
@@ -31,15 +31,15 @@
 
 ## 插件作者怎么用
 
-- 要增加面向用户的设置，在插件行上导出 `Config`，然后让设置服务渲染那份模式。官方客户端里的新设置卡片遵循 [docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md)。
+- 要增加面向用户的设置，在插件行上导出 `Config`，然后让设置服务渲染那份模式。官方客户端里的新设置卡片遵循 [docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/adding-a-settings-card)）。
 - 通过 `ctx.approval.request` 请求审批。除 `allowed-once` 以外的每个结果都当作拒绝。
 - 不要发明第二种权限模式。产品需要一对有名字的沙箱加审批时，组合一个权限预设。
 - `danger-full-access` 是已有的预设名。管理工具要求它，这是宿主策略，插件不应该绕过。
 
 ## 来源
 
-- [docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md)
+- [docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/settings)）
 - [packages/settings/settings/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/settings/settings/README.md)
-- [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)
+- [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/approval)）
 - [packages/interaction/permission-presets/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/interaction/permission-presets/README.md)
-- [docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md)
+- [docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/adding-a-settings-card)）

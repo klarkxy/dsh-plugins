@@ -12,11 +12,11 @@ Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harnes
 
 ## Where it lives
 
-- First tool: [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md)
-- Authoring reference: [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)
+- First tool: [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/tool))
+- Authoring reference: [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-tool))
 - Package: [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md)
-- Subsystem: [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)
-- Generated names: [docs/tool-catalog.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/tool-catalog.md)
+- Subsystem: [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/tools))
+- Generated names: [docs/tool-catalog.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/tool-catalog.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/tool-catalog))
 
 `defineTool` is exported from `@deepseek-ai/dsh-tools`.
 
@@ -85,8 +85,8 @@ Background work uses `ctx.jobs.start({ kind, label, owner: exec.agent, run })` a
 
 ## Sources
 
-- [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md)
-- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)
+- [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/tool))
+- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-tool))
 - [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md)
-- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)
-- [docs/tool-catalog.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/tool-catalog.md)
+- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/tools))
+- [docs/tool-catalog.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/tool-catalog.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/tool-catalog))

@@ -14,9 +14,9 @@
 
 ## 它在哪里
 
-- 会话日志：[docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)
-- 持久化缝：[docs/subsystems/persistence.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/persistence.md)
-- 标题子系统：[docs/subsystems/session-title.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-title.md)
+- 会话日志：[docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session)）
+- 持久化缝：[docs/subsystems/persistence.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/persistence.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/persistence)）
+- 标题子系统：[docs/subsystems/session-title.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-title.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session-title)）
 - 标题服务：[packages/session/session-title/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title/README.md)
 - 随发行的 provider：[packages/session/session-title-first-prompt-llm/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title-first-prompt-llm/README.md) 和 [packages/session/session-title-all-prompts-llm/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title-all-prompts-llm/README.md)
 - 随发行的行：[packages/bundle/base/cordis.patch.yml](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/bundle/base/cordis.patch.yml)
@@ -85,9 +85,9 @@ base bundle 随发行的是：
 
 ## 来源
 
-- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)
-- [docs/subsystems/persistence.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/persistence.md)
-- [docs/subsystems/session-title.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-title.md)
+- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session)）
+- [docs/subsystems/persistence.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/persistence.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/persistence)）
+- [docs/subsystems/session-title.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-title.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session-title)）
 - [packages/session/session-title/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title/README.md)
 - [packages/session/session-title-first-prompt-llm/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title-first-prompt-llm/README.md)
 - [packages/session/session-title-all-prompts-llm/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title-all-prompts-llm/README.md)

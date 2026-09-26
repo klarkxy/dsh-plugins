@@ -12,7 +12,7 @@ The value is configuration, not session history and not a one-shot permission. [
 
 ## How to choose
 
-[docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md) is the form path. [docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md) says business consumers read `.get()` on their own Config references. The settings service is not a generic key-value store. There is no documented `ctx.settings.get` / `set`. Writes go through `describe`, `update`, `replace`, and `mutate`, with `expectedRevision` from `describe`.
+[docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-settings-card)) is the form path. [docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/settings)) says business consumers read `.get()` on their own Config references. The settings service is not a generic key-value store. There is no documented `ctx.settings.get` / `set`. Writes go through `describe`, `update`, `replace`, and `mutate`, with `expectedRevision` from `describe`.
 
 | Need | Mechanism | Why this one |
 | --- | --- | --- |
@@ -33,8 +33,8 @@ Area pages: [Settings, approval, and permission presets](../areas/settings-appro
 
 Official files at the pinned commit:
 
-- [docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md)
-- [docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md)
+- [docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-settings-card))
+- [docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/settings))
 - [packages/settings/settings/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/settings/settings/README.md)
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)
 
@@ -70,7 +70,7 @@ Runnable example: not yet (planned). This page has no copy-paste package and no 
 
 ## Sources
 
-- [docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md)
-- [docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md)
+- [docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-settings-card))
+- [docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/settings))
 - [packages/settings/settings/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/settings/settings/README.md)
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)

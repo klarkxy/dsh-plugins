@@ -22,7 +22,7 @@
 - 工具参数：[packages/boot/plugin-manager/src/tools.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/boot/plugin-manager/src/tools.ts)
 - 扩展分组：[packages/extensions/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/README.md)
 - 检查工具：[packages/extensions/tool-cordis/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/tool-cordis/README.md)
-- 动态 Cordis 实践：[docs/user/develop/practice/dynamic-cordis.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/dynamic-cordis.md)
+- 动态 Cordis 实践：[docs/user/develop/practice/dynamic-cordis.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/dynamic-cordis.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/practice/dynamic-cordis)）
 - 查询工具实现：[packages/extensions/tool-cordis/src/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/tool-cordis/src/index.ts)
 - 插件开发技能：[packages/preset/agent-preset/skills/cordis-plugin-development/SKILL.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/SKILL.md)
 
@@ -70,7 +70,7 @@ base 补丁随发行 `plugin-manager`，并让 `tool-plugin-manager` 保持禁�
 - [packages/boot/plugin-manager/src/tools.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/boot/plugin-manager/src/tools.ts)
 - [packages/extensions/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/README.md)
 - [packages/extensions/tool-cordis/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/tool-cordis/README.md)
-- [docs/user/develop/practice/dynamic-cordis.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/dynamic-cordis.md)
+- [docs/user/develop/practice/dynamic-cordis.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/dynamic-cordis.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/practice/dynamic-cordis)）
 - [packages/extensions/tool-cordis/src/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/tool-cordis/src/index.ts)
 - [packages/preset/agent-preset/skills/cordis-plugin-development/SKILL.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/SKILL.md)
 - [packages/bundle/base/cordis.patch.yml](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/bundle/base/cordis.patch.yml)

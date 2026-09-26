@@ -18,7 +18,7 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
-给 agent 的开发索引在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/)（`llms.txt`、`index.json`、`meta.json`，每个任务一篇 markdown，以及每个主题一篇 markdown）。`meta.json` 是这些页面所对照的 DSH 修订。本仓库的 `docs/` 是唯一副本。`docs/meta.json` 用 `officialTag` 和 `officialCommit` 记录这些页面所描述的 DeepSeek Harness 修订。`dsh-dev-index` 插件不携带这些页面。它的 skill 让 agent 去拉取站点；Pages 没有响应时，回退到 `main` 上的原始文件 `https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/`。每日更新步骤在 [docs/REFRESH.md](docs/REFRESH.md)。需要在本仓库的 Settings → Pages 中把来源设为 GitHub Actions。工作流是 `.github/workflows/pages.yml`。这个设置打开之前，站点 URL 不会提供内容。本树进入 `main` 之后，原始文件 URL 仍然可以访问。
+给 agent 的开发索引在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/)（`llms.txt`、`index.json`、`meta.json`，每个任务一篇 markdown，以及每个主题一篇 markdown）。`meta.json` 是这些页面所对照的 DSH 修订。本仓库的 `docs/` 是唯一副本。`docs/meta.json` 用 `officialTag`、`officialCommit` 和 `officialDocsSite` 记录这些页面所描述的 DeepSeek Harness 修订。`officialDocsSite` 是给人读的官方文档站点，对应最近发布的版本。`dsh-dev-index` 插件不携带这些页面。它的 skill 让 agent 去拉取站点；Pages 没有响应时，回退到 `main` 上的原始文件 `https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/`。每日更新步骤在 [docs/REFRESH.md](docs/REFRESH.md)。需要在本仓库的 Settings → Pages 中把来源设为 GitHub Actions。工作流是 `.github/workflows/pages.yml`。这个设置打开之前，站点 URL 不会提供内容。本树进入 `main` 之后，原始文件 URL 仍然可以访问。
 
 ## 开发
 

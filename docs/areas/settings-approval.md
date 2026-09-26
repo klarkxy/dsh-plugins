@@ -14,9 +14,9 @@ Approval asks whether one specific action may proceed. Permission presets bundle
 
 ## Where it lives
 
-- Settings subsystem: [docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md)
+- Settings subsystem: [docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/settings))
 - Settings package: [packages/settings/settings/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/settings/settings/README.md)
-- Approval: [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)
+- Approval: [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/approval))
 - Permission presets: [packages/interaction/permission-presets/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/interaction/permission-presets/README.md)
 
 ## Contract
@@ -31,15 +31,15 @@ Tool policy uses `tools/pre-execute` (`allow`, `deny`, `cancel`, or `ask`) and `
 
 ## How a plugin author uses it
 
-- Add a user-facing setting by exporting `Config` on the plugin row, then letting the settings service render that schema. A new settings card in the official client follows [docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md).
+- Add a user-facing setting by exporting `Config` on the plugin row, then letting the settings service render that schema. A new settings card in the official client follows [docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-settings-card)).
 - Request approval through `ctx.approval.request`. Treat every outcome other than `allowed-once` as a refusal.
 - Do not invent a second permission mode. Compose a permission preset when the product needs a named sandbox plus approval pair.
 - `danger-full-access` is an existing preset name. Requiring it for a management tool is a host policy, not something a plugin should bypass.
 
 ## Sources
 
-- [docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md)
+- [docs/subsystems/settings.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/settings.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/settings))
 - [packages/settings/settings/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/settings/settings/README.md)
-- [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)
+- [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/approval))
 - [packages/interaction/permission-presets/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/interaction/permission-presets/README.md)
-- [docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md)
+- [docs/cookbook/adding-a-settings-card.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-settings-card.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-settings-card))

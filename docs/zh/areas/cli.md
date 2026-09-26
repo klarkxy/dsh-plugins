@@ -76,5 +76,5 @@ dsh --profile web --dump-config
 - [apps/cli/src/args.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/apps/cli/src/args.ts)
 - [apps/cli/src/plugin.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/apps/cli/src/plugin.ts)
 - [packages/boot/cmdline/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/boot/cmdline/README.md)
-- [docs/user/develop/basic/publish.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/publish.md)
+- [docs/user/develop/basic/publish.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/publish.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/basic/publish)）
 - [packages/boot/app-boot/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/boot/app-boot/README.md)

@@ -8,13 +8,13 @@ Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harnes
 
 ## When to use it
 
-Another plugin, or a shipped tool, already performs the action. You need to narrow who can call it, stop a call, ask a person, or record the outcome. [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) shows a permission gate on `tools/pre-execute` and says that waterfall is the reorderable policy layer.
+Another plugin, or a shipped tool, already performs the action. You need to narrow who can call it, stop a call, ask a person, or record the outcome. [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/extension-cookbook)) shows a permission gate on `tools/pre-execute` and says that waterfall is the reorderable policy layer.
 
 ## How to choose
 
 [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md) orders mechanisms from weakest to strongest: `ctx.tools.restrict()` can only remove tools; `ctx.tools.guard()` can only deny; waterfall listeners can rewrite a decision and depend on registration order; `system-prompt/assemble` replaces the whole assembly. Use the weakest one that suffices, and preserve other plugins' contributions.
 
-The pipeline in [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md) and [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md) is fixed: `tools/pre-execute`, then monotonic guards, then `tools/execute`, then `tools/post-execute`, then `tools/result`.
+The pipeline in [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/tools)) and [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md) is fixed: `tools/pre-execute`, then monotonic guards, then `tools/execute`, then `tools/post-execute`, then `tools/result`.
 
 | Need | Mechanism | Why this one |
 | --- | --- | --- |
@@ -26,7 +26,7 @@ The pipeline in [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepse
 | Watch the final outcome without changing it | `tools/result` | The outcome is frozen. Listener failures are contained. |
 | Replace content or the value, or block with feedback | `tools/post-execute` | Use this only when you must transform. Observation belongs on `tools/result`. |
 
-[docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md) says `allowed-once` grants only the asked-about action. The next call that returns `ask` asks again. Do not treat one approval as a session mode. `ApprovalPolicy` `never` rejects without prompting.
+[docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/approval)) says `allowed-once` grants only the asked-about action. The next call that returns `ask` asks again. Do not treat one approval as a session mode. `ApprovalPolicy` `never` rejects without prompting.
 
 A guard registered for one agent belongs on `agent.ctx`, with the disposer also kept in the plugin effect. Practices says unloading the plugin does not dispose `agent.ctx` registrations by itself. See [Architecture rules and anti-patterns](architecture-rules.md).
 
@@ -36,12 +36,12 @@ Area pages: [Tools](../areas/tools.md), [Settings, approval, and permission pres
 
 Official files at the pinned commit:
 
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
-- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)
-- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/extension-cookbook))
+- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-tool))
+- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/tools))
 - [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md)
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)
-- [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)
+- [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/approval))
 
 ## Pre-checks
 
@@ -75,9 +75,9 @@ Runnable example: not yet (planned). This page has no copy-paste package and no 
 
 ## Sources
 
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
-- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)
-- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/extension-cookbook))
+- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-tool))
+- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/tools))
 - [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md)
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)
-- [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)
+- [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/approval))

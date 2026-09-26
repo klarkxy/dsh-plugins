@@ -19,7 +19,7 @@
 <h2 id="它是什么">它是什么</h2>
 <p><code>@deepseek-ai/dsh-llm</code> 是与供应商无关的流式服务。适配器把供应商的线上格式翻译成共享的 <code>StreamChunk</code> 词汇。服务本身没有配置，也没有供应商的线上代码。重试是另一个包 <code>@deepseek-ai/dsh-llm-retry</code>。调用方必须让模型可见的输入能从会话日志重建。循环构建的请求到达时是深冻结的。</p>
 <h2 id="它在哪里">它在哪里</h2>
-<ul><li>适配器教程：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/llm-adapter.md">docs/user/develop/practice/llm-adapter.md</a></li><li>分组地图：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/llm/README.md">packages/llm/README.md</a></li><li>服务：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/llm/llm/README.md">packages/llm/llm/README.md</a></li></ul>
+<ul><li>适配器教程：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/llm-adapter.md">docs/user/develop/practice/llm-adapter.md</a>（<a href="https://deepseek-harness.github.io/deepseek-harness/develop/practice/llm-adapter">官方文档</a>）</li><li>分组地图：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/llm/README.md">packages/llm/README.md</a></li><li>服务：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/llm/llm/README.md">packages/llm/llm/README.md</a></li></ul>
 <p>自己写一个之前，先读随发行的适配器：<code>packages/llm/llm-deepseek/</code> 和 <code>packages/llm/llm-pi-ai/</code>。</p>
 <h2 id="约定">约定</h2>
 <p>适配器插件注入 <code>llm</code>，导出一份 Schemastery <code>Config</code>，并在 <code>apply</code> 期间注册：</p>
@@ -36,7 +36,7 @@ export function apply(ctx, config) {
 <h2 id="插件作者怎么用">插件作者怎么用</h2>
 <ul><li>要从插件调用模型，注入 <code>llm</code>，并把 <code>provider</code> 加上 <code>model</code> 传给 <code>ctx.llm.stream</code>。宿主已经挂载的供应商，不要再开第二个 HTTP 客户端。</li><li>要增加一个供应商，发布一个适配器包，再加上配置其凭据的 bundle 行。教程示例使用的键包括 <code>apiKey</code>、<code>providers</code> 和 <code>apiKeyEnv</code>。添加字段之前，先读你正在抄的那个适配器。</li><li>秘密放在加载器的 <code>!!js</code> 表达式或凭据缝里，不要放进聊天，也不要作为补丁默认值提交。</li><li>如果 Web 的模型选择器应该显示这个供应商，就实现 <code>listModels()</code>。</li></ul>
 <h2 id="来源">来源</h2>
-<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/llm-adapter.md">docs/user/develop/practice/llm-adapter.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/llm/README.md">packages/llm/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/llm/llm/README.md">packages/llm/llm/README.md</a></li></ul>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/llm-adapter.md">docs/user/develop/practice/llm-adapter.md</a>（<a href="https://deepseek-harness.github.io/deepseek-harness/develop/practice/llm-adapter">官方文档</a>）</li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/llm/README.md">packages/llm/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/llm/llm/README.md">packages/llm/llm/README.md</a></li></ul>
 </article>
 </body>
 </html>

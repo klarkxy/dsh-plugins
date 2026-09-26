@@ -14,7 +14,7 @@
 
 [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md) 第一条：会话日志是唯一的权威来源。分叉、恢复和重放都从日志推导。第三条：不要自己订阅、重扫或写 DOM。性能一节说，从日志派生的按会话状态放进 `ctx.sessionProjections` 单元，不要订阅 `session/event` 再重扫 `session.events`。
 
-[docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md) 说，`Session` 是只追加的日志。`ctx.sessions.create(id, { seed })` 用来重放或分叉。`fork(source, boundary?)` 复制一段必须结束在未闭合回合之外的前缀，子会话拿到精确的 `inheritedEventCount`。这段前缀就是分支。不要另造第二份历史存储。
+[docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session)） 说，`Session` 是只追加的日志。`ctx.sessions.create(id, { seed })` 用来重放或分叉。`fork(source, boundary?)` 复制一段必须结束在未闭合回合之外的前缀，子会话拿到精确的 `inheritedEventCount`。这段前缀就是分支。不要另造第二份历史存储。
 
 | 需求 | 机制 | 为什么是它 |
 | --- | --- | --- |
@@ -37,8 +37,8 @@
 
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)
 - [packages/session/session-projection/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection/README.md)
-- [docs/subsystems/session-projection.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md)
-- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)
+- [docs/subsystems/session-projection.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session-projection)）
+- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session)）
 - [packages/session/session-projection-cache/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection-cache/README.md)
 
 ## 事前检查
@@ -75,6 +75,6 @@
 
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)
 - [packages/session/session-projection/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection/README.md)
-- [docs/subsystems/session-projection.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md)
-- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)
+- [docs/subsystems/session-projection.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session-projection)）
+- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session)）
 - [packages/session/session-projection-cache/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection-cache/README.md)

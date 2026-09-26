@@ -10,7 +10,8 @@
 
 - [English](https://klarkxy.github.io/dsh-plugins/llms.txt)：人类可读页面的英文版。
 - [索引 JSON](https://klarkxy.github.io/dsh-plugins/index.json)：每个章节的 id、英文摘要和官方源路径。机器可读目录保持英文。
-- [所记录的修订](https://klarkxy.github.io/dsh-plugins/meta.json)：每日比对用的 officialRepository、officialTag 与 officialCommit。
+- [所记录的修订](https://klarkxy.github.io/dsh-plugins/meta.json)：每日比对用的 officialRepository、officialTag 与 officialCommit。officialDocsSite 是给人读的官方文档站点。
+- [官方文档](https://deepseek-harness.github.io/deepseek-harness/)：简体中文在站点根路径。它是最近发布的版本，要和目标版本对照。[llms.txt](https://deepseek-harness.github.io/deepseek-harness/llms.txt) 列出两个语言。核对仍用本索引钉住的提交。
 - [索引](https://klarkxy.github.io/dsh-plugins/zh/index.html)：带稳定锚点的章节列表。
 - [任务索引](https://klarkxy.github.io/dsh-plugins/zh/tasks/index.md)：先打开哪一个扩展任务，再读参考章节。
 - [架构规则](https://klarkxy.github.io/dsh-plugins/zh/tasks/architecture-rules.md)：来自官方插件实践的反模式。

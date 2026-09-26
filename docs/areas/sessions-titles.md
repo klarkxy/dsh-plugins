@@ -14,9 +14,9 @@ Titles are durable log events (`session/title`). They are client-visible and nev
 
 ## Where it lives
 
-- Session log: [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)
-- Persistence seam: [docs/subsystems/persistence.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/persistence.md)
-- Title subsystem: [docs/subsystems/session-title.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-title.md)
+- Session log: [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session))
+- Persistence seam: [docs/subsystems/persistence.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/persistence.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/persistence))
+- Title subsystem: [docs/subsystems/session-title.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-title.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session-title))
 - Title service: [packages/session/session-title/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title/README.md)
 - Shipped providers: [packages/session/session-title-first-prompt-llm/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title-first-prompt-llm/README.md) and [packages/session/session-title-all-prompts-llm/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title-all-prompts-llm/README.md)
 - Shipped rows: [packages/bundle/base/cordis.patch.yml](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/bundle/base/cordis.patch.yml)
@@ -85,9 +85,9 @@ The alternate package is `@deepseek-ai/dsh-session-title-all-prompts-llm`. Share
 
 ## Sources
 
-- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)
-- [docs/subsystems/persistence.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/persistence.md)
-- [docs/subsystems/session-title.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-title.md)
+- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session))
+- [docs/subsystems/persistence.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/persistence.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/persistence))
+- [docs/subsystems/session-title.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-title.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session-title))
 - [packages/session/session-title/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title/README.md)
 - [packages/session/session-title-first-prompt-llm/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title-first-prompt-llm/README.md)
 - [packages/session/session-title-all-prompts-llm/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-title-all-prompts-llm/README.md)

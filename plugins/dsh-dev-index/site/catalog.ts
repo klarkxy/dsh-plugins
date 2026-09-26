@@ -42,6 +42,8 @@ export interface DocEntry {
 export interface Catalog {
   readonly indexed: IndexedCommit;
   readonly pagesBaseUrl: string;
+  /** Human-readable official docs. Not one of the three revision fields a daily job compares. */
+  readonly officialDocsSite: string;
   readonly skill: SkillCopy;
   readonly areas: readonly Area[];
   readonly tasks: readonly DocEntry[];
@@ -52,6 +54,7 @@ export interface IndexMeta {
   readonly officialRepository: string;
   readonly officialTag: string;
   readonly officialCommit: string;
+  readonly officialDocsSite: string;
 }
 
 export const docsDirUrl = new URL("../../../docs/", import.meta.url);
@@ -67,6 +70,7 @@ export function metaFromCatalog(catalog: Catalog): IndexMeta {
     officialRepository: catalog.indexed.repository,
     officialTag: catalog.indexed.tag,
     officialCommit: catalog.indexed.commit,
+    officialDocsSite: catalog.officialDocsSite,
   };
 }
 
@@ -100,6 +104,7 @@ export function parseCatalog(raw: string): Catalog {
       subject: requiredString(indexed, "indexed.subject"),
     },
     pagesBaseUrl: normalizePagesBaseUrl(requiredString(value, "pagesBaseUrl")),
+    officialDocsSite: normalizePagesBaseUrl(requiredString(value, "officialDocsSite")),
     skill: {
       name: requiredString(skill, "skill.name"),
       description: requiredString(skill, "skill.description"),

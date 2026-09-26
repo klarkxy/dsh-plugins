@@ -7,6 +7,7 @@
     "subject": "Merge pull request #5180 from deepseek-harness/rel/dsh-0.1.7-rc.2"
   },
   "pagesBaseUrl": "https://klarkxy.github.io/dsh-plugins/",
+  "officialDocsSite": "https://deepseek-harness.github.io/deepseek-harness/",
   "skill": {
     "name": "dsh-dev-index",
     "description": "Pick a DeepSeek Harness extension mechanism and deliver a verified plugin. Prefer the official plugin-development skill and runtime inspection inside DSH. Cite pinned docs. Do not invent APIs.",

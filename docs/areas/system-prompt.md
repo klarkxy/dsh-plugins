@@ -15,7 +15,7 @@ Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harnes
 ## Where it lives
 
 - Assembler: [packages/core/system-prompt/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/system-prompt/README.md)
-- Types and Cordis surface: [docs/subsystems/system-prompt.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md)
+- Types and Cordis surface: [docs/subsystems/system-prompt.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/system-prompt))
 - Request-context plugins: [packages/context/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/context/README.md)
 
 Persona sections are the usual way to set prefix and suffix for one preset. See [Agent presets and persona](presets-persona.md).
@@ -68,5 +68,5 @@ Persona section names documented with the types include `deployment:persona-pref
 ## Sources
 
 - [packages/core/system-prompt/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/system-prompt/README.md)
-- [docs/subsystems/system-prompt.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md)
+- [docs/subsystems/system-prompt.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/system-prompt))
 - [packages/context/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/context/README.md)

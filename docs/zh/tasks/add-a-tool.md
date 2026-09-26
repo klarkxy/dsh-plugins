@@ -8,17 +8,17 @@
 
 ## 什么时候用
 
-产品需要模型用名字、描述和参数 schema 调用的函数。在 `ctx.tools` 上注册，schema 就会进入系统提示的拼装。[docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) 把内置工具映射到 `ctx.tools.register()`。
+产品需要模型用名字、描述和参数 schema 调用的函数。在 `ctx.tools` 上注册，schema 就会进入系统提示的拼装。[docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/extension-cookbook)） 把内置工具映射到 `ctx.tools.register()`。
 
 ## 怎么选
 
-抄邻近插件之前先读 [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)。`defineTool` 是带类型的助手。食谱也接受在 `ctx.tools.register()` 上直接登记原始 JSON Schema 的 `ToolDefinition`，MCP 来的工具就是这样进来的。自己写的插件优先用 `defineTool`。
+抄邻近插件之前先读 [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/adding-a-tool)）。`defineTool` 是带类型的助手。食谱也接受在 `ctx.tools.register()` 上直接登记原始 JSON Schema 的 `ToolDefinition`，MCP 来的工具就是这样进来的。自己写的插件优先用 `defineTool`。
 
 模型并不是在调用函数时，换一种机制：
 
 - 外部服务器已经暴露了工具，就做只含配置的 MCP bundle，不要再写一个客户端。见[MCP 服务器](../areas/mcp.md)。
 - 模型只需要阅读、本身没有副作用的说明，是 skill。见[技能](../areas/skills.md)。
-- 允许、拒绝、取消和询问不要写进 `execute`。那是[添加工具执行策略](add-a-tool-policy.md)。添加工具指南说，不要把部署策略做进工具里。
+- 允许、拒绝、取消和询问不要写进 `execute`。那是[添加工具执行策略](add-a-tool-policy.md)。[docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/adding-a-tool)）说，不要把部署策略做进工具里。
 - 用户要改的值是[添加设置界面](add-a-settings-ui.md)。用户要看的视图是[添加界面面板](add-a-ui-panel.md)。
 
 `execute` 返回一个规范的 JSON 值。注册表校验它，再交给 `output.render`。不要从函数体返回内容块。遵守 `exec.signal`。`agent.inject` 追加下一次请求能看到的上下文，不会唤醒空闲的 agent。长时间工作在生产者放行 `run_in_background` 之后用 `ctx.jobs.start`。id 一旦公布，取消属于这个任务，不再属于外层的 `exec.signal`。这些规则在添加工具指南和[工具](../areas/tools.md)章节里。
@@ -29,9 +29,9 @@
 
 钉住提交上的官方文件：
 
-- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)
-- [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md)
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
+- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/adding-a-tool)）
+- [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/basic/tool)）
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/extension-cookbook)）
 - [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md)
 
 ## 事前检查
@@ -65,7 +65,7 @@
 
 ## 来源
 
-- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)
-- [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md)
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
+- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/adding-a-tool)）
+- [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/develop/basic/tool)）
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/extension-cookbook)）
 - [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md)

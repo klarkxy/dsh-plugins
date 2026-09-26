@@ -8,17 +8,17 @@ Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harnes
 
 ## When to use it
 
-The product needs a function the model invokes with a name, a description, and a parameter schema. Registration on `ctx.tools` is enough for the schema to enter system-prompt assembly. [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) maps "Built-in tools" to `ctx.tools.register()`.
+The product needs a function the model invokes with a name, a description, and a parameter schema. Registration on `ctx.tools` is enough for the schema to enter system-prompt assembly. [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/extension-cookbook)) maps "Built-in tools" to `ctx.tools.register()`.
 
 ## How to choose
 
-Read [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md) before copying a neighbor. `defineTool` is the typed helper. The cookbook also accepts a raw JSON-Schema `ToolDefinition` at `ctx.tools.register()`, which is how MCP-sourced tools arrive. Prefer `defineTool` for a plugin you author.
+Read [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-tool)) before copying a neighbor. `defineTool` is the typed helper. The cookbook also accepts a raw JSON-Schema `ToolDefinition` at `ctx.tools.register()`, which is how MCP-sourced tools arrive. Prefer `defineTool` for a plugin you author.
 
 Choose a different mechanism when the model is not calling a function:
 
 - An external server that already exposes tools is a configuration-only MCP bundle, not a second client. See [MCP servers](../areas/mcp.md).
 - Instructions the model should read, with no side effect of their own, are a skill. See [Skills](../areas/skills.md).
-- Allow, deny, cancel, and ask do not belong in `execute`. That is [Add a tool execution policy](add-a-tool-policy.md). [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md) says to prefer not to build deployment policy into the tool.
+- Allow, deny, cancel, and ask do not belong in `execute`. That is [Add a tool execution policy](add-a-tool-policy.md). [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-tool)) says to prefer not to build deployment policy into the tool.
 - A value the user edits is [Add a settings UI](add-a-settings-ui.md). A view the user sees is [Add a UI panel](add-a-ui-panel.md).
 
 `execute` returns one canonical JSON value. The registry validates it and passes it to `output.render`. Do not return content blocks from the body. Honor `exec.signal`. `agent.inject` appends context the next request sees and does not wake an idle agent. Long-running work uses `ctx.jobs.start` after the producer gates `run_in_background`; once the id is published, cancellation belongs to the job, not the outer `exec.signal`. Those rules are in the adding-a-tool guide and the [tools area](../areas/tools.md).
@@ -29,9 +29,9 @@ Area pages: [Tools](../areas/tools.md), [Plugin module](../areas/plugin-module.m
 
 Official files at the pinned commit:
 
-- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)
-- [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md)
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
+- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-tool))
+- [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/tool))
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/extension-cookbook))
 - [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md)
 
 ## Pre-checks
@@ -65,7 +65,7 @@ Runnable example: not yet (planned). This page has no copy-paste package and no 
 
 ## Sources
 
-- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)
-- [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md)
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
+- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-tool))
+- [docs/user/develop/basic/tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/tool.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/tool))
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) ([official site](https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/extension-cookbook))
 - [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md)

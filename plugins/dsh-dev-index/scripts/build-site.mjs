@@ -20,10 +20,14 @@ if (!/^[0-9a-f]{40}$/.test(catalog.indexed?.commit ?? "")) {
   throw new Error("docs/index.json indexed.commit must be a 40-character hex sha");
 }
 const commitUrl = `${catalog.indexed.repository}/tree/${catalog.indexed.commit}`;
+if (typeof catalog.officialDocsSite !== "string" || !catalog.officialDocsSite.endsWith("/")) {
+  throw new Error("docs/index.json officialDocsSite must be an absolute URL with a trailing slash");
+}
 const meta = {
   officialRepository: catalog.indexed.repository,
   officialTag: catalog.indexed.tag,
   officialCommit: catalog.indexed.commit,
+  officialDocsSite: catalog.officialDocsSite,
 };
 
 if (!inPlace) {
@@ -113,7 +117,8 @@ function renderLlms(value) {
     "## Docs",
     "",
     `- [Index JSON](${value.pagesBaseUrl}index.json): Machine-readable catalog of every area, summary, and official source path.`,
-    `- [Recorded revision](${value.pagesBaseUrl}meta.json): officialRepository, officialTag, and officialCommit for the daily comparator.`,
+    `- [Recorded revision](${value.pagesBaseUrl}meta.json): officialRepository, officialTag, and officialCommit for the daily comparator. officialDocsSite is the human-readable official documentation.`,
+    `- [Official documentation](${value.officialDocsSite}en/): Latest published release. English lives under /en/. Chinese is the site root. [llms.txt](${value.officialDocsSite}llms.txt) lists both. Compare it with the target version. Pinned citations in this index are what you verify.`,
     `- [Index](${value.pagesBaseUrl}index.html): Area list with stable anchors.`,
     `- [中文](${value.pagesBaseUrl}zh/llms.txt): Simplified Chinese mirror of the human-readable pages.`,
     `- [Task index](${value.pagesBaseUrl}tasks/index.md): Which extension task to open before the area reference.`,
@@ -143,7 +148,8 @@ function renderLlmsZh(value, areas, tasks, guides) {
     "",
     `- [English](${value.pagesBaseUrl}llms.txt)：人类可读页面的英文版。`,
     `- [索引 JSON](${value.pagesBaseUrl}index.json)：每个章节的 id、英文摘要和官方源路径。机器可读目录保持英文。`,
-    `- [所记录的修订](${value.pagesBaseUrl}meta.json)：每日比对用的 officialRepository、officialTag 与 officialCommit。`,
+    `- [所记录的修订](${value.pagesBaseUrl}meta.json)：每日比对用的 officialRepository、officialTag 与 officialCommit。officialDocsSite 是给人读的官方文档站点。`,
+    `- [官方文档](${value.officialDocsSite})：简体中文在站点根路径。它是最近发布的版本，要和目标版本对照。[llms.txt](${value.officialDocsSite}llms.txt) 列出两个语言。核对仍用本索引钉住的提交。`,
     `- [索引](${value.pagesBaseUrl}zh/index.html)：带稳定锚点的章节列表。`,
     `- [任务索引](${value.pagesBaseUrl}zh/tasks/index.md)：先打开哪一个扩展任务，再读参考章节。`,
     `- [架构规则](${value.pagesBaseUrl}zh/tasks/architecture-rules.md)：来自官方插件实践的反模式。`,
@@ -188,6 +194,8 @@ function renderIndex(value) {
       "</header>",
       "<main>",
       "<h1>DSH development index</h1>",
+      "<h2>Official documentation</h2>",
+      `<p>Read the official docs on <a href="${escapeAttr(value.officialDocsSite)}en/">the English site</a>. Simplified Chinese is the site root. <a href="${escapeAttr(value.officialDocsSite)}llms.txt">llms.txt</a> lists both locales. The site is the latest published release, so compare it with the target version. Citations on these pages stay pinned to the recorded commit. The site link is for reading.</p>`,
       "<p>DeepSeek Harness features and extension points for an agent doing secondary development. Start with a task when the goal is to ship a plugin. Area pages remain the reference layer. Each page cites official files at the pinned commit. The recorded revision is <a href=\"meta.json\">meta.json</a>. If the target DSH version differs, treat these pages as unverified for that version.</p>",
       "<h2>Tasks</h2>",
       "<nav><ul>",
@@ -232,6 +240,8 @@ function renderIndexZh(value, areas, tasks, guides) {
       "</header>",
       "<main>",
       "<h1>DSH 开发索引</h1>",
+      "<h2>官方文档</h2>",
+      `<p>给人读的官方文档在<a href="${escapeAttr(value.officialDocsSite)}">官方站点</a>，简体中文在站点根路径。<a href="${escapeAttr(value.officialDocsSite)}llms.txt">llms.txt</a> 列出两个语言。该站点是最近发布的版本，要和目标版本对照。本索引的引用仍钉在记录的提交和路径上，站点链接只供阅读。</p>`,
       "<p>这是给做二次开发的 agent 用的 DeepSeek Harness 功能与扩展点索引。要交付插件时先打开任务。章节页仍是参考层。每一页都引用上述固定提交里的官方文件。所记录的修订见 <a href=\"../meta.json\">meta.json</a>。目标版本不同时，把这些页面当作未经核实。</p>",
       "<p>不要发明 API。</p>",
       "<h2>任务</h2>",

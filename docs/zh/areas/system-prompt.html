@@ -20,7 +20,7 @@
 <p><code>@deepseek-ai/dsh-system-prompt</code> 提供 <code>ctx.systemPrompt</code>。它为每一个模型步骤拼装一份有序的系统提示，以及可见的工具 schema。通过 <code>agent.ctx</code> 注册的贡献只影响那个 agent，并盖住同名的全局贡献。</p>
 <p><code>packages/context</code> 是另一族：工作区说明、<code>@file</code> 引用、会话引用、时间和 tmux。那些插件喂给请求上下文。它们不是拼装器。</p>
 <h2 id="它在哪里">它在哪里</h2>
-<ul><li>拼装器：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/system-prompt/README.md">packages/core/system-prompt/README.md</a></li><li>类型与 Cordis 表面：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md">docs/subsystems/system-prompt.md</a></li><li>请求上下文插件：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/context/README.md">packages/context/README.md</a></li></ul>
+<ul><li>拼装器：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/system-prompt/README.md">packages/core/system-prompt/README.md</a></li><li>类型与 Cordis 表面：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md">docs/subsystems/system-prompt.md</a>（<a href="https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/system-prompt">官方文档</a>）</li><li>请求上下文插件：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/context/README.md">packages/context/README.md</a></li></ul>
 <p>为一个 preset 设置前缀和后缀，通常用 persona section。见 <a href="presets-persona.html">Agent 预设与 Persona</a>。</p>
 <h2 id="约定">约定</h2>
 <p>拼装器配置：</p>
@@ -43,7 +43,7 @@ ctx.systemPrompt.tools(provider)</code></pre>
 <h2 id="插件作者怎么用">插件作者怎么用</h2>
 <ul><li>每个 agent 都应该看到的短说明，在宿主上用 <code>section</code>。只有一个 agent 应该看到时，放在 <code>agent.ctx</code> 上或 preset 内部。</li><li>除非那个插件拥有整份提示，否则不要设置 <code>complete: true</code>。另一个 complete section 也生效时，这一步会失败。</li><li>不要分叉拼装器。注册一份贡献。</li><li>长步骤放进技能。系统提示的 section 在每一步上，不适合放索引。</li></ul>
 <h2 id="来源">来源</h2>
-<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/system-prompt/README.md">packages/core/system-prompt/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md">docs/subsystems/system-prompt.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/context/README.md">packages/context/README.md</a></li></ul>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/system-prompt/README.md">packages/core/system-prompt/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md">docs/subsystems/system-prompt.md</a>（<a href="https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/system-prompt">官方文档</a>）</li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/context/README.md">packages/context/README.md</a></li></ul>
 </article>
 </body>
 </html>

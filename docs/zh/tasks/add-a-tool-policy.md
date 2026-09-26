@@ -8,13 +8,13 @@
 
 ## 什么时候用
 
-另一个插件或随发行的工具已经在做这件事。你要收窄谁能调用、拦住一次调用、问一个人，或记下结果。[docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) 给出了 `tools/pre-execute` 上的权限门，并说这条瀑布是可以重排的策略层。
+另一个插件或随发行的工具已经在做这件事。你要收窄谁能调用、拦住一次调用、问一个人，或记下结果。[docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/extension-cookbook)） 给出了 `tools/pre-execute` 上的权限门，并说这条瀑布是可以重排的策略层。
 
 ## 怎么选
 
 [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md) 把机制从弱到强排开：`ctx.tools.restrict()` 只能移除工具；`ctx.tools.guard()` 只能拒绝；瀑布监听器能改写决定，并且依赖注册顺序；`system-prompt/assemble` 会换掉整份拼装。用够用的最弱机制，并保留其他插件的贡献。
 
-[docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md) 和 [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md) 里的流水线是固定的：先 `tools/pre-execute`，再单调守卫，再 `tools/execute`，再 `tools/post-execute`，最后 `tools/result`。
+[docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/tools)） 和 [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md) 里的流水线是固定的：先 `tools/pre-execute`，再单调守卫，再 `tools/execute`，再 `tools/post-execute`，最后 `tools/result`。
 
 | 需求 | 机制 | 为什么是它 |
 | --- | --- | --- |
@@ -26,7 +26,7 @@
 | 只看最终结果，不改它 | `tools/result` | 结果是冻结的。监听器失败会被接住。 |
 | 替换内容或值，或用反馈阻断 | `tools/post-execute` | 只有必须变换时才用。观察属于 `tools/result`。 |
 
-[docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md) 说 `allowed-once` 只批准被问到的那一次动作。下一次返回 `ask` 会再问。不要把一次审批当成会话模式。`ApprovalPolicy` 为 `never` 时不提示就拒绝。
+[docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/approval)） 说 `allowed-once` 只批准被问到的那一次动作。下一次返回 `ask` 会再问。不要把一次审批当成会话模式。`ApprovalPolicy` 为 `never` 时不提示就拒绝。
 
 为一个 agent 登记的守卫属于 `agent.ctx`，释放函数也要留在插件 effect 里。实践文档说，卸载插件本身不会释放 `agent.ctx` 上的注册。见[架构规则与反模式](architecture-rules.md)。
 
@@ -36,12 +36,12 @@
 
 钉住提交上的官方文件：
 
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
-- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)
-- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/extension-cookbook)）
+- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/adding-a-tool)）
+- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/tools)）
 - [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md)
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)
-- [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)
+- [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/approval)）
 
 ## 事前检查
 
@@ -75,9 +75,9 @@
 
 ## 来源
 
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
-- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)
-- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/extension-cookbook)）
+- [docs/cookbook/adding-a-tool.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/adding-a-tool.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/adding-a-tool)）
+- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/tools)）
 - [packages/core/tools/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/tools/README.md)
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)
-- [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)
+- [docs/subsystems/approval.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/approval.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/approval)）

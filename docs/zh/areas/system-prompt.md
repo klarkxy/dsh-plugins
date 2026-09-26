@@ -15,7 +15,7 @@
 ## 它在哪里
 
 - 拼装器：[packages/core/system-prompt/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/system-prompt/README.md)
-- 类型与 Cordis 表面：[docs/subsystems/system-prompt.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md)
+- 类型与 Cordis 表面：[docs/subsystems/system-prompt.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/system-prompt)）
 - 请求上下文插件：[packages/context/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/context/README.md)
 
 为一个 preset 设置前缀和后缀，通常用 persona section。见 [Agent 预设与 Persona](presets-persona.md)。
@@ -68,5 +68,5 @@ ctx.systemPrompt.tools(provider)
 ## 来源
 
 - [packages/core/system-prompt/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/system-prompt/README.md)
-- [docs/subsystems/system-prompt.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md)
+- [docs/subsystems/system-prompt.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/system-prompt.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/system-prompt)）
 - [packages/context/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/context/README.md)

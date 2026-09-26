@@ -14,7 +14,7 @@
 
 为什么看起来能工作：写下这块内存的进程仍显示正确的值，自定义事件也出现在同一个进程里。
 
-什么时候会坏：分叉、恢复和重放都从日志重建。实践文档说，模型看到的任何东西都必须能从已提交的会话事件重建，插件内存是派生缓存。读者只在信封带 `ignorable: true` 时接受未知的已存事件。实时的 `Session.append()` 不能设置这个标记，于是会话会拒绝重新打开。[docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md) 把 `fork` 定义成带精确继承前缀的种子子会话。
+什么时候会坏：分叉、恢复和重放都从日志重建。实践文档说，模型看到的任何东西都必须能从已提交的会话事件重建，插件内存是派生缓存。读者只在信封带 `ignorable: true` 时接受未知的已存事件。实时的 `Session.append()` 不能设置这个标记，于是会话会拒绝重新打开。[docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session)） 把 `fork` 定义成带精确继承前缀的种子子会话。
 
 正确替代：从已有事件推导状态，或把插件自己的数据放进你通过检查找到的存储服务。模型可见的文字走已经会记日志的机制，例如 `agent.inject` 或工具结果。
 
@@ -38,7 +38,7 @@
 
 为什么看起来能工作：在你的监听器最后运行的 profile 里，工具消失了，提示看起来也对。
 
-什么时候会坏：`system-prompt/assemble` 会换掉整份拼装，其他插件的段落和当前的 PTC 模式都要你自己保留。[docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md) 说，必须在呈现、查找和执行上保持一致的工具过滤，优先用 `ctx.tools.restrict()`。瀑布可以重排。前面的监听器调用了 `next()` 时，后面的监听器可以换掉较早的允许或拒绝。[docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md) 说，守卫没有允许结果，所以监听器顺序不能把这次拒绝变回许可。
+什么时候会坏：`system-prompt/assemble` 会换掉整份拼装，其他插件的段落和当前的 PTC 模式都要你自己保留。[docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/extension-cookbook)） 说，必须在呈现、查找和执行上保持一致的工具过滤，优先用 `ctx.tools.restrict()`。瀑布可以重排。前面的监听器调用了 `next()` 时，后面的监听器可以换掉较早的允许或拒绝。[docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/tools)） 说，守卫没有允许结果，所以监听器顺序不能把这次拒绝变回许可。
 
 正确替代，从弱到强：`ctx.tools.restrict()` 只移除工具。`ctx.tools.guard()` 只拒绝，而且是同步的。瀑布可以改写，并依赖顺序。`system-prompt/assemble` 最强，会换掉一切。用 `ctx.systemPrompt.section()` 添加提示文字。决定必须等待时，从 `tools/pre-execute` 返回 `ask`。在 `tools/result` 上观察。
 
@@ -50,7 +50,7 @@
 
 为什么看起来能工作：打开的页面会更新，完整扫描得到的列表和日志会给出的一样。
 
-什么时候会坏：每个事件都重扫日志。分叉的 `init` 必须接收 `inheritedEventCount`，不能从 `firstLiveSeq` 或 `session/end-seed` 推断切口。客户端折叠会和宿主分叉。`wire.view` 返回新对象时，即使值没变也会发布。`stateVersion` 不动的话，过期检查点会被应用。[docs/subsystems/session-projection.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md) 说，框架驱动 `apply`，领域自己不持有订阅。
+什么时候会坏：每个事件都重扫日志。分叉的 `init` 必须接收 `inheritedEventCount`，不能从 `firstLiveSeq` 或 `session/end-seed` 推断切口。客户端折叠会和宿主分叉。`wire.view` 返回新对象时，即使值没变也会发布。`stateVersion` 不动的话，过期检查点会被应用。[docs/subsystems/session-projection.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session-projection)） 说，框架驱动 `apply`，领域自己不持有订阅。
 
 正确替代：`ctx.sessionProjections.register`，`apply` 同步，并在忽略事件时返回同一个状态引用；状态是普通 JSON；折叠变化时提高 `stateVersion`；客户端需要这个值时提供 `wire.view`。用 `stateOf` 或 `snapshot` 读取。
 
@@ -67,7 +67,7 @@
 ## 来源
 
 - [packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md)
-- [docs/subsystems/session-projection.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md)
-- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)
-- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)
-- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)
+- [docs/subsystems/session-projection.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session-projection)）
+- [docs/cookbook/extension-cookbook.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/cookbook/extension-cookbook)）
+- [docs/subsystems/tools.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/tools)）
+- [docs/subsystems/session.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/reference/subsystems/session)）
