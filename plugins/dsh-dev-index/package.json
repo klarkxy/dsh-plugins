@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-dev-index",
-  "version": "0.1.0",
-    "description": "Workflow skill that helps an agent pick a DeepSeek Harness extension mechanism and deliver a verified plugin.",
+  "version": "0.1.1",
+  "description": "Workflow skill that helps an agent pick a DeepSeek Harness extension mechanism and deliver a verified plugin.",
   "icon": "./icon.svg",
   "keywords": [
     "dsh-plugin",
@@ -84,6 +84,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "600dea2ae0a93ba3eedb1bb6e1a30299139f9b96fe30a2accb28165973efef99"
+    "contentHash": "271e90a176f8975205471618d07c5841fdbddbb080174f6e53c8226b6175b476"
   }
 }
