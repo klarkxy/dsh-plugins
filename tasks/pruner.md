@@ -34,3 +34,11 @@
 - 安装器拒绝覆盖。若复制中断，保留并报告未完成目录，由用户检查、备份和移走后重装；不偷偷清理不确定内容。
 
 隔离 Web 测试实例及其子进程已关闭；交付包保留复用 DSH 标准配置的 MIT 声明。
+
+## 2026-09-25：迁移并安装到日常 Web
+
+- 日常 Web 使用 DSH `0.1.7-rc.2`。该版本不再读取 `$DSH_HOME/.agent-presets`，所以旧安装器复制的 Preset 不会出现在菜单中。
+- 新增 `dsh-pruner@0.2.0` bundle 声明，把旧 `preset.yml` 的显示信息与 `agent.cordis.yml` 的插件列表迁入 `cordis.patch.yml`；未增加运行时服务，也未修改默认模型或权限。
+- 打包为仓库根目录的 `dsh-pruner-0.2.0.tgz`，通过原生插件命令安装到日常 `web` profile。此前由本轮复制的无效旧目录在逐文件校验后移除；安装前的 profile 配置备份保存在 `.artifacts/pruner-web-preinstall-20260925`。
+- `pnpm check` 通过：标题插件 22 项、Pruner 安装器 7 项，类型检查、构建和打包 dry-run 通过。最终归档安装后，实际 Web 新会话菜单同时显示“角色配置助手”和“删繁 / Pruner”；后者可选中，Classmates 设置页可打开。验收用临时浏览器和 Web 实例已关闭。
+- 本轮未发起真实模型请求；菜单、设置页与 Preset 挂载验收不能证明模型对 A–G 场景的决策质量。

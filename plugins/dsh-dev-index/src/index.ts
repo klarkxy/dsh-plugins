@@ -3,7 +3,7 @@ import z from "@deepseek-ai/schemastery";
 
 import { renderSkillBody, SKILL_DESCRIPTION, SKILL_NAME, SKILL_WHEN_TO_USE } from "./skill-body.js";
 
-export const name = "dsh-dev-index";
+export const name = "@klarkxy/dsh-dev-index";
 export const inject = ["skills"];
 
 export const DEFAULT_PAGES_BASE_URL = "https://klarkxy.github.io/dsh-plugins/";

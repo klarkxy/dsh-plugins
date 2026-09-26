@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Pruner",
+    "description": "Add a code simplification preset that preserves supported behavior."
+  }
+}

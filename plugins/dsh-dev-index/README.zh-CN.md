@@ -29,6 +29,14 @@ Pages 没有响应时，同样的路径在 GitHub 的 `main` 上：
 
 官方 DSH 不读取 `dsh.plugin.json`。本仓库其他 bundle 用这个文件做本地发现，所以这里也保留。加载器认的是 `package.json` 里的 `dsh.bundle.patch`。
 
+## 从 npm 安装
+
+```sh
+dsh plugin --profile web add @klarkxy/dsh-dev-index
+```
+
+npm 包包含已构建的 `lib/`。
+
 ## 从 GitHub 安装
 
 ```sh
@@ -39,7 +47,7 @@ Git 安装会运行 `prepare` 来构建 `lib/`。pnpm 在允许之前会拦住�
 
 ```yaml
 allowBuilds:
-  dsh-dev-index: true
+  '@klarkxy/dsh-dev-index': true
 ```
 
 然后再执行一次 add。该许可会在本机执行这个包的构建。需要固定插件来源时请钉住 commit。skill 读取的索引仍然跟随 `main` 和 Pages 站点。
@@ -50,7 +58,7 @@ allowBuilds:
 
 ```bash
 pnpm install
-pnpm --filter dsh-dev-index build
+pnpm --filter @klarkxy/dsh-dev-index build
 dsh plugin --profile web add ./plugins/dsh-dev-index
 ```
 
@@ -85,5 +93,5 @@ node plugins/dsh-dev-index/scripts/build-site.mjs
 ## 卸载
 
 ```bash
-dsh plugin --profile web remove dsh-dev-index
+dsh plugin --profile web remove @klarkxy/dsh-dev-index
 ```

@@ -14,7 +14,7 @@ const readmeZh = readFileSync(new URL("../README.zh-CN.md", import.meta.url), "u
 
 describe("bundle contract", () => {
   it("declares the DSH bundle patch and a prepare build", () => {
-    expect(packageJson.name).toBe("dsh-dev-index");
+    expect(packageJson.name).toBe("@klarkxy/dsh-dev-index");
     expect(packageJson.packageManager).toBe("pnpm@10.29.2");
     expect(packageJson.scripts).toMatchObject({ prepare: "pnpm build" });
     expect(packageJson.dsh).toEqual({ bundle: { patch: "./cordis.patch.yml" } });
@@ -41,14 +41,14 @@ describe("bundle contract", () => {
   it("inserts the index plugin with the pages URL", () => {
     expect(patch).toContain("- insert:");
     expect(patch).toContain("- id: dsh-dev-index");
-    expect(patch).toContain("name: 'dsh-dev-index'");
+    expect(patch).toContain("name: '@klarkxy/dsh-dev-index'");
     expect(patch).toContain("pagesBaseUrl: https://klarkxy.github.io/dsh-plugins/");
   });
 
   it("documents install, the skill, and the Pages site in both languages", () => {
     for (const document of [readme, readmeZh]) {
       expect(document).toContain("allowBuilds:");
-      expect(document).toContain("dsh-dev-index: true");
+      expect(document).toContain("'@klarkxy/dsh-dev-index': true");
       expect(document).toContain("https://klarkxy.github.io/dsh-plugins/");
       expect(document).toContain("https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/");
       expect(document).toContain("dsh-dev-index");

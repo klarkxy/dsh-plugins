@@ -29,6 +29,14 @@ The body also lists area ids so the agent knows which `areas/<id>.md` files exis
 
 Official DSH does not read `dsh.plugin.json`. This repository's other bundles ship that file for local discovery, so this package does too. The loader contract is `package.json` `dsh.bundle.patch`.
 
+## Install from npm
+
+```sh
+dsh plugin --profile web add @klarkxy/dsh-dev-index
+```
+
+The npm package includes the built `lib/` files.
+
 ## Install from GitHub
 
 ```sh
@@ -39,7 +47,7 @@ A Git install runs `prepare`, which builds `lib/`. pnpm blocks that script until
 
 ```yaml
 allowBuilds:
-  dsh-dev-index: true
+  '@klarkxy/dsh-dev-index': true
 ```
 
 Run the add again. That allowance executes this package's build on the machine. Pin a commit when the plugin source must not move. The index the skill fetches still follows `main` and the Pages site.
@@ -50,7 +58,7 @@ Peer ranges on `@deepseek-ai/dsh-skill` are checked against the running `dsh` ve
 
 ```bash
 pnpm install
-pnpm --filter dsh-dev-index build
+pnpm --filter @klarkxy/dsh-dev-index build
 dsh plugin --profile web add ./plugins/dsh-dev-index
 ```
 
@@ -85,5 +93,5 @@ node plugins/dsh-dev-index/scripts/build-site.mjs
 ## Uninstall
 
 ```bash
-dsh plugin --profile web remove dsh-dev-index
+dsh plugin --profile web remove @klarkxy/dsh-dev-index
 ```

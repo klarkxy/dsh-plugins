@@ -1,17 +1,50 @@
 {
-  "name": "dsh-pruner",
-  "version": "0.1.0",
+  "name": "@klarkxy/dsh-pruner",
+  "version": "0.2.0",
   "description": "Pruner: a subtractive engineering preset for DeepSeek Harness.",
+  "icon": "./icon.svg",
   "type": "module",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/klarkxy/dsh-plugins.git",
     "directory": "plugins/dsh-pruner"
   },
-  "keywords": ["deepseek-harness", "dsh-preset", "simplification"],
-  "bin": { "dsh-pruner-install": "./install.mjs" },
-  "files": ["install.mjs", "presets", "README*.md", "ACCEPTANCE.md", "LICENSE"],
-  "engines": { "node": ">=22.19.0", "dsh": ">=0.1.5-rc.2 <0.2.0" },
-  "scripts": { "test": "vitest run" }
+  "keywords": [
+    "deepseek-harness",
+    "dsh-preset",
+    "simplification"
+  ],
+  "bin": {
+    "dsh-pruner-install": "./install.mjs"
+  },
+  "files": [
+    "icon.svg",
+    "locale/*.json",
+    "cordis.patch.yml",
+    "install.mjs",
+    "presets",
+    "README*.md",
+    "ACCEPTANCE.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "dsh": "0.1.7-rc.2"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dshRelease": {
+    "contentHash": "a567bd6ac8608382e9bd80261774c2a7a0cb07848d520fc3ef3bb15c680360bc"
+  }
 }

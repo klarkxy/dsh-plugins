@@ -9,14 +9,16 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "pnpm --filter \"{plugins/*}\" build",
-    "typecheck": "pnpm --filter \"{plugins/*}\" typecheck",
+    "build": "pnpm --filter \"{plugins/*}\" --if-present run build",
+    "typecheck": "pnpm --filter \"{plugins/*}\" --if-present run typecheck",
     "test": "pnpm --filter \"{plugins/*}\" test",
     "pack:check": "pnpm --filter \"{plugins/*}\" exec npm pack --dry-run --cache .npm-cache",
-    "check": "pnpm typecheck && pnpm test && pnpm build && pnpm pack:check"
+    "release:check": "node scripts/release-target.mjs && node --test scripts/*.test.mjs",
+    "check": "pnpm release:check && pnpm typecheck && pnpm test && pnpm build && pnpm pack:check"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "semver": "^7.8.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }

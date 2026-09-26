@@ -6,23 +6,27 @@
 
 ## 安装与使用
 
-需要 Node.js 22.19+、DSH 0.1.5-rc.2 系列及其标准编码工具。仓库根目录执行：
+当前 Web bundle 需要 Node.js 24+、DSH 0.1.7-rc.2。npm 发布后可直接安装：
 
 ```sh
-node plugins/dsh-pruner/install.mjs
+dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
-默认安装到 `$DSH_HOME/.agent-presets/pruner`；未设置 `DSH_HOME` 时使用 `~/.dsh`。DSH Editor 或其他启动器使用独立 Home 时，指定它实际使用的路径：
+也可以从源码打包，再把生成的 `.tgz` 安装到目标 profile：
 
 ```sh
-node plugins/dsh-pruner/install.mjs --home "D:/my-dsh-home"
+cd plugins/dsh-pruner
+npm pack --ignore-scripts
+dsh plugin --profile web add "D:/path/to/klarkxy-dsh-pruner-0.2.0.tgz"
 ```
 
-在新会话的 Preset 选择器中选择 **删繁 / Pruner**，然后在模型选择器中选择当前可用的强推理、大上下文模型，并启用该模型支持的较高推理强度。Preset 元数据不支持单独绑定模型或 reasoning effort，所以此包不改全局模型配置，也不承诺替你选好了模型。
+自定义 profile 请把 `web` 换成其名称。安装后重启该 profile，在新会话的 Preset 选择器中选择 **删繁 / Pruner**。DSH 0.1.7 已不再读取 `$DSH_HOME/.agent-presets`；`install.mjs` 仅供旧版 0.1.5-rc.2 使用，不能用来安装到当前 Web。
 
-这是原生 Preset 文件包，不是 `dsh plugin add` 的 bundle。安装只复制 Preset 配置与随附声明，不改默认 Preset、其他 Preset、权限或模型设置，不执行构建钩子。已有同名目录、文件或符号链接会被拒绝；更新前自行备份并移走旧 `pruner` 目录，再运行安装。复制中断会报告未完成目录，不将半成品宣称为安装成功。无需更换当前正在运行的会话；已有消息的会话不能切换 Preset。
+然后在模型选择器中选择当前可用的强推理、大上下文模型，并启用该模型支持的较高推理强度。Preset 元数据不支持单独绑定模型或 reasoning effort，所以此包不改全局模型配置，也不承诺替你选好了模型。
 
-卸载时移走这个 Home 下的 `.agent-presets/pruner` 目录即可。文件在会话开始后发生变化，建议重启 DSH，再新建会话，以确保所有资源重新加载。若宿主关闭了 `includeUserRoot`，应在其现有 Preset 配置中启用用户目录或手动加入此根目录，保留其他已有配置。
+这是只声明原生 Preset 的 bundle，不增加运行时服务，不改默认 Preset、其他 Preset、权限或模型设置。已有消息的会话不能切换 Preset；更新后重启 profile 并新建会话。
+
+卸载时在目标 profile 的原生插件管理页移除 `@klarkxy/dsh-pruner` bundle。旧版安装器创建的 `.agent-presets/pruner` 目录对 0.1.7 无效；迁移并确认新版入口后可移走旧目录。
 
 ## 两种请求
 
@@ -37,12 +41,12 @@ Audit 是模型行为约定，**不是独立的工具权限沙箱**。需要强�
 
 报告以“少了什么”为中心，使用同一口径对比概念、状态和维护范围，列出实际验证与未验证项。零删除可以是正确结果；不以 LOC 或测试数量作为成功配额。
 
-系统提示词在 [agent.cordis.yml](presets/pruner/agent.cordis.yml)，显示信息在 [preset.yml](presets/pruner/preset.yml)。工具组合取自 DSH `0.1.5-rc.2` 的标准 Preset，并保留宿主所有权与服务隔离；升级 DSH 时应重新核验该静态组合。
+Web 声明在 [cordis.patch.yml](cordis.patch.yml)。它从旧版 [agent.cordis.yml](presets/pruner/agent.cordis.yml) 与 [preset.yml](presets/pruner/preset.yml) 迁移；工具组合取自 DSH `0.1.5-rc.2` 的标准 Preset，并在 Web `0.1.7-rc.2` 验证。升级 DSH 时应重新核验该静态组合。
 
 ## 验证
 
 ```sh
-pnpm --filter dsh-pruner test
+pnpm --filter @klarkxy/dsh-pruner test
 pnpm check
 ```
 

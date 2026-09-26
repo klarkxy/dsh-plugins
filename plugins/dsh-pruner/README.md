@@ -6,17 +6,23 @@ A native DeepSeek Harness preset for subtractive engineering: preserve supported
 
 ## Install
 
-Requires Node.js 22.19+ and DSH 0.1.5-rc.2 with the standard coding tools. From this repository:
+The Web bundle requires Node.js 24+ and DSH 0.1.7-rc.2. Once published to npm, install it directly:
 
 ```sh
-node plugins/dsh-pruner/install.mjs
-# For an Editor or launcher with a separate Harness home:
-node plugins/dsh-pruner/install.mjs --home "D:/my-dsh-home"
+dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
-The installer copies the preset to `$DSH_HOME/.agent-presets/pruner`, falling back to `~/.dsh` when `DSH_HOME` is unset. Select **删繁 / Pruner** in a new session, then choose a strong reasoning model with a large context window and a supported high reasoning setting. The current preset metadata cannot bind a per-preset model or effort. Pruner leaves model selection to the session and does not modify global settings.
+Alternatively, pack the source and install the resulting `.tgz` into the target profile:
 
-This is a native preset package, not a `dsh plugin add` bundle. Installation preserves other presets and settings and refuses an existing destination, including files and symlinks. Back up and move an existing `pruner` directory aside before updating. A failed copy reports an incomplete installation for inspection. Remove that preset directory to uninstall. Restart DSH and create a new session after editing installed assets; sessions with messages cannot switch presets. Hosts with `includeUserRoot: false` need to enable the user root or add it to their existing roster configuration without discarding other settings.
+```sh
+cd plugins/dsh-pruner
+npm pack --ignore-scripts
+dsh plugin --profile web add "D:/path/to/klarkxy-dsh-pruner-0.2.0.tgz"
+```
+
+Replace `web` for a custom profile. Restart the profile and select **删繁 / Pruner** in a new session, then choose a strong reasoning model with a large context window and a supported high reasoning setting. Preset metadata cannot bind a model or effort. Pruner leaves model selection to the session and does not modify global settings. DSH 0.1.7 no longer reads `$DSH_HOME/.agent-presets`; `install.mjs` is retained only for legacy 0.1.5-rc.2 deployments.
+
+This bundle declares a native Preset without a runtime service. It preserves other presets, permissions, and model settings. Existing sessions with messages cannot switch presets. Uninstall the `@klarkxy/dsh-pruner` bundle from the target profile's native plugin manager. A legacy `.agent-presets/pruner` directory is inert in 0.1.7 and can be removed after confirming the new bundle.
 
 ## Use
 
@@ -29,12 +35,12 @@ Missing evidence makes something a candidate, not safe to delete. Trace dynamic 
 
 The report explains what disappeared, the consistent before/after counting scope, actual verification and remaining uncertainty. Zero removals can be correct. LOC and test counts are supporting evidence, not quotas.
 
-The persona lives in [agent.cordis.yml](presets/pruner/agent.cordis.yml), with display metadata in [preset.yml](presets/pruner/preset.yml). Its static tool composition is adapted from DSH 0.1.5-rc.2; revalidate it when upgrading the host.
+The Web declaration is [cordis.patch.yml](cordis.patch.yml), migrated from [agent.cordis.yml](presets/pruner/agent.cordis.yml) and [preset.yml](presets/pruner/preset.yml). Its static tool composition is adapted from DSH 0.1.5-rc.2 and checked on Web 0.1.7-rc.2; revalidate it when upgrading the host.
 
 ## Verify
 
 ```sh
-pnpm --filter dsh-pruner test
+pnpm --filter @klarkxy/dsh-pruner test
 pnpm check
 ```
 

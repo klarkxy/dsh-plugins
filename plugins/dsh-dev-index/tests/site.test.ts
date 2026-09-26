@@ -37,7 +37,7 @@ describe("pages site", () => {
       expect(llms).toContain(area.file);
       expect(zhLlms).toContain(area.fileZh);
       const markdown = readFileSync(join(out, area.file), "utf8");
-      expect(markdown.startsWith(`# ${area.title}\n`)).toBe(true);
+      expect(markdown.split(/\r?\n/, 1)[0]).toBe(`# ${area.title}`);
       const html = readFileSync(join(out, "areas", `${area.id}.html`), "utf8");
       expect(html).toContain(`<h1 id="${slug(area.title)}">`);
       expect(html).toContain(catalog.indexed.commit);

@@ -31,7 +31,7 @@ describe("catalog", () => {
     expect(catalog.areas.length).toBeGreaterThan(0);
     for (const area of catalog.areas) {
       const markdown = readFileSync(new URL(area.file, new URL("../../../docs/", import.meta.url)), "utf8");
-      expect(markdown.startsWith(`# ${area.title}\n`)).toBe(true);
+      expect(markdown.split(/\r?\n/, 1)[0]).toBe(`# ${area.title}`);
       expect(markdown).toContain(catalog.indexed.commit);
       expect(area.sources.length).toBeGreaterThan(0);
       for (const source of area.sources) {
