@@ -2,25 +2,23 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { metaFromCatalog, loadCatalog } from "../site/catalog.js";
 import { apply, createSkill, resolveConfig, type IndexedSkill } from "../src/index.js";
-import { AREA_IDS, RAW_DOCS_BASE, renderSkillBody, TASK_IDS } from "../src/skill-body.js";
-
-const catalog = loadCatalog();
-const meta = metaFromCatalog(catalog);
+import {
+  OFFICIAL_DOCS_SITE,
+  OFFICIAL_LLMS_TXT,
+  OFFICIAL_RAW_DOCS,
+  OFFICIAL_REPOSITORY,
+  renderSkillBody,
+} from "../src/skill-body.js";
 
 describe("plugin", () => {
-  it("normalizes the pages URL and rejects unknown keys", () => {
-    expect(resolveConfig({ pagesBaseUrl: "https://klarkxy.github.io/dsh-plugins" }).pagesBaseUrl).toBe(
-      "https://klarkxy.github.io/dsh-plugins/",
-    );
-    expect(() => resolveConfig({ pagesBaseUrl: "ftp://example.test/" })).toThrow(/http/);
-    expect(() =>
-      resolveConfig({ pagesBaseUrl: "https://klarkxy.github.io/dsh-plugins/", extra: true } as never),
-    ).toThrow(/unknown config key/);
+  it("accepts an empty config and rejects leftover keys", () => {
+    expect(resolveConfig(undefined)).toEqual({});
+    expect(resolveConfig({})).toEqual({});
+    expect(() => resolveConfig({ pagesBaseUrl: OFFICIAL_DOCS_SITE } as never)).toThrow(/unknown config key/);
   });
 
-  it("registers a pointer skill and does not embed the indexed revision", () => {
+  it("registers a static pointer at official material", () => {
     const registered: IndexedSkill[] = [];
     apply(
       {
@@ -31,35 +29,39 @@ describe("plugin", () => {
           },
         },
       } as never,
-      { pagesBaseUrl: "https://klarkxy.github.io/dsh-plugins/" },
+      {},
     );
-    expect(registered).toHaveLength(1);
+    expect(registered).toEqual([createSkill()]);
     const skill = registered[0];
-    expect(skill).toEqual(createSkill("https://klarkxy.github.io/dsh-plugins/"));
     expect(skill.name).toBe("dsh-dev-index");
     expect(skill.invocation).toEqual({ modelInvocable: true, userInvocable: true });
     expect(skill).not.toHaveProperty("resourceBase");
-    expect(skill.content).toBe(renderSkillBody("https://klarkxy.github.io/dsh-plugins/"));
+    expect(skill.content).toBe(renderSkillBody());
     expect(skill.content.length).toBeLessThanOrEqual(7500);
-    expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/llms.txt");
-    expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/index.json");
-    expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/areas/<id>.md");
-    expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/tasks/index.md");
-    expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/tasks/<id>.md");
-    expect(skill.content).toContain(`${RAW_DOCS_BASE}llms.txt`);
-    expect(skill.content).toContain(`${RAW_DOCS_BASE}index.json`);
-    expect(skill.content).toContain(`${RAW_DOCS_BASE}areas/<id>.md`);
-    expect(skill.content).toContain(`${RAW_DOCS_BASE}tasks/index.md`);
-    expect(skill.content).toContain("officialTag");
-    expect(skill.content).toContain("Do not silently substitute");
-    expect(skill.content).toContain("could not be runtime-verified");
-    expect(skill.content).toContain("/deepseek-ai/deepseek-harness");
-    expect(skill.content).not.toContain(meta.officialCommit);
-    expect(skill.content).not.toContain(meta.officialTag);
-    expect(AREA_IDS).toEqual(catalog.areas.map((area) => area.id));
-    expect(TASK_IDS).toEqual(catalog.tasks.map((task) => task.id));
-    for (const id of AREA_IDS) expect(skill.content).toContain(`- ${id}`);
-    for (const id of TASK_IDS) expect(skill.content).toContain(`- ${id}`);
+    expect(skill.content).toContain("cordis-plugin-development");
+    expect(skill.content).toContain("cordis_inspect_list");
+    expect(skill.content).toContain("cordis_inspect_query");
+    expect(skill.content).toContain("danger-full-access");
+    expect(skill.content).toContain("plugin_manager");
+    expect(skill.content).toContain(OFFICIAL_DOCS_SITE);
+    expect(skill.content).toContain("/en/");
+    expect(skill.content).toContain(OFFICIAL_LLMS_TXT);
+    expect(skill.content).toContain("latest published release");
+    expect(skill.content).toContain(OFFICIAL_REPOSITORY);
+    expect(skill.content).toContain(OFFICIAL_RAW_DOCS);
+    expect(skill.content).toContain("dsh-v*");
+    expect(skill.content).toContain("Never silently mix versions");
+    expect(skill.content).toContain("docs/cookbook/extension-cookbook.md");
+    expect(skill.content).toContain("docs/cookbook/");
+    expect(skill.content).toContain("docs/subsystems/");
+    expect(skill.content).toContain("docs/tool-catalog.md");
+    expect(skill.content).toContain("docs/config-catalog.md");
+    expect(skill.content).toContain("references/practices.md");
+    expect(skill.content).toContain("remain unverified");
+    expect(skill.content).not.toMatch(/[0-9a-f]{40}/);
+    expect(skill.content).not.toMatch(/dsh-v\d/);
+    expect(skill.content).not.toContain("klarkxy.github.io");
+    expect(skill.content).not.toContain("pagesBaseUrl");
     const packed = readFileSync(new URL("../package.json", import.meta.url), "utf8");
     expect(packed).not.toContain("content/");
   });

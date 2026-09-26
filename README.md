@@ -8,7 +8,7 @@ A small pnpm monorepo for focused DeepSeek Harness plugins that do not need a re
 
 | Package | Purpose |
 | --- | --- |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | Walks an agent from a DSH extension task to a verified plugin, with area pages as the reference layer. |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | Lightweight skill that points an agent at official DSH docs, the plugin-development skill, and runtime inspection. |
 | [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.md) | Evidence-driven concept deletion and collapse through the native 删繁 / Pruner preset. |
 
 Install individual plugins from npm:
@@ -18,7 +18,7 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
-The development index for agents is [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) (`llms.txt`, `index.json`, `meta.json`, one markdown file per task, and one markdown file per area). `meta.json` is the DSH revision those pages were written against. `docs/` in this repository is the only copy. `docs/meta.json` records `officialTag` and `officialCommit` for the DeepSeek Harness revision those pages describe. The `dsh-dev-index` plugin does not ship the pages. Its skill tells the agent to fetch the site, and to fall back to raw files on `main` at `https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/` when Pages does not respond. A daily refresh follows [docs/REFRESH.md](docs/REFRESH.md). GitHub Pages has to be enabled for this repository with the source set to GitHub Actions. The workflow is `.github/workflows/pages.yml`. Until that setting is on, the site URL will not serve. The raw `main` URLs still will, once this tree is on `main`.
+`dsh-dev-index` does not keep a documentation copy. Official docs are [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/) (Chinese at the site root, English under `/en/`). [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) redirects there, including old paths. GitHub Pages publishes that redirect from `docs/` via `.github/workflows/pages.yml`. The repository setting Pages → Source must be GitHub Actions before that URL serves.
 
 ## Development
 

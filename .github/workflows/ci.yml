@@ -17,11 +17,4 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Fetch the pinned DeepSeek Harness commit
-        run: node plugins/dsh-dev-index/scripts/fetch-pinned.mjs /tmp/deepseek-harness
-      - name: Verify citations against that commit
-        run: node plugins/dsh-dev-index/scripts/verify-citations.mjs /tmp/deepseek-harness
       - run: pnpm check
-        env:
-          DSH_CHECKOUT: /tmp/deepseek-harness
-          DSH_REQUIRE_CHECKOUT: "1"

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -38,23 +39,36 @@ describe("bundle contract", () => {
     });
   });
 
-  it("inserts the index plugin with the pages URL", () => {
+  it("inserts the plugin with no config", () => {
     expect(patch).toContain("- insert:");
     expect(patch).toContain("- id: dsh-dev-index");
     expect(patch).toContain("name: '@klarkxy/dsh-dev-index'");
-    expect(patch).toContain("pagesBaseUrl: https://klarkxy.github.io/dsh-plugins/");
+    expect(patch).not.toContain("pagesBaseUrl");
   });
 
-  it("documents install, the skill, and the Pages site in both languages", () => {
+  it("documents the official docs pointer in both languages", () => {
     for (const document of [readme, readmeZh]) {
       expect(document).toContain("allowBuilds:");
       expect(document).toContain("'@klarkxy/dsh-dev-index': true");
-      expect(document).toContain("https://klarkxy.github.io/dsh-plugins/");
-      expect(document).toContain("https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/");
+      expect(document).toContain("https://deepseek-harness.github.io/deepseek-harness/");
+      expect(document).toContain("cordis-plugin-development");
       expect(document).toContain("dsh-dev-index");
       expect(document).toContain("ctx.skills.register");
+      expect(document).not.toContain("pagesBaseUrl");
       expect(document).not.toContain("resourceBase");
       expect(document).not.toContain("content/");
+      expect(document).not.toContain("REFRESH.md");
+    }
+  });
+
+  it("publishes only a redirect to the official documentation site", () => {
+    const docs = resolve(new URL("../../../docs/", import.meta.url).pathname);
+    for (const name of ["index.html", "404.html"]) {
+      const html = readFileSync(resolve(docs, name), "utf8");
+      expect(html).toContain('lang="en"');
+      expect(html).toContain("https://deepseek-harness.github.io/deepseek-harness/");
+      expect(html).toContain('http-equiv="refresh"');
+      expect(html).not.toMatch(/\p{Script=Han}/u);
     }
   });
 });
