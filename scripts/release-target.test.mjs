@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { discoverPackages } from './release-target.mjs';
-import { contentHash, selectRelease, readRegistry, writeVersion } from './publish-npm.mjs';
+import { contentHash, selectRelease, readRegistry, writeVersion, isAcceptedVersionConflict } from './publish-npm.mjs';
 
 const pkg = { name: '@klarkxy/dsh-one', directory: 'plugins/dsh-one', version: '1.2.3' };
 function fixture(t, overrides = {}) {
@@ -100,4 +100,15 @@ test('pending scanned version is recognized even while public package metadata i
     : { status: 404 }, pkg.version);
   assert.equal(selectRelease(pkg, 'same', metadata).publish, false);
   assert.equal(selectRelease(pkg, 'changed', metadata).version, '1.2.4');
+});
+
+
+test('only an explicit duplicate-version rejection can enter pending verification', () => {
+  const failure = (code, summary) => ({ stdout: JSON.stringify({ error: { code, summary } }) });
+  assert.equal(isAcceptedVersionConflict(failure('E403', 'You cannot publish over the previously published versions: 1.2.3.')), true);
+  assert.equal(isAcceptedVersionConflict(failure('EPUBLISHCONFLICT', 'version exists')), true);
+  for (const error of [failure('E403', 'Access denied'), failure('E401', 'Unauthorized'),
+    failure('E500', 'Server failure'), { stdout: 'invalid json' }]) {
+    assert.equal(isAcceptedVersionConflict(error), false);
+  }
 });

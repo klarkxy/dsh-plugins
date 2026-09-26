@@ -127,6 +127,14 @@ async function plan(root) {
   writeFileSync(join(root, planFile), JSON.stringify({ releases, changedFiles }, null, 2) + '\n');
 }
 
+export function isAcceptedVersionConflict(error) {
+  try {
+    const { error: detail } = JSON.parse(error.stdout?.toString() ?? '');
+    return detail?.code === 'EPUBLISHCONFLICT' || (detail?.code === 'E403' &&
+      /cannot publish over the previously published versions|cannot modify pre-existing version/i.test(`${detail.summary} ${detail.detail}`));
+  } catch { return false; }
+}
+
 async function publish(root) {
   const { releases } = JSON.parse(readFileSync(join(root, planFile), 'utf8'));
   const pending = [];
@@ -145,7 +153,14 @@ async function publish(root) {
       }
       console.log(`Already accepted: ${release.name}@${release.version}`);
     } else if (release.publish) {
-      console.log(npm(['publish', archive, '--ignore-scripts', '--access', 'public', '--provenance', '--tag', release.distTag, '--registry', registry], root));
+      try {
+        console.log(npm(['publish', archive, '--json', '--ignore-scripts', '--access', 'public', '--provenance', '--tag', release.distTag, '--registry', registry], root));
+      } catch (error) {
+        // Scanning can hide even exact-version metadata. A duplicate-version
+        // rejection only enters verification; auth and other failures still fail.
+        if (!isAcceptedVersionConflict(error)) throw error;
+        console.log(`Version already accepted; waiting to verify ${release.name}@${release.version}`);
+      }
     } else {
       throw new Error(`Previously published version is unavailable: ${release.name}@${release.version}`);
     }
@@ -158,7 +173,7 @@ async function publish(root) {
     for (let index = pending.length - 1; index >= 0; index--) {
       const { release, integrity } = pending[index];
       const remote = (await readRegistry(release.name)).versions[release.version];
-      if (!remote) continue;
+      if (!remote?.dist?.tarball || !remote.dist.integrity) continue;
       if (remote.dist?.integrity !== integrity) throw new Error(`Registry integrity mismatch: ${release.name}@${release.version}`);
       const archive = await fetch(remote.dist.tarball, { signal: AbortSignal.timeout(30_000) });
       if (archive.status === 404) continue;
