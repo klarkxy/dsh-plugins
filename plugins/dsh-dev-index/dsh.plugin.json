@@ -1,6 +1,6 @@
 {
   "id": "@klarkxy/dsh-dev-index",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "lib/index.js",
   "description": "Lightweight skill that points an agent at official DeepSeek Harness docs and runtime inspection.",
   "engines": {

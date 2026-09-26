@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-dev-index",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Lightweight skill that points an agent at official DeepSeek Harness docs and runtime inspection.",
   "icon": "./icon.svg",
   "keywords": [
@@ -81,6 +81,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "271e90a176f8975205471618d07c5841fdbddbb080174f6e53c8226b6175b476"
+    "contentHash": "78283c526c5c409111d736bf2afa6dd6d592483019a8520e52697e3da7ad6ad2"
   }
 }
