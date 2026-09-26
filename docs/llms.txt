@@ -11,6 +11,7 @@ Tag: dsh-v0.1.7-rc.2
 - [Index JSON](https://klarkxy.github.io/dsh-plugins/index.json): Machine-readable catalog of every area, summary, and official source path.
 - [Recorded revision](https://klarkxy.github.io/dsh-plugins/meta.json): officialRepository, officialTag, and officialCommit for the daily comparator.
 - [Index](https://klarkxy.github.io/dsh-plugins/index.html): Area list with stable anchors.
+- [中文](https://klarkxy.github.io/dsh-plugins/zh/llms.txt): Simplified Chinese mirror of the human-readable pages.
 - [Orientation](https://klarkxy.github.io/dsh-plugins/areas/orientation.md): What DeepSeek Harness is, where package groups live, and the rule that extensions depend on service definitions.
 - [Plugin module](https://klarkxy.github.io/dsh-plugins/areas/plugin-module.md): The apply/inject/Config plugin contract, Fiber lifecycle, services, and events.
 - [Bundles, profiles, and patches](https://klarkxy.github.io/dsh-plugins/areas/bundle-profile-patch.md): dsh.bundle versus dsh.profile, layer order, whole-config replacement, and display metadata.

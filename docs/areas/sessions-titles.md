@@ -1,6 +1,8 @@
 # Sessions and titles
 
-中文：会话是只追加的 `SessionEvent` 日志，消息历史从日志派生。标题服务是 `ctx.sessionTitle`。同一进程只能注册一个自动标题 provider；第二个 `register` 会抛错。
+[中文](../zh/areas/sessions-titles.md)
+
+A session is an append-only `SessionEvent` log, and message history is derived from that log. The title service is `ctx.sessionTitle`. A process may register only one automatic title provider; a second `register` throws.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

@@ -1,6 +1,8 @@
 # System prompt and request context
 
-中文：模型看到的系统提示由 `ctx.systemPrompt` 按顺序拼装。插件用 `section`、`variable`、`context` 和 `tools` 贡献内容。同名注册在 agent scope 上会盖住全局项。
+[中文](../zh/areas/system-prompt.md)
+
+`ctx.systemPrompt` assembles the system prompt the model sees, in order. Plugins contribute `section`, `variable`, `context`, and `tools`. A same-named registration on the agent scope overrides the global one.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

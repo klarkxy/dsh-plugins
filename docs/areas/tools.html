@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tools</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/tools.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="tools.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/tools.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="tools.md">markdown</a></p>
+</header>
 <article>
 <h1 id="tools">Tools</h1>
-<p>中文：模型可见的工具通过 <code>defineTool</code> 声明，并用 <code>ctx.tools.register</code> 注册。<code>execute</code> 只返回 schema 规定的 JSON 值。允许、拒绝和询问写在 <code>tools/pre-execute</code> 等事件上，不要写进工具正文。</p>
+<p><a href="../zh/areas/tools.html">中文</a></p>
+<p>Model-visible tools are declared with <code>defineTool</code> and registered with <code>ctx.tools.register</code>. <code>execute</code> returns only the JSON value required by the schema. Allow, deny, and ask belong on events such as <code>tools/pre-execute</code>, not inside the tool body.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p><code>@deepseek-ai/dsh-tools</code> provides <code>ctx.tools</code>, the registry the agent loop dispatches through. Registering a tool is enough for its schema to enter system-prompt assembly. Models see each permitted tool's name, description, and parameter schema. Per-agent restrictions can narrow that set.</p>

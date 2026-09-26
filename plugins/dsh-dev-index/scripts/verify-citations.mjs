@@ -25,22 +25,26 @@ if (meta.officialCommit !== catalog.indexed.commit) {
 }
 
 for (const area of catalog.areas) {
-  const markdown = await readFile(resolve(docsDir, area.file), "utf8");
-  if (!markdown.includes(catalog.indexed.commit)) {
-    missing.push(`${area.file} does not name ${catalog.indexed.commit}`);
+  for (const file of [area.file, area.fileZh]) {
+    const markdown = await readFile(resolve(docsDir, file), "utf8");
+    if (!markdown.includes(catalog.indexed.commit)) {
+      missing.push(`${file} does not name ${catalog.indexed.commit}`);
+    }
+    for (const source of area.sources) {
+      if (!markdown.includes(source)) missing.push(`${file} does not mention ${source}`);
+    }
+    const blobs = markdown.matchAll(/https:\/\/github\.com\/deepseek-ai\/deepseek-harness\/blob\/([0-9a-f]{40})\/([^)\s]+)/g);
+    for (const match of blobs) {
+      if (match[1] !== catalog.indexed.commit) {
+        missing.push(`${file} links commit ${match[1]}`);
+      }
+      if (!existsSync(resolve(checkout, match[2]))) {
+        missing.push(`${match[2]} missing from checkout (linked by ${area.id})`);
+      }
+    }
   }
   for (const source of area.sources) {
-    if (!markdown.includes(source)) missing.push(`${area.file} does not mention ${source}`);
     if (!existsSync(resolve(checkout, source))) missing.push(`${source} missing from checkout (cited by ${area.id})`);
-  }
-  const blobs = markdown.matchAll(/https:\/\/github\.com\/deepseek-ai\/deepseek-harness\/blob\/([0-9a-f]{40})\/([^)\s]+)/g);
-  for (const match of blobs) {
-    if (match[1] !== catalog.indexed.commit) {
-      missing.push(`${area.file} links commit ${match[1]}`);
-    }
-    if (!existsSync(resolve(checkout, match[2]))) {
-      missing.push(`${match[2]} missing from checkout (linked by ${area.id})`);
-    }
   }
 }
 

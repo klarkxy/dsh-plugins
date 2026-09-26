@@ -1,6 +1,8 @@
 # LLM providers
 
-中文：所有模型调用都走 `ctx.llm`。新供应商实现 `LlmAdapter` 并 `ctx.llm.registerAdapter`。不要在插件里直接请求供应商 HTTP。
+[中文](../zh/areas/llm-providers.md)
+
+Every model call goes through `ctx.llm`. A new provider implements `LlmAdapter` and calls `ctx.llm.registerAdapter`. Do not request the provider's HTTP API directly from a plugin.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

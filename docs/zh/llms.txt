@@ -1,0 +1,31 @@
+# DSH 开发索引
+
+> DeepSeek Harness dsh-v0.1.7-rc.2（477b4f420553e8a52c2fbccc464d7561b239c443）的功能与扩展点索引。供编写插件、预设、补丁、profile 与 provider 的 agent 使用。不要发明 API。
+
+来源：https://github.com/deepseek-ai/deepseek-harness
+提交：477b4f420553e8a52c2fbccc464d7561b239c443
+标签：dsh-v0.1.7-rc.2
+
+## 文档
+
+- [English](https://klarkxy.github.io/dsh-plugins/llms.txt)：人类可读页面的英文版。
+- [索引 JSON](https://klarkxy.github.io/dsh-plugins/index.json)：每个章节的 id、英文摘要和官方源路径。机器可读目录保持英文。
+- [所记录的修订](https://klarkxy.github.io/dsh-plugins/meta.json)：每日比对用的 officialRepository、officialTag 与 officialCommit。
+- [索引](https://klarkxy.github.io/dsh-plugins/zh/index.html)：带稳定锚点的章节列表。
+- [总览](https://klarkxy.github.io/dsh-plugins/zh/areas/orientation.md)：DeepSeek Harness 是「一切皆插件」的 agent harness。二次开发先定位能力属于哪一组包，再读该组 README 和对应子系统文档，不要从记忆里发明 API。
+- [插件模块](https://klarkxy.github.io/dsh-plugins/zh/areas/plugin-module.md)：一个插件是导出 `apply` 的模块。需要的服务写在 `inject` 里；可调参数用同名的 Schemastery `Config` 声明。通过 `ctx` 注册的资源会在卸载时自动清理。
+- [Bundle、Profile 与补丁](https://klarkxy.github.io/dsh-plugins/zh/areas/bundle-profile-patch.md)：作者发布的是 **bundle**（`package.json` 的 `dsh.bundle.patch` 指向一份补丁）。用户启动的是 **profile**（`$DSH_HOME/profiles/<name>`）。后应用的层按行覆盖，`config` 是整对象替换，不是深合并。
+- [命令行](https://klarkxy.github.io/dsh-plugins/zh/areas/cli.md)：`dsh` 是唯一支持的 Node 启动器。`dsh plugin --profile <name>` 把参数转给该 profile 目录里的 pnpm。`--dump-config` 只打印组合结果，不启动应用。
+- [工具](https://klarkxy.github.io/dsh-plugins/zh/areas/tools.md)：模型可见的工具通过 `defineTool` 声明，并用 `ctx.tools.register` 注册。`execute` 只返回 schema 规定的 JSON 值。允许、拒绝和询问写在 `tools/pre-execute` 等事件上，不要写进工具正文。
+- [技能](https://klarkxy.github.io/dsh-plugins/zh/areas/skills.md)：Skill 是按需加载的说明，不是会话事件。嵌入式说明用 `ctx.skills.register`。磁盘上的说明是带 frontmatter 的 `SKILL.md`，由 filesystem provider 发现。模型通过 `skill` 工具加载正文。
+- [Agent 预设与 Persona](https://klarkxy.github.io/dsh-plugins/zh/areas/presets-persona.md)：Agent preset 是一条 `@deepseek-ai/dsh-agent-preset` 声明，放在 bundle 补丁里。`$DSH_HOME/.agent-presets/` 在这一版已经不再被读取。Persona 用 `@deepseek-ai/dsh-persona` 挂在 preset 内部。
+- [系统提示与请求上下文](https://klarkxy.github.io/dsh-plugins/zh/areas/system-prompt.md)：模型看到的系统提示由 `ctx.systemPrompt` 按顺序拼装。插件用 `section`、`variable`、`context` 和 `tools` 贡献内容。同名注册在 agent scope 上会盖住全局项。
+- [会话与标题](https://klarkxy.github.io/dsh-plugins/zh/areas/sessions-titles.md)：会话是只追加的 `SessionEvent` 日志，消息历史从日志派生。标题服务是 `ctx.sessionTitle`。同一进程只能注册一个自动标题 provider；第二个 `register` 会抛错。
+- [大模型供应商](https://klarkxy.github.io/dsh-plugins/zh/areas/llm-providers.md)：所有模型调用都走 `ctx.llm`。新供应商实现 `LlmAdapter` 并 `ctx.llm.registerAdapter`。不要在插件里直接请求供应商 HTTP。
+- [Hook 桥接](https://klarkxy.github.io/dsh-plugins/zh/areas/hooks.md)：这一组不是通用的原生 hook API。它把已有的 Claude Code 或 Codex `hooks.json` 命令钩子接到 Harness 的拦截点上。`{"continue": false}` 会被记录，但不会停止运行。
+- [MCP 服务器](https://klarkxy.github.io/dsh-plugins/zh/areas/mcp.md)：外部 MCP 服务器用一条 `@deepseek-ai/dsh-mcp-client` 配置接入。工具名变成 `mcp__<serverName>__<tool>`。只加 client 行；官方 profile 已经挂了 `mcp-resources`。
+- [界面插槽](https://klarkxy.github.io/dsh-plugins/zh/areas/ui-slots.md)：Web 界面用 `ctx.slots` 组合 React。往别人声明的 slot 里注册时用 `ctx.slots.inject`，不要 import 另一个功能插件的组件。Client 入口在 `package.json` 的 `dsh.client` 和 `./client` 导出。
+- [设置、审批与权限预设](https://klarkxy.github.io/dsh-plugins/zh/areas/settings-approval.md)：业务插件读自己的 Config，不存在文档化的 `ctx.settings.get` / `set`。设置表单通过 `ctx.settings` 的 `describe`、`update`、`replace` 和 `mutate` 改 profile 补丁。审批问的是「这一次动作能否继续」，权限预设把 sandbox 和 approval 绑在一起。
+- [插件管理器与实时检查](https://klarkxy.github.io/dsh-plugins/zh/areas/plugin-manager-inspect.md)：改当前 profile 用 `plugin_manager` 工具或 `dsh plugin`，不要手改 profile 的 `package.json`。查已挂载服务的方法签名用 `cordis_inspect_query`。这两个工具都会要求 `danger-full-access` 或一次审批。
+- [压缩、子代理、任务与目录](https://klarkxy.github.io/dsh-plugins/zh/areas/other-seams.md)：压缩、子代理和后台任务都是「定义 / 提供者 / 消费者」三条缝。换实现时挂新的 provider，不要复制服务。字段的完整列表在生成的 config catalog，不在这篇索引里。
+

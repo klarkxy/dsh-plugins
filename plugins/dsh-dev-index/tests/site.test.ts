@@ -23,15 +23,29 @@ describe("pages site", () => {
     const index = readFileSync(join(out, "index.html"), "utf8");
     expect(readFileSync(join(out, ".nojekyll"), "utf8")).toBe("");
     expect(llms).toContain(catalog.indexed.commit);
+    expect(llms).toContain(`${catalog.pagesBaseUrl}zh/llms.txt`);
     expect(index).toContain('id="dsh-dev-index"');
+    expect(index).toContain('<html lang="en">');
+    expect(index).toContain('lang="zh-CN">中文</a>');
+    const zhIndex = readFileSync(join(out, "zh", "index.html"), "utf8");
+    const zhLlms = readFileSync(join(out, "zh", "llms.txt"), "utf8");
+    expect(zhIndex).toContain('<html lang="zh-CN">');
+    expect(zhIndex).toContain('lang="en">English</a>');
+    expect(zhLlms).toContain("[English](");
     for (const area of catalog.areas) {
       expect(index).toContain(`id="${area.id}"`);
       expect(llms).toContain(area.file);
+      expect(zhLlms).toContain(area.fileZh);
       const markdown = readFileSync(join(out, area.file), "utf8");
       expect(markdown.startsWith(`# ${area.title}\n`)).toBe(true);
       const html = readFileSync(join(out, "areas", `${area.id}.html`), "utf8");
       expect(html).toContain(`<h1 id="${slug(area.title)}">`);
       expect(html).toContain(catalog.indexed.commit);
+      expect(html).toContain(`../zh/areas/${area.id}.html`);
+      const zhHtml = readFileSync(join(out, "zh", "areas", `${area.id}.html`), "utf8");
+      expect(zhHtml).toContain('<html lang="zh-CN">');
+      expect(zhHtml).toContain(`../../areas/${area.id}.html`);
+      expect(zhHtml).toContain(catalog.indexed.commit);
     }
   });
 });

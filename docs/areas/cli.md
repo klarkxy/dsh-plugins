@@ -1,6 +1,8 @@
 # CLI
 
-中文：`dsh` 是唯一支持的 Node 启动器。`dsh plugin --profile <name>` 把参数转给该 profile 目录里的 pnpm。`--dump-config` 只打印组合结果，不启动应用。
+[中文](../zh/areas/cli.md)
+
+`dsh` is the only supported Node launcher. `dsh plugin --profile <name>` forwards its arguments to pnpm in that profile directory. `--dump-config` prints the composed result and does not boot the application.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

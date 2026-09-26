@@ -1,6 +1,8 @@
 # Plugin manager and live inspection
 
-中文：改当前 profile 用 `plugin_manager` 工具或 `dsh plugin`，不要手改 profile 的 `package.json`。查已挂载服务的方法签名用 `cordis_inspect_query`。这两个工具都会要求 `danger-full-access` 或一次审批。
+[中文](../zh/areas/plugin-manager-inspect.md)
+
+Change the current profile with the `plugin_manager` tool or `dsh plugin`. Do not hand-edit the profile `package.json`. Look up signatures of mounted services with `cordis_inspect_query`. Both tools require `danger-full-access` or a one-time approval.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

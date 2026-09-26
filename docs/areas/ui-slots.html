@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>UI slots</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/ui-slots.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="ui-slots.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/ui-slots.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="ui-slots.md">markdown</a></p>
+</header>
 <article>
 <h1 id="ui-slots">UI slots</h1>
-<p>中文：Web 界面用 <code>ctx.slots</code> 组合 React。往别人声明的 slot 里注册时用 <code>ctx.slots.inject</code>，不要 import 另一个功能插件的组件。Client 入口在 <code>package.json</code> 的 <code>dsh.client</code> 和 <code>./client</code> 导出。</p>
+<p><a href="../zh/areas/ui-slots.html">中文</a></p>
+<p>The web UI composes React through <code>ctx.slots</code>. Register into a slot declared elsewhere with <code>ctx.slots.inject</code>, and do not import another feature plugin's component. The client entry is <code>dsh.client</code> in <code>package.json</code> and the <code>./client</code> export.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p>Slots are the Web client's typed React composition system. <code>@deepseek-ai/dsh-client-ui-slots</code> is the React-free registry. <code>@deepseek-ai/dsh-client-ui-renderer</code> binds observables and renders the tree. A feature plugin contributes UI through <code>ctx.slots.register()</code> and does not import another feature plugin's component.</p>

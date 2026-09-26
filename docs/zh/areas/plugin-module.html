@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>插件模块</title>
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="alternate" hreflang="en" href="../../areas/plugin-module.html">
+</head>
+<body>
+<header>
+<p><a href="../../areas/plugin-module.html" lang="en">English</a> · <a href="../index.html">索引</a> · <a href="../../index.json">index.json</a> · <a href="../../meta.json">meta.json</a> · <a href="plugin-module.md">Markdown</a></p>
+</header>
+<article>
+<h1 id="插件模块">插件模块</h1>
+<p><a href="../../areas/plugin-module.html">English</a></p>
+<p>一个插件是导出 <code>apply</code> 的模块。需要的服务写在 <code>inject</code> 里；可调参数用同名的 Schemastery <code>Config</code> 声明。通过 <code>ctx</code> 注册的资源会在卸载时自动清理。</p>
+<p>索引所对照的版本是 <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a>（<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>）。</p>
+<h2 id="它是什么">它是什么</h2>
+<p>Harness 插件是一个模块。依赖就绪后，Cordis 加载器会调用它。常见形式是具名函数插件：</p>
+<pre><code>import type { Context } from '@deepseek-ai/cordis'
+
+export const name = 'my-plugin'
+export const inject = ['tools']
+
+export function apply(ctx: Context) {
+  // ctx.tools is ready here.
+}</code></pre>
+<p><code>inject</code> 列出必需的服务键。框架会等它们全部就绪，然后才运行 <code>apply</code>。如果某个必需服务消失，插件会卸载，并在服务回来时再次加载。</p>
+<p>另外还有两种形式。对象插件是 <code>{ name, inject, apply }</code>。类插件是 <code>export default class X extends Service</code>，带有 <code>static inject</code>，并在构造函数里调用 <code>super(ctx, 'serviceKey')</code>。其他插件需要调用你的服务时，用类形式。大多数贡献用函数形式就够了。</p>
+<h2 id="它在哪里">它在哪里</h2>
+<ul><li>第一个插件、三种形式，以及 <code>ctx.effect</code>：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/index.md">docs/user/develop/basic/index.md</a></li><li><code>Config</code> 模式：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/config.md">docs/user/develop/basic/config.md</a></li><li>Fiber 状态与清理：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/index.md">docs/user/develop/framework/index.md</a></li><li>提供一项服务：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/service.md">docs/user/develop/framework/service.md</a></li><li>事件：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/events.md">docs/user/develop/framework/events.md</a></li><li>加载器对 <code>config</code> 和 <code>disabled</code> 的插值：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cordis-primer.md">docs/cordis-primer.md</a></li></ul>
+<h2 id="约定">约定</h2>
+<p>Fiber 状态为 <code>PENDING</code>、<code>LOADING</code>、<code>ACTIVE</code>、<code>FAILED</code>、<code>UNLOADING</code> 和 <code>DISPOSED</code>。</p>
+<p>通过 <code>ctx</code> 做的注册会在卸载时撤销，包括 <code>ctx.on</code>、<code>ctx.tools.register</code>、<code>ctx.llm.registerAdapter</code> 和 <code>ctx.effect(() =&gt; cleanup)</code>。卸载期间，清理函数按注册的相反顺序开始调用，但多个异步清理函数会并发运行。有顺序要求的清理要放进同一个 <code>ctx.effect()</code> 返回的那一个清理函数里。</p>
+<p><code>ctx.plugin(child)</code> 创建一个子 Fiber，它会随父级一起卸载。</p>
+<p>事件分发方法是 <code>ctx.emit</code>、<code>ctx.bail</code>、<code>ctx.serial</code> 和 <code>ctx.waterfall</code>。waterfall 的监听器会收到 <code>next</code>，除非有意短路，否则必须调用它。</p>
+<p>配置是一份 Schemastery 模式，导出为 <code>Config</code>，并配有同名的 TypeScript <code>Config</code> 类型。默认值写在模式字段上（<code>Schema.string().default('Hello')</code>）。不要把普通对象导出为 <code>Config</code>；Cordis 要求 Standard Schema 接口。非法配置会导致加载失败。修改配置会热替换插件：旧实例卸载，新实例加载。</p>
+<p>两处部署可能想设成不同值的东西，都必须是配置字段。检验标准是：不改代码，只改 <code>cordis.yml</code>，能不能改变这个值。</p>
+<p>服务类要扩充 Cordis 上下文，调用方才能看到带类型的键：</p>
+<pre><code>declare module '@deepseek-ai/cordis' {
+  interface Context {
+    metrics: MetricsService
+  }
+}</code></pre>
+<p>传给 <code>super(ctx, 'metrics')</code> 的构造名字就是这个键。</p>
+<h2 id="插件作者怎么用">插件作者怎么用</h2>
+<ul><li>导出 <code>name</code>，这样日志和清单能识别这个插件。</li><li>为 <code>apply</code> 用到的每一个 <code>ctx.*</code> 服务声明 <code>inject</code>。不要去拿没有注入的服务。</li><li>补丁行有 <code>config</code> 对象时就导出 <code>Config</code>。在写出还没读过的行之前，先在正在运行的宿主上查询 <code>Config.listConfigs</code>。</li><li>在 <code>apply</code>（或服务构造函数）里注册工具、skill、监听器和定时器，这样卸载时会移除它们。</li><li>网络套接字或其他外部资源，要从 <code>ctx.effect</code> 返回它的关闭函数。</li></ul>
+<p>插件管理器卡片上的展示文字不属于 <code>apply</code>。<code>locale/en.json</code> 见 <a href="bundle-profile-patch.html">Bundle、Profile 与补丁</a>。</p>
+<h2 id="来源">来源</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/index.md">docs/user/develop/basic/index.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/config.md">docs/user/develop/basic/config.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/index.md">docs/user/develop/framework/index.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/service.md">docs/user/develop/framework/service.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/framework/events.md">docs/user/develop/framework/events.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cordis-primer.md">docs/cordis-primer.md</a></li></ul>
+</article>
+</body>
+</html>

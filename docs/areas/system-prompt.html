@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>System prompt and request context</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/system-prompt.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="system-prompt.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/system-prompt.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="system-prompt.md">markdown</a></p>
+</header>
 <article>
 <h1 id="system-prompt-and-request-context">System prompt and request context</h1>
-<p>中文：模型看到的系统提示由 <code>ctx.systemPrompt</code> 按顺序拼装。插件用 <code>section</code>、<code>variable</code>、<code>context</code> 和 <code>tools</code> 贡献内容。同名注册在 agent scope 上会盖住全局项。</p>
+<p><a href="../zh/areas/system-prompt.html">中文</a></p>
+<p><code>ctx.systemPrompt</code> assembles the system prompt the model sees, in order. Plugins contribute <code>section</code>, <code>variable</code>, <code>context</code>, and <code>tools</code>. A same-named registration on the agent scope overrides the global one.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p><code>@deepseek-ai/dsh-system-prompt</code> provides <code>ctx.systemPrompt</code>. It assembles one ordered system prompt and the visible tool schemas for each model step. Contributions registered through <code>agent.ctx</code> affect that agent alone and shadow a same-named global contribution.</p>

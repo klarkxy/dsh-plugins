@@ -1,6 +1,8 @@
 # Agent presets and persona
 
-中文：Agent preset 是一条 `@deepseek-ai/dsh-agent-preset` 声明，放在 bundle 补丁里。`$DSH_HOME/.agent-presets/` 在这一版已经不再被读取。Persona 用 `@deepseek-ai/dsh-persona` 挂在 preset 内部。
+[中文](../zh/areas/presets-persona.md)
+
+An agent preset is one `@deepseek-ai/dsh-agent-preset` declaration in a bundle patch. This revision no longer reads `$DSH_HOME/.agent-presets/`. Persona is mounted inside the preset with `@deepseek-ai/dsh-persona`.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

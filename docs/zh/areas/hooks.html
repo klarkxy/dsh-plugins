@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hook 桥接</title>
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="alternate" hreflang="en" href="../../areas/hooks.html">
+</head>
+<body>
+<header>
+<p><a href="../../areas/hooks.html" lang="en">English</a> · <a href="../index.html">索引</a> · <a href="../../index.json">index.json</a> · <a href="../../meta.json">meta.json</a> · <a href="hooks.md">Markdown</a></p>
+</header>
+<article>
+<h1 id="hook-桥接">Hook 桥接</h1>
+<p><a href="../../areas/hooks.html">English</a></p>
+<p>这一组不是通用的原生 hook API。它把已有的 Claude Code 或 Codex <code>hooks.json</code> 命令钩子接到 Harness 的拦截点上。<code>{"continue": false}</code> 会被记录，但不会停止运行。</p>
+<p>索引所对照的版本是 <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a>（<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>）。</p>
+<h2 id="它是什么">它是什么</h2>
+<p>hooks 这一组在 Harness 的 agent 运行期间，执行为 Claude Code 或 Codex 编写的命令钩子。每个集成只支持其来源工具所记录的命令钩子子集。<code>@deepseek-ai/dsh-hook-protocol</code> 是共享引擎。部署不直接配置它。</p>
+<h2 id="它在哪里">它在哪里</h2>
+<ul><li>分组：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/README.md">packages/hooks/README.md</a></li><li>Claude Code 桥接：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/hooks-claude-code/README.md">packages/hooks/hooks-claude-code/README.md</a></li><li>Codex 桥接：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/hooks-codex/README.md">packages/hooks/hooks-codex/README.md</a></li><li>共享库：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/hook-protocol/README.md">packages/hooks/hook-protocol/README.md</a></li></ul>
+<p>完整的配置字段在 <code>docs/config-catalog.md</code> 里，锚点是 <code>@deepseek-ai/dsh-hooks-claude-code</code> 和 <code>@deepseek-ai/dsh-hooks-codex</code>。</p>
+<h2 id="约定">约定</h2>
+<p>两个插件都要求 <code>configPath</code>。其他写明的键：</p>
+<table><thead><tr><th>包</th><th>键</th></tr></thead><tbody><tr><td><code>@deepseek-ai/dsh-hooks-claude-code</code></td><td><code>configPath</code>、<code>pluginRoot</code>、<code>projectDir</code>、<code>defaultTimeoutMs</code>、<code>stderrSummaryMaxChars</code></td></tr><tr><td><code>@deepseek-ai/dsh-hooks-codex</code></td><td><code>configPath</code>、<code>model</code>、<code>defaultTimeoutMs</code>、<code>stderrSummaryMaxChars</code></td></tr></tbody></table>
+<p>桥接文档里的 Claude Code 事件：</p>
+<table><thead><tr><th>事件</th><th>README 描述的效果</th></tr></thead><tbody><tr><td><code>SessionStart</code></td><td>附上上下文。</td></tr><tr><td><code>UserPromptSubmit</code></td><td>阻断提示，或附上上下文。</td></tr><tr><td><code>PreToolUse</code></td><td>阻断工具，或请求审批。</td></tr><tr><td><code>PostToolUse</code></td><td>用反馈阻断结果，或附上上下文。</td></tr><tr><td><code>Stop</code></td><td>带着理由强制再走一步。</td></tr><tr><td><code>SubagentStart</code></td><td>附上上下文，仅进程内。</td></tr><tr><td><code>SubagentStop</code></td><td>只观察。它不能阻断，也不能添加上下文。</td></tr></tbody></table>
+<p>桥接文档里的 Codex 事件：<code>SessionStart</code>、<code>UserPromptSubmit</code>、<code>PreToolUse</code>、<code>PostToolUse</code> 和 <code>Stop</code>。Codex README 没有为 <code>PreToolUse</code> 列出询问结果。</p>
+<p>写明的、模型可见的结果包括：被拒绝的工具是 <code>Error: blocked by PreToolUse hook</code>；工具后阻断是 <code>blocked by PostToolUse hook</code>；阻断性的 <code>Stop</code> 是转向 <code>continue: blocked by Stop hook</code>；被阻断的提示被丢弃，于是这一轮以 <code>blocked</code> 结束。在事件允许的地方，上下文作为带来源标记的消息附上。阻断性的 <code>Stop</code> 通过 <code>steer()</code> 强制再进行一轮模型。</p>
+<p>两座桥的限制一节都写明：<code>{"continue": false}</code> 会被记录，并且不会停止运行。</p>
+<p>Claude 桥的 README 把事件映射到 harness 的拦截点：<code>SessionStart</code> 通过 <code>agent/created</code> 添加上下文；<code>UserPromptSubmit</code> 和 <code>PreToolUse</code> 是 <code>agent/pre-step</code> 和 <code>tools/pre-execute</code> 上的 waterfall；<code>PostToolUse</code> 是 <code>tools/post-execute</code> 上的 waterfall；<code>Stop</code> 是 <code>agent/turn-stopping</code> 上的串行监听器，其阻断结果调用 <code>steer()</code>；子代理事件在 <code>subagent/start</code> 和 <code>subagent/end</code> 上发出。同一份 README 还说 <code>SessionStart</code>、<code>SubagentStart</code> 和 <code>SubagentStop</code> 是分离运行的，因此 <code>SessionStart</code> 的上下文可能错过第一个请求。在依赖钩子去阻断开场回合之前，先读限制一节。</p>
+<p>插件需要自己的策略时，应该监听那些 harness 事件，或使用 <code>tools/pre-execute</code>，而不是发明第三种钩子文件格式。见<a href="tools.html">工具</a>。</p>
+<h2 id="插件作者怎么用">插件作者怎么用</h2>
+<ul><li>要复用已有的 <code>hooks.json</code>，插入匹配的桥接行并设置 <code>configPath</code>。不要把外来文件改写成 Cordis YAML。</li><li>要在 Harness 内部强制一条新策略，在你的插件里注册 <code>tools/pre-execute</code> 或 <code>agent/pre-step</code> 监听器。不要往 <code>hooks.json</code> 里加一个没有文档的事件名，然后指望桥接去运行它。</li><li>把钩子命令当作在宿主上执行代码。它们不是沙箱边界。</li></ul>
+<h2 id="来源">来源</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/README.md">packages/hooks/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/hooks-claude-code/README.md">packages/hooks/hooks-claude-code/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/hooks-codex/README.md">packages/hooks/hooks-codex/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/hooks/hook-protocol/README.md">packages/hooks/hook-protocol/README.md</a></li></ul>
+</article>
+</body>
+</html>

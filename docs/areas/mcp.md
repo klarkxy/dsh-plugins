@@ -1,6 +1,8 @@
 # MCP servers
 
-中文：外部 MCP 服务器用一条 `@deepseek-ai/dsh-mcp-client` 配置接入。工具名变成 `mcp__<serverName>__<tool>`。只加 client 行；官方 profile 已经挂了 `mcp-resources`。
+[中文](../zh/areas/mcp.md)
+
+An external MCP server is attached with one `@deepseek-ai/dsh-mcp-client` configuration row. Tool names become `mcp__<serverName>__<tool>`. Add only the client row; the official profile already mounts `mcp-resources`.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MCP servers</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/mcp.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="mcp.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/mcp.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="mcp.md">markdown</a></p>
+</header>
 <article>
 <h1 id="mcp-servers">MCP servers</h1>
-<p>中文：外部 MCP 服务器用一条 <code>@deepseek-ai/dsh-mcp-client</code> 配置接入。工具名变成 <code>mcp__&lt;serverName&gt;__&lt;tool&gt;</code>。只加 client 行；官方 profile 已经挂了 <code>mcp-resources</code>。</p>
+<p><a href="../zh/areas/mcp.html">中文</a></p>
+<p>An external MCP server is attached with one <code>@deepseek-ai/dsh-mcp-client</code> configuration row. Tool names become <code>mcp__&lt;serverName&gt;__&lt;tool&gt;</code>. Add only the client row; the official profile already mounts <code>mcp-resources</code>.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p>The MCP group exposes external Model Context Protocol servers as native tools. <code>@deepseek-ai/dsh-mcp-client</code> is one configured server. <code>@deepseek-ai/dsh-mcp-resources</code> exposes that server's resources. Shipped profiles mount the resources plugin once, so a bundle that adds a server configures only a client row.</p>

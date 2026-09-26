@@ -1,6 +1,8 @@
 # Hook bridges
 
-中文：这一组不是通用的原生 hook API。它把已有的 Claude Code 或 Codex `hooks.json` 命令钩子接到 Harness 的拦截点上。`{"continue": false}` 会被记录，但不会停止运行。
+[中文](../zh/areas/hooks.md)
+
+This group is not a general native hook API. It connects existing Claude Code or Codex `hooks.json` command hooks to Harness intercept points. `{"continue": false}` is recorded and does not stop the run.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

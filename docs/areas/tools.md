@@ -1,6 +1,8 @@
 # Tools
 
-中文：模型可见的工具通过 `defineTool` 声明，并用 `ctx.tools.register` 注册。`execute` 只返回 schema 规定的 JSON 值。允许、拒绝和询问写在 `tools/pre-execute` 等事件上，不要写进工具正文。
+[中文](../zh/areas/tools.md)
+
+Model-visible tools are declared with `defineTool` and registered with `ctx.tools.register`. `execute` returns only the JSON value required by the schema. Allow, deny, and ask belong on events such as `tools/pre-execute`, not inside the tool body.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

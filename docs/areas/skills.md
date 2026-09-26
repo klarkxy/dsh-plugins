@@ -1,6 +1,8 @@
 # Skills
 
-中文：Skill 是按需加载的说明，不是会话事件。嵌入式说明用 `ctx.skills.register`。磁盘上的说明是带 frontmatter 的 `SKILL.md`，由 filesystem provider 发现。模型通过 `skill` 工具加载正文。
+[中文](../zh/areas/skills.md)
+
+A skill is an on-demand instruction, not a session event. Embedded instructions use `ctx.skills.register`. On-disk instructions are `SKILL.md` files with frontmatter, discovered by the filesystem provider. The model loads the body with the `skill` tool.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

@@ -1,6 +1,8 @@
 # UI slots
 
-中文：Web 界面用 `ctx.slots` 组合 React。往别人声明的 slot 里注册时用 `ctx.slots.inject`，不要 import 另一个功能插件的组件。Client 入口在 `package.json` 的 `dsh.client` 和 `./client` 导出。
+[中文](../zh/areas/ui-slots.md)
+
+The web UI composes React through `ctx.slots`. Register into a slot declared elsewhere with `ctx.slots.inject`, and do not import another feature plugin's component. The client entry is `dsh.client` in `package.json` and the `./client` export.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

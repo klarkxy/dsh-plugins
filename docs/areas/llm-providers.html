@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LLM providers</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/llm-providers.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="llm-providers.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/llm-providers.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="llm-providers.md">markdown</a></p>
+</header>
 <article>
 <h1 id="llm-providers">LLM providers</h1>
-<p>中文：所有模型调用都走 <code>ctx.llm</code>。新供应商实现 <code>LlmAdapter</code> 并 <code>ctx.llm.registerAdapter</code>。不要在插件里直接请求供应商 HTTP。</p>
+<p><a href="../zh/areas/llm-providers.html">中文</a></p>
+<p>Every model call goes through <code>ctx.llm</code>. A new provider implements <code>LlmAdapter</code> and calls <code>ctx.llm.registerAdapter</code>. Do not request the provider's HTTP API directly from a plugin.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p><code>@deepseek-ai/dsh-llm</code> is the provider-neutral streaming service. Adapters translate a provider's wire format into the shared <code>StreamChunk</code> vocabulary. The service itself has no configuration and no provider wire code. Retry is a separate package, <code>@deepseek-ai/dsh-llm-retry</code>. Callers must keep model-visible input reconstructable from the session log. Loop-built requests arrive deep-frozen.</p>

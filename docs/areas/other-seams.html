@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Compaction, subagents, jobs, and catalogs</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/other-seams.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="other-seams.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/other-seams.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="other-seams.md">markdown</a></p>
+</header>
 <article>
 <h1 id="compaction-subagents-jobs-and-catalogs">Compaction, subagents, jobs, and catalogs</h1>
-<p>中文：压缩、子代理和后台任务都是「定义 / 提供者 / 消费者」三条缝。换实现时挂新的 provider，不要复制服务。字段的完整列表在生成的 config catalog，不在这篇索引里。</p>
+<p><a href="../zh/areas/other-seams.html">中文</a></p>
+<p>Compaction, subagents, and background jobs are three seams: definition, provider, and consumer. Swap an implementation by mounting a new provider. Do not copy the service. The full field list is the generated config catalog, not this index page.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p>Several seams follow the same shape as tools and skills: a Service Definition other plugins inject, one or more providers, and a consumer that faces the model. This page records the registration names. It is not a second config catalog.</p>
