@@ -47,23 +47,34 @@ describe("bundle contract", () => {
     });
   });
 
-  it("inserts the index plugin with the pages URL", () => {
+  it("inserts the plugin with no config", () => {
     expect(patch).toContain("- insert:");
     expect(patch).toContain("- id: dsh-dev-index");
     expect(patch).toContain("name: '@klarkxy/dsh-dev-index'");
-    expect(patch).toContain("pagesBaseUrl: https://klarkxy.github.io/dsh-plugins/");
+    expect(patch).not.toContain("pagesBaseUrl");
   });
 
-  it("documents install, the skill, and the Pages site in both languages", () => {
+  it("documents the official docs pointer in both languages", () => {
     for (const document of [readme, readmeZh]) {
       expect(document).toContain("allowBuilds:");
       expect(document).toContain("'@klarkxy/dsh-dev-index': true");
-      expect(document).toContain("https://klarkxy.github.io/dsh-plugins/");
-      expect(document).toContain("https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/");
+      expect(document).toContain("https://deepseek-harness.github.io/deepseek-harness/");
+      expect(document).toContain("cordis-plugin-development");
       expect(document).toContain("dsh-dev-index");
       expect(document).toContain("ctx.skills.register");
+      expect(document).not.toContain("pagesBaseUrl");
       expect(document).not.toContain("resourceBase");
       expect(document).not.toContain("content/");
+      expect(document).not.toContain("REFRESH.md");
     }
+  });
+
+  it("publishes the reader index and redirects only unknown paths", () => {
+    const index = readFileSync(new URL("../../../docs/index.html", import.meta.url), "utf8");
+    expect(index).toContain('id="dsh-dev-index"');
+    expect(index).toContain("DSH development index");
+    const notFound = readFileSync(new URL("../../../docs/404.html", import.meta.url), "utf8");
+    expect(notFound).toContain('http-equiv="refresh"');
+    expect(notFound).toContain("https://deepseek-harness.github.io/deepseek-harness/");
   });
 });

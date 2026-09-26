@@ -8,7 +8,7 @@ A small pnpm monorepo for focused DeepSeek Harness plugins that do not need a re
 
 | Package | Purpose |
 | --- | --- |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | Indexes DeepSeek Harness features and extension points for an agent doing DSH secondary development. |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | Read the Pages index in DSH; its skill points agents at official DSH references. |
 | [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.md) | Evidence-driven concept deletion and collapse through the native 删繁 / Pruner preset. |
 
 Install individual plugins from npm:
@@ -18,7 +18,7 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
-The development index for agents is [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) (`llms.txt`, `index.json`, `meta.json`, and one markdown file per area). `docs/` in this repository is the only copy. `docs/meta.json` records `officialTag` and `officialCommit` for the DeepSeek Harness revision those pages describe. The `dsh-dev-index` plugin does not ship the pages. Its skill tells the agent to fetch the site, and to fall back to raw files on `main` at `https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/` when Pages does not respond. A daily refresh follows [docs/REFRESH.md](docs/REFRESH.md). GitHub Pages has to be enabled for this repository with the source set to GitHub Actions. The workflow is `.github/workflows/pages.yml`. Until that setting is on, the site URL will not serve. The raw `main` URLs still will, once this tree is on `main`.
+`dsh-dev-index` keeps a human-readable index at [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/), describing the pinned source revision in `docs/meta.json`. Its skill points agents to [official DSH documentation](https://deepseek-harness.github.io/deepseek-harness/) and runtime inspection. GitHub Pages publishes `docs/` through `.github/workflows/pages.yml`; Pages → Source must be GitHub Actions.
 
 ## Development
 

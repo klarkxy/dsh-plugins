@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { docsDir, loadCatalog, metaFromCatalog, parseCatalog } from "../site/catalog.js";
-import { AREA_IDS, SKILL_DESCRIPTION, SKILL_WHEN_TO_USE } from "../src/skill-body.js";
 
 const catalog = loadCatalog();
 
@@ -21,10 +20,10 @@ describe("catalog", () => {
     expect(catalog.indexed.repository).toBe("https://github.com/deepseek-ai/deepseek-harness");
     expect(catalog.pagesBaseUrl).toBe("https://klarkxy.github.io/dsh-plugins/");
     expect(catalog.skill.name).toBe("dsh-dev-index");
-    expect(catalog.skill.description).toBe(SKILL_DESCRIPTION);
-    expect(catalog.skill.whenToUse).toBe(SKILL_WHEN_TO_USE);
     expect(catalog.skill.description.length).toBeLessThanOrEqual(500);
-    expect(catalog.areas.map((area) => area.id)).toEqual([...AREA_IDS]);
+    expect(catalog.skill.whenToUse.length).toBeGreaterThan(0);
+    const areaIds = catalog.areas.map((area) => area.id);
+    expect(new Set(areaIds).size).toBe(areaIds.length);
   });
 
   it("keeps every area traceable to official paths named in that page", () => {

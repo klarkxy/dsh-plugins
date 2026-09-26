@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-dev-index",
-  "version": "0.1.0",
-  "description": "Browse DSH development documentation and help agents find extension points.",
+  "version": "0.1.2",
+  "description": "Browse DSH documentation and point agents at official development references.",
   "icon": "./icon.svg",
   "keywords": [
     "dsh-plugin",
@@ -52,10 +52,7 @@
     "prepare": "pnpm build",
     "prepack": "pnpm build",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run",
-    "site": "node scripts/build-site.mjs",
-    "verify-citations": "node scripts/verify-citations.mjs",
-    "check-languages": "node scripts/check-languages.mjs"
+    "test": "vitest run"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
@@ -91,6 +88,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "600dea2ae0a93ba3eedb1bb6e1a30299139f9b96fe30a2accb28165973efef99"
+    "contentHash": "78283c526c5c409111d736bf2afa6dd6d592483019a8520e52697e3da7ad6ad2"
   }
 }

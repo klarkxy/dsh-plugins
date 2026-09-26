@@ -1,8 +1,8 @@
 {
   "id": "@klarkxy/dsh-dev-index",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "main": "lib/index.js",
-  "description": "Browse DSH development documentation and help agents find extension points.",
+  "description": "Browse DSH documentation and point agents at official development references.",
   "engines": {
     "dsh": ">=0.1.7-rc.2 <0.2.0"
   },

@@ -2,34 +2,23 @@
 
 [English documentation](README.md)
 
-开发索引让用户直接浏览 DSH 开发文档，也帮助智能体查找功能、插件接口和扩展点。
+插件页会嵌入本仓库 GitHub Pages 上供人阅读的文档；轻量 skill 则把智能体指向官方 DSH 资料和运行时检查。
 
-索引正文不在这个包里。[klarkxy/dsh-plugins](https://github.com/klarkxy/dsh-plugins) 仓库的 `docs/` 是唯一副本，并发布在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/)。`docs/meta.json` 记录这些页面所描述的 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 修订：`officialTag` 与 `officialCommit`。每个章节都标明官方文件路径。接口说明以对应版本的官方源码为准。
+在正在运行的 DSH 里，优先用官方技能 `cordis-plugin-development`，以及只读的 `cordis_inspect_list` 和 `cordis_inspect_query`。`plugin_manager` 的每个动作都需要 `danger-full-access` 或一次性审批。环境自己的工具策略仍然适用。
+
+给人读的文档在官方站点 [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)（简体中文在根路径，英文在 `/en/`）和 [llms.txt](https://deepseek-harness.github.io/deepseek-harness/llms.txt)。该站点是最近发布的版本。源码和类型声明默认看 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的 `master`。目标版本不同时，改用对应的 `dsh-v*` 标签，不要混用版本。
+
+[https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) 提供供人阅读的索引，各章节对应 `docs/meta.json` 记录的固定源码修订。需要最新发布版的信息时看上面的官方站点。
 
 ## 在插件页阅读
 
-在 DSH Web 打开 **插件 → DSH 开发索引**，即可直接浏览 GitHub Pages 上的文档。阅读器跟随 DSH 界面语言打开中文或英文首页，也可以手动切换语言、返回文档首页，或在独立浏览器标签页中打开。文档从 Pages 实时读取，更新文档无需重装插件。如果内嵌页面未显示，可使用“在浏览器中打开”。
-
-这块阅读界面供用户使用；下方的 skill 仍让智能体读取机器可读索引。
+在 DSH Web 打开 **插件 → DSH 开发索引**，即可在页面中浏览 GitHub Pages 文档。阅读器按 DSH 界面语言打开中文或英文首页，也能手动切换语言、返回文档首页，或在独立标签页中打开。如果内嵌页面未显示，使用“在浏览器中打开”。阅读界面供用户使用；下方的 skill 为智能体提供官方资料指针。
 
 ## 为什么用 skill
 
-DSH 面向 agent 的知识契约是 `ctx.skills` 上的 skill。`@deepseek-ai/dsh-skill` 用 `ctx.skills.register` 登记嵌入式说明，`@deepseek-ai/dsh-tool-skill` 把模型可调用的 skill 放进会话目录，并用 `skill` 工具加载。Preset 会换掉 agent 的组合。工具必须先被调用，agent 才知道索引存在。宿主层 skill 会和其他 skill 一起出现在目录里，base 上的 profile 都能用。
+DSH 面向 agent 的知识契约是 `ctx.skills` 上的 skill。`@deepseek-ai/dsh-skill` 用 `ctx.skills.register` 登记嵌入式说明，`@deepseek-ai/dsh-tool-skill` 把模型可调用的 skill 放进会话目录，并用 `skill` 工具加载。Preset 会换掉 agent 的组合。工具必须先被调用，agent 才知道这个指针存在。宿主层 skill 会和其他 skill 一起出现在目录里，base 上的 profile 都能用。
 
-`apply` 时本插件登记 skill `dsh-dev-index`。正文只告诉 agent 去哪里读取当前索引：
-
-- `https://klarkxy.github.io/dsh-plugins/llms.txt`
-- `https://klarkxy.github.io/dsh-plugins/index.json`
-- `https://klarkxy.github.io/dsh-plugins/meta.json`
-- `https://klarkxy.github.io/dsh-plugins/areas/<id>.md`
-
-英文是默认语言。给人读的页面在 `zh/` 下另有简体中文版（例如 `zh/llms.txt` 和 `zh/areas/<id>.md`）。`index.json` 和 `meta.json` 保持英文。Agent 默认仍读取上面的英文文件。
-
-Pages 没有响应时，同样的路径在 GitHub 的 `main` 上：
-
-`https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/`
-
-正文还列出 area id，方便 agent 知道有哪些 `areas/<id>.md`。它不复制页面正文，也不写入被索引的 commit，因此每天刷新 `docs/` 不需要发布新的插件包。
+`apply` 时本插件登记 skill `dsh-dev-index`。正文是静态的。它不写入提交、标签，也不写入本仓库的 URL。
 
 `sdk-minimal` 没有挂载 `@deepseek-ai/dsh-skill`。本插件 `inject` 了 `skills`，在那里会一直等待。`web`、`headless`、`sdk` 和 `acp` 建立在 `@deepseek-ai/dsh-base` 上，base 会挂载这个注册表。
 
@@ -56,9 +45,9 @@ allowBuilds:
   '@klarkxy/dsh-dev-index': true
 ```
 
-然后再执行一次 add。该许可会在本机执行这个包的构建。需要固定插件来源时请钉住 commit。skill 读取的索引仍然跟随 `main` 和 Pages 站点。
+然后再执行一次 add。该许可会在本机执行这个包的构建。需要固定插件来源时请钉住 commit。
 
-`@deepseek-ai/dsh-skill` 上的 peer 范围会对照正在运行的 `dsh` 版本检查。本包要求 DSH `>=0.1.7-rc.2 <0.2.0`，因为 `ctx.skills.register` 来自该版本。加载器不强制 `engines.dsh`；生效的是 peer 范围。索引描述的官方修订记在 `docs/meta.json`，不由这个 peer 范围表示。
+`@deepseek-ai/dsh-skill` 上的 peer 范围会对照正在运行的 `dsh` 版本检查。本包要求 DSH `>=0.1.7-rc.2 <0.2.0`，因为 `ctx.skills.register` 来自该版本。加载器不强制 `engines.dsh`；生效的是 peer 范围。
 
 ## 从本仓库安装
 
@@ -76,21 +65,7 @@ dsh --profile web --dump-config
 
 组合结果里应有 `dsh-dev-index` 这一行。新会话在修改 DSH 插件或 Preset 之前，先加载 `dsh-dev-index` 这个 skill。
 
-## 配置
-
-补丁写出了唯一的键。后一层如果覆盖这一行，必须整份重写 `config`，因为补丁替换的是整个 `config` 对象。
-
-| 键 | 默认值 | 含义 |
-| --- | --- | --- |
-| `pagesBaseUrl` | `https://klarkxy.github.io/dsh-plugins/` | 写进 skill 正文的 http(s) 绝对基址。缺少末尾斜杠时会补上。GitHub 原始文件回退固定在本仓库的 `main`。 |
-
-## 更新索引
-
-每日步骤见 [docs/REFRESH.md](../../docs/REFRESH.md)。从 `docs/` 重新生成站点页面：
-
-```bash
-node plugins/dsh-dev-index/scripts/build-site.mjs
-```
+没有配置项。补丁只插入插件，不设置键。
 
 ## 许可证
 
