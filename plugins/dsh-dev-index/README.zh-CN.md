@@ -2,30 +2,19 @@
 
 [English documentation](README.md)
 
-这是一个 DeepSeek Harness bundle。它给 agent 一段短流程：确认目标 DSH 版本，在官方插件开发技能和运行时检查可用时优先使用它们，再选一个任务并验证插件。文档不在这个包里。
+这是一个很轻的 DeepSeek Harness skill。它把 agent 指到官方材料，不携带、也不维护一份文档副本。
 
-索引正文不在这个包里。[klarkxy/dsh-plugins](https://github.com/klarkxy/dsh-plugins) 仓库的 `docs/` 是唯一副本，并发布在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/)。`docs/meta.json` 记录这些页面所描述的 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 修订：`officialTag` 与 `officialCommit`。每个 area、任务和架构规则页都标明官方文件路径。索引不发明 API。
+在正在运行的 DSH 里，优先用官方技能 `cordis-plugin-development`，以及只读的 `cordis_inspect_list` 和 `cordis_inspect_query`。`plugin_manager` 的每个动作都需要 `danger-full-access` 或一次性审批。环境自己的工具策略仍然适用。
+
+给人读的文档在官方站点 [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)（简体中文在根路径，英文在 `/en/`）和 [llms.txt](https://deepseek-harness.github.io/deepseek-harness/llms.txt)。该站点是最近发布的版本。源码和类型声明默认看 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的 `master`。目标版本不同时，改用对应的 `dsh-v*` 标签，不要混用版本。
+
+[https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) 只做跳转。该主机上的旧路径也会跳走。
 
 ## 为什么用 skill
 
-DSH 面向 agent 的知识契约是 `ctx.skills` 上的 skill。`@deepseek-ai/dsh-skill` 用 `ctx.skills.register` 登记嵌入式说明，`@deepseek-ai/dsh-tool-skill` 把模型可调用的 skill 放进会话目录，并用 `skill` 工具加载。Preset 会换掉 agent 的组合。工具必须先被调用，agent 才知道索引存在。宿主层 skill 会和其他 skill 一起出现在目录里，base 上的 profile 都能用。
+DSH 面向 agent 的知识契约是 `ctx.skills` 上的 skill。`@deepseek-ai/dsh-skill` 用 `ctx.skills.register` 登记嵌入式说明，`@deepseek-ai/dsh-tool-skill` 把模型可调用的 skill 放进会话目录，并用 `skill` 工具加载。Preset 会换掉 agent 的组合。工具必须先被调用，agent 才知道这个指针存在。宿主层 skill 会和其他 skill 一起出现在目录里，base 上的 profile 都能用。
 
-`apply` 时本插件登记 skill `dsh-dev-index`。正文先是一段短流程，再列出读取地址。它让 agent 把 `meta.json` 的 `officialTag`、`officialCommit` 和目标 DSH 版本比较；不一致时把页面当作未经核实。正文不写入该修订，因此每天刷新 `docs/` 不需要发布新的插件包。
-
-- `https://klarkxy.github.io/dsh-plugins/llms.txt`
-- `https://klarkxy.github.io/dsh-plugins/index.json`
-- `https://klarkxy.github.io/dsh-plugins/meta.json`
-- `https://klarkxy.github.io/dsh-plugins/tasks/index.md`
-- `https://klarkxy.github.io/dsh-plugins/tasks/<id>.md`
-- `https://klarkxy.github.io/dsh-plugins/areas/<id>.md`
-
-英文是默认语言。给人读的页面在 `zh/` 下另有简体中文版（例如 `zh/llms.txt`、`zh/tasks/<id>.md` 和 `zh/areas/<id>.md`）。`index.json` 和 `meta.json` 保持英文。Agent 默认仍读取上面的英文文件。
-
-Pages 没有响应时，同样的路径在 GitHub 的 `main` 上：
-
-`https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/`
-
-正文还列出任务 id 和 area id，方便 agent 知道有哪些文件。它不复制页面正文。
+`apply` 时本插件登记 skill `dsh-dev-index`。正文是静态的。它不写入提交、标签，也不写入本仓库的 URL。
 
 `sdk-minimal` 没有挂载 `@deepseek-ai/dsh-skill`。本插件 `inject` 了 `skills`，在那里会一直等待。`web`、`headless`、`sdk` 和 `acp` 建立在 `@deepseek-ai/dsh-base` 上，base 会挂载这个注册表。
 
@@ -52,9 +41,9 @@ allowBuilds:
   '@klarkxy/dsh-dev-index': true
 ```
 
-然后再执行一次 add。该许可会在本机执行这个包的构建。需要固定插件来源时请钉住 commit。skill 读取的索引仍然跟随 `main` 和 Pages 站点。
+然后再执行一次 add。该许可会在本机执行这个包的构建。需要固定插件来源时请钉住 commit。
 
-`@deepseek-ai/dsh-skill` 上的 peer 范围会对照正在运行的 `dsh` 版本检查。本包要求 DSH `>=0.1.7-rc.2 <0.2.0`，因为 `ctx.skills.register` 来自该版本。加载器不强制 `engines.dsh`；生效的是 peer 范围。索引描述的官方修订记在 `docs/meta.json`，不由这个 peer 范围表示。
+`@deepseek-ai/dsh-skill` 上的 peer 范围会对照正在运行的 `dsh` 版本检查。本包要求 DSH `>=0.1.7-rc.2 <0.2.0`，因为 `ctx.skills.register` 来自该版本。加载器不强制 `engines.dsh`；生效的是 peer 范围。
 
 ## 从本仓库安装
 
@@ -72,21 +61,7 @@ dsh --profile web --dump-config
 
 组合结果里应有 `dsh-dev-index` 这一行。新会话在修改 DSH 插件或 Preset 之前，先加载 `dsh-dev-index` 这个 skill。
 
-## 配置
-
-补丁写出了唯一的键。后一层如果覆盖这一行，必须整份重写 `config`，因为补丁替换的是整个 `config` 对象。
-
-| 键 | 默认值 | 含义 |
-| --- | --- | --- |
-| `pagesBaseUrl` | `https://klarkxy.github.io/dsh-plugins/` | 写进 skill 正文的 http(s) 绝对基址。缺少末尾斜杠时会补上。GitHub 原始文件回退固定在本仓库的 `main`。 |
-
-## 更新索引
-
-每日步骤见 [docs/REFRESH.md](../../docs/REFRESH.md)。从 `docs/` 重新生成站点页面：
-
-```bash
-node plugins/dsh-dev-index/scripts/build-site.mjs
-```
+没有配置项。补丁只插入插件，不设置键。
 
 ## 许可证
 

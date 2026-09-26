@@ -2,30 +2,19 @@
 
 [Chinese documentation](README.zh-CN.md)
 
-A DeepSeek Harness bundle that walks an agent through a short workflow: confirm the target DSH version, prefer the official plugin-development skill and runtime inspection when they exist, pick a task, then verify the plugin. The docs stay outside this package.
+A lightweight DeepSeek Harness skill. It points an agent at official DSH material and does not ship or maintain a copy of the docs.
 
-The index itself is not in this package. `docs/` in [klarkxy/dsh-plugins](https://github.com/klarkxy/dsh-plugins) is the only copy, and it is published at [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/). `docs/meta.json` records `officialTag` and `officialCommit` for the [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) revision those pages describe. Every area, task, and architecture-rules page names the official file it came from. The index does not invent APIs.
+Inside a running DSH, prefer the official `cordis-plugin-development` skill and the read-only inspect tools `cordis_inspect_list` and `cordis_inspect_query`. Every `plugin_manager` action needs `danger-full-access` or a one-off approval. The environment's own tool policy still applies.
+
+Readable docs are the official site [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/) (Chinese at the site root, English under `/en/`) and [llms.txt](https://deepseek-harness.github.io/deepseek-harness/llms.txt). That site is the latest published release. Source and type declarations default to [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) `master`. When the target version differs, use the matching `dsh-v*` tag and do not mix versions.
+
+[https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) only redirects there. Old paths on that host redirect as well.
 
 ## Why a skill
 
-DSH's agent-facing knowledge contract is a skill on `ctx.skills`. `@deepseek-ai/dsh-skill` documents `ctx.skills.register` for an embedded instruction set, and `@deepseek-ai/dsh-tool-skill` puts model-invocable skills in the session catalog and loads them with the `skill` tool. A preset would replace the agent's composition. A tool would have to be called before the agent knew the index existed. A host-level skill is listed beside the agent's other skills and stays available in every base-backed profile.
+DSH's agent-facing knowledge contract is a skill on `ctx.skills`. `@deepseek-ai/dsh-skill` documents `ctx.skills.register` for an embedded instruction set, and `@deepseek-ai/dsh-tool-skill` puts model-invocable skills in the session catalog and loads them with the `skill` tool. A preset would replace the agent's composition. A tool would have to be called before the agent knew the pointer existed. A host-level skill is listed beside the agent's other skills and stays available in every base-backed profile.
 
-On `apply`, this plugin registers the skill `dsh-dev-index`. The body is a short workflow, then the fetch list. It tells the agent to compare `meta.json` `officialTag` and `officialCommit` with the target DSH version and, on a mismatch, to treat the pages as unverified. It does not embed that revision, so a daily docs refresh does not require a new package release.
-
-- `https://klarkxy.github.io/dsh-plugins/llms.txt`
-- `https://klarkxy.github.io/dsh-plugins/index.json`
-- `https://klarkxy.github.io/dsh-plugins/meta.json`
-- `https://klarkxy.github.io/dsh-plugins/tasks/index.md`
-- `https://klarkxy.github.io/dsh-plugins/tasks/<id>.md`
-- `https://klarkxy.github.io/dsh-plugins/areas/<id>.md`
-
-English is the default. Human-readable pages also exist in Simplified Chinese under `zh/` (for example `zh/llms.txt`, `zh/tasks/<id>.md`, and `zh/areas/<id>.md`). `index.json` and `meta.json` stay in English.
-
-If Pages does not respond, the same paths are on GitHub `main`:
-
-`https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/`
-
-The body also lists task ids and area ids so the agent knows which files exist. It does not copy page text.
+On `apply`, this plugin registers the skill `dsh-dev-index`. The body is static. It does not embed a commit, a tag, or a URL on this repository.
 
 `sdk-minimal` does not mount `@deepseek-ai/dsh-skill`. There the plugin stays pending because it injects `skills`. Web, headless, sdk, and acp build on `@deepseek-ai/dsh-base`, which mounts the registry.
 
@@ -52,9 +41,9 @@ allowBuilds:
   '@klarkxy/dsh-dev-index': true
 ```
 
-Run the add again. That allowance executes this package's build on the machine. Pin a commit when the plugin source must not move. The index the skill fetches still follows `main` and the Pages site.
+Run the add again. That allowance executes this package's build on the machine. Pin a commit when the plugin source must not move.
 
-Peer ranges on `@deepseek-ai/dsh-skill` are checked against the running `dsh` version. This package requires DSH `>=0.1.7-rc.2 <0.2.0` because it calls `ctx.skills.register` from that release. `engines.dsh` is not enforced by the loader; the peer range is. The indexed docs revision is `docs/meta.json`, not this peer range.
+Peer ranges on `@deepseek-ai/dsh-skill` are checked against the running `dsh` version. This package requires DSH `>=0.1.7-rc.2 <0.2.0` because it calls `ctx.skills.register` from that release. `engines.dsh` is not enforced by the loader; the peer range is.
 
 ## Install from this checkout
 
@@ -72,21 +61,7 @@ dsh --profile web --dump-config
 
 The composition should contain a `dsh-dev-index` row. In a new session, load the `dsh-dev-index` skill before changing DSH plugins or presets.
 
-## Configuration
-
-The patch sets the only key. A later layer that overrides the row must restate it, because a patch replaces `config` wholesale.
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `pagesBaseUrl` | `https://klarkxy.github.io/dsh-plugins/` | Absolute http(s) base URL written into the skill body. A missing trailing slash is added. The raw GitHub fallback stays on this repository's `main`. |
-
-## Refresh
-
-The daily procedure is [docs/REFRESH.md](../../docs/REFRESH.md). Regenerate the rendered site from `docs/` with:
-
-```bash
-node plugins/dsh-dev-index/scripts/build-site.mjs
-```
+There is no configuration. The patch inserts the plugin and does not set keys.
 
 ## License
 

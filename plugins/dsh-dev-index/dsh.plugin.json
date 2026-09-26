@@ -2,7 +2,7 @@
   "id": "@klarkxy/dsh-dev-index",
   "version": "0.1.1",
   "main": "lib/index.js",
-  "description": "Workflow skill that helps an agent pick a DeepSeek Harness extension mechanism and deliver a verified plugin.",
+  "description": "Lightweight skill that points an agent at official DeepSeek Harness docs and runtime inspection.",
   "engines": {
     "dsh": ">=0.1.7-rc.2 <0.2.0"
   },

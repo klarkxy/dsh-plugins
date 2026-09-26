@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-dev-index",
   "version": "0.1.1",
-  "description": "Workflow skill that helps an agent pick a DeepSeek Harness extension mechanism and deliver a verified plugin.",
+  "description": "Lightweight skill that points an agent at official DeepSeek Harness docs and runtime inspection.",
   "icon": "./icon.svg",
   "keywords": [
     "dsh-plugin",
@@ -15,7 +15,7 @@
     "url": "git+https://github.com/klarkxy/dsh-plugins.git",
     "directory": "plugins/dsh-dev-index"
   },
-  "homepage": "https://klarkxy.github.io/dsh-plugins/",
+  "homepage": "https://deepseek-harness.github.io/deepseek-harness/",
   "bugs": {
     "url": "https://github.com/klarkxy/dsh-plugins/issues"
   },
@@ -50,10 +50,7 @@
     "prepare": "pnpm build",
     "prepack": "pnpm build",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run",
-    "site": "node scripts/build-site.mjs",
-    "verify-citations": "node scripts/verify-citations.mjs",
-    "check-languages": "node scripts/check-languages.mjs"
+    "test": "vitest run"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
