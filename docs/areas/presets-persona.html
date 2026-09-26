@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent presets and persona</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/presets-persona.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="presets-persona.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/presets-persona.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="presets-persona.md">markdown</a></p>
+</header>
 <article>
 <h1 id="agent-presets-and-persona">Agent presets and persona</h1>
-<p>中文：Agent preset 是一条 <code>@deepseek-ai/dsh-agent-preset</code> 声明，放在 bundle 补丁里。<code>$DSH_HOME/.agent-presets/</code> 在这一版已经不再被读取。Persona 用 <code>@deepseek-ai/dsh-persona</code> 挂在 preset 内部。</p>
+<p><a href="../zh/areas/presets-persona.html">中文</a></p>
+<p>An agent preset is one <code>@deepseek-ai/dsh-agent-preset</code> declaration in a bundle patch. This revision no longer reads <code>$DSH_HOME/.agent-presets/</code>. Persona is mounted inside the preset with <code>@deepseek-ai/dsh-persona</code>.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p>An agent preset declares one agent's child plugins in ordinary Cordis YAML. The host still owns the agent loop. Each agent sees the tools, prompts, and skills of its selected revision. Definitions load eagerly. Edits affect agents created afterward. Existing sessions keep the revision they started with.</p>

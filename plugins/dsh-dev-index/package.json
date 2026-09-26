@@ -50,7 +50,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "site": "node scripts/build-site.mjs",
-    "verify-citations": "node scripts/verify-citations.mjs"
+    "verify-citations": "node scripts/verify-citations.mjs",
+    "check-languages": "node scripts/check-languages.mjs"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0",

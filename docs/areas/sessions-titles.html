@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sessions and titles</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/sessions-titles.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="sessions-titles.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/sessions-titles.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="sessions-titles.md">markdown</a></p>
+</header>
 <article>
 <h1 id="sessions-and-titles">Sessions and titles</h1>
-<p>中文：会话是只追加的 <code>SessionEvent</code> 日志，消息历史从日志派生。标题服务是 <code>ctx.sessionTitle</code>。同一进程只能注册一个自动标题 provider；第二个 <code>register</code> 会抛错。</p>
+<p><a href="../zh/areas/sessions-titles.html">中文</a></p>
+<p>A session is an append-only <code>SessionEvent</code> log, and message history is derived from that log. The title service is <code>ctx.sessionTitle</code>. A process may register only one automatic title provider; a second <code>register</code> throws.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p>A <code>Session</code> is an append-only log of typed <code>SessionEvent</code>s. That log is the source of truth for an agent's interaction history. The LLM message history is derived from the log, not stored separately. The in-memory store is <code>ctx.sessions</code> (<code>SessionStore</code>) from <code>@deepseek-ai/dsh-session</code>. Durability is a separate persistence seam.</p>

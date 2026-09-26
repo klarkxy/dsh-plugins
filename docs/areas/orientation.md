@@ -1,6 +1,8 @@
 # Orientation
 
-中文：DeepSeek Harness 是「一切皆插件」的 agent harness。二次开发先定位能力属于哪一组包，再读该组 README 和对应子系统文档，不要从记忆里发明 API。
+[中文](../zh/areas/orientation.md)
+
+DeepSeek Harness is an everything-is-a-plugin agent harness. For secondary development, find which package group owns the capability, then read that group's README and the matching subsystem document. Do not invent APIs from memory.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

@@ -17,6 +17,8 @@ DSH 面向 agent 的知识契约是 `ctx.skills` 上的 skill。`@deepseek-ai/ds
 - `https://klarkxy.github.io/dsh-plugins/meta.json`
 - `https://klarkxy.github.io/dsh-plugins/areas/<id>.md`
 
+英文是默认语言。给人读的页面在 `zh/` 下另有简体中文版（例如 `zh/llms.txt` 和 `zh/areas/<id>.md`）。`index.json` 和 `meta.json` 保持英文。Agent 默认仍读取上面的英文文件。
+
 Pages 没有响应时，同样的路径在 GitHub 的 `main` 上：
 
 `https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/`

@@ -1,6 +1,8 @@
 # Settings, approval, and permission presets
 
-中文：业务插件读自己的 Config，不存在文档化的 `ctx.settings.get` / `set`。设置表单通过 `ctx.settings` 的 `describe`、`update`、`replace` 和 `mutate` 改 profile 补丁。审批问的是「这一次动作能否继续」，权限预设把 sandbox 和 approval 绑在一起。
+[中文](../zh/areas/settings-approval.md)
+
+A feature plugin reads its own Config. There is no documented `ctx.settings.get` / `set`. Settings forms edit the profile patch through `describe`, `update`, `replace`, and `mutate` on `ctx.settings`. Approval asks whether this one action may proceed, and permission presets bind sandbox and approval together.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

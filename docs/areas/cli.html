@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CLI</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/cli.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="cli.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/cli.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="cli.md">markdown</a></p>
+</header>
 <article>
 <h1 id="cli">CLI</h1>
-<p>中文：<code>dsh</code> 是唯一支持的 Node 启动器。<code>dsh plugin --profile &lt;name&gt;</code> 把参数转给该 profile 目录里的 pnpm。<code>--dump-config</code> 只打印组合结果，不启动应用。</p>
+<p><a href="../zh/areas/cli.html">中文</a></p>
+<p><code>dsh</code> is the only supported Node launcher. <code>dsh plugin --profile &lt;name&gt;</code> forwards its arguments to pnpm in that profile directory. <code>--dump-config</code> prints the composed result and does not boot the application.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p><code>@deepseek-ai/dsh</code> parses launcher flags, stacks profile bundle patches, then either boots that tree, dumps configuration, or forwards <code>dsh plugin</code> to pnpm. SDK and ACP are profiles, not separate public binaries. Unrecognized tokens become <code>ctx.cmdlineArgs</code> for the booted app.</p>

@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Skills</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/skills.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="skills.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/skills.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="skills.md">markdown</a></p>
+</header>
 <article>
 <h1 id="skills">Skills</h1>
-<p>中文：Skill 是按需加载的说明，不是会话事件。嵌入式说明用 <code>ctx.skills.register</code>。磁盘上的说明是带 frontmatter 的 <code>SKILL.md</code>，由 filesystem provider 发现。模型通过 <code>skill</code> 工具加载正文。</p>
+<p><a href="../zh/areas/skills.html">中文</a></p>
+<p>A skill is an on-demand instruction, not a session event. Embedded instructions use <code>ctx.skills.register</code>. On-disk instructions are <code>SKILL.md</code> files with frontmatter, discovered by the filesystem provider. The model loads the body with the <code>skill</code> tool.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p>The skill family gives agents one catalog of reusable instructions. <code>@deepseek-ai/dsh-skill</code> is the registry (<code>ctx.skills</code>) and ships no skill text itself. <code>@deepseek-ai/dsh-skill-filesystem</code> discovers local files. <code>@deepseek-ai/dsh-tool-skill</code> publishes the session catalog and the model-facing <code>skill</code> tool. Packaged providers such as <code>@deepseek-ai/dsh-skill-badge</code> and <code>@deepseek-ai/dsh-skill-office</code> register their own sources.</p>

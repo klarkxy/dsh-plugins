@@ -1,6 +1,8 @@
 # Compaction, subagents, jobs, and catalogs
 
-中文：压缩、子代理和后台任务都是「定义 / 提供者 / 消费者」三条缝。换实现时挂新的 provider，不要复制服务。字段的完整列表在生成的 config catalog，不在这篇索引里。
+[中文](../zh/areas/other-seams.md)
+
+Compaction, subagents, and background jobs are three seams: definition, provider, and consumer. Swap an implementation by mounting a new provider. Do not copy the service. The full field list is the generated config catalog, not this index page.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

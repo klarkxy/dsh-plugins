@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bundles, profiles, and patches</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/bundle-profile-patch.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="bundle-profile-patch.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/bundle-profile-patch.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="bundle-profile-patch.md">markdown</a></p>
+</header>
 <article>
 <h1 id="bundles-profiles-and-patches">Bundles, profiles, and patches</h1>
-<p>中文：作者发布的是 <strong>bundle</strong>（<code>package.json</code> 的 <code>dsh.bundle.patch</code> 指向一份补丁）。用户启动的是 <strong>profile</strong>（<code>$DSH_HOME/profiles/&lt;name&gt;</code>）。后应用的层按行覆盖，<code>config</code> 是整对象替换，不是深合并。</p>
+<p><a href="../zh/areas/bundle-profile-patch.html">中文</a></p>
+<p>Authors publish a <strong>bundle</strong> (<code>dsh.bundle.patch</code> in <code>package.json</code> points at a patch). Users boot a <strong>profile</strong> (<code>$DSH_HOME/profiles/&lt;name&gt;</code>). A later layer overrides row by row, and <code>config</code> replaces the whole object rather than deep-merging.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p>Installation uses two manifests, both under the <code>package.json</code> key <code>dsh</code>, and they answer different questions.</p>

@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plugin manager and live inspection</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/plugin-manager-inspect.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="plugin-manager-inspect.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/plugin-manager-inspect.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="plugin-manager-inspect.md">markdown</a></p>
+</header>
 <article>
 <h1 id="plugin-manager-and-live-inspection">Plugin manager and live inspection</h1>
-<p>中文：改当前 profile 用 <code>plugin_manager</code> 工具或 <code>dsh plugin</code>，不要手改 profile 的 <code>package.json</code>。查已挂载服务的方法签名用 <code>cordis_inspect_query</code>。这两个工具都会要求 <code>danger-full-access</code> 或一次审批。</p>
+<p><a href="../zh/areas/plugin-manager-inspect.html">中文</a></p>
+<p>Change the current profile with the <code>plugin_manager</code> tool or <code>dsh plugin</code>. Do not hand-edit the profile <code>package.json</code>. Look up signatures of mounted services with <code>cordis_inspect_query</code>. Both tools require <code>danger-full-access</code> or a one-time approval.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p><code>@deepseek-ai/dsh-plugin-manager</code> manages the current profile: list and toggle plugin rows, list and toggle bundles, install and remove bundles through pnpm, and record exact-version compatibility exemptions. The Web sidebar and the <code>plugin_manager</code> tool share that service.</p>

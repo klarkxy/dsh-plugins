@@ -17,6 +17,8 @@ On `apply`, this plugin registers the skill `dsh-dev-index`. The body only tells
 - `https://klarkxy.github.io/dsh-plugins/meta.json`
 - `https://klarkxy.github.io/dsh-plugins/areas/<id>.md`
 
+English is the default. Human-readable pages also exist in Simplified Chinese under `zh/` (for example `zh/llms.txt` and `zh/areas/<id>.md`). `index.json` and `meta.json` stay in English.
+
 If Pages does not respond, the same paths are on GitHub `main`:
 
 `https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/`

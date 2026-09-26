@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bundle、Profile 与补丁</title>
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="alternate" hreflang="en" href="../../areas/bundle-profile-patch.html">
+</head>
+<body>
+<header>
+<p><a href="../../areas/bundle-profile-patch.html" lang="en">English</a> · <a href="../index.html">索引</a> · <a href="../../index.json">index.json</a> · <a href="../../meta.json">meta.json</a> · <a href="bundle-profile-patch.md">Markdown</a></p>
+</header>
+<article>
+<h1 id="bundle-profile-与补丁">Bundle、Profile 与补丁</h1>
+<p><a href="../../areas/bundle-profile-patch.html">English</a></p>
+<p>作者发布的是 <strong>bundle</strong>（<code>package.json</code> 的 <code>dsh.bundle.patch</code> 指向一份补丁）。用户启动的是 <strong>profile</strong>（<code>$DSH_HOME/profiles/&lt;name&gt;</code>）。后应用的层按行覆盖，<code>config</code> 是整对象替换，不是深合并。</p>
+<p>索引所对照的版本是 <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a>（<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>）。</p>
+<h2 id="它是什么">它是什么</h2>
+<p>安装用两份清单，都在 <code>package.json</code> 的 <code>dsh</code> 键下，回答的是不同的问题。</p>
+<ul><li><strong>bundle</strong> 是发布配置层的 npm 包。<code>dsh.bundle.patch</code> 是一个补丁文件，或一组有序的补丁文件，在 profile 列出该 bundle 时应用。</li><li><strong>profile</strong> 是 <code>$DSH_HOME/profiles/&lt;name&gt;</code> 下的一个目录，描述一份可运行的组合。<code>dsh.profile.bundles</code> 是有序的 bundle 列表。profile 自己的 <code>cordis.patch.yml</code> 是用户层。</li></ul>
+<p>二者不会同时成立。没有 <code>dsh.bundle</code> 的包仍然可以安装，但 <code>dsh plugin</code> 会警告，并且不会激活任何层。其他插件要 import 的库用这种形状。</p>
+<p>官方包不使用 <code>dsh.plugin.json</code>。在这一提交的官方树里按这个文件名查找，什么也找不到。</p>
+<h2 id="它在哪里">它在哪里</h2>
+<ul><li>教程：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/publish.md">docs/user/develop/basic/publish.md</a></li><li>随发行的 bundle：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/bundle/README.md">packages/bundle/README.md</a></li><li>base 补丁：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/bundle/base/cordis.patch.yml">packages/bundle/base/cordis.patch.yml</a></li><li>profile 启动：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/boot/app-boot/README.md">packages/boot/app-boot/README.md</a></li><li>设计笔记：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/.agents/notes/implemented/architecture/2026-08-05-profile-plugin-bundles.md">.agents/notes/implemented/architecture/2026-08-05-profile-plugin-bundles.md</a></li><li>展示元数据：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/host-plugin.md">packages/preset/agent-preset/skills/cordis-plugin-development/references/host-plugin.md</a></li></ul>
+<p>盒内 bundle 的包名是 <code>@deepseek-ai/dsh-base</code>、<code>@deepseek-ai/dsh-web-app</code>、<code>@deepseek-ai/dsh-headless</code>、<code>@deepseek-ai/dsh-acp-app</code>、<code>@deepseek-ai/dsh-sdk-app</code> 和 <code>@deepseek-ai/dsh-sdk-minimal</code>。<code>web</code>、<code>headless</code>、<code>acp</code> 和 <code>sdk</code> 建立在 <code>dsh-base</code> 上。<code>sdk-minimal</code> 用一个 bundle 提供完整的树。</p>
+<h2 id="约定">约定</h2>
+<p>bundle 清单：</p>
+<pre><code>{
+  "name": "dsh-hello-plugin",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "index.js",
+  "files": ["index.js", "cordis.patch.yml"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+}</code></pre>
+<p><code>patch</code> 可以是一个有序列表。启动器把这些文件当作一层来应用。相对的插件路径相对于点名它们的那个文件来解析。</p>
+<p>profile 清单（由 <code>dsh plugin</code> 写入，不要手写）：</p>
+<pre><code>"dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "dsh-hello-plugin"] } }</code></pre>
+<p>有效配置在空的根上组合。后出现的层按行获胜：</p>
+<ol><li>按 <code>dsh.profile.bundles</code> 的顺序应用每个 bundle 补丁。在基于 base 的 profile 上，<code>@deepseek-ai/dsh-base</code> 最先，然后是按添加顺序安装的 bundle。</li><li>profile 自己的 <code>cordis.patch.yml</code>。</li><li><code>$DSH_HOME/cordis.patch.yml</code>，这台机器上的每个 profile 共用。这份 home 文件压过单个 profile 的补丁。</li><li>每个 <code>--patch &lt;path&gt;</code> 覆盖层，按 argv 顺序。</li></ol>
+<p>补丁会替换一行的整个 <code>config</code> 值。它不会深合并键。这一行需要的每个键都要重新写上。</p>
+<p>补丁文档是 YAML 数组。常见条目形状：</p>
+<ul><li><code>- insert:</code> 后面跟着新行（<code>id</code>、<code>name</code>、<code>config</code>、<code>disabled</code>）。</li><li><code>- id: &lt;entryId&gt;</code> 用来覆盖已有行，可选 <code>name</code>、<code>disabled</code> 和 <code>config</code>。</li><li><code>disabled: !!js "..."</code>，这样加载器在该行激活时求值这个表达式。</li></ul>
+<p>加载器也理解原生的 <code>group</code>、<code>cordis:include</code> 和 <code>isolate</code>。这些是 Cordis 的组合特性，见入门文档。没有名为 <code>fork</code> 的补丁操作码。</p>
+<p>盒内 bundle 的名字先从 dsh 安装位置解析，再从 profile 的 <code>node_modules</code> 解析。</p>
+<p>插件管理器卡片在不激活插件的情况下读取 <code>locale/en.json</code>（以及 <code>locale/zh.json</code>）：</p>
+<pre><code>{ "meta": { "title": "My plugin", "description": "What the card shows." } }</code></pre>
+<p>导出 <code>./locale/*.json</code> 和 <code>./package.json</code>。可选的顶层 <code>icon</code> 是包目录内的相对 SVG、PNG、JPEG 或 WebP，最大 256 KiB。缺字段时回退到 <code>name</code> 和 <code>description</code>。</p>
+<p>对等依赖：当你 import 必须共享同一实例的宿主包（<code>@deepseek-ai/cordis</code>、<code>@deepseek-ai/dsh-*</code>）时，把它们同时写进 <code>peerDependencies</code> 和 <code>devDependencies</code>。发布教程写明，在清单的查找位置上，正在运行的 dsh 里已有的对等依赖使用安装副本。<code>engines.dsh</code> 是作者声明的范围；<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/util/package-manifest/README.md">packages/util/package-manifest/README.md</a> 说当前的安装器和加载器并不强制它。<code>@deepseek-ai/dsh</code> 和 <code>@deepseek-ai/dsh-*</code> 上的对等范围会对照 <code>getDshRuntimeVersion()</code> 检查。见<a href="cli.html">命令行</a>。</p>
+<h2 id="插件作者怎么用">插件作者怎么用</h2>
+<ul><li>发布 <code>dsh.bundle.patch</code>，以及一份用包名（不是源码检出路径）<code>insert</code> 你的插件行的补丁。</li><li>包名和每一行的 <code>id</code> 都要唯一。</li><li>只有在稳定 <code>id</code> 上才覆盖更早的行，并且把打算保留的完整 <code>config</code> 抄下来。</li><li>用户可调的默认值放进模式。你预期多数用户会保留的值放进补丁。</li><li>不启动即可验证：<code>dsh --profile &lt;name&gt; --dump-config</code>。类似 <code># == your-package</code> 的层标题说明这个 bundle 有贡献。<code>--dump-config-schema</code> 会为组合后的插件打印 JSON Schema，并 import 那些模块，所以只对你信任的插件运行它。</li><li>链接的检出保留自己的 <code>node_modules</code>。git 安装不会运行 <code>build</code>，除非 <code>prepare</code> 去运行。见<a href="cli.html">命令行</a>。</li></ul>
+<h2 id="来源">来源</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/basic/publish.md">docs/user/develop/basic/publish.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/bundle/README.md">packages/bundle/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/bundle/base/README.md">packages/bundle/base/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/bundle/base/cordis.patch.yml">packages/bundle/base/cordis.patch.yml</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/boot/app-boot/README.md">packages/boot/app-boot/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/.agents/notes/implemented/architecture/2026-08-05-profile-plugin-bundles.md">.agents/notes/implemented/architecture/2026-08-05-profile-plugin-bundles.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/host-plugin.md">packages/preset/agent-preset/skills/cordis-plugin-development/references/host-plugin.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/util/package-manifest/README.md">packages/util/package-manifest/README.md</a></li></ul>
+</article>
+</body>
+</html>

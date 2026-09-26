@@ -22,8 +22,8 @@ export interface Area {
   readonly id: string;
   readonly title: string;
   readonly summary: string;
-  readonly summaryZh: string;
   readonly file: string;
+  readonly fileZh: string;
   readonly sources: readonly string[];
 }
 
@@ -107,12 +107,14 @@ function parseArea(value: unknown, index: number): Area {
   }
   const file = requiredString(value, `areas[${index}].file`);
   if (file !== `areas/${id}.md`) throw new Error(`dsh-dev-index: area "${id}" file must be areas/${id}.md`);
+  const fileZh = requiredString(value, `areas[${index}].fileZh`);
+  if (fileZh !== `zh/areas/${id}.md`) throw new Error(`dsh-dev-index: area "${id}" fileZh must be zh/areas/${id}.md`);
   return {
     id,
     title: requiredString(value, `areas[${index}].title`),
     summary: requiredString(value, `areas[${index}].summary`),
-    summaryZh: requiredString(value, `areas[${index}].summaryZh`),
     file,
+    fileZh,
     sources,
   };
 }

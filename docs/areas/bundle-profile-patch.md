@@ -1,6 +1,8 @@
 # Bundles, profiles, and patches
 
-中文：作者发布的是 **bundle**（`package.json` 的 `dsh.bundle.patch` 指向一份补丁）。用户启动的是 **profile**（`$DSH_HOME/profiles/<name>`）。后应用的层按行覆盖，`config` 是整对象替换，不是深合并。
+[中文](../zh/areas/bundle-profile-patch.md)
+
+Authors publish a **bundle** (`dsh.bundle.patch` in `package.json` points at a patch). Users boot a **profile** (`$DSH_HOME/profiles/<name>`). A later layer overrides row by row, and `config` replaces the whole object rather than deep-merging.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 

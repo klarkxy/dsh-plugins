@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plugin module</title>
 <link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/areas/plugin-module.html">
 </head>
 <body>
-<p><a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="plugin-module.md">markdown</a></p>
+<header>
+<p><a href="../zh/areas/plugin-module.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="plugin-module.md">markdown</a></p>
+</header>
 <article>
 <h1 id="plugin-module">Plugin module</h1>
-<p>中文：一个插件是导出 <code>apply</code> 的模块。需要的服务写在 <code>inject</code> 里；可调参数用同名的 Schemastery <code>Config</code> 声明。通过 <code>ctx</code> 注册的资源会在卸载时自动清理。</p>
+<p><a href="../zh/areas/plugin-module.html">中文</a></p>
+<p>A plugin is a module that exports <code>apply</code>. Required services are listed in <code>inject</code>. Tunable parameters use a same-named Schemastery <code>Config</code>. Resources registered through <code>ctx</code> are cleaned up automatically on unload.</p>
 <p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>).</p>
 <h2 id="what-it-is">What it is</h2>
 <p>A Harness plugin is a module the Cordis loader calls when its dependencies are ready. The usual form is a named function plugin:</p>

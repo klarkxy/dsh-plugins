@@ -1,6 +1,8 @@
 # Plugin module
 
-中文：一个插件是导出 `apply` 的模块。需要的服务写在 `inject` 里；可调参数用同名的 Schemastery `Config` 声明。通过 `ctx` 注册的资源会在卸载时自动清理。
+[中文](../zh/areas/plugin-module.md)
+
+A plugin is a module that exports `apply`. Required services are listed in `inject`. Tunable parameters use a same-named Schemastery `Config`. Resources registered through `ctx` are cleaned up automatically on unload.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 
