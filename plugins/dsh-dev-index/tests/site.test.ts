@@ -32,6 +32,23 @@ describe("pages site", () => {
     expect(zhIndex).toContain('<html lang="zh-CN">');
     expect(zhIndex).toContain('lang="en">English</a>');
     expect(zhLlms).toContain("[English](");
+    expect(llms).toContain("tasks/index.md");
+    expect(index).toContain('href="tasks/index.html"');
+    expect(zhLlms).toContain("zh/tasks/index.md");
+    for (const task of [...catalog.tasks, ...catalog.guides]) {
+      expect(index).toContain(`tasks/${task.id}.html`);
+      expect(llms).toContain(task.file);
+      expect(zhLlms).toContain(task.fileZh);
+      const markdown = readFileSync(join(out, task.file), "utf8");
+      expect(markdown.split(/\r?\n/, 1)[0]).toBe(`# ${task.title}`);
+      const html = readFileSync(join(out, "tasks", `${task.id}.html`), "utf8");
+      expect(html).toContain(`<h1 id="${slug(task.title)}">`);
+      expect(html).toContain(catalog.indexed.commit);
+      expect(html).toContain(`../zh/tasks/${task.id}.html`);
+      const zhHtml = readFileSync(join(out, "zh", "tasks", `${task.id}.html`), "utf8");
+      expect(zhHtml).toContain('<html lang="zh-CN">');
+      expect(zhHtml).toContain(`../../tasks/${task.id}.html`);
+    }
     for (const area of catalog.areas) {
       expect(index).toContain(`id="${area.id}"`);
       expect(llms).toContain(area.file);

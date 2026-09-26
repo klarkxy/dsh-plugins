@@ -27,7 +27,7 @@ Business consumers read `.get()` on their own Config references. The settings se
 
 `@deepseek-ai/dsh-permission-presets` config includes `presets` and `defaultPreset`. The shipped default presets include `workspace-write` and `danger-full-access`. Each preset bundles `sandbox` and `approval`. Users switch with `/permission`, which records a `permission/preset` event.
 
-Tool policy should use `tools/pre-execute` (allow, deny, or ask) and call into approval when a human must decide. Do not hide a prompt inside `execute`.
+Tool policy uses `tools/pre-execute` (`allow`, `deny`, `cancel`, or `ask`) and `ctx.tools.guard` when a denial must survive later listeners. Call `ctx.approval` when a human must decide. `allowed-once` covers that one action, so the next call asks again. Do not hide a prompt inside `execute`. The pipeline order is on [Tools](tools.md).
 
 ## How a plugin author uses it
 

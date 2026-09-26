@@ -15,14 +15,26 @@
 </header>
 <main>
 <h1>DSH 开发索引</h1>
-<p>这是给做二次开发的 agent 用的 DeepSeek Harness 功能与扩展点索引。每一章都引用上述固定提交里的官方文件。所记录的修订见 <a href="../meta.json">meta.json</a>。</p>
-<p>先读索引，再打开对应章节。不要发明 API。</p>
+<p>这是给做二次开发的 agent 用的 DeepSeek Harness 功能与扩展点索引。要交付插件时先打开任务。章节页仍是参考层。每一页都引用上述固定提交里的官方文件。所记录的修订见 <a href="../meta.json">meta.json</a>。目标版本不同时，把这些页面当作未经核实。</p>
+<p>不要发明 API。</p>
+<h2>任务</h2>
+<nav><ul>
+<li><a href="tasks/index.html">任务索引</a></li>
+<li id="add-a-tool"><a href="tasks/add-a-tool.html">添加工具</a> — 模型必须按名字调用一项新能力时用这个任务。工具就是这个面向模型的动作。策略、设置和面板是别的任务。 <a href="tasks/add-a-tool.md">Markdown</a></li>
+<li id="add-a-tool-policy"><a href="tasks/add-a-tool-policy.html">添加工具执行策略</a> — 已有的工具调用需要被隐藏、拒绝、批准或观察时用这个任务。不要把这个决定写进工具的 <code>execute</code>。 <a href="tasks/add-a-tool-policy.md">Markdown</a></li>
+<li id="add-a-settings-ui"><a href="tasks/add-a-settings-ui.html">添加设置界面</a> — 人要修改插件配置，并且修改必须留在 profile 补丁里时，用这个任务。批准一次工具调用是另一个任务。 <a href="tasks/add-a-settings-ui.md">Markdown</a></li>
+<li id="add-a-ui-panel"><a href="tasks/add-a-ui-panel.html">添加界面面板</a> — 人要在 Harness 网页界面里看到一块内容时用这个任务。写视图之前先选表面。选错表面之后，样式补不回来。 <a href="tasks/add-a-ui-panel.md">Markdown</a></li>
+<li id="add-session-derived-state"><a href="tasks/add-session-derived-state.html">添加会话派生状态</a> — 值从对话派生，并且必须熬过重放、恢复和分叉时，用这个任务。会话日志是权威来源。插件内存是缓存。 <a href="tasks/add-session-derived-state.md">Markdown</a></li>
+<li id="implement-or-replace-a-provider"><a href="tasks/implement-or-replace-a-provider.html">实现或替换提供者</a> — 能力缝需要一个后端，或必须换掉随发行的后端时，用这个任务。依赖服务定义。不要复制这条缝，也不要为了调用而去导入具体提供者。 <a href="tasks/implement-or-replace-a-provider.md">Markdown</a></li>
+<li id="architecture-rules"><a href="tasks/architecture-rules.html">架构规则与反模式</a> — 这四条规则来自官方的插件实践。每一节都是一个在单次实时会话里看起来没问题的错误做法，以及它会在什么时候坏、正确替代方案，和怎么测。 <a href="tasks/architecture-rules.md">Markdown</a></li>
+</ul></nav>
+<h2>章节</h2>
 <nav><ul>
 <li id="orientation"><a href="areas/orientation.html">总览</a> — DeepSeek Harness 是「一切皆插件」的 agent harness。二次开发先定位能力属于哪一组包，再读该组 README 和对应子系统文档，不要从记忆里发明 API。 <a href="areas/orientation.md">Markdown</a></li>
 <li id="plugin-module"><a href="areas/plugin-module.html">插件模块</a> — 一个插件是导出 <code>apply</code> 的模块。需要的服务写在 <code>inject</code> 里；可调参数用同名的 Schemastery <code>Config</code> 声明。通过 <code>ctx</code> 注册的资源会在卸载时自动清理。 <a href="areas/plugin-module.md">Markdown</a></li>
 <li id="bundle-profile-patch"><a href="areas/bundle-profile-patch.html">Bundle、Profile 与补丁</a> — 作者发布的是 <strong>bundle</strong>（<code>package.json</code> 的 <code>dsh.bundle.patch</code> 指向一份补丁）。用户启动的是 <strong>profile</strong>（<code>$DSH_HOME/profiles/&lt;name&gt;</code>）。后应用的层按行覆盖，<code>config</code> 是整对象替换，不是深合并。 <a href="areas/bundle-profile-patch.md">Markdown</a></li>
 <li id="cli"><a href="areas/cli.html">命令行</a> — <code>dsh</code> 是唯一支持的 Node 启动器。<code>dsh plugin --profile &lt;name&gt;</code> 把参数转给该 profile 目录里的 pnpm。<code>--dump-config</code> 只打印组合结果，不启动应用。 <a href="areas/cli.md">Markdown</a></li>
-<li id="tools"><a href="areas/tools.html">工具</a> — 模型可见的工具通过 <code>defineTool</code> 声明，并用 <code>ctx.tools.register</code> 注册。<code>execute</code> 只返回 schema 规定的 JSON 值。允许、拒绝和询问写在 <code>tools/pre-execute</code> 等事件上，不要写进工具正文。 <a href="areas/tools.md">Markdown</a></li>
+<li id="tools"><a href="areas/tools.html">工具</a> — 模型可见的工具通过 <code>defineTool</code> 声明，并用 <code>ctx.tools.register</code> 注册。<code>execute</code> 只返回 schema 规定的 JSON 值。允许、拒绝、取消和询问写在 <code>tools/pre-execute</code> 上。与顺序无关的拒绝用 <code>ctx.tools.guard</code>，它是同步的，不能询问。不要把策略写进工具正文。 <a href="areas/tools.md">Markdown</a></li>
 <li id="skills"><a href="areas/skills.html">技能</a> — Skill 是按需加载的说明，不是会话事件。嵌入式说明用 <code>ctx.skills.register</code>。磁盘上的说明是带 frontmatter 的 <code>SKILL.md</code>，由 filesystem provider 发现。模型通过 <code>skill</code> 工具加载正文。 <a href="areas/skills.md">Markdown</a></li>
 <li id="presets-persona"><a href="areas/presets-persona.html">Agent 预设与 Persona</a> — Agent preset 是一条 <code>@deepseek-ai/dsh-agent-preset</code> 声明，放在 bundle 补丁里。<code>$DSH_HOME/.agent-presets/</code> 在这一版已经不再被读取。Persona 用 <code>@deepseek-ai/dsh-persona</code> 挂在 preset 内部。 <a href="areas/presets-persona.md">Markdown</a></li>
 <li id="system-prompt"><a href="areas/system-prompt.html">系统提示与请求上下文</a> — 模型看到的系统提示由 <code>ctx.systemPrompt</code> 按顺序拼装。插件用 <code>section</code>、<code>variable</code>、<code>context</code> 和 <code>tools</code> 贡献内容。同名注册在 agent scope 上会盖住全局项。 <a href="areas/system-prompt.md">Markdown</a></li>
@@ -32,7 +44,7 @@
 <li id="mcp"><a href="areas/mcp.html">MCP 服务器</a> — 外部 MCP 服务器用一条 <code>@deepseek-ai/dsh-mcp-client</code> 配置接入。工具名变成 <code>mcp__&lt;serverName&gt;__&lt;tool&gt;</code>。只加 client 行；官方 profile 已经挂了 <code>mcp-resources</code>。 <a href="areas/mcp.md">Markdown</a></li>
 <li id="ui-slots"><a href="areas/ui-slots.html">界面插槽</a> — Web 界面用 <code>ctx.slots</code> 组合 React。往别人声明的 slot 里注册时用 <code>ctx.slots.inject</code>，不要 import 另一个功能插件的组件。Client 入口在 <code>package.json</code> 的 <code>dsh.client</code> 和 <code>./client</code> 导出。 <a href="areas/ui-slots.md">Markdown</a></li>
 <li id="settings-approval"><a href="areas/settings-approval.html">设置、审批与权限预设</a> — 业务插件读自己的 Config，不存在文档化的 <code>ctx.settings.get</code> / <code>set</code>。设置表单通过 <code>ctx.settings</code> 的 <code>describe</code>、<code>update</code>、<code>replace</code> 和 <code>mutate</code> 改 profile 补丁。审批问的是「这一次动作能否继续」，权限预设把 sandbox 和 approval 绑在一起。 <a href="areas/settings-approval.md">Markdown</a></li>
-<li id="plugin-manager-inspect"><a href="areas/plugin-manager-inspect.html">插件管理器与实时检查</a> — 改当前 profile 用 <code>plugin_manager</code> 工具或 <code>dsh plugin</code>，不要手改 profile 的 <code>package.json</code>。查已挂载服务的方法签名用 <code>cordis_inspect_query</code>。这两个工具都会要求 <code>danger-full-access</code> 或一次审批。 <a href="areas/plugin-manager-inspect.md">Markdown</a></li>
+<li id="plugin-manager-inspect"><a href="areas/plugin-manager-inspect.html">插件管理器与实时检查</a> — 改当前 profile 用 <code>plugin_manager</code> 工具或 <code>dsh plugin</code>，不要手改 profile 的 <code>package.json</code>。查已挂载声明用 <code>cordis_inspect_list</code> 和 <code>cordis_inspect_query</code>。这两类工具的审批要求不同。 <a href="areas/plugin-manager-inspect.md">Markdown</a></li>
 <li id="other-seams"><a href="areas/other-seams.html">压缩、子代理、任务与目录</a> — 压缩、子代理和后台任务都是「定义 / 提供者 / 消费者」三条缝。换实现时挂新的 provider，不要复制服务。字段的完整列表在生成的 config catalog，不在这篇索引里。 <a href="areas/other-seams.md">Markdown</a></li>
 </ul></nav>
 </main>

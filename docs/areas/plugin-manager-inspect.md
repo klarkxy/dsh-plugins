@@ -2,7 +2,11 @@
 
 [中文](../zh/areas/plugin-manager-inspect.md)
 
-Change the current profile with the `plugin_manager` tool or `dsh plugin`. Do not hand-edit the profile `package.json`. Look up signatures of mounted services with `cordis_inspect_query`. Both tools require `danger-full-access` or a one-time approval.
+Change the current profile with the `plugin_manager` tool or `dsh plugin`. Do not hand-edit the profile `package.json`. Look up mounted declarations with `cordis_inspect_list` and `cordis_inspect_query`. Those two families do not share an approval rule.
+
+Every `plugin_manager` action, including `list_plugins` and `list_bundles`, calls `approveEscalation` with requested mode `danger-full-access` before it touches the profile. If the session is not already in that mode, the call needs a one-off approval. That approval does not change the session permission mode. The official `cordis-plugin-development` skill says to call `plugin_manager` only when its result decides the next step.
+
+`cordis_inspect_list` and `cordis_inspect_query` do not call that escalation and do not request `danger-full-access`. The same skill tells agents to confirm a newly installed plugin with `cordis_inspect_query`, which needs no approval, rather than paging `list_plugins`. The query implementation only runs a read-only inspect method. The environment's own tool permission policy still applies, including `tools/pre-execute` listeners and the session sandbox mode, the same as for any other tool.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 
@@ -19,6 +23,8 @@ Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harnes
 - Extensions group: [packages/extensions/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/README.md)
 - Inspect tools: [packages/extensions/tool-cordis/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/tool-cordis/README.md)
 - Dynamic Cordis practice: [docs/user/develop/practice/dynamic-cordis.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/dynamic-cordis.md)
+- Query tool implementation: [packages/extensions/tool-cordis/src/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/tool-cordis/src/index.ts)
+- Plugin-development skill: [packages/preset/agent-preset/skills/cordis-plugin-development/SKILL.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/SKILL.md)
 
 The base patch ships `plugin-manager` and leaves `tool-plugin-manager` disabled until a profile enables it. The cordis-plugin-development skill says the row id and the reason are in the shipped patch.
 
@@ -39,7 +45,7 @@ The base patch ships `plugin-manager` and leaves `tool-plugin-manager` disabled 
 
 Other parameters: `target`, `enabled`, `runtimeVersion`, `acceptRisk`, `approvedBuilds`, `registry`, `offset`, `limit`. List pages default to offset 0 and limit 25, with limit from 1 to 100.
 
-Every action goes through an approval escalation whose requested mode is `danger-full-access`. The justification states that profile changes persist and installed host code runs outside the workspace sandbox. Pass `approvedBuilds` only after the user approves those install scripts. The service records the names; it does not check the conversation.
+Every `plugin_manager` action goes through that approval escalation. The justification states that profile changes persist and installed host code runs outside the workspace sandbox. Pass `approvedBuilds` only after the user approves those install scripts. The service validates pending names; it does not verify conversation approval.
 
 Service methods behind the tool include `listPlugins`, `listBundles`, `setPluginEnabled`, `setBundleEnabled`, `installBundle`, `removeBundle`, `inspect`, `listVersionExemptions`, `setVersionExemption`, `waitForInstall`, and `cancelInstall`. Events include `plugin-manager/changed`, `plugin-manager/install-log`, and `plugin-manager/install-state`.
 
@@ -47,7 +53,9 @@ Documented manager config defaults include `pnpmCommand` `pnpm`, `inspectTimeout
 
 Activation results distinguish `applied`, `restart-required`, `failed`, and `overridden`. Replacing an installed package requires a process restart to load a new JavaScript module generation. HMR can apply a newly installed bundle. The manager cannot disable its own management components, change another profile, or edit an agent preset's composition.
 
-Inspection tools documented by the extensions group are `cordis_inspect_list` and `cordis_inspect_query`. The plugin-development skill tells agents to query `Service`, `Event`, `Config.listConfigs`, `Tool`, `Slots`, and `Theme` before writing a plugin. `Config.listConfigs` filtered by package `name` yields an `entry` id; querying that entry returns `packageDir`, which is where `README.md` and `lib/types` live. `ctx.cordisInspect` and `ctx.dynamicCordisRunner` come from `cordis-host-runner`.
+Inspection tools documented by the extensions group are `cordis_inspect_list` and `cordis_inspect_query`. Their registration in [packages/extensions/tool-cordis/src/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/tool-cordis/src/index.ts) has no `approveEscalation` call. A query reads declarations and runtime info only: Service methods, Event modes, a mounted plugin's Config schema, tool schemas, theme tokens, and live slot trees. It cannot invoke business Service methods, configure plugins, mutate the runtime, or execute generated code. Host queries run locally. A Client query waits for the first valid page response and stays pending until a page answers or the tool is cancelled. `Config.listConfigs` walks the profile Loader tree only. A plugin that exists only inside an agent preset's `plugins` list is not listed unless the profile tree also mounts it.
+
+The plugin-development skill tells agents to query `Service`, `Event`, `Config.listConfigs`, `Tool`, `Slots`, and `Theme` before writing a plugin. `Config.listConfigs` filtered by package `name` yields an `entry` id; querying that entry returns `packageDir`, which is where `README.md` and `lib/types` live. `ctx.cordisInspect` and `ctx.dynamicCordisRunner` come from `cordis-host-runner`.
 
 ## How a plugin author uses it
 
@@ -63,4 +71,6 @@ Inspection tools documented by the extensions group are `cordis_inspect_list` an
 - [packages/extensions/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/README.md)
 - [packages/extensions/tool-cordis/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/tool-cordis/README.md)
 - [docs/user/develop/practice/dynamic-cordis.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/user/develop/practice/dynamic-cordis.md)
+- [packages/extensions/tool-cordis/src/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/extensions/tool-cordis/src/index.ts)
+- [packages/preset/agent-preset/skills/cordis-plugin-development/SKILL.md](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/SKILL.md)
 - [packages/bundle/base/cordis.patch.yml](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/bundle/base/cordis.patch.yml)

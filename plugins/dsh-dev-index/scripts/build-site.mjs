@@ -31,43 +31,74 @@ if (!inPlace) {
 }
 await mkdir(resolve(outDir, "areas"), { recursive: true });
 await mkdir(resolve(outDir, "zh", "areas"), { recursive: true });
+await mkdir(resolve(outDir, "tasks"), { recursive: true });
+await mkdir(resolve(outDir, "zh", "tasks"), { recursive: true });
 await mkdir(resolve(outDir, "assets"), { recursive: true });
+
+const docEntries = [...catalog.areas, ...catalog.tasks, ...catalog.guides];
 
 if (!inPlace) {
   await writeFile(resolve(outDir, "index.json"), `${JSON.stringify(catalog, null, 2)}\n`);
-  for (const area of catalog.areas) {
-    const markdown = await readFile(resolve(docsDir, area.file), "utf8");
-    await writeFile(resolve(outDir, area.file), markdown);
-    const zhMarkdown = await readFile(resolve(docsDir, area.fileZh), "utf8");
-    await writeFile(resolve(outDir, area.fileZh), zhMarkdown);
+  const copies = [
+    ...docEntries.flatMap((entry) => [entry.file, entry.fileZh]),
+    "tasks/index.md",
+    "zh/tasks/index.md",
+    "REFRESH.md",
+  ];
+  for (const rel of copies) {
+    const markdown = await readFile(resolve(docsDir, rel), "utf8");
+    await writeFile(resolve(outDir, rel), markdown);
   }
 }
 
 const zhAreas = [];
 for (const area of catalog.areas) {
   const markdown = await readFile(resolve(docsDir, area.fileZh), "utf8");
-  zhAreas.push({ ...area, ...parseZhPage(markdown, area.id), markdown });
+  zhAreas.push({ ...area, ...parseZhPage(markdown, area.fileZh), markdown });
+}
+
+const zhTasks = [];
+for (const task of catalog.tasks) {
+  const markdown = await readFile(resolve(docsDir, task.fileZh), "utf8");
+  zhTasks.push({ ...task, ...parseZhPage(markdown, task.fileZh), markdown });
+}
+
+const zhGuides = [];
+for (const guide of catalog.guides) {
+  const markdown = await readFile(resolve(docsDir, guide.fileZh), "utf8");
+  zhGuides.push({ ...guide, ...parseZhPage(markdown, guide.fileZh), markdown });
 }
 
 await writeFile(resolve(outDir, ".nojekyll"), "");
 await writeFile(resolve(outDir, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
 await writeFile(resolve(outDir, "llms.txt"), renderLlms(catalog));
-await writeFile(resolve(outDir, "zh/llms.txt"), renderLlmsZh(catalog, zhAreas));
+await writeFile(resolve(outDir, "zh/llms.txt"), renderLlmsZh(catalog, zhAreas, zhTasks, zhGuides));
 await writeFile(resolve(outDir, "assets/site.css"), CSS);
 await writeFile(resolve(outDir, "index.html"), renderIndex(catalog));
-await writeFile(resolve(outDir, "zh/index.html"), renderIndexZh(catalog, zhAreas));
+await writeFile(resolve(outDir, "zh/index.html"), renderIndexZh(catalog, zhAreas, zhTasks, zhGuides));
 
 for (const area of catalog.areas) {
   const markdown = await readFile(resolve(docsDir, area.file), "utf8");
-  await writeFile(
-    resolve(outDir, `areas/${area.id}.html`),
-    renderArea(area, markdown),
-  );
+  await writeFile(resolve(outDir, `areas/${area.id}.html`), renderArea(area, markdown));
 }
 
 for (const area of zhAreas) {
   await writeFile(resolve(outDir, `zh/areas/${area.id}.html`), renderAreaZh(area));
 }
+
+for (const task of [...catalog.tasks, ...catalog.guides]) {
+  const markdown = await readFile(resolve(docsDir, task.file), "utf8");
+  await writeFile(resolve(outDir, `tasks/${task.id}.html`), renderTask(task, markdown));
+}
+
+for (const task of [...zhTasks, ...zhGuides]) {
+  await writeFile(resolve(outDir, `zh/tasks/${task.id}.html`), renderTaskZh(task));
+}
+
+const taskIndex = await readFile(resolve(docsDir, "tasks/index.md"), "utf8");
+await writeFile(resolve(outDir, "tasks/index.html"), renderTaskIndex(taskIndex));
+const taskIndexZh = await readFile(resolve(docsDir, "zh/tasks/index.md"), "utf8");
+await writeFile(resolve(outDir, "zh/tasks/index.html"), renderTaskIndexZh(taskIndexZh));
 
 function renderLlms(value) {
   const lines = [
@@ -85,7 +116,12 @@ function renderLlms(value) {
     `- [Recorded revision](${value.pagesBaseUrl}meta.json): officialRepository, officialTag, and officialCommit for the daily comparator.`,
     `- [Index](${value.pagesBaseUrl}index.html): Area list with stable anchors.`,
     `- [中文](${value.pagesBaseUrl}zh/llms.txt): Simplified Chinese mirror of the human-readable pages.`,
+    `- [Task index](${value.pagesBaseUrl}tasks/index.md): Which extension task to open before the area reference.`,
+    `- [Architecture rules](${value.pagesBaseUrl}tasks/architecture-rules.md): Anti-patterns from the official plugin practices.`,
   ];
+  for (const task of value.tasks) {
+    lines.push(`- [${task.title}](${value.pagesBaseUrl}${task.file}): ${task.summary}`);
+  }
   for (const area of value.areas) {
     lines.push(`- [${area.title}](${value.pagesBaseUrl}${area.file}): ${area.summary}`);
   }
@@ -93,7 +129,7 @@ function renderLlms(value) {
   return `${lines.join("\n")}\n`;
 }
 
-function renderLlmsZh(value, areas) {
+function renderLlmsZh(value, areas, tasks, guides) {
   const lines = [
     "# DSH 开发索引",
     "",
@@ -109,7 +145,12 @@ function renderLlmsZh(value, areas) {
     `- [索引 JSON](${value.pagesBaseUrl}index.json)：每个章节的 id、英文摘要和官方源路径。机器可读目录保持英文。`,
     `- [所记录的修订](${value.pagesBaseUrl}meta.json)：每日比对用的 officialRepository、officialTag 与 officialCommit。`,
     `- [索引](${value.pagesBaseUrl}zh/index.html)：带稳定锚点的章节列表。`,
+    `- [任务索引](${value.pagesBaseUrl}zh/tasks/index.md)：先打开哪一个扩展任务，再读参考章节。`,
+    `- [架构规则](${value.pagesBaseUrl}zh/tasks/architecture-rules.md)：来自官方插件实践的反模式。`,
   ];
+  for (const task of [...tasks, ...guides]) {
+    lines.push(`- [${task.zhTitle}](${value.pagesBaseUrl}${task.fileZh})：${task.zhSummary}`);
+  }
   for (const area of areas) {
     lines.push(`- [${area.zhTitle}](${value.pagesBaseUrl}${area.fileZh})：${area.zhSummary}`);
   }
@@ -118,6 +159,13 @@ function renderLlmsZh(value, areas) {
 }
 
 function renderIndex(value) {
+  const tasks = value.tasks.map((task) => [
+    `<li id="${escapeAttr(task.id)}">`,
+    `<a href="tasks/${task.id}.html">${escapeText(task.title)}</a>`,
+    ` — ${escapeText(task.summary)}`,
+    ` <a href="${escapeAttr(task.file)}">markdown</a>`,
+    "</li>",
+  ].join(""));
   const items = value.areas.map((area) => [
     `<li id="${escapeAttr(area.id)}">`,
     `<a href="areas/${area.id}.html">${escapeText(area.title)}</a>`,
@@ -140,7 +188,14 @@ function renderIndex(value) {
       "</header>",
       "<main>",
       "<h1>DSH development index</h1>",
-      "<p>DeepSeek Harness features and extension points for an agent doing secondary development. Each area cites official files at the pinned commit. The recorded revision is <a href=\"meta.json\">meta.json</a>.</p>",
+      "<p>DeepSeek Harness features and extension points for an agent doing secondary development. Start with a task when the goal is to ship a plugin. Area pages remain the reference layer. Each page cites official files at the pinned commit. The recorded revision is <a href=\"meta.json\">meta.json</a>. If the target DSH version differs, treat these pages as unverified for that version.</p>",
+      "<h2>Tasks</h2>",
+      "<nav><ul>",
+      `<li><a href="tasks/index.html">Task index</a></li>`,
+      `<li><a href="tasks/architecture-rules.html">Architecture rules and anti-patterns</a></li>`,
+      ...tasks,
+      "</ul></nav>",
+      "<h2>Areas</h2>",
       "<nav><ul>",
       ...items,
       "</ul></nav>",
@@ -149,7 +204,14 @@ function renderIndex(value) {
   });
 }
 
-function renderIndexZh(value, areas) {
+function renderIndexZh(value, areas, tasks, guides) {
+  const taskItems = [...tasks, ...guides].map((task) => [
+    `<li id="${escapeAttr(task.id)}">`,
+    `<a href="tasks/${task.id}.html">${escapeText(task.zhTitle)}</a>`,
+    ` — ${inline(task.zhSummary)}`,
+    ` <a href="tasks/${task.id}.md">Markdown</a>`,
+    "</li>",
+  ].join(""));
   const items = areas.map((area) => [
     `<li id="${escapeAttr(area.id)}">`,
     `<a href="areas/${area.id}.html">${escapeText(area.zhTitle)}</a>`,
@@ -170,8 +232,14 @@ function renderIndexZh(value, areas) {
       "</header>",
       "<main>",
       "<h1>DSH 开发索引</h1>",
-      "<p>这是给做二次开发的 agent 用的 DeepSeek Harness 功能与扩展点索引。每一章都引用上述固定提交里的官方文件。所记录的修订见 <a href=\"../meta.json\">meta.json</a>。</p>",
-      "<p>先读索引，再打开对应章节。不要发明 API。</p>",
+      "<p>这是给做二次开发的 agent 用的 DeepSeek Harness 功能与扩展点索引。要交付插件时先打开任务。章节页仍是参考层。每一页都引用上述固定提交里的官方文件。所记录的修订见 <a href=\"../meta.json\">meta.json</a>。目标版本不同时，把这些页面当作未经核实。</p>",
+      "<p>不要发明 API。</p>",
+      "<h2>任务</h2>",
+      "<nav><ul>",
+      `<li><a href="tasks/index.html">任务索引</a></li>`,
+      ...taskItems,
+      "</ul></nav>",
+      "<h2>章节</h2>",
       "<nav><ul>",
       ...items,
       "</ul></nav>",
@@ -189,6 +257,74 @@ function renderArea(area, markdown) {
     body: [
       "<header>",
       `<p><a href="../zh/areas/${area.id}.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a> · <a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · <a href="${escapeAttr(area.file.slice("areas/".length))}">markdown</a></p>`,
+      "</header>",
+      "<article>",
+      renderMarkdown(markdown),
+      "</article>",
+    ].join("\n"),
+  });
+}
+
+function renderTask(task, markdown) {
+  return page({
+    title: task.title,
+    lang: "en",
+    css: "../assets/site.css",
+    alternate: { hreflang: "zh-CN", href: `../zh/tasks/${task.id}.html` },
+    body: [
+      "<header>",
+      `<p><a href="../zh/tasks/${task.id}.html" lang="zh-CN">中文</a> · <a href="../tasks/index.html">Tasks</a> · <a href="../index.html">Index</a> · <a href="${task.id}.md">markdown</a></p>`,
+      "</header>",
+      "<article>",
+      renderMarkdown(markdown),
+      "</article>",
+    ].join("\n"),
+  });
+}
+
+function renderTaskZh(task) {
+  return page({
+    title: task.zhTitle,
+    lang: "zh-CN",
+    css: "../../assets/site.css",
+    alternate: { hreflang: "en", href: `../../tasks/${task.id}.html` },
+    body: [
+      "<header>",
+      `<p><a href="../../tasks/${task.id}.html" lang="en">English</a> · <a href="../index.html">索引</a> · <a href="${task.id}.md">Markdown</a></p>`,
+      "</header>",
+      "<article>",
+      renderMarkdown(task.markdown),
+      "</article>",
+    ].join("\n"),
+  });
+}
+
+function renderTaskIndex(markdown) {
+  return page({
+    title: "Task index",
+    lang: "en",
+    css: "../assets/site.css",
+    alternate: { hreflang: "zh-CN", href: "../zh/tasks/index.html" },
+    body: [
+      "<header>",
+      `<p><a href="../zh/tasks/index.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a></p>`,
+      "</header>",
+      "<article>",
+      renderMarkdown(markdown),
+      "</article>",
+    ].join("\n"),
+  });
+}
+
+function renderTaskIndexZh(markdown) {
+  return page({
+    title: "任务索引",
+    lang: "zh-CN",
+    css: "../../assets/site.css",
+    alternate: { hreflang: "en", href: "../../tasks/index.html" },
+    body: [
+      "<header>",
+      `<p><a href="../../tasks/index.html" lang="en">English</a> · <a href="../index.html">索引</a></p>`,
       "</header>",
       "<article>",
       renderMarkdown(markdown),
@@ -217,9 +353,9 @@ function renderAreaZh(area) {
 function parseZhPage(markdown, id) {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const heading = lines.find((line) => line.startsWith("# "));
-  if (!heading) throw new Error(`docs/zh/areas/${id}.md is missing an h1`);
+  if (!heading) throw new Error(`docs/${id} is missing an h1`);
   const zhTitle = heading.slice(2).trim();
-  if (!zhTitle) throw new Error(`docs/zh/areas/${id}.md has an empty h1`);
+  if (!zhTitle) throw new Error(`docs/${id} has an empty h1`);
   const prose = [];
   let seenHeading = false;
   for (const line of lines) {
@@ -235,7 +371,7 @@ function parseZhPage(markdown, id) {
     }
     prose.push(line.trim());
   }
-  if (prose.length === 0) throw new Error(`docs/zh/areas/${id}.md is missing an opening paragraph`);
+  if (prose.length === 0) throw new Error(`docs/${id} is missing an opening paragraph`);
   return { zhTitle, zhSummary: prose.join(" ") };
 }
 

@@ -2,7 +2,7 @@
 
 [中文](../zh/areas/tools.md)
 
-Model-visible tools are declared with `defineTool` and registered with `ctx.tools.register`. `execute` returns only the JSON value required by the schema. Allow, deny, and ask belong on events such as `tools/pre-execute`, not inside the tool body.
+Model-visible tools are declared with `defineTool` and registered with `ctx.tools.register`. `execute` returns only the JSON value required by the schema. Allow, deny, cancel, and ask belong on `tools/pre-execute`. An order-independent denial is `ctx.tools.guard`, which is synchronous and cannot ask. Do not hide policy inside the tool body.
 
 Indexed against [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443) (`477b4f420553e8a52c2fbccc464d7561b239c443`).
 
@@ -64,7 +64,7 @@ Policy events, in pipeline order:
 
 | Event or method | Role |
 | --- | --- |
-| `tools/pre-execute` | Allow, deny, or ask. |
+| `tools/pre-execute` | Allow, deny, cancel, or ask. `ask` continues only after approval returns `allowed-once`; anything else denies. |
 | `ctx.tools.guard(guard)` | Monotonic deny after pre-execute. Later listeners cannot undo it. |
 | `tools/execute` | Around-dispatch, including deadlines and retry. |
 | `tools/post-execute` | Replace content or value, block, or attach context. |

@@ -61,9 +61,13 @@ git -C /tmp/deepseek-harness diff --name-only "$RECORDED_COMMIT" HEAD
 
 `rev-parse HEAD` must equal `LATEST_COMMIT`. Keep the `%cI` line for `indexed.committedAt` and the subject line for `indexed.subject`. The `diff --name-only` list is the set of paths that changed between the indexed revision and the new release.
 
-## 3. Update affected area pages in both languages
+## 3. Update affected area pages, task pages, and the anti-pattern page
 
-Open `docs/index.json`. For each area, if any path in `sources` is in that name list, or a cited path was renamed or deleted, re-read those files in `/tmp/deepseek-harness` and edit **both** `docs/areas/<id>.md` and `docs/zh/areas/<id>.md`. Also update an area when the diff changes behavior that page describes, even if you have to add or remove a path in `sources`. Leave every other area's prose unchanged, in both languages.
+Open `docs/index.json`. A page is affected when any path in its `sources` is in the diff name list, when a cited path was renamed or deleted, or when the diff changes behavior that page describes. For an affected area, re-read those files in `/tmp/deepseek-harness` and edit **both** `docs/areas/<id>.md` and `docs/zh/areas/<id>.md`. Do the same for each entry in `tasks` and `guides`: edit **both** `docs/tasks/<id>.md` and `docs/zh/tasks/<id>.md`.
+
+A task or guide is also affected when an area it lists in `areas` was edited in this refresh. Re-read the task's "how to choose" section and its verification checklist against the new upstream text and against the area page you just edited. If the mechanism advice, the checklist, or a failure note is now wrong, rewrite it. Do not stop at replacing commit hashes in links while leaving stale prose. `docs/tasks/index.md` and `docs/zh/tasks/index.md` move with any task you add, remove, or rename.
+
+Leave every unaffected page's prose unchanged, in both languages.
 
 Write the English page in English and the Chinese page in Simplified Chinese. Do not leave a Chinese sentence on an English page, or an English sentence on a Chinese page. Identifiers, paths, code fences, and quoted upstream strings stay as they appear in the source. On an English page the only CJK is the link text `中文`. On a Chinese page the link back is the word `English`.
 
@@ -71,11 +75,11 @@ Do not add a config key, method, event, or default you did not read in the new t
 
 ## 4. Pin links to the new commit
 
-In every `docs/areas/*.md` file and every `docs/zh/areas/*.md` file, replace the previous commit in:
+In every `docs/areas/*.md`, `docs/zh/areas/*.md`, `docs/tasks/*.md`, and `docs/zh/tasks/*.md` file, replace the previous commit in:
 
 `https://github.com/deepseek-ai/deepseek-harness/blob/<sha>/<path>`
 
-with `LATEST_COMMIT`. Each page, in both languages, must still contain `LATEST_COMMIT` and every path listed in that area's `sources`.
+with `LATEST_COMMIT`. Each area, task, and guide page, in both languages, must still contain `LATEST_COMMIT` and every path listed in that entry's `sources`. Task pages must still link to each id in `areas`, and must still say `Runnable example: not yet (planned)` until a later round ships a pack. Do not flip `runnableExample` away from `not-yet` in this refresh.
 
 ## 5. Record the new revision
 
@@ -87,11 +91,11 @@ Edit `docs/index.json`:
 - `indexed.subject` = the subject line
 - `summary` and `sources` only for areas whose prose changed
 
-`index.json` and `meta.json` stay in English. `file` remains the English page. `fileZh` is `zh/areas/<id>.md`. Do not put Chinese prose in `index.json`. The Chinese opening paragraph in `docs/zh/areas/<id>.md` is the Chinese summary the index page shows. There is no `summaryZh` field.
+`index.json` and `meta.json` stay in English. `file` remains the English page. For an area, `fileZh` is `zh/areas/<id>.md`. For a task or guide, `fileZh` is `zh/tasks/<id>.md`. Do not put Chinese prose in `index.json`. The Chinese opening paragraph is the Chinese summary the index page shows. There is no `summaryZh` field. `tasks` and `guides` record `areas` (area ids that page must link) and `runnableExample`. Round 1 leaves `runnableExample` at `not-yet`.
 
-Do not hand-edit `docs/meta.json`. The next command rewrites it. Keep `officialRepository`, `officialTag`, and `officialCommit` as the three fields a daily job compares.
+Do not hand-edit `docs/meta.json`. The next command rewrites it. Keep `officialRepository`, `officialTag`, and `officialCommit` as the three fields a daily job compares. Those three fields are the DSH revision the pages were written against. The skill tells an agent to compare them with the target version and, on a mismatch, treat the pages as unverified.
 
-If you added, removed, or renamed an area id, also update `AREA_IDS` in `plugins/dsh-dev-index/src/skill-body.ts` so the skill lists the same ids in the same order, and add both `docs/areas/<id>.md` and `docs/zh/areas/<id>.md`. A commit bump that does not change area ids does not touch the plugin. Do not copy markdown into the package. The skill keeps pointing at the English files and may mention that `zh/` exists.
+If you added, removed, or renamed an area id, also update `AREA_IDS` in `plugins/dsh-dev-index/src/skill-body.ts`. If you added, removed, or renamed a task id, update `TASK_IDS` there too. The skill lists those ids in the same order. Add both language files for any new id. A commit bump that does not change ids does not touch the plugin. Do not copy markdown into the package. The skill keeps pointing at the English files and may mention that `zh/` exists.
 
 ## 6. Regenerate rendered files and check
 
@@ -104,20 +108,23 @@ node plugins/dsh-dev-index/scripts/check-languages.mjs
 pnpm check
 ```
 
-`build-site.mjs` reads `docs/index.json`, `docs/areas/*.md`, and `docs/zh/areas/*.md`. It rewrites these in place:
+`build-site.mjs` reads `docs/index.json`, the area markdown, and the task and guide markdown, including `docs/tasks/index.md` and `docs/zh/tasks/index.md`. It rewrites these in place:
 
 - `docs/meta.json` (`officialRepository`, `officialTag`, `officialCommit`)
 - `docs/llms.txt` and `docs/zh/llms.txt`
 - `docs/index.html` and `docs/zh/index.html`
 - `docs/areas/*.html` and `docs/zh/areas/*.html`
+- `docs/tasks/*.html` and `docs/zh/tasks/*.html`
 - `docs/assets/site.css`
 - `docs/.nojekyll`
 
 It does not delete `docs/`, and it does not rewrite `docs/index.json` or the area markdown.
 
-`verify-citations.mjs` fails unless `meta.json` matches `index.json`, every English and Chinese area page names the recorded commit and its `sources`, and each cited path exists in the checkout.
+`verify-citations.mjs` fails unless `meta.json` matches `index.json`, every English and Chinese area, task, and guide page names the recorded commit and its `sources`, and each cited path exists in the checkout. It refuses to skip when the checkout argument is missing.
 
-`check-languages.mjs` fails if an English docs file contains CJK outside the `中文` language-switch link, or if `docs/zh/areas/<id>.md` or `docs/zh/areas/<id>.html` is missing for any area id. It also fails when a Chinese page contains a run of English words outside code, identifiers, and the `English` link. `pnpm check` runs the same script. Read both versions of any area you edited and confirm neither one mixes languages.
+`check-languages.mjs` fails if an English docs file contains CJK outside the `中文` language-switch link, or if a Chinese twin or its HTML is missing for any area, task, or guide. It also fails when a Chinese page contains a run of English words outside code, identifiers, and the `English` link, when a task does not link its `areas`, or when a task or guide drops the runnable-example placeholder. `pnpm check` runs the same script. Read both versions of any page you edited and confirm neither one mixes languages.
+
+`plugins/dsh-dev-index/tests/catalog.test.ts` checks the same cited paths when `DSH_CHECKOUT` (default `/tmp/deepseek-harness`) contains `packages/README.md`. Without that checkout it prints a `SKIP source-path check` warning and skips the test. It does not pass quietly. CI runs `plugins/dsh-dev-index/scripts/fetch-pinned.mjs` first so the check executes against `officialCommit`. Set `DSH_REQUIRE_CHECKOUT=1` to fail instead of skip.
 
 ## 7. Commit
 

@@ -2,7 +2,7 @@
   "id": "@klarkxy/dsh-dev-index",
   "version": "0.1.0",
   "main": "lib/index.js",
-  "description": "DeepSeek Harness feature index for agents doing DSH secondary development.",
+  "description": "Workflow skill that helps an agent pick a DeepSeek Harness extension mechanism and deliver a verified plugin.",
   "engines": {
     "dsh": ">=0.1.7-rc.2 <0.2.0"
   },

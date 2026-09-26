@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task index</title>
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/tasks/index.html">
+</head>
+<body>
+<header>
+<p><a href="../zh/tasks/index.html" lang="zh-CN">中文</a> · <a href="../index.html">Index</a></p>
+</header>
+<article>
+<h1 id="task-index">Task index</h1>
+<p><a href="../zh/tasks/index.html">中文</a></p>
+<p>Pick a task, then read the linked area pages. Area pages stay the reference layer. These steps are written against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>). If the target DSH version differs, treat every page as unverified for that version and check the pinned source and type declarations. Do not silently substitute this index.</p>
+<p>Inside a running DSH, prefer the official <code>cordis-plugin-development</code> skill and <code>cordis_inspect_query</code> for what is actually mounted. Outside DSH, do not assume those tools exist. Context7 (<code>/deepseek-ai/deepseek-harness</code>) tracks master and is only a secondary source for scattered examples.</p>
+<p>Read <a href="architecture-rules.html">Architecture rules and anti-patterns</a> before choosing a mechanism.</p>
+<table><thead><tr><th>Task</th><th>Use it when</th></tr></thead><tbody><tr><td><a href="add-a-tool.html">Add a tool</a></td><td>The model must call a new capability by name.</td></tr><tr><td><a href="add-a-tool-policy.html">Add a tool execution policy</a></td><td>An existing call must be hidden, denied, asked, or observed.</td></tr><tr><td><a href="add-a-settings-ui.html">Add a settings UI</a></td><td>A person must edit plugin config that survives in the profile patch.</td></tr><tr><td><a href="add-a-ui-panel.html">Add a UI panel</a></td><td>A person must see something in the Harness Web UI.</td></tr><tr><td><a href="add-session-derived-state.html">Add session-derived state</a></td><td>A value must follow the session log across replay, restore, and forks.</td></tr><tr><td><a href="implement-or-replace-a-provider.html">Implement or replace a provider</a></td><td>A seam needs a new backend, or a shipped backend must be swapped.</td></tr></tbody></table>
+<p>Runnable example: not yet (planned). This index does not ship task packs. A later round adds runnable examples and tests.</p>
+<h2 id="sources">Sources</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/SKILL.md">packages/preset/agent-preset/skills/cordis-plugin-development/SKILL.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md">packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md</a></li></ul>
+</article>
+</body>
+</html>

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "DSH development index",
-    "description": "Help agents find DSH features, extension points, and development documentation."
+    "description": "Help an agent pick a DSH extension mechanism and deliver a verified plugin."
   }
 }

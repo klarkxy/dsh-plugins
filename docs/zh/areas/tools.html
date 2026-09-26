@@ -14,7 +14,7 @@
 <article>
 <h1 id="工具">工具</h1>
 <p><a href="../../areas/tools.html">English</a></p>
-<p>模型可见的工具通过 <code>defineTool</code> 声明，并用 <code>ctx.tools.register</code> 注册。<code>execute</code> 只返回 schema 规定的 JSON 值。允许、拒绝和询问写在 <code>tools/pre-execute</code> 等事件上，不要写进工具正文。</p>
+<p>模型可见的工具通过 <code>defineTool</code> 声明，并用 <code>ctx.tools.register</code> 注册。<code>execute</code> 只返回 schema 规定的 JSON 值。允许、拒绝、取消和询问写在 <code>tools/pre-execute</code> 上。与顺序无关的拒绝用 <code>ctx.tools.guard</code>，它是同步的，不能询问。不要把策略写进工具正文。</p>
 <p>索引所对照的版本是 <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a>（<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>）。</p>
 <h2 id="它是什么">它是什么</h2>
 <p><code>@deepseek-ai/dsh-tools</code> 提供 <code>ctx.tools</code>，也就是 agent 循环用来分发的注册表。注册一个工具，就足以让它的 schema 进入系统提示的拼装。模型看到每个被允许的工具的名字、描述和参数 schema。按 agent 的限制可以收窄这组工具。</p>
@@ -49,7 +49,7 @@ export function apply(ctx: Context) {
 <p>食谱里的规则：</p>
 <ul><li><code>defineTool</code> 在 <code>execute</code> 之前校验模型参数。在 <code>execute</code> 内部，参数符合 schema。DSL 表达不了的约束要自己检查。</li><li><code>execute</code> 返回一个规范的 JSON 值。注册表校验它，再传给 <code>output.render</code>。不要从函数体返回内容块。</li><li>抛出或非法值会变成错误结果。基础设施故障用抛出。成功的领域结果放进规范值。</li><li>尊重 <code>exec.signal</code>。身份字段（<code>callId</code>、<code>name</code>、<code>arguments</code>、<code>agent</code>、<code>token</code>、<code>signal</code>）保持不可变。</li><li><code>output.presentationMeta(args, value)</code> 派生可重放的卡片 JSON。核心把它持久化在 <code>tool/result</code> 上。</li><li><code>agent.inject({ content, source: { kind: 'plugin', plugin: '&lt;name&gt;' } })</code> 追加下一次模型请求能看到的持久上下文。它不会唤醒空闲的 agent。</li></ul>
 <p>策略事件，按流水线顺序：</p>
-<table><thead><tr><th>事件或方法</th><th>作用</th></tr></thead><tbody><tr><td><code>tools/pre-execute</code></td><td>允许、拒绝或询问。</td></tr><tr><td><code>ctx.tools.guard(guard)</code></td><td>在 pre-execute 之后单调拒绝。后面的监听器不能撤销它。</td></tr><tr><td><code>tools/execute</code></td><td>环绕分发，包括截止时间和重试。</td></tr><tr><td><code>tools/post-execute</code></td><td>替换内容或值、阻断，或附上上下文。</td></tr><tr><td><code>tools/result</code></td><td>观察最终结果。</td></tr></tbody></table>
+<table><thead><tr><th>事件或方法</th><th>作用</th></tr></thead><tbody><tr><td><code>tools/pre-execute</code></td><td>允许、拒绝、取消或询问。<code>ask</code> 只有在审批返回 <code>allowed-once</code> 之后才继续，其余结果都拒绝。</td></tr><tr><td><code>ctx.tools.guard(guard)</code></td><td>在 pre-execute 之后单调拒绝。后面的监听器不能撤销它。</td></tr><tr><td><code>tools/execute</code></td><td>环绕分发，包括截止时间和重试。</td></tr><tr><td><code>tools/post-execute</code></td><td>替换内容或值、阻断，或附上上下文。</td></tr><tr><td><code>tools/result</code></td><td>观察最终结果。</td></tr></tbody></table>
 <p>按 agent 收窄用 <code>ctx.tools.restrict(filter)</code>、<code>ctx.tools.get(name, scope)</code> 和 <code>ctx.tools.schemas(scope)</code>。</p>
 <p>包 README 里的注册表配置：<code>mode</code> 是 <code>native</code>、<code>ptc</code> 或 <code>both</code>（默认 <code>native</code>）；<code>maxParallelSubCalls</code> 默认 10。在 <code>ptc</code> 或 <code>both</code> 下，可见工具也会作为 <code>await tools.&lt;name&gt;(args)</code> 暴露在生成的 <code>run_code</code> SDK 里。agent 可以用 <code>presentAs</code> 覆盖呈现方式。</p>
 <p>后台工作在生产者配置放行 <code>run_in_background</code> 之后，使用 <code>ctx.jobs.start({ kind, label, owner: exec.agent, run })</code>。成功的后台分支返回带类型的句柄，例如 <code>{ kind: 'background', jobId }</code>。一旦 <code>ctx.jobs.start()</code> 公布了 id，取消就属于这个任务（<code>job_kill</code>、所有者释放、服务拆卸），不再属于外层的 <code>exec.signal</code>。</p>
