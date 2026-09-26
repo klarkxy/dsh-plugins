@@ -8,7 +8,7 @@
 
 | 包 | 作用 |
 | --- | --- |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | 为做 DSH 二次开发的 agent 索引 DeepSeek Harness 的功能与扩展点。 |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | 让 agent 从一项 DSH 扩展任务走到经过验证的插件，章节页仍是参考层。 |
 | [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.zh-CN.md) | 删繁：保持受支持行为，以证据驱动删除和合并概念的原生 Preset。 |
 
 可以从 npm 安装单个插件：
@@ -18,7 +18,7 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
-给 agent 的开发索引在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/)（`llms.txt`、`index.json`、`meta.json`，以及每个主题一篇 markdown）。本仓库的 `docs/` 是唯一副本。`docs/meta.json` 用 `officialTag` 和 `officialCommit` 记录这些页面所描述的 DeepSeek Harness 修订。`dsh-dev-index` 插件不携带这些页面。它的 skill 让 agent 去拉取站点；Pages 没有响应时，回退到 `main` 上的原始文件 `https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/`。每日更新步骤在 [docs/REFRESH.md](docs/REFRESH.md)。需要在本仓库的 Settings → Pages 中把来源设为 GitHub Actions。工作流是 `.github/workflows/pages.yml`。这个设置打开之前，站点 URL 不会提供内容。本树进入 `main` 之后，原始文件 URL 仍然可以访问。
+给 agent 的开发索引在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/)（`llms.txt`、`index.json`、`meta.json`，每个任务一篇 markdown，以及每个主题一篇 markdown）。`meta.json` 是这些页面所对照的 DSH 修订。本仓库的 `docs/` 是唯一副本。`docs/meta.json` 用 `officialTag` 和 `officialCommit` 记录这些页面所描述的 DeepSeek Harness 修订。`dsh-dev-index` 插件不携带这些页面。它的 skill 让 agent 去拉取站点；Pages 没有响应时，回退到 `main` 上的原始文件 `https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/docs/`。每日更新步骤在 [docs/REFRESH.md](docs/REFRESH.md)。需要在本仓库的 Settings → Pages 中把来源设为 GitHub Actions。工作流是 `.github/workflows/pages.yml`。这个设置打开之前，站点 URL 不会提供内容。本树进入 `main` 之后，原始文件 URL 仍然可以访问。
 
 ## 开发
 

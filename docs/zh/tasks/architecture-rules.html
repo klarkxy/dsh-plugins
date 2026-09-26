@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>架构规则与反模式</title>
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="alternate" hreflang="en" href="../../tasks/architecture-rules.html">
+</head>
+<body>
+<header>
+<p><a href="../../tasks/architecture-rules.html" lang="en">English</a> · <a href="../index.html">索引</a> · <a href="architecture-rules.md">Markdown</a></p>
+</header>
+<article>
+<h1 id="架构规则与反模式">架构规则与反模式</h1>
+<p><a href="../../tasks/architecture-rules.html">English</a></p>
+<p>这四条规则来自官方的插件实践。每一节都是一个在单次实时会话里看起来没问题的错误做法，以及它会在什么时候坏、正确替代方案，和怎么测。</p>
+<p>索引所对照的版本是 <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a>（<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>）。目标版本不同时，把本页当作未经核实，并核对钉住的源码。</p>
+<p>顺序和会话规则的出处是 <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md">packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md</a>。</p>
+<h2 id="会话日志是权威来源">会话日志是权威来源</h2>
+<p>错误做法：把功能的事实放在插件内存、私有文件，或一种新的会话事件 <code>type</code> 里。</p>
+<p>为什么看起来能工作：写下这块内存的进程仍显示正确的值，自定义事件也出现在同一个进程里。</p>
+<p>什么时候会坏：分叉、恢复和重放都从日志重建。实践文档说，模型看到的任何东西都必须能从已提交的会话事件重建，插件内存是派生缓存。读者只在信封带 <code>ignorable: true</code> 时接受未知的已存事件。实时的 <code>Session.append()</code> 不能设置这个标记，于是会话会拒绝重新打开。<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md">docs/subsystems/session.md</a> 把 <code>fork</code> 定义成带精确继承前缀的种子子会话。</p>
+<p>正确替代：从已有事件推导状态，或把插件自己的数据放进你通过检查找到的存储服务。模型可见的文字走已经会记日志的机制，例如 <code>agent.inject</code> 或工具结果。</p>
+<p>怎么测：在回合之间的边界分叉，把派生值和父前缀比较。重启并重放同一份日志。不要停在检查写下内存的那个进程。</p>
+<h2 id="注册属于一个上下文">注册属于一个上下文</h2>
+<p>错误做法：在 <code>agent/created</code> 里向 <code>agent.ctx</code> 注册，却只从一侧释放；或把必须随 agent 死去的资源登记在插件 fiber 上。</p>
+<p>为什么看起来能工作：你试过的那条路径里，释放一次 agent，或卸载一次插件，看起来是干净的。</p>
+<p>什么时候会坏：实践文档说，登记在另一个上下文上，例如 <code>agent.ctx</code>，就有两个主人。卸载插件本身不会释放 <code>agent.ctx</code> 上的注册。释放 agent 也不会运行只活在插件 fiber 上的释放函数。</p>
+<p>正确替代：在 <code>agent/created</code> 监听器里取得 <code>agent.ctx</code>，把注册包进一个 <code>agent.ctx.effect()</code>，并且把这个释放函数按 agent 留在插件自己的 effect 里。任一条拆除路径都会移除它。可选服务放进 <code>inject</code> 或 <code>ctx.inject</code>，这样没有它们的 profile 会让插件保持不激活，而不是抛错。</p>
+<p>怎么测：agent 还在时卸载插件，确认注册消失。插件还在时释放 agent，确认注册消失。两种顺序都要跑。</p>
+<h2 id="优先用够用的最弱机制">优先用够用的最弱机制</h2>
+<p>错误做法：监听 <code>system-prompt/assemble</code> 来添加或移除工具或文字；或在较早的 <code>tools/pre-execute</code> 监听器里拒绝，并把这次拒绝当成最终的。</p>
+<p>为什么看起来能工作：在你的监听器最后运行的 profile 里，工具消失了，提示看起来也对。</p>
+<p>什么时候会坏：<code>system-prompt/assemble</code> 会换掉整份拼装，其他插件的段落和当前的 PTC 模式都要你自己保留。<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md">docs/cookbook/extension-cookbook.md</a> 说，必须在呈现、查找和执行上保持一致的工具过滤，优先用 <code>ctx.tools.restrict()</code>。瀑布可以重排。前面的监听器调用了 <code>next()</code> 时，后面的监听器可以换掉较早的允许或拒绝。<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md">docs/subsystems/tools.md</a> 说，守卫没有允许结果，所以监听器顺序不能把这次拒绝变回许可。</p>
+<p>正确替代，从弱到强：<code>ctx.tools.restrict()</code> 只移除工具。<code>ctx.tools.guard()</code> 只拒绝，而且是同步的。瀑布可以改写，并依赖顺序。<code>system-prompt/assemble</code> 最强，会换掉一切。用 <code>ctx.systemPrompt.section()</code> 添加提示文字。决定必须等待时，从 <code>tools/pre-execute</code> 返回 <code>ask</code>。在 <code>tools/result</code> 上观察。</p>
+<p>怎么测：再加载一个插件，它贡献一段提示，或从 <code>tools/pre-execute</code> 返回 <code>allow</code>。确认你的改动没有擦掉那段提示。确认在另一个插件允许这次调用之后，守卫的拒绝仍然拦住它。</p>
+<h2 id="不要自己重算会话派生数据">不要自己重算会话派生数据</h2>
+<p>错误做法：订阅 <code>session/event</code> 并重扫 <code>session.events</code>，或在客户端折叠日志。</p>
+<p>为什么看起来能工作：打开的页面会更新，完整扫描得到的列表和日志会给出的一样。</p>
+<p>什么时候会坏：每个事件都重扫日志。分叉的 <code>init</code> 必须接收 <code>inheritedEventCount</code>，不能从 <code>firstLiveSeq</code> 或 <code>session/end-seed</code> 推断切口。客户端折叠会和宿主分叉。<code>wire.view</code> 返回新对象时，即使值没变也会发布。<code>stateVersion</code> 不动的话，过期检查点会被应用。<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md">docs/subsystems/session-projection.md</a> 说，框架驱动 <code>apply</code>，领域自己不持有订阅。</p>
+<p>正确替代：<code>ctx.sessionProjections.register</code>，<code>apply</code> 同步，并在忽略事件时返回同一个状态引用；状态是普通 JSON；折叠变化时提高 <code>stateVersion</code>；客户端需要这个值时提供 <code>wire.view</code>。用 <code>stateOf</code> 或 <code>snapshot</code> 读取。</p>
+<p>怎么测：被忽略的事件保持同一个状态引用。分叉子会话与继承前缀的折叠一致。<code>stateVersion</code> 提高之后，旧缓存行被丢弃。两个会话不共享一个单元格。</p>
+<h2 id="要一起读">要一起读</h2>
+<p>章节：<a href="../areas/orientation.html">总览</a>、<a href="../areas/sessions-titles.html">会话与标题</a>、<a href="../areas/tools.html">工具</a>、<a href="../areas/plugin-module.html">插件模块</a>。</p>
+<h2 id="可运行示例">可运行示例</h2>
+<p><code>Runnable example: not yet (planned)</code>。本页没有可复制的包，也没有测试。后续轮次才会补上可运行的任务包。</p>
+<h2 id="来源">来源</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md">packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md">docs/subsystems/session-projection.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md">docs/cookbook/extension-cookbook.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md">docs/subsystems/tools.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md">docs/subsystems/session.md</a></li></ul>
+</article>
+</body>
+</html>

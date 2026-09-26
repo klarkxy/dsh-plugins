@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>添加会话派生状态</title>
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="alternate" hreflang="en" href="../../tasks/add-session-derived-state.html">
+</head>
+<body>
+<header>
+<p><a href="../../tasks/add-session-derived-state.html" lang="en">English</a> · <a href="../index.html">索引</a> · <a href="add-session-derived-state.md">Markdown</a></p>
+</header>
+<article>
+<h1 id="添加会话派生状态">添加会话派生状态</h1>
+<p><a href="../../tasks/add-session-derived-state.html">English</a></p>
+<p>值从对话派生，并且必须熬过重放、恢复和分叉时，用这个任务。会话日志是权威来源。插件内存是缓存。</p>
+<p>索引所对照的版本是 <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a>（<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>）。目标版本不同时，把本页当作未经核实，并核对钉住的源码。</p>
+<h2 id="什么时候用">什么时候用</h2>
+<p>客户端或后来的宿主代码需要日志里已经记下的当前值：一份列表、一个计数、折叠后的标题输入。<a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection/README.md">packages/session/session-projection/README.md</a> 说，客户端需要这个值、又不想重放原始日志时，用 <code>ctx.sessionProjections</code>。没有客户端要读的纯宿主记账可以不用它，或者不写 <code>wire</code>，让单元只留在宿主。</p>
+<h2 id="怎么选">怎么选</h2>
+<p><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md">packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md</a> 第一条：会话日志是唯一的权威来源。分叉、恢复和重放都从日志推导。第三条：不要自己订阅、重扫或写 DOM。性能一节说，从日志派生的按会话状态放进 <code>ctx.sessionProjections</code> 单元，不要订阅 <code>session/event</code> 再重扫 <code>session.events</code>。</p>
+<p><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md">docs/subsystems/session.md</a> 说，<code>Session</code> 是只追加的日志。<code>ctx.sessions.create(id, { seed })</code> 用来重放或分叉。<code>fork(source, boundary?)</code> 复制一段必须结束在未闭合回合之外的前缀，子会话拿到精确的 <code>inheritedEventCount</code>。这段前缀就是分支。不要另造第二份历史存储。</p>
+<table><thead><tr><th>需求</th><th>机制</th><th>为什么是它</th></tr></thead><tbody><tr><td>已提交事件的当前值</td><td>用同步的 <code>apply</code> 调用 <code>ctx.sessionProjections.register</code></td><td>注册表驱动每条已提交事件。忽略事件时 <code>apply</code> 返回同一个状态引用，未变化的状态不会给下游增加工作。</td></tr><tr><td>客户端必须显示它</td><td><code>wire.view</code> 加 <code>viewSchema</code></td><td>实践文档说，值到达客户端时已经算好。客户端不折叠。</td></tr><tr><td>只在宿主折叠</td><td>省略 <code>wire</code></td><td>包说明说，没有 <code>wire</code> 的单元只留在宿主。用 <code>stateOf(session, key)</code> 读。</td></tr><tr><td>更快的冷启动</td><td>挂上 <code>dsh-session-projection-cache</code>，字段或折叠语义变化时提高 <code>stateVersion</code></td><td><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection-cache/README.md">packages/session/session-projection-cache/README.md</a> 说，版本对不上就不会当成当前结果来用。</td></tr><tr><td>为插件内存新增事件类型</td><td>不要</td><td>实践文档说，读者只在信封带 <code>ignorable: true</code> 时接受未知的已存事件，而实时的 <code>Session.append()</code> 不能设置这个标记，于是会话会拒绝重新打开。</td></tr><tr><td>标题</td><td><code>ctx.sessionTitle.register</code></td><td>那是单一提供者，写在<a href="../areas/sessions-titles.html">会话与标题</a>，不是通用投影。</td></tr></tbody></table>
+<p><code>init(header, inheritedEventCount)</code> 必须使用分叉继承的切口。投影说明说，不要从 <code>firstLiveSeq</code> 或 <code>session/end-seed</code> 推断这个切口。状态必须是普通 JSON。同一个键配上不同的 <code>stateVersion</code> 会抛错。相同版本的登记者共享单元格。单元表是进程级的，所以任意 agent preset 登记的键会出现在每个会话快照里。隔离的是按会话的单元格，不是键。读 <code>stateOf(session, key)</code> 或 <code>snapshot(session)</code>。不要在会话之间共享一个可变对象。</p>
+<p>注册是调用方 fiber 上的 effect。最后一次卸载会移除这个键和它缓存的单元格。可选的贡献者用 <code>ctx.inject(['sessionProjections'], ...)</code>，这样没有注册表的 profile 会保持不激活。</p>
+<h2 id="要一起读">要一起读</h2>
+<p>章节：<a href="../areas/sessions-titles.html">会话与标题</a>、<a href="../areas/plugin-module.html">插件模块</a>、<a href="../areas/ui-slots.html">界面插槽</a>。</p>
+<p>钉住提交上的官方文件：</p>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md">packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection/README.md">packages/session/session-projection/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md">docs/subsystems/session-projection.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md">docs/subsystems/session.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection-cache/README.md">packages/session/session-projection-cache/README.md</a></li></ul>
+<h2 id="事前检查">事前检查</h2>
+<ul><li>把目标 DSH 版本和 <code>meta.json</code> 比较。</li><li>在 DSH 里面，注册之前确认 <code>sessionProjections</code> 已挂载。在 DSH 外面，读目标提交上的包说明，并把实时注册表标成未经核实。</li><li>写明你要折叠的已有事件。不要新增事件 <code>type</code>。</li><li>客户端要显示这个值时，现在就计划 <code>wire.view</code>。事后在客户端重扫是错误的补救。</li></ul>
+<h2 id="验证清单">验证清单</h2>
+<ul><li>同一份日志的重放，产生和实时会话相同的值。</li><li>在回合之间的边界分叉，并带上文档写明的 <code>inheritedEventCount</code>，结果与该前缀的折叠一致。<code>fork</code> 会拒绝未闭合的回合，而不是悄悄裁掉。</li><li>重启后的恢复与实时值一致。<code>stateVersion</code> 提高之后，旧检查点被丢弃，而不是被应用。</li><li>两个会话不共享单元格状态。快照里有某个键，并不能说明这个功能在该会话里运行过。要读值。</li><li>被忽略的事件返回同一个状态引用（<code>Object.is</code>）。客户端值没变时，对象形式的 <code>wire.view</code> 复用它的引用。</li><li>卸载后，后续快照里没有这个键。</li><li>写明哪些行你跑过，哪些仍未经核实。</li></ul>
+<h2 id="常见失败">常见失败</h2>
+<ul><li>把列表放在插件上的 <code>Map</code> 里，启动时再写回去。分叉和重放永远看不见它。</li><li>订阅 <code>session/event</code>，并在每个事件上扫描 <code>session.events</code>。</li><li>在客户端折叠。宿主视图才是契约。</li><li>从 <code>firstLiveSeq</code> 推断分叉切口。</li><li>折叠变了却不提高 <code>stateVersion</code>，于是过期检查点又被当成事实。</li><li>追加自定义事件类型。会话可能拒绝重新打开。</li></ul>
+<h2 id="可运行示例">可运行示例</h2>
+<p><code>Runnable example: not yet (planned)</code>。本页没有可复制的包，也没有测试。后续轮次才会补上可运行的任务包。</p>
+<h2 id="来源">来源</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md">packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection/README.md">packages/session/session-projection/README.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md">docs/subsystems/session-projection.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md">docs/subsystems/session.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/session/session-projection-cache/README.md">packages/session/session-projection-cache/README.md</a></li></ul>
+</article>
+</body>
+</html>

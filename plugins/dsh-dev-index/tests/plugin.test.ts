@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { metaFromCatalog, loadCatalog } from "../site/catalog.js";
 import { apply, createSkill, resolveConfig, type IndexedSkill } from "../src/index.js";
-import { AREA_IDS, RAW_DOCS_BASE, renderSkillBody } from "../src/skill-body.js";
+import { AREA_IDS, RAW_DOCS_BASE, renderSkillBody, TASK_IDS } from "../src/skill-body.js";
 
 const catalog = loadCatalog();
 const meta = metaFromCatalog(catalog);
@@ -44,13 +44,22 @@ describe("plugin", () => {
     expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/llms.txt");
     expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/index.json");
     expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/areas/<id>.md");
+    expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/tasks/index.md");
+    expect(skill.content).toContain("https://klarkxy.github.io/dsh-plugins/tasks/<id>.md");
     expect(skill.content).toContain(`${RAW_DOCS_BASE}llms.txt`);
     expect(skill.content).toContain(`${RAW_DOCS_BASE}index.json`);
     expect(skill.content).toContain(`${RAW_DOCS_BASE}areas/<id>.md`);
+    expect(skill.content).toContain(`${RAW_DOCS_BASE}tasks/index.md`);
+    expect(skill.content).toContain("officialTag");
+    expect(skill.content).toContain("Do not silently substitute");
+    expect(skill.content).toContain("could not be runtime-verified");
+    expect(skill.content).toContain("/deepseek-ai/deepseek-harness");
     expect(skill.content).not.toContain(meta.officialCommit);
     expect(skill.content).not.toContain(meta.officialTag);
     expect(AREA_IDS).toEqual(catalog.areas.map((area) => area.id));
+    expect(TASK_IDS).toEqual(catalog.tasks.map((task) => task.id));
     for (const id of AREA_IDS) expect(skill.content).toContain(`- ${id}`);
+    for (const id of TASK_IDS) expect(skill.content).toContain(`- ${id}`);
     const packed = readFileSync(new URL("../package.json", import.meta.url), "utf8");
     expect(packed).not.toContain("content/");
   });

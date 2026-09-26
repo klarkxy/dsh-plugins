@@ -35,13 +35,21 @@ async function read(rel) {
   return readFile(resolve(docsDir, rel), "utf8");
 }
 
+const docEntries = [...catalog.areas, ...catalog.tasks, ...catalog.guides];
+
+function htmlFor(markdownRel) {
+  return markdownRel.replace(/\.md$/, ".html");
+}
+
 const englishFiles = [
   "index.html",
   "llms.txt",
   "REFRESH.md",
   "index.json",
   "meta.json",
-  ...catalog.areas.flatMap((area) => [area.file, `areas/${area.id}.html`]),
+  "tasks/index.md",
+  "tasks/index.html",
+  ...docEntries.flatMap((entry) => [entry.file, htmlFor(entry.file)].filter((rel) => !rel.startsWith("zh/"))),
 ];
 
 for (const rel of englishFiles) {
@@ -68,6 +76,11 @@ for (const rel of englishFiles) {
     const expected = `../zh/areas/${id}.md`;
     if (!raw.includes(`[中文](${expected})`)) errors.push(`${rel} must link to ${expected}`);
   }
+  if (rel.endsWith(".md") && rel.startsWith("tasks/")) {
+    const id = rel.slice("tasks/".length, -".md".length);
+    const expected = `../zh/tasks/${id}.md`;
+    if (!raw.includes(`[中文](${expected})`)) errors.push(`${rel} must link to ${expected}`);
+  }
 }
 
 if (!existsSync(resolve(docsDir, "llms.txt")) || !(await read("llms.txt")).includes("[中文](")) {
@@ -77,7 +90,9 @@ if (!existsSync(resolve(docsDir, "llms.txt")) || !(await read("llms.txt")).inclu
 const zhFiles = [
   "zh/index.html",
   "zh/llms.txt",
-  ...catalog.areas.flatMap((area) => [area.fileZh, `zh/areas/${area.id}.html`]),
+  "zh/tasks/index.md",
+  "zh/tasks/index.html",
+  ...docEntries.flatMap((entry) => [entry.fileZh, htmlFor(entry.fileZh)]),
 ];
 
 for (const rel of zhFiles) {
@@ -108,14 +123,45 @@ for (const area of catalog.areas) {
     errors.push(`${area.id} fileZh must be zh/areas/${area.id}.md`);
     continue;
   }
-  if (!existsSync(resolve(docsDir, area.fileZh))) continue;
-  const zh = await read(area.fileZh);
-  if (!zh.includes(catalog.indexed.commit)) errors.push(`${area.fileZh} does not name the indexed commit`);
-  for (const source of area.sources) {
-    if (!zh.includes(source)) errors.push(`${area.fileZh} does not mention ${source}`);
+  await checkZhTwin(area, `../../areas/${area.id}.md`);
+}
+
+for (const entry of [...catalog.tasks, ...catalog.guides]) {
+  if (entry.fileZh !== `zh/tasks/${entry.id}.md`) {
+    errors.push(`${entry.id} fileZh must be zh/tasks/${entry.id}.md`);
+    continue;
   }
-  if (!zh.includes(`[English](../../areas/${area.id}.md)`)) {
-    errors.push(`${area.fileZh} must link back to ../../areas/${area.id}.md`);
+  await checkZhTwin(entry, `../../tasks/${entry.id}.md`);
+  const zh = await read(entry.fileZh);
+  const en = await read(entry.file);
+  for (const areaId of entry.areas) {
+    const needle = `areas/${areaId}.md`;
+    if (!en.includes(needle)) errors.push(`${entry.file} does not link to ${needle}`);
+    if (!zh.includes(needle)) errors.push(`${entry.fileZh} does not link to ${needle}`);
+  }
+  if (!en.includes("Runnable example: not yet (planned)")) {
+    errors.push(`${entry.file} is missing the runnable-example placeholder`);
+  }
+  if (!zh.includes("Runnable example: not yet (planned)")) {
+    errors.push(`${entry.fileZh} is missing the runnable-example placeholder`);
+  }
+}
+
+const zhIndex = await read("zh/tasks/index.md");
+if (!zhIndex.includes(catalog.indexed.commit)) errors.push("zh/tasks/index.md does not name the indexed commit");
+if (!zhIndex.includes("[English](../../tasks/index.md)")) {
+  errors.push("zh/tasks/index.md must link back to ../../tasks/index.md");
+}
+
+async function checkZhTwin(entry, englishLink) {
+  if (!existsSync(resolve(docsDir, entry.fileZh))) return;
+  const zh = await read(entry.fileZh);
+  if (!zh.includes(catalog.indexed.commit)) errors.push(`${entry.fileZh} does not name the indexed commit`);
+  for (const source of entry.sources) {
+    if (!zh.includes(source)) errors.push(`${entry.fileZh} does not mention ${source}`);
+  }
+  if (!zh.includes(`[English](${englishLink})`)) {
+    errors.push(`${entry.fileZh} must link back to ${englishLink}`);
   }
 }
 
@@ -129,4 +175,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-process.stdout.write(`language check ok (${catalog.areas.length} areas)\n`);
+process.stdout.write(`language check ok (${catalog.areas.length} areas, ${catalog.tasks.length} tasks, ${catalog.guides.length} guides)\n`);

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture rules and anti-patterns</title>
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="zh-CN" href="../zh/tasks/architecture-rules.html">
+</head>
+<body>
+<header>
+<p><a href="../zh/tasks/architecture-rules.html" lang="zh-CN">中文</a> · <a href="../tasks/index.html">Tasks</a> · <a href="../index.html">Index</a> · <a href="architecture-rules.md">markdown</a></p>
+</header>
+<article>
+<h1 id="architecture-rules-and-anti-patterns">Architecture rules and anti-patterns</h1>
+<p><a href="../zh/tasks/architecture-rules.html">中文</a></p>
+<p>These four rules come from the official plugin practices. Each section is a wrong approach that looks fine in one live session, the case that breaks it, the alternative, and how to test it.</p>
+<p>Indexed against <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> (<code>477b4f420553e8a52c2fbccc464d7561b239c443</code>). If the target version differs, treat this page as unverified and check the pinned source.</p>
+<p>The source of the ordering and the session rule is <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md">packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md</a>.</p>
+<h2 id="the-session-log-is-authoritative">The session log is authoritative</h2>
+<p>Wrong approach: store the feature's truth in plugin memory, a private file, or a new session event <code>type</code>.</p>
+<p>Why it seems to work: the process that wrote the memory still shows the right value, and a custom event appears in that same process.</p>
+<p>When it breaks: fork, resume, and replay rebuild from the log. Practices says anything the model sees must be reconstructable from committed session events, and plugin memory is a derived cache. Readers accept an unknown stored event only when its envelope carries <code>ignorable: true</code>. Live <code>Session.append()</code> cannot set that marker, so the session would refuse to reopen. <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md">docs/subsystems/session.md</a> defines <code>fork</code> as a seeded child with an exact inherited prefix.</p>
+<p>Correct alternative: derive state from existing events, or keep plugin-owned data in a storage service you found through inspection. Model-visible text goes through the mechanisms that already log it, such as <code>agent.inject</code> or a tool result.</p>
+<p>How to test: fork at a between-turn boundary and compare the derived value with the parent prefix. Restart and replay the same log. Do not stop after checking the process that wrote the memory.</p>
+<h2 id="registrations-belong-to-one-context">Registrations belong to one context</h2>
+<p>Wrong approach: register on <code>agent.ctx</code> inside <code>agent/created</code> and dispose from only one side, or register on the plugin fiber for a resource that must die with the agent.</p>
+<p>Why it seems to work: disposing the agent once, or unloading the plugin once, looks clean in the path you tried.</p>
+<p>When it breaks: practices says a registration on another context, such as <code>agent.ctx</code>, has two owners. Unloading the plugin does not dispose <code>agent.ctx</code> registrations by itself. Disposing the agent does not run a disposer that lived only on the plugin fiber.</p>
+<p>Correct alternative: obtain <code>agent.ctx</code> in an <code>agent/created</code> listener, wrap the registration in one <code>agent.ctx.effect()</code>, and also keep that disposer, keyed by agent, in the plugin's own effect. Either teardown removes it. Put optional services in <code>inject</code> or <code>ctx.inject</code> so a profile without them leaves the plugin inactive instead of throwing.</p>
+<p>How to test: unload the plugin while the agent still exists and confirm the registration is gone. Dispose the agent while the plugin stays and confirm it is gone. Run both orders.</p>
+<h2 id="prefer-the-weakest-mechanism">Prefer the weakest mechanism</h2>
+<p>Wrong approach: listen to <code>system-prompt/assemble</code> to add or remove tools or text, or deny in an early <code>tools/pre-execute</code> listener and call that denial final.</p>
+<p>Why it seems to work: in a profile where your listener runs last, the tool disappears and the prompt looks right.</p>
+<p>When it breaks: <code>system-prompt/assemble</code> replaces the whole assembly, so other plugins' sections and the active PTC mode are yours to preserve. <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md">docs/cookbook/extension-cookbook.md</a> says to prefer <code>ctx.tools.restrict()</code> for tool filtering that must stay aligned. A waterfall is reorderable. A later listener can replace an earlier allow or deny when earlier listeners call <code>next()</code>. <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md">docs/subsystems/tools.md</a> says a guard has no allow result, so listener order cannot turn that denial back into permission.</p>
+<p>Correct alternative, weakest first: <code>ctx.tools.restrict()</code> only removes tools. <code>ctx.tools.guard()</code> only denies, and it is synchronous. A waterfall may rewrite and depends on order. <code>system-prompt/assemble</code> is the strongest and replaces everything. Add prompt text with <code>ctx.systemPrompt.section()</code>. Return <code>ask</code> from <code>tools/pre-execute</code> when the decision must await. Observe on <code>tools/result</code>.</p>
+<p>How to test: load a second plugin that contributes a prompt section or returns <code>allow</code> from <code>tools/pre-execute</code>. Confirm your change does not erase that section. Confirm a guard denial still blocks after the other plugin allows the call.</p>
+<h2 id="do-not-recompute-session-derived-data">Do not recompute session-derived data</h2>
+<p>Wrong approach: subscribe to <code>session/event</code> and rescan <code>session.events</code>, or fold the log in the client.</p>
+<p>Why it seems to work: the open page updates, and a full scan returns the same list the log would.</p>
+<p>When it breaks: every event rescans the log. Fork <code>init</code> must take <code>inheritedEventCount</code> and must not infer the cut from <code>firstLiveSeq</code> or <code>session/end-seed</code>. A client fold diverges from the host. A new object from <code>wire.view</code> publishes even when the value did not change. A stale checkpoint is applied if <code>stateVersion</code> stays put. <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md">docs/subsystems/session-projection.md</a> says the framework drives <code>apply</code> and the domain holds no subscription.</p>
+<p>Correct alternative: <code>ctx.sessionProjections.register</code> with a synchronous <code>apply</code> that returns the same state reference for events it ignores, plain JSON state, a <code>stateVersion</code> you bump when the fold changes, and <code>wire.view</code> when the client needs the value. Read with <code>stateOf</code> or <code>snapshot</code>.</p>
+<p>How to test: an ignored event keeps the same state reference. A fork child matches a fold of the inherited prefix. After a <code>stateVersion</code> bump, the old cache row is discarded. Two sessions do not share one cell.</p>
+<h2 id="read-together">Read together</h2>
+<p>Area pages: <a href="../areas/orientation.html">Orientation</a>, <a href="../areas/sessions-titles.html">Sessions and titles</a>, <a href="../areas/tools.html">Tools</a>, <a href="../areas/plugin-module.html">Plugin module</a>.</p>
+<h2 id="runnable-example">Runnable example</h2>
+<p>Runnable example: not yet (planned). This page has no copy-paste package and no tests. A later round adds a runnable task pack.</p>
+<h2 id="sources">Sources</h2>
+<ul><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md">packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session-projection.md">docs/subsystems/session-projection.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/cookbook/extension-cookbook.md">docs/cookbook/extension-cookbook.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/tools.md">docs/subsystems/tools.md</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/docs/subsystems/session.md">docs/subsystems/session.md</a></li></ul>
+</article>
+</body>
+</html>

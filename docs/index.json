@@ -9,8 +9,8 @@
   "pagesBaseUrl": "https://klarkxy.github.io/dsh-plugins/",
   "skill": {
     "name": "dsh-dev-index",
-    "description": "Look up DeepSeek Harness features and extension points before writing plugins, bundles, presets, patches, profiles, providers, tools, skills, hooks, or UI. Cites the official repository. Do not invent DSH APIs.",
-    "whenToUse": "Use when the task is DSH secondary development: plugins, presets, patches, profiles, providers, tools, skills, hooks, MCP servers, UI slots, or config keys."
+    "description": "Pick a DeepSeek Harness extension mechanism and deliver a verified plugin. Prefer the official plugin-development skill and runtime inspection inside DSH. Cite pinned docs. Do not invent APIs.",
+    "whenToUse": "Use for DSH secondary development when choosing how to extend the harness: tools, execution policy, settings UI, panels, session-derived state, or providers."
   },
   "areas": [
     {
@@ -217,7 +217,7 @@
     {
       "id": "plugin-manager-inspect",
       "title": "Plugin manager and live inspection",
-      "summary": "plugin_manager actions and cordis_inspect_query.",
+      "summary": "plugin_manager actions escalate to danger-full-access or a one-off approval. cordis_inspect_query is read-only and does not itself request that escalation.",
       "file": "areas/plugin-manager-inspect.md",
       "fileZh": "zh/areas/plugin-manager-inspect.md",
       "sources": [
@@ -225,6 +225,8 @@
         "packages/boot/plugin-manager/src/tools.ts",
         "packages/extensions/README.md",
         "packages/extensions/tool-cordis/README.md",
+        "packages/extensions/tool-cordis/src/index.ts",
+        "packages/preset/agent-preset/skills/cordis-plugin-development/SKILL.md",
         "docs/user/develop/practice/dynamic-cordis.md",
         "packages/bundle/base/cordis.patch.yml"
       ]
@@ -245,6 +247,122 @@
         "docs/config-catalog.md",
         "docs/cookbook/extension-cookbook.md"
       ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "add-a-tool",
+      "title": "Add a tool",
+      "summary": "Register a model-facing tool with defineTool when the model must call a new capability by name.",
+      "file": "tasks/add-a-tool.md",
+      "fileZh": "zh/tasks/add-a-tool.md",
+      "areas": ["tools", "plugin-module", "plugin-manager-inspect", "mcp"],
+      "sources": [
+        "docs/cookbook/adding-a-tool.md",
+        "docs/user/develop/basic/tool.md",
+        "docs/cookbook/extension-cookbook.md",
+        "packages/core/tools/README.md"
+      ],
+      "runnableExample": "not-yet"
+    },
+    {
+      "id": "add-a-tool-policy",
+      "title": "Add a tool execution policy",
+      "summary": "Choose restrict, guard, pre-execute ask, or result observation, and check coexistence with other plugins.",
+      "file": "tasks/add-a-tool-policy.md",
+      "fileZh": "zh/tasks/add-a-tool-policy.md",
+      "areas": ["tools", "settings-approval", "plugin-module"],
+      "sources": [
+        "docs/cookbook/extension-cookbook.md",
+        "docs/cookbook/adding-a-tool.md",
+        "docs/subsystems/tools.md",
+        "packages/core/tools/README.md",
+        "packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md",
+        "docs/subsystems/approval.md"
+      ],
+      "runnableExample": "not-yet"
+    },
+    {
+      "id": "add-a-settings-ui",
+      "title": "Add a settings UI",
+      "summary": "Expose volatile Config through a settings card or a plugins.detail slot, and persist edits in the profile patch.",
+      "file": "tasks/add-a-settings-ui.md",
+      "fileZh": "zh/tasks/add-a-settings-ui.md",
+      "areas": ["settings-approval", "plugin-module", "ui-slots", "bundle-profile-patch"],
+      "sources": [
+        "docs/cookbook/adding-a-settings-card.md",
+        "docs/subsystems/settings.md",
+        "packages/settings/settings/README.md",
+        "packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md"
+      ],
+      "runnableExample": "not-yet"
+    },
+    {
+      "id": "add-a-ui-panel",
+      "title": "Add a UI panel",
+      "summary": "Choose the host and client boundary, a slot, how data arrives, theme tokens, and unload before drawing a panel.",
+      "file": "tasks/add-a-ui-panel.md",
+      "fileZh": "zh/tasks/add-a-ui-panel.md",
+      "areas": ["ui-slots", "plugin-module", "sessions-titles"],
+      "sources": [
+        "packages/preset/agent-preset/skills/cordis-plugin-development/references/ui-plugin.md",
+        "packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md",
+        "docs/subsystems/slots.md",
+        "packages/client/ui-slots/README.md",
+        "docs/cookbook/extension-cookbook.md"
+      ],
+      "runnableExample": "not-yet"
+    },
+    {
+      "id": "add-session-derived-state",
+      "title": "Add session-derived state",
+      "summary": "Fold committed session events in a projection unit so fork, replay, restore, and branches share one source of truth.",
+      "file": "tasks/add-session-derived-state.md",
+      "fileZh": "zh/tasks/add-session-derived-state.md",
+      "areas": ["sessions-titles", "plugin-module", "ui-slots"],
+      "sources": [
+        "packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md",
+        "packages/session/session-projection/README.md",
+        "docs/subsystems/session-projection.md",
+        "docs/subsystems/session.md",
+        "packages/session/session-projection-cache/README.md"
+      ],
+      "runnableExample": "not-yet"
+    },
+    {
+      "id": "implement-or-replace-a-provider",
+      "title": "Implement or replace a provider",
+      "summary": "Depend on the service definition, then register or swap a provider instead of copying the seam.",
+      "file": "tasks/implement-or-replace-a-provider.md",
+      "fileZh": "zh/tasks/implement-or-replace-a-provider.md",
+      "areas": ["orientation", "llm-providers", "other-seams", "sessions-titles"],
+      "sources": [
+        "packages/README.md",
+        "docs/capability-seams.md",
+        "docs/cookbook/extension-cookbook.md",
+        "docs/user/develop/practice/llm-adapter.md",
+        "docs/subsystems/subagent.md",
+        "packages/compaction/compaction/README.md"
+      ],
+      "runnableExample": "not-yet"
+    }
+  ],
+  "guides": [
+    {
+      "id": "architecture-rules",
+      "title": "Architecture rules and anti-patterns",
+      "summary": "Session log is authoritative, registrations have an owner, use the weakest mechanism, and do not recompute session-derived data.",
+      "file": "tasks/architecture-rules.md",
+      "fileZh": "zh/tasks/architecture-rules.md",
+      "areas": ["orientation", "sessions-titles", "tools", "plugin-module"],
+      "sources": [
+        "packages/preset/agent-preset/skills/cordis-plugin-development/references/practices.md",
+        "docs/subsystems/session-projection.md",
+        "docs/cookbook/extension-cookbook.md",
+        "docs/subsystems/tools.md",
+        "docs/subsystems/session.md"
+      ],
+      "runnableExample": "not-yet"
     }
   ]
 }

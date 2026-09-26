@@ -27,7 +27,7 @@
 
 `@deepseek-ai/dsh-permission-presets` 的配置包括 `presets` 和 `defaultPreset`。随发行的默认预设包括 `workspace-write` 和 `danger-full-access`。每个预设捆绑 `sandbox` 和 `approval`。用户用 `/permission` 切换，这会记录一条 `permission/preset` 事件。
 
-工具策略应该使用 `tools/pre-execute`（允许、拒绝或询问），并在必须由人决定时调用审批。不要把提示藏在 `execute` 里面。
+工具策略用 `tools/pre-execute`（`allow`、`deny`、`cancel` 或 `ask`）。必须挡住后面监听器的拒绝用 `ctx.tools.guard`。必须由人决定时调用 `ctx.approval`。`allowed-once` 只覆盖这一次动作，下一次调用会再问。不要把提示藏在 `execute` 里面。流水线顺序见[工具](tools.md)。
 
 ## 插件作者怎么用
 

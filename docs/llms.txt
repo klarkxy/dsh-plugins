@@ -12,6 +12,14 @@ Tag: dsh-v0.1.7-rc.2
 - [Recorded revision](https://klarkxy.github.io/dsh-plugins/meta.json): officialRepository, officialTag, and officialCommit for the daily comparator.
 - [Index](https://klarkxy.github.io/dsh-plugins/index.html): Area list with stable anchors.
 - [中文](https://klarkxy.github.io/dsh-plugins/zh/llms.txt): Simplified Chinese mirror of the human-readable pages.
+- [Task index](https://klarkxy.github.io/dsh-plugins/tasks/index.md): Which extension task to open before the area reference.
+- [Architecture rules](https://klarkxy.github.io/dsh-plugins/tasks/architecture-rules.md): Anti-patterns from the official plugin practices.
+- [Add a tool](https://klarkxy.github.io/dsh-plugins/tasks/add-a-tool.md): Register a model-facing tool with defineTool when the model must call a new capability by name.
+- [Add a tool execution policy](https://klarkxy.github.io/dsh-plugins/tasks/add-a-tool-policy.md): Choose restrict, guard, pre-execute ask, or result observation, and check coexistence with other plugins.
+- [Add a settings UI](https://klarkxy.github.io/dsh-plugins/tasks/add-a-settings-ui.md): Expose volatile Config through a settings card or a plugins.detail slot, and persist edits in the profile patch.
+- [Add a UI panel](https://klarkxy.github.io/dsh-plugins/tasks/add-a-ui-panel.md): Choose the host and client boundary, a slot, how data arrives, theme tokens, and unload before drawing a panel.
+- [Add session-derived state](https://klarkxy.github.io/dsh-plugins/tasks/add-session-derived-state.md): Fold committed session events in a projection unit so fork, replay, restore, and branches share one source of truth.
+- [Implement or replace a provider](https://klarkxy.github.io/dsh-plugins/tasks/implement-or-replace-a-provider.md): Depend on the service definition, then register or swap a provider instead of copying the seam.
 - [Orientation](https://klarkxy.github.io/dsh-plugins/areas/orientation.md): What DeepSeek Harness is, where package groups live, and the rule that extensions depend on service definitions.
 - [Plugin module](https://klarkxy.github.io/dsh-plugins/areas/plugin-module.md): The apply/inject/Config plugin contract, Fiber lifecycle, services, and events.
 - [Bundles, profiles, and patches](https://klarkxy.github.io/dsh-plugins/areas/bundle-profile-patch.md): dsh.bundle versus dsh.profile, layer order, whole-config replacement, and display metadata.
@@ -26,6 +34,6 @@ Tag: dsh-v0.1.7-rc.2
 - [MCP servers](https://klarkxy.github.io/dsh-plugins/areas/mcp.md): Configuration-only dsh-mcp-client bundles and mcp__server__tool names.
 - [UI slots](https://klarkxy.github.io/dsh-plugins/areas/ui-slots.md): ctx.slots.inject, slot cardinality, and the dsh.client bundle entry.
 - [Settings, approval, and permission presets](https://klarkxy.github.io/dsh-plugins/areas/settings-approval.md): Settings forms, ctx.approval outcomes, and /permission presets.
-- [Plugin manager and live inspection](https://klarkxy.github.io/dsh-plugins/areas/plugin-manager-inspect.md): plugin_manager actions and cordis_inspect_query.
+- [Plugin manager and live inspection](https://klarkxy.github.io/dsh-plugins/areas/plugin-manager-inspect.md): plugin_manager actions escalate to danger-full-access or a one-off approval. cordis_inspect_query is read-only and does not itself request that escalation.
 - [Compaction, subagents, jobs, and catalogs](https://klarkxy.github.io/dsh-plugins/areas/other-seams.md): Compaction backends, subagent providers, background jobs, and the generated config catalog.
 

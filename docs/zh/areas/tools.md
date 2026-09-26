@@ -2,7 +2,7 @@
 
 [English](../../areas/tools.md)
 
-模型可见的工具通过 `defineTool` 声明，并用 `ctx.tools.register` 注册。`execute` 只返回 schema 规定的 JSON 值。允许、拒绝和询问写在 `tools/pre-execute` 等事件上，不要写进工具正文。
+模型可见的工具通过 `defineTool` 声明，并用 `ctx.tools.register` 注册。`execute` 只返回 schema 规定的 JSON 值。允许、拒绝、取消和询问写在 `tools/pre-execute` 上。与顺序无关的拒绝用 `ctx.tools.guard`，它是同步的，不能询问。不要把策略写进工具正文。
 
 索引所对照的版本是 [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443)（`477b4f420553e8a52c2fbccc464d7561b239c443`）。
 
@@ -64,7 +64,7 @@ export function apply(ctx: Context) {
 
 | 事件或方法 | 作用 |
 | --- | --- |
-| `tools/pre-execute` | 允许、拒绝或询问。 |
+| `tools/pre-execute` | 允许、拒绝、取消或询问。`ask` 只有在审批返回 `allowed-once` 之后才继续，其余结果都拒绝。 |
 | `ctx.tools.guard(guard)` | 在 pre-execute 之后单调拒绝。后面的监听器不能撤销它。 |
 | `tools/execute` | 环绕分发，包括截止时间和重试。 |
 | `tools/post-execute` | 替换内容或值、阻断，或附上上下文。 |
