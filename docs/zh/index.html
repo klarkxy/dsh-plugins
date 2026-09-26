@@ -10,13 +10,12 @@
 <body>
 <header>
 <p><a href="../index.html" lang="en">English</a></p>
-<p>索引所对照的版本是 <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443">dsh-v0.1.7-rc.2</a> <code>477b4f420553e8a52c2fbccc464d7561b239c443</code>。</p>
+<p>索引所对照的版本是 <a href="https://github.com/deepseek-ai/deepseek-harness/tree/477b4f420553e8a52c2fbccc464d7561b239c443" target="_blank" rel="noopener noreferrer">dsh-v0.1.7-rc.2</a> <code>477b4f420553e8a52c2fbccc464d7561b239c443</code>。</p>
 <p>机器可读文件仍为英文：<a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · 本目录的 <a href="llms.txt">llms.txt</a></p>
 </header>
 <main>
 <h1>DSH 开发索引</h1>
-<p>这是给做二次开发的 agent 用的 DeepSeek Harness 功能与扩展点索引。每一章都引用上述固定提交里的官方文件。所记录的修订见 <a href="../meta.json">meta.json</a>。</p>
-<p>先读索引，再打开对应章节。不要发明 API。</p>
+<p>浏览 DeepSeek Harness 的功能与扩展点。每个章节都附有对应版本的官方源码链接，方便核对接口。</p>
 <nav><ul>
 <li id="orientation"><a href="areas/orientation.html">总览</a> — DeepSeek Harness 是「一切皆插件」的 agent harness。二次开发先定位能力属于哪一组包，再读该组 README 和对应子系统文档，不要从记忆里发明 API。 <a href="areas/orientation.md">Markdown</a></li>
 <li id="plugin-module"><a href="areas/plugin-module.html">插件模块</a> — 一个插件是导出 <code>apply</code> 的模块。需要的服务写在 <code>inject</code> 里；可调参数用同名的 Schemastery <code>Config</code> 声明。通过 <code>ctx</code> 注册的资源会在卸载时自动清理。 <a href="areas/plugin-module.md">Markdown</a></li>

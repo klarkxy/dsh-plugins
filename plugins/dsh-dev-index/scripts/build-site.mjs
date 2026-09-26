@@ -2,10 +2,14 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const CSS = `body{margin:0 auto;max-width:52rem;padding:1.5rem;font:1rem/1.5 system-ui,sans-serif;color:#1c1917;background:#fafaf9}
-a{color:#9a3412} code,pre{font-family:ui-monospace,monospace} pre{overflow:auto;padding:0.75rem;background:#f5f5f4}
-table{border-collapse:collapse;width:100%} th,td{border:1px solid #d6d3d1;padding:0.35rem 0.5rem;vertical-align:top}
-nav ul{padding-left:1.2rem} header{margin-bottom:1rem}
+const CSS = `:root{color-scheme:light dark;--bg:#f8fafc;--panel:#fff;--ink:#17212f;--muted:#526174;--line:#d8e1ec;--link:#245ab0;--code:#edf2f8}
+@media(prefers-color-scheme:dark){:root{--bg:#11161e;--panel:#1b2330;--ink:#e9edf4;--muted:#abb8ca;--line:#344255;--link:#8bb9ff;--code:#263244}}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}
+header,main,article{max-width:76rem;margin-inline:auto;padding-inline:clamp(16px,4vw,48px)}header{padding-block:16px;border-bottom:1px solid var(--line);color:var(--muted);font-size:14px}header p{margin:.2rem 0}
+main{padding-block:30px 70px}article{max-width:80ch;padding-block:26px 70px}h1{font-size:clamp(28px,4vw,38px);line-height:1.2;letter-spacing:-.025em;margin:.1em 0 .6em}h2{font-size:1.4rem;margin-top:2.3rem;border-bottom:1px solid var(--line);padding-bottom:.35rem}h3{font-size:1.1rem;margin-top:1.8rem}
+p,li{overflow-wrap:anywhere}a{color:var(--link);text-underline-offset:3px}a:hover{text-decoration-thickness:2px}a:focus-visible{outline:2px solid var(--link);outline-offset:3px;border-radius:2px}header code{font-size:12px}code,pre{font-family:ui-monospace,"Cascadia Code",Consolas,monospace}code{background:var(--code);border-radius:3px;padding:.08em .25em}pre{overflow:auto;padding:16px;background:var(--code);border-radius:8px}pre code{padding:0}
+nav ul{list-style:none;margin:28px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:12px}nav li{border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:16px 18px;color:var(--muted)}nav li>a:first-child{display:block;color:var(--ink);font-size:1.05rem;font-weight:650;text-decoration:none;margin-bottom:5px}nav li>a:first-child:hover{text-decoration:underline}nav li>a:last-child{display:inline-block;margin-top:8px;font-size:13px}
+table{display:block;overflow-x:auto;border-collapse:collapse;max-width:100%}th,td{border:1px solid var(--line);padding:8px 10px;vertical-align:top}th{background:var(--code);text-align:left}article ul,article ol{padding-left:1.4em}article li+li{margin-top:.35em}@media(max-width:600px){header,main,article{padding-inline:18px}header code{overflow-wrap:anywhere}nav ul{grid-template-columns:1fr}}
 `;
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -135,12 +139,12 @@ function renderIndex(value) {
       `<script type="application/json" id="dsh-dev-index">${JSON.stringify(value).replaceAll("<", "\\u003c")}</script>`,
       "<header>",
       `<p><a href="zh/index.html" lang="zh-CN">中文</a></p>`,
-      `<p>Indexed against <a href="${escapeAttr(commitUrl)}">${escapeText(value.indexed.tag)}</a> <code>${escapeText(value.indexed.commit)}</code>.</p>`,
+      `<p>Indexed against <a href="${escapeAttr(commitUrl)}" target="_blank" rel="noopener noreferrer">${escapeText(value.indexed.tag)}</a> <code>${escapeText(value.indexed.commit)}</code>.</p>`,
       `<p>Machine-readable: <a href="index.json">index.json</a> · <a href="meta.json">meta.json</a> · <a href="llms.txt">llms.txt</a></p>`,
       "</header>",
       "<main>",
       "<h1>DSH development index</h1>",
-      "<p>DeepSeek Harness features and extension points for an agent doing secondary development. Each area cites official files at the pinned commit. The recorded revision is <a href=\"meta.json\">meta.json</a>.</p>",
+      "<p>Browse DeepSeek Harness features and extension points. Each chapter links to the official source at the recorded revision.</p>",
       "<nav><ul>",
       ...items,
       "</ul></nav>",
@@ -165,13 +169,12 @@ function renderIndexZh(value, areas) {
     body: [
       "<header>",
       `<p><a href="../index.html" lang="en">English</a></p>`,
-      `<p>索引所对照的版本是 <a href="${escapeAttr(commitUrl)}">${escapeText(value.indexed.tag)}</a> <code>${escapeText(value.indexed.commit)}</code>。</p>`,
+      `<p>索引所对照的版本是 <a href="${escapeAttr(commitUrl)}" target="_blank" rel="noopener noreferrer">${escapeText(value.indexed.tag)}</a> <code>${escapeText(value.indexed.commit)}</code>。</p>`,
       `<p>机器可读文件仍为英文：<a href="../index.json">index.json</a> · <a href="../meta.json">meta.json</a> · 本目录的 <a href="llms.txt">llms.txt</a></p>`,
       "</header>",
       "<main>",
       "<h1>DSH 开发索引</h1>",
-      "<p>这是给做二次开发的 agent 用的 DeepSeek Harness 功能与扩展点索引。每一章都引用上述固定提交里的官方文件。所记录的修订见 <a href=\"../meta.json\">meta.json</a>。</p>",
-      "<p>先读索引，再打开对应章节。不要发明 API。</p>",
+      "<p>浏览 DeepSeek Harness 的功能与扩展点。每个章节都附有对应版本的官方源码链接，方便核对接口。</p>",
       "<nav><ul>",
       ...items,
       "</ul></nav>",
@@ -343,7 +346,8 @@ function inline(text) {
   return escaped
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => {
       const target = href.endsWith(".md") && !href.includes("://") ? href.replace(/\.md$/, ".html") : href;
-      return `<a href="${escapeAttr(target)}">${label}</a>`;
+      const external = /^https?:\/\//.test(target) ? ' target="_blank" rel="noopener noreferrer"' : "";
+      return `<a href="${escapeAttr(target)}"${external}>${label}</a>`;
     })
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");

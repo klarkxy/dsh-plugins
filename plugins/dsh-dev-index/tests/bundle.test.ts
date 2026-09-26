@@ -17,9 +17,18 @@ describe("bundle contract", () => {
     expect(packageJson.name).toBe("@klarkxy/dsh-dev-index");
     expect(packageJson.packageManager).toBe("pnpm@10.29.2");
     expect(packageJson.scripts).toMatchObject({ prepare: "pnpm build" });
-    expect(packageJson.dsh).toEqual({ bundle: { patch: "./cordis.patch.yml" } });
+    expect(packageJson.dsh).toEqual({
+      bundle: { patch: "./cordis.patch.yml" },
+      client: {
+        platform: "web",
+        immediately: true,
+        inject: ["@deepseek-ai/dsh-client-ui-plugin-manager", "@deepseek-ai/dsh-client-locale"],
+      },
+    });
+    expect(packageJson.exports).toMatchObject({ "./client": "./client.js" });
     expect(packageJson.files).toEqual(expect.arrayContaining([
       "dsh.plugin.json",
+      "client.js",
       "locale/*.json",
     ]));
     expect(packageJson.files.join("\n")).not.toMatch(/content\/|REFRESH\.md/);

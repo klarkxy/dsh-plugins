@@ -2,9 +2,15 @@
 
 [Chinese documentation](README.zh-CN.md)
 
-A DeepSeek Harness bundle that points an agent at one index of DSH features and extension points while it writes plugins, presets, patches, profiles, providers, or other DSH secondary development.
+The development index lets people browse DSH documentation and helps agents find features, plugin interfaces, and extension points when writing integrations.
 
-The index itself is not in this package. `docs/` in [klarkxy/dsh-plugins](https://github.com/klarkxy/dsh-plugins) is the only copy, and it is published at [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/). `docs/meta.json` records `officialTag` and `officialCommit` for the [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) revision those pages describe. Every area names the official file it came from. The index does not invent APIs.
+The index itself is not in this package. `docs/` in [klarkxy/dsh-plugins](https://github.com/klarkxy/dsh-plugins) is the only copy, and it is published at [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/). `docs/meta.json` records `officialTag` and `officialCommit` for the [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) revision those pages describe. Every area names the official file it came from. Interface details are based on the official source for the documented version.
+
+## Read in the Plugins page
+
+In DSH Web, open **Plugins → DSH development index**. The bundle page contains a browser for the published documentation. It starts in the DSH interface language, offers Chinese and English, and has a link to open the site in a separate browser tab. The reader loads the live GitHub Pages site, so documentation updates do not require reinstalling this bundle. If the embedded page cannot load, use **Open in browser**.
+
+The browser is for people reading the index. The skill below continues to use the machine-readable files for agents.
 
 ## Why a skill
 

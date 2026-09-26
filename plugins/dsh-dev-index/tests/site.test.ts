@@ -27,10 +27,12 @@ describe("pages site", () => {
     expect(index).toContain('id="dsh-dev-index"');
     expect(index).toContain('<html lang="en">');
     expect(index).toContain('lang="zh-CN">中文</a>');
+    expect(index).toContain("Browse DeepSeek Harness features and extension points.");
     const zhIndex = readFileSync(join(out, "zh", "index.html"), "utf8");
     const zhLlms = readFileSync(join(out, "zh", "llms.txt"), "utf8");
     expect(zhIndex).toContain('<html lang="zh-CN">');
     expect(zhIndex).toContain('lang="en">English</a>');
+    expect(zhIndex).toContain("浏览 DeepSeek Harness 的功能与扩展点。");
     expect(zhLlms).toContain("[English](");
     for (const area of catalog.areas) {
       expect(index).toContain(`id="${area.id}"`);
@@ -42,6 +44,7 @@ describe("pages site", () => {
       expect(html).toContain(`<h1 id="${slug(area.title)}">`);
       expect(html).toContain(catalog.indexed.commit);
       expect(html).toContain(`../zh/areas/${area.id}.html`);
+      expect(html).toContain('target="_blank" rel="noopener noreferrer"');
       const zhHtml = readFileSync(join(out, "zh", "areas", `${area.id}.html`), "utf8");
       expect(zhHtml).toContain('<html lang="zh-CN">');
       expect(zhHtml).toContain(`../../areas/${area.id}.html`);

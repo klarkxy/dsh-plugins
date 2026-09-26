@@ -2,9 +2,15 @@
 
 [English documentation](README.md)
 
-这是一个 DeepSeek Harness bundle。Agent 在编写插件、Preset、补丁、Profile、Provider，或做其他 DSH 二次开发时，用它找到 DSH 功能与扩展点的索引。
+开发索引让用户直接浏览 DSH 开发文档，也帮助智能体查找功能、插件接口和扩展点。
 
-索引正文不在这个包里。[klarkxy/dsh-plugins](https://github.com/klarkxy/dsh-plugins) 仓库的 `docs/` 是唯一副本，并发布在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/)。`docs/meta.json` 记录这些页面所描述的 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 修订：`officialTag` 与 `officialCommit`。每个章节都标明官方文件路径。索引不发明 API。
+索引正文不在这个包里。[klarkxy/dsh-plugins](https://github.com/klarkxy/dsh-plugins) 仓库的 `docs/` 是唯一副本，并发布在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/)。`docs/meta.json` 记录这些页面所描述的 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 修订：`officialTag` 与 `officialCommit`。每个章节都标明官方文件路径。接口说明以对应版本的官方源码为准。
+
+## 在插件页阅读
+
+在 DSH Web 打开 **插件 → DSH 开发索引**，即可直接浏览 GitHub Pages 上的文档。阅读器跟随 DSH 界面语言打开中文或英文首页，也可以手动切换语言、返回文档首页，或在独立浏览器标签页中打开。文档从 Pages 实时读取，更新文档无需重装插件。如果内嵌页面未显示，可使用“在浏览器中打开”。
+
+这块阅读界面供用户使用；下方的 skill 仍让智能体读取机器可读索引。
 
 ## 为什么用 skill
 

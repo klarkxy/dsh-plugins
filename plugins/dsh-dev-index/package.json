@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-dev-index",
   "version": "0.1.0",
-  "description": "DeepSeek Harness feature index for agents doing DSH secondary development.",
+  "description": "Browse DSH development documentation and help agents find extension points.",
   "icon": "./icon.svg",
   "keywords": [
     "dsh-plugin",
@@ -33,10 +33,12 @@
       "default": "./lib/index.js"
     },
     "./package.json": "./package.json",
+    "./client": "./client.js",
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "icon.svg",
+    "client.js",
     "lib/**/*.js",
     "lib/**/*.d.ts",
     "cordis.patch.yml",
@@ -63,6 +65,11 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["@deepseek-ai/dsh-client-ui-plugin-manager", "@deepseek-ai/dsh-client-locale"]
     }
   },
   "peerDependencies": {
