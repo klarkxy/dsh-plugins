@@ -202,6 +202,38 @@ test('separate credential stores cannot make connection target changes safe', as
   const v = bp([pkg('example-a')]); v.settings = [{ package: 'example-a', row: 'a', module: 'example-a', fields: [{ path: ['baseURL'], value: 'https://other.invalid' }] }];
   assert.equal((await preview(f, v)).planId, null); assert.equal(f.calls.length, 0);
 });
+
+for (const container of ['object', 'array']) {
+  for (const change of ['target', 'credential', 'remove', 'add', 'label']) {
+    test(`nested ${container} replacement checks connection changes: ${change}`, async () => {
+      const f = fixture(), current = f.state.forms[0];
+      current.secrets = [];
+      current.schema = structuredClone(current.schema);
+      const connection = { endpoint: 'https://local.invalid', apiKeyEnv: 'LOCAL_PROVIDER_KEY', label: 'old' };
+      const next = { ...connection };
+      if (change === 'target') next.endpoint = 'https://other.invalid';
+      if (change === 'credential') next.apiKeyEnv = 'OTHER_PROVIDER_KEY';
+      if (change === 'remove') delete next.endpoint;
+      if (change === 'add') delete connection.endpoint;
+      if (change === 'label') next.label = 'new';
+      const wrap = value => container === 'array' ? [value] : { provider: value };
+      current.value.connections = wrap(connection);
+      const itemSchema = { type: 'object', dict: Object.fromEntries(['endpoint', 'apiKeyEnv', 'label'].map(key => [key, { type: 'string' }])) };
+      current.schema.dict.connections = container === 'array'
+        ? { type: 'array', meta: { volatile: true }, inner: itemSchema }
+        : { type: 'object', meta: { volatile: true }, dict: { provider: itemSchema } };
+      const v = bp([pkg('example-a')]);
+      v.settings = [{ package: 'example-a', row: 'a', module: 'example-a', fields: [{ path: ['connections'], value: wrap(next) }] }];
+      const p = await preview(f, v);
+      if (change === 'label') {
+        assert.ok(p.planId); assert.equal((await f.engine.apply(p.planId)).status, 'applied');
+        assert.deepEqual(current.value.connections, wrap(next));
+      } else {
+        assert.equal(p.planId, null); assert.equal(f.calls.length, 0);
+      }
+    });
+  }
+}
 test('adding a disabled package does not reorder already-correct existing layers', async () => {
   const f = fixture(['example-a', 'unrelated']);
   const p = await preview(f, bp([pkg('example-a'), pkg('example-b')], ['example-a']));

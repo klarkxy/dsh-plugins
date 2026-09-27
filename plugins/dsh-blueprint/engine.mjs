@@ -2,6 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { decode, encode, fail } from './codec.mjs';
 import { validate, closed, array, text, path, identity, equal, overlaps, prefix, publicFields, policy, get } from './blueprint.mjs';
 
+function changesConnection(at, before, after) {
+  if (equal(before, after)) return false;
+  if (at.some(p => /^(?:base[_-]?url|endpoint|url|host|api[_-]?key[_-]?env)$/i.test(p))) return true;
+  const keys = value => value !== null && typeof value === 'object' ? Object.keys(value) : [];
+  // Whole-container edits must also protect nested additions, removals and replacements.
+  return [...new Set([...keys(before), ...keys(after)])]
+    .some(key => changesConnection([...at, key], get(before, [key]), get(after, [key])));
+}
+
 export class BlueprintEngine {
   constructor(port, now = Date.now) { this.port = port; this.now = now; this.plans = new Map(); this.results = new Map(); this.busy = false; }
   fields(form) {
@@ -91,7 +100,7 @@ export class BlueprintEngine {
             || rules.include !== null && !rules.include.some(p => prefix(p, field.path));
           if (denied || !this.port.allows(form, field.path, field.value)) { blockers.push(`${config.row}/${field.path.join('/')}: not a shareable editable field.`); continue; }
           if (equal(get(form.value, field.path), field.value)) continue;
-          if (field.path.some(p => /^(?:base[_-]?url|endpoint|url|host|api[_-]?key[_-]?env)$/i.test(p))) {
+          if (changesConnection(field.path, get(form.value, field.path), field.value)) {
             blockers.push(`${config.row}: changing a connection target while retaining a credential requires rebinding in the official configuration page.`); continue;
           }
           edits.push({ op: 'set', path: field.path, value: field.value });
