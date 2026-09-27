@@ -7,11 +7,6 @@
     "subject": "Merge pull request #5180 from deepseek-harness/rel/dsh-0.1.7-rc.2"
   },
   "pagesBaseUrl": "https://klarkxy.github.io/dsh-plugins/",
-  "skill": {
-    "name": "dsh-dev-index",
-    "description": "Look up DeepSeek Harness features and extension points before writing plugins, bundles, presets, patches, profiles, providers, tools, skills, hooks, or UI. Cites the official repository. Do not invent DSH APIs.",
-    "whenToUse": "Use when the task is DSH secondary development: plugins, presets, patches, profiles, providers, tools, skills, hooks, MCP servers, UI slots, or config keys."
-  },
   "areas": [
     {
       "id": "orientation",

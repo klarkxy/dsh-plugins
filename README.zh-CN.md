@@ -8,7 +8,7 @@
 
 | 包 | 作用 |
 | --- | --- |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | 在 DSH 中阅读 Pages 索引；skill 为智能体提供官方 DSH 资料指针。 |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | 在 DSH 中阅读官方文档；创造模式通过原生工具搜索和读取官方资料。 |
 | [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.zh-CN.md) | 删繁：保持受支持行为，以证据驱动删除和合并概念的原生 Preset。 |
 
 可以从 npm 安装单个插件：
@@ -18,7 +18,7 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
-`dsh-dev-index` 在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) 提供供人阅读的索引，对应 `docs/meta.json` 记录的固定源码修订。skill 把智能体指向[官方 DSH 文档](https://deepseek-harness.github.io/deepseek-harness/)和运行时检查。GitHub Pages 通过 `.github/workflows/pages.yml` 发布 `docs/`；仓库的 Pages 来源需设为 GitHub Actions。
+`dsh-dev-index` 在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) 提供供人阅读的索引，对应 `docs/meta.json` 记录的固定源码修订。创造模式通过 `dsh_docs_search` 和 `dsh_docs_fetch` 在线读取[官方 DSH 文档](https://deepseek-harness.github.io/deepseek-harness/)，并核对运行时接口。GitHub Pages 通过 `.github/workflows/pages.yml` 发布 `docs/`；仓库的 Pages 来源需设为 GitHub Actions。
 
 ## 开发
 

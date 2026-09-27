@@ -34,17 +34,20 @@ describe("bundle contract", () => {
     expect(packageJson.files.join("\n")).not.toMatch(/content\/|REFRESH\.md/);
   });
 
-  it("records the skill contribution for this monorepo", () => {
+  it("records the Creator prompt dependencies without a skill contribution", () => {
     expect(registryManifest).toMatchObject({
       id: packageJson.name,
       version: packageJson.version,
       main: packageJson.main,
       engines: { dsh: ">=0.1.7-rc.2 <0.2.0" },
-      contributes: { tools: [], skills: ["dsh-dev-index"] },
+      contributes: { tools: ["dsh_docs_search", "dsh_docs_fetch"], skills: [] },
     });
     expect(packageJson.peerDependencies).toMatchObject({
-      "@deepseek-ai/dsh-skill": ">=0.1.7-rc.2 <0.2.0",
+      "@deepseek-ai/dsh-agent-preset-registry": ">=0.1.7-rc.2 <0.2.0",
+      "@deepseek-ai/dsh-system-prompt": ">=0.1.7-rc.2 <0.2.0",
+      "@deepseek-ai/dsh-tools": ">=0.1.7-rc.2 <0.2.0",
     });
+    expect(packageJson.peerDependencies).not.toHaveProperty("@deepseek-ai/dsh-skill");
   });
 
   it("inserts the plugin with no config", () => {
@@ -59,9 +62,9 @@ describe("bundle contract", () => {
       expect(document).toContain("allowBuilds:");
       expect(document).toContain("'@klarkxy/dsh-dev-index': true");
       expect(document).toContain("https://deepseek-harness.github.io/deepseek-harness/");
-      expect(document).toContain("cordis-plugin-development");
+      expect(document).toContain("cordis_inspect_list");
       expect(document).toContain("dsh-dev-index");
-      expect(document).toContain("ctx.skills.register");
+      expect(document).not.toContain("ctx.skills.register");
       expect(document).not.toContain("pagesBaseUrl");
       expect(document).not.toContain("resourceBase");
       expect(document).not.toContain("content/");

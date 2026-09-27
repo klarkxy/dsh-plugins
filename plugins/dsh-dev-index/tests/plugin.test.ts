@@ -1,69 +1,48 @@
-import { readFileSync } from "node:fs";
-
 import { describe, expect, it } from "vitest";
 
-import { apply, createSkill, resolveConfig, type IndexedSkill } from "../src/index.js";
-import {
-  OFFICIAL_DOCS_SITE,
-  OFFICIAL_LLMS_TXT,
-  OFFICIAL_RAW_DOCS,
-  OFFICIAL_REPOSITORY,
-  renderSkillBody,
-} from "../src/skill-body.js";
+import { CREATOR_GUIDANCE, OFFICIAL_LLMS_TXT, OFFICIAL_REPOSITORY } from "../src/creator-guidance.js";
+import { apply, resolveConfig, type CreatorPromptHost } from "../src/index.js";
 
-describe("plugin", () => {
+describe("creator documentation guidance", () => {
   it("accepts an empty config and rejects leftover keys", () => {
     expect(resolveConfig(undefined)).toEqual({});
     expect(resolveConfig({})).toEqual({});
-    expect(() => resolveConfig({ pagesBaseUrl: OFFICIAL_DOCS_SITE } as never)).toThrow(/unknown config key/);
+    expect(() => resolveConfig({ pagesBaseUrl: "https://example.com" } as never)).toThrow(/unknown config key/);
   });
 
-  it("registers a static pointer at official material", () => {
-    const registered: IndexedSkill[] = [];
-    apply(
-      {
-        skills: {
-          register(skill: IndexedSkill) {
-            registered.push(skill);
-            return () => undefined;
-          },
+  it("contributes official docs only to the Creator preset", () => {
+    let section: Parameters<CreatorPromptHost["systemPrompt"]["section"]>[0] | undefined;
+    let preset = "cordis";
+    const toolNames: string[] = [];
+    apply({
+      tools: { register(tool: { name: string }) { toolNames.push(tool.name); return () => undefined; } },
+      systemPrompt: {
+        section(value: Parameters<CreatorPromptHost["systemPrompt"]["section"]>[0]) {
+          section = value;
+          return () => undefined;
         },
-      } as never,
-      {},
-    );
-    expect(registered).toEqual([createSkill()]);
-    const skill = registered[0];
-    expect(skill.name).toBe("dsh-dev-index");
-    expect(skill.invocation).toEqual({ modelInvocable: true, userInvocable: true });
-    expect(skill).not.toHaveProperty("resourceBase");
-    expect(skill.content).toBe(renderSkillBody());
-    expect(skill.content.length).toBeLessThanOrEqual(7500);
-    expect(skill.content).toContain("cordis-plugin-development");
-    expect(skill.content).toContain("cordis_inspect_list");
-    expect(skill.content).toContain("cordis_inspect_query");
-    expect(skill.content).toContain("danger-full-access");
-    expect(skill.content).toContain("plugin_manager");
-    expect(skill.content).toContain(OFFICIAL_DOCS_SITE);
-    expect(skill.content).toContain("/en/");
-    expect(skill.content).toContain(OFFICIAL_LLMS_TXT);
-    expect(skill.content).toContain("fetch " + OFFICIAL_LLMS_TXT + " first");
-    expect(skill.content).toContain("relevant raw .md pages");
-    expect(skill.content).toContain("latest published documentation");
-    expect(skill.content).toContain(OFFICIAL_REPOSITORY);
-    expect(skill.content).toContain(OFFICIAL_RAW_DOCS);
-    expect(skill.content).toContain("dsh-v*");
-    expect(skill.content).toContain("Never silently mix versions");
-    expect(skill.content).toContain("docs/cookbook/extension-cookbook.md");
-    expect(skill.content).toContain("docs/subsystems/skills.md");
-    expect(skill.content).toContain("docs/tool-catalog.md");
-    expect(skill.content).toContain("docs/config-catalog.md");
-    expect(skill.content).toContain("references/practices.md");
-    expect(skill.content).toContain("remain unverified");
-    expect(skill.content).not.toMatch(/[0-9a-f]{40}/);
-    expect(skill.content).not.toMatch(/dsh-v\d/);
-    expect(skill.content).not.toContain("klarkxy.github.io");
-    expect(skill.content).not.toContain("pagesBaseUrl");
-    const packed = readFileSync(new URL("../package.json", import.meta.url), "utf8");
-    expect(packed).not.toContain("content/");
+      },
+      agentPresets: { composedPreset: () => preset },
+      effect(callback: () => () => void) {
+        callback();
+        return () => undefined;
+      },
+    } as never, {});
+
+    expect(section?.name).toBe("dsh-dev-index.creator-docs");
+    expect(toolNames).toEqual(["dsh_docs_search", "dsh_docs_fetch"]);
+    expect(section?.text({ agent: { ctx: {} as never } })).toBe(CREATOR_GUIDANCE);
+    preset = "standard";
+    expect(section?.text({ agent: { ctx: {} as never } })).toBe("");
+    expect(section?.text({})).toBe("");
+    expect(CREATOR_GUIDANCE).toContain(OFFICIAL_LLMS_TXT);
+    expect(CREATOR_GUIDANCE).toContain(OFFICIAL_REPOSITORY);
+    expect(CREATOR_GUIDANCE).toContain("cordis_inspect_list");
+    expect(CREATOR_GUIDANCE).toContain("cordis_inspect_query");
+    expect(CREATOR_GUIDANCE).toContain("dsh_docs_search");
+    expect(CREATOR_GUIDANCE).toContain("dsh_docs_fetch");
+    expect(CREATOR_GUIDANCE).not.toContain("curl");
+    expect(CREATOR_GUIDANCE).toContain("dsh-v*");
+    expect(CREATOR_GUIDANCE.length).toBeLessThan(900);
   });
 });

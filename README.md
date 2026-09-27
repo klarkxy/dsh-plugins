@@ -8,7 +8,7 @@ A small pnpm monorepo for focused DeepSeek Harness plugins that do not need a re
 
 | Package | Purpose |
 | --- | --- |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | Read the Pages index in DSH; its skill points agents at official DSH references. |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | Browse official DSH docs and let Creator mode search and read them with native tools. |
 | [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.md) | Evidence-driven concept deletion and collapse through the native 删繁 / Pruner preset. |
 
 Install individual plugins from npm:
@@ -18,7 +18,7 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
-`dsh-dev-index` keeps a human-readable index at [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/), describing the pinned source revision in `docs/meta.json`. Its skill points agents to [official DSH documentation](https://deepseek-harness.github.io/deepseek-harness/) and runtime inspection. GitHub Pages publishes `docs/` through `.github/workflows/pages.yml`; Pages → Source must be GitHub Actions.
+`dsh-dev-index` keeps a human-readable index at [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/), describing the pinned source revision in `docs/meta.json`. Creator mode uses `dsh_docs_search` and `dsh_docs_fetch` to read live [official DSH documentation](https://deepseek-harness.github.io/deepseek-harness/) and verify runtime contracts. GitHub Pages publishes `docs/` through `.github/workflows/pages.yml`; Pages → Source must be GitHub Actions.
 
 ## Development
 

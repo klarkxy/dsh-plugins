@@ -1,31 +1,29 @@
 import type { Context } from "@deepseek-ai/cordis";
 import z from "@deepseek-ai/schemastery";
+import type { ToolDefinition } from "@deepseek-ai/dsh-tools";
 
-import { renderSkillBody, SKILL_DESCRIPTION, SKILL_NAME, SKILL_WHEN_TO_USE } from "./skill-body.js";
+import { CREATOR_GUIDANCE } from "./creator-guidance.js";
+import { DocsClient } from "./docs.js";
+import { docsTools } from "./docs-tools.js";
 
 export const name = "@klarkxy/dsh-dev-index";
-export const inject = ["skills"];
+export const inject = ["systemPrompt", "agentPresets", "tools"];
 
 export interface Config {}
 
 export const Config: z<Config> = z.object({});
 
-export interface IndexedSkill {
-  readonly name: string;
-  readonly description: string;
-  readonly whenToUse: string;
-  readonly source: "bundled";
-  readonly content: string;
-  readonly invocation: {
-    readonly modelInvocable: true;
-    readonly userInvocable: true;
-  };
+interface PromptSection {
+  name: string;
+  order: number;
+  text: (context: { agent?: { ctx: Context } }) => string;
 }
 
-export interface SkillHost {
-  skills: {
-    register(skill: IndexedSkill): () => void;
-  };
+export interface CreatorPromptHost {
+  tools: { register(tool: ToolDefinition): () => void };
+  systemPrompt: { section(section: PromptSection): () => void };
+  agentPresets: { composedPreset(context: Context): string | undefined };
+  effect(callback: () => () => void | Promise<void>, label: string): () => void;
 }
 
 export function resolveConfig(config: Config | undefined): Config {
@@ -39,18 +37,16 @@ export function resolveConfig(config: Config | undefined): Config {
   return Object.freeze({});
 }
 
-export function createSkill(): IndexedSkill {
-  return {
-    name: SKILL_NAME,
-    description: SKILL_DESCRIPTION,
-    whenToUse: SKILL_WHEN_TO_USE,
-    source: "bundled",
-    invocation: { modelInvocable: true, userInvocable: true },
-    content: renderSkillBody(),
-  };
-}
-
-export function apply(ctx: Context & SkillHost, config: Config): void {
+export function apply(ctx: Context & CreatorPromptHost, config: Config): void {
   resolveConfig(config);
-  ctx.skills.register(createSkill());
+  const client = new DocsClient();
+  ctx.effect(() => () => client.dispose(), "dsh-dev-index.docs-client");
+  for (const tool of docsTools(client)) ctx.tools.register(tool);
+  ctx.effect(() => ctx.systemPrompt.section({
+    name: "dsh-dev-index.creator-docs",
+    order: 100,
+    text: ({ agent }) => agent !== undefined && ctx.agentPresets.composedPreset(agent.ctx) === "cordis"
+      ? CREATOR_GUIDANCE
+      : "",
+  }), "dsh-dev-index.creator-docs");
 }

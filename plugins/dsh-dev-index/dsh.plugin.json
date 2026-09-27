@@ -2,14 +2,12 @@
   "id": "@klarkxy/dsh-dev-index",
   "version": "0.1.2",
   "main": "lib/index.js",
-  "description": "Browse DSH documentation and point agents at official development references.",
+  "description": "Browse official DSH documentation and guide Creator mode to its sources.",
   "engines": {
     "dsh": ">=0.1.7-rc.2 <0.2.0"
   },
   "contributes": {
-    "tools": [],
-    "skills": [
-      "dsh-dev-index"
-    ]
+    "tools": ["dsh_docs_search", "dsh_docs_fetch"],
+    "skills": []
   }
 }

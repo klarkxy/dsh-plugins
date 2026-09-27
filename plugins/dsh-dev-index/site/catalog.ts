@@ -12,12 +12,6 @@ export interface IndexedCommit {
   readonly subject: string;
 }
 
-export interface SkillCopy {
-  readonly name: string;
-  readonly description: string;
-  readonly whenToUse: string;
-}
-
 export interface Area {
   readonly id: string;
   readonly title: string;
@@ -30,7 +24,6 @@ export interface Area {
 export interface Catalog {
   readonly indexed: IndexedCommit;
   readonly pagesBaseUrl: string;
-  readonly skill: SkillCopy;
   readonly areas: readonly Area[];
 }
 
@@ -60,7 +53,6 @@ export function parseCatalog(raw: string): Catalog {
   const value: unknown = JSON.parse(raw);
   if (!isRecord(value)) throw new Error("dsh-dev-index: catalog must be an object");
   const indexed = record(value, "indexed");
-  const skill = record(value, "skill");
   const areas = value.areas;
   if (!Array.isArray(areas) || areas.length === 0) {
     throw new Error("dsh-dev-index: catalog.areas must be a non-empty array");
@@ -76,19 +68,8 @@ export function parseCatalog(raw: string): Catalog {
       subject: requiredString(indexed, "indexed.subject"),
     },
     pagesBaseUrl: normalizePagesBaseUrl(requiredString(value, "pagesBaseUrl")),
-    skill: {
-      name: requiredString(skill, "skill.name"),
-      description: requiredString(skill, "skill.description"),
-      whenToUse: requiredString(skill, "skill.whenToUse"),
-    },
     areas: areas.map((area, index) => parseArea(area, index)),
   };
-  if (!AREA_ID.test(catalog.skill.name)) {
-    throw new Error("dsh-dev-index: skill.name must be kebab-case");
-  }
-  if (catalog.skill.description.length === 0 || catalog.skill.description.length > 500) {
-    throw new Error("dsh-dev-index: skill.description must be 1 to 500 characters");
-  }
   const ids = new Set<string>();
   for (const area of catalog.areas) {
     if (ids.has(area.id)) throw new Error(`dsh-dev-index: duplicate area id "${area.id}"`);

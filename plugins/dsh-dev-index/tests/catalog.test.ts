@@ -19,9 +19,7 @@ describe("catalog", () => {
     expect(catalog.indexed.tag).toMatch(/^dsh-v/);
     expect(catalog.indexed.repository).toBe("https://github.com/deepseek-ai/deepseek-harness");
     expect(catalog.pagesBaseUrl).toBe("https://klarkxy.github.io/dsh-plugins/");
-    expect(catalog.skill.name).toBe("dsh-dev-index");
-    expect(catalog.skill.description.length).toBeLessThanOrEqual(500);
-    expect(catalog.skill.whenToUse.length).toBeGreaterThan(0);
+    expect(catalog).not.toHaveProperty("skill");
     const areaIds = catalog.areas.map((area) => area.id);
     expect(new Set(areaIds).size).toBe(areaIds.length);
   });

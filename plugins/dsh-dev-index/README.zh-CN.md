@@ -2,9 +2,9 @@
 
 [English documentation](README.md)
 
-插件页会嵌入 DSH 官方文档供人阅读；轻量 skill 则把智能体指向官方 DSH 资料和运行时检查。
+插件页嵌入 DSH 官方文档供人阅读；创造模式会收到一段简短指引，在开发 DSH 插件前查阅官方资料。
 
-在正在运行的 DSH 里，优先用官方技能 `cordis-plugin-development`，以及只读的 `cordis_inspect_list` 和 `cordis_inspect_query`。`plugin_manager` 的每个动作都需要 `danger-full-access` 或一次性审批。环境自己的工具策略仍然适用。
+在正在运行的 DSH 里，这段指引要求创造模式使用只读的 `cordis_inspect_list` 和 `cordis_inspect_query` 核对接口。环境自己的工具与审批策略仍然适用。
 
 给人读的文档在[官方站点](https://deepseek-harness.github.io/deepseek-harness/)（简体中文在根路径，英文在 `/en/`）。智能体先读官方 [llms.txt](https://deepseek-harness.github.io/deepseek-harness/llms.txt) 索引，再按需读取原始 Markdown 页面。站点对应最近发布的版本。查特定版本的文档、源码和类型声明时，只有目标版本与 `master` 一致才用 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的 `master`，否则使用对应的 `dsh-v*` 标签，不混用版本。
 
@@ -12,15 +12,20 @@
 
 ## 在插件页阅读
 
-在 DSH Web 打开 **插件 → DSH 开发索引**，即可在页面中浏览官方 GitHub Pages 文档。阅读器按 DSH 界面语言打开中文或英文首页，也能手动切换语言、返回文档首页，或在独立标签页中打开。如果内嵌页面未显示，使用“在浏览器中打开”。阅读界面供用户使用；下方的 skill 为智能体提供官方资料指针。
+在 DSH Web 打开 **插件 → DSH 开发索引**，即可在页面中浏览官方 GitHub Pages 文档。阅读器按 DSH 界面语言打开中文或英文首页，也能手动切换语言、返回文档首页，或在独立标签页中打开。如果内嵌页面未显示，使用“在浏览器中打开”。
 
-## 为什么用 skill
+## 创造模式指引
 
-DSH 面向 agent 的知识契约是 `ctx.skills` 上的 skill。`@deepseek-ai/dsh-skill` 用 `ctx.skills.register` 登记嵌入式说明，`@deepseek-ai/dsh-tool-skill` 把模型可调用的 skill 放进会话目录，并用 `skill` 工具加载。Preset 会换掉 agent 的组合。工具必须先被调用，agent 才知道这个指针存在。宿主层 skill 会和其他 skill 一起出现在目录里，base 上的 profile 都能用。
+宿主插件在会话使用 `cordis` 预设（创造模式）时加入一段系统提示，要求智能体先调用 `dsh_docs_search`，再调用 `dsh_docs_fetch` 阅读正文，随后选择 API。其他预设不注入额外提示。两个只读工具注册在宿主工具表中，仍受宿主工具策略约束。本插件不再注册 Skill。
 
-`apply` 时本插件登记 skill `dsh-dev-index`。正文是静态的。它不写入提交、标签，也不写入本仓库的 URL。
+- `dsh_docs_search({ query: "插件", language: "zh" })` 在线读取官方 `llms.txt`，搜索标题、分类和路径。这是目录搜索，不是全文搜索；没有命中不代表正文不含相关内容，可以改用更宽泛的中文或英文关键词。
+- `dsh_docs_fetch({ id: "develop/basic/tool.md" })` 读取搜索结果中的文档 ID。结果包含来源、获取时间、内容修订值和 `nextOffset`。长文用该偏移量和相同的 `revision` 继续读取；正文更新时需要从头重读。默认每次返回 12,000 字符，上限 16,000。
 
-`sdk-minimal` 没有挂载 `@deepseek-ai/dsh-skill`。本插件 `inject` 了 `skills`，在那里会一直等待。`web`、`headless`、`sdk` 和 `acp` 建立在 `@deepseek-ai/dsh-base` 上，base 会挂载这个注册表。
+请求由插件宿主执行，沿用 DSH 已有的 HTTP 代理策略，不执行命令，也不调用 `web_fetch`。只读取固定官方索引列出的 Markdown，拒绝任意 URL 和跳转，保留 TLS 证书校验。单次请求超时为 20 秒，单篇文档上限为 2 MiB。
+
+内存缓存有效期为五分钟，最多保存 32 页、8 MiB。传入 `refresh: true` 可立即刷新。过期数据必须成功刷新后才能使用；请求失败会报告错误，不会静默返回旧副本。停用插件会取消请求并清空缓存。无需随包分发文档快照、维护持久索引或部署 MCP 服务。
+
+官网对应当前发布的文档，不一定与本机 DSH 版本一致。仍需使用 `cordis_inspect_list` 和 `cordis_inspect_query` 核对运行时接口；版本不一致时查对应官方 `dsh-v*` 源码标签。两个工具不提供历史标签读取。
 
 官方 DSH 不读取 `dsh.plugin.json`。本仓库其他 bundle 用这个文件做本地发现，所以这里也保留。加载器认的是 `package.json` 里的 `dsh.bundle.patch`。
 
@@ -47,7 +52,7 @@ allowBuilds:
 
 然后再执行一次 add。该许可会在本机执行这个包的构建。需要固定插件来源时请钉住 commit。
 
-`@deepseek-ai/dsh-skill` 上的 peer 范围会对照正在运行的 `dsh` 版本检查。本包要求 DSH `>=0.1.7-rc.2 <0.2.0`，因为 `ctx.skills.register` 来自该版本。加载器不强制 `engines.dsh`；生效的是 peer 范围。
+`@deepseek-ai/dsh-system-prompt` 和 `@deepseek-ai/dsh-agent-preset-registry` 的 peer 范围会对照正在运行的 `dsh` 版本检查。本包要求 DSH `>=0.1.7-rc.2 <0.2.0`；加载器不强制 `engines.dsh`。
 
 ## 从本仓库安装
 
@@ -63,7 +68,7 @@ dsh plugin --profile web add ./plugins/dsh-dev-index
 dsh --profile web --dump-config
 ```
 
-组合结果里应有 `dsh-dev-index` 这一行。新会话在修改 DSH 插件或 Preset 之前，先加载 `dsh-dev-index` 这个 skill。
+组合结果里应有 `dsh-dev-index` 这一行。新建创造模式会话即可自动收到文档指引。
 
 没有配置项。补丁只插入插件，不设置键。
 
