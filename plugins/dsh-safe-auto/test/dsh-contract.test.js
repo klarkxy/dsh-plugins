@@ -32,10 +32,14 @@ test('real Cordis + DSH ToolRuntime: schema, preflight, final guard, policy comp
       resolve() { return { mode: 'workspace-write', workspaceRoot: root }; }
     }
     const ctx = new Context();
-    t.after(async () => { await ctx.dispose(); rmSync(root, { recursive: true, force: true }); });
-    await ctx.plugin(host.prompt.default, {});
-    await ctx.plugin(host.tools.default);
-    await ctx.plugin(TestSandboxPolicy);
+    const fixtures = [];
+    t.after(async () => {
+      try { for (const fiber of fixtures.reverse()) await fiber.dispose(); }
+      finally { rmSync(root, { recursive: true, force: true }); }
+    });
+    fixtures.push(await ctx.plugin(host.prompt.default, {}));
+    fixtures.push(await ctx.plugin(host.tools.default));
+    fixtures.push(await ctx.plugin(TestSandboxPolicy));
     let executions = 0;
     ctx.tools.register({
       name: 'read', description: 'test read body (no actual filesystem side effects)',
@@ -46,6 +50,7 @@ test('real Cordis + DSH ToolRuntime: schema, preflight, final guard, policy comp
     const agent = { id: 'contract-agent', session: { id: 'contract-session', header: { cwd: root }, snapshotEvents: () => [] } };
     const run = path => ctx.tools.execute({ callId: 'same-call-id', name: 'read', arguments: { file_path: path }, agent, signal: new AbortController().signal });
     const fiber = await ctx.plugin(safeAuto, { mode: 'smart', workspaceRoots: [root] });
+    fixtures.push(fiber);
     assert.equal((await run('hello.txt')).isError, false, 'real pre-execute runs before monotonic guards');
     assert.equal((await run('hello.txt')).isError, false, 'final-result cleanup permits another call with the same visible ID');
     assert.equal((await run('.env')).isError, true);
@@ -60,5 +65,6 @@ test('real Cordis + DSH ToolRuntime: schema, preflight, final guard, policy comp
     assert.match(JSON.stringify(bypassed.content), /PREFLIGHT_NOT_RUN/);
     stopBypass();
     await fiber.dispose();
+    fixtures.pop();
     assert.equal((await run('.env')).isError, false, 'plugin unload removes its listeners and guard');
   });
