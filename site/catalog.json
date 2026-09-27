@@ -290,8 +290,8 @@
         "zh": "docs/README.zh-CN.md",
         "en": "README.md"
       },
-      "repository": "https://github.com/klarkxy/dsh-editor",
-      "directory": "packages/dsh-zhihu"
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-zhihu"
     },
     {
       "slug": "dev-index",

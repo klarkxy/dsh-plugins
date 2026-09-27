@@ -50,7 +50,7 @@ Package names link to npm. Follow each plugin's documentation for installation, 
 | [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | Generate session recaps and inject bounded agent checkpoints. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
 | [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | Learn conditional methods from outcome evidence, with optional skill export. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
 | [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | Manage web search providers and public-page fetching. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
-| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | Zhihu search, agent tools, knowledge bases, and usage tracking. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-zhihu#readme) |
+| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | Zhihu search, agent tools, knowledge bases, and usage tracking. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
 | [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | Discover, review, and install reusable capabilities. | [Docs](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
 
 ## Development
@@ -84,4 +84,4 @@ Use the repository Actions secret `NPM_TOKEN` for first publication. Then config
 
 ## Editor public-plugin extraction
 
-Nine portable packages are now maintained under `plugins/`. Package names, runtime code and persisted settings are unchanged. Zhihu, manuscript, proofread and application-private packages remain in Editor. Desktop preinstallation and offline startup are unchanged. See [handoff and validation](docs/editor-plugin-migration.md).
+Ten portable packages are now maintained under `plugins/`, including Zhihu. Package names, tool behavior and persisted settings are unchanged; Zhihu now uses a local structural control adapter instead of a private UI dependency. Manuscript, proofread and application-private packages remain in Editor. Desktop preinstallation and offline startup are unchanged. See [handoff and validation](docs/editor-plugin-migration.md).

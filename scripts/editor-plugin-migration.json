@@ -47,6 +47,12 @@
       "name": "@klarkxy/dsh-web-search-manager",
       "version": "0.1.7",
       "directory": "plugins/dsh-web-search-manager"
+    },
+    {
+      "name": "@klarkxy/dsh-zhihu",
+      "version": "0.1.7",
+      "directory": "plugins/dsh-zhihu",
+      "sourceRevision": "36eadb6fbae398a12dc21e7b2200dd06e2bf3f7b"
     }
   ],
   "files": {
@@ -317,6 +323,44 @@
     "packages/dsh-web-search-manager/src/tools.spec.ts": "e193703b4e8f32640d9a8adca1c6ba832d9228036fca8c61b904a98340e4aefc",
     "packages/dsh-web-search-manager/src/tools.ts": "6d310683440ba49fbadc400529cd6358b0a97a173cc320ce73d21e8226c31e3c",
     "packages/dsh-web-search-manager/tsconfig.json": "4de22f3d1601a26837ca814d720cf9bde246527746fb2e22d3344583399986cb",
-    "packages/dsh-web-search-manager/tsdown.config.ts": "5923b9c4c16e4f2ea86d656e63a006ec980d673e770950d8fdf50a08fda70335"
-  }
+    "packages/dsh-web-search-manager/tsdown.config.ts": "5923b9c4c16e4f2ea86d656e63a006ec980d673e770950d8fdf50a08fda70335",
+    "packages/dsh-zhihu/LICENSE": "aed92f36df5fe8301ecdf57a9f8deeb072c83e6828edd1aa36bca1c2a5f495ca",
+    "packages/dsh-zhihu/README.md": "deface465d8c18f1c58619d51c5e1c095ac31e18fdde35efa6318b31edeb3a57",
+    "packages/dsh-zhihu/cordis.patch.yml": "61d8dab36380ad7a8a3447313305438283b6ed891f9e83a349ffa715548115e1",
+    "packages/dsh-zhihu/docs/README.zh-CN.md": "a6340e49189e6542803b95b9e0528e2d900ea527971abaa384a064dee8699a9f",
+    "packages/dsh-zhihu/package.json": "3846faf7d4f55658473ced087acbba72577218ecbeca2f733551de6195af5117",
+    "packages/dsh-zhihu/src/client-host-ui.spec.ts": "dcc619c42579261ad27d98fdbe8869165deab9a9446447ce34c9ff64d1e7f4c6",
+    "packages/dsh-zhihu/src/client-host-ui.tsx": "8043db68a45711af77d498f3eb45f1530f0154f8b8b8adc7c70fdfa8c6cacb20",
+    "packages/dsh-zhihu/src/client-state.spec.ts": "20dadfecd577410dd523e70d0e9853b4af3191d37ae49edd37bcfabf2b805f99",
+    "packages/dsh-zhihu/src/client-state.ts": "1c829e98af157db48747af96eb6fe700f69f65289a44ab9e463b690112f5324d",
+    "packages/dsh-zhihu/src/client-styles.spec.ts": "9947001ce316f483aa30712b82cf49f1f29fa05cfd2c9c660dc78dd523857c44",
+    "packages/dsh-zhihu/src/client-styles.ts": "d5502b136d9ae2d8939e16088959c0b47fb68254e8d3ca9eb753ff98c18fb269",
+    "packages/dsh-zhihu/src/client-usage.spec.ts": "ad302e80b5b398a20f1f31e12e4663489161db2dacd16645a43cb5078cf49e3f",
+    "packages/dsh-zhihu/src/client.tsx": "ca0a6a504e00b9ee82a2e04f48443ce86dac7dc5932acd6e5828606554ba4be6",
+    "packages/dsh-zhihu/src/contracts.ts": "91ecce241bc5a88f75bfc2f1701eca9bb09304830870d7759a9c48a469be9244",
+    "packages/dsh-zhihu/src/host-rpc.ts": "3f28061ce059313052965a3f3e0296285aa1ea445980f351b6084c4d644fcd67",
+    "packages/dsh-zhihu/src/index.spec.ts": "c4a5f6fa6573229ec63b68e1cd96d0d2b7d1525cbcfbad745d2d4942762bfdce",
+    "packages/dsh-zhihu/src/index.ts": "bc0e72fac3250037306e1a2d34481f0f426aa5b642592b2db3c46e3b219e21df",
+    "packages/dsh-zhihu/src/operations.ts": "b83984b2d82a17907857b30529cec5ac4cf2ac161fea9dcf3f2ccdfa4231c441",
+    "packages/dsh-zhihu/src/search-api.ts": "f45c6a4abc09a615d8136aeb30bad6a2b70a3bb93835696355911926c7884bec",
+    "packages/dsh-zhihu/src/tool-definitions.ts": "81db5d826f46ed75ba15170e2d549cbf18db1fcaedf833f153138be12e7ef898",
+    "packages/dsh-zhihu/src/tools.ts": "1af2e329d0b11f4b1fe62d0f53a480d121c7c774c949ffb02b752f56ed432d42",
+    "packages/dsh-zhihu/src/usage.spec.ts": "a36e31c64aff5915f238f76473c83db10b32282d6222c652b99580eaed1d60cd",
+    "packages/dsh-zhihu/src/usage.ts": "95da89414a69447446f7e9683f511accde3cffdb2bdf10f05aa7dbb0ef0484a0",
+    "packages/dsh-zhihu/src/web-search-provider.spec.ts": "a731d9a01ac7ab5db6cdff1a83cd320a03e0caf016ce0fc1f2be0cbe27284d21",
+    "packages/dsh-zhihu/src/web-search-provider.ts": "892896216467a51369f0069ea98bcd022ef71c4ab094c58370a0c8a0fa86c9f0",
+    "packages/dsh-zhihu/src/zhihu-client.ts": "bf5d3d993e91d0c967ec99253c89b38c367db22f7e206183bafbac55e54a384f",
+    "packages/dsh-zhihu/src/zhihu-knowledge.spec.ts": "a3b185b5002069d7abd77c6c4eac51d2735fe772aef3db581160d8f7b3933615",
+    "packages/dsh-zhihu/src/zhihu-knowledge.ts": "bbaa6f8422eec0bad12e68a8f207d5a1296b439457433a51f907472aa92626a6",
+    "packages/dsh-zhihu/src/zhihu-search.spec.ts": "65bbb84785dfbaf3f60a1dc03738b3255713acdf1e7913c8310eb611dfe71e7e",
+    "packages/dsh-zhihu/src/zhihu-search.ts": "e0ea5d7e88e1d9c51cc38a20c86b6de74f1c9c93177f005b6e07950ce9995efc",
+    "packages/dsh-zhihu/src/zhihu-tools.spec.ts": "38fc582e2e6d41cb8baf061903abf2ae9f73bebf8bc52f4075ad15738f011ef0",
+    "packages/dsh-zhihu/src/zhihu-tools.ts": "5f7f9baa37995ea923487e09ec51e48db7081bd99e907c2504dcf5a953678ad8",
+    "packages/dsh-zhihu/tsconfig.json": "53762838495cd3f0fa2fa8d3edd988ccb9e9fc3e11f6c7f03bf8f9d2a5cf8112",
+    "packages/dsh-zhihu/tsdown.config.ts": "fdb923714c5b803b267385c49e53dcd8cf02462b11b5ff84004fa8c272d9f8ee"
+  },
+  "zhihuAdjustments": [
+    "Replace the inlined private SeatButton import with a package-local structural host/native adapter.",
+    "Migrate build/test paths and documentation links; preserve all backend files and original package tests."
+  ]
 }

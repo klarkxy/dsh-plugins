@@ -1,0 +1,3 @@
+- insert:
+    - id: zhihu
+      name: '@klarkxy/dsh-zhihu'

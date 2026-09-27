@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-Nine public packages move from `klarkxy/dsh-editor` revision `66d03814ecdac679947e9198c2e9be931462703a` into this repository:
+Ten public packages move from `klarkxy/dsh-editor` revision `66d03814ecdac679947e9198c2e9be931462703a` into this repository:
 
 | Package (`@klarkxy/` scope) | Existing version |
 | --- | --- |
@@ -15,10 +15,11 @@ Nine public packages move from `klarkxy/dsh-editor` revision `66d03814ecdac67994
 | dsh-model-center | 0.1.3 |
 | dsh-fusion | 0.1.0 |
 | dsh-web-search-manager | 0.1.7 |
+| dsh-zhihu | 0.1.7 |
 
-Package names, public exports, plugin IDs, runtime implementation, default toggles, storage-domain names and data formats are preserved. The extraction changes build/test paths and publishing ownership, not plugin behavior. `scripts/editor-plugin-migration.json` records the source revision and SHA-256 of every original package file; it is provenance, not a claim that future revisions remain byte-identical. Git history remains accessible in the original repository.
+Package names, public exports, plugin IDs, backend implementation, default toggles, storage-domain names and data formats are preserved. Zhihu alone replaces its private SeatButton build import with a package-local structural host/native adapter, retaining classes, events, ref forwarding and accessibility props. Its tools, credentials and original tests are unchanged. `scripts/editor-plugin-migration.json` records the source revision and SHA-256 of every original package file; it is provenance, not a claim that future revisions remain byte-identical. Git history remains accessible in the original repository.
 
-Zhihu stays in Editor because its build still depends on Editor seats. Manuscript, proofread and all Editor-specific packages also stay there. Desktop packaging and offline profile deployment remain Editor responsibilities. Making the writing environment reproducible through a blueprint remains a future direction; this migration does not redesign blueprints or add startup network installation.
+Zhihu is included from the pinned Editor consumer revision recorded on its migration entry. It has no private runtime, peer or development dependency. Existing optional settings/overlay slot names remain for host compatibility; they do not require Editor. Manuscript, proofread and all Editor-specific packages stay in Editor. Desktop packaging and offline profile deployment remain Editor responsibilities. Making the writing environment reproducible through a blueprint remains a future direction; this migration does not redesign blueprints or add startup network installation.
 
 ## Build and test ownership
 
@@ -28,7 +29,7 @@ The optional search-settings browser suite is `pnpm test:e2e:web-search`; instal
 
 ## Publication handoff: closed by default
 
-The nine packages are held by `holdPublish: true` in the migration manifest. Both release planning and publishing exclude them. Existing unrelated packages remain eligible. No npm release is needed for Editor to consume the already-published exact versions.
+The ten packages are held by `holdPublish: true` in the migration manifest. Both release planning and publishing exclude them. Existing unrelated packages remain eligible. No npm release is needed for Editor to consume the already-published exact versions.
 
 Merge this source-import PR first, then the Editor consumer/removal PR. Before a separate change removes the hold:
 
@@ -43,3 +44,7 @@ The publisher now stages the npm-selected files, resolves supported `workspace:*
 Extraction CI run [36305516870](https://github.com/klarkxy/dsh-plugins/actions/runs/36305516870) generated the lockfile, committed the extraction, verified a frozen install and passed the full `pnpm check` on Linux, Node 24.21.0 and pnpm 10.29.2. This includes original package tests, typechecks, builds, npm pack checks, existing site/release tests and six added release-workspace tests. Two of those tests inspect actual npm archives without publishing.
 
 Later PR checks are authoritative for later commits. No claim is made here of real DSH/Electron end-to-end, Windows/macOS installer, or browser visual acceptance. No installed user Home, credentials or application data were touched.
+
+## Zhihu follow-up validation scope
+
+The original Zhihu package tests and three stylesheet lifecycle regressions move with the source. New control-adapter tests cover hosted/native rendering, variants, events, refs, disabled and ARIA properties. The shared private-dependency guard includes Zhihu. The existing Editor pin remains the already-published 0.1.7 archive; this source refactor needs a later authorized release before consumers receive the new adapter. No live Zhihu request, credential migration or npm publication is performed. UI layout and stylesheet bytes are unchanged; real browser/Electron visual acceptance is not implied by unit/build results.

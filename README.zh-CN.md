@@ -48,7 +48,7 @@ pnpm site:test    # 离线渲染测试，也包含在 pnpm check 中
 | [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | 生成会话回顾，并注入有长度限制的智能体检查点。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
 | [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | 根据结果证据积累有适用条件的方法，可选导出为技能。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
 | [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | 管理网页搜索服务商和公开页面抓取。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
-| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | 知乎搜索、智能体工具、知识库和用量跟踪。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-zhihu#readme) |
+| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | 知乎搜索、智能体工具、知识库和用量跟踪。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
 | [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | 发现、审查和安装可复用能力。 | [文档](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
 
 ## 开发
@@ -82,4 +82,4 @@ npm 发布后可能先进行扫描。CI 先提交所有变更包，再等待最�
 
 ## Editor 公共插件迁移
 
-9 个可独立运行的包迁入 `plugins/`，保留包名、运行时代码与持久化设置。知乎、稿纸、校对及应用私有包暂留 Editor。桌面预装和离线启动方式不变。参见[交接与验收](docs/editor-plugin-migration.md)。
+10 个可独立运行的包（含知乎）迁入 `plugins/`，保留包名、工具行为与持久化设置；知乎改用包内结构化控件适配，解除私有 UI 依赖。稿纸、校对及应用私有包暂留 Editor。桌面预装和离线启动方式不变。参见[交接与验收](docs/editor-plugin-migration.md)。
