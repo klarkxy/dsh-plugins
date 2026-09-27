@@ -11,18 +11,61 @@
   "scripts": {
     "build": "pnpm --filter \"{plugins/*}\" --if-present run build",
     "typecheck": "pnpm --filter \"{plugins/*}\" --if-present run typecheck",
-    "test": "pnpm --filter \"{plugins/*}\" test",
+    "test": "pnpm --workspace-concurrency=2 --filter \"{plugins/*}\" test",
     "pack:check": "pnpm --filter \"{plugins/*}\" exec npm pack --dry-run --cache .npm-cache",
     "release:check": "node scripts/release-target.mjs && node --test scripts/*.test.mjs",
     "site:build": "node site/build.mjs",
     "site:test": "node --test site/*.test.mjs",
-    "check": "pnpm release:check && pnpm site:test && pnpm typecheck && pnpm test && pnpm build && pnpm pack:check"
+    "check": "pnpm release:check && pnpm site:test && pnpm test:editor-build && pnpm typecheck && pnpm test && pnpm build && pnpm pack:check",
+    "test:editor-build": "vitest run --config vitest.editor-plugins.config.ts scripts/editor-plugins",
+    "test:e2e:web-search": "node e2e/web-search-settings.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
     "marked": "18.0.14",
     "semver": "^7.8.5",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "tsdown": "^0.22.14",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@types/react": "~18.3.1",
+    "playwright": "1.62.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ],
+    "overrides": {
+      "@deepseek-ai/dsh-anonymous-user-id": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-attachment": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-bash-local": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-client-store": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-client-ui-slots": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-compaction": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-deepseek-account": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-fs": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-hook-protocol": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-jobs": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-llm-deepseek": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-output-retention": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-sdk-protocol": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-session-telemetry": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-session-title-llm": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-shell": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-spill": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-subagent-in-process-driver": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-util-time": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-util-workspace-path": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-workflow": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-sandbox": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-invariants": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-scope": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-storage": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-ptc-runtime": "0.1.7-rc.2",
+      "@deepseek-ai/dsh-session-persistence": "0.1.7-rc.2",
+      "playwright": "1.62.1"
+    }
   }
 }

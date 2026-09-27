@@ -33,22 +33,22 @@ pnpm site:test    # 离线渲染测试，也包含在 pnpm check 中
 
 `.github/workflows/pages.yml` 在 `main` 每次推送、每次 npm 发布流程结束后以及每天一次构建并部署 `_site/`。npm 或 jsDelivr 不可用时构建失败，线上保留上一次部署。仓库的 Pages 来源需设为 GitHub Actions。旧开发索引地址（如 `/areas/*.html`）会跳转到 DSH 官方文档。
 
-## 其他仓库已发布的插件
+## 更多已发布插件
 
 包名链接指向 npm。安装方式、宿主兼容性和配置要求见各插件文档。
 
 | 包 | 作用 | 文档 |
 | --- | --- | --- |
-| [`@klarkxy/dsh-ai-services`](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) | 共享模型路由、受限辅助调用和用量记录。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-ai-services#readme) |
-| [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | 根据最新用户任务更新会话标题，保留手动命名。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-current-title#readme) |
-| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | 持续的 Lead 与 Sidekick 协作，生成由作者审核的写作候选。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-fusion#readme) |
-| [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | 按作用域维护术语、偏好和近期活动，并通过 Dream 整理记忆。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-memory#readme) |
-| [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | 配置模型档位、服务商连接和 AI 调用限额。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-model-center#readme) |
-| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 在智能体执行前澄清模糊需求。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-mood#readme) |
-| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | 生成会话回顾，并注入有长度限制的智能体检查点。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-recap#readme) |
-| [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | 根据结果证据积累有适用条件的方法，可选导出为技能。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-self-improvement#readme) |
-| [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | 管理网页搜索服务商和公开页面抓取。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-web-search-manager#readme) |
-| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | 知乎搜索、智能体工具、知识库和用量跟踪。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-zhihu#readme) |
+| [`@klarkxy/dsh-ai-services`](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) | 共享模型路由、受限辅助调用和用量记录。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-ai-services#readme) |
+| [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | 根据最新用户任务更新会话标题，保留手动命名。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title#readme) |
+| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | 持续的 Lead 与 Sidekick 协作，生成由作者审核的写作候选。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion#readme) |
+| [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | 按作用域维护术语、偏好和近期活动，并通过 Dream 整理记忆。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory#readme) |
+| [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | 配置模型档位、服务商连接和 AI 调用限额。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-model-center#readme) |
+| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 在智能体执行前澄清模糊需求。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
+| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | 生成会话回顾，并注入有长度限制的智能体检查点。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
+| [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | 根据结果证据积累有适用条件的方法，可选导出为技能。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
+| [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | 管理网页搜索服务商和公开页面抓取。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
+| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | 知乎搜索、智能体工具、知识库和用量跟踪。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
 | [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | 发现、审查和安装可复用能力。 | [文档](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
 
 ## 开发
@@ -79,3 +79,7 @@ npm 发布后可能先进行扫描。CI 先提交所有变更包，再等待最�
 ## 许可证
 
 [SATA License 2.1](LICENSE)
+
+## Editor 公共插件迁移
+
+10 个可独立运行的包（含知乎）迁入 `plugins/`，保留包名、工具行为与持久化设置；知乎改用包内结构化控件适配，解除私有 UI 依赖。稿纸、校对及应用私有包暂留 Editor。桌面预装和离线启动方式不变。参见[交接与验收](docs/editor-plugin-migration.md)。

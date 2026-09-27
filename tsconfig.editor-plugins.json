@@ -1,0 +1,82 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "declaration": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
+    "types": [
+      "node"
+    ],
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@klarkxy/dsh-ai-services": [
+        "plugins/dsh-ai-services/src/index.ts"
+      ],
+      "@klarkxy/dsh-ai-services/contracts": [
+        "plugins/dsh-ai-services/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-current-title": [
+        "plugins/dsh-current-title/src/index.ts"
+      ],
+      "@klarkxy/dsh-current-title/contracts": [
+        "plugins/dsh-current-title/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-mood": [
+        "plugins/dsh-mood/src/index.ts"
+      ],
+      "@klarkxy/dsh-mood/contracts": [
+        "plugins/dsh-mood/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-recap": [
+        "plugins/dsh-recap/src/index.ts"
+      ],
+      "@klarkxy/dsh-recap/contracts": [
+        "plugins/dsh-recap/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-memory": [
+        "plugins/dsh-memory/src/index.ts"
+      ],
+      "@klarkxy/dsh-memory/contracts": [
+        "plugins/dsh-memory/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-self-improvement": [
+        "plugins/dsh-self-improvement/src/index.ts"
+      ],
+      "@klarkxy/dsh-self-improvement/contracts": [
+        "plugins/dsh-self-improvement/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-model-center": [
+        "plugins/dsh-model-center/src/index.ts"
+      ],
+      "@klarkxy/dsh-model-center/contracts": [
+        "plugins/dsh-model-center/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-ai-services/host-rpc": [
+        "plugins/dsh-ai-services/src/host-rpc.ts"
+      ],
+      "@klarkxy/dsh-ai-services/client-utils": [
+        "plugins/dsh-ai-services/src/client-utils.ts"
+      ],
+      "@klarkxy/dsh-ai-services/insert-output": [
+        "plugins/dsh-ai-services/src/insert-output.ts"
+      ],
+      "@klarkxy/dsh-fusion": [
+        "plugins/dsh-fusion/src/index.ts"
+      ],
+      "@klarkxy/dsh-fusion/contracts": [
+        "plugins/dsh-fusion/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-fusion/host-contracts": [
+        "plugins/dsh-fusion/src/host-contracts.ts"
+      ]
+    }
+  }
+}

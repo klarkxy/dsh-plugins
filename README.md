@@ -35,22 +35,22 @@ pnpm site:test    # offline rendering tests, also part of pnpm check
 
 `.github/workflows/pages.yml` builds and deploys `_site/` on every `main` push, after each npm publish run, and once a day. If npm or jsDelivr cannot be reached the build fails and the previous deployment stays online. Pages → Source must be GitHub Actions. Old development-index URLs such as `/areas/*.html` redirect to the official DSH documentation.
 
-## Published plugins from other repositories
+## Additional published plugins
 
 Package names link to npm. Follow each plugin's documentation for installation, host compatibility, and configuration.
 
 | Package | Purpose | Documentation |
 | --- | --- | --- |
-| [`@klarkxy/dsh-ai-services`](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) | Shared model routing, bounded auxiliary calls, and usage receipts. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-ai-services#readme) |
-| [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | Update session titles from the latest human task while preserving manual names. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-current-title#readme) |
-| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | Persistent Lead and Sidekick collaboration with author-reviewed writing candidates. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-fusion#readme) |
-| [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | Scoped vocabulary, preferences, recent activity, and Dream memory consolidation. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-memory#readme) |
-| [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | Configure model tiers, provider connections, and AI call limits. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-model-center#readme) |
-| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | Clarify ambiguous requests before agent execution. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-mood#readme) |
-| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | Generate session recaps and inject bounded agent checkpoints. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-recap#readme) |
-| [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | Learn conditional methods from outcome evidence, with optional skill export. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-self-improvement#readme) |
-| [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | Manage web search providers and public-page fetching. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-web-search-manager#readme) |
-| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | Zhihu search, agent tools, knowledge bases, and usage tracking. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-zhihu#readme) |
+| [`@klarkxy/dsh-ai-services`](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) | Shared model routing, bounded auxiliary calls, and usage receipts. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-ai-services#readme) |
+| [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | Update session titles from the latest human task while preserving manual names. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title#readme) |
+| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | Persistent Lead and Sidekick collaboration with author-reviewed writing candidates. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion#readme) |
+| [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | Scoped vocabulary, preferences, recent activity, and Dream memory consolidation. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory#readme) |
+| [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | Configure model tiers, provider connections, and AI call limits. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-model-center#readme) |
+| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | Clarify ambiguous requests before agent execution. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
+| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | Generate session recaps and inject bounded agent checkpoints. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
+| [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | Learn conditional methods from outcome evidence, with optional skill export. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
+| [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | Manage web search providers and public-page fetching. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
+| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | Zhihu search, agent tools, knowledge bases, and usage tracking. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
 | [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | Discover, review, and install reusable capabilities. | [Docs](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
 
 ## Development
@@ -81,3 +81,7 @@ Use the repository Actions secret `NPM_TOKEN` for first publication. Then config
 ## License
 
 [SATA License 2.1](LICENSE)
+
+## Editor public-plugin extraction
+
+Ten portable packages are now maintained under `plugins/`, including Zhihu. Package names, tool behavior and persisted settings are unchanged; Zhihu now uses a local structural control adapter instead of a private UI dependency. Manuscript, proofread and application-private packages remain in Editor. Desktop preinstallation and offline startup are unchanged. See [handoff and validation](docs/editor-plugin-migration.md).
