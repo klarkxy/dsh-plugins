@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-safe-auto
+      name: '@klarkxy/dsh-safe-auto'

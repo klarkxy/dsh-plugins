@@ -1,0 +1,19 @@
+{
+  "name": "@klarkxy/dsh-safe-auto",
+  "version": "0.1.0-rc.1",
+  "description": "Conservative, budgeted auto-review for DSH with a deterministic capability envelope.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": { ".": "./src/index.js", "./package.json": "./package.json" },
+  "files": ["src/*.js", "cordis.patch.yml", "dsh.plugin.json", "README*.md", "docs/*.md", "LICENSE"],
+  "scripts": {
+    "build": "node --check src/config.js && node --check src/policy.js && node --check src/reviewer.js && node --check src/gate.js && node --check src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": "^22.19.0 || >=24.0.0", "dsh": ">=0.1.7-rc.2 <0.2.0" },
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": { "type": "git", "url": "git+https://github.com/klarkxy/dsh-plugins.git", "directory": "plugins/dsh-safe-auto" },
+  "keywords": ["dsh-plugin", "deepseek-harness", "approval", "security"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" }
+}
