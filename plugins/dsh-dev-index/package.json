@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-dev-index",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Browse official DSH documentation and guide Creator mode to its sources.",
   "icon": "./icon.svg",
   "keywords": [
@@ -91,6 +91,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "c95b10ddf9dc3ae04ca996551d4750d214e2ba7078e02e103f4b4fc401af7393"
+    "contentHash": "13d30ab28269a38aca2e21ded85c41d0fa685d066348c725482c677025c3023b"
   }
 }
