@@ -1,22 +1,12 @@
 # DSH Safe Auto（候选版）
 
-[English / 完整配置表](README.md) · [预检设计](docs/ADR-0001.md) · [单次提权设计与验收](docs/ADR-0002.md)
+[English / 完整配置表](README.md) · [单次提权](docs/ADR-0002.md) · [审批模型路由](docs/ADR-0003.md)
 
-复用 DSH 原生工具循环、沙箱和审批服务的安全预检插件。**现在支持在明确登记的范围内，自动审核并批准单次沙箱提权；不把整个会话切成 Full Access。** 模型只能缩小规则给定的范围，不能自行扩大权限。
+复用 DSH 原生工具循环、模型适配器和审批服务。**审批模型默认跟随当前对话，也能单独指定 provider/model，或继续使用独立 HTTP 端点。** 在明确登记的范围内，可以自动审核并批准单次沙箱提权，但不会把整个会话切成 Full Access。模型只能缩小规则给定的权限范围。
 
-当前面向本地 POSIX/native 工具，仍是未经独立安全审计的候选版，不宣称适用于所有工具、平台或 PTC 工作流。
+仍为本地 POSIX/native 工具候选版，未经独立安全审计。保留原生沙箱、人工审批、备份和外层隔离，不宣称兼容所有工具或平台。
 
-## 默认行为
-
-安装默认 `shadow`，没有登记命令和 reviewer 时不产生额外模型调用。Shadow 不保护执行，只保留原生行为；普通候选命令可以进行影子审核，提权则直接留给原生审批，不自动审查或批准。
-
-`smart` 下，登记工作区内的普通 `read/read_image/write/edit` 经过确定性路径检查后交回现有策略，不调用模型。受保护的凭据、安全配置和部分危险命令硬拒绝。完整精确匹配的普通 Shell 命令才可进入 reviewer；未知情况交原生人工审批。
-
-单次提权使用独立的 `escalationCandidates`，**普通 `shellCandidates` 不能授予沙箱外执行权限**。匹配的原生 `bash/write/edit` 提权，在 `approval/request` 阶段才调用 reviewer，允许后返回一次 `allowed-once`；显式拒绝不重试，不交另一审批插件再次争取放行。
-
-`unattended` 也可以批准符合条件的单次提权，但所有不确定、错误和其余审批需求均拒绝，不转人工。取消、身份不符或审核期间授权/参数变化，不会自动批准。
-
-## 接入与配置
+## 安装与默认配置
 
 在仓库检查通过后，向一次性测试 profile 安装本地包：
 
@@ -26,7 +16,7 @@ pnpm --filter @klarkxy/dsh-safe-auto test
 dsh plugin --profile web add ./plugins/dsh-safe-auto
 ```
 
-PR 不代表 npm 已发布。配置 bundle 插入的 `dsh-safe-auto` 条目，其 `config` 示例为：
+PR 不等于 npm 已发布。在 bundle 插入的 `dsh-safe-auto` 条目中配置 `config`：
 
 ```yaml
 mode: shadow
@@ -34,19 +24,61 @@ workspaceRoots:
   - /absolute/canonical/project
 shellCandidates:
   - git status --short
+# 模型字段不填，默认跟随本对话。
+```
+
+另行选择原生 Workspace Write；工作区必须是规范绝对路径，与会话 cwd 和沙箱 root 完全相同。配置严格校验，修改后重载插件。**目前通过 profile 配置，未提供图形化模型选择器或自动设置表单。**
+
+## 审批模型可以单独设置
+
+### 默认：跟随当前对话
+
+`endpoint`、`fastProvider`、`fastModel` 均留空。每次需要模型审核时，读取请求会话已经接受的 `requestHeader().config` 的 provider/model；尚无请求 header 才使用同一 Agent 的 options。存在但不完整的 header 不会偷偷回退。对话下一轮接受了新模型，后续审核随之更新；不同会话不会共用一个全局模型选择。
+
+直接复用 DSH 对应 provider 的适配器和凭据，**不用再填一遍 API Key**。只继承模型路由，不继承聊天历史、主 Agent 提示词、工具权限、回放状态、思考档位或输出预算。审批仍是独立、无工具的模型请求，使用自身的提示和成本上限。需要大量推理 token 的模型可能要提高审批输出上限；无法支持的参数应失败关闭，不能丢掉限制后执行。
+
+### 独立指定 DSH 模型
+
+在同一插件配置中成对设置：
+
+```yaml
+fastProvider: your-review-provider
+fastModel: your-small-review-model
+```
+
+填写 DSH 已配置的实际 provider/model ID。可以和对话完全不同；对话切换模型不会影响这个固定审批模型。清空两项恢复跟随。provider 不存在、模型不可用、凭据错误等会回人工或拒绝，**不静默改用对话模型或其他服务**。
+
+可选深审也可单独指定，包括主审批模型继续跟随对话的情况：
+
+```yaml
+deepProvider: your-deep-review-provider
+deepModel: your-deep-review-model
+```
+
+只有快速审核返回 `review` 才调用深审。两项均为空表示不开启深审，不会默认再调用一次对话模型。不确定时 Smart 回人工，无人值守拒绝。原生路由的 provider/model 必须成对填写。
+
+### 保留独立 HTTP 端点
+
+RC2 的配置继续有效：
+
+```yaml
 endpoint: https://your-trusted-gateway.example/v1/chat/completions
-fastModel: your-fast-model
-# deepModel: your-deep-model
+fastModel: your-http-review-model
+# deepModel: your-http-deep-model
 apiKeyEnv: DSH_SAFE_AUTO_API_KEY
 ```
 
-API Key 只从指定环境变量读取。端点是完整的 OpenAI-compatible Chat Completions URL，可接兼容 lapp 网关；此版不读取原生 DSH provider 路由。仅 HTTPS 或 loopback HTTP，拒绝重定向、URL 凭据、查询参数和 fragment。配置严格校验，修改后需要重载插件，尚无独立设置页面。
+这是完整 OpenAI-compatible Chat Completions URL，可接兼容 lapp 网关。此模式不要填写 `fastProvider/deepProvider`；与原生路由混填会报错。只有 HTTP 模式读取上述 API Key 环境变量。仅允许 HTTPS 或 loopback HTTP，拒绝重定向、URL 凭据、查询参数和 fragment。恢复跟随时要同时清空 endpoint 和 HTTP fastModel，不能只删 endpoint。
 
-工作区必须是已登记的规范绝对路径，并与会话 cwd、原生沙箱 root 完全一致。需要另行选择原生 **Workspace Write**，插件不会修改权限档。
+普通预检和单次提权都使用这套选择。一次审核固定两阶段路由；审核期间模型变化会作废自动放行结果，最终 guard 再次核对。模型服务失效不会导致安全 guard 一并卸载。切换模型不重置预算；已经明确拒绝的操作也不会因为换模型被改成可再次争取放行。
 
-## 开启单次提权
+## 默认行为与单次提权
 
-默认 `escalationCandidates: []`。在同一 `config` 中加入明确规则，验证后再切换 `smart` 或 `unattended`：
+`off` 不安装策略。`shadow` 只观察，不保护执行；**登记了普通候选命令后，即使没有独立 endpoint，也可能使用对话模型产生审核费用**。提权在 Shadow 中仍交原生审批，不自动审查或批准。安装时候选列表默认全空，不自动产生审核请求。
+
+`smart` 对普通工作区 `read/read_image/write/edit` 做零模型检查，保留其他原生策略；受保护凭据、安全配置和部分危险命令硬拒绝。未知情况交人工。`unattended` 可以批准符合条件的单次提权，但不确定和其他审批需求均拒绝。
+
+`escalationCandidates` 与 `shellCandidates` 独立，普通命令候选不授予沙箱外权限。例如：
 
 ```yaml
 escalationCandidates:
@@ -58,7 +90,6 @@ escalationCandidates:
     cwd: /absolute/canonical/project
     mode: danger-full-access
     filePath: /absolute/other-project/notes.txt
-  # bash 自动提权还须满足下文的前台执行条件。
   - tool: bash
     cwd: /absolute/canonical/project
     mode: danger-full-access
@@ -67,40 +98,32 @@ escalationApprovalTtlMs: 30000
 escalationMaxTimeoutMs: 30000
 ```
 
-每条规则只有 `tool/cwd/mode` 和 `filePath` 或 `command` 四个字段。不支持前缀、通配符、整个目录授权或自动更换目标。原生 DSH 使用 `sandbox_permissions: danger-full-access` 加 `justification`，不是 Codex 的 `require_escalated`。本候选版只实现从 Workspace Write 到单次 Full Access，不实现 read-only 到 workspace-write 的自动放宽。
+每条规则只有 tool/cwd/mode 和 filePath 或 command 四项，不允许前缀、通配符或整个目录授权。原生 DSH 使用 `sandbox_permissions: danger-full-access` 加 justification，不是 Codex 的 require_escalated。当前只支持 Workspace Write 到单次 Full Access。文件目标要是规范绝对路径且父目录已存在；链接、硬链接写入、受保护/系统目标及未知参数不自动放行。write/edit 分别登记；完整有界内容交给 Reviewer，超长或命中敏感检测时不截断后批准。
 
-**文件提权：** 目标必须是精确绝对路径，父目录已存在且规范。符号链接、硬链接写入、受保护/系统目标和未知参数不自动放行。`write` 与 `edit` 必须分别登记。完整的有界文件内容及修改参数会交给 reviewer，超长或命中敏感内容检查时拒绝，不截断后继续批准。
+**Bash 自动提权要求没有 jobs 服务**、可确认的沙箱 shell、不请求后台、显式正数 timeoutMs 且不超过配置上限，workdir 不变。加载 jobs 的 DSH 可能把超时前台任务转后台；这种组合仍走人工或无人值守拒绝，不会偷偷关闭 jobs。超时和一次性批准不能证明所有派生进程都已经退出。
 
-**Bash 提权：** 自动审批要求当前没有 `jobs` 服务，能确认 shell 具备沙箱能力，`run_in_background` 为 false 或省略，并显式提供正数 `timeoutMs` 且不超过配置上限。`workdir` 只能省略或等于登记 cwd。DSH 在加载 jobs 时可能把超时的前台命令转成后台，所以仅写 `run_in_background: false` 不够。常见的 jobs-enabled profile 中，这类请求仍走人工，或在无人值守下拒绝；插件不偷偷关闭 jobs。原生命令超时也不等于证明所有自行派生的子进程都已退出。
+只在匹配的原生 approval/request 内返回 allowed-once，由原生工具消费，不自行执行或修改会话权限。批准绑定 opaque token、异步上下文、Agent、callId、signal、完整参数、cwd、权限模式、直接用户意图和文件状态。并发相同 callId 不能互借；每次执行只消费一次，无跨调用批准缓存。审批 TTL 是决定新鲜度，不是进程 TTL、撤销或回滚；操作副作用不会自动撤销。详见 [ADR-0002](docs/ADR-0002.md)。
 
-批准绑定当前执行的 opaque token、异步执行上下文、Agent、callId、signal、完整参数、工作目录、权限模式、直接用户意图及文件状态。只有匹配的原生审批能消费一次；相同 callId 的并发调用不能借用许可。普通预检不会预先批准提权，也不重复调用 reviewer。
+**原生 approval: never 优先拒绝所有审批。** 启用自动提权时，原生服务仍需设为 ask，即使插件模式是 unattended。ask 表示分发给审批者，不代表一定有人在线。缺少原生审批服务时不提权。不要叠加官方 Auto、Autogate 或其他自动 answerer，人工 fallback 假定下游是原生人工通道。
 
-`escalationApprovalTtlMs` 是自动审批决定的新鲜度限制，**不是进程运行时长、事后撤销权限或回滚副作用的保证**。过期后 Smart 交人工、无人值守拒绝。会话的默认权限始终不变。
+## 成本、隐私与安全边界
 
-## 原生审批策略与组合
+默认快速/深审输出上限 64/256 tokens，分别写入原生 maxTokens 或 HTTP 参数；每个直接用户任务最多 20/3 次；每阶段超时 8000ms，输入上限 8192 字节；连续 3 次或每会话累计 20 次非允许审核触发熔断。快速返回 allow/review/deny，深审返回 allow/ask/deny。错误 JSON、额外字段、工具调用、缺失 finish 和截断不能批准；原生 reasoning 内容也受响应大小限制。
 
-**原生 `approval: never` 在所有 answerer 之前直接拒绝，包括本插件。** 要用自动提权，原生审批服务必须保留 `ask`；即使本插件是 `unattended` 也是如此。这里的 `ask` 意味着分发给审批者，审批者可以是插件，不要求一定有人在线。没有原生审批服务时不能提权。
+普通预检和提权共享网络前原子预算，失败不退额。sessionBudgetUnits 默认 100000，按提示 UTF-8 字节数 + 输出上限 + 1024 预留，不是精确账单或主 Agent 总成本。原生缓存计数按 DSH 的互斥计量合并。插件不主动进行传输/语义重试；宿主适配器或中间件可能有自身传输策略，预留计数是逻辑审核请求，不是所有底层 HTTP 尝试。新用户消息只重置任务计数，换模型不重置；重载/重启仍会重置内存计数。
 
-现有其他策略的 deny/ask 会保留；非本次提权的审批不会被自动回答。不要与官方 experimental Auto、Autogate 或其他自动审批插件叠加，否则原生人工 fallback 可能被另一个模型自动回答。可信同进程插件、工具注册、profile 和执行提供方仍属于可信计算基础。
+仅发送动作和最近直接人类文本，不发送完整历史、主 Agent 推理或工具结果。justification 不是授权。敏感检测是启发式；选定或跟随远端 provider 会发送这些有界输入，文件提权包含内容。固定配置失效时不偷偷更换数据目的地。
 
-## 安全与成本的实际边界
+DSH workspace-write 只约束文件效果，不是网络隔离或全面敏感读取防护。单次 Full Access 确实移除该次 DSH 文件沙箱；精确规则不等于 OS 仅放开一个文件。路径重查不能消除 TOCTOU。测试、构建、安装和 Git hooks 可运行任意代码，命令登记不固定其未来内容。无人值守需额外隔离凭据与网络。可信同进程插件、工具和执行提供方仍属于信任基础。
 
-DSH `workspace-write` 是文件效果策略，**不是网络出口隔离，也不阻止所有敏感读取**。获准的 `danger-full-access` 调用确实没有 DSH 文件沙箱限制；规则只限定审批资格，并未给操作系统增加“只开放这个文件”的细粒度边界。路径重查减少陈旧决定，但不能消除 TOCTOU。无人值守应放在无宿主凭据、限制网络的隔离环境。
+## 验证与剩余范围
 
-测试、构建、安装依赖和 Git hooks 可能执行任意代码，不默认视为安全。精确登记命令不代表底层脚本未来不会变化。Reviewer 仅接收动作和最近直接人类文本，不传整段历史、工具输出或主 Agent 推理；justification 不能替代用户授权。敏感信息检测是启发式，不能识别所有密钥。配置远端 reviewer 意味着同意发送这些有界输入，提权文件操作包含内容。
+运行 npm test、npm run build（JavaScript 语法检查，不是 TypeScript typecheck）、npm pack --dry-run 和全仓 pnpm check。测试包括路由/并发/失效/取消，以及真实 DSH LlmRuntime、ToolRuntime、ApprovalService 和受控适配器集成。CI 必须运行真实 DSH tests；缺依赖的离线本地环境可以明确跳过。
 
-快速/深审分别输出 `allow/review/deny` 和 `allow/ask/deny`，只有快速层返回 review 才调用可选深审。默认输出上限 64/256 tokens，真实写入请求；每个人类任务最多 20/3 次；连续 3 次不通过或每会话累计 20 次后停止继续模型审核。普通预检和提权共享预算，网络前原子预留，失败不退额，不做传输或语义重试。
+受控模型和 fixture 的 session/tool/policy 不是在线模型准确率、OS 沙箱或 authenticated Web/Headless 验收。剩余清单在 ADR-0002。日志区分 assessment、escalation 和实际 result，不记录原始命令/提示/Key，留存由宿主管理。
 
-`sessionBudgetUnits` 默认 100000，按输入 UTF-8 字节数 + 输出上限 + 1024 预留，不是精确账单或金额上限，也不包含主 Agent 消耗。默认每阶段超时 8000ms，合并输入上限 8192 字节。新用户消息只重置每任务计数；重载/重启会重置全部内存预算。熔断不等于停止整个 Agent 循环。
-
-## 验证与日志
-
-日志区分 assessment、单次 escalation 审批及实际 result，不记录原始命令、用户提示或 Key。审批日志包含来源、权限变化及绑定摘要；DSH 另外保存原生 asked/decided 审计对。日志留存由宿主管理，未实现防篡改持久化数据库。
-
-自动测试包含故障/并发/绕过、真实 loopback HTTP，以及真实 Cordis、ToolRuntime、ApprovalService 和 `approveEscalation` 的组合。集成测试在临时目录写入工作区外的 fixture 文件，并验证批准不继承、原生 never 优先和审计配对；其 session、沙箱策略和工具体仍是 fixtures，**不是实际操作系统隔离验收**。缺依赖的本地离线环境允许跳过真实 DSH 测试，CI 必须运行。
-
-尚未完成实际 Web/Headless 登录 profile、真实操作系统沙箱、在线模型准确率及攻击语料验收。PowerShell、PTC/MCP、远程、复杂 Shell、子代理模型提权未纳入自动放行范围。详见 [ADR-0002 验收清单](docs/ADR-0002.md)，不承诺绝对安全或固定 token 节省比例。
+PowerShell、PTC/MCP、远程、复杂 Shell、子代理模型提权和 read-only 到 workspace-write 仍未纳入自动放行。没有持久化预算/审计库、跨调用批准缓存、PI probe 或图形化模型选择器。不承诺绝对安全或固定节省比例。
 
 ## 许可证
 
-原始实现使用仓库的 [SATA License 2.1](LICENSE)，参考了社区设计但没有直接复制其代码。
+原始实现使用 [SATA License 2.1](LICENSE)，参考社区设计但未直接复制其代码。

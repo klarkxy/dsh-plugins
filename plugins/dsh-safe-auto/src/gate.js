@@ -39,6 +39,7 @@ export function createGate(config, { fetcher = globalThis.fetch, audit = () => {
               const llm = routes.fast.transport === 'dsh' ? getLlm() : undefined;
               const kind = await review(config, result.action, call.intent, s, signal, fetcher, { routes, llm });
               if (signal.aborted || s.task !== oldTask) result = { kind: 'deny', code: 'STALE_REVIEW' };
+              else if (kind === 'deny') result = { kind: 'deny', code: 'MODEL_NOT_ALLOWED' };
               else if (!sameRoutes(routes, resolveReviewRoutes(config, call)) || (llm && llm !== getLlm())) {
                 result = { kind: 'ask', code: 'REVIEW_MODEL_CHANGED' };
               } else result = { kind, code: kind === 'allow' ? 'MODEL_ALLOWED' : 'MODEL_NOT_ALLOWED',
