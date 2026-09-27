@@ -1,4 +1,5 @@
 import { assess } from './policy.js';
+import { assessEscalation } from './escalation.js';
 import { review } from './reviewer.js';
 
 /** Per-instance, per-session budgets. No cached grants and no shared callId lookup table. */
@@ -19,9 +20,9 @@ export function createGate(config, { fetcher = globalThis.fetch, audit = () => {
   }
   return {
     dispose() { abort.abort(); },
-    async decide(call) {
+    async decide(call, phase = 'preflight') {
       const start = Date.now();
-      let result = assess(call, config);
+      let result = phase === 'escalation' ? assessEscalation(call, config) : assess(call, config);
       let s;
       if (result.kind === 'review') {
         if (!call.session || call.subagent) result = { kind: 'ask', code: 'NO_DIRECT_USER_AUTHORITY' };
@@ -45,7 +46,7 @@ export function createGate(config, { fetcher = globalThis.fetch, audit = () => {
       if (call.signal.aborted || abort.signal.aborted) result = { kind: 'cancel', code: 'CANCELLED' };
       if (config.mode === 'unattended' && result.kind === 'ask') result = { ...result, kind: 'deny' };
       // Audit failures cannot accidentally grant permission. Do not include arguments, intent, endpoint or errors.
-      try { audit({ phase: 'assessment', tool: call.tool, callId: call.callId, decision: result.kind, code: result.code,
+      try { audit({ phase: 'assessment', gate: phase, tool: call.tool, callId: call.callId, decision: result.kind, code: result.code,
         mode: config.mode, durationMs: Date.now() - start,
         ...(s ? { reservedUnits: s.units, reportedTokens: s.reportedTokens, fastCalls: s.fastCalls, deepCalls: s.deepCalls } : {}),
       }); } catch { result = { kind: 'deny', code: 'AUDIT_UNAVAILABLE' }; }

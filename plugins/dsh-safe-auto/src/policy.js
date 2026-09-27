@@ -52,14 +52,28 @@ export function inspectPath(root, raw, writing = false) {
   } catch { return verdict('ask', 'PATH_UNAVAILABLE'); }
 }
 
+/** Hard refusals are evaluated before any widening request; escalation cannot skip these. */
+export function hardRisk(call) {
+  const args = call?.args ?? {};
+  for (const path of [args.file_path, args.path]) {
+    if (typeof path === 'string' && PROTECTED.test(path)) return verdict('deny', 'PROTECTED_PATH');
+  }
+  if (SHELL_TOOLS.has(call?.tool) && typeof args.command === 'string') {
+    if (args.command.split(/\s+/).some(p => PROTECTED.test(p)) || containsSecret(args.command)) return verdict('deny', 'SENSITIVE_COMMAND');
+    if (simpleCommand(args.command) && DANGEROUS_PROGRAM.test(args.command.split(' ')[0])) return verdict('deny', 'DANGEROUS_PROGRAM');
+  }
+  return undefined;
+}
+
 /** A candidate is only a bounded operator grant; an LLM can narrow it, never enlarge it. */
 export function assess(call, config) {
   if (!call || !call.args || typeof call.args !== 'object' || Array.isArray(call.args)) return verdict('ask', 'INVALID_ARGUMENTS');
   const args = call.args;
   const rawPath = args.file_path ?? args.path;
-  if (typeof rawPath === 'string' && PROTECTED.test(rawPath)) return verdict('deny', 'PROTECTED_PATH');
+  const hard = hardRisk(call);
+  if (hard) return hard;
   if (call.sandbox?.mode !== 'workspace-write') return verdict('deny', 'WORKSPACE_SANDBOX_REQUIRED');
-  if (args.sandbox_permissions !== undefined && args.sandbox_permissions !== 'use_default') return verdict('ask', 'SANDBOX_ESCALATION');
+  if (args.sandbox_permissions !== undefined && args.sandbox_permissions !== 'use_default' && args.sandbox_permissions !== call.sandbox.mode) return verdict('ask', 'SANDBOX_ESCALATION');
   const root = call.sandbox.workspaceRoot;
   if (typeof root !== 'string' || !config.workspaceRoots.includes(root) || root !== call.cwd) return verdict('ask', 'UNTRUSTED_WORKSPACE');
   if (FILE_TOOLS.has(call.tool)) {
@@ -74,7 +88,7 @@ export function assess(call, config) {
     const argv = cmd.split(' ');
     if (DANGEROUS_PROGRAM.test(argv[0])) return verdict('deny', 'DANGEROUS_PROGRAM');
     // Extra process/environment/cwd arguments are not covered by the exact-command grant.
-    if (Object.keys(args).some(k => !['command', 'description', 'timeout', 'sandbox_permissions'].includes(k))) return verdict('ask', 'UNREVIEWED_ARGUMENTS');
+    if (Object.keys(args).some(k => !['command', 'description', 'timeout', 'timeoutMs', 'sandbox_permissions', 'justification'].includes(k))) return verdict('ask', 'UNREVIEWED_ARGUMENTS');
     if (!config.shellCandidates.includes(cmd)) return verdict('ask', 'OUTSIDE_REVIEW_ENVELOPE');
     return verdict('review', 'ENROLLED_COMMAND', { action: { tool: call.tool, command: cmd, cwd: root } });
   }

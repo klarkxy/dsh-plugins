@@ -1,7 +1,9 @@
 import { isAbsolute } from 'node:path';
+import { parseEscalationCandidates } from './escalation.js';
 
 const defaults = Object.freeze({
-  mode: 'shadow', workspaceRoots: [], shellCandidates: [],
+  mode: 'shadow', workspaceRoots: [], shellCandidates: [], escalationCandidates: [],
+  escalationApprovalTtlMs: 30000, escalationMaxTimeoutMs: 30000,
   endpoint: '', fastModel: '', deepModel: '', apiKeyEnv: 'DSH_SAFE_AUTO_API_KEY',
   tokenField: 'max_tokens', timeoutMs: 8000, maxInputBytes: 8192,
   fastOutputTokens: 64, deepOutputTokens: 256,
@@ -9,6 +11,7 @@ const defaults = Object.freeze({
   consecutiveDenials: 3, totalDenials: 20,
 });
 const limits = {
+  escalationApprovalTtlMs: [100, 120000], escalationMaxTimeoutMs: [100, 60000],
   timeoutMs: [100, 60000], maxInputBytes: [512, 32768],
   fastOutputTokens: [32, 512], deepOutputTokens: [64, 2048],
   fastCallsPerTask: [1, 100], deepCallsPerTask: [0, 20],
@@ -45,6 +48,7 @@ export function parseConfig(raw = {}) {
     if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback)) throw new Error('endpoint requires HTTPS or loopback HTTP');
     c.endpoint = u.href;
   }
+  c.escalationCandidates = parseEscalationCandidates(c.escalationCandidates, c.workspaceRoots);
   return Object.freeze(c);
 }
 
