@@ -45,7 +45,7 @@ type CredentialsApi = {
 
 type SlotHandle = {
   inject: (key: string, callback: () => unknown) => unknown
-  register: (spec: { name: string; id?: string; order?: number; label?: string }, render: unknown) => unknown
+  register: (spec: { name: string; key?: string; id?: string; order?: number; label?: string }, render: unknown) => unknown
 }
 
 type RemoteCredentials = {
@@ -95,7 +95,7 @@ type Failure = { kind: 'credential' | 'network' | 'request'; text: string }
 /** Credential absence and transport failure read differently from a plain bad request. */
 function failureOf(code: string, message: string): Failure {
   if (code === 'token-missing') {
-    return { kind: 'credential', text: '未配置知乎 Access Secret 或凭证不可用，请到「设置」页完成配置。' }
+    return { kind: 'credential', text: '未配置知乎 Access Secret 或凭证不可用，请到「插件 → 知乎资料 → 设置」完成配置。' }
   }
   return { kind: 'request', text: `请求失败：${message}` }
 }
@@ -1152,7 +1152,7 @@ const TAB_LABEL: Record<Tab, string> = {
   knowledge: '知识库',
 }
 
-const OVERLAY_TABS: Tab[] = ['search', 'settings', 'usage', 'knowledge']
+const OVERLAY_TABS: Tab[] = ['search', 'usage', 'knowledge']
 const SETTINGS_TABS: Tab[] = ['settings', 'usage', 'knowledge', 'search']
 
 function tabLabel(tab: Tab, surface: ZhihuSurface): string {
@@ -1183,7 +1183,7 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
   const wasOpen = useRef(false)
 
   // Standalone dock owns focus return. Host Dialog restores the invoker itself.
-  // Settings embed is already inside the host settings dialog.
+  // Settings are embedded in the plugin detail page, not a second dialog.
   useEffect(() => {
     if (Dialog || surface === 'settings') return
     if (open) {
@@ -1490,12 +1490,10 @@ export function apply(ctx: Context): void {
         {...host} />
     );
   }
-  // Official Web declares shell.overlay. Desktop settings consume the
-  // structural seat dsh-editor.settings.zhihu (literal, no shell import).
-  // inject() waits for the declaration, so each entry goes live only in the
-  // host that actually provides the seat, and unload retracts both.
+  // Keep the search dock, but configuration belongs only to this bundle's page.
+  // inject() waits for each declaration and retracts its entry on unload.
   client.slots.inject('shell.overlay', () =>
     client.slots.register({ name: 'shell.overlay', id: SLOT_ID, order: SLOT_ORDER, label: SLOT_LABEL }, overlayRender))
-  client.slots.inject('dsh-editor.settings.zhihu', () =>
-    client.slots.register({ name: 'dsh-editor.settings.zhihu', id: SLOT_ID, order: SLOT_ORDER, label: SLOT_LABEL }, settingsRender))
+  client.slots.inject('plugins.bundle.config', () =>
+    client.slots.register({ name: 'plugins.bundle.config', key: '@klarkxy/dsh-zhihu' }, settingsRender))
 }

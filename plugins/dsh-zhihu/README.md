@@ -28,7 +28,7 @@ To enable agent tools, add this entry to the plugin list in the agent's `agent.c
 
 ## Use
 
-DSH Web provides search, settings, usage, and knowledge-base views. Open **Settings → Zhihu resources** for configuration, usage, knowledge bases, and a connection test; the agent tools are included.
+DSH Web provides search, settings, usage, and knowledge-base views. Open **Plugins → Zhihu resources** for configuration, usage, knowledge bases, and a connection test; the agent tools are included. The search dock remains available, but credential configuration lives only on the plugin page.
 
 Five agent tools are available once the tools entry is enabled:
 

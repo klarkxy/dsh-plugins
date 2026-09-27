@@ -1,21 +1,9 @@
 import {
-  AI_RPC_CHANNEL, MODEL_CENTER_RPC_CHANNEL, MODEL_SETTINGS_SLOT, type ModelCenterLocale, type ModelCenterStatus,
+  AI_RPC_CHANNEL, MODEL_CENTER_PLUGIN, MODEL_CENTER_RPC_CHANNEL, type ModelCenterLocale, type ModelCenterStatus,
   type ModelCenterTab, type RpcResult,
 } from './contracts.ts'
 
-export const SETTINGS_SECTION_SLOT = 'settings.section'
-export const MODEL_CENTER_SLOT_ID = 'model-center'
-export const MODEL_CENTER_SLOT_ORDER = 40
-
-export const SETTINGS_SEAT = {
-  replacement: MODEL_SETTINGS_SLOT,
-  fallback: SETTINGS_SECTION_SLOT,
-  exclusive: true,
-} as const
-
-export function visibleSettingsSeat(replacementAvailable: boolean): 'replacement' | 'section' {
-  return replacementAvailable ? 'replacement' : 'section'
-}
+export const PLUGIN_SETTINGS_SLOT = 'plugins.bundle.config'
 
 export class RpcCallError extends Error {
   constructor(message: string, readonly code?: string) {
@@ -43,10 +31,6 @@ export function isHostEnabledStatus(value: unknown): boolean {
   }
 }
 
-export function shouldReplaceModelsUi(enabled: boolean): boolean {
-  return enabled === true
-}
-
 export function tablistKey(current: ModelCenterTab, key: string): ModelCenterTab | undefined {
   if (key === 'Home') return 'policy'
   if (key === 'End') return 'providers'
@@ -69,53 +53,20 @@ export function centerLabel(locale: ModelCenterLocale): string {
   return locale === 'en' ? 'Model Center' : '模型中心'
 }
 
-export type SlotSpec = { name: string; id: string; label: string; order: number }
+export type SlotSpec = { name: string; key: string }
 
-export function modelSettingsSlotSpec(locale: ModelCenterLocale): SlotSpec {
-  return { name: MODEL_SETTINGS_SLOT, id: MODEL_CENTER_SLOT_ID, order: 0, label: centerLabel(locale) }
-}
-
-export function settingsSectionSlotSpec(locale: ModelCenterLocale): SlotSpec {
-  return { name: SETTINGS_SECTION_SLOT, id: MODEL_CENTER_SLOT_ID, order: MODEL_CENTER_SLOT_ORDER, label: centerLabel(locale) }
+export function pluginSettingsSlotSpec(): SlotSpec {
+  return { name: PLUGIN_SETTINGS_SLOT, key: MODEL_CENTER_PLUGIN }
 }
 
 export type SlotHandle = {
-  inject: (key: string, callback: () => unknown) => unknown
-  register: (spec: SlotSpec, render: unknown) => unknown
+  inject: (key: string, callback: () => unknown) => () => void
+  register: (spec: SlotSpec, render: unknown) => () => void
 }
 
-/** Bind the replacement seat when declared; otherwise the standalone settings.section. Never both. */
-export function registerExclusiveSettingsSeats(
-  slots: SlotHandle,
-  render: unknown,
-  locale: ModelCenterLocale = 'zh',
-): () => void {
-  let replacementLive = false
-  let dropFallbackInject = () => {}
-  let dropFallbackRegister = () => {}
-
-  const dropReplacement = slots.inject(SETTINGS_SEAT.replacement, () => {
-    replacementLive = true
-    dropFallbackRegister()
-    dropFallbackRegister = () => {}
-    dropFallbackInject()
-    dropFallbackInject = () => {}
-    return slots.register(modelSettingsSlotSpec(locale), render)
-  }) as () => void
-
-  if (!replacementLive) {
-    dropFallbackInject = slots.inject(SETTINGS_SEAT.fallback, () => {
-      if (replacementLive) return () => {}
-      dropFallbackRegister = slots.register(settingsSectionSlotSpec(locale), render) as () => void
-      return () => { dropFallbackRegister() }
-    }) as () => void
-  }
-
-  return () => {
-    dropReplacement()
-    dropFallbackInject()
-    dropFallbackRegister()
-  }
+/** The Plugins page owns the title and navigation. Never fall back to global Settings. */
+export function registerPluginSettings(slots: SlotHandle, render: unknown): () => void {
+  return slots.inject(PLUGIN_SETTINGS_SLOT, () => slots.register(pluginSettingsSlotSpec(), render))
 }
 
 export const AI_STATUS_ENDPOINT = 'status'

@@ -132,7 +132,7 @@ describe('public zhihu host compatibility', () => {
       remote: { credentials },
     }
     apply(ctx as never)
-    expect(injected).toEqual(['shell.overlay', 'dsh-editor.settings.zhihu'])
+    expect(injected).toEqual(['shell.overlay', 'plugins.bundle.config'])
     expect(injected).not.toContain('dsh-editor.extensions')
     expect(renders.length).toBe(2)
     const standalone = renders[0]!({})

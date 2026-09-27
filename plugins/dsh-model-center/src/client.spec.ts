@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MODEL_SETTINGS_SLOT } from './contracts.ts'
+import { PLUGIN_SETTINGS_SLOT } from './client-view.ts'
 import {
   activateClientUi, apply, presetLabel, purposeTargetFromValue, purposeTargetValue,
   registerModelCenterSlots, shouldAttach, type ModelCenterClient,
@@ -7,7 +8,7 @@ import {
 
 function mockClient(
   status: unknown,
-  declared: string[] = [MODEL_SETTINGS_SLOT, 'settings.section'],
+  declared: string[] = [PLUGIN_SETTINGS_SLOT, MODEL_SETTINGS_SLOT, 'settings.section'],
   extras: Partial<ModelCenterClient['remote']> = {},
 ): ModelCenterClient & { injected: string[]; registered: string[] } {
   const injected: string[] = []
@@ -15,6 +16,10 @@ function mockClient(
   const client: ModelCenterClient & { injected: string[]; registered: string[] } = {
     injected,
     registered,
+    sessions: {},
+    uiWorkspace: {},
+    uiSession: { adapter: { current: { getSnapshot: () => ({ key: 'selected-session' }), subscribe: () => () => {} } } },
+    locale: { getSnapshot: () => ({ active: 'en' }), subscribe: () => () => {} },
     connection: {
       rpc: {
         call: async (channel: string, endpoint: string) => {
@@ -94,7 +99,7 @@ describe('model center client seats', () => {
     expect(client.injected).toEqual([])
   })
 
-  it('occupies only the editor replacement seat when that slot is already declared', async () => {
+  it('occupies only the plugin page even when the old editor replacement seat is declared', async () => {
     const client = mockClient({ ok: true, value: { enabled: true, plugin: '@klarkxy/dsh-model-center' } })
     const renders: Array<(props: object) => { props: Record<string, unknown> }> = []
     client.slots.register = (spec, render) => {
@@ -103,8 +108,8 @@ describe('model center client seats', () => {
       return () => {}
     }
     const dispose = await activateClientUi(client, () => false)
-    expect(client.injected).toEqual([MODEL_SETTINGS_SLOT])
-    expect(client.registered).toEqual([MODEL_SETTINGS_SLOT])
+    expect(client.injected).toEqual([PLUGIN_SETTINGS_SLOT])
+    expect(client.registered).toEqual([PLUGIN_SETTINGS_SLOT])
     const hosted = renders[0]!({ sessionId: 's1', locale: 'zh', renderProviders: () => 'native-editor', renderChatModel: () => 'chat-model' })
     expect(hosted.props.sessionId).toBe('s1')
     expect(hosted.props.locale).toBe('zh')
@@ -113,13 +118,13 @@ describe('model center client seats', () => {
     dispose()
   })
 
-  it('keeps a standalone settings.section page when the replacement seat is absent', async () => {
+  it('does not create a global settings page when the plugin page is absent', async () => {
     const client = mockClient(
       { ok: true, value: { enabled: true, plugin: '@klarkxy/dsh-model-center' } },
       ['settings.section'],
     )
     const dispose = await activateClientUi(client, () => false)
-    expect(client.registered).toEqual(['settings.section'])
+    expect(client.registered).toEqual([])
     dispose()
   })
 
@@ -132,7 +137,7 @@ describe('model center client seats', () => {
     }
     const renderProviders = () => 'host-providers'
     const renderChatModel = () => 'chat-model'
-    registerModelCenterSlots(client, props => ({ props } as never), 'zh')
+    registerModelCenterSlots(client, props => ({ props } as never))
     const element = renders[0]!({ renderProviders, renderChatModel })
     expect(element.props.renderProviders).toBe(renderProviders)
     expect(element.props.renderChatModel).toBe(renderChatModel)
