@@ -1,8 +1,8 @@
 {
   "id": "@klarkxy/dsh-safe-auto",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "main": "src/index.js",
-  "description": "Conservative, budgeted auto-review with a deterministic capability envelope.",
+  "description": "Budgeted preflight and opt-in, one-shot native sandbox escalation review.",
   "engines": { "dsh": ">=0.1.7-rc.2 <0.2.0" },
   "contributes": { "tools": [], "skills": [] }
 }

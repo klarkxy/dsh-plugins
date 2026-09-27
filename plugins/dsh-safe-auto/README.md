@@ -1,39 +1,39 @@
 # DSH Safe Auto (release candidate)
 
-[中文](README.zh-CN.md) · [Design and verified contracts](docs/ADR-0001.md)
+[中文](README.zh-CN.md) · [Preflight design](docs/ADR-0001.md) · [One-shot escalation and acceptance](docs/ADR-0002.md)
 
-A conservative preflight policy for DeepSeek Harness. It reuses the native tool loop, sandbox and human approval channel. It **never returns `allowed-once` for sandbox escalation**, never switches the session to Full Access, and never lets a model enlarge an operator's review envelope.
+Budgeted preflight and opt-in automatic approval of **one native sandbox escalation at a time**. The plugin reuses DSH's tool loop and approval service. It never switches the standing session to Full Access, never executes a command on the model's behalf, and never lets the reviewer enlarge the operator's configured envelope.
 
-**This is a local POSIX/native-tool preview, not an independently audited security boundary.** Start with `shadow`. Keep native sandbox providers, manual approval, isolated environments and backups. DSH's `workspace-write` vocabulary governs file effects, not network egress or secret reads. A plugin cannot turn it into a network sandbox.
+**Local POSIX/native-tool candidate, not an independently audited security boundary.** Start with `shadow`. Keep correctly composed native sandbox providers, human approval, isolation and backups. DSH's `workspace-write` governs file effects, not network egress or all secret reads. A one-shot `danger-full-access` execution is genuinely unconfined by the DSH file sandbox; exact target rules do not create a finer OS sandbox.
 
 ## What runs automatically
 
 | Action | Policy in `smart` |
 | --- | --- |
-| `read`, `read_image`, `write`, `edit` on ordinary files in an enrolled canonical workspace | Deterministic pass to the existing policy; zero reviewer calls |
-| Protected credentials, agent/security configuration, selected dangerous shell programs | Hard denial |
-| An exact operator-enrolled simple `shell`/`bash` command | Fast reviewer; `review` may invoke the optional deep reviewer |
-| Unknown tools, PowerShell, compound shell, symlinks, outside paths, escalation | Native human approval, never LLM-only approval |
-| Reviewer timeout, malformed JSON, cancellation, exhausted budget | No automatic grant |
+| Ordinary `read`, `read_image`, `write`, `edit` in an enrolled canonical workspace | Deterministic pass to existing policy; zero reviewer calls |
+| Protected credentials/security configuration and selected dangerous programs | Hard denial, including when escalation is requested |
+| Exact enrolled simple `shell`/`bash` command without widening | Fast reviewer; `review` may invoke optional deep review |
+| Exact separately enrolled native `write`/`edit` or eligible `bash` escalation | Review at native `approval/request`; a fresh allow grants `allowed-once` |
+| Unenrolled or ambiguous escalation, unsupported tools or process lifetime | Native human approval; no automatic grant |
+| Explicit model denial | Rejected without retries or another answerer |
+| Reviewer error, invalid output, budget exhaustion | Human fallback in smart; rejection in unattended |
+| Cancelled, changed or mismatched approval binding | No grant |
 
-`grep`, `glob`, `run_code`/PTC, MCP and remote execution have **no automatic exemption** in this release. PTC deployments will require human approval for the transport. Do not select unattended mode for an unsupported workflow. Subagents may use the same deterministic file checks, but cannot obtain model-reviewed command grants from delegated text.
+`grep`, `glob`, PTC/`run_code`, MCP, PowerShell, remote execution and compound shell have no automatic exemption. PTC transports can require manual approval. Subagents may use deterministic file checks but do not receive model-reviewed command or escalation grants from delegated text.
 
-`npm test`, builds and dependency installation can execute repository-controlled code. They are **not** built-in safe commands. An exact candidate is a deliberate operator capability grant, not evidence that a script's future contents are safe. The reviewer can narrow that grant, not expand it. Avoid enrolling commands in untrusted/mutable repositories; review changes to their executable inputs.
+Tests, builds and dependency installation can execute repository-controlled code. They are not built-in safe commands. Exact enrollment is an operator capability boundary, not proof that the executable, scripts, hooks or dependencies remain benign. Avoid enrolling commands in untrusted/mutable repositories.
 
 ## Install and configure
 
-From a checkout, first install the workspace dependencies and run the checks. Add the **local package directory** to a disposable DSH profile:
+From the repository checkout, use a disposable profile:
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm --filter @klarkxy/dsh-safe-auto test
-# Run from the repository root; use an absolute path when installing elsewhere.
 dsh plugin --profile web add ./plugins/dsh-safe-auto
 ```
 
-The PR does not itself publish an npm version. After publication, use an explicit `@klarkxy/dsh-safe-auto@<version>` rather than assuming a dist-tag exists.
-
-The bundle inserts a `dsh-safe-auto` profile row. Configure that row through the profile patch mechanism (see the DSH profile documentation); for example the resulting row is:
+This PR does not publish npm. After publication, request an explicit package version. The bundle inserts a `dsh-safe-auto` row; configure it through the profile patch mechanism. Example resulting row:
 
 ```yaml
 id: dsh-safe-auto
@@ -50,54 +50,92 @@ config:
   apiKeyEnv: DSH_SAFE_AUTO_API_KEY
 ```
 
-Supply the key through that environment variable, not the profile or tool arguments. `endpoint` is the complete **OpenAI-compatible Chat Completions URL**; a compatible local lapp gateway can be used. HTTPS is required except loopback HTTP. Redirects, URL credentials, query strings and fragments are rejected. Native DSH provider routing is deferred; there is no automatic fallback to the main agent's provider.
+`endpoint` is the complete OpenAI-compatible Chat Completions URL. A compatible lapp gateway can be used; native DSH provider routing is not implemented. Supply credentials via the named environment variable, never in a tool call or profile. HTTPS is required except loopback HTTP. Redirects, URL credentials, query strings and fragments are rejected.
 
-The selected workspace must match the session cwd and resolved sandbox root exactly. Select native **Workspace Write** separately. This plugin does not alter that setting. Configuration is immutable for one plugin instance and validated through Standard Schema v1; edits require a plugin reload. A custom/generated settings form is not included.
+Select native **Workspace Write** separately. The enrolled root must match both session cwd and resolved sandbox root exactly. This plugin does not change permission presets. Configuration is immutable for one instance and validated by Standard Schema v1; reload after edits. No custom/generated settings form is bundled.
+
+## Enable one-shot sandbox escalation
+
+`escalationCandidates` defaults to `[]`. Ordinary `shellCandidates` do not authorize any widening. To enable review, add exact rules to the same plugin `config`, then use `smart` or `unattended` after validation:
+
+```yaml
+escalationCandidates:
+  - tool: write
+    cwd: /absolute/canonical/project
+    mode: danger-full-access
+    filePath: /absolute/other-project/notes.txt
+  # edit requires its own rule, even for the same target:
+  - tool: edit
+    cwd: /absolute/canonical/project
+    mode: danger-full-access
+    filePath: /absolute/other-project/notes.txt
+  # Automatic bash widening additionally requires the foreground-only
+  # composition described below. Never enroll this merely to test a checkbox.
+  - tool: bash
+    cwd: /absolute/canonical/project
+    mode: danger-full-access
+    command: git status --short
+escalationApprovalTtlMs: 30000
+escalationMaxTimeoutMs: 30000
+```
+
+Each rule requires exactly `tool`, `cwd`, `mode` and either `filePath` or `command`. No prefixes, globs, directory grants or inferred target changes. Native DSH uses `sandbox_permissions: danger-full-access` plus `justification`, not Codex's `require_escalated` value. This candidate supports widening from standing Workspace Write only; read-only-to-workspace-write is not implemented.
+
+For file operations, the parent must already exist and be canonical, the target must be an exact absolute path, and links, protected/system targets and unreviewed arguments cannot receive automatic approval. The reviewer receives the complete bounded write/edit arguments, including content. Large or known-secret-bearing payloads are refused, not truncated.
+
+For **automatic Bash escalation**, the `jobs` service must be absent, a sandbox-capable shell must be visible, `run_in_background` must be false or omitted, and an explicit positive `timeoutMs` must not exceed `escalationMaxTimeoutMs`. `workdir` may only repeat the enrolled cwd. DSH can promote a foreground command into a background job when `jobs` is composed, so merely setting `run_in_background: false` is insufficient. In a normal jobs-enabled profile these Bash requests stay manual in smart, or are rejected in unattended. The plugin does not disable jobs globally. The timeout is passed to the native executor; this is not proof that arbitrary spawned descendants can never outlive it.
+
+The preflight only admits the native tool to request escalation. Only that tool's exact live `approval/request` can receive `allowed-once`. Complete arguments, effective policy, cwd, direct user intent and file identity are rechecked before returning a decision. Async execution context and opaque tokens isolate identical call IDs and concurrent calls. Each execution can consume one approval slot; there is no cross-call grant cache.
+
+`escalationApprovalTtlMs` bounds the automatic review decision's freshness, **not process lifetime or rollback**. Expiry returns to human approval in smart or denies in unattended. Cancellation, changed bindings and late answers do not grant. Side effects of an approved action are not automatically undone.
 
 ## Modes and composition
 
-`off` installs no policy. `shadow` records hypothetical assessments and preserves native behavior; **it does not protect execution** and can still call a configured reviewer for enrolled commands. `smart` enforces denials and sends uncertainty to native approval. `unattended` turns uncertainty into denial and rejects approval requests without asking a human. Native `approval: never` remains authoritative in every mode.
+`off` installs nothing. `shadow` preserves native behavior and does not protect execution; configured ordinary command reviews can still run, but sandbox escalation is left to native approval without automatic review or grant. `smart` enforces policy and sends uncertainty to native approval. `unattended` allows eligible reviewed one-shot escalations and otherwise rejects approval requests without human fallback.
 
-Low-risk passes call `next()` instead of returning an unconditional grant, preserving downstream denials and prompts. A final monotonic guard rechecks paths and sandbox state and rejects calls that skipped our preflight. Per-execution opaque tokens, not visible call IDs, isolate pending decisions. There is no cross-call approval cache.
+**Native `approval: never` still rejects every request before any answerer, including this plugin.** A host using automatic escalation must keep the native approval service at `ask`, even when this plugin is `unattended`. Here `ask` dispatches to the configured answerer, which can be the plugin; it does not require that a human be present. Without a native approval service, widening fails closed.
 
-Do **not** stack this with official experimental Auto, Autogate or another auto-approval answerer. They can answer native prompts with different semantics. Trusted same-process plugins, the filesystem/subprocess providers, and the operator's profile remain in the trusted computing base. Unloading a plugin removes its guards; it is not an OS enforcement mechanism.
+Ordinary passes compose through `next()`, preserving other policies' denials and prompts. The monotonic guard rejects skipped preflight. Unrelated approvals are not automatically answered. Do not combine this plugin with official experimental Auto, Autogate or another automatic answerer: human fallback assumes the downstream chain is the native human channel, not another permission policy.
+
+Trusted same-process plugins, tool registrations, profile and filesystem/process providers remain in the trusted computing base. Unloading a plugin removes its guards. Rechecking file identity reduces staleness but cannot eliminate OS-level TOCTOU races.
 
 ## Reviewer and budgets
 
-The reviewer receives only the exact command/action and the latest direct human text, never tool results, assistant reasoning or a whole transcript. Non-text, missing, oversized or known-secret-bearing authority cannot auto-approve. Inputs are refused, not truncated to hide a dangerous suffix. Secret detection is heuristic: ordinary source files and arbitrary user text may still contain undiscovered secrets. Configuring an external reviewer is consent to send these bounded inputs to that endpoint; inspect the endpoint and avoid sensitive prompts.
+Only the selected action and latest direct human text are sent, never tool results, assistant reasoning or the complete transcript. Descriptions, justifications and quoted material are not authorization. Missing, non-text, oversized, unresolved or known-secret-bearing authority cannot auto-approve. Secret detection is heuristic, not a guarantee; configuring a remote reviewer permits sending these bounded inputs, including file content for escalation, to that endpoint.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `mode`, `workspaceRoots`, `shellCandidates` | `shadow`, `[]`, `[]` | Explicit enrollment; install alone spends no reviewer tokens |
-| `endpoint`, `fastModel`, `deepModel` | empty | No external reviewer by default; deep is optional |
-| `timeoutMs`, `maxInputBytes` | `8000`, `8192` | Per-stage deadline and combined UTF-8 prompt/input limit |
-| `fastOutputTokens`, `deepOutputTokens` | `64`, `256` | Output limit actually sent to the endpoint |
-| `tokenField` | `max_tokens` | Alternatively `max_completion_tokens`; choose what the provider supports |
-| `fastCallsPerTask`, `deepCallsPerTask` | `20`, `3` | Atomic reservations per latest direct user message |
-| `sessionBudgetUnits` | `100000` | Conservative reservation units: prompt bytes + output cap + 1024 per request |
-| `consecutiveDenials`, `totalDenials` | `3`, `20` | Fuse on non-allowing reviews/errors, per task and per session |
+| `mode`, `workspaceRoots`, `shellCandidates`, `escalationCandidates` | `shadow`, `[]`, `[]`, `[]` | Explicit enrollment; install alone makes no model requests |
+| `endpoint`, `fastModel`, `deepModel` | empty | Fast route required for model review; deep optional |
+| `timeoutMs`, `maxInputBytes` | `8000`, `8192` | Per-stage deadline; combined UTF-8 input/prompt cap |
+| `fastOutputTokens`, `deepOutputTokens` | `64`, `256` | Actual output caps in HTTP requests |
+| `tokenField` | `max_tokens` | Or `max_completion_tokens`, according to endpoint support |
+| `fastCallsPerTask`, `deepCallsPerTask` | `20`, `3` | Atomic reservations per latest direct human message |
+| `sessionBudgetUnits` | `100000` | Prompt bytes + output cap + 1024 reserved per request |
+| `consecutiveDenials`, `totalDenials` | `3`, `20` | Non-allowing review/error fuse per task/session |
+| `escalationApprovalTtlMs`, `escalationMaxTimeoutMs` | `30000`, `30000` | Automatic decision freshness; maximum requested Bash timeout |
 
-Output must be exactly one JSON object with only `decision`. Fast: `allow / review / deny`; deep: `allow / ask / deny`. Truncation, tool calls, extra fields, missing completion or invalid JSON fail closed. There are no semantic or transport retries. Prefer a fast model that can reliably emit structured output within the chosen cap.
+Strict JSON only: fast `allow/review/deny`, deep `allow/ask/deny`. Truncation, extra fields, tools, missing finish or invalid JSON fail closed. No transport/semantic retries. Choose a model that emits structured output within its cap.
 
-Reservations occur before network I/O, are never refunded on errors, and are shared by concurrent calls in the same session. Response bodies are bounded while streaming. Cancellation and timeout discard late answers even when a transport ignores its abort signal. **Reservation units are not actual billed tokens or a currency guarantee.** Provider usage is recorded when available; the provider must honor its output limit. Main-agent tokens are outside this plugin's budget.
+Preflight and escalation share one session ledger, with reservations before I/O and no refunds on failure. A native escalation is reviewed once at approval, not twice. Responses are bounded while streaming; timeout/cancellation discard late allows even when an adapter ignores abort.
 
-Counters are in memory for the plugin instance. A new direct user message resets per-task counters, not the session reservation/total-denial limit. Reload/restart resets all counters; durable budgets are deferred. The fuse blocks more model review, not the entire DSH agent loop; low-risk file work can continue.
+Reservation units are not exact billable tokens, currency limits or the main agent's budget. Providers must honor their limits; reported usage is informational with an additional stop check. Counters are in memory: a new human message resets per-task counters but not session limits; reload/restart resets all. The fuse stops additional model reviews, not the entire agent loop.
 
 ## Audit and validation
 
-Host logger records `phase: assessment` (proposed policy verdict) separately from `phase: result` (actual tool success/error). Events contain tool/call IDs, reason codes, duration and available budget counters, not raw command, authority, endpoint, API keys or model error bodies. Configure host log retention yourself. No durable audit database/UI is bundled; final-result observer failures cannot undo an already executed tool.
+Host logs distinguish `assessment`, native `escalation` outcome and actual `result`. They include reason codes, approval source, duration, available counters and a binding hash, not raw commands, prompts or keys. DSH's approval service separately records its native asked/decided pair. Host retention is operator-managed; no persistent audit database is bundled and result logging cannot undo an executed operation.
 
 ```sh
 cd plugins/dsh-safe-auto
 npm test
-npm run build                  # JavaScript syntax checks, not TypeScript checking
+npm run build                 # JavaScript syntax checks, not TypeScript checking
 npm pack --dry-run
 ```
 
-Unit tests cover policy, path/link edge cases, strict verdicts, budgets, timeouts, cancellations, scope, cleanup and hook composition. The real Cordis + ToolRuntime contract test uses the workspace's pinned DSH dependencies via `dsh-dev-index`. It can skip on a dependency-free offline checkout but **must run in CI**. Its sandbox provider/tool bodies are fixtures: this does not test OS sandbox enforcement, authenticated Web/Headless profiles or live model quality.
+Tests include fault/race/scope cases, real loopback HTTP, real Cordis/ToolRuntime, and real ApprovalService plus `approveEscalation`. The native contract test writes only a disposable fixture file outside a fixture workspace, verifies the native audit pair, `never` precedence and non-inheritance on the next call. Its session, filesystem policy and tool body are fixtures: it is **not an OS sandbox or authenticated Web/Headless acceptance test**. Real DSH tests can skip in a dependency-free local checkout but are mandatory in CI.
 
-Before calling this production-ready, run the live-profile checklist in the ADR. No token-saving percentage or classifier false-negative rate is claimed.
+Follow [ADR-0002's remaining acceptance checklist](docs/ADR-0002.md) before promoting beyond candidate. Live provider/model quality, adversarial false-negative rates, authenticated profiles and supported OS enforcement still need validation. No absolute safety or token-saving percentage is claimed.
 
 ## License
 
-Original implementation under the repository's [SATA License 2.1](LICENSE). Community projects informed the design; their source was not copied into this package.
+Original implementation under [SATA License 2.1](LICENSE). Community projects informed the design; their code was not vendored.
