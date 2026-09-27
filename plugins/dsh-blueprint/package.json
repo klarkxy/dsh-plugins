@@ -1,0 +1,60 @@
+{
+  "name": "@klarkxy/dsh-blueprint",
+  "version": "0.1.0-alpha.2",
+  "description": "Import and export plugin blueprints from the official DSH plugin manager.",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./core": "./blueprint.mjs",
+    "./codec": "./codec.mjs",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "*.mjs",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "README*.md",
+    "NOTICE.md",
+    "LICENSE",
+    "ACCEPTANCE.md",
+    "SETTINGS-SCOPE.md"
+  ],
+  "scripts": {
+    "build": "node --check index.mjs && node --check client.js && node --check official.mjs && node --check engine.mjs && node --check blueprint.mjs && node --check codec.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.1.7-0 <0.2.0"
+  },
+  "license": "MIT",
+  "author": "klarkxy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klarkxy/dsh-plugins.git",
+    "directory": "plugins/dsh-blueprint"
+  },
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/blueprint/",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-connection"
+      ]
+    }
+  }
+}
