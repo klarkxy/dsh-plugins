@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import semver from 'semver';
 import { discoverPackages } from './release-target.mjs';
+import { orderedPackages, packRelease, releaseCandidates } from './release-workspace.mjs';
 
 const registry = 'https://registry.npmjs.org/';
 const planFile = '.artifacts/npm-release/plan.json';
@@ -114,10 +115,9 @@ export function writeVersion(root, release) {
 async function plan(root) {
   const releases = [];
   const changedFiles = [];
-  for (const pkg of discoverPackages(root)) {
-    const directory = join(root, pkg.directory);
-    const [packed] = JSON.parse(npm(['pack', '--dry-run', '--ignore-scripts', '--json'], directory));
-    const hash = contentHash(packed.files, path => readFileSync(join(directory, path)));
+  const packages = orderedPackages(root, releaseCandidates(root, discoverPackages(root)));
+  for (const pkg of packages) {
+    const { hash } = packRelease(root, pkg, packages, npm, contentHash);
     const release = selectRelease(pkg, hash, await readRegistry(pkg.name, fetch, pkg.version));
     changedFiles.push(...writeVersion(root, release));
     releases.push(release);
@@ -138,11 +138,12 @@ export function isAcceptedVersionConflict(error) {
 async function publish(root) {
   const { releases } = JSON.parse(readFileSync(join(root, planFile), 'utf8'));
   const pending = [];
+  const packages = orderedPackages(root, releaseCandidates(root, discoverPackages(root)));
+  const allowed = new Set(packages.map(pkg => pkg.name));
+  if (releases.some(release => !allowed.has(release.name))) throw new Error('Release plan contains a held or removed package');
   // Submit every changed package before waiting for npm's publish-time scanning.
   for (const release of releases) {
-    const directory = join(root, release.directory);
-    const [packed] = JSON.parse(npm(['pack', '--ignore-scripts', '--json', '--pack-destination', join(root, '.artifacts/npm-release')], directory));
-    const currentHash = contentHash(packed.files, path => readFileSync(join(directory, path)));
+    const { packed, hash: currentHash } = packRelease(root, release, packages, npm, contentHash);
     if (currentHash !== release.hash) throw new Error(`Package changed after planning: ${release.name}`);
     const archive = join(root, '.artifacts/npm-release', packed.filename);
     const before = await readRegistry(release.name, fetch, release.version);
