@@ -1,8 +1,9 @@
 {
   "name": "@klarkxy/dsh-pruner",
   "version": "0.2.0",
-  "description": "Pruner: a subtractive engineering preset for DeepSeek Harness.",
+  "description": "Review and simplify code, preserving existing functionality while reducing redundancy and unnecessary abstractions.",
   "icon": "./icon.svg",
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/pruner/",
   "type": "module",
   "publishConfig": {
     "access": "public",

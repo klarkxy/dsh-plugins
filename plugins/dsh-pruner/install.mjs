@@ -33,7 +33,7 @@ if (args.length === 1 && ["--help", "-h"].includes(args[0])) {
         recursive: true, force: false, errorOnExist: true,
       });
     }
-    console.log(`Installed: ${target}\nStart a new DSH session and select 删繁 / Pruner. Choose a strong reasoning model in the model picker.`);
+    console.log(`Installed: ${target}\nStart a new DSH session and select 精简模式. Choose a strong reasoning model in the model picker.`);
   } catch (error) {
     const detail = error.code === "EEXIST" && !created
       ? `Preset already exists: ${target}. Back it up and move it aside before installing an update.`

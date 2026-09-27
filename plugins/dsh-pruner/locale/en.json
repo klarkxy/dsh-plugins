@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Pruner",
-    "description": "Add a code simplification preset that preserves supported behavior."
+    "title": "Simplify mode",
+    "description": "Review and simplify code, preserving existing functionality while reducing redundancy and unnecessary abstractions."
   }
 }

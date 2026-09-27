@@ -1,8 +1,8 @@
-# Pruner / 删繁
+# Simplify mode / 精简模式
 
 [中文](README.zh-CN.md)
 
-A native DeepSeek Harness preset for subtractive engineering: preserve supported behavior while removing unnecessary concepts, state, ownership and abstraction layers. It has its own system prompt and uses DSH's existing coding tools, skills, plan mode and compaction. There is no runtime plugin or automatic model router.
+Simplify mode reviews and simplifies code while preserving existing functionality. It uses DSH's coding tools, skills, plan mode, and context compaction. The package name is `@klarkxy/dsh-pruner`.
 
 ## Install
 
@@ -20,7 +20,7 @@ npm pack --ignore-scripts
 dsh plugin --profile web add "D:/path/to/klarkxy-dsh-pruner-0.2.0.tgz"
 ```
 
-Replace `web` for a custom profile. Restart the profile and select **删繁 / Pruner** in a new session, then choose a strong reasoning model with a large context window and a supported high reasoning setting. Preset metadata cannot bind a model or effort. Pruner leaves model selection to the session and does not modify global settings. DSH 0.1.7 no longer reads `$DSH_HOME/.agent-presets`; `install.mjs` is retained only for legacy 0.1.5-rc.2 deployments.
+Replace `web` for a custom profile. Restart the profile and select **精简模式** in a new session, then choose a strong reasoning model with a large context window and a supported high reasoning setting. Preset metadata cannot bind a model or effort. Pruner leaves model selection to the session and does not modify global settings. DSH 0.1.7 no longer reads `$DSH_HOME/.agent-presets`; `install.mjs` is retained only for legacy 0.1.5-rc.2 deployments.
 
 This bundle declares a native Preset without a runtime service. It preserves other presets, permissions, and model settings. Existing sessions with messages cannot switch presets. Uninstall the `@klarkxy/dsh-pruner` bundle from the target profile's native plugin manager. A legacy `.agent-presets/pruner` directory is inert in 0.1.7 and can be removed after confirming the new bundle.
 

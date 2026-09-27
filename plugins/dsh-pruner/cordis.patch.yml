@@ -3,8 +3,8 @@
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: pruner
-        name: 删繁 / Pruner
-        description: 保持受支持行为，以证据驱动删除和合并概念。支持只读审计与直接精简；建议选用强推理、大上下文模型。
+        name: 精简模式
+        description: 审查和精简代码，保留现有功能，减少冗余和不必要的抽象。建议使用强推理、大上下文模型。
         order: 20
         plugins:
           # Pruner owns only its scoped persona and ordinary coding tools.
@@ -14,7 +14,7 @@
             config:
               suffix: Your working directory is {{cwd}}. You are powered by {{model}}.
               prefix: |-
-                你是「删繁 / Pruner」，一名以减法为目标的软件工程师。
+                你是「精简模式」，一名以减法为目标的软件工程师。
                 在保持当前受支持行为、必要兼容性、安全和数据完整性的前提下，减少理解系统必须掌握的概念、状态、所有权和抽象层。
                 Same behavior, less system. Do not improve an existing design by adding more design.
 

@@ -1,8 +1,8 @@
-# 删繁 / Pruner
+# 精简模式
 
 [English](README.md)
 
-保持受支持行为，减少理解系统必须掌握的概念、状态与抽象层。Pruner 是独立 DSH Preset，使用原生文件、搜索、Shell、Skills、计划模式和上下文压缩能力；没有额外运行时插件、自动路由或统计服务。
+精简模式用于审查和精简代码，在保留现有功能的前提下减少冗余和不必要的抽象。它使用 DSH 的文件、搜索、终端、技能、计划模式和上下文压缩功能，包名为 `@klarkxy/dsh-pruner`。
 
 ## 安装与使用
 
@@ -20,11 +20,11 @@ npm pack --ignore-scripts
 dsh plugin --profile web add "D:/path/to/klarkxy-dsh-pruner-0.2.0.tgz"
 ```
 
-自定义 profile 请把 `web` 换成其名称。安装后重启该 profile，在新会话的 Preset 选择器中选择 **删繁 / Pruner**。DSH 0.1.7 已不再读取 `$DSH_HOME/.agent-presets`；`install.mjs` 仅供旧版 0.1.5-rc.2 使用，不能用来安装到当前 Web。
+自定义 profile 请把 `web` 换成其名称。安装后重启该 profile，在新会话的 预设选择器中选择 **精简模式**。DSH 0.1.7 已不再读取 `$DSH_HOME/.agent-presets`；`install.mjs` 仅供旧版 0.1.5-rc.2 使用，不能用来安装到当前 Web。
 
 然后在模型选择器中选择当前可用的强推理、大上下文模型，并启用该模型支持的较高推理强度。Preset 元数据不支持单独绑定模型或 reasoning effort，所以此包不改全局模型配置，也不承诺替你选好了模型。
 
-这是只声明原生 Preset 的 bundle，不增加运行时服务，不改默认 Preset、其他 Preset、权限或模型设置。已有消息的会话不能切换 Preset；更新后重启 profile 并新建会话。
+这是只注册原生预设的插件包，不增加运行时服务，不改默认预设、其他预设、权限或模型设置。已有消息的会话不能切换预设；更新后重启 profile 并新建会话。
 
 卸载时在目标 profile 的原生插件管理页移除 `@klarkxy/dsh-pruner` bundle。旧版安装器创建的 `.agent-presets/pruner` 目录对 0.1.7 无效；迁移并确认新版入口后可移走旧目录。
 
