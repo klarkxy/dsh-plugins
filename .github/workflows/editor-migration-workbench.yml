@@ -6,13 +6,15 @@ on:
 permissions:
   contents: read
 jobs:
-  snapshot:
+  extract:
     if: github.repository == 'klarkxy/dsh-plugins' && github.ref == 'refs/heads/refactor/extract-editor-public-plugins'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
           path: target
       - uses: actions/checkout@v4
         with:
@@ -20,13 +22,44 @@ jobs:
           ref: 66d03814ecdac679947e9198c2e9be931462703a
           persist-credentials: false
           path: source
-      - name: Archive tracked source only
-        run: |
-          mkdir snapshots
-          git -C source archive HEAD > snapshots/editor.tar
-          git -C target archive HEAD > snapshots/plugins.tar
-      - uses: actions/upload-artifact@v4
+      - uses: pnpm/action-setup@v4
         with:
-          name: editor-migration-sources
-          path: snapshots/*.tar
+          version: 10.29.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Extract pinned portable packages
+        working-directory: target
+        run: |
+          if [ ! -f scripts/editor-plugin-migration.json ]; then
+            node scripts/import-editor-plugins.mjs ../source
+          fi
+      - name: Generate frozen dependency graph
+        working-directory: target
+        run: pnpm install --no-frozen-lockfile
+      - name: Commit generated source and lockfile only to migration branch
+        working-directory: target
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add plugins scripts/editor-plugins scripts/editor-plugin-migration.json scripts/publish-npm.mjs package.json pnpm-lock.yaml .npmrc .gitignore tsconfig.editor-plugins.json vitest.editor-plugins.config.ts e2e/web-search-settings.mjs docs/editor-plugins site/catalog.json README.md README.zh-CN.md
+          if ! git diff --cached --quiet; then
+            git commit -m 'refactor: extract nine portable Editor plugins with original tests and runtime code'
+            git push origin HEAD:refactor/extract-editor-public-plugins
+          fi
+      - name: Validate frozen install
+        working-directory: target
+        run: pnpm install --frozen-lockfile
+      - name: Full repository validation
+        working-directory: target
+        run: pnpm check
+      - name: Snapshot resulting tracked tree
+        if: always()
+        working-directory: target
+        run: git archive HEAD > ../migrated-plugins.tar
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: migrated-plugins-source
+          path: migrated-plugins.tar
           retention-days: 3
