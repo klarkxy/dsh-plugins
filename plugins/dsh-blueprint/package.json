@@ -56,5 +56,8 @@
         "@deepseek-ai/dsh-client-connection"
       ]
     }
+  },
+  "dshRelease": {
+    "contentHash": "f2612ba3162fb21206dfa2f290d95585fa4b289651784093535a47e1f9c91179"
   }
 }
