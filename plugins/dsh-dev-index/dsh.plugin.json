@@ -1,6 +1,6 @@
 {
   "id": "@klarkxy/dsh-dev-index",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "main": "lib/index.js",
   "description": "Browse official DSH documentation and guide Creator mode to its sources.",
   "engines": {
