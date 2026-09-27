@@ -1,9 +1,10 @@
 import { assess } from './policy.js';
 import { assessEscalation } from './escalation.js';
 import { review } from './reviewer.js';
+import { resolveReviewRoutes, sameRoutes } from './model-route.js';
 
-/** Per-instance, per-session budgets. No cached grants and no shared callId lookup table. */
-export function createGate(config, { fetcher = globalThis.fetch, audit = () => {} } = {}) {
+/** Per-instance, per-session budgets. Model changes never reset the session budget. */
+export function createGate(config, { fetcher = globalThis.fetch, audit = () => {}, getLlm = () => undefined } = {}) {
   const sessions = new WeakMap();
   const abort = new AbortController();
   function state(session, task) {
@@ -34,9 +35,15 @@ export function createGate(config, { fetcher = globalThis.fetch, audit = () => {
             const oldTask = s.task;
             try {
               const signal = AbortSignal.any([call.signal, abort.signal]);
-              const kind = await review(config, result.action, call.intent, s, signal, fetcher);
+              const routes = resolveReviewRoutes(config, call);
+              const llm = routes.fast.transport === 'dsh' ? getLlm() : undefined;
+              const kind = await review(config, result.action, call.intent, s, signal, fetcher, { routes, llm });
               if (signal.aborted || s.task !== oldTask) result = { kind: 'deny', code: 'STALE_REVIEW' };
-              else result = { kind, code: kind === 'allow' ? 'MODEL_ALLOWED' : 'MODEL_NOT_ALLOWED' };
+              else if (!sameRoutes(routes, resolveReviewRoutes(config, call)) || (llm && llm !== getLlm())) {
+                result = { kind: 'ask', code: 'REVIEW_MODEL_CHANGED' };
+              } else result = { kind, code: kind === 'allow' ? 'MODEL_ALLOWED' : 'MODEL_NOT_ALLOWED',
+                ...(kind === 'allow' ? { reviewRoutes: routes, reviewLlm: llm } : {}),
+              };
             } catch { result = { kind: 'ask', code: 'REVIEW_UNAVAILABLE' }; }
             if (result.kind === 'allow') s.consecutive = 0;
             else { s.consecutive++; s.denials++; }

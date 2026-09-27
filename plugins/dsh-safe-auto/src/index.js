@@ -3,6 +3,7 @@ import { parseConfig } from './config.js';
 import { assess } from './policy.js';
 import { createGate } from './gate.js';
 import { assessEscalation, bindingOf, escalationReason, isNativeEscalation } from './escalation.js';
+import { resolveReviewRoutes, sameRoutes } from './model-route.js';
 export { Config } from './config.js';
 
 export const name = 'dsh-safe-auto';
@@ -30,14 +31,22 @@ export function apply(ctx, raw = {}) {
   const decisions = new Map();
   const execution = new AsyncLocalStorage();
   const lifetime = new AbortController();
-  const gate = createGate(config, { audit: row => ctx.logger.info('safe-auto %s', JSON.stringify(row)) });
+  let llm;
+  // Optional dependency: losing a model service must NOT unload the safety guards.
+  // HTTP-only profiles and deterministic checks remain usable without a native adapter.
+  if (!config.endpoint && typeof ctx.inject === 'function') ctx.inject(['llm'], scope => {
+    const active = scope.llm;
+    llm = active;
+    scope.effect(() => () => { if (llm === active) llm = undefined; });
+  });
+  const gate = createGate(config, { getLlm: () => llm, audit: row => ctx.logger.info('safe-auto %s', JSON.stringify(row)) });
   ctx.effect(() => () => { lifetime.abort(); gate.dispose(); decisions.clear(); execution.disable(); });
 
   function callOf(exec, includeAuthority = false) {
     const session = exec.agent?.session;
     const sandbox = ctx.sandboxPolicy.resolve({ session });
     const info = includeAuthority ? authority(session) : {};
-    const call = { tool: exec.name, args: exec.arguments, callId: String(exec.callId), session,
+    const call = { tool: exec.name, args: exec.arguments, callId: String(exec.callId), session, agent: exec.agent,
       cwd: session?.header?.cwd, sandbox, signal: exec.signal,
       subagent: Boolean(session?.header?.parentSession) || session?.header?.origin === 'subagent',
       nested: exec.parent !== undefined, ...info };
@@ -59,6 +68,12 @@ export function apply(ctx, raw = {}) {
     return { call, assessment, unchanged: bindingOf(call, assessment) === saved.binding };
   }
 
+  function sameReviewer(exec, decision) {
+    if (!decision.reviewRoutes) return true;
+    return sameRoutes(decision.reviewRoutes, resolveReviewRoutes(config, callOf(exec))) &&
+      (decision.reviewRoutes.fast.transport !== 'dsh' || decision.reviewLlm === llm);
+  }
+
   ctx.tools.guard(exec => {
     if (config.mode === 'shadow') return undefined;
     if (exec.signal.aborted || lifetime.signal.aborted) return 'safe-auto: CANCELLED';
@@ -66,13 +81,13 @@ export function apply(ctx, raw = {}) {
       const hard = assess(callOf(exec), config);
       if (hard.kind === 'deny') return `safe-auto: ${hard.code}`;
       const saved = decisions.get(exec.token);
-      // A prepended short-circuiting plugin must not bypass our policy entirely.
       if (!saved) return 'safe-auto: PREFLIGHT_NOT_RUN';
+      if (!sameReviewer(exec, saved)) return 'safe-auto: REVIEW_MODEL_CHANGED';
       if (saved.kind === 'escalation') {
         const current = currentEscalation(exec, saved);
         if (current.assessment.kind === 'deny') return `safe-auto: ${current.assessment.code}`;
         if (!current.unchanged) return 'safe-auto: ESCALATION_CHANGED';
-        return undefined; // Only admits the native tool to ASK; not permission to execute outside the sandbox.
+        return undefined;
       }
       if (saved.kind === 'allow' && hard.kind === 'ask') return 'safe-auto: POLICY_CHANGED';
       if (saved.kind === 'deny' || saved.kind === 'cancel') return `safe-auto: ${saved.code}`;
@@ -115,8 +130,7 @@ export function apply(ctx, raw = {}) {
     return { kind: 'ask', reason: `safe-auto: ${decision.code}` };
   }, { prepend: true });
 
-  // ApprovalRequest deliberately has no execution token/arguments. Bind it through the active
-  // async dispatch, never a global callId cache or the assistant's claimed approval reason.
+  // Bind the approval to the active execution, never a process-wide visible callId cache.
   ctx.on('tools/execute', async (exec, next) => {
     if (config.mode === 'shadow') return next();
     const saved = decisions.get(exec.token);
@@ -138,21 +152,21 @@ export function apply(ctx, raw = {}) {
     if (!store) return config.mode === 'unattended' ? (req.signal?.aborted ? 'cancelled' : 'rejected') : next();
     const { exec, saved } = store;
     if (!store.active || store.claimed) return 'rejected';
-    // Other policy questions are not our sandbox request. Never auto-answer them.
     if (typeof req.reason !== 'string' || !req.reason.startsWith('escalate sandbox to ')) {
       return config.mode === 'unattended' ? 'rejected' : next();
     }
     if (req.agent !== exec.agent || req.toolName !== exec.name || req.callId !== exec.callId ||
         req.signal !== exec.signal || req.reason !== escalationReason(callOf(exec))) return 'rejected';
-    store.claimed = true; // Reserve the single decision slot BEFORE the first await.
+    store.claimed = true;
     const signal = AbortSignal.any([saved.signal, exec.signal, req.signal, lifetime.signal]);
     const started = performance.now();
     const requestReason = req.reason;
+    let reviewed;
     function stillBound() {
       if (signal.aborted || !store.active || decisions.get(exec.token) !== saved) return false;
       if (req.agent !== exec.agent || req.toolName !== exec.name || req.callId !== exec.callId ||
           req.signal !== exec.signal || req.reason !== requestReason) return false;
-      try { return currentEscalation(exec, saved).unchanged; }
+      try { return currentEscalation(exec, saved).unchanged && (!reviewed || sameReviewer(exec, reviewed)); }
       catch { return false; }
     }
     function finish(outcome, source, code) {
@@ -170,12 +184,12 @@ export function apply(ctx, raw = {}) {
     let decision;
     try { decision = await gate.decide({ ...callOf(exec, true), signal }, 'escalation'); }
     catch { decision = { kind: 'ask', code: 'REVIEW_UNAVAILABLE' }; }
+    if (decision.kind === 'allow') reviewed = decision;
     if (!stillBound()) return finish('rejected', 'binding', 'ESCALATION_CHANGED');
     if (performance.now() - started > config.escalationApprovalTtlMs) decision = { kind: 'ask', code: 'ESCALATION_LEASE_EXPIRED' };
     if (decision.kind === 'allow') return finish('allowed-once', 'reviewer', decision.code);
     if (decision.kind === 'cancel') return finish('cancelled', 'reviewer', decision.code);
     if (decision.kind === 'deny' || config.mode === 'unattended') return finish('rejected', 'policy', decision.code);
-    // Only uncertainty falls back to native approval. Explicit model denials are not retried.
     try {
       const human = await next();
       return finish(['allowed-once', 'rejected', 'cancelled', 'unavailable'].includes(human) ? human : 'unavailable', 'native', decision.code);

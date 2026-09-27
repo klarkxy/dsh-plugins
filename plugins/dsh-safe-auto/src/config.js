@@ -1,10 +1,11 @@
 import { isAbsolute } from 'node:path';
 import { parseEscalationCandidates } from './escalation.js';
+import { validateModelConfig } from './model-route.js';
 
 const defaults = Object.freeze({
   mode: 'shadow', workspaceRoots: [], shellCandidates: [], escalationCandidates: [],
   escalationApprovalTtlMs: 30000, escalationMaxTimeoutMs: 30000,
-  endpoint: '', fastModel: '', deepModel: '', apiKeyEnv: 'DSH_SAFE_AUTO_API_KEY',
+  endpoint: '', fastProvider: '', fastModel: '', deepProvider: '', deepModel: '', apiKeyEnv: 'DSH_SAFE_AUTO_API_KEY',
   tokenField: 'max_tokens', timeoutMs: 8000, maxInputBytes: 8192,
   fastOutputTokens: 64, deepOutputTokens: 256,
   fastCallsPerTask: 20, deepCallsPerTask: 3, sessionBudgetUnits: 100000,
@@ -24,7 +25,7 @@ export function parseConfig(raw = {}) {
   for (const key of Object.keys(raw)) if (!Object.hasOwn(defaults, key)) throw new Error(`unknown config field: ${key}`);
   const c = { ...defaults, ...raw };
   if (!['off', 'shadow', 'smart', 'unattended'].includes(c.mode)) throw new Error('invalid mode');
-  for (const key of ['endpoint', 'fastModel', 'deepModel', 'apiKeyEnv', 'tokenField']) {
+  for (const key of ['endpoint', 'fastProvider', 'fastModel', 'deepProvider', 'deepModel', 'apiKeyEnv', 'tokenField']) {
     if (typeof c[key] !== 'string' || c[key].length > 4096) throw new Error(`${key} must be a string`);
   }
   for (const key of ['workspaceRoots', 'shellCandidates']) {
@@ -39,8 +40,7 @@ export function parseConfig(raw = {}) {
   }
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(c.apiKeyEnv)) throw new Error('invalid apiKeyEnv');
   if (!['max_tokens', 'max_completion_tokens'].includes(c.tokenField)) throw new Error('invalid tokenField');
-  if (Boolean(c.endpoint) !== Boolean(c.fastModel)) throw new Error('endpoint and fastModel must be configured together');
-  if (c.deepModel && !c.fastModel) throw new Error('deepModel requires fastModel');
+  validateModelConfig(c);
   if (c.endpoint) {
     const u = new URL(c.endpoint);
     if (u.username || u.password || u.hash || u.search) throw new Error('endpoint must not contain credentials, query or fragment');
