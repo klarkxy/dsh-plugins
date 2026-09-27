@@ -4,12 +4,12 @@
 
 这是一个用于收纳轻量 DeepSeek Harness 插件的 pnpm monorepo。`plugins/` 下的每个目录都是可以独立安装、测试和发布的 DSH bundle 或原生 Preset；仓库根目录本身不是插件。
 
-## 插件与 Preset
+本 README 同时汇总 klarkxy 已在 npm 公开发布的 DSH 插件，包括在其他仓库维护的包；可浏览的版本见[插件站点](https://klarkxy.github.io/dsh-plugins/)。每次发布新插件时，都应在 `site/catalog.json` 和中英文 README 中补上条目。
 
-| 包 | 作用 |
-| --- | --- |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | 在 DSH 中阅读官方文档；创造模式通过原生工具搜索和读取官方资料。 |
-| [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.zh-CN.md) | 删繁：保持受支持行为，以证据驱动删除和合并概念的原生 Preset。 |
+| 包 | 作用 | npm |
+| --- | --- | --- |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | 在 DSH 中阅读官方文档；创造模式通过原生工具搜索和读取官方资料。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
+| [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.zh-CN.md) | 精简模式：审查和精简代码，保留现有功能，减少冗余和不必要的抽象。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
 
 可以从 npm 安装单个插件：
 
@@ -18,7 +18,38 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
-`dsh-dev-index` 在 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) 提供供人阅读的索引，对应 `docs/meta.json` 记录的固定源码修订。创造模式通过 `dsh_docs_search` 和 `dsh_docs_fetch` 在线读取[官方 DSH 文档](https://deepseek-harness.github.io/deepseek-harness/)，并核对运行时接口。GitHub Pages 通过 `.github/workflows/pages.yml` 发布 `docs/`；仓库的 Pages 来源需设为 GitHub Actions。
+创造模式通过 `dsh-dev-index` 的 `dsh_docs_search` 和 `dsh_docs_fetch` 在线读取[官方 DSH 文档](https://deepseek-harness.github.io/deepseek-harness/)，并核对运行时接口。
+
+## 插件站点
+
+[https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) 用中英文列出全部插件，每个插件有独立详情页：按依赖顺序排好的安装命令、包内 README、运行要求和版本记录。站点同时提供 `plugins.json` 与 `llms.txt`，方便工具和智能体读取。
+
+需要手工维护的只有 `site/catalog.json`：slug、包名、分类、中英文标题与简介、README 路径和源码仓库。版本、日期、依赖、README 和图标在构建时从 npm 与 jsDelivr 读取，所以在其他仓库发布的新版本不需要在这里提交就会出现。
+
+```bash
+pnpm site:build   # 读取线上数据，生成 _site/
+pnpm site:test    # 离线渲染测试，也包含在 pnpm check 中
+```
+
+`.github/workflows/pages.yml` 在 `main` 每次推送、每次 npm 发布流程结束后以及每天一次构建并部署 `_site/`。npm 或 jsDelivr 不可用时构建失败，线上保留上一次部署。仓库的 Pages 来源需设为 GitHub Actions。旧开发索引地址（如 `/areas/*.html`）会跳转到 DSH 官方文档。
+
+## 其他仓库已发布的插件
+
+包名链接指向 npm。安装方式、宿主兼容性和配置要求见各插件文档。
+
+| 包 | 作用 | 文档 |
+| --- | --- | --- |
+| [`@klarkxy/dsh-ai-services`](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) | 共享模型路由、受限辅助调用和用量记录。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-ai-services#readme) |
+| [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | 根据最新用户任务更新会话标题，保留手动命名。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-current-title#readme) |
+| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | 持续的 Lead 与 Sidekick 协作，生成由作者审核的写作候选。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-fusion#readme) |
+| [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | 按作用域维护术语、偏好和近期活动，并通过 Dream 整理记忆。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-memory#readme) |
+| [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | 配置模型档位、服务商连接和 AI 调用限额。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-model-center#readme) |
+| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 在智能体执行前澄清模糊需求。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-mood#readme) |
+| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | 生成会话回顾，并注入有长度限制的智能体检查点。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-recap#readme) |
+| [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | 根据结果证据积累有适用条件的方法，可选导出为技能。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-self-improvement#readme) |
+| [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | 管理网页搜索服务商和公开页面抓取。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-web-search-manager#readme) |
+| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | 知乎搜索、智能体工具、知识库和用量跟踪。 | [文档](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-zhihu#readme) |
+| [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | 发现、审查和安装可复用能力。 | [文档](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
 
 ## 开发
 

@@ -4,12 +4,14 @@
 
 A small pnpm monorepo for focused DeepSeek Harness plugins that do not need a repository of their own. Each package under `plugins/` is an independently installable DSH bundle or native preset; see its installation instructions.
 
+This README also catalogs klarkxy's public DSH plugins on npm, including packages maintained in other repositories. The browsable version is the [plugin site](https://klarkxy.github.io/dsh-plugins/). When a new plugin is published, add it to `site/catalog.json` and to both READMEs.
+
 ## Plugins and presets
 
-| Package | Purpose |
-| --- | --- |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | Browse official DSH docs and let Creator mode search and read them with native tools. |
-| [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.md) | Evidence-driven concept deletion and collapse through the native 删繁 / Pruner preset. |
+| Package | Purpose | npm |
+| --- | --- | --- |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | Browse official DSH docs and let Creator mode search and read them with native tools. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
+| [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.md) | Simplify mode: review and simplify code while preserving existing functionality. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
 
 Install individual plugins from npm:
 
@@ -18,7 +20,38 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
-`dsh-dev-index` keeps a human-readable index at [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/), describing the pinned source revision in `docs/meta.json`. Creator mode uses `dsh_docs_search` and `dsh_docs_fetch` to read live [official DSH documentation](https://deepseek-harness.github.io/deepseek-harness/) and verify runtime contracts. GitHub Pages publishes `docs/` through `.github/workflows/pages.yml`; Pages → Source must be GitHub Actions.
+Creator mode uses `dsh_docs_search` and `dsh_docs_fetch` from `dsh-dev-index` to read live [official DSH documentation](https://deepseek-harness.github.io/deepseek-harness/) and verify runtime contracts.
+
+## Plugin site
+
+[https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) lists every plugin in Chinese and English, with a detail page per plugin: install commands in dependency order, the package README, requirements, and version history. It also publishes `plugins.json` and `llms.txt` for tools and agents.
+
+`site/catalog.json` is the only hand-maintained part: slug, package, category, titles and summaries, README paths, and source repository. Versions, dates, dependencies, READMEs, and icons come from npm and jsDelivr at build time, so a release from another repository appears without a commit here.
+
+```bash
+pnpm site:build   # fetch live data and write _site/
+pnpm site:test    # offline rendering tests, also part of pnpm check
+```
+
+`.github/workflows/pages.yml` builds and deploys `_site/` on every `main` push, after each npm publish run, and once a day. If npm or jsDelivr cannot be reached the build fails and the previous deployment stays online. Pages → Source must be GitHub Actions. Old development-index URLs such as `/areas/*.html` redirect to the official DSH documentation.
+
+## Published plugins from other repositories
+
+Package names link to npm. Follow each plugin's documentation for installation, host compatibility, and configuration.
+
+| Package | Purpose | Documentation |
+| --- | --- | --- |
+| [`@klarkxy/dsh-ai-services`](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) | Shared model routing, bounded auxiliary calls, and usage receipts. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-ai-services#readme) |
+| [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | Update session titles from the latest human task while preserving manual names. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-current-title#readme) |
+| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | Persistent Lead and Sidekick collaboration with author-reviewed writing candidates. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-fusion#readme) |
+| [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | Scoped vocabulary, preferences, recent activity, and Dream memory consolidation. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-memory#readme) |
+| [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | Configure model tiers, provider connections, and AI call limits. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-model-center#readme) |
+| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | Clarify ambiguous requests before agent execution. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-mood#readme) |
+| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | Generate session recaps and inject bounded agent checkpoints. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-recap#readme) |
+| [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | Learn conditional methods from outcome evidence, with optional skill export. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-self-improvement#readme) |
+| [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | Manage web search providers and public-page fetching. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-web-search-manager#readme) |
+| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | Zhihu search, agent tools, knowledge bases, and usage tracking. | [Docs](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-zhihu#readme) |
+| [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | Discover, review, and install reusable capabilities. | [Docs](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
 
 ## Development
 

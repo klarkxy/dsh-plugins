@@ -8,7 +8,7 @@
 
 给人读的文档在[官方站点](https://deepseek-harness.github.io/deepseek-harness/)（简体中文在根路径，英文在 `/en/`）。智能体先读官方 [llms.txt](https://deepseek-harness.github.io/deepseek-harness/llms.txt) 索引，再按需读取原始 Markdown 页面。站点对应最近发布的版本。查特定版本的文档、源码和类型声明时，只有目标版本与 `master` 一致才用 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的 `master`，否则使用对应的 `dsh-v*` 标签，不混用版本。
 
-本仓库的 `docs/` 保留一份固定修订的阅读索引，对应 `docs/meta.json` 记录的源码。目前已发布的 [klarkxy Pages 地址](https://klarkxy.github.io/dsh-plugins/) 会跳转到官方站点；阅读器直接打开官方站点，因此不依赖内嵌跳转。
+插件不再附带或依赖镜像索引。[klarkxy Pages 站点](https://klarkxy.github.io/dsh-plugins/) 现在是 klarkxy 的 DSH 插件目录，旧索引地址会跳转到官方站点。
 
 ## 在插件页阅读
 

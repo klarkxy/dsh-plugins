@@ -71,13 +71,4 @@ describe("bundle contract", () => {
       expect(document).not.toContain("REFRESH.md");
     }
   });
-
-  it("publishes the reader index and redirects only unknown paths", () => {
-    const index = readFileSync(new URL("../../../docs/index.html", import.meta.url), "utf8");
-    expect(index).toContain('id="dsh-dev-index"');
-    expect(index).toContain("DSH development index");
-    const notFound = readFileSync(new URL("../../../docs/404.html", import.meta.url), "utf8");
-    expect(notFound).toContain('http-equiv="refresh"');
-    expect(notFound).toContain("https://deepseek-harness.github.io/deepseek-harness/");
-  });
 });

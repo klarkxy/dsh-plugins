@@ -8,7 +8,7 @@ Inside a running DSH, the instruction points Creator mode to the read-only inspe
 
 Readers use the [official documentation site](https://deepseek-harness.github.io/deepseek-harness/) (Chinese at the site root, English under `/en/`). Agents start from its [llms.txt](https://deepseek-harness.github.io/deepseek-harness/llms.txt) index and fetch relevant raw Markdown pages. The site reflects the latest published release. For version-specific docs, source, and type declarations, use [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) `master` only when it matches the target version; otherwise use the matching `dsh-v*` tag. Do not mix versions.
 
-This repository keeps a pinned human-readable index in `docs/`, describing the source revision recorded in `docs/meta.json`. The currently published [klarkxy Pages address](https://klarkxy.github.io/dsh-plugins/) redirects to the official site. The browser opens the official site directly so it works with that redirect.
+The plugin no longer ships or depends on a mirrored index. The [klarkxy Pages site](https://klarkxy.github.io/dsh-plugins/) is now a catalog of klarkxy's DSH plugins; its old index URLs redirect to the official site.
 
 ## Read in the Plugins page
 

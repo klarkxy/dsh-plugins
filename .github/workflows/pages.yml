@@ -1,8 +1,16 @@
 name: Pages
 
+# Builds the plugin site from site/catalog.json plus live npm data.
+# Scheduled and post-publish runs keep versions current without a commit here,
+# including plugins released from other repositories.
 on:
   push:
     branches: [main]
+  workflow_run:
+    workflows: [Publish npm plugins]
+    types: [completed]
+  schedule:
+    - cron: "17 1 * * *"
   workflow_dispatch:
 
 permissions:
@@ -22,9 +30,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm site:test
+      - run: pnpm site:build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4

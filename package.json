@@ -14,10 +14,13 @@
     "test": "pnpm --filter \"{plugins/*}\" test",
     "pack:check": "pnpm --filter \"{plugins/*}\" exec npm pack --dry-run --cache .npm-cache",
     "release:check": "node scripts/release-target.mjs && node --test scripts/*.test.mjs",
-    "check": "pnpm release:check && pnpm typecheck && pnpm test && pnpm build && pnpm pack:check"
+    "site:build": "node site/build.mjs",
+    "site:test": "node --test site/*.test.mjs",
+    "check": "pnpm release:check && pnpm site:test && pnpm typecheck && pnpm test && pnpm build && pnpm pack:check"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "marked": "18.0.14",
     "semver": "^7.8.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"

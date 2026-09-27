@@ -1,0 +1,54 @@
+# AGENTS.md
+
+本仓库是 klarkxy 的 DSH 插件 monorepo，同时托管插件发布站 <https://klarkxy.github.io/dsh-plugins/>。
+
+## 插件站点
+
+站点由 `site/` 生成，输出到 `_site/`（不提交）。`docs/` 旧开发索引已下线，不要恢复。
+
+| 文件 | 职责 |
+| --- | --- |
+| `site/catalog.json` | 唯一手工维护的数据 |
+| `site/render.mjs` | 纯渲染：catalog + npm 数据 → 文件内容，不做 I/O |
+| `site/build.mjs` | 从 npm registry 和 jsDelivr 拉数据，写入 `_site/` |
+| `site/assets/` | 样式与脚本；脚本只做渐进增强，页面无 JS 也要可用 |
+| `site/site.test.mjs` | 离线测试，包含在 `pnpm check` |
+
+### 新增、修改或下线插件
+
+只改 `site/catalog.json`，并同步根目录 `README.md` 与 `README.zh-CN.md` 的插件表格。
+
+- 只收录已发布到 npm、带 `latest` 标签的 DSH 插件。未发布的包会让构建失败；非 DSH 包不收录。
+- `slug`：小写字母、数字和连字符，通常是包名去掉作用域和 `dsh-` 前缀。已发布的 slug 是公开 URL，不要改名。
+- `category` 必须是 `categories` 里的 id；`kind` 只能是 `preset`、`plugin`、`service`。
+- `title`、`summary` 必须同时有 `zh` 和 `en`。简介一句话，从用户角度说它做什么，不写实现细节或宣传语。
+- `readme.zh` / `readme.en` 写包内实际存在的路径（相对包根目录）。某个语言没有 README 时仍填预期路径，构建会警告并回退到另一种语言。
+- `repository` 为 `https://github.com/<owner>/<repo>`；`directory` 是包在仓库中的子目录，仓库根目录即包时填 `""`。
+- 不要把版本、日期、依赖、图标写进 catalog，这些在构建时从 npm 读取。插件依赖根据 `dependencies` / `peerDependencies` 中同样在 catalog 里的包自动推导。
+
+### 修改渲染
+
+- README 里的原始 HTML 不原样输出，只保留 `<img>` 和 `<br>`；链接和图片地址只允许 `http(s)`、`mailto`、锚点和相对路径。不要放宽这条规则。
+- 改链接改写、依赖推导或页面结构时，在 `site/site.test.mjs` 补测试。测试要离线运行，不访问网络。
+- 首页和详情页都是中文在根路径、英文在 `en/` 下，两种语言的页面结构保持一致；新增文案要同时加到 `render.mjs` 的 `T.zh` 和 `T.en`。
+- 视觉方向：蓝墨色配冷色纸底，只有安装命令那一行做强调。不要引入外部字体、CDN 脚本或统计代码。
+
+### 验证
+
+```bash
+pnpm site:test                                     # 离线渲染测试
+pnpm site:build                                    # 拉取线上数据生成 _site/
+node site/build.mjs --save-snapshot .scratch/snap.json   # 保存数据快照
+node site/build.mjs --snapshot .scratch/snap.json        # 用快照离线重建
+pnpm check                                         # 全仓检查
+```
+
+改动页面后在本地起静态服务预览 `_site/`，桌面和手机宽度都要看；站点部署在 `/dsh-plugins/` 子路径下，页面内链接必须用相对路径（404 页除外）。快照和预览文件放在 `.scratch/`，用完删除。
+
+### 部署
+
+`.github/workflows/pages.yml` 在推送 `main`、`Publish npm plugins` 工作流结束后，以及每天 01:17 UTC 运行 `site:test` 和 `site:build`，再部署 `_site/`。拉取失败时构建直接失败，线上保留上一版，不要为了让构建通过而吞掉网络错误或改用过期数据。
+
+## 与 npm 发布的关系
+
+`plugins/*` 下被 `npm pack` 打包的文件（含 `package.json`、README）内容一变，`npm-publish.yml` 就会自动发布 patch 版本。只改 `site/`、根 README 或测试不会触发发布。插件的 `homepage` 指向对应详情页 `https://klarkxy.github.io/dsh-plugins/plugins/<slug>/`。

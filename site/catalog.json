@@ -1,0 +1,215 @@
+{
+  "siteUrl": "https://klarkxy.github.io/dsh-plugins/",
+  "owner": {
+    "name": "klarkxy",
+    "github": "https://github.com/klarkxy",
+    "npm": "https://www.npmjs.com/~klarkxy"
+  },
+  "source": "https://github.com/klarkxy/dsh-plugins",
+  "categories": [
+    {
+      "id": "workflow",
+      "title": { "zh": "工作方式", "en": "How the agent works" },
+      "summary": { "zh": "改变智能体接活、做事和交付的方式。", "en": "Change how the agent takes on, carries out, and hands back work." }
+    },
+    {
+      "id": "sessions",
+      "title": { "zh": "会话与记忆", "en": "Sessions and memory" },
+      "summary": { "zh": "让会话好找、能回顾，并从经验里学习。", "en": "Keep sessions findable, reviewable, and learning from experience." }
+    },
+    {
+      "id": "models",
+      "title": { "zh": "模型与联网", "en": "Models and the web" },
+      "summary": { "zh": "模型配置、网页搜索和外部知识来源。", "en": "Model setup, web search, and outside knowledge sources." }
+    },
+    {
+      "id": "dev",
+      "title": { "zh": "插件开发", "en": "Plugin development" },
+      "summary": { "zh": "给写 DSH 插件的人用。", "en": "For people writing DSH plugins." }
+    }
+  ],
+  "plugins": [
+    {
+      "slug": "pruner",
+      "package": "@klarkxy/dsh-pruner",
+      "category": "workflow",
+      "kind": "preset",
+      "title": { "zh": "精简模式", "en": "Simplify mode" },
+      "summary": {
+        "zh": "审查和精简代码，保留现有功能，减少冗余和不必要的抽象。",
+        "en": "Review and simplify code while keeping existing behavior, cutting redundancy and needless abstraction."
+      },
+      "readme": { "zh": "README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-pruner"
+    },
+    {
+      "slug": "autoevo",
+      "package": "dsh-plugin-autoevo",
+      "category": "workflow",
+      "kind": "plugin",
+      "title": { "zh": "进化模式", "en": "Evolution mode" },
+      "summary": {
+        "zh": "查找和审查可复用能力，经你确认后安装、修改或创建。",
+        "en": "Find and review reusable capabilities, then install, modify, or create them after you confirm."
+      },
+      "readme": { "zh": "README.md", "en": "README.en.md" },
+      "repository": "https://github.com/klarkxy/dsh-plugin-autoevo",
+      "directory": ""
+    },
+    {
+      "slug": "fusion",
+      "package": "@klarkxy/dsh-fusion",
+      "category": "workflow",
+      "kind": "plugin",
+      "title": { "zh": "Fusion 协作", "en": "Fusion" },
+      "summary": {
+        "zh": "当前助手搭配一个常驻 Sidekick：分派有边界的任务，核对原文结果后采纳或要求修改。",
+        "en": "Pair the assistant with one persistent Sidekick: delegate bounded tasks, then accept or send back the exact result."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-editor",
+      "directory": "packages/dsh-fusion"
+    },
+    {
+      "slug": "mood",
+      "package": "@klarkxy/dsh-mood",
+      "category": "workflow",
+      "kind": "plugin",
+      "title": { "zh": "需求澄清", "en": "Mood" },
+      "summary": {
+        "zh": "请求含糊时，先把需求问清楚再让智能体动手。",
+        "en": "When a request is ambiguous, pin down what is wanted before the agent starts."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-editor",
+      "directory": "packages/dsh-mood"
+    },
+    {
+      "slug": "current-title",
+      "package": "@klarkxy/dsh-current-title",
+      "category": "sessions",
+      "kind": "plugin",
+      "title": { "zh": "实时标题", "en": "Current title" },
+      "summary": {
+        "zh": "会话标题跟着最新任务更新，你手动改过的名字不会被覆盖。",
+        "en": "Session titles follow the latest task; names you set by hand stay put."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-editor",
+      "directory": "packages/dsh-current-title"
+    },
+    {
+      "slug": "recap",
+      "package": "@klarkxy/dsh-recap",
+      "category": "sessions",
+      "kind": "plugin",
+      "title": { "zh": "会话回顾", "en": "Recap" },
+      "summary": {
+        "zh": "在后台生成会话回顾，并给智能体注入有长度上限的进度检查点。",
+        "en": "Write session recaps in the background and give the agent bounded progress checkpoints."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-editor",
+      "directory": "packages/dsh-recap"
+    },
+    {
+      "slug": "memory",
+      "package": "@klarkxy/dsh-memory",
+      "category": "sessions",
+      "kind": "plugin",
+      "title": { "zh": "记忆", "en": "Memory" },
+      "summary": {
+        "zh": "按作用域记住术语、偏好和近期活动，由 Dream 定期整理。",
+        "en": "Remember vocabulary, preferences, and recent activity per scope, consolidated by Dream."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-editor",
+      "directory": "packages/dsh-memory"
+    },
+    {
+      "slug": "self-improvement",
+      "package": "@klarkxy/dsh-self-improvement",
+      "category": "sessions",
+      "kind": "plugin",
+      "title": { "zh": "自我改进", "en": "Self improvement" },
+      "summary": {
+        "zh": "从结果证据里总结带适用条件的做法，可以导出为技能。",
+        "en": "Learn conditional methods from outcome evidence, with optional export as skills."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-editor",
+      "directory": "packages/dsh-self-improvement"
+    },
+    {
+      "slug": "model-center",
+      "package": "@klarkxy/dsh-model-center",
+      "category": "models",
+      "kind": "plugin",
+      "title": { "zh": "模型中心", "en": "Model center" },
+      "summary": {
+        "zh": "配置模型档位、服务商连接和 AI 调用限额。",
+        "en": "Configure model tiers, provider connections, and AI call limits."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-editor",
+      "directory": "packages/dsh-model-center"
+    },
+    {
+      "slug": "ai-services",
+      "package": "@klarkxy/dsh-ai-services",
+      "category": "models",
+      "kind": "service",
+      "title": { "zh": "AI 服务", "en": "AI services" },
+      "summary": {
+        "zh": "给其他插件用的共享服务：模型路由、有上限的辅助调用和用量记录。单独装没有可见功能。",
+        "en": "Shared service for other plugins: model routing, bounded auxiliary calls, and usage receipts. No visible feature on its own."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-editor",
+      "directory": "packages/dsh-ai-services"
+    },
+    {
+      "slug": "web-search-manager",
+      "package": "@klarkxy/dsh-web-search-manager",
+      "category": "models",
+      "kind": "plugin",
+      "title": { "zh": "网页搜索管理", "en": "Web search manager" },
+      "summary": {
+        "zh": "在一个设置页里管理网页搜索服务商和公开页面抓取。",
+        "en": "Manage web search providers and public-page fetching from one settings page."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-editor",
+      "directory": "packages/dsh-web-search-manager"
+    },
+    {
+      "slug": "zhihu",
+      "package": "@klarkxy/dsh-zhihu",
+      "category": "models",
+      "kind": "plugin",
+      "title": { "zh": "知乎", "en": "Zhihu" },
+      "summary": {
+        "zh": "知乎搜索、智能体工具、知识库和用量统计。",
+        "en": "Zhihu search, agent tools, knowledge bases, and usage tracking."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-editor",
+      "directory": "packages/dsh-zhihu"
+    },
+    {
+      "slug": "dev-index",
+      "package": "@klarkxy/dsh-dev-index",
+      "category": "dev",
+      "kind": "plugin",
+      "title": { "zh": "DSH 开发索引", "en": "DSH development index" },
+      "summary": {
+        "zh": "在插件页阅读 DSH 官方文档；创造模式用原生工具搜索和读取官方资料。",
+        "en": "Read the official DSH docs in the Plugins page; Creator mode searches and reads them with native tools."
+      },
+      "readme": { "zh": "README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-dev-index"
+    }
+  ]
+}
