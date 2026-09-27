@@ -1,0 +1,32 @@
+name: Editor migration workbench
+on:
+  push:
+    branches: [refactor/extract-editor-public-plugins]
+    paths: [.github/workflows/editor-migration-workbench.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    if: github.repository == 'klarkxy/dsh-plugins' && github.ref == 'refs/heads/refactor/extract-editor-public-plugins'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: target
+      - uses: actions/checkout@v4
+        with:
+          repository: klarkxy/dsh-editor
+          ref: 66d03814ecdac679947e9198c2e9be931462703a
+          persist-credentials: false
+          path: source
+      - name: Archive tracked source only
+        run: |
+          mkdir snapshots
+          git -C source archive HEAD > snapshots/editor.tar
+          git -C target archive HEAD > snapshots/plugins.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: editor-migration-sources
+          path: snapshots/*.tar
+          retention-days: 3
