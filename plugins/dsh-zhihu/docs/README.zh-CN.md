@@ -18,7 +18,7 @@ npm install @klarkxy/dsh-zhihu
 dsh plugin --profile web add @klarkxy/dsh-zhihu
 ```
 
-重启 DSH Web，打开「知乎资料」填写 Access Secret（DSH 凭据 `ZHIHU_ACCESS_TOKEN`）。请使用完整 scoped 包名；无 scope 的 `dsh-zhihu` 属于其他维护者。
+重启 DSH Web，在侧栏打开「插件 → @klarkxy/dsh-zhihu」，在「设置」标签填写 Access Secret（DSH 凭据 `ZHIHU_ACCESS_TOKEN`）。请使用完整 scoped 包名；无 scope 的 `dsh-zhihu` 属于其他维护者。
 
 模型需要使用知乎工具时，在所用 `agent.cordis.yml` 的插件列表加入：
 
@@ -28,7 +28,7 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 
 ## 使用
 
-DSH Web 提供搜索、设置、用量与知识库视图。在「设置 → 知乎资料」配置、查看用量、管理知识库和测试连接；模型工具随插件一同提供。
+DSH Web 的入口统一放在「插件 → @klarkxy/dsh-zhihu」。内嵌配置默认打开「设置」，同时保留「用量」「知识库」「连接测试」四个标签；聊天界面不再显示知乎悬浮按钮。Editor 宿主仍保留原有的「设置 → 知乎资料」入口。
 
 启用 tools 入口后，模型可使用五个工具：
 
@@ -50,4 +50,4 @@ DSH Web 提供搜索、设置、用量与知识库视图。在「设置 → 知�
 
 [发布维护](https://github.com/klarkxy/dsh-plugins/blob/main/docs/editor-plugin-migration.md) · [许可证](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/LICENSE)
 
-客户端接收宿主提供的结构化控件，缺失时使用原生 HTML 控件。构建和使用本包不依赖应用私有 UI 包；Agent 工具、凭据、RPC 合同和存储标识保持不变。
+客户端以 `@klarkxy/dsh-zhihu` 为 key 注册到 `plugins.bundle.config`，并保留 `dsh-editor.settings.zhihu` 兼容 Editor。注册等待宿主声明对应插槽，不回退到 `shell.overlay`。客户端接收宿主提供的结构化控件，缺失时使用原生 HTML 控件。构建和使用本包不依赖应用私有 UI 包；Agent 工具、凭据、RPC 合同和存储标识保持不变。

@@ -18,7 +18,7 @@ Then load it:
 dsh plugin --profile web add @klarkxy/dsh-zhihu
 ```
 
-Restart DSH Web, open **Zhihu resources**, and enter your Access Secret (DSH credential `ZHIHU_ACCESS_TOKEN`). Use the full scoped name; the unscoped `dsh-zhihu` package belongs to another maintainer.
+Restart DSH Web, open **Plugins → @klarkxy/dsh-zhihu** in the sidebar, and enter your Access Secret in the **Settings** tab (DSH credential `ZHIHU_ACCESS_TOKEN`). Use the full scoped name; the unscoped `dsh-zhihu` package belongs to another maintainer.
 
 To enable agent tools, add this entry to the plugin list in the agent's `agent.cordis.yml`:
 
@@ -28,7 +28,7 @@ To enable agent tools, add this entry to the plugin list in the agent's `agent.c
 
 ## Use
 
-DSH Web provides search, settings, usage, and knowledge-base views. Open **Settings → Zhihu resources** for configuration, usage, knowledge bases, and a connection test; the agent tools are included.
+Open **Plugins → @klarkxy/dsh-zhihu** in DSH Web. The embedded configuration defaults to **Settings** and also includes **Usage**, **Knowledge bases**, and **Connection test**. There is no floating Zhihu button in the chat view. Editor hosts retain their existing **Settings → Zhihu resources** entry.
 
 Five agent tools are available once the tools entry is enabled:
 
@@ -50,4 +50,4 @@ Read [contracts](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zh
 
 [Publishing](https://github.com/klarkxy/dsh-plugins/blob/main/docs/editor-plugin-migration.md) · [License](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/LICENSE)
 
-The client accepts structural host controls and has native HTML fallbacks. Building or using this package does not require application-private UI packages. Agent tools, credentials, RPC contracts and storage identifiers are unchanged.
+The client registers `plugins.bundle.config` with the key `@klarkxy/dsh-zhihu`, and keeps `dsh-editor.settings.zhihu` for Editor compatibility. Registrations wait for their host-owned slots; there is no `shell.overlay` fallback. The client accepts structural host controls and has native HTML fallbacks. Building or using this package does not require application-private UI packages. Agent tools, credentials, RPC contracts and storage identifiers are unchanged.

@@ -107,7 +107,7 @@ describe('public zhihu host compatibility', () => {
     expect(closes).toEqual(['x'])
   })
 
-  it('the overlay renderer accepts host refs and remains self-contained without them', () => {
+  it('the plugin settings renderer accepts host refs and remains self-contained without them', () => {
     const renders: Array<(props: unknown) => { props: Record<string, unknown> }> = []
     const injected: string[] = []
     const credentials = {
@@ -132,19 +132,20 @@ describe('public zhihu host compatibility', () => {
       remote: { credentials },
     }
     apply(ctx as never)
-    expect(injected).toEqual(['shell.overlay', 'dsh-editor.settings.zhihu'])
+    expect(injected).toEqual(['plugins.bundle.config', 'dsh-editor.settings.zhihu'])
+    expect(injected).not.toContain('shell.overlay')
     expect(injected).not.toContain('dsh-editor.extensions')
     expect(renders.length).toBe(2)
-    const standalone = renders[0]!({})
-    expect(standalone.props.surface).toBe('overlay')
+    const standalone = renders[0]!({ view: 'page' })
+    expect(standalone.props.surface).toBe('settings')
     expect(standalone.props.Select).toBeUndefined()
     expect(standalone.props.Dialog).toBeUndefined()
-    const hosted = renders[0]!({ Select: MockSelect, Dialog: MockDialog, Button: MockButton, Input: MockInput })
+    const hosted = renders[0]!({ view: 'page', Select: MockSelect, Dialog: MockDialog, Button: MockButton, Input: MockInput })
     expect(hosted.props.Select).toBe(MockSelect)
     expect(hosted.props.Dialog).toBe(MockDialog)
     expect(hosted.props.Button).toBe(MockButton)
     expect(hosted.props.Input).toBe(MockInput)
-    /* 设置槽现在拿到完整宿主组件集：设置分区里的按钮走宿主 Button,
+    /* Editor 设置槽仍拿到完整宿主组件集；两种入口均为嵌入式设置,
        Dialog 虽传入但 settings surface 不使用。 */
     const settings = renders[1]!({ Select: MockSelect, Dialog: MockDialog, Button: MockButton, Input: MockInput })
     expect(settings.props.surface).toBe('settings')

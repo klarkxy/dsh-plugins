@@ -18,6 +18,7 @@ import { ZhihuButton } from './client-host-ui.tsx'
 export const name = 'dsh-zhihu-client'
 export const inject = ['slots', 'connection', 'remote', 'remote.credentials'] as const
 
+const PLUGIN_PACKAGE = '@klarkxy/dsh-zhihu'
 const SLOT_ID = 'zhihu'
 const SLOT_ORDER = 120
 const SLOT_LABEL = '知乎资料'
@@ -45,7 +46,7 @@ type CredentialsApi = {
 
 type SlotHandle = {
   inject: (key: string, callback: () => unknown) => unknown
-  register: (spec: { name: string; id?: string; order?: number; label?: string }, render: unknown) => unknown
+  register: (spec: { name: string; key?: string; id?: string; order?: number; label?: string }, render: unknown) => unknown
 }
 
 type RemoteCredentials = {
@@ -95,7 +96,7 @@ type Failure = { kind: 'credential' | 'network' | 'request'; text: string }
 /** Credential absence and transport failure read differently from a plain bad request. */
 function failureOf(code: string, message: string): Failure {
   if (code === 'token-missing') {
-    return { kind: 'credential', text: '未配置知乎 Access Secret 或凭证不可用，请到「设置」页完成配置。' }
+    return { kind: 'credential', text: '未配置知乎 Access Secret 或凭证不可用，请在本插件的「设置」页完成配置。' }
   }
   return { kind: 'request', text: `请求失败：${message}` }
 }
@@ -1475,12 +1476,8 @@ export function apply(ctx: Context): void {
     return () => style?.remove()
   }, 'zhihu.styles')
   const client = ctx as ZhihuClientContext
-  const overlayRender = (props: unknown) => <ZhihuDock
-    rpc={client.connection.rpc}
-    credentials={wrapCredentials(client.remote.credentials)}
-    surface="overlay"
-    {...hostComponentsFromRenderProps(props)} />
   const settingsRender = (props: unknown) => {
+    if (props && typeof props === 'object' && (props as { view?: unknown }).view === 'summary') return null
     const host = hostComponentsFromRenderProps(props)
     return (
       <ZhihuDock
@@ -1490,12 +1487,11 @@ export function apply(ctx: Context): void {
         {...host} />
     );
   }
-  // Official Web declares shell.overlay. Desktop settings consume the
-  // structural seat dsh-editor.settings.zhihu (literal, no shell import).
-  // inject() waits for the declaration, so each entry goes live only in the
-  // host that actually provides the seat, and unload retracts both.
-  client.slots.inject('shell.overlay', () =>
-    client.slots.register({ name: 'shell.overlay', id: SLOT_ID, order: SLOT_ORDER, label: SLOT_LABEL }, overlayRender))
+  // Configure the bundle on its own Plugins page, never on the chat overlay.
+  // Keep the Editor's existing embedded settings seat for desktop compatibility.
+  // inject() waits for each host-owned seat and retracts it on plugin unload.
+  client.slots.inject('plugins.bundle.config', () =>
+    client.slots.register({ name: 'plugins.bundle.config', key: PLUGIN_PACKAGE }, settingsRender))
   client.slots.inject('dsh-editor.settings.zhihu', () =>
     client.slots.register({ name: 'dsh-editor.settings.zhihu', id: SLOT_ID, order: SLOT_ORDER, label: SLOT_LABEL }, settingsRender))
 }
