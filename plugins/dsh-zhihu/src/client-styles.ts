@@ -1,8 +1,4 @@
-// One-shot stylesheet for the zhihu dock. Colors use Radix Themes
-// variables from the host Theme tree. Placement follows the host's
-// --dsh-ext-* contract. Overlay hosts outside a `.radix-themes`
-// ancestor get local Radix tokens (same values as
-// dsh-editor-seats/src/tokens.ts). Do not gate on :root:has(.radix-themes).
+// Settings page styles use host theme tokens, with local fallbacks outside Radix.
 const standaloneOutsideTheme = ':not(.radix-themes *)'
 
 const standaloneLightTokens = `
@@ -128,18 +124,15 @@ const standaloneDarkTokens = `
 `
 
 export const zhihuClientStyles = `
-.zhihu-dock {
-  position: var(--dsh-ext-dock-position, absolute);
-  right: var(--dsh-ext-dock-right, var(--space-4, 16px));
-  bottom: var(--dsh-ext-dock-bottom, calc(var(--space-4, 16px) + 44px));
-  pointer-events: auto;
-}
+
 .zhihu-settings-embed {
   font: 400 var(--font-size-2)/1.5 var(--default-font-family);
   color: var(--gray-12);
   display: flex;
   flex-direction: column;
   min-width: 0;
+  width: 100%;
+  max-width: 760px;
   min-height: 0;
   gap: 0;
 }
@@ -150,73 +143,19 @@ export const zhihuClientStyles = `
   padding: var(--space-4) 0 0;
   overflow: visible;
 }
-.zhihu-toggle {
-  pointer-events: auto;
-  font: inherit;
-  font-family: var(--default-font-family);
-  font-size: var(--font-size-2);
-  min-height: var(--control-h, 34px);
-  color: var(--gray-11);
-  background: var(--color-panel-solid);
-  border: 1px solid var(--gray-6);
-  border-radius: 999px;
-  padding: 0 14px;
-  cursor: pointer;
-  box-shadow: var(--shadow-3);
-}
-.zhihu-toggle:hover { border-color: var(--accent-9); color: var(--accent-11); background: var(--gray-a3); }
-.zhihu-toggle:focus-visible,
 .zhihu-panel button:focus-visible,
 .zhihu-panel input:focus-visible,
 .zhihu-panel select:focus-visible,
 .zhihu-panel a:focus-visible {
   box-shadow: 0 0 0 2px var(--accent-a8);
 }
-.zhihu-dock .zhihu-panel {
-  position: absolute;
-  top: var(--dsh-ext-panel-top, auto);
-  right: 0;
-  bottom: var(--dsh-ext-panel-bottom, calc(100% + 6px));
-  z-index: 10;
-  width: min(440px, calc(100vw - 32px));
-  max-height: min(72vh, 620px);
-  display: flex;
-  flex-direction: column;
-  pointer-events: auto;
-  font-family: var(--default-font-family);
-  font-size: var(--font-size-2);
-  color: var(--gray-12);
-  background: var(--color-panel-solid);
-  border: 1px solid var(--gray-6);
-  border-radius: var(--radius-3);
-  box-shadow: var(--shadow-4);
-  overflow: hidden;
-}
+
 .zhihu-panel {
   font-family: var(--default-font-family);
   font-size: var(--font-size-2);
   color: var(--gray-12);
   background: var(--color-panel-solid);
 }
-.zhihu-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--gray-6);
-}
-.zhihu-panel-title {
-  margin: 0;
-  font-size: var(--font-size-2);
-  font-weight: var(--font-weight-medium);
-  font-family: var(--default-font-family);
-}
-.zhihu-panel-close {
-  font: inherit; font-size: var(--font-size-2); min-height: 32px; color: var(--gray-11); background: none; border: none;
-  border-radius: var(--radius-2); padding: 0 8px; cursor: pointer;
-}
-.zhihu-panel-close:hover { color: var(--gray-12); background: var(--gray-a3); }
-.zhihu-panel-close:disabled { opacity: 0.5; cursor: default; }
 .zhihu-tabs {
   display: inline-flex;
   gap: 2px;
@@ -412,24 +351,16 @@ export const zhihuClientStyles = `
 .zhihu-dots i:nth-child(2) { animation-delay: .2s; }
 .zhihu-dots i:nth-child(3) { animation-delay: .4s; }
 @media (prefers-reduced-motion: reduce) {
-  .zhihu-dock, .zhihu-dock *, .zhihu-panel, .zhihu-panel * {
+  .zhihu-panel, .zhihu-panel * {
     animation: none !important; transition: none !important;
     transform: none !important; filter: none !important;
   }
   .zhihu-dots i { animation: none; }
 }
-/* Local tokens when this overlay is not under .radix-themes. Host Theme
-   and --dsh-ext-* rail overrides still win inside the Theme tree. Dark
-   follows body[data-ds-dark-theme] / :root[data-theme=dark], not OS scheme. */
-.zhihu-dock${standaloneOutsideTheme},
-.zhihu-toggle${standaloneOutsideTheme},
+/* Local tokens follow the host theme when the settings page is outside Radix. */
 .zhihu-panel${standaloneOutsideTheme} {
 ${standaloneLightTokens}}
-html:not([data-theme]) body[data-ds-dark-theme] .zhihu-dock${standaloneOutsideTheme},
-html:not([data-theme]) body[data-ds-dark-theme] .zhihu-toggle${standaloneOutsideTheme},
 html:not([data-theme]) body[data-ds-dark-theme] .zhihu-panel${standaloneOutsideTheme},
-:root[data-theme="dark"] .zhihu-dock${standaloneOutsideTheme},
-:root[data-theme="dark"] .zhihu-toggle${standaloneOutsideTheme},
 :root[data-theme="dark"] .zhihu-panel${standaloneOutsideTheme} {
 ${standaloneDarkTokens}}
 `
