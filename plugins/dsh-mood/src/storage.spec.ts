@@ -96,7 +96,7 @@ describe('aggregate mood domain adapter', () => {
     expect(service.status().settings).toMatchObject({ revision: 1, mode: 'auto' })
     expect(service.getContract('sess-1')?.goal).toBe('保留原约定')
     const result = await service.call('mode', { expectedRevision: 1, mode: 'strict' }, new AbortController().signal)
-    expect(result).toEqual({ ok: false, error: { code: 'MOOD_STORAGE', message: '需求澄清保存失败，已保留原内容。' } })
+    expect(result).toEqual({ ok: false, error: { code: 'MOOD_STORAGE', message: '需求摘要保存失败，已保留原内容。' } })
     expect(service.status().settings).toMatchObject({ revision: 1, mode: 'auto' })
     expect(service.getContract('sess-1')?.goal).toBe('保留原约定')
     expect(service.status('sess-1').session?.clarification[0]?.answer).toBe('对白')
