@@ -1,10 +1,10 @@
 # @klarkxy/dsh-mood
 
-Mood is a default-enabled requirements clarification feature: it intercepts agent requests at the Host `agent/pre-step` boundary and asks before ambiguous work starts.
+Mood is a lightweight, autonomy-first behavior policy for DeepSeek Harness. It helps the main Agent investigate first, choose reasonable low-risk defaults, and ask the user only when a genuine blocker cannot be resolved independently.
 
-[简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-mood/docs/README.zh-CN.md)
+[简体中文](docs/README.zh-CN.md)
 
-Requires Node.js ≥22 and DSH `0.1.7-rc.2`. The bundle entry starts enabled and remains independently switchable. Mood does not replace native permissions or writing proposal confirmation.
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. Enable or disable it under **Settings → Plugins**. Native permissions, writing proposals, publishing confirmation, and Safe Auto decisions remain independent and unchanged.
 
 ```sh
 npm install @klarkxy/dsh-mood
@@ -12,48 +12,54 @@ dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-mood
 ```
 
-Enable or disable the feature under **Settings → Plugins**. When enabled, it uses automatic clarification. The chat card uses seat `dsh-editor.chat.events` with `{sessionId, locale}`.
+## Default behavior
 
-Clear requests do not call `mood.analyze`. Auto mode only asks when a conservative check finds material ambiguity or risk, and asks at most `MAX_QUESTIONS` (3) questions. Clarification waits in the same pre-step, then resumes that intercepted request once.
+At `agent/pre-step`, Mood adds one deduplicated, stable policy message with plugin provenance. It makes **no auxiliary model call, no question dialog, no task-contract write, and no execution hold** on the normal path. The policy remains present on tool continuation steps, not just at the start of a task.
 
-## Task contract
+The Agent should read existing context and use authorized tools before asking. When a reasonable, low-risk, reversible default exists, it should proceed and briefly disclose a material assumption without waiting for confirmation. A necessary question must materially affect the result, be unanswerable using available information/tools, and have no reasonable default or useful unblocked work to do first. Ordinary questions should be grouped, but new genuine blockers and required approvals must still be surfaced.
 
-Each session's clarified requirements are stored as a `TaskContract` (goal, deliverables, scope, constraints, acceptance, assumptions, questions, evidence). The chat card renders the goal, the evidence list, and the clarification questions with their answers, plus three actions: **修订** (amend the goal), **重新分析** (reanalyze the session), and **按原请求重试** (retry the held original request when one is waiting).
+“Continue”, “you decide”, and equivalent instructions continue the existing task within its scope and permissions. Deliberate discussion or collaborative decision-making remains supported. The policy discourages habitual closing questions such as “should I continue?”. This is behavioral guidance, not a guarantee that every model will follow it perfectly, and not a security boundary.
 
-The contract carries a `readiness` state: `pending` (待确认), `clear-request` (表述清楚), `user-confirmed` (作者已确认), `disclosed-assumptions` (按已披露假定继续), `cancelled` (已取消，未确认), or `stale` (已过期).
+## Optional task notes
 
-At `agent/pre-step` the contract snapshot is injected into the model context as a bounded user message; it is descriptive context and never replaces file or publish approval.
+Use **Summarize requirements** in the native Mood settings panel, or call `manual`, to explicitly request a summary. Only this operation activates `mood.analyze`. It uses recent real user messages, retains prior answers in that context, and excludes plugin-authored messages pretending to be user text.
 
-### Naming
+The result uses the existing `TaskContract` interface for compatibility with Recap and other consumers. It is an optional summary, never an approval certificate or a prerequisite for execution. Empty question lists stay empty. Suggested questions appear as open points in the notes, not as blocking dialogs. The main Agent applies the normal necessary-question policy to them.
 
-The same feature appears under several names; they are one thing:
+Ordinary requests no longer create task cards. Legacy automatically generated cards are hidden. Explicit notes are collapsed in chat by default and remain editable in settings. Obsolete notes stop being injected when a new task arrives; a simple continuation does not invalidate them.
 
-| Surface | Name |
-| --- | --- |
-| Settings → Plugins entry | 需求澄清 |
-| Chat seat label | 需求约定 |
-| Chat card title | 任务约定 |
-| API and contract type | `TaskContract` |
+## Compatibility and recovery
+
+Storage and the `/dsh-mood` RPC channel are retained. Existing notes and answers remain readable. Old `manual`/`strict` mode values normalize to the single non-blocking `auto` strategy; the obsolete mode selector is no longer displayed.
+
+A request held by an older Mood version is never replayed automatically. **Retry original** explicitly resumes the original human messages once through the native Host adapter, without bypassing permissions. New user work supersedes old held work. An old pending/cancelled contract is not silently promoted to confirmed.
+
+Optional analysis or note-storage errors are returned to the manual caller without blocking ordinary conversation. Cancellation, newer requests, and plugin disposal discard late analysis results. A summary edit uses revision-based compare-and-swap and does not invent answers to unrelated questions.
 
 ## Host RPC
 
-Channel `/dsh-mood` requires the host authorization policy.
+The channel requires the Host authorization policy.
 
-- `status` — settings and, with `sessionId`, the session view (contract, clarification, held and pending flags).
-- `contract` — the session's current task contract, or `null`.
-- `mode` — persist the clarification mode with compare-and-swap (`{ mode, expectedRevision }`); while the feature is enabled the stored mode is `auto`.
-- `manual` — queue a manual analysis for a session.
-- `retry` — resume the session's held original request once.
-- `edit` — amend the contract goal with compare-and-swap (`{ sessionId, expectedRevision, patch }`).
+| Endpoint | Behavior |
+| --- | --- |
+| `status` | Settings and optional session view; `held` is legacy recovery only |
+| `contract` | Current optional `TaskContract`, or `null` |
+| `mode` | Compatibility CAS operation; accepted legacy names normalize to `auto` |
+| `manual` | Explicitly analyze recent user context now and return optional notes; no fabricated chat message |
+| `edit` | Amend notes with `{ sessionId, expectedRevision, patch }` |
+| `retry` | Explicitly resume a legacy held original request once |
+
+## Validation
 
 From the repository root:
 
 ```sh
 pnpm --filter @klarkxy/dsh-mood typecheck
-pnpm exec vitest run packages/dsh-mood/src
+pnpm --filter @klarkxy/dsh-mood test
 pnpm --filter @klarkxy/dsh-mood build
+pnpm check
 ```
 
-[Publishing](https://github.com/klarkxy/dsh-editor/blob/main/packages/PUBLISHING.md) · [License](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-mood/LICENSE)
+Tests cover quiet defaults, continuation/delegation, source provenance, empty analysis questions, native rejection preservation, optional failure fallback, old request recovery, stale results, storage failures, CAS edits, and quiet card presentation.
 
-Hosts that bundle this feature usually enable it by default; where the host supports live plugin switching, toggling needs no restart. Standalone DSH must load `@klarkxy/dsh-ai-services` before this package; installation or removal may require a restart when the host asks for one.
+[Publishing](../PUBLISHING.md) · [License](LICENSE)

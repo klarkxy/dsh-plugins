@@ -52,7 +52,7 @@ pnpm site:test    # 离线渲染测试，也包含在 pnpm check 中
 | [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | 副驾协作：常驻副驾与主助手搭配，结果由你确认后采纳。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion#readme) |
 | [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | 长期记忆：按作用域记住术语、偏好和近期动态，由 Dream 定期整理。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory#readme) |
 | [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | 模型中心：配置模型档位、服务商连接和 AI 调用限额。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-model-center#readme) |
-| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 需求澄清：在智能体动手前澄清模糊需求。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
+| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 需求澄清：默认自主推进，仅在真正阻塞时询问，并支持按需梳理需求。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
 | [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | 会话纪要：后台生成纪要，并注入有长度限制的智能体检查点。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
 | [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | 经验学习：从结果证据总结带适用条件的做法，可选导出为技能。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
 | [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | 网页搜索：在一个设置页管理搜索服务商和公开页面抓取。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |

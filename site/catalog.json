@@ -120,11 +120,11 @@
       "kind": "plugin",
       "title": {
         "zh": "需求澄清",
-        "en": "Clarify"
+        "en": "Mood"
       },
       "summary": {
-        "zh": "请求含糊时，先把目标、范围和验收问清楚，再让智能体动手。",
-        "en": "When a request is ambiguous, pin down the goal, scope, and acceptance before the agent starts."
+        "zh": "默认自主推进，仅在真正阻塞时询问，并支持按需梳理需求。",
+        "en": "Proceed autonomously, ask only for genuine blockers, and summarize requirements on demand."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",

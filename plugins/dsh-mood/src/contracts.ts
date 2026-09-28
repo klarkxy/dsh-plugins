@@ -13,11 +13,12 @@ export const MOOD_AI_PLUGIN = MOOD_PLUGIN
 export const MOOD_RPC_CHANNEL = '/dsh-mood'
 export const MOOD_ANALYZE_PURPOSE = 'mood.analyze'
 export const CONTRACT_SECTION = 'dsh-mood:contract'
-export const PROMPT_VERSION = 'mood.analyze.v1'
+export const PROMPT_VERSION = 'mood.analyze.v2'
 export const SCHEMA_VERSION = 'mood-contract.v1'
 export const MAX_QUESTIONS = 3
 export const MAX_EXCERPT_CHARS = 200
 export const MAX_PROJECT_ID_CHARS = 32_768
+/** Legacy export only. Empty analysis results never synthesize this question. */
 export const DEFAULT_QUESTION = '这次要改哪些内容，做到什么程度算完成？'
 
 export type MoodMode = 'auto' | 'manual' | 'strict'
@@ -31,7 +32,7 @@ export interface MoodSettings {
 
 export const defaultSettings = (): MoodSettings => ({ revision: 0, mode: 'auto' })
 
-/** Enabled Mood always runs auto; persisted manual/strict flags are ignored. */
+/** Old mode names remain accepted aliases for the single non-blocking strategy. */
 export function operationalSettings(settings: MoodSettings): MoodSettings {
   return { revision: settings.revision, mode: 'auto' }
 }
