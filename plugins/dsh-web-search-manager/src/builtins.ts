@@ -8,6 +8,7 @@ import {
 } from '@deepseek-ai/dsh-web-search-deepseek'
 import { ExaSearchProvider } from '@deepseek-ai/dsh-web-search-exa'
 import { HttpFetchProvider } from '@deepseek-ai/dsh-web-fetch-http'
+import { JinaFirstFetchProvider } from './jina-fetch.ts'
 import { SEARCH_ENGINE_ID, SearchEngineProvider } from './search-engine.ts'
 import { BochaSearchProvider, BraveSearchProvider, FirecrawlSearchProvider, SerperSearchProvider } from './rest-search.ts'
 import { TavilySearchProvider } from './tavily.ts'
@@ -64,12 +65,21 @@ export function registerBuiltins(manager: WebSearchManager): () => void {
     signupUrl: 'https://app.tavily.com',
   }, options => new TavilySearchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL }))
   const offHttp = manager.registerFetchProvider({
-    id: 'http', label: 'HTTP 读取', billing: 'none',
-    description: '本机直连公开网页，无需 Key，不产生搜索费用。',
-  }, options => new HttpFetchProvider({
-    maxResponseBytes: 5_000_000, maxBodyChars: options.maxFetchChars,
-    timeoutMs: options.timeoutMs, maxRedirects: 5, userAgent: 'dsh-editor/managed-web',
-  }))
+    id: 'http', label: '网页读取', billing: 'none',
+    description: '优先通过匿名 Jina Reader 读取，失败后本机 HTTP 直连；无需 Key。',
+  }, options => {
+    const limits = {
+      maxResponseBytes: 5_000_000, maxBodyChars: options.maxFetchChars,
+      timeoutMs: options.timeoutMs, maxRedirects: 5, userAgent: 'dsh-editor/managed-web',
+    }
+    const readerTimeoutMs = Math.min(15_000, Math.floor(options.timeoutMs / 2))
+    return new JinaFirstFetchProvider({
+      // Decode a complete JSON envelope before the manager applies maxFetchChars to its content.
+      reader: new HttpFetchProvider({ ...limits, maxBodyChars: limits.maxResponseBytes, timeoutMs: readerTimeoutMs }),
+      direct: new HttpFetchProvider(limits),
+      readerTimeoutMs,
+    })
+  })
   return () => {
     offHttp(); offTavily(); offFirecrawl(); offSerper(); offBocha(); offBrave(); offExa(); offDeepSeek(); offEngine()
   }
