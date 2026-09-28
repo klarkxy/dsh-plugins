@@ -55,6 +55,15 @@ pnpm check                                         # 全仓检查
 
 公开包 `plugins/*` 下被 `npm pack` 打包的文件（含 `package.json`、README）内容一变，`npm-publish.yml` 就会自动发布 patch 版本。只改 `site/`、根 README 或测试不会触发发布。插件的 `homepage` 指向对应详情页 `https://klarkxy.github.io/dsh-plugins/plugins/<slug>/`。
 
+## 官方包依赖约定
+
+`@deepseek-ai/dsh` / `@deepseek-ai/dsh-*` 包由宿主运行时提供，**永远不要放进 `dependencies`**，也不要在任何字段写死精确版本或 `<0.2.0` 这类上界。写死版本会让 pnpm 把旧版官方包装进 profile 的 node_modules，宿主 loader 解析内置插件行时命中旧拷贝、版本检查不通过直接禁用（0.1.7→0.2.0 升级时 storage-domain 被禁用、workspaceController 全线 pending 就是这么炸的）。
+
+- 宿主包含的包（对照 DSH 安装目录 `node_modules/@deepseek-ai`）：`peerDependencies` 写开放下界（`>=0.1.7-rc.2`，loader 只按这个范围对运行时版本做兼容检查），并在 `peerDependenciesMeta` 标 `optional: true`，防止 pnpm auto-install-peers 把物理副本装进 profile；`devDependencies` 保留精确版本供本地 typecheck/测试。
+- 宿主不包含的包（如 `@deepseek-ai/dsh-web-search-exa`）：留在 `dependencies`，同样用开放下界，不写死。
+- `engines.dsh` 也只写开放下界。
+- 例外：确实需要独立副本的无状态工具包可以进 `dependencies`（官方文档允许的口径），但先确认它不在宿主安装目录里。
+
 ## 插件配置入口
 
 插件自己的设置统一注册到 `plugins.bundle.config`，`key` 必须为 npm 包名；某个 bundle 行自己的设置使用 `plugins.row.config`。不要注册 `settings.section`、`settings.plugins.tab` 或旧的 `dsh-editor.settings.*`，也不要在插件页未声明时回退到全局设置。`slots.inject()` 等待宿主声明并负责卸载回收；标题与导航由宿主插件页提供。功能性搜索面板可以保留，但不要在那里重复提供凭据设置。迁移入口时保留 RPC、凭据引用、存储结构和已保存的开关，不触发模型调用。

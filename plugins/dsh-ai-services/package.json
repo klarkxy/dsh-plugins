@@ -69,16 +69,29 @@
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-ai-services/src"
   },
   "dependencies": {
-    "@deepseek-ai/dsh-llm": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-storage-domain": "0.1.7-rc.2",
     "zod": "^4.1.5"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-llm": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-storage-domain": ">=0.1.7-rc.2",
     "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-storage-domain": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-llm": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-storage-domain": "0.1.7-rc.2",
     "react": "^18.2.0",
     "@types/react": "18.3.31"
   },
@@ -103,11 +116,6 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
-  },
-  "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    }
   },
   "dshRelease": {
     "contentHash": "sha256-f2bd7c89d18449606c0ee2350aca1347ee84667478f4b11b20c4c9ab4116bf10"
