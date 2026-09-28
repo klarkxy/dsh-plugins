@@ -314,7 +314,10 @@ describe('untrusted presentation and raw result preservation', () => {
     assert.equal(text.includes('LikeCount'), false)
   })
   it('warns on missing or empty full text', () => {
-    for (const data of [{}, { Body: '' }, { Body: '<script>only script</script>' }]) {
+    const samples: Array<Parameters<typeof renderZhihuOpenPlatform>[0]['data']> = [
+      {}, { Body: '' }, { Body: '<script>only script</script>' },
+    ]
+    for (const data of samples) {
       assert.match(renderZhihuOpenPlatform({ version: 1, operation: 'content.detail', data }), /不能视为全文/)
     }
   })
