@@ -18,7 +18,7 @@ Then load it:
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-Restart DSH Web and open **Settings → Web search**. For agent access, add this entry to the plugin list in its `agent.cordis.yml`:
+Restart DSH Web and open **Plugins → Web search**. For agent access, add this entry to the plugin list in its `agent.cordis.yml`:
 
 ```yaml
 - name: '@klarkxy/dsh-web-search-manager/tools'

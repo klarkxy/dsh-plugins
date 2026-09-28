@@ -20,7 +20,7 @@ AI policy is stored by `@klarkxy/dsh-ai-services`. Provider credentials stay in 
 
 ## Use
 
-Settings → **模型中心** (or the host Models page when the editor supplies that seat).
+Open **Plugins → Model Center**. Configuration is registered under this bundle’s package name; it neither adds a global Settings section nor replaces the native Models page. Hosts must provide the `plugins.bundle.config` slot.
 
 - **Model routing** shows the common new-conversation, completion, and rewrite defaults first; other capability defaults are available under **More capability settings**. It previews features that still follow a saved provider or model absent from the current catalogue and marks the old choice. Select an available model and save to repair the binding; the connection change itself does not rewrite policy. Returning from Providers refreshes the catalogue, and the recovery notice also offers a refresh action.
 - **Model routing** opens with four tiers: Quick, Chat, Thinking, and Fantasy. Quick is for cheap latency-sensitive auxiliary calls, Chat is the everyday default, Thinking is for heavier reasoning, and Fantasy is the highest-cost creative tier. Any tier can bind a model from any provider. Fantasy is reserved for explicit user selection and is never a built-in plugin default. Each tier configures a model and reasoning effort; unconfigured tiers inherit Chat. Capability defaults — new conversations, completion, rewrite, title, clarification, recap, and the rest — can follow any tier or use a separate model and effort. Auxiliary capabilities can also follow the current session. Reasoning effort options come from the current model catalogue. An invalid provider, model, or reasoning choice reports an error and never silently switches to another route.
@@ -35,7 +35,7 @@ Built-in plugin default tiers: manuscript completion, current title, and recap u
 - `.` — Cordis plugin entry (
 ame`, `inject`, `apply`), the `ModelCenter` service provided as `ctx.modelCenter` (`status()`), and `handleHostRpc`.
 - `./contracts` — channel and plugin constants (`MODEL_CENTER_RPC_CHANNEL`, `MODEL_CENTER_PLUGIN`, `MODEL_CENTER_ENTRY_ID`, `MODEL_ROLES`), policy types re-exported from `@klarkxy/dsh-ai-services/contracts`, and UI types (`ModelCenterStatus`, `ModelCenterTab`, `RegisteredPurpose`, `ProviderListing`, `DiscoveredModel`, `RoutePreview`).
-- `./client` — web client entry (`apply`) that registers the settings seats and renders the Model Center tabs.
+- `./client` — web client entry (`apply`) that registers `plugins.bundle.config` for `@klarkxy/dsh-model-center` and renders the Model Center tabs.
 
 Host RPC is `/dsh-model-center` with a single `status` endpoint reporting `{ enabled, plugin }`. Policy reads and writes go through `/dsh-ai-services`: `status` returns the stored policy and registered purposes, `update` writes the policy with compare-and-swap (`expectedRevision`), and `resolve` previews the route for a purpose without calling a model.
 

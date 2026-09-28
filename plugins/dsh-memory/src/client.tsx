@@ -24,7 +24,7 @@ type Client = NativeSurfaceClient & {
   }
   slots: {
     inject(key: string, callback: () => unknown): () => void
-    register(spec: { name: string; id: string; label: string; order: number }, render: unknown): () => void
+    register(spec: { name: string; key: string }, render: unknown): () => void
   }
 }
 
@@ -587,7 +587,7 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'dsh-memory.styles')
-  ctx.effect(() => client.slots.inject('settings.section', () => client.slots.register({
-    name: 'settings.section', id: 'memory', order: 65, label: '长期记忆',
+  ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register({
+    name: 'plugins.bundle.config', key: '@klarkxy/dsh-memory',
   }, (props: unknown) => <MemorySettings client={client} host={ctx} props={props} />)), 'dsh-memory.settings')
 }

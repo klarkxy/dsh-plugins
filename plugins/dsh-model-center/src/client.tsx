@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { useNativeSeat, type NativeSurfaceClient } from '@klarkxy/dsh-ai-services/client-utils'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { purposeLabel } from './catalogue.ts'
 import {
@@ -7,7 +8,7 @@ import {
   type ResolvedRoute,
 } from './contracts.ts'
 import {
-  centerLabel, copy, hostChannel, isHostEnabledStatus, readHostEnabled, registerExclusiveSettingsSeats, tabLabel,
+  centerLabel, copy, hostChannel, isHostEnabledStatus, readHostEnabled, registerPluginSettings, tabLabel,
   tablistKey, unwrapRpc, type SlotSpec,
 } from './client-view.ts'
 import { loadModelCenter, savePolicyUpdate, stillCurrent, createGenerationGate } from './load.ts'
@@ -21,7 +22,7 @@ import {
 import { LIMIT_BOUNDS, editablePolicy } from './schema.ts'
 
 export const name = 'dsh-model-center-client'
-export const inject = ['slots', 'connection', 'remote', 'remote.llm', 'remote.settings', 'remote.session', 'remote.credentials', 'configForms', 'settingsSchema'] as const
+export const inject = ['slots', 'connection', 'remote', 'remote.llm', 'remote.settings', 'remote.session', 'remote.credentials', 'configForms', 'settingsSchema', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 
 interface CredentialsRemote {
   describe(refs: string[]): Promise<unknown>
@@ -34,8 +35,10 @@ interface LlmRemote {
 interface SettingsRemote {
   openSettingsDocument?(signal?: AbortSignal): Promise<unknown>
 }
-export interface ModelCenterClient {
-  connection: { rpc: { call(channel: string, endpoint: string, payload?: unknown, signal?: AbortSignal): Promise<unknown> } }
+export interface ModelCenterClient extends NativeSurfaceClient {
+  connection: NonNullable<NativeSurfaceClient['connection']> & {
+    rpc: { call(channel: string, endpoint: string, payload?: unknown, signal?: AbortSignal): Promise<unknown> }
+  }
   remote: {
     llm: LlmRemote
     settings: SettingsRemote
@@ -79,9 +82,8 @@ export function purposeTargetFromValue(value: string): ModelTarget {
 export function registerModelCenterSlots(
   client: ModelCenterClient,
   render: (props: ModelCenterRenderProps) => ReactNode,
-  locale: ModelCenterLocale = 'zh',
 ): () => void {
-  return registerExclusiveSettingsSeats(client.slots, render, locale)
+  return registerPluginSettings(client.slots, render)
 }
 
 export async function activateClientUi(
@@ -121,8 +123,11 @@ export function apply(ctx: Context): void {
   }, 'model-center.ui')
 }
 
-export function ModelCenterSettings(props: ModelCenterRenderProps & { client: ModelCenterClient }): ReactNode {
-  const locale: ModelCenterLocale = props.locale === 'en' ? 'en' : 'zh'
+export function ModelCenterSettings(input: ModelCenterRenderProps & { client: ModelCenterClient }): ReactNode {
+  // Plugin-page owner props contain view/form, not the selected session or locale.
+  const seat = useNativeSeat(input.client, input)
+  const props = { ...input, sessionId: seat.sessionId || undefined }
+  const locale: ModelCenterLocale = seat.locale
   const text = copy(locale)
   const tabsId = useId()
   const generation = useRef(createGenerationGate())

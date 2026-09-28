@@ -19,7 +19,7 @@ interface Client {
   remote: { credentials: Credentials }
   slots: {
     inject(key: string, callback: () => unknown): () => void
-    register(spec: { name: string; id: string; label: string; order: number }, render: unknown): () => void
+    register(spec: { name: string; key: string }, render: unknown): () => void
   }
 }
 
@@ -461,7 +461,7 @@ export function apply(ctx: Context): void {
     style.dataset.dshWebSearch = ''; document.head.appendChild(style)
     return () => style.remove()
   }, 'web-search-manager.styles')
-  ctx.effect(() => client.slots.inject('settings.section', () => client.slots.register({
-    name: 'settings.section', id: 'web-search', order: 70, label: '网页搜索',
+  ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register({
+    name: 'plugins.bundle.config', key: '@klarkxy/dsh-web-search-manager',
   }, () => <NetworkSearchSettings client={client} />)), 'web-search-manager.settings')
 }

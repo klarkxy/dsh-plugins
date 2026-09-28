@@ -18,7 +18,7 @@ const clientSrc = readFileSync(fileURLToPath(new URL('./client.tsx', import.meta
 
 function captureRenders() {
   const renders: Record<string, (props: unknown) => unknown> = {}
-  const names: Array<{ name: string; id?: string; order?: number; label?: string }> = []
+  const names: Array<{ name: string; key?: string; id?: string; order?: number; label?: string }> = []
   apply({
     effect(fn: () => (() => void) | void) { fn() },
     slots: {
@@ -26,7 +26,7 @@ function captureRenders() {
         callback()
         return () => {}
       },
-      register(spec: { name: string; id?: string; order?: number; label?: string }, render: unknown) {
+      register(spec: { name: string; key?: string; id?: string; order?: number; label?: string }, render: unknown) {
         names.push(spec)
         renders[spec.name] = render as (props: unknown) => unknown
         return () => {}
@@ -97,17 +97,17 @@ describe('frozen seat and project identity', () => {
 })
 
 describe('memory settings and host locale', () => {
-  it('registers management in settings without exposing memory in chat', () => {
+  it('registers management on its own plugin page without exposing memory in chat', () => {
     const { names, renders } = captureRenders()
     expect(names).toEqual([
-      { name: 'settings.section', id: 'memory', order: 65, label: '长期记忆' },
+      { name: 'plugins.bundle.config', key: '@klarkxy/dsh-memory' },
     ])
     expect(renders[CHAT_EVENTS_SLOT]).toBeUndefined()
   })
 
-  it('passes host settings.section session and locale into the settings panel', () => {
+  it('passes plugin-page owner props into the native session and locale adapter', () => {
     const { renders } = captureRenders()
-    const wrapped = renders['settings.section']!({ sessionId: 'sess-9', locale: 'en' })
+    const wrapped = renders['plugins.bundle.config']!({ sessionId: 'sess-9', locale: 'en' })
     expect(isValidElement(wrapped)).toBe(true)
     expect(wrapped.type).toBe(MemorySettings)
     expect(propsOf(wrapped).props).toEqual({ sessionId: 'sess-9', locale: 'en' })

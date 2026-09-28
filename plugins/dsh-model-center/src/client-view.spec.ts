@@ -1,46 +1,56 @@
 import { describe, expect, it } from 'vitest'
-import { MODEL_SETTINGS_SLOT } from './contracts.ts'
+import { MODEL_CENTER_PLUGIN, MODEL_SETTINGS_SLOT } from './contracts.ts'
 import {
-  COPY, SETTINGS_SEAT, isHostEnabledStatus, modelSettingsSlotSpec, readHostEnabled, registerExclusiveSettingsSeats,
-  settingsSectionSlotSpec, shouldReplaceModelsUi, tabLabel, tablistKey, unwrapRpc, visibleSettingsSeat, type SlotHandle,
+  COPY, PLUGIN_SETTINGS_SLOT, isHostEnabledStatus, pluginSettingsSlotSpec, readHostEnabled,
+  registerPluginSettings, tabLabel, tablistKey, unwrapRpc, type SlotHandle, type SlotSpec,
 } from './client-view.ts'
 
-function slotsMock(declared: string[]) {
+function slotsMock(initial: string[]) {
+  const declared = new Set(initial)
   const injected: string[] = []
-  const registered: string[] = []
-  const pending = new Map<string, () => unknown>()
-  const slots: SlotHandle & { injected: string[]; registered: string[]; declare(key: string): void } = {
-    injected,
-    registered,
+  const registered: SlotSpec[] = []
+  const listeners = new Map<string, Set<{ attach(): void; detach(): void }>>()
+  const slots: SlotHandle & {
+    injected: string[]; registered: SlotSpec[]; declare(key: string): void; undeclare(key: string): void
+  } = {
+    injected, registered,
     inject(key, callback) {
       injected.push(key)
-      if (declared.includes(key)) callback()
-      else pending.set(key, callback)
-      return () => { pending.delete(key) }
+      let cleanup: (() => void) | undefined
+      const listener = {
+        attach() { cleanup ??= callback() as () => void },
+        detach() { cleanup?.(); cleanup = undefined },
+      }
+      const set = listeners.get(key) ?? new Set()
+      listeners.set(key, set)
+      set.add(listener)
+      if (declared.has(key)) listener.attach()
+      return () => { listener.detach(); set.delete(listener) }
     },
     register(spec) {
-      registered.push(spec.name)
+      registered.push(spec)
       return () => {
-        const index = registered.indexOf(spec.name)
+        const index = registered.indexOf(spec)
         if (index >= 0) registered.splice(index, 1)
       }
     },
     declare(key) {
-      const callback = pending.get(key)
-      if (!callback) return
-      pending.delete(key)
-      callback()
+      declared.add(key)
+      for (const listener of listeners.get(key) ?? []) listener.attach()
+    },
+    undeclare(key) {
+      declared.delete(key)
+      for (const listener of listeners.get(key) ?? []) listener.detach()
     },
   }
   return slots
 }
 
 describe('client view helpers', () => {
-  it('only replaces native models UI when host status is enabled', () => {
-    expect(isHostEnabledStatus({ ok: true, value: { enabled: true, plugin: '@klarkxy/dsh-model-center' } })).toBe(true)
-    expect(isHostEnabledStatus({ ok: true, value: { enabled: false, plugin: '@klarkxy/dsh-model-center' } })).toBe(false)
+  it('only attaches when host status is enabled', () => {
+    expect(isHostEnabledStatus({ ok: true, value: { enabled: true, plugin: MODEL_CENTER_PLUGIN } })).toBe(true)
+    expect(isHostEnabledStatus({ ok: true, value: { enabled: false, plugin: MODEL_CENTER_PLUGIN } })).toBe(false)
     expect(isHostEnabledStatus({ ok: false, error: { code: 'x', message: 'no' } })).toBe(false)
-    expect(shouldReplaceModelsUi(false)).toBe(false)
   })
 
   it('moves through 模型配置 / 运行设置 / 供应商', () => {
@@ -55,33 +65,41 @@ describe('client view helpers', () => {
     expect(COPY.zh.noPurposes).toBe('没有其他功能需要单独配置。')
   })
 
-  it('registers only the replacement seat when the editor already declared it', () => {
-    expect(visibleSettingsSeat(true)).toBe('replacement')
-    expect(SETTINGS_SEAT.exclusive).toBe(true)
+  it('registers by package name only, even when old settings seats exist', () => {
+    const slots = slotsMock([PLUGIN_SETTINGS_SLOT, MODEL_SETTINGS_SLOT, 'settings.section'])
+    registerPluginSettings(slots, () => null)
+    expect(slots.injected).toEqual([PLUGIN_SETTINGS_SLOT])
+    expect(slots.registered).toEqual([{ name: PLUGIN_SETTINGS_SLOT, key: MODEL_CENTER_PLUGIN }])
+    expect(pluginSettingsSlotSpec()).toEqual(slots.registered[0])
+  })
+
+  it('waits for the plugin page without falling back to Settings', () => {
     const slots = slotsMock([MODEL_SETTINGS_SLOT, 'settings.section'])
-    registerExclusiveSettingsSeats(slots, () => null, 'zh')
-    expect(slots.injected).toEqual([MODEL_SETTINGS_SLOT])
-    expect(slots.registered).toEqual([MODEL_SETTINGS_SLOT])
-    expect(modelSettingsSlotSpec('zh')).toEqual({
-      name: MODEL_SETTINGS_SLOT, id: 'model-center', order: 0, label: '模型中心',
-    })
+    registerPluginSettings(slots, () => null)
+    expect(slots.registered).toEqual([])
+    slots.declare(PLUGIN_SETTINGS_SLOT)
+    expect(slots.registered).toEqual([pluginSettingsSlotSpec()])
   })
 
-  it('registers standalone settings.section when the replacement seat is absent', () => {
-    expect(visibleSettingsSeat(false)).toBe('section')
-    const slots = slotsMock(['settings.section'])
-    registerExclusiveSettingsSeats(slots, () => null, 'zh')
-    expect(slots.injected).toEqual([MODEL_SETTINGS_SLOT, 'settings.section'])
-    expect(slots.registered).toEqual(['settings.section'])
-    expect(settingsSectionSlotSpec('zh').name).toBe('settings.section')
+  it('retracts and reattaches exactly once across page redeclaration and unload', () => {
+    const slots = slotsMock([PLUGIN_SETTINGS_SLOT])
+    const dispose = registerPluginSettings(slots, () => null)
+    slots.undeclare(PLUGIN_SETTINGS_SLOT)
+    expect(slots.registered).toEqual([])
+    slots.declare(PLUGIN_SETTINGS_SLOT)
+    slots.declare(PLUGIN_SETTINGS_SLOT)
+    expect(slots.registered).toEqual([pluginSettingsSlotSpec()])
+    dispose()
+    dispose()
+    slots.declare(PLUGIN_SETTINGS_SLOT)
+    expect(slots.registered).toEqual([])
   })
 
-  it('drops the fallback page if the replacement seat appears later', () => {
-    const slots = slotsMock(['settings.section'])
-    registerExclusiveSettingsSeats(slots, () => null, 'zh')
-    expect(slots.registered).toEqual(['settings.section'])
-    slots.declare(MODEL_SETTINGS_SLOT)
-    expect(slots.registered).toEqual([MODEL_SETTINGS_SLOT])
+  it('cancels a pending registration when the plugin unloads first', () => {
+    const slots = slotsMock([])
+    registerPluginSettings(slots, () => null)()
+    slots.declare(PLUGIN_SETTINGS_SLOT)
+    expect(slots.registered).toEqual([])
   })
 
   it('unwraps RpcResult and reads host enabled over the status endpoint', async () => {
