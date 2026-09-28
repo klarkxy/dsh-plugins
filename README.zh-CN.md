@@ -8,10 +8,18 @@
 
 | 包 | 作用 | npm |
 | --- | --- | --- |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | 在 DSH 中阅读官方文档；创造模式通过原生工具搜索和读取官方资料。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
-| [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.zh-CN.md) | 精简模式：审查和精简代码，保留现有功能，减少冗余和不必要的抽象。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | DSH 文档：在插件页阅读官方文档；创造模式通过原生工具搜索和读取官方资料。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
+| [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.zh-CN.md) | 代码精简：审查并精简代码，保留现有行为，削减冗余和多余抽象。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
 
-可以从 npm 安装单个插件：
+## 未发布的开发包
+
+| 包 | 作用 | 状态 |
+| --- | --- | --- |
+| [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.zh-CN.md) | 队友角色：配置可复用的队友角色，增强原生 Team 界面。 | 本地 alpha；不参与自动 npm 发布，不收录到插件站。 |
+
+从本地 `dsh-teammates` 目录迁入，详见[迁移记录](docs/classmates-migration.md)。
+
+可以从 npm 安装已发布的插件：
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-dev-index
@@ -39,21 +47,21 @@ pnpm site:test    # 离线渲染测试，也包含在 pnpm check 中
 
 | 包 | 作用 | 文档 |
 | --- | --- | --- |
-| [`@klarkxy/dsh-ai-services`](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) | 共享模型路由、受限辅助调用和用量记录。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-ai-services#readme) |
-| [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | 根据最新用户任务更新会话标题，保留手动命名。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title#readme) |
-| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | 持续的 Lead 与 Sidekick 协作，生成由作者审核的写作候选。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion#readme) |
-| [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | 按作用域维护术语、偏好和近期活动，并通过 Dream 整理记忆。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory#readme) |
-| [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | 配置模型档位、服务商连接和 AI 调用限额。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-model-center#readme) |
-| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 在智能体执行前澄清模糊需求。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
-| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | 生成会话回顾，并注入有长度限制的智能体检查点。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
-| [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | 根据结果证据积累有适用条件的方法，可选导出为技能。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
-| [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | 管理网页搜索服务商和公开页面抓取。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
-| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | 知乎搜索、智能体工具、知识库和用量跟踪。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
+| [`@klarkxy/dsh-ai-services`](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) | AI 服务：共享模型路由、受限辅助调用和用量记录。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-ai-services#readme) |
+| [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | 自动标题：会话标题跟随最新任务更新，手动命名不被覆盖。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title#readme) |
+| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | 副驾协作：常驻副驾与主助手搭配，结果由你确认后采纳。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion#readme) |
+| [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | 长期记忆：按作用域记住术语、偏好和近期动态，由 Dream 定期整理。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory#readme) |
+| [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | 模型中心：配置模型档位、服务商连接和 AI 调用限额。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-model-center#readme) |
+| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 需求澄清：在智能体动手前澄清模糊需求。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
+| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | 会话纪要：后台生成纪要，并注入有长度限制的智能体检查点。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
+| [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | 经验学习：从结果证据总结带适用条件的做法，可选导出为技能。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
+| [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | 网页搜索：在一个设置页管理搜索服务商和公开页面抓取。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
+| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | 知乎：知乎搜索、智能体工具、知识库和用量跟踪。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
 | [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | 发现、审查和安装可复用能力。 | [文档](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
 
 ## 开发
 
-需要 Node.js 22+ 与 pnpm 10。
+需要 Node.js 24+ 与 pnpm 10。
 
 ```bash
 pnpm install
@@ -64,7 +72,7 @@ pnpm check
 
 ## npm 自动发布
 
-所有 `plugins/dsh-xxx` 包统一命名为 `@klarkxy/dsh-xxx`，并设置公开 npm registry。`.github/workflows/npm-publish.yml` 在 `main` 更新时检查各包；也可以在 Actions 页面手动运行来重试，不需要推送版本标签。
+所有 `plugins/dsh-xxx` 包统一命名为 `@klarkxy/dsh-xxx`。标记 `private: true` 的开发包参与检查，但不参与自动发布；公开包设置公开 npm registry。`.github/workflows/npm-publish.yml` 在 `main` 更新时检查各包；也可以在 Actions 页面手动运行来重试，不需要推送版本标签。
 
 流程先构建，再按 `npm pack` 的文件清单计算内容指纹，与 npm 已发布包比较。只有内容变更或显式提高版本的包才发布。仅更新仓库文档、索引网站或未进入包的测试文件，不会产生新 npm 版本。版本字段和 CI 自己写入的 `dshRelease.contentHash` 不参与指纹，避免重复发布。
 

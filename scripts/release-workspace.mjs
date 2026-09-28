@@ -3,6 +3,12 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 
 const dependencyFields = ['dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies'];
+function workspaceDependencies(root, pkg) {
+  const manifest = JSON.parse(readFileSync(join(root, pkg.directory, 'package.json'), 'utf8'));
+  return dependencyFields.flatMap(field => Object.entries(manifest[field] ?? {})
+    .filter(([, spec]) => typeof spec === 'string' && spec.startsWith('workspace:')).map(([name]) => name));
+}
+
 export function orderedPackages(root, packages) {
   const byName = new Map(packages.map(pkg => [pkg.name, pkg]));
   const visiting = new Set(), complete = new Set(), ordered = [];
@@ -10,13 +16,9 @@ export function orderedPackages(root, packages) {
     if (complete.has(pkg.name)) return;
     if (visiting.has(pkg.name)) throw new Error(`Cyclic workspace release dependency: ${pkg.name}`);
     visiting.add(pkg.name);
-    const manifest = JSON.parse(readFileSync(join(root, pkg.directory, 'package.json'), 'utf8'));
-    for (const field of dependencyFields) {
-      for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
-        if (typeof spec !== 'string' || !spec.startsWith('workspace:')) continue;
-        if (!byName.has(name)) throw new Error(`${pkg.name}: workspace dependency ${name} is not a release target`);
-        visit(byName.get(name));
-      }
+    for (const name of workspaceDependencies(root, pkg)) {
+      if (!byName.has(name)) throw new Error(`${pkg.name}: workspace dependency ${name} is not a release target`);
+      visit(byName.get(name));
     }
     visiting.delete(pkg.name); complete.add(pkg.name); ordered.push(pkg);
   };
@@ -76,4 +78,17 @@ export function releaseCandidates(root, packages) {
   if (!migration.holdPublish) return packages;
   const held = new Set(migration.packages.map(pkg => pkg.name));
   return packages.filter(pkg => !held.has(pkg.name));
+}
+
+/** Held packages remain version inputs without becoming publication targets. */
+export function releaseWorkspace(root, packages) {
+  const ordered = orderedPackages(root, packages);
+  const candidates = releaseCandidates(root, ordered);
+  const targets = new Set(candidates.map(pkg => pkg.name));
+  const dependencies = new Set(candidates.flatMap(pkg => workspaceDependencies(root, pkg)));
+  return {
+    packages: ordered,
+    candidates,
+    heldDependencies: ordered.filter(pkg => !targets.has(pkg.name) && dependencies.has(pkg.name)),
+  };
 }

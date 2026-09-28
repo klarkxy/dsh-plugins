@@ -10,7 +10,7 @@ The bundle insert is enabled after installation. It does not permanently turn of
 
 ## Install
 
-Requires Node.js ≥22 and DSH `0.1.7-rc.2`. The **当前标题** entry starts enabled and can be disabled in plugin settings. Native title storage and scheduling come from host `sessionTitle`; generation needs `@klarkxy/dsh-ai-services`.
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. The **自动标题** entry starts enabled and can be disabled in plugin settings. Native title storage and scheduling come from host `sessionTitle`; generation needs `@klarkxy/dsh-ai-services`.
 
 ```sh
 npm install @klarkxy/dsh-current-title

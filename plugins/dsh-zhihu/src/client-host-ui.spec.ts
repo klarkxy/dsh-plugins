@@ -1,3 +1,4 @@
+import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { apply } from './client.tsx'
 import {
@@ -107,23 +108,27 @@ describe('public zhihu host compatibility', () => {
     expect(closes).toEqual(['x'])
   })
 
-  it('the overlay renderer accepts host refs and remains self-contained without them', () => {
+  it('registers only the package settings page and supports native and host controls', () => {
     const renders: Array<(props: unknown) => { props: Record<string, unknown> }> = []
     const injected: string[] = []
+    const registrations: unknown[] = []
+    const disposers: Array<() => void> = []
+    let slotDisposed = false
     const credentials = {
       describe: async () => ({ ok: true as const, value: {} }),
       set: async () => ({ ok: true as const, value: undefined }),
       unset: async () => ({ ok: true as const, value: undefined }),
     }
     const ctx = {
-      effect(fn: () => (() => void) | void) { fn() },
+      effect(fn: () => (() => void) | void) { const off = fn(); if (off) disposers.push(off) },
       slots: {
         inject(key: string, callback: () => unknown) {
           injected.push(key)
           callback()
-          return () => {}
+          return () => { slotDisposed = true }
         },
-        register(_spec: unknown, render: unknown) {
+        register(spec: unknown, render: unknown) {
+          registrations.push(spec)
           renders.push(render as (typeof renders)[number])
           return () => {}
         },
@@ -132,25 +137,23 @@ describe('public zhihu host compatibility', () => {
       remote: { credentials },
     }
     apply(ctx as never)
-    expect(injected).toEqual(['shell.overlay', 'plugins.bundle.config'])
-    expect(injected).not.toContain('dsh-editor.extensions')
-    expect(renders.length).toBe(2)
-    const standalone = renders[0]!({})
-    expect(standalone.props.surface).toBe('overlay')
-    expect(standalone.props.Select).toBeUndefined()
-    expect(standalone.props.Dialog).toBeUndefined()
-    const hosted = renders[0]!({ Select: MockSelect, Dialog: MockDialog, Button: MockButton, Input: MockInput })
+    expect(injected).toEqual(['plugins.bundle.config'])
+    expect(registrations).toEqual([{
+      name: 'plugins.bundle.config', key: '@klarkxy/dsh-zhihu', order: 120, label: '知乎',
+    }])
+    expect(renders).toHaveLength(1)
+    const standalone = renders[0]!({ owner: { view: 'page' } })
+    const html = renderToStaticMarkup(standalone as never)
+    expect(html).toContain('zhihu-settings-embed')
+    expect(html).toContain('知乎凭证设置')
+    for (const label of ['设置', '用量', '知识库', '搜索']) expect(html).toContain(label)
+    expect(html).not.toContain('zhihu-open')
+    expect(html).not.toContain('zhihu-dock')
+    const hosted = renders[0]!({ owner: { Select: MockSelect, Button: MockButton, Input: MockInput } })
     expect(hosted.props.Select).toBe(MockSelect)
-    expect(hosted.props.Dialog).toBe(MockDialog)
     expect(hosted.props.Button).toBe(MockButton)
     expect(hosted.props.Input).toBe(MockInput)
-    /* 设置槽现在拿到完整宿主组件集：设置分区里的按钮走宿主 Button,
-       Dialog 虽传入但 settings surface 不使用。 */
-    const settings = renders[1]!({ Select: MockSelect, Dialog: MockDialog, Button: MockButton, Input: MockInput })
-    expect(settings.props.surface).toBe('settings')
-    expect(settings.props.Select).toBe(MockSelect)
-    expect(settings.props.Dialog).toBe(MockDialog)
-    expect(settings.props.Button).toBe(MockButton)
-    expect(settings.props.Input).toBe(MockInput)
+    for (const dispose of disposers) dispose()
+    expect(slotDisposed).toBe(true)
   })
 })

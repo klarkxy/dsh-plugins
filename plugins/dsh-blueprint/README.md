@@ -1,14 +1,14 @@
-# DSH Blueprint
+# Blueprint
 
 [中文](README.zh-CN.md)
 
-Export and import DSH plugin compositions from the **official Plugins page**. Share either the plugin list and layer order, or the same composition with saved configuration. No Spaces installation, workspace supervisor, separate desktop application or cloud account is required.
+Export and import DSH plugin compositions from the **official Plugins page**. Blueprint codes share only the plugin list, exact versions and order. Reusable default configuration belongs in native composition/preset plugins. No Spaces installation, workspace supervisor, separate desktop application or cloud account is required.
 
 **Source preview, not a published or end-to-end-certified release.** See [ACCEPTANCE.md](ACCEPTANCE.md) for actual test coverage and outstanding runtime verification.
 
 ## Install this checkout
 
-Requires a DSH Web host exposing the official `pluginManager`, profile-backed volatile `settings`, `pluginPackages`, `loader`, authenticated `connection.rpc` and plugin-manager configuration slots. The adapter checks capabilities instead of assuming a version string guarantees support. The current source contracts were reviewed at upstream commit `477b4f420553e8a52c2fbccc464d7561b239c443`; compatibility with a particular npm/desktop release still needs a runtime test.
+Requires a DSH Web host exposing the official `pluginManager`, `profileContext`, authenticated Connection/WebServer and plugin-manager configuration slots. The adapter checks capabilities instead of assuming a version string guarantees support. The current source contracts were reviewed at upstream commit `477b4f420553e8a52c2fbccc464d7561b239c443`; compatibility with a particular npm/desktop release still needs a runtime test.
 
 ```sh
 cd plugins/dsh-blueprint
@@ -23,81 +23,68 @@ This package has no npm dependencies and no compilation requirement. It calls na
 
 ## Use
 
-Open **Plugins → DSH Blueprint**. A **Share blueprint** action on another bundle's detail page opens the same export screen focused on that bundle.
+On hosts with the `plugins.list.actions` slot, use **Plugins → Blueprint → Import blueprint / Export blueprint** in the list toolbar. The Blueprint plugin page offers the same controls on hosts without that slot. Other plugin detail pages no longer show a Share blueprint button.
 
-Select bundles, choose **Plugins only** or **Include saved settings**, and generate a preview. Settings mode also records editable plugin-row enabled states. Ordinary fields are included by default. Uncheck a form or individual field before generating. Copy the share code or save UTF-8 JSON. Nothing is published or sent to a third-party service.
+**Export blueprint:** select plugins, review or adjust their preferred order, generate a code and copy it. Paste it into **Import blueprint**, preview package operations and final order, then confirm. Missing packages are installed disabled through the official manager before explicit activation; unrelated packages are preserved. No configuration or row states enter a blueprint.
 
-On the receiving host, paste a code/JSON or open a file, then **Preview import changes**. Inspect versions, operations, the resulting complete layer order, settings values and warnings. Confirm the trust notice before applying. Missing packages are installed disabled through the official manager; requested bundle activation is an explicit, previewed operation and executes plugin code.
+The official DSH 0.1.7-rc.2 host lacks the list-toolbar slot. See the source patch in [host integration](https://github.com/klarkxy/dsh-plugins/tree/main/host-integration/blueprint-list-actions). Shipping this plugin alone cannot add a toolbar control to the stock host.
 
-When composition changes are needed, apply those first, then run **Preview settings after installation**. This second preview binds configuration writes to the real installed plugin's native schema and revision. The plugin never invents configuration metadata for code that has not been loaded. Native `restart-required`, rejected writes or failures stop the plan and are reported rather than called success.
+
+## Creator mode
+
+When this plugin is loaded, Creator (`cordis`) receives the bundled [blueprint skill](skills/dsh-blueprint/SKILL.md), covering blueprint codes, import previews and native composition plugins. The body is injected directly into the Creator system prompt so it does not depend on a skill catalog or a separate skill tool. Other presets receive no guidance; switching away removes it on the next prompt assembly. Registration follows plugin and prompt-service lifetimes. Hosts without prompt services retain the Plugins-page workflow.
+
+The skill uses the read-only discovery tools below and the existing page and validation/codec exports. It adds no model-facing install/apply tools and does not imply permission to import or publish a blueprint. Without page access, the agent can prepare/review JSON and explain the remaining steps, but must not claim the import ran.
+
+## Plugin search and versions
+
+Blueprint owns two read-only host tools (subject to the host's tool policies); it does not depend on the official-documentation plugin:
+
+- `blueprint_search_plugins({ query, source?, limit?, offset? })`: the default `catalog` source searches the site's published Chinese/English [plugin catalog](https://klarkxy.github.io/dsh-plugins/plugins.json). `source: "npm"` searches npm's `dsh-plugin` keyword candidates and filters for DSH names/keywords. Neither source is exhaustive; use exact package lookup for known packages. Results include source, fetch time and pagination, and remain candidates until version verification.
+- `blueprint_plugin_versions({ package, version?, limit?, offset? })`: queries public npm metadata, lists published releases and tags, and returns the selected exact version's bundle declaration, DSH/Node engine ranges, dependencies, peer dependencies and deprecation. `version` accepts an exact release or dist-tag, defaulting to `latest`; ranges are rejected. Versions are paged by publication time, not semver precedence. Use `selected.version` in the blueprint.
+
+Queries fetch current metadata without caching or a stale fallback. They do not download packages, execute scripts, install plugins or alter the profile. Native import preview remains the authority for installation and target compatibility. Built-in bundles still come from the current host; these tools do not discover private registry packages. Missing tool services leave the page operational; plugin/service unload unregisters tools and aborts pending requests. Tool registration uses the DSH 0.1.7-rc.2 output contract.
 
 ## Scope and defaults
 
 - Only bundles listed by the official manager are selected. Exact npm versions and installation-provided bundles are supported. Local links, git/tarball sources, aliases, unreadable metadata and version conflicts are reported, not silently rewritten as npm packages. Dependencies without a bundle remain the native package manager's responsibility.
-- The native manifest supplies layer order, not the alphabetically sorted cards. Unshared bundles are not removed or disabled. If relative order must change, selected active bundles are disabled and then enabled in blueprint order, after unshared layers. The preview shows this placement and every resulting operation. A bundle with no activation change is not cycled unnecessarily.
-- Settings come exclusively from the official Config/Settings **native editable descriptors**: saved effective values, including defaults, not browser drafts, raw Config files or plugin data directories. No page ledger or per-page mapping is maintained. Custom UI over native Settings works without UI-specific handling; custom-only pages, APIs and storage are deliberately unsupported.
-- Only active, uniquely owned, writable native forms are eligible. Ordinary nonvolatile fields are not shared. Unavailable native settings are reported; package-list sharing remains available. An incoming unsupported form or path blocks the settings preview instead of being silently dropped. A custom page may display fewer fields than the native descriptor: review the actual export fields, not the page's appearance.
-- See [Settings scope](SETTINGS-SCOPE.md) for the normative boundary, author responsibilities, alpha.1 behavior change and upstream evidence. There is no planned per-plugin custom-storage adapter or migration layer.
-- Host-redacted secrets never enter the blueprint. A secret-bearing array is omitted as a whole rather than reindexed or copied incompletely. The plugin does not read the credential service. **Unmarked private text is not reliably recognizable as a secret.** Preview the output before publishing it.
-- Import applies explicit field edits with the native revision check, preserving unmentioned values. It is not a whole-form replacement. Nonsecret arrays are replaced atomically; they are not guessed or merged by index. Connection-target changes (`baseURL`, `endpoint`, `url`, `host`, `apiKeyEnv` and spelling variants) require local changes in the official page before importing, even when the secret lives outside the Settings form. This avoids silently combining an imported endpoint with a receiver's existing key.
-- Native type/schema validation still applies. Directory strings and provider/model route names are ordinary settings, not copied resources; the recipient must ensure they refer to available local resources. Import does not transfer directories, model connections, keys, sessions, attachments, histories, databases or caches.
+- Export starts from native order and records a preference. Import preserves the full local active sequence and appends only requested activations that are not already active. Matching packages are reused; omitted or install-only entries never disable local bundles. Different sequence order is not a conflict, and repeating an unchanged import is a no-op.
+- Blueprint does not read or write settings, schemas, credentials or plugin data. There is no settings-transfer or field-sharing policy.
 
-## Optional author policy
+## Reuse configuration through composition plugins
 
-No contribution means **include the native public form by default**. In the owning package's `package.json`, an author can narrow sharing for an exact native row id:
+A native bundle can depend on plugin packages and explicitly insert their components with reusable configuration defaults in its cordis.patch.yml. Another bundle can override existing rows. Dependency installation alone does not recursively activate every dependency bundle; declare the intended component rows and avoid loading the same row twice.
 
-```json
-{
-  "dshBlueprint": {
-    "version": 1,
-    "entries": {
-      "my-plugin": {
-        "exclude": [["privateNote"], ["connection", "machineId"]]
-      },
-      "another-instance": { "share": false },
-      "theme": { "include": [["appearance"]] }
-    }
-  }
-}
-```
+This uses the host's existing configuration layers. Later layers take precedence, and a row patch replaces the entire config value rather than deep-merging its fields. Users' profile/home overrides can supersede bundle defaults. Do not package keys, credentials or machine-specific personal data as reusable defaults. See the [version-matched official bundle guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/docs/user/develop/basic/publish.md#the-loading-order).
 
-Paths are arrays of exact segments, not globs or JavaScript. `share: false` excludes the entire form; `include` narrows it; `exclude`, native editability and host secret annotations always win. The receiver rechecks its installed policy. Invalid declarations make that package's configuration unavailable with a warning; they never degrade to exporting everything. Metadata is read as JSON without executing export callbacks. This policy only narrows native fields; it cannot register another storage source. This is this plugin's contribution contract, not an official DSH manifest extension.
-
+Enabling a bundle can change the effective defaults contributed by its own patch. The newly appended layer still participates in native configuration precedence; review the package operation preview.
 ## Portable format v2
+
+See the [blueprint-code protocol](PROTOCOL.md) for the complete fields, additive import semantics, encoding rules and shipped test vectors.
 
 ```json
 {
   "kind": "dsh-blueprint",
   "formatVersion": 2,
-  "metadata": { "name": "My setup", "version": "1.0.0" },
+  "metadata": { "name": "My setup" },
   "packages": [
     { "name": "example-plugin", "version": "1.2.3", "source": "npm" }
   ],
-  "bundles": ["example-plugin"],
-  "settings": [
-    {
-      "package": "example-plugin",
-      "row": "example",
-      "module": "example-plugin",
-      "fields": [{ "path": ["theme"], "value": "paper" }]
-    }
-  ]
+  "bundles": ["example-plugin"]
 }
 ```
 
-The package is illustrative, not an install recommendation. `settings` and `rows` are optional; plugin-only exports omit both. `rows` entries carry `package`, `row`, `module` and boolean `enabled`. `source` is `npm` or `builtin`. Exact row/module/package identity is verified on the recipient. Unknown root/entry fields and unsupported versions are rejected.
+The package is illustrative, not an install recommendation. `source` is `npm` or `builtin`. Blueprint documents contain only the fields shown above; unknown fields and other document kinds are rejected.
 
-Codes are `DSHBP2:J:<unpadded-base64url-UTF8-JSON>` or `DSHBP2:Z:<unpadded-base64url-raw-DEFLATE-JSON>`. The encoder chooses the shorter form. Limits: 1 MiB decoded JSON, 2 MiB input code, 64 JSON container levels. Duplicate JSON members, unsafe numbers, prototype keys, malformed Unicode, noncanonical Base64url and trailing compressed streams are rejected. Codes are **not encryption, signatures or proof of trust**.
-
-Spaces `DSHBP1` / format v1 described creation of a new isolated space, including Spaces-specific bindings. The v2 reader rejects those codes rather than silently applying them to the current profile. Re-export through the new manager integration. This extraction does not delete or rewrite the legacy v1 implementation in the source repository; no in-place v1 migration is claimed.
+Codes use one format: `DSHBP2:<payload>`, where the payload is unpadded canonical Base64url of raw-DEFLATE-compressed UTF-8 JSON. The interface imports and exports only this code; JSON is an internal data structure. Limits: 1 MiB decoded JSON, 2 MiB input code, 64 JSON container levels. Duplicate JSON members, unsafe numbers, prototype keys, malformed Unicode, noncanonical Base64url and trailing compressed streams are rejected. Codes are **not encryption, signatures or proof of trust**.
 
 ## Operation and security contract
 
-All management goes through the official manager; all setting writes go through native Settings. The package registers an authenticated logical RPC channel through official Connection, not a second server. The native transport's request cap also applies.
+All package management goes through the official manager. The package registers an authenticated logical RPC channel through official Connection, not a second server. The native transport's request cap also applies.
 
-A preview creates a process-local, five-minute, one-use plan bound to the observed profile and form revisions. At most eight plans/results are retained. Changed observations invalidate a plan; completed results can be read without rerunning operations. No automatic retries, upgrades, downgrades, script approvals, removals, cross-profile writes or blueprint-level rollback are performed. The native installer retains its own documented failure behavior.
+A preview creates a process-local, five-minute, one-use plan bound to the observed package/profile state. At most eight plans/results are retained. Changed observations invalidate a plan; completed results can be read without rerunning operations. No automatic retries, upgrades, downgrades, script approvals, removals, cross-profile writes or blueprint-level rollback are performed. The native installer retains its own documented failure behavior.
 
-A multi-step import is **not a transaction or a lock against every other editor**. It checks observed state between operations and uses native per-operation serialization/revision checks. Stop editing that profile elsewhere while applying. Failures preserve visible partial outcomes; a lost response is not a reason to replay an import. Closing the page requests cancellation where supported. Already-completed changes may remain.
+A multi-step import is **not a transaction or a lock against every other editor**. It checks observed state between operations and uses native per-operation serialization. Stop editing that profile elsewhere while applying. Failures preserve visible partial outcomes; a lost response is not a reason to replay an import. Closing the page requests cancellation where supported. Already-completed changes may remain.
 
 ## Development
 

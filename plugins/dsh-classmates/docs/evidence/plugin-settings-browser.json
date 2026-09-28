@@ -1,0 +1,17 @@
+{
+  "checks": [
+    "model switch preserves effort; explicit reset follows chat",
+    "plugin entry, no general-settings entry, create, native switch, save and reload persistence",
+    "conflict preserves draft and shows remote changes",
+    "320px mobile layout",
+    "native dark theme",
+    "delete and post-delete interaction",
+    "component disable disposes settings; re-enable mounts once and preserves original roles",
+    "manager and start-task navigation leave Plugins correctly"
+  ],
+  "pageErrors": [],
+  "checkedAt": "2026-09-26T01:09:28.968Z",
+  "hostVersion": "0.1.7-rc.2",
+  "model": "local deterministic fixture",
+  "scope": "Plugin settings migration; isolated profile, no production configuration changes"
+}

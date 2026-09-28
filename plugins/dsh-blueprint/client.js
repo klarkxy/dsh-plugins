@@ -3,121 +3,242 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react'), h = React.createElement;
     const PACKAGE = '@klarkxy/dsh-blueprint';
-    const idOf = f => JSON.stringify([f.package, f.row, f.module]);
-    const style = { border: '1px solid currentColor', borderRadius: 6, padding: '6px 10px', background: 'transparent', color: 'inherit', font: 'inherit' };
-    let focusPackage = null;
-    function Panel({ ctx }) {
+    const box = { boxSizing: 'border-box', border: '1px solid currentColor', borderRadius: 7, padding: '7px 10px', background: 'transparent', color: 'inherit', font: 'inherit' };
+    const row = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 };
+    const stack = { display: 'grid', gap: 12, minWidth: 0 };
+    const card = { border: '1px solid color-mix(in srgb, currentColor 30%, transparent)', borderRadius: 9, padding: 12 };
+    const dim = { opacity: .72, margin: 0 };
+    const check = (label, checked, onChange, disabled) => h('label', { style: { display: 'flex', gap: 8, alignItems: 'start', overflowWrap: 'anywhere' } },
+      h('input', { type: 'checkbox', checked, onChange, disabled, style: { marginTop: 3 } }), label);
+    const Button = ({ children, primary, ...props }) => h('button', { type: 'button', style: { ...box, cursor: props.disabled ? 'default' : 'pointer', fontWeight: primary ? 650 : undefined }, ...props }, children);
+    const textarea = (value, label, rows = 6) => h('textarea', { readOnly: true, value, rows, 'aria-label': label, onFocus: e => e.target.select(),
+      style: { ...box, width: '100%', resize: 'vertical', fontFamily: 'ui-monospace, monospace' } });
+
+    function useText(ctx) {
       const [zh, setZh] = React.useState(() => ctx.locale.getSnapshot().active.startsWith('zh'));
-      const t = (a, b) => zh ? a : b;
-      const [catalog, setCatalog] = React.useState(null), [selected, setSelected] = React.useState([]);
-      const [forms, setForms] = React.useState([]), [omit, setOmit] = React.useState([]);
-      const [mode, setMode] = React.useState('plugins'), [name, setName] = React.useState('My DSH setup');
-      const [generated, setGenerated] = React.useState(null), [source, setSource] = React.useState('');
-      const [preview, setPreview] = React.useState(null), [confirmed, setConfirmed] = React.useState(false);
-      const [report, setReport] = React.useState(null), [lastPlan, setLastPlan] = React.useState(null);
+      React.useEffect(() => ctx.locale.subscribe(() => setZh(ctx.locale.getSnapshot().active.startsWith('zh'))), [ctx]);
+      return (cn, en) => zh ? cn : en;
+    }
+    function Menu({ label, items, choose }) {
+      const ref = React.useRef(null);
+      React.useEffect(() => {
+        const outside = event => {
+          if (ref.current?.open && !ref.current.contains(event.target)) ref.current.open = false;
+        };
+        const escape = event => {
+          if (event.key !== 'Escape' || !ref.current?.open) return;
+          event.preventDefault();
+          event.stopPropagation();
+          ref.current.open = false;
+          ref.current.querySelector('summary')?.focus();
+        };
+        document.addEventListener('pointerdown', outside);
+        document.addEventListener('keydown', escape, true);
+        return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape, true); };
+      }, []);
+      return h('details', { ref, style: { position: 'relative', WebkitAppRegion: 'no-drag' } },
+        h('summary', { style: { ...box, cursor: 'pointer', listStyle: 'none' } }, label, ' ▾'),
+        h('div', { style: { ...card, position: 'absolute', zIndex: 20, top: 'calc(100% + 4px)', insetInlineStart: 0, minWidth: 190,
+          background: 'var(--dsw-specific-menu, var(--dsw-alias-bg-layer-1, Canvas))',
+          color: 'var(--dsw-alias-label-primary, CanvasText)', boxShadow: 'var(--dsw-elevation-prominent, 0 8px 24px #0002)', padding: 4 } },
+          items.map(item => h('button', { key: item.key, type: 'button', onClick: () => {
+            if (ref.current) { ref.current.open = false; ref.current.querySelector('summary')?.focus(); }
+            choose(item.key);
+          },
+            style: { display: 'block', width: '100%', textAlign: 'start', border: 0, borderRadius: 6, padding: '9px 10px', background: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer' } }, item.label))));
+    }
+    function Actions({ ctx, page = false }) {
+      const t = useText(ctx);
+      const [task, setTask] = React.useState(null);
+      const [lastPlan, setLastPlan] = React.useState(null);
+      return h('section', { 'aria-label': t('蓝图', 'Blueprint'), style: { ...stack, position: 'relative', zIndex: 30, WebkitAppRegion: 'no-drag' } },
+        page && h('p', { style: dim }, t('分享插件组合与安装顺序。导入前可以核对变更。', 'Share plugin selection and installation order. Review changes before importing.')),
+        h('div', { style: row },
+          h(Menu, { label: t('蓝图', 'Blueprint'), choose: setTask, items: [
+            { key: 'import', label: t('导入蓝图', 'Import blueprint') },
+            { key: 'export', label: t('导出蓝图', 'Export blueprint') }] })),
+        task && h(TaskDialog, { key: task, ctx, task, t, lastPlan, onPlan: setLastPlan, onClose: () => setTask(null) }));
+    }
+    function TaskDialog({ ctx, task, t, lastPlan, onPlan, onClose }) {
+      const exporting = task === 'export';
+      const title = exporting ? t('导出蓝图', 'Export blueprint') : t('导入蓝图', 'Import blueprint');
+      const dialog = React.useRef(null), controller = React.useRef(null), epoch = React.useRef(0), locked = React.useRef(false);
       const [busy, setBusy] = React.useState(false), [error, setError] = React.useState('');
-      const lifetime = React.useRef(null);
-      async function rpc(endpoint, payload) {
-        const result = await ctx.connection.rpc.call('/dsh-blueprint', endpoint, payload, lifetime.current?.signal);
-        if (!result.ok) throw new Error(result.error.message);
+      const [catalog, setCatalog] = React.useState(null), [selected, setSelected] = React.useState([]);
+      const [name, setName] = React.useState(() => t('我的插件组合', 'My plugin setup')), [generated, setGenerated] = React.useState(null);
+      const [copied, setCopied] = React.useState(null), [source, setSource] = React.useState('');
+      const [preview, setPreview] = React.useState(null), [confirmed, setConfirmed] = React.useState(false);
+      const [report, setReport] = React.useState(null), [finishedPlan, setFinishedPlan] = React.useState(lastPlan);
+      function close() { epoch.current++; controller.current?.abort(); dialog.current?.close(); onClose(); }
+      React.useEffect(() => {
+        const node = dialog.current; node?.showModal();
+        return () => { epoch.current++; controller.current?.abort(); controller.current = null; locked.current = false; if (node?.open) node.close(); };
+      }, []);
+      async function rpc(endpoint, payload, signal) {
+        const result = await ctx.connection.rpc.call('/dsh-blueprint', endpoint, payload, signal);
+        if (!result.ok) throw new Error(result.error?.message || 'Request failed');
         return result.value;
       }
-      async function run(fn) {
-        setBusy(true); setError('');
-        try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : 'Operation failed'); }
-        finally { setBusy(false); }
+      async function run(work) {
+        if (locked.current) return;
+        locked.current = true;
+        const id = ++epoch.current, request = new AbortController();
+        controller.current = request; setBusy(true); setError('');
+        try { await work((endpoint, payload) => rpc(endpoint, payload, request.signal), () => epoch.current === id && !request.signal.aborted); }
+        catch (cause) { if (epoch.current === id && !request.signal.aborted) setError(cause instanceof Error ? cause.message : t('操作失败', 'Operation failed')); }
+        finally { if (epoch.current === id) { locked.current = false; controller.current = null; setBusy(false); } }
       }
-      async function load() {
-        const data = await rpc('catalog', {}); setCatalog(data);
-        const selection = data.packages.filter(p => !p.readonly && !p.reason && (!focusPackage || p.name === focusPackage)).map(p => p.name);
-        setSelected(selection); setForms(data.forms.filter(f => f.builtin || selection.includes(f.package)).map(idOf));
-        setOmit([]); setGenerated(null); focusPackage = null;
+      function clearExport() { setGenerated(null); setCopied(null); }
+      function updateSource(text) { setSource(text); setPreview(null); setConfirmed(false); setReport(null); }
+      function load() {
+        return run(async (call, current) => {
+          const data = await call('catalog', {});
+          if (!current()) return;
+          setCatalog(data);
+          const eligible = new Set(data.packages.filter(p => !p.readonly && !p.reason).map(p => p.name));
+          setSelected(data.order.filter(n => eligible.has(n)));
+          clearExport();
+        });
       }
-      React.useEffect(() => {
-        lifetime.current = new AbortController();
-        const off = ctx.locale.subscribe(() => setZh(ctx.locale.getSnapshot().active.startsWith('zh')));
-        void run(load);
-        return () => { off(); lifetime.current.abort(); };
-      }, []);
-      const button = (label, action, disabled = false) => h('button', { type: 'button', style, disabled: busy || disabled, onClick: () => run(action) }, label);
-      const toggle = (list, value) => list.includes(value) ? list.filter(v => v !== value) : [...list, value];
-      const check = (label, checked, onChange, disabled = false) => h('label', { style: { display: 'flex', alignItems: 'start', gap: 8, padding: '5px 0', overflowWrap: 'anywhere' } },
-        h('input', { type: 'checkbox', checked, disabled: busy || disabled, onChange }), label);
-      function updateSource(value) { setSource(value); setPreview(null); setConfirmed(false); setReport(null); }
-      const code = value => h('pre', { style: { overflow: 'auto', maxHeight: 360, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', padding: 12, border: '1px solid currentColor', borderRadius: 6 } }, JSON.stringify(value, null, 2));
-      return h('section', { 'aria-label': t('蓝图导入与导出', 'Blueprint import and export'), style: { display: 'grid', gap: 14, minWidth: 0 } },
-        h('p', null, t('分享插件组合和官方 Config／Settings 暴露的可编辑设置。不读取自定义页面、自建存储、会话或凭据库。', 'Share plugins and editable settings exposed by official Config/Settings. Custom pages, private storage, sessions and credential stores are not read.')),
-        error && h('p', { role: 'alert', style: { border: '1px solid currentColor', padding: 10 } }, error),
-        busy && h('p', { role: 'status' }, t('正在处理；安装进度也可在官方插件管理器中查看。', 'Working. Native package installation progress is also available in the official manager.')),
-        h('h3', null, t('导出蓝图', 'Export blueprint')),
-        button(t('刷新插件与原生设置', 'Refresh plugins and native settings'), load),
-        h('label', null, t('名称 ', 'Name '), h('input', { style, value: name, maxLength: 120, disabled: busy, onChange: e => { setName(e.target.value); setGenerated(null); } })),
-        h('label', null, t('分享范围 ', 'Share '), h('select', { style, value: mode, disabled: busy, onChange: e => { setMode(e.target.value); setGenerated(null); } },
-          h('option', { value: 'plugins' }, t('仅插件组合和顺序', 'Plugins and order only')),
-          h('option', { value: 'settings' }, t('插件组合及设置', 'Plugins and settings')))),
-        catalog && h('div', null, catalog.packages.map(p => h('div', { key: p.name }, check(
-          `${p.name}@${p.version ?? '?'}${p.reason ? ` (${p.reason})` : ''}${p.readonly ? t('（宿主管理，不导出）', ' (host-managed)') : ''}`,
-          selected.includes(p.name), () => { setSelected(toggle(selected, p.name)); setGenerated(null); }, p.readonly || Boolean(p.reason))))),
-        mode === 'settings' && catalog && h('div', null,
-          h('p', null, t('以官方可编辑字段为准，不推断自定义页面的可见字段。普通字段默认包含；可以取消任一表单或字段。请检查未标记的私密内容。', 'The official editable fields define scope, not custom-page visibility. Ordinary fields are included by default. Uncheck any form or field and review unmarked private text.')),
-          catalog.forms.filter(f => f.builtin || selected.includes(f.package)).map(f => h('details', { key: idOf(f) },
-            h('summary', null, `${f.row} · ${f.package}`),
-            check(t('包含此原生配置', 'Include these native settings'), forms.includes(idOf(f)), () => { setForms(toggle(forms, idOf(f))); setGenerated(null); }),
-            f.fields.map(field => {
-              const key = JSON.stringify([idOf(f), field.path]);
-              return h('div', { key }, check(`${field.path.join('.')} = ${JSON.stringify(field.value)}`, !omit.includes(key), () => { setOmit(toggle(omit, key)); setGenerated(null); }, !forms.includes(idOf(f))));
-            }), f.omitted.length > 0 && code(f.omitted))),
-        ),
-        catalog?.warnings?.length > 0 && h('details', null, h('summary', null, t('未导出的项目与限制', 'Unavailable configurations and limits')), code(catalog.warnings)),
-        button(t('生成并预览', 'Generate and review'), async () => setGenerated(await rpc('generate', {
-          mode, name, packages: selected,
-          forms: forms.filter(id => catalog.forms.some(f => idOf(f) === id && (f.builtin || selected.includes(f.package)))),
-          omit: omit.map(key => { const [form, path] = JSON.parse(key); return { form, path }; }),
-        })), !catalog || !name.trim()),
-        generated && h('div', null, code(generated.blueprint),
-          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
-            button(t('复制分享码', 'Copy share code'), () => navigator.clipboard.writeText(generated.code)),
-            button(t('保存 JSON', 'Save JSON'), async () => {
-              const url = URL.createObjectURL(new Blob([generated.json], { type: 'application/json' }));
-              const a = document.createElement('a'); a.href = url; a.download = 'setup.dsh-blueprint.json'; a.click();
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
-            })),
-          h('details', null, h('summary', null, t('分享码（也可手动复制）', 'Share code (manual copy)')), h('textarea', { readOnly: true, value: generated.code, rows: 4, style: { ...style, width: '100%', boxSizing: 'border-box' } }))),
-        h('hr'), h('h3', null, t('导入到当前 profile', 'Import into the current profile')),
-        h('p', null, t('不会新建空间或删除现有插件。蓝图中的插件会保持相对顺序；需要重排时放在未选插件之后。', 'No spaces are created and no existing packages are removed. Imported bundles retain their relative order; reordered bundles follow unselected bundles.')),
-        h('label', null, t('读取蓝图文件 ', 'Read blueprint file '), h('input', { type: 'file', accept: '.json,.txt', disabled: busy, onChange: e => { const file = e.target.files?.[0]; if (file) void run(async () => {
-          if (file.size > 2 * 1024 * 1024) throw new Error('File exceeds 2 MiB');
-          updateSource(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(await file.arrayBuffer()));
-        }); } })),
-        h('textarea', { 'aria-label': t('JSON 或分享码', 'JSON or share code'), value: source, rows: 7, disabled: busy,
-          maxLength: 2 * 1024 * 1024, style: { ...style, width: '100%', boxSizing: 'border-box' }, onChange: e => updateSource(e.target.value) }),
-        button(t('预览导入变更', 'Preview import changes'), async () => { setConfirmed(false); setPreview(await rpc('preview', { text: source })); }, !source.trim()),
-        preview && h('div', null,
-          preview.blockers.length > 0 && h('div', { role: 'alert' }, code(preview.blockers)),
-          code({ stage: preview.stage, operations: preview.operations, finalOrder: preview.order }),
-          preview.next && h('p', null, t('这一步仅安装／启用插件。完成后再次预览，核对真实配置字段后再确认写入设置。', 'This stage only installs/enables plugins. Preview again afterwards to review the live configuration fields before writing settings.')),
-          check(t('我已核对变更，并信任这些插件代码。安装可能运行先前已授权的构建脚本；启用会执行插件。', 'I reviewed the changes and trust the plugin code. Installation may run previously approved build scripts; enabling executes plugins.'), confirmed, () => setConfirmed(!confirmed)),
-          button(t('确认执行本次变更', 'Apply these changes'), async () => {
-            const id = preview.planId; setLastPlan(id);
-            const result = await rpc('apply', { planId: id, confirmed: true }); setReport(result); setPreview(null); setConfirmed(false);
-          }, !preview.planId || !confirmed)),
-        report && h('div', { role: 'status' }, h('strong', null, t('执行结果', 'Execution result')), code(report),
-          report.next && h('p', null, t('请再次点击“预览导入变更”以继续设置阶段。', 'Select Preview import changes again to continue with settings.'))),
-        lastPlan && button(t('读取该次执行结果（不重试执行）', 'Read this execution result (no replay)'), async () => {
-          const result = await rpc('result', { planId: lastPlan });
-          if (!result) throw new Error(t('结果尚未生成或服务已重启；请检查官方管理器，不要假定操作未发生。', 'No retained result yet, or the service restarted. Check the official manager; do not assume nothing changed.'));
-          setReport(result);
-        }),
-      );
+      React.useEffect(() => { if (exporting) void load(); }, []);
+      function togglePackage(name) { setSelected(old => old.includes(name) ? old.filter(n => n !== name) : [...old, name]); clearExport(); }
+      function move(index, by) {
+        setSelected(old => { const next = [...old]; [next[index], next[index + by]] = [next[index + by], next[index]]; return next; });
+        clearExport();
+      }
+      function generate() {
+        return run(async (call, current) => {
+          const value = await call('generate', { name, packages: selected });
+          if (current()) setGenerated(value);
+        });
+      }
+      function previewImport() {
+        setPreview(null); setConfirmed(false); setReport(null);
+        return run(async (call, current) => { const value = await call('preview', { text: source }); if (current()) setPreview(value); });
+      }
+      function applyImport() {
+        if (!preview?.planId || preview.blockers?.length || !preview.operations?.length || !confirmed) return;
+        const planId = preview.planId; onPlan(planId); setFinishedPlan(planId); setConfirmed(false);
+        return run(async (call, current) => {
+          const value = await call('apply', { planId, confirmed: true });
+          if (current()) { setReport(value); setPreview(null); }
+        });
+      }
+      function readResult() {
+        if (!finishedPlan) return;
+        return run(async (call, current) => {
+          const value = await call('result', { planId: finishedPlan });
+          if (!current()) return;
+          if (!value) throw new Error(t('结果未保留；请在原生插件管理器检查当前状态。', 'Result unavailable. Check the native plugin manager for current state.'));
+          setReport(value);
+        });
+      }
+      return h('dialog', { ref: dialog, onCancel: e => { e.preventDefault(); close(); }, 'aria-label': title,
+        style: { width: 'min(680px, calc(100vw - 32px))', maxWidth: 'calc(100vw - 32px)', maxHeight: '85vh', overflow: 'auto',
+          boxSizing: 'border-box', border: '1px solid currentColor', borderRadius: 12, padding: 'clamp(16px, 4vw, 26px)',
+          background: 'var(--dsw-alias-bg-module-platform, Canvas)', color: 'var(--dsw-alias-label-primary, CanvasText)' } },
+        h('div', { style: stack },
+          h('div', { style: { ...row, justifyContent: 'space-between' } },
+            h('h2', { style: { margin: 0, fontSize: '1.2em' } }, title),
+            h(Button, { onClick: close, 'aria-label': t('关闭', 'Close') }, '×')),
+          error && h('p', { role: 'alert', style: card }, error),
+          busy && h('p', { role: 'status', style: dim }, t('正在处理…', 'Working…')),
+          exporting ? h(ExportContent, { t, busy, catalog, selected, togglePackage, move, name, setName,
+            generated, clearExport, copied, setCopied, load, generate })
+            : h(ImportContent, { t, busy, source, updateSource, preview, previewImport, confirmed, setConfirmed,
+              applyImport, report, finishedPlan, readResult })));
+    }
+    function ExportContent(p) {
+      const { t, busy, catalog, selected, togglePackage, move, name, setName,
+        generated, clearExport, copied, setCopied, load, generate } = p;
+      const mounted = React.useRef(false);
+      React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+      const eligible = catalog?.packages.filter(pkg => !pkg.readonly && !pkg.reason) ?? [];
+      return h('div', { style: stack },
+        h('p', { style: dim }, t('选择插件及建议顺序；导入时会保留接收方已有的插件顺序。', 'Choose plugins and a preferred order. Import preserves the recipient’s existing order.')),
+        h(Button, { onClick: load, disabled: busy }, t('刷新', 'Refresh')),
+        h('label', { style: stack }, t('名称', 'Name'),
+          h('input', { style: { ...box, width: '100%' }, value: name, maxLength: 120, disabled: busy,
+            onChange: e => { setName(e.target.value); clearExport(); } })),
+        catalog && h('div', { style: stack },
+          h('h3', { style: { margin: 0 } }, t('插件', 'Plugins')),
+          eligible.map(pkg => h('div', { key: pkg.name }, check(`${pkg.name} · ${pkg.version ?? '?'}${pkg.enabled ? '' : t('（未启用，仅分享安装）', ' (inactive; installation only)')}`,
+            selected.includes(pkg.name), () => togglePackage(pkg.name), busy))),
+          h('h3', { style: { margin: 0 } }, t('建议顺序', 'Preferred order')),
+          selected.length ? h('ol', { style: { ...stack, paddingInlineStart: 30, margin: 0 } }, selected.map((pkg, index) =>
+            h('li', { key: pkg }, h('div', { style: { ...row, justifyContent: 'space-between' } },
+              h('span', { style: { overflowWrap: 'anywhere' } }, pkg),
+              h('span', { style: row },
+                h(Button, { disabled: busy || index === 0, onClick: () => move(index, -1), 'aria-label': t(`上移 ${pkg}`, `Move ${pkg} up`) }, '↑'),
+                h(Button, { disabled: busy || index === selected.length - 1, onClick: () => move(index, 1),
+                  'aria-label': t(`下移 ${pkg}`, `Move ${pkg} down`) }, '↓'))))))
+            : h('p', { style: dim }, t('未选择插件。', 'No plugins selected.'))),
+        h(Button, { onClick: generate, disabled: busy || !catalog || !name.trim() || !selected.length, primary: true },
+          t('生成导出内容', 'Generate export')),
+        generated && h('div', { style: stack },
+          h('div', { style: stack },
+            h('label', { style: stack }, t('蓝图分享码', 'Blueprint share code'), textarea(generated.code, t('蓝图分享码', 'Blueprint share code'))),
+            h('div', { style: row }, h(Button, { disabled: busy, onClick: async () => {
+              try { await navigator.clipboard.writeText(generated.code); if (mounted.current) setCopied('ok'); }
+              catch { if (mounted.current) setCopied('failed'); }
+            } }, t('复制分享码', 'Copy share code')),
+              copied && h('span', { role: copied === 'failed' ? 'alert' : 'status' },
+                copied === 'ok' ? t('已复制', 'Copied') : t('复制失败，请手动复制分享码。', 'Copy failed. Select and copy the code manually.'))))));
+    }
+    function describe(op, t) {
+      if (op.type === 'install') return t(`安装 ${op.name}@${op.version}`, `Install ${op.name}@${op.version}`);
+      if (op.type === 'bundle') return t(`启用 ${op.name}`, `Enable ${op.name}`);
+      return String(op.type);
+    }
+    function status(value, t) {
+      const labels = {
+        applied: [ '已完成', 'Applied' ], interrupted: [ '已中断', 'Interrupted' ],
+        conflict: [ '当前状态已变化', 'Profile changed' ], 'verification-failed': [ '验证失败', 'Verification failed' ],
+        failed: [ '失败', 'Failed' ], rejected: [ '未执行', 'Not applied' ],
+        'restart-required': [ '需要重启后生效', 'Restart required' ], overridden: [ '被宿主配置覆盖', 'Overridden by host configuration' ],
+        cancelled: [ '已取消', 'Cancelled' ],
+      };
+      return labels[value] ? t(...labels[value]) : String(value ?? t('未知', 'Unknown'));
+    }
+    function ImportContent(p) {
+      const { t, busy, source, updateSource, preview, previewImport, confirmed, setConfirmed,
+        applyImport, report, finishedPlan, readResult } = p;
+      const blocked = (preview?.blockers?.length ?? 0) > 0;
+      return h('div', { style: stack },
+        h('p', { style: dim }, t('粘贴蓝图码。保留已有顺序，需要启用的插件按蓝图顺序追加。', 'Paste a blueprint code. Existing order stays; requested new activations append in blueprint order.')),
+        h('p', { style: dim }, t('不会删除现有插件。安装可能运行包脚本；启用会执行插件代码。请只导入可信来源的蓝图。',
+          'Existing plugins are not removed. Installation may run package scripts, and enabling runs plugin code. Import only from a source you trust.')),
+        h('label', { style: stack }, t('蓝图分享码', 'Blueprint share code'),
+          h('textarea', { style: { ...box, width: '100%', resize: 'vertical', fontFamily: 'ui-monospace, monospace' }, rows: 7,
+            value: source, disabled: busy, onChange: e => updateSource(e.target.value) })),
+        h(Button, { onClick: previewImport, disabled: busy || !source.trim(), primary: true }, t('预览变更', 'Preview changes')),
+        preview && h('section', { style: { ...stack, ...card }, 'aria-label': t('导入预览', 'Import preview') },
+          h('h3', { style: { margin: 0 } }, t('将执行的变更', 'Planned changes')),
+          preview.operations?.length ? h('ol', { style: { margin: 0, paddingInlineStart: 25 } },
+            preview.operations.map((op, index) => h('li', { key: index }, describe(op, t))))
+            : h('p', { style: dim }, t('当前内容没有需要执行的变更。', 'No changes are needed.')),
+          preview.order?.length > 0 && h('p', { style: dim }, t('最终插件顺序：', 'Final plugin order: '), preview.order.join(' → ')),
+          blocked && h('div', { role: 'alert' }, h('strong', null, t('需要先解决的问题', 'Resolve before applying')),
+            h('ul', null, preview.blockers.map((item, index) => h('li', { key: index }, String(item))))),
+          !blocked && preview.operations?.length > 0 && check(t('我已核对上述变更，确认执行。', 'I reviewed these changes and confirm applying them.'),
+            confirmed, () => setConfirmed(value => !value), busy),
+          h(Button, { onClick: applyImport, disabled: busy || blocked || !preview.planId || !preview.operations?.length || !confirmed, primary: true },
+            t('执行变更', 'Apply changes'))),
+        report && h('section', { style: { ...stack, ...card }, role: 'status' },
+          h('strong', null, t('执行状态：', 'Result: '), status(report.status, t)),
+          report.steps?.length > 0 && h('ol', { style: { margin: 0, paddingInlineStart: 25 } },
+            report.steps.map((step, index) => h('li', { key: index }, `${step.target ?? step.type}: `, status(step.outcome?.application ?? 'applied', t)))),
+          report.remaining > 0 && h('p', { style: dim }, t(`仍有 ${report.remaining} 项未执行。`, `${report.remaining} changes remain.`))),
+        finishedPlan && h(Button, { onClick: readResult, disabled: busy }, t('读取上次执行结果', 'Read last execution result')));
     }
     return {
-      inject: ['slots', 'locale', 'connection', 'pluginNavigation'],
+      inject: ['slots', 'locale', 'connection'],
       apply(ctx) {
-        ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({ name: 'plugins.bundle.config', key: PACKAGE }, () => h(Panel, { ctx })));
-        ctx.slots.inject('plugins.detail.actions', () => ctx.slots.register({ name: 'plugins.detail.actions', id: 'klarkxy-blueprint-share', order: 40 }, ({ subject }) => {
-          if (subject.kind !== 'bundle' || subject.pkg.name === PACKAGE) return null;
-          return h('button', { type: 'button', style, onClick: () => { focusPackage = subject.pkg.name; ctx.pluginNavigation.openBundle(PACKAGE); } }, ctx.locale.getSnapshot().active.startsWith('zh') ? '分享蓝图' : 'Share blueprint');
-        }));
+        ctx.slots.inject('plugins.list.actions', () => ctx.slots.register(
+          { name: 'plugins.list.actions', id: 'klarkxy-blueprint', order: 40 },
+          () => h(Actions, { ctx })));
+        ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register(
+          { name: 'plugins.bundle.config', key: PACKAGE }, () => h(Actions, { ctx, page: true })));
       },
     };
   },

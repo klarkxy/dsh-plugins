@@ -1,0 +1,19 @@
+{
+  "checks": [
+    "model switch preserves effort; explicit reset follows chat",
+    "list switches persist immediately without saving or losing same-role and other-role drafts",
+    "plugin entry, no general-settings entry, create, native switch, save and reload persistence",
+    "stale toggle refused; refresh and retry preserve text draft and conflict protection",
+    "conflict preserves draft and shows remote changes",
+    "320px mobile layout",
+    "native dark theme",
+    "delete and post-delete interaction",
+    "component disable disposes settings; re-enable mounts once and preserves original roles",
+    "manager and start-task navigation leave Plugins correctly"
+  ],
+  "pageErrors": [],
+  "checkedAt": "2026-09-26T01:25:35.696620+00:00",
+  "hostVersion": "0.1.7-rc.2",
+  "scope": "11 preset roles, compact list/details layout, immediate persisted switches, draft and conflict protection",
+  "model": "local deterministic fixture"
+}

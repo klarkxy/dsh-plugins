@@ -18,7 +18,7 @@ Then load it:
 dsh plugin --profile web add @klarkxy/dsh-zhihu
 ```
 
-Restart DSH Web, open **Zhihu resources**, and enter your Access Secret (DSH credential `ZHIHU_ACCESS_TOKEN`). Use the full scoped name; the unscoped `dsh-zhihu` package belongs to another maintainer.
+Restart DSH Web, open **Plugins → @klarkxy/dsh-zhihu**, and enter your Access Secret (DSH credential `ZHIHU_ACCESS_TOKEN`). Use the full scoped name; the unscoped `dsh-zhihu` package belongs to another maintainer.
 
 To enable agent tools, add this entry to the plugin list in the agent's `agent.cordis.yml`:
 
@@ -28,7 +28,7 @@ To enable agent tools, add this entry to the plugin list in the agent's `agent.c
 
 ## Use
 
-DSH Web provides search, settings, usage, and knowledge-base views. Open **Plugins → Zhihu resources** for configuration, usage, knowledge bases, and a connection test; the agent tools are included. The search dock remains available, but credential configuration lives only on the plugin page.
+DSH Web provides search, settings, usage, and knowledge-base views. Open **Plugins → @klarkxy/dsh-zhihu** for configuration, usage, knowledge bases, and search; the agent tools are included.
 
 Five agent tools are available once the tools entry is enabled:
 

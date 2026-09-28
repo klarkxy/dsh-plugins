@@ -11,4 +11,4 @@ The original MIT notice is retained in LICENSE. New code in this package is also
 
 The application engine, strict v2 JSON validation, optional policy, host adapter and client integration here target the official current-profile plugin manager. Spaces Supervisor, space creation, LLM connection bindings, workbench RPC, Electron integration and private filesystem write paths are not runtime dependencies and were not copied.
 
-Upstream API inspection: deepseek-ai/deepseek-harness at `477b4f420553e8a52c2fbccc464d7561b239c443`, particularly `packages/boot/plugin-manager`, `packages/settings/settings`, `packages/client/connection`, `packages/client/ui-plugin-manager` and the official settings-page controllers. This inspection is source evidence, not a claim that the same APIs are shipped by every npm or desktop version.
+Upstream API inspection: deepseek-ai/deepseek-harness at `477b4f420553e8a52c2fbccc464d7561b239c443`, particularly `packages/boot/plugin-manager`, `packages/client/connection`, `packages/client/ui-plugin-manager`. This inspection is source evidence, not a claim that the same APIs are shipped by every npm or desktop version.

@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-current-title",
   "version": "0.1.4",
-  "description": "Update DeepSeek Harness session titles from the latest human task while preserving manual names.",
+  "description": "Auto Title: keep session titles following the latest task; names you set by hand stay put.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -26,6 +26,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "icon.svg",
     "lib",
     "cordis.patch.yml",
     "README.md",
@@ -53,8 +54,8 @@
     "entries": [
       {
         "id": "current-title",
-        "title": "当前标题",
-        "description": "按最近人工消息更新会话标题",
+        "title": "自动标题",
+        "description": "标题跟随最新任务更新，手动命名不被覆盖",
         "feature": "current-title",
         "service": "currentTitle"
       }

@@ -4,8 +4,6 @@ import { zhihuClientStyles } from './client-styles.ts'
 const HOST_DARK = 'html:not([data-theme]) body[data-ds-dark-theme]'
 const ROOT_DARK = ':root[data-theme="dark"]'
 const ROOTS = [
-  '.zhihu-dock',
-  '.zhihu-toggle',
   '.zhihu-panel',
 ] as const
 
@@ -53,21 +51,8 @@ describe('zhihu standalone theme selectors', () => {
   })
 })
 
-describe('zhihu standalone dock placement', () => {
-  it('keeps host --dsh-ext-* overrides and numeric length fallbacks for a bare overlay', () => {
-    expect(zhihuClientStyles).toContain('position: var(--dsh-ext-dock-position, absolute);')
-    expect(zhihuClientStyles).toContain('right: var(--dsh-ext-dock-right, var(--space-4, 16px));')
-    expect(zhihuClientStyles).toContain('bottom: var(--dsh-ext-dock-bottom, calc(var(--space-4, 16px) + 44px));')
-    expect(zhihuClientStyles).toContain('top: var(--dsh-ext-panel-top, auto);')
-    expect(zhihuClientStyles).toContain('bottom: var(--dsh-ext-panel-bottom, calc(100% + 6px));')
-    expect(zhihuClientStyles).not.toMatch(/right:\s*var\(--dsh-ext-dock-right,\s*var\(--space-4\)\)\s*;/)
-    expect(zhihuClientStyles).not.toMatch(/bottom:\s*var\(--dsh-ext-dock-bottom,\s*calc\(var\(--space-4\) \+ 44px\)\)/)
-  })
-})
-
-describe('zhihu standalone overlay tokens', () => {
+describe('zhihu settings fallback tokens', () => {
   it('paints local Radix tokens only when the overlay is not under .radix-themes', () => {
-    expect(zhihuClientStyles).toContain('.zhihu-dock:not(.radix-themes *)')
     expect(zhihuClientStyles).toContain('.zhihu-panel:not(.radix-themes *)')
     expect(zhihuClientStyles).not.toMatch(/:has\(\s*\.radix-themes/)
     expect(zhihuClientStyles).not.toMatch(/@media\s*\(\s*prefers-color-scheme/)

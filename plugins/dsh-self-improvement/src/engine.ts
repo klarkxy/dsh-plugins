@@ -89,7 +89,7 @@ export class SelfImprovementEngine {
 
   private requireActive(): RpcResult<never> | undefined {
     if (this.active) return undefined
-    return fail('DISABLED', '自我改进已关闭，摘录和教训注入已停止。')
+    return fail('DISABLED', '经验学习已关闭，摘录和教训注入已停止。')
   }
 
   private async persist<T>(work: () => Promise<T>): Promise<T> {
@@ -252,7 +252,7 @@ export class SelfImprovementEngine {
     this.aiScope = ai.activate(SELF_IMPROVEMENT_ACTIVATE_ID)
     this.aiScope.registerPurpose({
       id: EXTRACT_PURPOSE,
-      label: '自我改进摘录',
+      label: '经验学习摘录',
       defaultTarget: { kind: 'role', role: 'normal' },
       maxOutputTokens: 1200,
       maxInputChars: 8000,

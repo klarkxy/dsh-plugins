@@ -141,7 +141,6 @@ export const patchRpcSchema = z.object({
   content: z.string().min(1).max(4000).optional(),
   tags: z.array(z.string().min(1).max(40)).max(16).optional(),
   exceptions: z.array(z.string().max(200)).max(16).optional(),
-  status: memoryRecordSchema.shape.status.optional(),
   expiresAt: z.number().int().positive().optional(),
 }).strict()
 

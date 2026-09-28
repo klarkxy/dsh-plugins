@@ -1,0 +1,14 @@
+import {chromium} from '@playwright/test';
+import {writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const browser=await chromium.launch({channel:'msedge',headless:true});
+const page=await browser.newPage({viewport:{width:1365,height:1000}}),errors=[];
+page.on('pageerror',e=>errors.push(String(e)));
+await page.goto(pathToFileURL(resolve('demo/novice-minesweeper/index.html')).href);
+await page.screenshot({path:resolve('demo/recordings/novice-live/game-initial.png')});
+console.log(await page.locator('body').innerText());
+console.log(JSON.stringify(await page.locator('button,input,select').evaluateAll(es=>es.map(e=>({tag:e.tagName,text:e.innerText,id:e.id,testid:e.getAttribute('data-testid'),label:e.getAttribute('aria-label')})))));
+console.log('STATE',JSON.stringify(await page.evaluate(()=>window.msGetState?.())).slice(0,1100));
+await writeFile(resolve('demo/recordings/novice-live/game-initial-errors.json'),JSON.stringify(errors));
+await browser.close();

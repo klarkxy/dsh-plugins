@@ -18,7 +18,7 @@ npm install @klarkxy/dsh-zhihu
 dsh plugin --profile web add @klarkxy/dsh-zhihu
 ```
 
-重启 DSH Web，打开「知乎资料」填写 Access Secret（DSH 凭据 `ZHIHU_ACCESS_TOKEN`）。请使用完整 scoped 包名；无 scope 的 `dsh-zhihu` 属于其他维护者。
+重启 DSH Web，从「插件」打开「知乎（@klarkxy/dsh-zhihu）」填写 Access Secret（DSH 凭据 `ZHIHU_ACCESS_TOKEN`）。请使用完整 scoped 包名；无 scope 的 `dsh-zhihu` 属于其他维护者。
 
 模型需要使用知乎工具时，在所用 `agent.cordis.yml` 的插件列表加入：
 
@@ -28,7 +28,7 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 
 ## 使用
 
-DSH Web 提供搜索、设置、用量与知识库视图。在「插件 → 知乎资料」配置、查看用量、管理知识库和测试连接；模型工具随插件一同提供。搜索浮层保留，但凭据配置仅在插件页提供。
+DSH Web 提供搜索、设置、用量与知识库视图。在「插件 → 知乎（@klarkxy/dsh-zhihu）」配置、查看用量、管理知识库和搜索；模型工具随插件一同提供。
 
 启用 tools 入口后，模型可使用五个工具：
 

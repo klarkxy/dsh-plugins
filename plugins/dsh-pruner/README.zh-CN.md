@@ -1,8 +1,8 @@
-# 精简模式
+# 代码精简
 
 [English](README.md)
 
-精简模式用于审查和精简代码，在保留现有功能的前提下减少冗余和不必要的抽象。它使用 DSH 的文件、搜索、终端、技能、计划模式和上下文压缩功能，包名为 `@klarkxy/dsh-pruner`。
+代码精简用于审查和精简代码，在保留现有行为的前提下削减冗余和多余抽象。它使用 DSH 的文件、搜索、终端、技能、计划模式和上下文压缩功能，包名为 `@klarkxy/dsh-pruner`。
 
 ## 安装与使用
 
@@ -20,7 +20,7 @@ npm pack --ignore-scripts
 dsh plugin --profile web add "D:/path/to/klarkxy-dsh-pruner-0.2.0.tgz"
 ```
 
-自定义 profile 请把 `web` 换成其名称。安装后重启该 profile，在新会话的 预设选择器中选择 **精简模式**。DSH 0.1.7 已不再读取 `$DSH_HOME/.agent-presets`；`install.mjs` 仅供旧版 0.1.5-rc.2 使用，不能用来安装到当前 Web。
+自定义 profile 请把 `web` 换成其名称。安装后重启该 profile，在新会话的 预设选择器中选择 **代码精简**。DSH 0.1.7 已不再读取 `$DSH_HOME/.agent-presets`；`install.mjs` 仅供旧版 0.1.5-rc.2 使用，不能用来安装到当前 Web。
 
 然后在模型选择器中选择当前可用的强推理、大上下文模型，并启用该模型支持的较高推理强度。Preset 元数据不支持单独绑定模型或 reasoning effort，所以此包不改全局模型配置，也不承诺替你选好了模型。
 

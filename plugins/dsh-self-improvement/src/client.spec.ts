@@ -69,7 +69,7 @@ describe('self-improvement client seats', () => {
 
   it('keeps Memory-unavailable copy actionable and does not claim downloaded files are recalled', () => {
     expect(memoryUnavailableCopy('zh')).toBe(MEMORY_UNAVAILABLE_MESSAGE)
-    expect(memoryUnavailableCopy('en')).toMatch(/Enable the Memory plugin separately/)
+    expect(memoryUnavailableCopy('en')).toMatch(/Enable the Long-term Memory plugin separately/)
     expect(exportRevocationCopy('zh')).toContain('不会收回')
     expect(unwrap({ ok: true, value: 1 })).toBe(1)
     expect(() => unwrap({ ok: false, error: { code: 'X', message: 'no' } })).toThrow('no')

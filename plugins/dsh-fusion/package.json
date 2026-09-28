@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-fusion",
   "version": "0.1.0",
-  "description": "Persistent native Lead and Sidekick collaboration with exact author-reviewed writing candidates.",
+  "description": "Sidekick: persistent Lead–Sidekick collaboration. Delegate bounded tasks, then accept or send back exact results.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -31,6 +31,7 @@
     }
   },
   "files": [
+    "icon.svg",
     "lib",
     "cordis.patch.yml",
     "README.md",
@@ -58,8 +59,8 @@
     "entries": [
       {
         "id": "fusion",
-        "title": "Fusion 协作",
-        "description": "主助手统筹、持久搭档执行，写作候选由你确认采用",
+        "title": "副驾协作",
+        "description": "主助手统筹、常驻副驾执行，结果由你确认后采纳",
         "feature": "fusion",
         "service": "fusion",
         "defaultEnabled": false

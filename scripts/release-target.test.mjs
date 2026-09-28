@@ -31,8 +31,16 @@ function fingerprint(files) {
 test('discovers all independent scoped plugins', t => {
   assert.equal(discoverPackages(fixture(t)).length, 2);
 });
-test('rejects invalid names, private packages, versions and registries', t => {
-  for (const overrides of [{ name: 'dsh-one' }, { private: true }, { version: '1.0' },
+test('excludes private development packages from automatic publication', t => {
+  const root = fixture(t);
+  writeFileSync(join(root, 'plugins/dsh-two/package.json'), JSON.stringify({
+    name: '@klarkxy/dsh-two', version: '0.2.0-alpha.1', private: true,
+  }));
+  assert.deepEqual(discoverPackages(root).map(pkg => pkg.name), ['@klarkxy/dsh-one']);
+});
+
+test('rejects invalid names, versions and registries', t => {
+  for (const overrides of [{ name: 'dsh-one' }, { private: 'true' }, { version: '1.0' },
     { version: '1.2.3\n' }, { version: '1.2.3+build' },
     { publishConfig: { access: 'restricted', registry: 'https://registry.npmjs.org/' } },
     { publishConfig: { access: 'public', registry: 'https://example.com/' } }]) {

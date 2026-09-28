@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import semver from 'semver';
 import { discoverPackages } from './release-target.mjs';
-import { orderedPackages, packRelease, releaseCandidates } from './release-workspace.mjs';
+import { packRelease, releaseWorkspace } from './release-workspace.mjs';
 
 const registry = 'https://registry.npmjs.org/';
 const planFile = '.artifacts/npm-release/plan.json';
@@ -112,11 +112,21 @@ export function writeVersion(root, release) {
   return changed;
 }
 
+export async function validateHeldDependencies(dependencies, lookup = readRegistry) {
+  for (const dependency of dependencies) {
+    const metadata = await lookup(dependency.name, fetch, dependency.version);
+    if (!metadata.versions[dependency.version]) {
+      throw new Error(`Held workspace dependency is not published: ${dependency.name}@${dependency.version}`);
+    }
+  }
+}
+
 async function plan(root) {
   const releases = [];
   const changedFiles = [];
-  const packages = orderedPackages(root, releaseCandidates(root, discoverPackages(root)));
-  for (const pkg of packages) {
+  const { packages, candidates, heldDependencies } = releaseWorkspace(root, discoverPackages(root));
+  await validateHeldDependencies(heldDependencies);
+  for (const pkg of candidates) {
     const { hash } = packRelease(root, pkg, packages, npm, contentHash);
     const release = selectRelease(pkg, hash, await readRegistry(pkg.name, fetch, pkg.version));
     changedFiles.push(...writeVersion(root, release));
@@ -138,8 +148,9 @@ export function isAcceptedVersionConflict(error) {
 async function publish(root) {
   const { releases } = JSON.parse(readFileSync(join(root, planFile), 'utf8'));
   const pending = [];
-  const packages = orderedPackages(root, releaseCandidates(root, discoverPackages(root)));
-  const allowed = new Set(packages.map(pkg => pkg.name));
+  const { packages, candidates, heldDependencies } = releaseWorkspace(root, discoverPackages(root));
+  await validateHeldDependencies(heldDependencies);
+  const allowed = new Set(candidates.map(pkg => pkg.name));
   if (releases.some(release => !allowed.has(release.name))) throw new Error('Release plan contains a held or removed package');
   // Submit every changed package before waiting for npm's publish-time scanning.
   for (const release of releases) {
