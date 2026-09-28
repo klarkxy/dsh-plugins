@@ -17,6 +17,7 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import type { ZhihuQuotaId } from './contracts.ts'
 
 export const ZHIHU_BASE_URL = 'https://developer.zhihu.com'
 export const ZHIHU_DEFAULT_TIMEOUT_MS = 15_000
@@ -33,6 +34,7 @@ export type ZhihuSearchToken = { token: string; source: TokenSource }
 export type ZhihuSearchFetcher = (input: string, init?: { method?: string; headers?: Record<string, string>; body?: string | FormData; signal?: AbortSignal }) => Promise<{
   ok: boolean
   status: number
+  headers?: { get(name: string): string | null }
   text(): Promise<string>
   json(): Promise<unknown>
 }>
@@ -89,19 +91,32 @@ export async function resolveZhihuToken(
   ].join(''))
 }
 
+export type ZhihuErrorDetails = {
+  upstreamCode?: number
+  retryAfter?: number
+  retryable?: boolean
+}
+
 export class ZhihuSearchError extends Error {
   readonly code: 'TOKEN_MISSING' | 'HTTP_ERROR' | 'TIMEOUT' | 'BAD_RESPONSE'
+    | 'INVALID_ARGUMENTS' | 'TOKEN_INVALID' | 'RATE_LIMITED' | 'UPSTREAM_UNAVAILABLE' | 'CANCELLED'
   readonly status?: number
-  constructor(code: ZhihuSearchError['code'], message: string, status?: number) {
+  readonly upstreamCode?: number
+  readonly retryAfter?: number
+  readonly retryable?: boolean
+  constructor(code: ZhihuSearchError['code'], message: string, status?: number, details: ZhihuErrorDetails = {}) {
     super(message)
     this.name = 'ZhihuSearchError'
     this.code = code
     if (status !== undefined) this.status = status
+    if (details.upstreamCode !== undefined) this.upstreamCode = details.upstreamCode
+    if (details.retryAfter !== undefined) this.retryAfter = details.retryAfter
+    if (details.retryable !== undefined) this.retryable = details.retryable
   }
 }
 
 /** Metering payload emitted after each zhihu tool execution. */
-export type ZhihuSearchExecuted = { ok: boolean; results: number }
+export type ZhihuSearchExecuted = { ok: boolean; results: number; quotaId?: ZhihuQuotaId }
 
 /** Metering must never break the tool itself. */
 export function reportExecuted(hook: ((event: ZhihuSearchExecuted) => void) | undefined, event: ZhihuSearchExecuted): void {
@@ -127,78 +142,150 @@ function isAbortError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError'
 }
 
+/** Parse Retry-After seconds or an HTTP date; never invent a quota reset time. */
+export function parseZhihuRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
+  if (!value?.trim()) return undefined
+  const text = value.trim()
+  if (/^\d+(?:\.\d+)?$/.test(text)) {
+    const seconds = Number(text)
+    return Number.isFinite(seconds) ? Math.ceil(seconds) : undefined
+  }
+  // Do not let Date.parse interpret negative numbers as calendar dates.
+  if (!/[a-z]/i.test(text)) return undefined
+  const date = Date.parse(text)
+  return Number.isFinite(date) ? Math.max(0, Math.ceil((date - now) / 1000)) : undefined
+}
+
 /**
- * 发起一次带鉴权与超时的知乎请求,返回解析后的 JSON 原文(信封由调用方处理)。
- * `label` 用于中文错误文案,如「知乎搜索」「知乎热榜」。
+ * Shared authenticated request. envelope=true opts into official error semantics
+ * and returns Data. Legacy callers still receive the full JSON / chat response.
+ * The timeout and cancellation cover BOTH headers and response-body consumption.
+ * No requests are retried, including 429, exhausted quota, or risk-control denial.
  */
 export async function zhihuFetchJson(
   path: string,
-  init: { method?: 'GET' | 'POST'; params?: Record<string, string>; body?: unknown; formData?: FormData },
+  init: { method?: 'GET' | 'POST'; params?: Record<string, string>; body?: unknown; formData?: FormData; envelope?: boolean },
   label: string,
   options: ZhihuClientOptions = {},
 ): Promise<unknown> {
+  const linked = options.signal
+  if (linked?.aborted) throw new ZhihuSearchError('CANCELLED', '请求已取消')
+  const url = new URL(path, ZHIHU_BASE_URL)
+  if (url.origin !== ZHIHU_BASE_URL || url.username || url.password) {
+    throw new ZhihuSearchError('INVALID_ARGUMENTS', '只允许请求知乎开放平台。')
+  }
+  for (const [key, value] of Object.entries(init.params ?? {})) url.searchParams.set(key, value)
   const token = await resolveZhihuToken(options.env, { resolveCredential: options.resolveCredential })
+  if (linked?.aborted) throw new ZhihuSearchError('CANCELLED', '请求已取消')
   const fetcher = options.fetcher ?? globalFetch
   if (!fetcher) throw new ZhihuSearchError('BAD_RESPONSE', '当前环境没有可用的 fetch。')
-
-  const url = new URL(path, ZHIHU_BASE_URL)
-  for (const [key, value] of Object.entries(init.params ?? {})) url.searchParams.set(key, value)
-
   const method = init.method ?? (init.formData || init.body !== undefined ? 'POST' : 'GET')
-  const timeout = options.timeoutMs ?? ZHIHU_DEFAULT_TIMEOUT_MS
+  const timeout = options.timeoutMs !== undefined && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
+    ? options.timeoutMs : ZHIHU_DEFAULT_TIMEOUT_MS
   const controller = new AbortController()
-  const linked = options.signal
   const onAbort = () => controller.abort(linked?.reason)
-  if (linked) {
-    if (linked.aborted) controller.abort(linked.reason)
-    else linked.addEventListener('abort', onAbort, { once: true })
-  }
+  if (linked?.aborted) onAbort()
+  else linked?.addEventListener('abort', onAbort, { once: true })
   const timer = setTimeout(() => controller.abort(new Error('zhihu request timeout')), timeout)
-  let response: Awaited<ReturnType<ZhihuSearchFetcher>>
+  let stopWaiting = () => {}
+  const aborted = new Promise<never>((_resolve, reject) => {
+    const rejectAbort = () => reject(controller.signal.reason)
+    if (controller.signal.aborted) rejectAbort()
+    else {
+      controller.signal.addEventListener('abort', rejectAbort, { once: true })
+      stopWaiting = () => controller.signal.removeEventListener('abort', rejectAbort)
+    }
+  })
   try {
-    response = await fetcher(url.toString(), {
-      method,
-      headers: {
-        Authorization: `Bearer ${token.token}`,
-        'X-Request-Timestamp': String(Math.floor(Date.now() / 1000)),
-        Accept: 'application/json',
-        // multipart 的 Content-Type(含 boundary)由 fetch 自动生成,不能手写。
-        ...(method === 'POST' && !init.formData ? { 'Content-Type': 'application/json' } : {}),
-      },
-      signal: controller.signal,
-      ...(init.formData ? { body: init.formData } : init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
-    })
+    const request = async () => {
+      controller.signal.throwIfAborted()
+      const response = await fetcher(url.toString(), {
+        method,
+        headers: {
+          Authorization: `Bearer ${token.token}`,
+          'X-Request-Timestamp': String(Math.floor(Date.now() / 1000)),
+          Accept: 'application/json',
+          // Let fetch supply the multipart boundary.
+          ...(method === 'POST' && !init.formData ? { 'Content-Type': 'application/json' } : {}),
+        },
+        signal: controller.signal,
+        ...(init.formData ? { body: init.formData } : init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
+      })
+      const retryAfter = parseZhihuRetryAfter(response.headers?.get('Retry-After'))
+      const httpError = () => {
+        const code = response.status === 429 ? 'RATE_LIMITED'
+          : init.envelope && (response.status === 401 || response.status === 403) ? 'TOKEN_INVALID'
+          : 'HTTP_ERROR'
+        return new ZhihuSearchError(code, `${label}返回 HTTP ${response.status}。`, response.status,
+          code === 'RATE_LIMITED' ? { retryAfter, retryable: true } : {})
+      }
+      let body: unknown
+      try { body = await response.json() }
+      catch (error) {
+        if (controller.signal.aborted) throw error
+        if (!response.ok) throw httpError()
+        throw new ZhihuSearchError('BAD_RESPONSE', `${label}响应不是合法 JSON。`)
+      }
+      controller.signal.throwIfAborted()
+      // A business error remains meaningful even when the HTTP status is 400.
+      const isEnvelope = body !== null && typeof body === 'object' && !Array.isArray(body) && 'Code' in body
+      if (!response.ok && !isEnvelope) throw httpError()
+      if (init.envelope || (isEnvelope && (body as { Code: unknown }).Code !== 0 && (body as { Code: unknown }).Code !== '0')) {
+        const data = parseZhihuEnvelope(body, { status: response.status, retryAfter, officialErrors: init.envelope })
+        if (!response.ok) throw httpError()
+        if (init.envelope) return data
+      }
+      if (!response.ok) throw httpError()
+      return body
+    }
+    return await Promise.race([request(), aborted])
   } catch (error) {
-    if (isAbortError(error) || controller.signal.aborted) {
+    if (linked?.aborted) throw new ZhihuSearchError('CANCELLED', '请求已取消')
+    if (controller.signal.aborted || isAbortError(error)) {
       throw new ZhihuSearchError('TIMEOUT', `${label}超时（${Math.round(timeout / 1000)} 秒），请稍后再试。`)
     }
-    throw new ZhihuSearchError('BAD_RESPONSE', `${label}失败：${error instanceof Error ? error.message : String(error)}`)
+    if (error instanceof ZhihuSearchError) {
+      error.message = error.message.replaceAll(token.token, '[REDACTED]')
+      throw error
+    }
+    const message = (error instanceof Error ? error.message : String(error)).replaceAll(token.token, '[REDACTED]')
+    throw new ZhihuSearchError('BAD_RESPONSE', `${label}失败：${message}`)
   } finally {
     clearTimeout(timer)
-    if (linked) linked.removeEventListener('abort', onAbort)
-  }
-
-  if (!response.ok) {
-    throw new ZhihuSearchError('HTTP_ERROR', `${label}返回 HTTP ${response.status}。`, response.status)
-  }
-
-  try {
-    return await response.json()
-  } catch (error) {
-    throw new ZhihuSearchError('BAD_RESPONSE', `${label}响应不是合法 JSON：${error instanceof Error ? error.message : String(error)}`)
+    stopWaiting()
+    linked?.removeEventListener('abort', onAbort)
   }
 }
 
-/** 解析 {Code, Message, Data} 信封,Code 非 0 抛出 HTTP_ERROR;返回 Data(缺省为 {})。 */
-export function parseZhihuEnvelope(body: unknown): unknown {
+const ZHIHU_BUSINESS_ERRORS: Record<number, ZhihuSearchError['code']> = {
+  10001: 'INVALID_ARGUMENTS', 20001: 'TOKEN_INVALID',
+  30001: 'RATE_LIMITED', 30002: 'RATE_LIMITED',
+  40001: 'INVALID_ARGUMENTS', 40002: 'INVALID_ARGUMENTS', 40003: 'RATE_LIMITED',
+  40004: 'INVALID_ARGUMENTS', 40005: 'INVALID_ARGUMENTS', 40006: 'INVALID_ARGUMENTS',
+  50002: 'UPSTREAM_UNAVAILABLE', 90001: 'UPSTREAM_UNAVAILABLE',
+}
+
+/** Parse the official envelope without coercing null/false/empty Code into success. */
+export function parseZhihuEnvelope(body: unknown, meta: { status?: number; retryAfter?: number; officialErrors?: boolean } = {}): unknown {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    throw new ZhihuSearchError('BAD_RESPONSE', '知乎响应缺少 {Code,Message,Data} 信封。')
+    throw new ZhihuSearchError('BAD_RESPONSE', '知乎响应缺少 {Code,Message,Data} 信封。', meta.status)
   }
   const envelope = body as { Code?: unknown; Message?: unknown; Data?: unknown }
-  const code = Number(envelope.Code)
-  if (!Number.isFinite(code) || code !== 0) {
-    const msg = typeof envelope.Message === 'string' ? envelope.Message : '未知错误'
-    throw new ZhihuSearchError('HTTP_ERROR', `知乎开放平台返回错误（code=${envelope.Code ?? '?'}）：${msg}`)
+  const rawCode = envelope.Code
+  if (!((typeof rawCode === 'number' && Number.isSafeInteger(rawCode))
+    || (typeof rawCode === 'string' && /^\d+$/.test(rawCode) && Number.isSafeInteger(Number(rawCode))))) {
+    throw new ZhihuSearchError('BAD_RESPONSE', '知乎响应缺少有效的 Code 字段。', meta.status)
+  }
+  const code = Number(rawCode)
+  if (code !== 0) {
+    const message = typeof envelope.Message === 'string' && envelope.Message ? envelope.Message : '未知错误'
+    if (code === 30003) {
+      throw new ZhihuSearchError('UPSTREAM_UNAVAILABLE', `知乎开放平台被风控拒绝：${message}。请不要立即重试。`,
+        meta.status, { upstreamCode: code, retryable: false })
+    }
+    const kind = ZHIHU_BUSINESS_ERRORS[code] ?? (meta.officialErrors ? 'UPSTREAM_UNAVAILABLE' : 'HTTP_ERROR')
+    throw new ZhihuSearchError(kind, `知乎开放平台返回错误（code=${code}）：${message}`, meta.status,
+      { upstreamCode: code, ...(kind === 'RATE_LIMITED' ? { retryAfter: meta.retryAfter, retryable: true } : {}) })
   }
   return envelope.Data ?? {}
 }
