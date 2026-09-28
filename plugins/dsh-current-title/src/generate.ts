@@ -27,7 +27,7 @@ export function systemPrompt(config: GenerateConfig): string {
 export function registerTitlePurpose(scope: AiFeatureScope): () => void {
   return scope.registerPurpose({
     id: PURPOSE_ID,
-    label: '当前标题',
+    label: '自动标题',
     defaultTarget: { kind: 'role', role: 'weak' },
     maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
   })

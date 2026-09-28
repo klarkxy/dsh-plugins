@@ -100,7 +100,7 @@ describe('memory settings and host locale', () => {
   it('registers management in settings without exposing memory in chat', () => {
     const { names, renders } = captureRenders()
     expect(names).toEqual([
-      { name: 'settings.section', id: 'memory', order: 65, label: '记忆' },
+      { name: 'settings.section', id: 'memory', order: 65, label: '长期记忆' },
     ])
     expect(renders[CHAT_EVENTS_SLOT]).toBeUndefined()
   })

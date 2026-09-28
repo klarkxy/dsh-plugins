@@ -37,7 +37,7 @@ describe('current title UI', () => {
     expect(clientSource).not.toContain('settings.section')
     expect(settingsCopy('zh').regenerate).toBe('重新生成')
     expect(settingsCopy('en').regenerate).toBe('Regenerate')
-    expect(settingsCopy('zh').label).toBe('当前标题')
+    expect(settingsCopy('zh').label).toBe('自动标题')
     expect(shouldSkipTitleRefresh({ busy: true })).toBe(true)
     expect(shouldSkipTitleRefresh({ busy: false })).toBe(false)
   })

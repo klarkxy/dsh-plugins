@@ -2,7 +2,7 @@ import type { RpcResult, TitleLocaleMode, TitleStatus } from './contracts.ts'
 
 export const titleCopy = {
   zh: {
-    label: '当前标题',
+    label: '自动标题',
     pinned: '已手动命名',
     generating: '正在生成标题…',
     regenerate: '重新生成',
@@ -12,7 +12,7 @@ export const titleCopy = {
     failed: '无法读取标题设置。',
   },
   en: {
-    label: 'Current title',
+    label: 'Auto Title',
     pinned: 'Renamed manually',
     generating: 'Generating title…',
     regenerate: 'Regenerate',

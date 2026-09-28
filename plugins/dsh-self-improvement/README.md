@@ -20,7 +20,7 @@ dsh plugin --profile web add @klarkxy/dsh-memory
 dsh plugin --profile web add @klarkxy/dsh-self-improvement
 ```
 
-This plugin never enables Memory or Dream on the user's behalf. Dream may remain off. Review methods and Skill drafts under Settings → Memory → Self-improvement; there is no extra chat panel or separate settings page. The bundle starts enabled and can be switched off independently.
+This plugin never enables Memory or Dream on the user's behalf. Dream may remain off. Review methods and Skill drafts under Settings → Long-term Memory → Experience Learning; there is no extra chat panel or separate settings page. The bundle starts enabled and can be switched off independently.
 
 ## Evidence and activation
 
@@ -40,7 +40,7 @@ The package has three entry points:
 
 - `.` — the Cordis plugin (`name`, `inject`, `apply`), the `SelfImprovementEngine` class and the shared constants `CHAT_EVENTS_SLOT` and `SELF_IMPROVEMENT_RPC_CHANNEL`. `apply` provides the engine as `ctx.selfImprovement` and registers the host RPC channel.
 - `./contracts` — browser-safe types and constants: the frozen AI/Memory interfaces re-exported from `@klarkxy/dsh-ai-services`, plus `SkillRecord`, `ReviewSnapshot`, `LessonTrigger`, injection bounds and the `/dsh-self-improvement` channel name.
-- `./client` — the review UI bundle. It provides the `dshSelfImprovementReview` render service that the Memory settings page embeds as its Self-improvement section.
+- `./client` — the review UI bundle. It provides the `dshSelfImprovementReview` render service that the Memory settings page embeds as its Experience Learning section.
 
 The host RPC channel is `/dsh-self-improvement` with endpoints `status`, `extract`, `inspect`, `accept`, `reject`, `revoke`, `skill.preview`, `skill.accept`, `skill.reject`, `skill.revoke`, `skill.export`, `skill.exported` and `skill.unexport`.
 

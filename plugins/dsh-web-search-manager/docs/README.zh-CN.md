@@ -18,7 +18,7 @@ npm install @klarkxy/dsh-web-search-manager
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-重启 DSH Web，打开「设置 → 网络搜索」。模型需要使用搜索工具时，在所用 `agent.cordis.yml` 的插件列表加入：
+重启 DSH Web，打开「设置 → 网页搜索」。模型需要使用搜索工具时，在所用 `agent.cordis.yml` 的插件列表加入：
 
 ```yaml
 - name: '@klarkxy/dsh-web-search-manager/tools'

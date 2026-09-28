@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-recap",
   "version": "0.1.4",
-  "description": "Generate session recaps and inject bounded agent checkpoints in DeepSeek Harness.",
+  "description": "Session Recap: write session recaps in the background and give the agent bounded progress checkpoints.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -26,6 +26,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "icon.svg",
     "lib",
     "cordis.patch.yml",
     "README.md",
@@ -53,8 +54,8 @@
     "entries": [
       {
         "id": "recap",
-        "title": "回顾与检查点",
-        "description": "后台回顾，以及可选的任务检查点",
+        "title": "会话纪要",
+        "description": "后台生成纪要，以及可选的任务检查点",
         "feature": "recap",
         "service": "recap"
       }

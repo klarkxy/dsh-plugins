@@ -2,7 +2,7 @@
   "id": "@klarkxy/dsh-dev-index",
   "version": "0.1.4",
   "main": "lib/index.js",
-  "description": "Browse official DSH documentation and guide Creator mode to its sources.",
+  "description": "DSH Docs: read the official DSH documentation in the Plugins page; Creator mode searches and fetches it with native tools.",
   "engines": {
     "dsh": ">=0.1.7-rc.2 <0.2.0"
   },

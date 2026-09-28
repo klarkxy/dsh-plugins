@@ -66,7 +66,7 @@ describe('recap client seats', () => {
     expect(injected).toEqual([CHAT_EVENTS_SLOT])
     expect(CHAT_EVENTS_SLOT).toBe('dsh-editor.chat.events')
     expect(names).toEqual([
-      { name: CHAT_EVENTS_SLOT, id: 'recap', order: 40, label: '回顾' },
+      { name: CHAT_EVENTS_SLOT, id: 'recap', order: 40, label: '会话纪要' },
     ])
     expect(readFileSync(fileURLToPath(new URL('./client.tsx', import.meta.url)), 'utf8')).toContain('hidden={seat.hidden} quiet')
   })

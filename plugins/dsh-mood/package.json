@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-mood",
   "version": "0.1.4",
-  "description": "Clarify ambiguous requests before agent execution in DeepSeek Harness.",
+  "description": "Clarify: pin down what an ambiguous request means before the agent starts.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -26,6 +26,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "icon.svg",
     "lib",
     "cordis.patch.yml",
     "README.md",

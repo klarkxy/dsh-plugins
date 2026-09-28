@@ -1,4 +1,4 @@
-# DSH Safe Auto（候选版）
+# Safe Auto（候选版）
 
 [English / 完整配置表](README.md) · [单次提权](docs/ADR-0002.md) · [审批模型路由](docs/ADR-0003.md)
 

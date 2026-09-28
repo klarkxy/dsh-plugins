@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-memory",
   "version": "0.1.4",
-  "description": "Descriptive context and Dream consolidation for DSH Web: scoped vocabulary, preferences and recent activity.",
+  "description": "Long-term Memory: remember vocabulary, preferences, and recent activity per scope, consolidated by Dream.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -26,6 +26,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "icon.svg",
     "lib",
     "cordis.patch.yml",
     "README.md",
@@ -53,8 +54,8 @@
     "entries": [
       {
         "id": "memory",
-        "title": "记忆",
-        "description": "作者用语、偏好与近期状态；Dream 语境观察与整理",
+        "title": "长期记忆",
+        "description": "按作用域记住术语、偏好与近期动态，由 Dream 定期整理",
         "feature": "memory",
         "service": "aiMemory"
       }

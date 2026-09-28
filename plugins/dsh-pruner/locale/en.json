@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Simplify mode",
-    "description": "Review and simplify code, preserving existing functionality while reducing redundancy and unnecessary abstractions."
+    "title": "Code Prune",
+    "description": "Review and simplify code while keeping existing behavior, cutting redundancy and needless abstraction."
   }
 }

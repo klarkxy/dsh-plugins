@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-safe-auto",
   "version": "0.1.0-rc.3",
-  "description": "Budgeted DSH preflight and one-shot escalation with conversation-following or independent reviewers.",
+  "description": "Safe Auto: budgeted preflight and one-shot escalation with conversation-following or independent reviewers.",
   "type": "module",
   "main": "src/index.js",
   "exports": {
@@ -9,6 +9,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "icon.svg",
     "src/*.js",
     "cordis.patch.yml",
     "dsh.plugin.json",

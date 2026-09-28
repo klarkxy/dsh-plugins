@@ -59,11 +59,11 @@
       "category": "workflow",
       "kind": "preset",
       "title": {
-        "zh": "精简模式",
-        "en": "Simplify mode"
+        "zh": "代码精简",
+        "en": "Code Prune"
       },
       "summary": {
-        "zh": "审查和精简代码，保留现有功能，减少冗余和不必要的抽象。",
+        "zh": "审查并精简代码：保留现有行为，削减冗余和多余抽象。",
         "en": "Review and simplify code while keeping existing behavior, cutting redundancy and needless abstraction."
       },
       "readme": {
@@ -99,12 +99,12 @@
       "category": "workflow",
       "kind": "plugin",
       "title": {
-        "zh": "Fusion 协作",
-        "en": "Fusion"
+        "zh": "副驾协作",
+        "en": "Sidekick"
       },
       "summary": {
-        "zh": "当前助手搭配一个常驻 Sidekick：分派有边界的任务，核对原文结果后采纳或要求修改。",
-        "en": "Pair the assistant with one persistent Sidekick: delegate bounded tasks, then accept or send back the exact result."
+        "zh": "给助手配一个常驻副驾：分派有边界的任务，核对结果后采纳或退回修改。",
+        "en": "Pair the assistant with a persistent sidekick: delegate bounded tasks, then accept or send back the exact result."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
@@ -120,11 +120,11 @@
       "kind": "plugin",
       "title": {
         "zh": "需求澄清",
-        "en": "Mood"
+        "en": "Clarify"
       },
       "summary": {
-        "zh": "请求含糊时，先把需求问清楚再让智能体动手。",
-        "en": "When a request is ambiguous, pin down what is wanted before the agent starts."
+        "zh": "请求含糊时，先把目标、范围和验收问清楚，再让智能体动手。",
+        "en": "When a request is ambiguous, pin down the goal, scope, and acceptance before the agent starts."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
@@ -139,12 +139,12 @@
       "category": "sessions",
       "kind": "plugin",
       "title": {
-        "zh": "实时标题",
-        "en": "Current title"
+        "zh": "自动标题",
+        "en": "Auto Title"
       },
       "summary": {
-        "zh": "会话标题跟着最新任务更新，你手动改过的名字不会被覆盖。",
-        "en": "Session titles follow the latest task; names you set by hand stay put."
+        "zh": "会话标题跟随最新任务自动更新，你手动改过的名字不会被覆盖。",
+        "en": "Session titles follow the latest task automatically; names you set by hand stay put."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
@@ -159,11 +159,11 @@
       "category": "sessions",
       "kind": "plugin",
       "title": {
-        "zh": "会话回顾",
-        "en": "Recap"
+        "zh": "会话纪要",
+        "en": "Session Recap"
       },
       "summary": {
-        "zh": "在后台生成会话回顾，并给智能体注入有长度上限的进度检查点。",
+        "zh": "在后台生成会话纪要，并给智能体注入有长度上限的进度检查点。",
         "en": "Write session recaps in the background and give the agent bounded progress checkpoints."
       },
       "readme": {
@@ -179,11 +179,11 @@
       "category": "sessions",
       "kind": "plugin",
       "title": {
-        "zh": "记忆",
-        "en": "Memory"
+        "zh": "长期记忆",
+        "en": "Long-term Memory"
       },
       "summary": {
-        "zh": "按作用域记住术语、偏好和近期活动，由 Dream 定期整理。",
+        "zh": "按作用域记住术语、偏好和近期动态，由 Dream 定期整理。",
         "en": "Remember vocabulary, preferences, and recent activity per scope, consolidated by Dream."
       },
       "readme": {
@@ -199,8 +199,8 @@
       "category": "sessions",
       "kind": "plugin",
       "title": {
-        "zh": "自我改进",
-        "en": "Self improvement"
+        "zh": "经验学习",
+        "en": "Experience Learning"
       },
       "summary": {
         "zh": "从结果证据里总结带适用条件的做法，可以导出为技能。",
@@ -220,7 +220,7 @@
       "kind": "plugin",
       "title": {
         "zh": "模型中心",
-        "en": "Model center"
+        "en": "Model Center"
       },
       "summary": {
         "zh": "配置模型档位、服务商连接和 AI 调用限额。",
@@ -240,7 +240,7 @@
       "kind": "service",
       "title": {
         "zh": "AI 服务",
-        "en": "AI services"
+        "en": "AI Services"
       },
       "summary": {
         "zh": "给其他插件用的共享服务：模型路由、有上限的辅助调用和用量记录。单独装没有可见功能。",
@@ -259,8 +259,8 @@
       "category": "models",
       "kind": "plugin",
       "title": {
-        "zh": "网页搜索管理",
-        "en": "Web search manager"
+        "zh": "网页搜索",
+        "en": "Web Search"
       },
       "summary": {
         "zh": "在一个设置页里管理网页搜索服务商和公开页面抓取。",
@@ -299,12 +299,12 @@
       "category": "dev",
       "kind": "plugin",
       "title": {
-        "zh": "DSH 开发索引",
-        "en": "DSH development index"
+        "zh": "DSH 文档",
+        "en": "DSH Docs"
       },
       "summary": {
         "zh": "在插件页阅读 DSH 官方文档；创造模式用原生工具搜索和读取官方资料。",
-        "en": "Read the official DSH docs in the Plugins page; Creator mode searches and reads them with native tools."
+        "en": "Read the official DSH docs in the Plugins page; Creator mode searches and fetches them with native tools."
       },
       "readme": {
         "zh": "README.zh-CN.md",

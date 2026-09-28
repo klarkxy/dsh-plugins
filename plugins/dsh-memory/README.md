@@ -19,7 +19,7 @@ dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-memory
 ```
 
-No application-private packages or Self Improve are required. The bundle starts enabled; merely opening its UI does not call a model. Use Settings → Memory to manage records, prompt injection and the Dream observation/consolidation switch.
+No application-private packages or Self Improve are required. The bundle starts enabled; merely opening its UI does not call a model. Use Settings → Long-term Memory to manage records, prompt injection and the Dream observation/consolidation switch.
 
 ## Context, not procedures
 

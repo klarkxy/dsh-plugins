@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-dev-index",
   "version": "0.1.4",
-  "description": "Browse official DSH documentation and guide Creator mode to its sources.",
+  "description": "DSH Docs: read the official DSH documentation in the Plugins page; Creator mode searches and fetches it with native tools.",
   "icon": "./icon.svg",
   "keywords": [
     "dsh-plugin",

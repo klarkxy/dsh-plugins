@@ -462,6 +462,6 @@ export function apply(ctx: Context): void {
     return () => style.remove()
   }, 'web-search-manager.styles')
   ctx.effect(() => client.slots.inject('settings.section', () => client.slots.register({
-    name: 'settings.section', id: 'web-search', order: 70, label: '网络搜索',
+    name: 'settings.section', id: 'web-search', order: 70, label: '网页搜索',
   }, () => <NetworkSearchSettings client={client} />)), 'web-search-manager.settings')
 }

@@ -1,4 +1,4 @@
-# DSH Safe Auto (release candidate)
+# Safe Auto (release candidate)
 
 [中文](README.zh-CN.md) · [Preflight](docs/ADR-0001.md) · [One-shot escalation](docs/ADR-0002.md) · [Reviewer routing](docs/ADR-0003.md)
 

@@ -214,7 +214,7 @@ function MemorySettingsPanel({ client, sessionId, locale }: { client: Client; se
       <header>
         <div>
           <h3>{t(locale, 'Dream 语境记忆', 'Dream context memory')}</h3>
-          <p className="dsh-memory-meta">{t(locale, '从原始用户消息记录用语与近期状态，闲时整理已有语境。行动方法由自我改进负责。', 'Records vocabulary and recent activity from original user messages, then consolidates context while idle. Self Improve owns methods.')}</p>
+          <p className="dsh-memory-meta">{t(locale, '从原始用户消息记录用语与近期状态，闲时整理已有语境。行动方法由经验学习负责。', 'Records vocabulary and recent activity from original user messages, then consolidates context while idle. Experience Learning owns methods.')}</p>
         </div>
         <button type="button" role="switch" className={`dsh-memory-switch${draft.dreamIdleEnabled ? ' is-on' : ''}`}
           aria-checked={draft.dreamIdleEnabled} aria-label={draft.dreamIdleEnabled ? t(locale, '关闭 Dream 观察与整理', 'Disable Dream observation and consolidation') : t(locale, '启用 Dream 观察与整理', 'Enable Dream observation and consolidation')}
@@ -529,7 +529,7 @@ export function MemorySettings({ client, host, props }: { client: Client; host?:
       ? <details className="dsh-memory-si" data-testid="self-improvement-entry">
         <summary>
           <svg className="dsh-memory-si-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>
-          {t(seat.locale, '自我改进', 'Self-improvement')}
+          {t(seat.locale, '经验学习', 'Experience Learning')}
         </summary>
         <div className="dsh-memory-si-body">{review.render({ sessionId: seat.sessionId, locale: seat.locale })}</div>
       </details>
@@ -588,6 +588,6 @@ export function apply(ctx: Context): void {
     return () => style.remove()
   }, 'dsh-memory.styles')
   ctx.effect(() => client.slots.inject('settings.section', () => client.slots.register({
-    name: 'settings.section', id: 'memory', order: 65, label: '记忆',
+    name: 'settings.section', id: 'memory', order: 65, label: '长期记忆',
   }, (props: unknown) => <MemorySettings client={client} host={ctx} props={props} />)), 'dsh-memory.settings')
 }

@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-self-improvement",
   "version": "0.1.4",
-  "description": "Evidence-backed procedural learning for DSH Web: conditional methods, outcome observations and optional skill export.",
+  "description": "Experience Learning: learn conditional methods from outcome evidence, with optional export as skills.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -26,6 +26,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "icon.svg",
     "lib",
     "cordis.patch.yml",
     "README.md",
@@ -53,8 +54,8 @@
     "entries": [
       {
         "id": "self-improvement",
-        "title": "自我改进",
-        "description": "从明确要求与结果反馈提炼行动方法；可审计、可撤回",
+        "title": "经验学习",
+        "description": "从结果证据总结带适用条件的做法，可导出为技能",
         "feature": "self-improvement",
         "service": "selfImprovement"
       }

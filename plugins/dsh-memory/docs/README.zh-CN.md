@@ -19,7 +19,7 @@ dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-memory
 ```
 
-插件安装后默认启用，单纯打开界面不发起推理。在「设置 → 记忆」管理条目、提示注入和 Dream 观察与整理开关。
+插件安装后默认启用，单纯打开界面不发起推理。在「设置 → 长期记忆」管理条目、提示注入和 Dream 观察与整理开关。
 
 ## 行为
 
