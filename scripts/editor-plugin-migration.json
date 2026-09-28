@@ -1,7 +1,7 @@
 {
   "repository": "klarkxy/dsh-editor",
   "revision": "66d03814ecdac679947e9198c2e9be931462703a",
-  "holdPublish": true,
+  "holdPublish": false,
   "packages": [
     {
       "name": "@klarkxy/dsh-ai-services",
