@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http'
+import { createServer, request as httpRequest, type Server } from 'node:http'
 import { once } from 'node:events'
 import { afterEach, expect, it } from 'vitest'
 import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
@@ -30,7 +30,20 @@ async function host(rejection?: number, omitPolicy = false, result: RpcResult = 
 }
 
 function request(url: string, body: unknown = { type: 'client-request', rpcId: 'test', method: 'status', payload: {} }) {
-  return fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  // OS-assigned test ports may be on Fetch's browser-oriented forbidden list.
+  return new Promise<Response>((resolve, reject) => {
+    const req = httpRequest(url, { method: 'POST', headers: { 'content-type': 'application/json' } }, res => {
+      const chunks: Buffer[] = []
+      res.on('data', chunk => chunks.push(Buffer.from(chunk)))
+      res.on('error', reject)
+      res.on('end', () => resolve(new Response(Buffer.concat(chunks), {
+        status: res.statusCode,
+        headers: Object.fromEntries(Object.entries(res.headers).filter((entry): entry is [string, string] => typeof entry[1] === 'string')),
+      })))
+    })
+    req.on('error', reject)
+    req.end(JSON.stringify(body))
+  })
 }
 
 it.each([401, 403])('rejects unauthenticated/foreign-origin requests with %s before dispatch', async rejection => {

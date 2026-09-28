@@ -8,6 +8,32 @@ function sessions(cwd?: string) {
 }
 
 describe('host rpc scope', () => {
+  it('cannot bypass stale-candidate acceptance or reactivate rejected records through generic editing', async () => {
+    let n = 0
+    const runtime = new MemoryRuntime({ store: createMemoryStore(), now: () => 1, id: () => `id-${++n}` })
+    const source = await runtime.createManualRecord({ sessionId: 'live', projectId: '/real/work', title: 'source', content: 'original', kind: 'preference' })
+    const candidate = await runtime.create({
+      scope: source.scope, kind: 'preference', status: 'candidate', title: 'derived', content: 'stale conclusion',
+      source: 'user', tags: [], exceptions: [], evidence: [], basis: [{ id: source.id, revision: source.revision }],
+    })
+    await runtime.update(source.id, { content: 'corrected' }, source.revision)
+    const signal = new AbortController().signal
+    expect(await handleMemoryRpc('records.accept', {
+      sessionId: 'live', id: candidate.id, expectedRevision: candidate.revision,
+    }, signal, runtime, sessions('/real/work'))).toMatchObject({ ok: false, error: { code: 'MEMORY_STALE' } })
+    const activate = (id: string, expectedRevision: number) => handleMemoryRpc('records.update', {
+      sessionId: 'live', id, expectedRevision, status: 'active',
+    }, signal, runtime, sessions('/real/work'))
+    expect(await activate(candidate.id, candidate.revision)).toMatchObject({ ok: false, error: { code: 'MEMORY_INVALID' } })
+    const rejected = await runtime.reject(candidate.id, candidate.revision)
+    expect(await activate(rejected.id, rejected.revision)).toMatchObject({ ok: false, error: { code: 'MEMORY_INVALID' } })
+    expect(runtime.status().records.find(record => record.id === candidate.id)?.status).toBe('rejected')
+    expect(await handleMemoryRpc('records.update', {
+      sessionId: 'live', id: source.id, expectedRevision: source.revision + 1, title: 'edited normally',
+    }, signal, runtime, sessions('/real/work'))).toMatchObject({ ok: true, value: { title: 'edited normally', status: 'active' } })
+    await runtime.dispose()
+  })
+
   it('derives project scope from the live session, not a client path', async () => {
     let n = 0
     const runtime = new MemoryRuntime({
