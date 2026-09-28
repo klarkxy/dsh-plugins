@@ -175,11 +175,11 @@ describe('zhihu_search', () => {
       expect(result.count).toBe(ZHIHU_SEARCH_DEFAULT_COUNT)
     })
 
-    it('returns HTTP_ERROR with status when the API responds non-2xx', async () => {
+    it('returns TOKEN_INVALID with status when the API responds HTTP 401', async () => {
       const fetcher = makeFetcher(() => jsonResponse(null, { ok: false, status: 401 }))
       await expect(executeZhihuSearch('x', 5, { fetcher, env: { ZHIHU_ACCESS_TOKEN: token.token } })).rejects.toMatchObject({
         name: 'ZhihuSearchError',
-        code: 'HTTP_ERROR',
+        code: 'TOKEN_INVALID',
         status: 401,
       })
     })
@@ -300,7 +300,7 @@ describe('zhihu_search', () => {
         env: { ZHIHU_ACCESS_TOKEN: 'primarytoken1' },
         onExecuted: (event) => events.push(event),
       })
-      await expect(executeTool(tool, { query: 'q', count: 1 })).rejects.toMatchObject({ code: 'HTTP_ERROR' })
+      await expect(executeTool(tool, { query: 'q', count: 1 })).rejects.toMatchObject({ code: 'TOKEN_INVALID' })
       expect(events).toEqual([{ ok: false, results: 0 }])
     })
 

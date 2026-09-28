@@ -1,4 +1,5 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
+export * from './open-platform-tools.ts'
 import { reportExecuted, type ZhihuClientOptions } from './zhihu-client.ts'
 import { ZHIHU_SEARCH_TOOL_NAME, ZHIHU_GLOBAL_SEARCH_TOOL_NAME, ZHIHU_HOT_LIST_TOOL_NAME, ZHIHU_ASK_TOOL_NAME, ZHIHU_KNOWLEDGE_SEARCH_TOOL_NAME } from './contracts.ts'
 import { executeZhihuSearch, renderZhihuSearch, ZHIHU_SEARCH_DEFAULT_COUNT, ZHIHU_SEARCH_MAX_COUNT, type ZhihuSearchResult } from './search-api.ts'

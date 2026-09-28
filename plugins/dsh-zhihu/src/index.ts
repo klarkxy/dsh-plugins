@@ -11,6 +11,14 @@ import { createZhihuUsageRecorder, resolveDays, zhihuUsageDomainSpec, type Zhihu
 import { ZHIHU_RPC_CHANNEL, ZHIHU_CREDENTIAL_REF, ZHIHU_SEARCH_EVENT, type ZhihuRpcResult } from './contracts.ts'
 import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
 import { bindZhihuWebSearch } from './web-search-provider.ts'
+import { zhihuEndpointQuota } from './quota.ts'
+import {
+  executeZhihuQuestionRecommendations, executeZhihuQuestionAnswers,
+  executeZhihuContentDetail, executeZhihuContentComments,
+  executeZhihuCreatorAccountStats, executeZhihuCreatorContentStats, zhihuOpenResultCount,
+  type ZhihuRecommendationsArgs, type ZhihuAnswersArgs, type ZhihuContentArgs,
+  type ZhihuCommentsArgs, type ZhihuAccountStatsArgs, type ZhihuContentStatsArgs,
+} from './open-platform.ts'
 
 export const name = '@klarkxy/dsh-zhihu'
 export const inject = ['connection', 'credentials', 'storageDomain', 'webServer'] as const
@@ -25,7 +33,7 @@ export type ZhihuService = {
 type Host = Context & HostRpcContext & {
   credentials: { resolve: (ref: ReturnType<typeof credentialRef>) => Promise<{ value: string } | undefined> }
 }
-const fail = (code: string, message: string): ZhihuRpcResult => ({ ok: false, error: { code, message, details: {} } })
+const fail = (code: string, message: string, details: Record<string, unknown> = {}): ZhihuRpcResult => ({ ok: false, error: { code, message, details } })
 
 /** One shared service for direct UI RPC and optional Tool wrappers. */
 export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsageRecorder, notify: (event: ZhihuSearchExecuted) => void = () => {}): ZhihuService {
@@ -73,6 +81,24 @@ export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsag
         } else if (endpoint === 'ask') {
           const model = (ZHIHU_ASK_MODELS as readonly unknown[]).includes(body.model) ? body.model as typeof ZHIHU_ASK_MODELS[number] : ZHIHU_ASK_DEFAULT_MODEL
           value = await executeZhihuAsk(query, model, client); results = 1
+        } else if (endpoint === 'question.recommendations') {
+          const result = await executeZhihuQuestionRecommendations(body as ZhihuRecommendationsArgs, client)
+          value = result; results = zhihuOpenResultCount(result)
+        } else if (endpoint === 'question.answers') {
+          const result = await executeZhihuQuestionAnswers(body as ZhihuAnswersArgs, client)
+          value = result; results = zhihuOpenResultCount(result)
+        } else if (endpoint === 'content.detail') {
+          const result = await executeZhihuContentDetail(body as ZhihuContentArgs, client)
+          value = result; results = zhihuOpenResultCount(result)
+        } else if (endpoint === 'content.comments') {
+          const result = await executeZhihuContentComments(body as ZhihuCommentsArgs, client)
+          value = result; results = zhihuOpenResultCount(result)
+        } else if (endpoint === 'creator.account.stats') {
+          const result = await executeZhihuCreatorAccountStats(body as ZhihuAccountStatsArgs, client)
+          value = result; results = zhihuOpenResultCount(result)
+        } else if (endpoint === 'creator.content.stats') {
+          const result = await executeZhihuCreatorContentStats(body as ZhihuContentStatsArgs, client)
+          value = result; results = zhihuOpenResultCount(result)
         } else if (endpoint === 'knowledge.search') {
           const result = await executeZhihuKnowledgeSearch(query, typeof body.limit === 'number' ? body.limit : 5, normalizeRecallScopes(body.recallScopes), client)
           value = result; results = result.items.length
@@ -94,13 +120,17 @@ export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsag
           counted = false
           return fail('bad-request', `unknown endpoint ${endpoint}`)
         }
-        record({ ok: true, results })
+        record({ ok: true, results, quotaId: zhihuEndpointQuota(endpoint) })
         return { ok: true, value }
       } catch (error) {
-        if (counted) record({ ok: false, results: 0 })
+        if (counted) record({ ok: false, results: 0, quotaId: zhihuEndpointQuota(endpoint) })
         if (signal.aborted) return fail('cancelled', '请求已取消')
         const code = error instanceof ZhihuSearchError ? error.code.toLowerCase().replaceAll('_', '-') : 'internal'
-        return fail(code, error instanceof Error ? error.message : '知乎请求失败')
+        return fail(code, error instanceof Error ? error.message : '知乎请求失败', error instanceof ZhihuSearchError ? {
+          ...(error.status !== undefined ? { status: error.status } : {}),
+          ...(error.apiCode !== undefined ? { apiCode: error.apiCode } : {}),
+          ...(error.retryAfter !== undefined ? { retryAfter: error.retryAfter } : {}),
+        } : {})
       }
     },
   }

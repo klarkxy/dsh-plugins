@@ -17,6 +17,7 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import type { ZhihuQuotaId } from './quota.ts'
 
 export const ZHIHU_BASE_URL = 'https://developer.zhihu.com'
 export const ZHIHU_DEFAULT_TIMEOUT_MS = 15_000
@@ -33,6 +34,7 @@ export type ZhihuSearchToken = { token: string; source: TokenSource }
 export type ZhihuSearchFetcher = (input: string, init?: { method?: string; headers?: Record<string, string>; body?: string | FormData; signal?: AbortSignal }) => Promise<{
   ok: boolean
   status: number
+  headers?: { get(name: string): string | null }
   text(): Promise<string>
   json(): Promise<unknown>
 }>
@@ -90,18 +92,22 @@ export async function resolveZhihuToken(
 }
 
 export class ZhihuSearchError extends Error {
-  readonly code: 'TOKEN_MISSING' | 'HTTP_ERROR' | 'TIMEOUT' | 'BAD_RESPONSE'
+  readonly code: 'TOKEN_MISSING' | 'TOKEN_INVALID' | 'HTTP_ERROR' | 'TIMEOUT' | 'CANCELLED' | 'BAD_RESPONSE' | 'INVALID_ARGUMENTS' | 'RATE_LIMITED' | 'RISK_CONTROL' | 'UPSTREAM_UNAVAILABLE'
   readonly status?: number
-  constructor(code: ZhihuSearchError['code'], message: string, status?: number) {
+  readonly apiCode?: number
+  readonly retryAfter?: string
+  constructor(code: ZhihuSearchError['code'], message: string, status?: number, details: { apiCode?: number; retryAfter?: string } = {}) {
     super(message)
     this.name = 'ZhihuSearchError'
     this.code = code
     if (status !== undefined) this.status = status
+    this.apiCode = details.apiCode
+    this.retryAfter = details.retryAfter
   }
 }
 
 /** Metering payload emitted after each zhihu tool execution. */
-export type ZhihuSearchExecuted = { ok: boolean; results: number }
+export type ZhihuSearchExecuted = { ok: boolean; results: number; quotaId?: ZhihuQuotaId }
 
 /** Metering must never break the tool itself. */
 export function reportExecuted(hook: ((event: ZhihuSearchExecuted) => void) | undefined, event: ZhihuSearchExecuted): void {
@@ -133,7 +139,7 @@ function isAbortError(error: unknown): boolean {
  */
 export async function zhihuFetchJson(
   path: string,
-  init: { method?: 'GET' | 'POST'; params?: Record<string, string>; body?: unknown; formData?: FormData },
+  init: { method?: 'GET' | 'POST'; params?: Record<string, string>; body?: unknown; formData?: FormData; preserveInt64?: boolean },
   label: string,
   options: ZhihuClientOptions = {},
 ): Promise<unknown> {
@@ -156,6 +162,7 @@ export async function zhihuFetchJson(
   const timer = setTimeout(() => controller.abort(new Error('zhihu request timeout')), timeout)
   let response: Awaited<ReturnType<ZhihuSearchFetcher>>
   try {
+    controller.signal.throwIfAborted()
     response = await fetcher(url.toString(), {
       method,
       headers: {
@@ -168,7 +175,46 @@ export async function zhihuFetchJson(
       signal: controller.signal,
       ...(init.formData ? { body: init.formData } : init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
     })
+    if (linked?.aborted) throw new ZhihuSearchError('CANCELLED', '请求已取消。')
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new ZhihuSearchError('TOKEN_INVALID', '知乎 Access Secret 无效或无权访问，请检查凭据。', response.status)
+      }
+      if (response.status === 429) {
+        throw new ZhihuSearchError('RATE_LIMITED', `${label}被限流（HTTP 429）。`, response.status, { retryAfter: response.headers?.get('Retry-After') ?? undefined })
+      }
+      // Some parameter/risk failures arrive as envelopes on HTTP 4xx.
+      if (response.status < 500) {
+        let body: unknown
+        try { body = await response.json() } catch (error) { if (controller.signal.aborted) throw error }
+        if (body && typeof body === 'object' && 'Code' in body) parseZhihuEnvelope(body, { status: response.status, retryAfter: response.headers?.get('Retry-After') ?? undefined })
+      }
+      throw new ZhihuSearchError('HTTP_ERROR', `${label}返回 HTTP ${response.status}。`, response.status)
+    }
+    let body: unknown
+    try {
+      body = init.preserveInt64
+        ? JSON.parse(await response.text(), (_key: string, value: unknown, context?: { source?: string }) => {
+            // Node >=22 supplies the original number token. Never round Int64 cursors or IDs.
+            if (typeof value === 'number' && Number.isInteger(value) && !Number.isSafeInteger(value)) {
+              if (context?.source && /^-?\d+$/.test(context.source)) return context.source
+              throw new Error('无法无损读取 Int64；请升级 Node.js')
+            }
+            return value
+          })
+        : await response.json()
+      if (controller.signal.aborted) controller.signal.throwIfAborted()
+    } catch (error) {
+      if (controller.signal.aborted) throw error
+      throw new ZhihuSearchError('BAD_RESPONSE', `${label}响应不是合法 JSON：${error instanceof Error ? error.message : String(error)}`)
+    }
+    if (body && typeof body === 'object' && 'Code' in body && Number(body.Code) !== 0) {
+      parseZhihuEnvelope(body, { status: response.status, retryAfter: response.headers?.get('Retry-After') ?? undefined })
+    }
+    return body
   } catch (error) {
+    if (linked?.aborted) throw new ZhihuSearchError('CANCELLED', '请求已取消。')
+    if (error instanceof ZhihuSearchError) throw error
     if (isAbortError(error) || controller.signal.aborted) {
       throw new ZhihuSearchError('TIMEOUT', `${label}超时（${Math.round(timeout / 1000)} 秒），请稍后再试。`)
     }
@@ -177,28 +223,27 @@ export async function zhihuFetchJson(
     clearTimeout(timer)
     if (linked) linked.removeEventListener('abort', onAbort)
   }
-
-  if (!response.ok) {
-    throw new ZhihuSearchError('HTTP_ERROR', `${label}返回 HTTP ${response.status}。`, response.status)
-  }
-
-  try {
-    return await response.json()
-  } catch (error) {
-    throw new ZhihuSearchError('BAD_RESPONSE', `${label}响应不是合法 JSON：${error instanceof Error ? error.message : String(error)}`)
-  }
 }
 
-/** 解析 {Code, Message, Data} 信封,Code 非 0 抛出 HTTP_ERROR;返回 Data(缺省为 {})。 */
-export function parseZhihuEnvelope(body: unknown): unknown {
+/** 解析信封，按主库分类鉴权、参数、限流和风控错误；返回 Data（缺省为 {}）。 */
+export function parseZhihuEnvelope(body: unknown, transport: { status?: number; retryAfter?: string } = {}): unknown {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new ZhihuSearchError('BAD_RESPONSE', '知乎响应缺少 {Code,Message,Data} 信封。')
   }
   const envelope = body as { Code?: unknown; Message?: unknown; Data?: unknown }
+  if (!(typeof envelope.Code === 'number' && Number.isInteger(envelope.Code))
+    && !(typeof envelope.Code === 'string' && /^\d+$/.test(envelope.Code))) {
+    throw new ZhihuSearchError('BAD_RESPONSE', '知乎响应缺少有效的 Code 字段。')
+  }
   const code = Number(envelope.Code)
-  if (!Number.isFinite(code) || code !== 0) {
+  if (code !== 0) {
     const msg = typeof envelope.Message === 'string' ? envelope.Message : '未知错误'
-    throw new ZhihuSearchError('HTTP_ERROR', `知乎开放平台返回错误（code=${envelope.Code ?? '?'}）：${msg}`)
+    if (code === 30003) throw new ZhihuSearchError('RISK_CONTROL', `知乎请求被风控拒绝：${msg}。请不要立即重试。`, transport.status, { apiCode: code })
+    if ([30001, 30002, 40003].includes(code)) throw new ZhihuSearchError('RATE_LIMITED', `知乎频率或额度限制：${msg}`, transport.status, { apiCode: code, retryAfter: transport.retryAfter })
+    if (code === 20001) throw new ZhihuSearchError('TOKEN_INVALID', '知乎 Access Secret 无效或无权访问，请检查凭据。', transport.status, { apiCode: code })
+    if ([10001, 40001, 40002, 40004, 40005, 40006].includes(code)) throw new ZhihuSearchError('INVALID_ARGUMENTS', `知乎参数错误：${msg}`, transport.status, { apiCode: code })
+    if ([50002, 90001].includes(code)) throw new ZhihuSearchError('UPSTREAM_UNAVAILABLE', `知乎上游服务不可用：${msg}`, transport.status, { apiCode: code })
+    throw new ZhihuSearchError('HTTP_ERROR', `知乎开放平台返回错误（code=${envelope.Code ?? '?'}）：${msg}`, transport.status, { apiCode: code })
   }
   return envelope.Data ?? {}
 }

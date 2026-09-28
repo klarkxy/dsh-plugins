@@ -1,5 +1,7 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
+import { ZHIHU_QUOTA_IDS, type ZhihuQuotaId } from './quota.ts'
+export { ZHIHU_QUOTA_IDS, ZHIHU_ENDPOINT_QUOTAS, zhihuEndpointQuota, type ZhihuQuotaId } from './quota.ts'
 export class UsageInputError extends Error {
   constructor(message: string, readonly code: string) { super(message); this.name = 'UsageInputError' }
 }
@@ -27,16 +29,24 @@ export type ZhihuDailyUsage = {
   calls: number
   failures: number
   results: number
+  /** Local calls by official quota category; not an official balance or billing estimate. */
+  quotas?: Partial<Record<ZhihuQuotaId, { calls: number; failures: number; results: number }>>
 }
 
 /** Metering payload emitted by novel tool hosts after each zhihu_search execution. */
-export type ZhihuSearchEvent = { ok: boolean; results?: number }
+export type ZhihuSearchEvent = { ok: boolean; results?: number; quotaId?: ZhihuQuotaId }
 
 const dailyRowSchema = z.object({
   date: z.string(),
   calls: z.number().int().nonnegative(),
   failures: z.number().int().nonnegative(),
   results: z.number().int().nonnegative(),
+  // Optional so existing v1 rows remain readable without inventing historical categories.
+  quotas: z.partialRecord(z.enum(ZHIHU_QUOTA_IDS), z.object({
+    calls: z.number().int().nonnegative(),
+    failures: z.number().int().nonnegative(),
+    results: z.number().int().nonnegative(),
+  })).optional(),
 })
 
 export const zhihuUsageDomainSpec = defineDomain({
@@ -59,6 +69,14 @@ export function mergeZhihuUsage(day: ZhihuDailyUsage | undefined, event: ZhihuSe
   next.calls += 1
   if (event.ok) next.results += int(event.results)
   else next.failures += 1
+  if (event.quotaId) {
+    const previous = day?.quotas?.[event.quotaId] ?? { calls: 0, failures: 0, results: 0 }
+    next.quotas = { ...day?.quotas, [event.quotaId]: {
+      calls: previous.calls + 1,
+      failures: previous.failures + (event.ok ? 0 : 1),
+      results: previous.results + (event.ok ? int(event.results) : 0),
+    } }
+  }
   return next
 }
 
