@@ -13,15 +13,17 @@ export function discoverPackages(root) {
           manifest.name !== `@klarkxy/${entry.name}`) {
         throw new Error(`${directory}: package name must be @klarkxy/${entry.name} (dsh-xxx)`);
       }
-      if (manifest.private || semver.valid(manifest.version) !== manifest.version || manifest.version.includes('+')) {
-        throw new Error(`${directory}: expected a public package with a release version`);
+      if (semver.valid(manifest.version) !== manifest.version || manifest.version.includes('+')) {
+        throw new Error(`${directory}: expected a valid release version`);
       }
+      if (manifest.private === true) return null;
+      if (manifest.private) throw new Error(`${directory}: private must be a boolean`);
       if (manifest.publishConfig?.access !== 'public' ||
           manifest.publishConfig?.registry !== 'https://registry.npmjs.org/') {
         throw new Error(`${directory}: publishConfig must select public access and the npm registry`);
       }
       return { slug: entry.name, directory, name: manifest.name, version: manifest.version };
-    });
+    }).filter(Boolean);
   if (!packages.length) throw new Error('No plugins found');
   return packages;
 }

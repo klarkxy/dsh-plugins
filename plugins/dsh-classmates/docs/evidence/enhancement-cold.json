@@ -1,0 +1,77 @@
+{
+  "checkedAt": "2026-09-25T07:09:19.439Z",
+  "remoteModelCalls": 0,
+  "liveAgentsBefore": 0,
+  "members": [
+    {
+      "memberId": "enhancement-1790319694628",
+      "memberName": "lead",
+      "configuredModel": null,
+      "lastUsedModel": {
+        "provider": "fixture",
+        "id": "lead-model"
+      }
+    },
+    {
+      "memberId": "f6bf88bf-53db-4a69-a3a5-860aa26717d9",
+      "memberName": "desktop-designer",
+      "configuredModel": {
+        "provider": "fixture",
+        "id": "design-model"
+      },
+      "lastUsedModel": {
+        "provider": "fixture",
+        "id": "design-model"
+      },
+      "roleId": "designer",
+      "roleName": "界面制作同学",
+      "description": "实现清晰易用的页面和交互"
+    },
+    {
+      "memberId": "e16bbd6e-e86a-46f7-9549-ce6c11beee35",
+      "memberName": "mobile-designer",
+      "configuredModel": {
+        "provider": "fixture",
+        "id": "design-model"
+      },
+      "lastUsedModel": {
+        "provider": "fixture",
+        "id": "design-model"
+      },
+      "roleId": "designer",
+      "roleName": "界面制作同学",
+      "description": "实现清晰易用的页面和交互"
+    },
+    {
+      "memberId": "3903f649-4f32-4ac8-9b9a-17c859971d9c",
+      "memberName": "independent-reviewer",
+      "configuredModel": {
+        "provider": "fixture",
+        "id": "review-model",
+        "reasoningEffort": "high"
+      },
+      "lastUsedModel": {
+        "provider": "fixture",
+        "id": "review-model",
+        "reasoningEffort": "high"
+      },
+      "roleId": "reviewer",
+      "roleName": "独立审查同学",
+      "description": "检查实现、提出具体问题"
+    },
+    {
+      "memberId": "e0d852f0-6082-4f67-aa82-8c35565e1bb1",
+      "memberName": "native-helper",
+      "configuredModel": null,
+      "lastUsedModel": {
+        "provider": "fixture",
+        "id": "lead-model"
+      }
+    }
+  ],
+  "checks": [
+    "official persisted Session query after process restart",
+    "frozen role and actual request model recovered",
+    "metadata reads do not wake agents or issue model requests"
+  ]
+}

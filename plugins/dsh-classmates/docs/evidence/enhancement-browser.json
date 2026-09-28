@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-09-25T07:09:33.672Z",
+  "model": "local deterministic fixture",
+  "checks": [
+    "one native Team action; frozen role, instance, request model, native member, task ownership readable",
+    "native child navigation; role and model visible without opening panel",
+    "Escape restores trigger focus",
+    "390px member header and panel remain readable",
+    "native dark theme",
+    "manager opens in workspace, allows conversation, uses host model; advanced editing retained"
+  ],
+  "pageErrors": []
+}

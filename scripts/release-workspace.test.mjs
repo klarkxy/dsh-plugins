@@ -13,7 +13,7 @@ function writePackage(root, name, dependencies = {}) {
   writeFileSync(join(root, directory, 'package.json'), JSON.stringify({ name, version: pkg.version, type: 'module', files: ['index.js'], dependencies }));
   writeFileSync(join(root, directory, 'index.js'), 'export const ready = true;\n'); return pkg;
 }
-const npm = (args, cwd) => execFileSync('npm', args, { cwd, encoding: 'utf8', env: { ...process.env, npm_config_audit: 'false', npm_config_fund: 'false' } });
+const npm = (args, cwd) => execFileSync(process.platform === 'win32' ? 'cmd.exe' : 'npm', process.platform === 'win32' ? ['/d', '/s', '/c', 'npm', ...args] : args, { cwd, encoding: 'utf8', env: { ...process.env, npm_config_audit: 'false', npm_config_fund: 'false' } });
 test('orders workspace dependencies before dependants regardless of directory order', t => {
   const root = fixture(t), memory = writePackage(root, '@klarkxy/dsh-memory');
   const feature = writePackage(root, '@klarkxy/dsh-feature', { [memory.name]: 'workspace:*' });

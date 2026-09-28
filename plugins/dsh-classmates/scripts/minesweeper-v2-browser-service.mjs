@@ -1,0 +1,12 @@
+import { chromium } from '@playwright/test';
+import { writeFile, mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { createInterface } from 'node:readline';
+const directory=resolve('.test-output/minesweeper-v2-native');
+await mkdir(directory,{recursive:true});
+const server=await chromium.launchServer({channel:'msedge',headless:true,host:'127.0.0.1',port:19436});
+await writeFile(`${directory}/browser-endpoint.txt`,server.wsEndpoint());
+console.log('BROWSER_SERVICE_READY');
+for await (const line of createInterface({input:process.stdin})) if(line.trim()==='stop') break;
+await server.close();
+process.exit(0);
