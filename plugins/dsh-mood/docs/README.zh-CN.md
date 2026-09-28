@@ -1,10 +1,10 @@
 # @klarkxy/dsh-mood
 
-默认启用的需求澄清：在 Host `agent/pre-step` 边界拦截代理请求，在含糊的工作开始前先提问确认。
+Mood 是 DeepSeek Harness 的轻量自主推进策略：让主 Agent 先调查、采用合理的低风险默认方案，仅在无法自行解决的实质阻塞处询问用户。
 
-[English](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-mood/README.md)
+[English](../README.md)
 
-需要 Node.js ≥22 和 DSH `0.1.7-rc.2`。插件安装后默认启用，也可在插件设置中关闭。它不会替代原生权限或写作提案确认。
+需要 Node.js ≥22 和 DSH `0.1.7-rc.2`。在 **设置 → 插件** 中独立启停。原生权限、写作提案、发布确认和 Safe Auto 的审批保持独立，Mood 不替它们放行。
 
 ```sh
 npm install @klarkxy/dsh-mood
@@ -12,46 +12,54 @@ dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-mood
 ```
 
-在「设置 → 插件」开关需求澄清。启用后按自动模式运行，不再提供单独设置页。对话卡片使用座位 `dsh-editor.chat.events`，参数 `{sessionId, locale}`。
+## 默认行为
 
-表述清楚的请求不调用 `mood.analyze`。自动模式只在确定存在实质含糊或风险时提问，且最多提 `MAX_QUESTIONS`（3）个问题。澄清在同一次 pre-step 内等待，然后只恢复这次被拦住的请求。
+Mood 在 `agent/pre-step` 注入一条带插件来源、可去重的稳定策略。普通请求**不调用辅助模型、不弹出问题、不写入任务约定、不挂起执行**。策略在后续工具步骤中继续生效，而不只影响任务开头。
 
-## 任务约定（TaskContract）
+不明确时先检查已有上下文和获准工具。存在合理、低风险、可调整的默认方案时直接继续；影响结果的假设可简短说明，但不等待确认。只有答案会实质改变结果、无法从现有资料或工具获得、且没有合理默认值或可先推进的部分时，才提出最小必要问题。
 
-每个会话澄清出的需求存为一份 `TaskContract`（目标、交付、范围、约束、验收、假定、待确认问题、证据）。聊天卡片渲染目标、证据列表和澄清问题及其回答，并提供三个操作：「修订」（修改目标）、「重新分析」（重新分析该会话）、「按原请求重试」（有被扣住的原请求时恢复它一次）。
+普通澄清尽量合并，新的实质阻塞和必须的权限审批仍应提出。“继续”“你决定”“按你的建议来”表示在原任务和权限范围内推进，不触发重新确认。用户明确要求讨论、访谈或共同决策时，仍按其要求交流。任务完成后不惯例性追加“是否继续”。这是行为指导，不保证所有模型完全遵守，也不是安全边界。
 
-约定带有 `readiness` 状态：`pending`（待确认）、`clear-request`（表述清楚）、`user-confirmed`（作者已确认）、`disclosed-assumptions`（按已披露假定继续）、`cancelled`（已取消，未确认）、`stale`（已过期）。
+## 按需梳理需求
 
-在 `agent/pre-step` 时，约定快照作为有界的用户消息注入模型上下文；它只是描述性上下文，不能代替文件修改或发布审批。
+在原生 Mood 设置面板点击 **梳理需求**，或主动调用 `manual`，才激活 `mood.analyze`。梳理使用最近的真实用户消息，保留上下文里的已有回答，不把插件伪装的用户消息当作用户要求。
 
-### 名称对照
+结果仍通过 `TaskContract` 提供给 Recap 等消费者，但只是可选摘要，不是执行证书或前置条件。空问题列表保持为空；建议问题作为摘要中的未决事项展示，不弹出阻塞问卷。是否确实需要询问，由主 Agent 按自主推进策略判断。
 
-同一功能在不同界面有不同名称，指的都是它：
+普通请求不再生成任务卡片，旧版自动生成的卡片默认隐藏。主动生成的摘要在聊天中默认折叠，可在设置中修订。新任务会停止注入过期摘要；单纯“继续”不会使摘要失效。
 
-| 位置 | 名称 |
+## 旧数据与故障恢复
+
+保留原存储结构和 `/dsh-mood` RPC。旧约定、回答仍可读取；历史 `manual/strict` 模式统一归一为不阻塞的 `auto`，界面不再展示失效的模式选择器。
+
+旧版挂起的请求不会自动重放。**按原请求重试** 只在用户主动操作后，通过原生 Host 适配器恢复原始用户消息一次，仍经过权限机制。新用户任务会取代旧的挂起请求。旧的待确认或已取消约定不会被静默改成已确认。
+
+手动分析或摘要存储失败会向该次主动操作报告错误，不阻塞普通对话。取消、新消息和插件停用会丢弃迟到结果。修订仍使用版本 CAS，修改目标不会替用户编造对其他问题的回答。
+
+## Host RPC
+
+频道受 Host 授权策略保护。
+
+| 端点 | 行为 |
 | --- | --- |
-| 「设置 → 插件」功能入口 | 需求澄清 |
-| 聊天座位 label | 需求约定 |
-| 聊天卡片标题 | 任务约定 |
-| API 与契约类型 | `TaskContract` |
+| `status` | 设置及可选会话视图；`held` 仅用于旧版恢复 |
+| `contract` | 当前可选 `TaskContract`，没有则返回 `null` |
+| `mode` | 兼容 CAS 接口；历史模式名归一为 `auto` |
+| `manual` | 立即按需梳理最近用户上下文，返回摘要，不伪造聊天消息 |
+| `edit` | 用 `{ sessionId, expectedRevision, patch }` 修订摘要 |
+| `retry` | 主动恢复旧版挂起的原始请求一次 |
 
-## 宿主 RPC
+## 验证
 
-频道 `/dsh-mood`，走宿主授权策略。
-
-- `status` — 设置；传入 `sessionId` 时附会话视图（约定、澄清、扣留与待处理标记）。
-- `contract` — 该会话当前的任务约定，没有时为 `null`。
-- `mode` — 按比较并交换修订号保存澄清模式（`{ mode, expectedRevision }`）；功能启用期间存储的模式为 `auto`。
-- `manual` — 为会话排队一次手动分析。
-- `retry` — 恢复该会话被扣住的原请求一次。
-- `edit` — 按比较并交换修订号修订约定目标（`{ sessionId, expectedRevision, patch }`）。
+在仓库根目录执行：
 
 ```sh
 pnpm --filter @klarkxy/dsh-mood typecheck
-pnpm exec vitest run packages/dsh-mood/src
+pnpm --filter @klarkxy/dsh-mood test
 pnpm --filter @klarkxy/dsh-mood build
+pnpm check
 ```
 
-[发布说明](https://github.com/klarkxy/dsh-editor/blob/main/packages/PUBLISHING.md) · [许可证](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-mood/LICENSE)
+回归测试覆盖默认零询问、继续与委托、消息来源、空问题列表、原生拒绝、辅助故障降级、旧请求恢复、过期结果、存储失败、CAS 修订与安静的卡片展示。
 
-部分宿主会预装并默认启用本功能；宿主支持热切换时，通过「设置 → 插件」开关无需重启。独立 DSH 需先加载 `@klarkxy/dsh-ai-services` 再加载本包；宿主提示需要重启时，安装或移除后重启。
+[发布说明](../../PUBLISHING.md) · [许可证](../LICENSE)

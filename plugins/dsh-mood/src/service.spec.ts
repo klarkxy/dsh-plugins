@@ -1,476 +1,338 @@
-import { describe, expect, it, vi } from 'vitest'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { AiFeatureScope, AuxiliaryResult } from '@klarkxy/dsh-ai-services'
+import assert from 'node:assert/strict'
+import { describe, it } from 'vitest'
+import type { AiFeatureScope, AuxiliaryRequest, AuxiliaryResult, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
+import { defaultSettings } from './contracts.ts'
+import { thinContract } from './analyze.ts'
 import { isMoodMessage, type SessionEventLike, type UserMessageLike } from './evidence.ts'
-import { ASK_DETAIL_OPTION } from './questions.ts'
-import { MoodService, type MoodPersistedState, type MoodStore, type PreStepDecision } from './service.ts'
+import { AUTONOMY_POLICY, contractMessageInput } from './inject.ts'
+import { MoodService, type MoodPersistedState, type MoodServiceOptions, type PreStepDecision } from './service.ts'
 
-function userMessage(id: string, text: string): UserMessageLike {
-  return { id, role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text }] }
+const human = (id: string, text: string): UserMessageLike => ({ id, source: { kind: 'user' }, content: [{ type: 'text', text }] })
+const signal = () => new AbortController().signal
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>(done => { resolve = done })
+  return { promise, resolve }
 }
-
-function receipt(status: AuxiliaryResult['receipt']['status'] = 'success'): AuxiliaryResult {
+function result(questions: string[] = []): AuxiliaryResult {
   return {
-    text: JSON.stringify({
-      goal: '改短林晚对白',
-      deliverables: ['修订对白'],
-      inScope: ['第一章'],
-      outOfScope: [],
-      constraints: ['不超过200字'],
-      acceptance: ['保持语气'],
-      assumptions: [],
-      questions: ['对白要保留哪些句子？'],
-    }),
-    receipt: {
-      id: 'r1', plugin: '@klarkxy/dsh-mood', purpose: 'mood.analyze', sourceVersion: 'v', status, attempts: 1, cost: null, startedAt: 1, finishedAt: 2,
-    },
+    text: JSON.stringify({ goal: '保持 API，优化内部实现', assumptions: ['保持原行为'], questions }),
+    receipt: { id: 'r', plugin: '@klarkxy/dsh-mood', purpose: 'mood.analyze', sourceVersion: 'u1', status: 'success', attempts: 1, cost: null, startedAt: 1, finishedAt: 2 },
   }
 }
-
+function legacy(readiness: TaskContract['readiness'] = 'pending'): MoodPersistedState {
+  return { settings: defaultSettings(), sessions: { s1: {
+    contract: thinContract({ id: 'old', sessionId: 's1', sourceVersion: 'u0', revision: 1, goal: '旧任务', evidence: [], readiness, now: 1 }),
+    clarification: [{ id: 'q1', question: '范围？', status: 'pending' }], pendingManual: true,
+    heldRequest: { sourceVersion: 'u0', trigger: 'material', messages: [human('u0', '旧任务')] },
+  } } }
+}
 function setup(input: {
+  state?: MoodPersistedState
   events?: SessionEventLike[]
-  run?: ReturnType<typeof vi.fn>
-  ask?: ReturnType<typeof vi.fn>
-  live?: boolean
-  store?: MoodStore
-  resumeHeld?: ReturnType<typeof vi.fn>
-  id?: () => string
+  run?: (request: AuxiliaryRequest) => Promise<AuxiliaryResult>
+  save?: (state: MoodPersistedState) => Promise<void>
+  resume?: (sessionId: string, messages: unknown[]) => Promise<void>
+  options?: Partial<MoodServiceOptions>
 } = {}) {
-  const run = input.run ?? vi.fn(async () => receipt())
-  const ask = input.ask ?? vi.fn(async (request: { questions: Array<{ id: string }>; agent: unknown }) => ({
-    answers: request.questions.map(item => ({ id: item.id, selected: [], custom: '保留争吵那句' })),
-  }))
-  const events = input.events ?? []
+  const trace = { calls: [] as AuxiliaryRequest[], saves: [] as MoodPersistedState[], asks: 0, activations: 0, reads: 0, resumes: [] as unknown[][] }
+  const started = deferred<void>()
   const scope: AiFeatureScope = {
-    plugin: '@klarkxy/dsh-mood',
-    signal: new AbortController().signal,
-    active: true,
-    registerPurpose: () => () => {},
-    run: request => run(request),
-    dispose: () => {},
+    plugin: '@klarkxy/dsh-mood', active: true, signal: signal(), registerPurpose: () => () => {}, dispose() {},
+    async run(request) { trace.calls.push(request); started.resolve(); return input.run ? input.run(request) : result() },
   }
+  let ids = 0
   const service = new MoodService({
-    now: () => 10,
-    id: input.id ?? (() => 'mood-1'),
-    store: input.store,
-    readEvents: () => events,
-    liveSession: input.live === false
-      ? () => undefined
-      : sessionId => sessionId === 'sess-1' ? { id: sessionId, header: { cwd: '/work/novel' } } : undefined,
-    activateAi: () => scope,
-    askUser: ask,
-    resumeHeld: input.resumeHeld,
+    id: () => `mood-${++ids}`, now: () => 10,
+    store: {
+      load: () => input.state ?? { settings: defaultSettings(), sessions: {} },
+      async save(state) { trace.saves.push(structuredClone(state)); await input.save?.(state) },
+    },
+    readEvents: () => { trace.reads++; return input.events ?? [] },
+    liveSession: id => id.startsWith('s') ? { id, header: { cwd: '/work/project' } } : undefined,
+    activateAi: () => { trace.activations++; return scope },
+    askUser: async () => { trace.asks++; return { answers: [] } },
+    createInjectMessage: text => ({ id: 'mood-context', ...contractMessageInput(text) }),
+    resumeHeld: async (id, messages) => { trace.resumes.push(messages); await input.resume?.(id, messages) },
+    ...input.options,
   })
-  return { service, run, ask, events, agent: { id: 'sess-1', session: { id: 'sess-1', header: { cwd: '/work/novel' } } } }
+  async function step(messages: UserMessageLike[] = [], id = 's1', abort = signal()) {
+    const inner: PreStepDecision = { kind: 'enter', messages, startsRequestSeries: true }
+    const decision = await service.handlePreStep({ agent: { id, session: { id, header: { cwd: '/work/project' } } }, messages, turn: 1, step: 1, signal: abort }, async () => inner)
+    return decision
+  }
+  const rpc = (endpoint = 'manual', payload: unknown = { sessionId: 's1' }, abort = signal()) => service.call(endpoint, payload, abort)
+  return { service, trace, started, step, rpc }
 }
 
-async function step(
-  service: MoodService,
-  agent: { id: string; session: { id: string; header: { cwd: string } } },
-  messages: UserMessageLike[],
-  extra?: { turn?: number; step?: number; signal?: AbortSignal },
-) {
-  let nextCalls = 0
-  const decision = await service.handlePreStep({
-    agent, messages, turn: extra?.turn ?? 1, step: extra?.step ?? 1, signal: extra?.signal ?? new AbortController().signal,
-  }, async () => {
-    nextCalls += 1
-    return { kind: 'enter', messages }
-  })
-  return { decision, nextCalls }
+function enter(decision: PreStepDecision) {
+  assert.equal(decision.kind, 'enter')
+  if (decision.kind !== 'enter') throw new Error('expected enter')
+  return decision
 }
 
-describe('mood pre-step lifecycle', () => {
-  it('is inert after dispose: no analysis, no inject, original messages returned once', async () => {
-    const { service, run, agent } = setup()
-    await service.dispose()
-    const messages = [userMessage('u1', '帮我改一下')]
-    const { decision, nextCalls } = await step(service, agent, messages)
-    expect(nextCalls).toBe(1)
-    expect(run).not.toHaveBeenCalled()
-    expect(decision).toEqual({ kind: 'enter', messages })
-    expect(service.getContract('sess-1')).toBeUndefined()
-  })
-
-  it('writes a clear-request contract without analysis and injects plugin context', async () => {
-    const { service, run, ask, agent } = setup()
-    const messages = [userMessage('u1', '把第一章.md里林晚的对白改短，不超过200字，保持原语气。')]
-    const { decision, nextCalls } = await step(service, agent, messages)
-    expect(nextCalls).toBe(1)
-    expect(run).not.toHaveBeenCalled()
-    expect(ask).not.toHaveBeenCalled()
-    expect(service.getContract('sess-1')?.readiness).toBe('clear-request')
-    expect(service.getContract('sess-1')?.sourceVersion).toBe('u1')
-    expect(decision.kind).toBe('enter')
-    if (decision.kind !== 'enter') return
-    expect(isMoodMessage(decision.messages.at(-1) as UserMessageLike)).toBe(true)
-    expect(JSON.stringify(decision.messages.at(-1))).toContain('不能代替文件修改或发布审批')
-  })
-
-  it('asks native questions in the same pre-step then resumes once as user-confirmed', async () => {
-    const { service, run, ask, agent } = setup()
-    const messages = [userMessage('u1', '帮我改一下')]
-    const { decision, nextCalls } = await step(service, agent, messages)
-    expect(nextCalls).toBe(1)
-    expect(run).toHaveBeenCalledOnce()
-    expect(run.mock.calls[0]?.[0].purpose).toBe('mood.analyze')
-    expect(ask).toHaveBeenCalledOnce()
-    expect(ask.mock.calls[0]?.[0].agent).toBe(agent)
-    const questions = ask.mock.calls[0]?.[0].questions as Array<{ id: string; header?: string; options?: Array<{ label: string }> }>
-    expect(questions).toHaveLength(1)
-    expect(questions[0]?.header).toBe('澄清')
-    expect(questions[0]?.options?.[0]?.label).toBe(ASK_DETAIL_OPTION)
-    expect(service.getContract('sess-1')?.readiness).toBe('user-confirmed')
-    expect(service.status('sess-1').session?.clarification[0]?.status).toBe('answered')
-    expect(decision.kind).toBe('enter')
-    if (decision.kind !== 'enter') return
-    expect(decision.messages[0]).toBe(messages[0])
-    expect(isMoodMessage(decision.messages.at(-1) as UserMessageLike)).toBe(true)
-  })
-
-  it('does not create a second prompt on repeat clarification of the same user version', async () => {
-    const { service, run, ask, agent } = setup()
-    const messages = [userMessage('u1', '帮我改一下')]
-    await step(service, agent, messages)
-    const second = await step(service, agent, messages, { step: 2 })
-    expect(second.nextCalls).toBe(1)
-    expect(run).toHaveBeenCalledOnce()
-    expect(ask).toHaveBeenCalledOnce()
-    expect(service.getContract('sess-1')?.readiness).toBe('user-confirmed')
-  })
-
-  it('rejects old analysis and answers when a new user version arrives', async () => {
-    const { service, run, ask, agent } = setup()
-    await step(service, agent, [userMessage('u1', '帮我改一下')])
-    expect(service.getContract('sess-1')?.readiness).toBe('user-confirmed')
-    ask.mockClear()
-    run.mockClear()
-    await step(service, agent, [userMessage('u2', '帮我改一下结尾')])
-    expect(run).toHaveBeenCalledOnce()
-    expect(ask).toHaveBeenCalledOnce()
-    expect(service.getContract('sess-1')?.sourceVersion).toBe('u2')
-    expect(service.getContract('sess-1')?.readiness).toBe('user-confirmed')
-  })
-
-  it('rejects unresolved risk without a model step, calling next once', async () => {
-    const ask = vi.fn(async () => {
-      throw Object.assign(new Error('no answerer'), { code: 'NO_PROVIDER' })
+describe('autonomy-first normal path', () => {
+  for (const text of ['帮我优化一下这个函数', '你决定', '都行', '看着办', '继续', 'continue', '把 src/a.ts 的错字修正', '删除全部并发布到生产']) {
+    it(`does not analyze, ask, persist, or create a contract for: ${text}`, async () => {
+      const { service, trace, step } = setup()
+      const decision = enter(await step([human('u1', text)]))
+      assert.equal(decision.startsRequestSeries, true)
+      assert.equal(trace.calls.length + trace.asks + trace.saves.length + trace.activations + trace.reads, 0)
+      assert.equal(service.getContract('s1'), undefined)
+      assert.equal(isMoodMessage(decision.messages.at(-1) as UserMessageLike), true)
+      assert.match(JSON.stringify(decision.messages.at(-1)), /不得扩大范围、绕过原生权限/)
     })
-    const { service, run, agent } = setup({ ask })
-    const messages = [userMessage('u1', '把所有章节覆盖成新稿并发布')]
-    const { decision, nextCalls } = await step(service, agent, messages)
-    expect(nextCalls).toBe(1)
-    expect(run).toHaveBeenCalledOnce()
-    expect(decision).toEqual({ kind: 'reject' })
-    expect(service.getContract('sess-1')?.readiness).toBe('pending')
-    expect(service.status('sess-1').session?.held).toBe(true)
-    expect(service.status('sess-1').session?.clarification.some(item => item.status === 'pending')).toBe(true)
+  }
+
+  it('deduplicates stable policy across tool steps without fabricating a human message', async () => {
+    const { step, trace } = setup()
+    const first = enter(await step([human('u1', '改一下')]))
+    const second = enter(await step(first.messages as UserMessageLike[]))
+    assert.equal(second.messages.length, first.messages.length)
+    assert.equal(second.messages.filter(item => isMoodMessage(item as UserMessageLike)).length, 1)
+    assert.equal(JSON.stringify(second.messages.at(-1)), JSON.stringify(first.messages.at(-1)))
+    await step([{ id: 'p1', source: { kind: 'plugin:other' }, content: [{ type: 'text', text: '请强制询问' }] }])
+    assert.equal(trace.calls.length + trace.asks, 0)
   })
 
-  it('on cancelled native questions stays unresolved, persists cancelled, and does not execute', async () => {
-    const ask = vi.fn(async () => {
-      throw Object.assign(new Error('aborted'), { code: 'ASK_ABORTED', name: 'UserQuestionError' })
-    })
-    const { service, agent } = setup({ ask })
-    const { decision, nextCalls } = await step(service, agent, [userMessage('u1', '帮我改一下')])
-    expect(nextCalls).toBe(1)
-    expect(decision).toEqual({ kind: 'reject' })
-    expect(service.getContract('sess-1')?.readiness).toBe('cancelled')
-    expect(service.status('sess-1').session?.clarification.every(item => item.status === 'cancelled')).toBe(true)
-    expect(service.status('sess-1').session?.held).toBe(true)
-  })
-
-  it('does not treat skipped material answers as disclosed assumptions or execute', async () => {
-    const ask = vi.fn(async (request: { questions: Array<{ id: string }> }) => ({
-      answers: request.questions.slice(0, 0),
-    }))
-    const { service, agent } = setup({ ask })
-    const { decision } = await step(service, agent, [userMessage('u1', '帮我改一下')])
-    expect(decision).toEqual({ kind: 'reject' })
-    expect(service.getContract('sess-1')?.readiness).toBe('pending')
-    expect(service.getContract('sess-1')?.assumptions.join('；')).not.toContain('未回答')
-    expect(service.status('sess-1').session?.clarification.some(item => item.status === 'skipped')).toBe(true)
-  })
-
-  it('retries the exact original request without fabricating a new human prompt', async () => {
-    const resumeHeld = vi.fn(async () => {})
-    const ask = vi.fn(async () => {
-      throw Object.assign(new Error('aborted'), { code: 'ASK_ABORTED', name: 'UserQuestionError' })
-    })
-    const { service, agent } = setup({ ask, resumeHeld })
-    const original = userMessage('u1', '帮我改一下')
-    await step(service, agent, [original])
-    const retried = await service.call('retry', { sessionId: 'sess-1' }, new AbortController().signal)
-    expect(retried.ok).toBe(true)
-    expect(resumeHeld).toHaveBeenCalledOnce()
-    const held = resumeHeld.mock.calls[0]?.[1] as UserMessageLike[]
-    expect(held[0]?.id).toBe('u1')
-    expect(held[0]?.source?.kind).toBe('user')
-    expect(JSON.stringify(held[0])).toContain('帮我改一下')
-  })
-
-  it('does not process plugin-only batches', async () => {
-    const { service, run, ask, agent } = setup()
-    const plugin = { id: 'p1', source: { kind: 'plugin:other', plugin: 'other' }, content: [{ type: 'text', text: '辅助' }] }
-    const { decision } = await step(service, agent, [plugin])
-    expect(run).not.toHaveBeenCalled()
-    expect(ask).not.toHaveBeenCalled()
-    expect(decision).toEqual({ kind: 'enter', messages: [plugin] })
-  })
-
-  it('does not attribute previous turn seq as this request sourceVersion or evidence', async () => {
-    const events: SessionEventLike[] = [
-      { seq: 5, type: 'user/message', data: { id: 'u-old', source: { kind: 'user' }, content: [{ type: 'text', text: '上一轮' }] } },
-    ]
-    const { service, agent } = setup({ events })
-    await step(service, agent, [userMessage('u-new', '把第一章.md里林晚的对白改短，不超过200字，保持原语气。')])
-    const contract = service.getContract('sess-1')
-    expect(contract?.sourceVersion).toBe('u-new')
-    expect(contract?.sourceVersion).not.toContain('5')
-    expect(contract?.evidence.some(item => item.seq === 5)).toBe(false)
-  })
-
-  it('cancels in-flight questions on disable without a late contract commit or inject', async () => {
-    let release!: (error: unknown) => void
-    const ask = vi.fn(() => new Promise<never>((_, reject) => { release = reject }))
-    const { service, agent } = setup({ ask })
-    const messages = [userMessage('u1', '帮我改一下')]
-    const pending = step(service, agent, messages)
-    await vi.waitFor(() => expect(ask).toHaveBeenCalled())
-    await service.dispose()
-    release(Object.assign(new Error('aborted'), { code: 'ASK_ABORTED', name: 'UserQuestionError' }))
-    const { decision, nextCalls } = await pending
-    expect(nextCalls).toBe(1)
-    expect(decision).toEqual({ kind: 'enter', messages })
-    expect(service.getContract('sess-1')).toBeUndefined()
-    if (decision.kind === 'enter') expect(decision.messages.every(item => !isMoodMessage(item as UserMessageLike))).toBe(true)
-  })
-
-  it('does not let a late analysis overwrite a newer contract', async () => {
-    let finishFirst!: (value: AuxiliaryResult) => void
-    const run = vi.fn()
-      .mockImplementationOnce(() => new Promise<AuxiliaryResult>(resolve => { finishFirst = resolve }))
-      .mockImplementation(async () => receipt())
-    const { service, agent } = setup({ run })
-    const first = step(service, agent, [userMessage('u1', '帮我改一下')])
-    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1))
-    const second = await step(service, agent, [userMessage('u2', '帮我改一下结尾')])
-    expect(second.decision.kind).toBe('enter')
-    expect(service.getContract('sess-1')?.sourceVersion).toBe('u2')
-    finishFirst(receipt())
-    const late = await first
-    expect(late.decision).toEqual({ kind: 'reject' })
-    expect(service.getContract('sess-1')?.sourceVersion).toBe('u2')
-  })
-
-  it('uses unique default ids across service instances instead of mood-++ counters', async () => {
-    const first = new MoodService({
-      now: () => 10,
-      readEvents: () => [],
-      liveSession: id => id === 'sess-1' ? { id: 'sess-1', header: { cwd: '/work/novel' } } : undefined,
-      activateAi: () => undefined,
-    })
-    const second = new MoodService({
-      now: () => 10,
-      readEvents: () => [],
-      liveSession: id => id === 'sess-1' ? { id: 'sess-1', header: { cwd: '/work/novel' } } : undefined,
-      activateAi: () => undefined,
-    })
-    const agent = { id: 'sess-1', session: { id: 'sess-1', header: { cwd: '/work/novel' } } }
-    const messages = [userMessage('u1', '把第一章.md里林晚的对白改短，不超过200字，保持原语气。')]
-    await first.handlePreStep({ agent, messages, turn: 1, step: 1, signal: new AbortController().signal }, async () => ({ kind: 'enter', messages }))
-    await second.handlePreStep({ agent, messages, turn: 1, step: 1, signal: new AbortController().signal }, async () => ({ kind: 'enter', messages }))
-    const left = first.getContract('sess-1')?.id ?? ''
-    const right = second.getContract('sess-1')?.id ?? ''
-    expect(left).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    expect(right).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    expect(left).not.toBe(right)
-  })
-
-  it('does not claim a saved success when persist fails', async () => {
-    const store: MoodStore = {
-      load: () => ({ settings: { revision: 0, mode: 'auto' }, sessions: {} }),
-      save: async () => { throw new Error('disk') },
-    }
-    const { service } = setup({ store })
-    const result = await service.call('mode', { expectedRevision: 0, mode: 'strict' }, new AbortController().signal)
-    expect(result).toEqual({ ok: false, error: { code: 'MOOD_STORAGE', message: '需求澄清保存失败，已保留原内容。' } })
-    expect(service.status().settings.revision).toBe(0)
-    expect(service.status().settings.mode).toBe('auto')
-    expect(service.status().storageFailed).toBe(true)
-  })
-
-  it('serializes concurrent CAS updates so the loser keeps the previous revision', async () => {
-    let release!: () => void
-    const gate = new Promise<void>(resolve => { release = resolve })
-    let writes = 0
-    let persisted: MoodPersistedState | undefined
-    const store: MoodStore = {
-      load: () => ({ settings: { revision: 0, mode: 'auto' }, sessions: {} }),
-      save: async next => {
-        writes += 1
-        if (writes === 1) await gate
-        persisted = structuredClone(next)
-      },
-    }
-    const { service } = setup({ store })
-    const first = service.call('mode', { expectedRevision: 0, mode: 'manual' }, new AbortController().signal)
-    const second = service.call('mode', { expectedRevision: 0, mode: 'strict' }, new AbortController().signal)
-    await Promise.resolve()
-    expect(service.status().settings.mode).toBe('auto')
-    expect(service.status().settings.revision).toBe(0)
-    release()
-    const [won, lost] = await Promise.all([first, second])
-    expect(won.ok).toBe(true)
-    expect(lost.ok).toBe(false)
-    if (!lost.ok) expect(lost.error.code).toBe('MOOD_STALE')
-    expect(service.status().settings.mode).toBe('auto')
-    expect(service.status().settings.revision).toBe(1)
-    expect(persisted?.settings.mode).toBe('auto')
-    expect(persisted?.settings.revision).toBe(1)
-  })
-
-  it('derives mutative RPC from the live host session and supports manual/edit', async () => {
+  it('never overrides an upstream permission rejection or invokes next twice', async () => {
     const { service } = setup()
-    const missing = await service.call('manual', { sessionId: 'gone' }, new AbortController().signal)
-    expect(missing.ok).toBe(false)
-    const live = new MoodService({
-      now: () => 10,
-      readEvents: () => [],
-      liveSession: id => id === 'sess-1' ? { id: 'sess-1', header: { cwd: '/work/novel' } } : undefined,
-      activateAi: () => undefined,
+    let calls = 0
+    const rejected: PreStepDecision = { kind: 'reject' }
+    const answer = await service.handlePreStep({ agent: { id: 's1' }, messages: [human('u1', '删除全部')], turn: 1, step: 1, signal: signal() }, async () => { calls++; return rejected })
+    assert.equal(answer, rejected)
+    assert.equal(calls, 1)
+  })
+
+  it('is inert after disposal and preserves user cancellation', async () => {
+    const { service, step } = setup()
+    const abort = new AbortController()
+    abort.abort()
+    await assert.rejects(step([human('u1', '继续')], 's1', abort.signal), { name: 'AbortError' })
+    await service.dispose()
+    const messages = [human('u1', '改一下')]
+    assert.deepEqual(await step(messages), { kind: 'enter', messages, startsRequestSeries: true })
+  })
+
+  it('falls back to the main Agent when optional injection or storage loading fails', async () => {
+    const { step, service } = setup({ options: {
+      store: { load() { throw new Error('disk unavailable') }, async save() { throw new Error('disk unavailable') } },
+      createInjectMessage() { throw new Error('optional context failed') },
+    } })
+    const messages = [human('u1', '优化一下')]
+    assert.deepEqual(await step(messages), { kind: 'enter', messages, startsRequestSeries: true })
+    assert.equal(service.status().storageFailed, true)
+  })
+
+  for (const mode of ['auto', 'manual', 'strict'] as const) {
+    it(`does not restore automatic analysis from legacy mode ${mode}`, async () => {
+      const state = legacy()
+      state.settings.mode = mode
+      const { service, step, trace } = setup({ state })
+      assert.equal(service.status('s1').session?.pendingManual, false)
+      enter(await step())
+      assert.equal(service.status('s1').session?.held, true)
+      assert.equal(service.getContract('s1')?.readiness, 'pending')
+      assert.equal(trace.activations + trace.calls.length + trace.asks + trace.resumes.length, 0)
     })
-    const messages = [userMessage('u1', '把第一章.md里林晚的对白改短，不超过200字，保持原语气。')]
-    await live.handlePreStep({
-      agent: { id: 'sess-1', session: { id: 'sess-1', header: { cwd: '/work/novel' } } },
-      messages, turn: 1, step: 1, signal: new AbortController().signal,
-    }, async () => ({ kind: 'enter', messages }))
-    const edited = await live.call('edit', {
-      sessionId: 'sess-1', expectedRevision: 1, patch: { goal: '改为旁白' },
-    }, new AbortController().signal)
-    expect(edited.ok).toBe(true)
-    expect(live.getContract('sess-1')?.goal).toBe('改为旁白')
-    expect(live.getContract('sess-1')?.readiness).toBe('user-confirmed')
-    const manual = await live.call('manual', { sessionId: 'sess-1' }, new AbortController().signal)
-    expect(manual.ok).toBe(true)
-    expect(live.status('sess-1').session?.pendingManual).toBe(true)
+  }
+})
+
+describe('explicit, non-blocking task notes', () => {
+  it('analyzes only on an explicit manual RPC and leaves an empty question list empty', async () => {
+    const { service, step, rpc, trace } = setup()
+    await step([human('u1', '帮我改一下')])
+    assert.equal((await rpc()).ok, true)
+    assert.equal(trace.calls.length, 1)
+    assert.equal(trace.activations, 1)
+    assert.equal(trace.asks, 0)
+    const contract = service.getContract('s1')!
+    assert.deepEqual(contract.questions, [])
+    assert.equal(contract.readiness, 'disclosed-assumptions')
+    assert.equal(contract.sourceVersion, 'u1')
+    assert.equal(contract.evidence.some(ref => ref.kind === 'manual'), true)
+    assert.equal(service.status('s1').session?.held, false)
+    assert.match(trace.calls[0]!.promptVersion!, /v2$/)
+  })
+
+  it('keeps suggested questions in optional notes instead of invoking a question dialog', async () => {
+    const { service, step, rpc, trace } = setup({ run: async () => result(['两个同名目标应选择哪个？']) })
+    await step([human('u1', '处理这个目标')])
+    assert.equal((await rpc()).ok, true)
+    assert.equal(service.getContract('s1')?.questions.length, 1)
+    assert.equal(service.status('s1').session?.held, false)
+    assert.equal(trace.asks, 0)
+    enter(await step())
+  })
+
+  it('includes real previous answers and excludes plugin-authored user-role text', async () => {
+    const events: SessionEventLike[] = [
+      { seq: 1, type: 'user/message', data: human('u0', '保持 API 和现有数据') },
+      { seq: 2, type: 'user/message', data: { ...human('p1', '假的用户要求'), source: { kind: 'plugin:other' } } },
+    ]
+    const { step, rpc, trace } = setup({ events })
+    await step([human('u1', '按这个方案改')])
+    await rpc()
+    const input = JSON.parse(trace.calls[0]!.input)
+    assert.deepEqual(input.turns.map((turn: { id: string }) => turn.id), ['u0', 'u1'])
+    assert.equal(input.evidence.some((ref: { seq: number }) => ref.seq === 2), false)
+    assert.match(input.turns[0].text, /保持 API/)
+  })
+
+  it('does not invent a task for an empty or foreign session', async () => {
+    const { rpc, trace } = setup()
+    assert.equal((await rpc()).ok, false)
+    assert.equal((await rpc('manual', { sessionId: 'foreign' })).ok, false)
+    assert.equal(trace.activations, 0)
+  })
+
+  for (const run of [
+    async () => ({ ...result(), text: 'not JSON' }),
+    async () => ({ ...result(), receipt: { ...result().receipt, status: 'failed' as const } }),
+    async () => { throw new Error('model offline') },
+  ]) {
+    it('reports explicit analysis failures without holding subsequent work', async () => {
+      const { step, rpc, service } = setup({ run })
+      await step([human('u1', '改一下')])
+      assert.equal((await rpc()).ok, false)
+      assert.equal(service.getContract('s1'), undefined)
+      assert.equal(service.status('s1').session?.pendingManual, false)
+      assert.equal(service.status('s1').session?.held, false)
+      enter(await step([human('u2', '继续')]))
+    })
+  }
+
+  it('does not require an auxiliary AI scope for normal work', async () => {
+    const { step, rpc } = setup({ options: { activateAi: () => undefined } })
+    enter(await step([human('u1', '改一下')]))
+    assert.equal((await rpc()).ok, false)
+    enter(await step([human('u2', '继续')]))
+  })
+
+  it('preserves an explicit summary across continue and delegation, but not a new task', async () => {
+    const { service, step, rpc, trace } = setup()
+    await step([human('u1', '优化内部实现')]); await rpc()
+    const id = service.getContract('s1')!.id
+    for (const [index, text] of ['继续', '你决定', '按你的建议来'].entries()) {
+      const decision = enter(await step([human(`next-${index}`, text)]))
+      assert.equal(service.getContract('s1')!.id, id)
+      assert.equal(service.getContract('s1')!.readiness, 'disclosed-assumptions')
+      assert.match(JSON.stringify(decision.messages.at(-1)), /保持 API，优化内部实现/)
+    }
+    assert.equal(trace.calls.length, 1)
+    const next = enter(await step([human('other', '解释什么是闭包')]))
+    assert.equal(service.getContract('s1')!.readiness, 'stale')
+    assert.equal(JSON.stringify(next.messages.at(-1)).includes('保持 API，优化内部实现'), false)
+  })
+
+  it('returns immutable contract snapshots to recap and other consumers', async () => {
+    const { service, step, rpc } = setup()
+    await step([human('u1', '优化')]); await rpc()
+    const copy = service.getContract('s1')!
+    copy.goal = 'mutated'
+    copy.assumptions.push('mutated')
+    assert.notEqual(service.getContract('s1')!.goal, 'mutated')
+    assert.equal(service.getContract('s1')!.assumptions.includes('mutated'), false)
   })
 })
 
-function pluginSnapshot(plugin: string, section: string, text: string) {
-  return createUserMessage({
-    source: { kind: 'plugin:' + plugin, plugin, form: 'snapshot', sections: [{ name: section, text }] },
-    content: [{ type: 'text', text }],
-  })
-}
-
-function claimedHuman(text: string) {
-  return createUserMessage({
-    source: { kind: 'user' },
-    content: [{ type: 'text', text }],
-  })
-}
-
-function nativeChain(claimed: unknown[]) {
-  const runtime = pluginSnapshot('runtime-context', 'runtimeContext.project', 'cwd=/work/novel')
-  const memory = pluginSnapshot('@klarkxy/dsh-memory', 'dsh-memory:records', '项目记忆')
-  const recap = pluginSnapshot('@klarkxy/dsh-recap', 'checkpoint', '检查点')
-  const inner: Extract<PreStepDecision, { kind: 'enter' }> = {
-    kind: 'enter',
-    startsRequestSeries: true,
-    messages: [...claimed, runtime, memory, recap],
-  }
-  return { runtime, memory, recap, inner }
-}
-
-function expectPreservedInner(
-  decision: PreStepDecision,
-  inner: Extract<PreStepDecision, { kind: 'enter' }>,
-  extras: { runtime: unknown; memory: unknown; recap: unknown },
-  mood: boolean,
-) {
-  expect(decision.kind).toBe('enter')
-  if (decision.kind !== 'enter') return
-  expect(decision.startsRequestSeries).toBe(true)
-  expect(decision.messages).toContain(inner.messages[0])
-  expect(decision.messages).toContain(extras.runtime)
-  expect(decision.messages).toContain(extras.memory)
-  expect(decision.messages).toContain(extras.recap)
-  const moodRows = decision.messages.filter(item => isMoodMessage(item as UserMessageLike))
-  if (mood) {
-    expect(moodRows).toHaveLength(1)
-    expect(isMoodMessage(decision.messages.at(-1) as UserMessageLike)).toBe(true)
-  } else {
-    expect(moodRows).toHaveLength(0)
-    expect(decision.messages).toEqual(inner.messages)
-  }
-}
-
-describe('pre-step preserves native and plugin inner snapshots', () => {
-  it('keeps runtime context and other plugin snapshots on clear, analyzed, manual, and disable', async () => {
-    const { service, run, ask, agent } = setup()
-
-    const clearClaimed = [claimedHuman('把第一章.md里林晚的对白改短，不超过200字，保持原语气。')]
-    const clear = nativeChain(clearClaimed)
-    const clearDecision = await service.handlePreStep({
-      agent, messages: clearClaimed as UserMessageLike[], turn: 1, step: 1, signal: new AbortController().signal,
-    }, async () => clear.inner)
-    expect(run).not.toHaveBeenCalled()
-    expectPreservedInner(clearDecision, clear.inner, clear, true)
-    expect(service.getContract('sess-1')?.sourceVersion).toBe((clearClaimed[0] as { id: string }).id)
-
-    const mildClaimed = [claimedHuman('请润色第三章的对话。')]
-    const mild = nativeChain(mildClaimed)
-    const mildDecision = await service.handlePreStep({
-      agent, messages: mildClaimed as UserMessageLike[], turn: 1, step: 2, signal: new AbortController().signal,
-    }, async () => mild.inner)
-    expectPreservedInner(mildDecision, mild.inner, mild, false)
-
-    const analyzedClaimed = [claimedHuman('帮我改一下')]
-    const analyzed = nativeChain(analyzedClaimed)
-    const analyzedDecision = await service.handlePreStep({
-      agent, messages: analyzedClaimed as UserMessageLike[], turn: 1, step: 3, signal: new AbortController().signal,
-    }, async () => analyzed.inner)
-    expect(ask).toHaveBeenCalled()
-    expectPreservedInner(analyzedDecision, analyzed.inner, analyzed, true)
-    expect(service.getContract('sess-1')?.readiness).toBe('user-confirmed')
-    expect(service.getContract('sess-1')?.sourceVersion).toBe((analyzedClaimed[0] as { id: string }).id)
-
-    await service.call('manual', { sessionId: 'sess-1' }, new AbortController().signal)
-    const manualClaimed = [claimedHuman('把第一章.md里林晚的对白改短，不超过200字，保持原语气。')]
-    const manual = nativeChain(manualClaimed)
-    run.mockClear()
-    ask.mockClear()
-    const manualDecision = await service.handlePreStep({
-      agent, messages: manualClaimed as UserMessageLike[], turn: 1, step: 4, signal: new AbortController().signal,
-    }, async () => manual.inner)
-    expect(run).toHaveBeenCalledOnce()
-    expectPreservedInner(manualDecision, manual.inner, manual, true)
-
-    await service.dispose()
-    const disabledClaimed = [claimedHuman('帮我改一下')]
-    const disabled = nativeChain(disabledClaimed)
-    const disabledDecision = await service.handlePreStep({
-      agent, messages: disabledClaimed as UserMessageLike[], turn: 1, step: 5, signal: new AbortController().signal,
-    }, async () => disabled.inner)
-    expect(disabledDecision).toEqual(disabled.inner)
-    expectPreservedInner(disabledDecision, disabled.inner, disabled, false)
+describe('cancellation, recovery, and persistence', () => {
+  it('discards a late manual analysis after a new human request', async () => {
+    const gate = deferred<AuxiliaryResult>()
+    const { service, step, rpc, trace, started } = setup({ run: () => gate.promise })
+    await step([human('u1', '改一下')])
+    const pending = rpc()
+    await started.promise
+    enter(await step([human('u2', '新的任务')]))
+    assert.equal(trace.calls[0]!.signal?.aborted, true)
+    gate.resolve(result())
+    assert.equal((await pending).ok, false)
+    assert.equal(service.getContract('s1'), undefined)
+    assert.equal(trace.saves.length, 0)
   })
 
-  it('does not drop inner snapshots when disable aborts an in-flight question', async () => {
-    let release!: (error: unknown) => void
-    const ask = vi.fn(() => new Promise<never>((_, reject) => { release = reject }))
-    const { service, agent } = setup({ ask })
-    const claimed = [claimedHuman('帮我改一下')]
-    const chain = nativeChain(claimed)
-    const pending = service.handlePreStep({
-      agent, messages: claimed as UserMessageLike[], turn: 1, step: 1, signal: new AbortController().signal,
-    }, async () => chain.inner)
-    await vi.waitFor(() => expect(ask).toHaveBeenCalled())
-    await service.dispose()
-    release(Object.assign(new Error('aborted'), { code: 'ASK_ABORTED', name: 'UserQuestionError' }))
-    const decision = await pending
-    expect(decision).toEqual(chain.inner)
-    expectPreservedInner(decision, chain.inner, chain, false)
+  it('discards a late result after disable without blocking disposal', async () => {
+    const gate = deferred<AuxiliaryResult>()
+    const { service, step, rpc, trace, started } = setup({ run: () => gate.promise })
+    await step([human('u1', '改一下')])
+    const pending = rpc(); await started.promise
+    await service.dispose(); gate.resolve(result())
+    assert.equal((await pending).ok, false)
+    assert.equal(trace.saves.length, 0)
+  })
+
+  it('keeps sessions isolated while an explicit analysis is running', async () => {
+    const gate = deferred<AuxiliaryResult>()
+    const { service, step, rpc, started } = setup({ run: () => gate.promise })
+    await step([human('u1', '改一下')])
+    const pending = rpc(); await started.promise
+    await step([human('other', '另一个会话')], 's2')
+    gate.resolve(result())
+    assert.equal((await pending).ok, true)
+    assert.equal(service.getContract('s2'), undefined)
+  })
+
+  it('retries a legacy held request once, only on explicit action', async () => {
+    const { service, rpc, trace } = setup({ state: legacy() })
+    assert.equal(trace.resumes.length, 0)
+    const answers = await Promise.all([rpc('retry'), rpc('retry')])
+    assert.equal(answers.filter(answer => answer.ok).length, 1)
+    assert.equal(trace.resumes.length, 1)
+    assert.deepEqual(trace.resumes[0], [human('u0', '旧任务')])
+    assert.equal(service.status('s1').session?.held, false)
+    assert.equal(service.getContract('s1')?.readiness, 'pending')
+  })
+
+  it('retains recovery on resume failure, and drops stale held work on a new request', async () => {
+    const { service, rpc, step } = setup({ state: legacy(), resume: async () => { throw new Error('host offline') } })
+    assert.equal((await rpc('retry')).ok, false)
+    assert.equal(service.status('s1').session?.held, true)
+    enter(await step([human('u1', '新任务')]))
+    assert.equal(service.status('s1').session?.held, false)
+  })
+
+  it('does not fabricate answers when a legacy goal is edited, and enforces CAS', async () => {
+    const { service, rpc } = setup({ state: legacy() })
+    assert.equal((await rpc('edit', { sessionId: 's1', expectedRevision: 1, patch: { goal: '新目标' } })).ok, true)
+    assert.equal(service.getContract('s1')?.goal, '新目标')
+    assert.deepEqual(service.status('s1').session?.clarification, [])
+    assert.equal((await rpc('edit', { sessionId: 's1', expectedRevision: 1, patch: { goal: '过期写入' } })).ok, false)
+    assert.equal(service.getContract('s1')?.goal, '新目标')
+    assert.equal((await rpc('mode', { mode: 'strict', expectedRevision: 0 })).ok, true)
+    assert.equal((await rpc('mode', { mode: 'manual', expectedRevision: 0 })).ok, false)
+    assert.equal(service.status().settings.mode, 'auto')
+  })
+
+  it('keeps the previous contract on storage failure and leaves the normal path usable', async () => {
+    const { service, rpc, step } = setup({ state: legacy(), save: async () => { throw new Error('disk full') } })
+    assert.equal((await rpc('edit', { sessionId: 's1', expectedRevision: 1, patch: { goal: '未保存' } })).ok, false)
+    assert.equal(service.getContract('s1')?.goal, '旧任务')
+    assert.equal(service.status().storageFailed, true)
+    enter(await step([human('u1', '继续')]))
+  })
+
+  it('repairs a disk write that finishes after cancellation', async () => {
+    const saving = deferred<void>(), release = deferred<void>()
+    let writes = 0
+    const { service, step, rpc, trace } = setup({ save: async () => {
+      if (++writes === 1) { saving.resolve(); await release.promise }
+    } })
+    await step([human('u1', '改一下')])
+    const pending = rpc(); await saving.promise
+    enter(await step([human('u2', '新任务')]))
+    release.resolve()
+    assert.equal((await pending).ok, false)
+    assert.equal(service.getContract('s1'), undefined)
+    assert.equal(trace.saves.length, 2)
+    assert.equal(trace.saves.at(-1)!.sessions.s1!.contract, undefined)
+  })
+
+  it('does not inject unconfirmed or cancelled legacy contracts as authorization', async () => {
+    for (const readiness of ['pending', 'cancelled', 'stale'] as const) {
+      const { step, service } = setup({ state: legacy(readiness) })
+      const decision = enter(await step())
+      assert.equal((decision.messages.at(-1) as { content: Array<{ text: string }> }).content[0]!.text, AUTONOMY_POLICY)
+      assert.equal(service.getContract('s1')?.readiness, readiness)
+    }
   })
 })

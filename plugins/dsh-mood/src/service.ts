@@ -1,28 +1,26 @@
 import { randomUUID } from 'node:crypto'
-import type { AiFeatureScope, AuxiliaryResult, RpcResult, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
+import type { AiFeatureScope, RpcResult, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
 import {
   MOOD_ANALYZE_PURPOSE, PROMPT_VERSION, SCHEMA_VERSION, cloneContract, defaultSettings, excerptOf, fail, ok,
-  operationalSettings,
-  parseSessionId, projectIdFromCwd, sessionIdOf, type AskUserRequest, type AskUserQuestionAnswer, type ClarificationItem,
-  type HeldRequest, type MoodMode, type MoodSessionView, type MoodSettings, type MoodStatus,
+  operationalSettings, parseSessionId, projectIdFromCwd, sessionIdOf,
+  type AskUserRequest, type AskUserQuestionAnswer, type ClarificationItem, type HeldRequest,
+  type MoodSettings, type MoodStatus,
 } from './contracts.ts'
-import { ANALYZE_SYSTEM, analyzePurpose, boundQuestions, contractFromDraft, parseAnalysis, thinContract } from './analyze.ts'
+import { ANALYZE_SYSTEM, analyzePurpose, boundQuestions, contractFromDraft, parseAnalysis } from './analyze.ts'
 import {
-  collectClaimedHumans, evidenceForRequest, incomingAreAuxiliaryOnly, latestUserSeq, sourceVersionOf,
+  collectClaimedHumans, collectLogHumans, latestUserSeq, sourceVersionOf,
   type SessionEventLike, type UserMessageLike,
 } from './evidence.ts'
-import { createMoodContextMessage, formatContract, mergeContractMessage } from './inject.ts'
-import {
-  answeredNotes, applyAnswers, isAbortLike, markClarification, pendingClarifications, readinessAfterAnswers, toAskItems,
-} from './questions.ts'
-import { parseEdit, parseManual, parseModeUpdate } from './schema.ts'
-import { classifyRequest, isBlockingKind, shouldAnalyze, shouldWriteClearContract, type TriggerKind } from './trigger.ts'
+import { AUTONOMY_POLICY, createMoodContextMessage, formatContract, mergeContractMessage } from './inject.ts'
+import { parseEdit, parseManual, parseModeUpdate, type ContractEdit } from './schema.ts'
+import { isContinuationRequest } from './trigger.ts'
 
 export interface MoodPersistedState {
   settings: MoodSettings
   sessions: Record<string, MoodStoredSession>
 }
 
+/** Existing storage/RPC shape is retained; heldRequest is recovery-only. */
 export interface MoodStoredSession {
   contract?: TaskContract
   clarification: ClarificationItem[]
@@ -60,6 +58,7 @@ export interface MoodServiceOptions {
   readEvents: (sessionId: string) => readonly SessionEventLike[] | undefined
   liveSession?: (sessionId: string) => SessionLike | undefined
   activateAi?: () => AiFeatureScope | undefined
+  /** Kept for Host compatibility. The main Agent owns necessary native questions. */
   askUser?: (request: AskUserRequest) => Promise<AskUserQuestionAnswer>
   createInjectMessage?: (text: string) => unknown
   resumeHeld?: (sessionId: string, messages: unknown[]) => Promise<void>
@@ -68,11 +67,13 @@ export interface MoodServiceOptions {
 type InternalSession = MoodStoredSession & {
   generation: number
   work?: AbortController
-  inflightVersion?: string
+  requestVersion?: string
+  latest?: UserMessageLike[]
+  retrying?: boolean
 }
 
 export class MoodService {
-  private settings: MoodSettings
+  private settings = defaultSettings()
   private sessions = new Map<string, InternalSession>()
   private storageFailed = false
   private active = true
@@ -83,19 +84,21 @@ export class MoodService {
   private readonly nextId: () => string
 
   constructor(private readonly options: MoodServiceOptions) {
-    const loaded = cloneState(options.store?.load() ?? { settings: defaultSettings(), sessions: {} })
-    this.settings = operationalSettings(loaded.settings)
-    for (const [sessionId, row] of Object.entries(loaded.sessions)) {
-      this.sessions.set(sessionId, {
-        ...row,
-        clarification: row.clarification ?? [],
-        pendingManual: Boolean(row.pendingManual),
-        generation: 0,
-      })
-    }
     this.now = options.now ?? Date.now
     this.nextId = options.id ?? randomUUID
-    this.syncAi()
+    try {
+      const loaded = structuredClone(options.store?.load() ?? { settings: defaultSettings(), sessions: {} })
+      this.settings = operationalSettings(loaded.settings)
+      for (const [sessionId, row] of Object.entries(loaded.sessions)) {
+        this.sessions.set(sessionId, {
+          ...row, clarification: row.clarification ?? [], pendingManual: false, generation: 0,
+          requestVersion: row.lastHandledVersion ?? row.contract?.sourceVersion ?? row.heldRequest?.sourceVersion,
+        })
+      }
+    } catch {
+      // Optional task notes must not prevent the main Agent from starting.
+      this.storageFailed = true
+    }
   }
 
   getContract(sessionId: string): TaskContract | undefined {
@@ -104,574 +107,269 @@ export class MoodService {
   }
 
   status(sessionId?: string): MoodStatus {
-    const status: MoodStatus = {
-      settings: { ...this.settings },
-      storageFailed: this.storageFailed,
-    }
+    const status: MoodStatus = { settings: { ...this.settings }, storageFailed: this.storageFailed }
     if (!sessionId) return status
     const row = this.ensure(sessionId)
-    status.session = this.view(sessionId, row)
+    status.session = {
+      sessionId, projectId: row.projectId, contract: this.getContract(sessionId),
+      clarification: structuredClone(row.clarification), pendingManual: row.pendingManual,
+      held: Boolean(row.heldRequest?.messages.length),
+    }
     return status
   }
 
-  isActive(): boolean {
-    return this.active
-  }
+  isActive(): boolean { return this.active }
 
   async dispose(): Promise<void> {
     this.active = false
-    for (const row of this.sessions.values()) {
-      row.generation += 1
-      row.work?.abort()
-      row.work = undefined
-    }
-    this.detachAi()
+    for (const row of this.sessions.values()) this.cancelWork(row)
+    this.unregisterPurpose?.()
+    this.ai?.dispose()
+    this.ai = undefined
     await this.pending
   }
 
   async call(endpoint: string, payload: unknown, signal: AbortSignal): Promise<RpcResult> {
-    if (!this.active) return fail('MOOD_DISABLED', '需求澄清已关闭。')
+    if (!this.active) return fail('MOOD_DISABLED', '自主推进已关闭。')
     if (signal.aborted) return fail('MOOD_CANCELLED', '请求已取消。')
     try {
       if (endpoint === 'status') return ok(this.status(parseSessionId(payload)))
       if (endpoint === 'contract') {
-        const sessionId = this.hostSessionId(parseSessionId(payload), false)
+        const sessionId = parseSessionId(payload)
         if (!sessionId) return fail('MOOD_INVALID', '缺少会话。')
         return ok(this.getContract(sessionId) ?? null)
       }
       if (endpoint === 'mode') {
         const parsed = parseModeUpdate(payload)
         if (!parsed) return fail('MOOD_INVALID', '模式格式无效。')
-        return ok(await this.updateMode(parsed.mode, parsed.expectedRevision))
+        return ok(await this.serialize(async () => {
+          this.assertLive()
+          signal.throwIfAborted()
+          if (parsed.expectedRevision !== this.settings.revision) coded('MOOD_STALE', '设置已更新，请刷新后重试。')
+          const settings = operationalSettings({ mode: parsed.mode, revision: this.settings.revision + 1 })
+          await this.persist({ ...this.snapshot(), settings })
+          this.settings = settings
+          return this.status()
+        }))
       }
-      if (endpoint === 'manual') {
-        const parsed = parseManual(payload)
-        if (!parsed) return fail('MOOD_INVALID', '缺少会话。')
-        const sessionId = this.hostSessionId(parsed.sessionId, true)
+      if (endpoint === 'manual' || endpoint === 'retry' || endpoint === 'edit') {
+        const parsed = endpoint === 'edit' ? parseEdit(payload) : parseManual(payload)
+        if (!parsed) return fail('MOOD_INVALID', '请求格式无效。')
+        const sessionId = this.hostSessionId(parsed.sessionId)
         if (!sessionId) return fail('MOOD_SESSION_NOT_FOUND', '会话不在当前 Host。')
-        return ok(await this.requestManual(sessionId))
-      }
-      if (endpoint === 'retry') {
-        const parsed = parseManual(payload)
-        if (!parsed) return fail('MOOD_INVALID', '缺少会话。')
-        const sessionId = this.hostSessionId(parsed.sessionId, true)
-        if (!sessionId) return fail('MOOD_SESSION_NOT_FOUND', '会话不在当前 Host。')
-        return ok(await this.requestRetry(sessionId))
-      }
-      if (endpoint === 'edit') {
-        const parsed = parseEdit(payload)
-        if (!parsed) return fail('MOOD_INVALID', '修订格式无效。')
-        const sessionId = this.hostSessionId(parsed.sessionId, true)
-        if (!sessionId) return fail('MOOD_SESSION_NOT_FOUND', '会话不在当前 Host。')
-        return ok(await this.editContract(sessionId, parsed.expectedRevision, parsed.patch))
+        if (endpoint === 'manual') await this.analyzeManually(sessionId, signal)
+        if (endpoint === 'retry') await this.retryLegacy(sessionId, signal)
+        if (endpoint === 'edit') await this.editContract(sessionId, parsed as ContractEdit, signal)
+        return ok(this.status(sessionId))
       }
       return fail('MOOD_INVALID', '未知操作。')
     } catch (error) {
-      const code = error && typeof error === 'object' && 'code' in error ? String((error as { code: unknown }).code) : 'MOOD_FAILED'
-      return fail(code, error instanceof Error ? error.message : '需求澄清操作失败。')
+      const aborted = signal.aborted || (error instanceof Error && ['AbortError', 'TimeoutError'].includes(error.name))
+      const code = aborted ? 'MOOD_CANCELLED'
+        : error && typeof error === 'object' && 'code' in error ? String(error.code) : 'MOOD_FAILED'
+      return fail(code, error instanceof Error ? error.message : '需求梳理失败。')
     }
   }
 
+  /** No model call, question, disk write, or requirement gate on the normal path. */
   async handlePreStep(payload: PreStepPayload, next: () => Promise<PreStepDecision>): Promise<PreStepDecision> {
     const inner = await next()
-    if (!this.active) return inner
-    if (inner.kind !== 'enter') return inner
+    if (!this.active || inner.kind !== 'enter') return inner
     payload.signal.throwIfAborted()
     const sessionId = sessionIdOf(payload.agent)
     if (!sessionId) return inner
-    const claimedMessages = payload.messages
-    const state = this.ensure(sessionId)
-    state.projectId = projectIdFromCwd(payload.agent.session?.header?.cwd ?? payload.agent.session?.meta?.cwd)
-      ?? projectIdFromCwd(this.options.liveSession?.(sessionId)?.header?.cwd ?? this.options.liveSession?.(sessionId)?.meta?.cwd)
-      ?? state.projectId
-
-    if (incomingAreAuxiliaryOnly(claimedMessages) && !state.pendingManual) {
-      if (this.isBlocked(state)) return { kind: 'reject' }
-      return this.enter(inner, state.contract, state.clarification)
-    }
-
-    const claimed = collectClaimedHumans(claimedMessages)
-    const sourceVersion = sourceVersionOf(claimed)
-    const events = this.options.readEvents(sessionId) ?? []
-    const evidence = evidenceForRequest(sessionId, events, claimed)
-    const text = claimed.at(-1)?.text ?? ''
-
-    if (claimed.length) this.supersedeIfNew(sessionId, sourceVersion)
-
-    const live = this.ensure(sessionId)
-    if (live.lastHandledVersion === sourceVersion && !live.pendingManual && isSettled(live.contract?.readiness)) {
-      return this.enter(inner, live.contract, live.clarification)
-    }
-
-    const kind = classifyRequest(text, { hasConfirmedContract: isSettled(live.contract?.readiness) })
-    if (kind === 'skip' && !live.pendingManual) {
-      return this.enter(inner, live.contract, live.clarification)
-    }
-
-    if (shouldWriteClearContract(kind, live.pendingManual, this.settings.mode)) {
-      const generation = live.generation
-      const contract = thinContract({
-        id: this.nextId(),
-        sessionId,
-        sourceVersion,
-        revision: nextRevision(live.contract),
-        goal: text.slice(0, 2000),
-        evidence,
-        readiness: 'clear-request',
-        now: this.now(),
-      })
-      const wrote = await this.commitIfCurrent(sessionId, generation, {
-        contract,
-        clarification: [],
-        lastHandledVersion: sourceVersion,
-        pendingManual: false,
-        heldRequest: undefined,
-        projectId: live.projectId,
-      })
-      if (!wrote) return this.afterStale(inner)
-      return this.enter(inner, contract, [])
-    }
-
-    if (!shouldAnalyze(kind, this.settings.mode, live.pendingManual)) {
+    try {
+      const row = this.ensure(sessionId)
+      const humans = collectClaimedHumans(payload.messages)
+      if (humans.length) {
+        const version = sourceVersionOf(humans)
+        if (row.requestVersion !== version) {
+          this.cancelWork(row)
+          if (!isContinuationRequest(humans.at(-1)!.text) && row.contract && row.contract.sourceVersion !== version) {
+            row.contract = { ...row.contract, readiness: 'stale' }
+          }
+          row.requestVersion = version
+          row.heldRequest = undefined
+        }
+        row.latest = structuredClone(payload.messages.filter(message => message.source?.kind === 'user'))
+      }
+      row.projectId = projectIdFromCwd(payload.agent.session?.header?.cwd ?? payload.agent.session?.meta?.cwd) ?? row.projectId
+      const contract = row.contract
+      const settled = contract && ['user-confirmed', 'disclosed-assumptions', 'clear-request'].includes(contract.readiness)
+      // Old automatically generated thin contracts add no information to the conversation.
+      const explicit = contract && (contract.readiness === 'user-confirmed' || contract.evidence.some(ref => ref.kind === 'manual'))
+      const text = settled && explicit ? `${AUTONOMY_POLICY}\n\n${formatContract(contract, row.clarification)}` : AUTONOMY_POLICY
+      const extra = (this.options.createInjectMessage ?? createMoodContextMessage)(text)
+      return { ...inner, messages: mergeContractMessage(inner.messages, extra) }
+    } catch {
+      // Never override an upstream rejection, swallow user cancellation, or fail closed on optional context.
+      payload.signal.throwIfAborted()
       return inner
     }
+  }
 
-    const generation = live.generation
-    live.inflightVersion = sourceVersion
-    const work = this.replaceWork(sessionId)
-    const combined = combineSignals(payload.signal, work.signal, this.ai?.signal)
-    let draft = undefined as ReturnType<typeof parseAnalysis>
+  /** Explicit RPC only. Produces optional notes, never a blocking question dialog. */
+  private async analyzeManually(sessionId: string, signal: AbortSignal): Promise<void> {
+    const row = this.ensure(sessionId)
+    const logged = collectLogHumans(sessionId, this.options.readEvents(sessionId) ?? [])
+    const claimed = collectClaimedHumans(row.latest ?? [])
+    const turns = new Map(logged.map(turn => [turn.id, { id: turn.id, text: turn.text }]))
+    for (const turn of claimed) turns.set(turn.id, turn)
+    const recent = [...turns.values()].slice(-12)
+    if (!recent.length) coded('MOOD_NOT_FOUND', '没有可梳理的用户请求。')
+    this.cancelWork(row)
+    const generation = row.generation
+    const work = new AbortController()
+    row.work = work
+    row.pendingManual = true
+    const version = row.requestVersion ?? recent.at(-1)!.id
+    row.requestVersion = version
     try {
-      draft = await this.runAnalysis({ sessionId, sourceVersion, text, evidence, signal: combined, generation })
-    } catch (error) {
-      if (!this.generationCurrent(sessionId, generation)) return this.afterStale(inner)
-      const status = isAbortLike(error, combined) ? 'cancelled' : 'pending'
-      await this.blockUnresolved({
-        sessionId, generation, sourceVersion, text, evidence, kind, claimed: claimedMessages, status, inner,
+      const scope = this.scope()
+      const combined = AbortSignal.any([signal, work.signal, scope.signal, AbortSignal.timeout(analyzePurpose.timeoutMs)])
+      const evidence = logged.filter(turn => recent.some(item => item.id === turn.id)).map(turn => turn.evidence)
+      evidence.push({ sessionId, seq: latestUserSeq(this.options.readEvents(sessionId) ?? []), kind: 'manual', excerpt: '用户主动梳理需求；不是执行授权' })
+      const result = await scope.run({
+        purpose: MOOD_ANALYZE_PURPOSE, sessionId, sourceVersion: version,
+        promptVersion: PROMPT_VERSION, schemaVersion: SCHEMA_VERSION, system: ANALYZE_SYSTEM,
+        input: JSON.stringify({ turns: recent.map(turn => ({ ...turn, text: turn.text.slice(-2000) })), evidence }),
+        signal: combined, priority: 'interactive',
+        isCurrent: () => this.active && row.generation === generation && !combined.aborted,
       })
-      return { kind: 'reject' }
+      combined.throwIfAborted()
+      this.assertCurrent(row, generation)
+      const draft = result.receipt.status === 'success' ? parseAnalysis(result.text) : undefined
+      if (!draft) coded('MOOD_ANALYZE', '未能生成需求摘要；普通对话不受影响。')
+      const contract = contractFromDraft({
+        id: this.nextId(), sessionId, sourceVersion: version, revision: (row.contract?.revision ?? 0) + 1,
+        goalFallback: recent.at(-1)!.text, evidence, draft,
+        questions: boundQuestions(draft.questions, 'mild'), readiness: 'disclosed-assumptions', now: this.now(),
+      })
+      await this.commit(sessionId, generation, () => ({
+        contract, clarification: [], pendingManual: false, lastHandledVersion: version,
+      }), combined)
+    } finally {
+      if (row.work === work) { row.work = undefined; row.pendingManual = false }
     }
+  }
 
-    if (!this.generationCurrent(sessionId, generation)) return this.afterStale(inner)
-
-    const questions = boundQuestions(draft?.questions ?? [], kind)
-    const clarification = pendingClarifications(questions)
-    let contract = contractFromDraft({
-      id: this.nextId(),
-      sessionId,
-      sourceVersion,
-      revision: nextRevision(this.ensure(sessionId).contract),
-      goalFallback: text.slice(0, 2000),
-      evidence,
-      draft,
-      questions,
-      readiness: questions.length || isBlockingKind(kind) ? 'pending' : 'disclosed-assumptions',
-      now: this.now(),
-    })
-
-    if (questions.length > 0) {
-      const asked = await this.askOnce(payload.agent, clarification, combined)
-      if (!this.generationCurrent(sessionId, generation)) return this.afterStale(inner)
-      if (asked.kind === 'aborted' || asked.kind === 'failed') {
-        const status = asked.kind === 'aborted' ? 'cancelled' : 'pending'
-        await this.blockUnresolved({
-          sessionId, generation, sourceVersion, text, evidence, kind, claimed: claimedMessages, status, inner,
-          contract, clarification: asked.kind === 'aborted' ? markClarification(clarification, 'cancelled') : clarification,
-        })
-        return { kind: 'reject' }
+  private async editContract(sessionId: string, input: ContractEdit, signal: AbortSignal): Promise<void> {
+    const row = this.ensure(sessionId)
+    this.cancelWork(row)
+    await this.commit(sessionId, row.generation, current => {
+      const contract = current.contract
+      if (!contract) coded('MOOD_NOT_FOUND', '还没有可修订的约定。')
+      if (contract.revision !== input.expectedRevision) coded('MOOD_STALE', '约定已更新，请刷新后重试。')
+      return {
+        contract: {
+          ...contract, ...input.patch, revision: contract.revision + 1, readiness: 'user-confirmed', updatedAt: this.now(),
+          evidence: [...contract.evidence, { sessionId, seq: latestUserSeq(this.options.readEvents(sessionId) ?? []), kind: 'manual', excerpt: excerptOf(input.patch.goal ?? '修订约定') }],
+        },
+        // Editing a goal must not fabricate answers to unrelated old questions.
+        clarification: current.clarification.filter(item => item.status === 'answered'), pendingManual: false, heldRequest: undefined,
       }
-      const answered = applyAnswers(clarification, asked.answer)
-      const readiness = readinessAfterAnswers(answered, kind)
-      if (isBlockingKind(kind) && readiness !== 'user-confirmed') {
-        contract = {
-          ...contract,
-          readiness: 'pending',
-          assumptions: draft?.assumptions ?? contract.assumptions,
-          constraints: [...contract.constraints, ...answeredNotes(answered)],
-          questions: answered.filter(item => item.status !== 'answered').map(item => item.question),
-          updatedAt: this.now(),
-        }
-        await this.commitIfCurrent(sessionId, generation, {
-          contract,
-          clarification: answered,
-          pendingManual: false,
-          lastHandledVersion: undefined,
-          heldRequest: holdOf(sourceVersion, kind, claimedMessages),
-          projectId: this.ensure(sessionId).projectId,
-        })
-        return { kind: 'reject' }
-      }
-      contract = {
-        ...contract,
-        readiness,
-        assumptions: [
-          ...contract.assumptions,
-          ...(isBlockingKind(kind) ? [] : answered.filter(item => item.status === 'skipped').map(item => `未回答：${item.question}`)),
-        ],
-        constraints: [...contract.constraints, ...answeredNotes(answered)],
-        questions: answered.filter(item => item.status !== 'answered').map(item => item.question),
-        updatedAt: this.now(),
-      }
-      const wrote = await this.commitIfCurrent(sessionId, generation, {
-        contract,
-        clarification: answered,
-        lastHandledVersion: sourceVersion,
-        pendingManual: false,
-        heldRequest: undefined,
-        projectId: this.ensure(sessionId).projectId,
-      })
-      if (!wrote) return this.afterStale(inner)
-      return this.enter(inner, contract, answered)
-    }
-
-    if (isBlockingKind(kind) && contract.readiness === 'pending') {
-      await this.commitIfCurrent(sessionId, generation, {
-        contract,
-        clarification,
-        pendingManual: false,
-        lastHandledVersion: undefined,
-        heldRequest: holdOf(sourceVersion, kind, claimedMessages),
-        projectId: this.ensure(sessionId).projectId,
-      })
-      return { kind: 'reject' }
-    }
-
-    const wrote = await this.commitIfCurrent(sessionId, generation, {
-      contract,
-      clarification,
-      lastHandledVersion: sourceVersion,
-      pendingManual: false,
-      heldRequest: undefined,
-      projectId: this.ensure(sessionId).projectId,
-    })
-    if (!wrote) return this.afterStale(inner)
-    return this.enter(inner, contract, clarification)
+    }, signal)
   }
 
-  private async runAnalysis(input: {
-    sessionId: string
-    sourceVersion: string
-    text: string
-    evidence: TaskContract['evidence']
-    signal: AbortSignal
-    generation: number
-  }): Promise<ReturnType<typeof parseAnalysis>> {
-    const scope = this.ai
-    if (!scope?.active) return undefined
-    input.signal.throwIfAborted()
-    const result: AuxiliaryResult = await scope.run({
-      purpose: MOOD_ANALYZE_PURPOSE,
-      sessionId: input.sessionId,
-      sourceVersion: input.sourceVersion,
-      promptVersion: PROMPT_VERSION,
-      schemaVersion: SCHEMA_VERSION,
-      system: ANALYZE_SYSTEM,
-      input: JSON.stringify({
-        text: input.text,
-        evidence: input.evidence,
-      }),
-      signal: input.signal,
-      priority: 'interactive',
-      isCurrent: () => this.generationCurrent(input.sessionId, input.generation) && !input.signal.aborted,
-    })
-    if (result.receipt.status !== 'success') return undefined
-    if (!this.generationCurrent(input.sessionId, input.generation)) return undefined
-    return parseAnalysis(result.text)
-  }
-
-  private async askOnce(
-    agent: unknown,
-    clarification: ClarificationItem[],
-    signal: AbortSignal,
-  ): Promise<{ kind: 'answered'; answer: AskUserQuestionAnswer } | { kind: 'aborted' } | { kind: 'failed' }> {
-    const ask = this.options.askUser
-    const items = toAskItems(clarification)
-    if (!items.length || !ask) return { kind: 'failed' }
-    try {
-      const answer = await ask({ agent, questions: items, signal })
-      return { kind: 'answered', answer }
-    } catch (error) {
-      if (isAbortLike(error, signal)) return { kind: 'aborted' }
-      return { kind: 'failed' }
-    }
-  }
-
-  private afterStale(inner: Extract<PreStepDecision, { kind: 'enter' }>): PreStepDecision {
-    if (!this.active) return inner
-    return { kind: 'reject' }
-  }
-
-  private enter(
-    decision: Extract<PreStepDecision, { kind: 'enter' }>,
-    contract: TaskContract | undefined,
-    clarification: readonly ClarificationItem[],
-  ): PreStepDecision {
-    if (!this.active || !contract) return decision
-    if (contract.readiness === 'pending' || contract.readiness === 'cancelled' || contract.readiness === 'stale') {
-      return decision
-    }
-    const text = formatContract(contract, clarification)
-    const extra = this.options.createInjectMessage
-      ? this.options.createInjectMessage(text)
-      : createMoodContextMessage(text)
-    return { ...decision, messages: mergeContractMessage(decision.messages ?? [], extra) }
-  }
-
-  private async blockUnresolved(input: {
-    sessionId: string
-    generation: number
-    sourceVersion: string
-    text: string
-    evidence: TaskContract['evidence']
-    kind: TriggerKind
-    claimed: unknown[]
-    status: 'pending' | 'cancelled' | 'stale'
-    inner: Extract<PreStepDecision, { kind: 'enter' }>
-    contract?: TaskContract
-    clarification?: ClarificationItem[]
-  }): Promise<void> {
-    if (!this.generationCurrent(input.sessionId, input.generation)) return
-    const state = this.ensure(input.sessionId)
-    const questions = boundQuestions(input.contract?.questions ?? [], input.kind)
-    const clarification = input.clarification ?? markClarification(
-      pendingClarifications(questions),
-      input.status === 'pending' ? 'pending' : input.status,
-    )
-    const contract = input.contract
-      ? { ...input.contract, readiness: input.status, questions, updatedAt: this.now() }
-      : thinContract({
-        id: this.nextId(),
-        sessionId: input.sessionId,
-        sourceVersion: input.sourceVersion,
-        revision: nextRevision(state.contract),
-        goal: input.text.slice(0, 2000),
-        evidence: input.evidence,
-        readiness: input.status,
-        now: this.now(),
-        extra: { questions },
-      })
-    const hold = isBlockingKind(input.kind) || clarification.length > 0
-      ? holdOf(input.sourceVersion, input.kind, input.claimed)
-      : undefined
-    await this.commitIfCurrent(input.sessionId, input.generation, {
-      contract,
-      clarification,
-      pendingManual: false,
-      lastHandledVersion: undefined,
-      heldRequest: hold,
-      projectId: state.projectId,
-    })
-    void input.inner
-  }
-
-  private async updateMode(_mode: MoodMode, expectedRevision: number): Promise<MoodStatus> {
-    return this.serialize(async () => {
-      this.assertLive()
-      if (expectedRevision !== this.settings.revision) coded('MOOD_STALE', '需求澄清设置已更新，请刷新后重试。')
-      const proposed = this.snapshot()
-      proposed.settings = operationalSettings({ mode: 'auto', revision: this.settings.revision + 1 })
-      await this.persistProposed(proposed)
-      this.commitState(proposed)
-      return this.status()
-    })
-  }
-
-  private async requestManual(sessionId: string): Promise<MoodStatus> {
-    const state = this.ensure(sessionId)
-    const generation = state.generation
-    const held = state.heldRequest
-    const wrote = await this.commitIfCurrent(sessionId, generation, {
-      pendingManual: true,
-      lastHandledVersion: undefined,
-      heldRequest: held,
-      clarification: state.clarification,
-      contract: state.contract,
-      projectId: state.projectId,
-    })
-    if (!wrote) coded('MOOD_CANCELLED', '会话已切换，未执行手动分析。')
-    if (held?.messages.length) await this.resumeExact(sessionId, held.messages)
-    return this.status(sessionId)
-  }
-
-  private async requestRetry(sessionId: string): Promise<MoodStatus> {
-    const state = this.ensure(sessionId)
-    const held = state.heldRequest
-    if (!held?.messages.length) coded('MOOD_NOT_FOUND', '没有可按原请求重试的内容。')
-    const generation = state.generation
-    const wrote = await this.commitIfCurrent(sessionId, generation, {
-      pendingManual: false,
-      lastHandledVersion: undefined,
-      heldRequest: held,
-      clarification: state.clarification.map(item => (
-        item.status === 'cancelled' || item.status === 'stale' ? { ...item, status: 'pending' as const, answer: undefined } : item
-      )),
-      contract: state.contract ? { ...state.contract, readiness: 'pending', updatedAt: this.now() } : state.contract,
-      projectId: state.projectId,
-    })
-    if (!wrote) coded('MOOD_CANCELLED', '会话已切换，未重试。')
-    await this.resumeExact(sessionId, held.messages)
-    return this.status(sessionId)
-  }
-
-  private async resumeExact(sessionId: string, messages: unknown[]): Promise<void> {
+  private async retryLegacy(sessionId: string, signal: AbortSignal): Promise<void> {
+    const row = this.ensure(sessionId)
+    const held = row.heldRequest
+    if (!held?.messages.length || row.retrying) coded('MOOD_NOT_FOUND', '没有可按原请求重试的内容。')
     const resume = this.options.resumeHeld
     if (!resume) coded('MOOD_NO_RESUME', '当前 Host 不能按原请求恢复。')
-    await resume(sessionId, messages)
+    this.cancelWork(row)
+    const generation = row.generation
+    row.retrying = true
+    try {
+      await this.commit(sessionId, generation, () => ({ heldRequest: undefined, pendingManual: false }), signal)
+      signal.throwIfAborted()
+      this.assertCurrent(row, generation)
+      await resume(sessionId, structuredClone(held.messages))
+    } catch (error) {
+      if (this.active && row.generation === generation && !row.heldRequest) {
+        await this.commit(sessionId, generation, () => ({ heldRequest: held }))
+      }
+      throw error
+    } finally { row.retrying = false }
   }
 
-  private async editContract(
-    sessionId: string,
-    expectedRevision: number,
-    patch: Partial<Pick<TaskContract, 'goal' | 'deliverables' | 'inScope' | 'outOfScope' | 'constraints' | 'acceptance' | 'assumptions' | 'questions'>>,
-  ): Promise<MoodStatus> {
-    const state = this.ensure(sessionId)
-    const generation = state.generation
-    const current = state.contract
-    if (!current) coded('MOOD_NOT_FOUND', '还没有可修订的约定。')
-    if (current.revision !== expectedRevision) coded('MOOD_STALE', '约定已更新，请刷新后重试。')
-    const evidence = [
-      ...current.evidence,
-      { sessionId, seq: latestUserSeq(this.options.readEvents(sessionId) ?? []), kind: 'manual' as const, excerpt: excerptOf(patch.goal ?? '修订约定') },
-    ]
-    const contract: TaskContract = {
-      ...current,
-      ...patch,
-      revision: current.revision + 1,
-      readiness: 'user-confirmed',
-      evidence,
-      updatedAt: this.now(),
-    }
-    const wrote = await this.commitIfCurrent(sessionId, generation, {
-      contract,
-      clarification: state.clarification.map(item => item.status === 'pending' ? { ...item, status: 'answered' as const, answer: '作者直接修订约定' } : item),
-      pendingManual: false,
-      lastHandledVersion: state.lastHandledVersion,
-      heldRequest: undefined,
-      projectId: state.projectId,
-    })
-    if (!wrote) coded('MOOD_CANCELLED', '会话已切换，未保存修订。')
-    return this.status(sessionId)
+  private scope(): AiFeatureScope {
+    if (this.ai?.active) return this.ai
+    this.unregisterPurpose?.()
+    this.ai?.dispose()
+    this.ai = this.options.activateAi?.()
+    if (!this.ai?.active) coded('MOOD_NO_AI', '需求梳理服务不可用；普通对话不受影响。')
+    this.unregisterPurpose = this.ai.registerPurpose(analyzePurpose)
+    return this.ai
   }
 
-  private hostSessionId(sessionId: string | undefined, required: boolean): string | undefined {
-    if (!sessionId) return undefined
+  private hostSessionId(sessionId: string): string | undefined {
     if (!this.options.liveSession) return sessionId
-    const live = this.options.liveSession(sessionId)
-    if (!live) return required ? undefined : sessionId
-    return live.id != null ? String(live.id) : sessionId
+    const session = this.options.liveSession(sessionId)
+    return session ? String(session.id ?? sessionId) : undefined
   }
 
   private ensure(sessionId: string): InternalSession {
-    const existing = this.sessions.get(sessionId)
-    if (existing) return existing
-    const created: InternalSession = { clarification: [], pendingManual: false, generation: 0 }
-    this.sessions.set(sessionId, created)
-    return created
-  }
-
-  private view(sessionId: string, row: InternalSession): MoodSessionView {
-    return {
-      sessionId,
-      ...(row.projectId ? { projectId: row.projectId } : {}),
-      ...(row.contract ? { contract: cloneContract(row.contract) } : {}),
-      clarification: row.clarification.map(item => ({ ...item })),
-      pendingManual: row.pendingManual,
-      held: Boolean(row.heldRequest?.messages.length),
+    let row = this.sessions.get(sessionId)
+    if (!row) {
+      row = { clarification: [], pendingManual: false, generation: 0 }
+      this.sessions.set(sessionId, row)
     }
+    return row
   }
 
-  private isBlocked(state: InternalSession): boolean {
-    if (!state.heldRequest) return false
-    const readiness = state.contract?.readiness
-    return readiness === 'pending' || readiness === 'cancelled' || state.clarification.some(item => item.status === 'pending' || item.status === 'cancelled')
-  }
-
-  private async commitIfCurrent(sessionId: string, generation: number, patch: MoodStoredSession): Promise<boolean> {
-    return this.serialize(async () => {
-      if (!this.generationCurrent(sessionId, generation)) return false
-      const proposed = this.snapshot()
-      proposed.sessions[sessionId] = storedOf({ ...this.ensure(sessionId), ...patch })
-      await this.persistProposed(proposed)
-      if (!this.generationCurrent(sessionId, generation)) return false
-      this.commitState(proposed)
-      return true
-    })
-  }
-
-  private supersedeIfNew(sessionId: string, sourceVersion: string): void {
-    const state = this.ensure(sessionId)
-    const previous = state.inflightVersion ?? state.heldRequest?.sourceVersion ?? state.contract?.sourceVersion
-    if (!previous || previous === sourceVersion) return
-    this.supersede(sessionId)
-  }
-
-  private supersede(sessionId: string): void {
-    const state = this.ensure(sessionId)
-    state.generation += 1
-    state.work?.abort()
-    state.work = undefined
-    state.inflightVersion = undefined
-    state.heldRequest = undefined
-    state.lastHandledVersion = undefined
-    if (state.contract && state.contract.readiness !== 'stale' && state.contract.readiness !== 'cancelled') {
-      state.contract = { ...state.contract, readiness: 'stale', updatedAt: this.now() }
-    }
-    state.clarification = markClarification(state.clarification, 'stale')
-  }
-
-  private replaceWork(sessionId: string): AbortController {
-    const state = this.ensure(sessionId)
-    state.work?.abort()
-    const work = new AbortController()
-    state.work = work
-    return work
-  }
-
-  private generationCurrent(sessionId: string, generation: number): boolean {
-    if (!this.active) return false
-    const state = this.sessions.get(sessionId)
-    return Boolean(state && state.generation === generation)
-  }
-
-  private snapshot(): MoodPersistedState {
-    const sessions: Record<string, MoodStoredSession> = {}
-    for (const [sessionId, row] of this.sessions) sessions[sessionId] = storedOf(row)
-    return cloneState({ settings: this.settings, sessions })
-  }
-
-  private commitState(proposed: MoodPersistedState): void {
-    this.settings = proposed.settings
-    const next = new Map<string, InternalSession>()
-    for (const [sessionId, row] of Object.entries(proposed.sessions)) {
-      const previous = this.sessions.get(sessionId)
-      next.set(sessionId, {
-        ...row,
-        generation: previous?.generation ?? 0,
-        work: previous?.work,
-        inflightVersion: previous?.inflightVersion,
-      })
-    }
-    this.sessions = next
-  }
-
-  private async persistProposed(proposed: MoodPersistedState): Promise<void> {
-    this.assertLive()
-    if (!this.options.store) {
-      this.storageFailed = false
-      return
-    }
-    try {
-      await this.options.store.save(cloneState(proposed))
-      this.storageFailed = false
-    } catch (error) {
-      this.storageFailed = true
-      if (error && typeof error === 'object' && 'code' in error) throw error
-      coded('MOOD_STORAGE', '需求澄清保存失败，已保留原内容。')
-    }
+  private cancelWork(row: InternalSession): void {
+    row.generation += 1
+    row.work?.abort()
+    row.work = undefined
+    row.pendingManual = false
   }
 
   private assertLive(): void {
-    if (!this.active) coded('MOOD_DISABLED', '需求澄清已关闭。')
+    if (!this.active) coded('MOOD_DISABLED', '自主推进已关闭。')
+  }
+
+  private assertCurrent(row: InternalSession, generation: number): void {
+    this.assertLive()
+    if (row.generation !== generation) coded('MOOD_CANCELLED', '会话已更新，已丢弃过期的需求梳理。')
+  }
+
+  private commit(
+    sessionId: string, generation: number,
+    patch: (row: InternalSession) => Partial<MoodStoredSession>, signal?: AbortSignal,
+  ): Promise<void> {
+    return this.serialize(async () => {
+      const row = this.ensure(sessionId)
+      this.assertCurrent(row, generation)
+      signal?.throwIfAborted()
+      const next = patch(row)
+      const proposed = this.snapshot()
+      proposed.sessions[sessionId] = storedOf({ ...row, ...next })
+      await this.persist(proposed)
+      if (!this.active || row.generation !== generation || signal?.aborted) {
+        // A save may finish after cancellation. Restore live notes before releasing the write queue.
+        await this.persist(this.snapshot())
+        signal?.throwIfAborted()
+        this.assertCurrent(row, generation)
+      }
+      Object.assign(row, next)
+    })
+  }
+
+  private snapshot(): MoodPersistedState {
+    return structuredClone({ settings: this.settings, sessions: Object.fromEntries(
+      [...this.sessions].map(([id, row]) => [id, storedOf(row)]),
+    ) })
+  }
+
+  private async persist(state: MoodPersistedState): Promise<void> {
+    try {
+      await this.options.store?.save(structuredClone(state))
+      this.storageFailed = false
+    } catch {
+      this.storageFailed = true
+      coded('MOOD_STORAGE', '需求摘要保存失败，已保留原内容。')
+    }
   }
 
   private serialize<T>(run: () => Promise<T>): Promise<T> {
@@ -679,62 +377,15 @@ export class MoodService {
     this.pending = task.then(() => {}, () => {})
     return task
   }
-
-  private syncAi(): void {
-    if (!this.active) {
-      this.detachAi()
-      return
-    }
-    if (this.ai) return
-    const scope = this.options.activateAi?.()
-    if (!scope) return
-    this.ai = scope
-    this.unregisterPurpose = scope.registerPurpose(analyzePurpose)
-  }
-
-  private detachAi(): void {
-    this.unregisterPurpose?.()
-    this.unregisterPurpose = undefined
-    this.ai?.dispose()
-    this.ai = undefined
-  }
-}
-
-function isSettled(readiness: TaskContract['readiness'] | undefined): boolean {
-  return readiness === 'user-confirmed' || readiness === 'clear-request' || readiness === 'disclosed-assumptions'
-}
-
-function nextRevision(contract: TaskContract | undefined): number {
-  return (contract?.revision ?? 0) + 1
-}
-
-function holdOf(sourceVersion: string, kind: TriggerKind, messages: unknown[]): HeldRequest {
-  const trigger = kind === 'risk' || kind === 'material' || kind === 'mild' || kind === 'clear' ? kind : 'material'
-  return { sourceVersion, trigger, messages: structuredClone(messages) }
 }
 
 function storedOf(row: MoodStoredSession): MoodStoredSession {
   return {
-    clarification: row.clarification,
-    pendingManual: row.pendingManual,
-    ...(row.contract ? { contract: row.contract } : {}),
-    ...(row.lastHandledVersion !== undefined ? { lastHandledVersion: row.lastHandledVersion } : {}),
-    ...(row.projectId ? { projectId: row.projectId } : {}),
-    ...(row.heldRequest ? { heldRequest: row.heldRequest } : {}),
+    contract: row.contract, clarification: row.clarification, lastHandledVersion: row.lastHandledVersion,
+    pendingManual: false, projectId: row.projectId, heldRequest: row.heldRequest,
   }
-}
-
-function cloneState(state: MoodPersistedState): MoodPersistedState {
-  return structuredClone(state)
 }
 
 function coded(code: string, message: string): never {
   throw Object.assign(new Error(message), { code })
-}
-
-function combineSignals(...signals: Array<AbortSignal | undefined>): AbortSignal {
-  const live = signals.filter((item): item is AbortSignal => Boolean(item))
-  if (live.length === 0) return new AbortController().signal
-  if (live.length === 1) return live[0]!
-  return AbortSignal.any(live)
 }

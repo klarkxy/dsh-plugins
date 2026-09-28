@@ -44,7 +44,7 @@ pnpm site:test    # 离线渲染测试，也包含在 pnpm check 中
 | [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | 持续的 Lead 与 Sidekick 协作，生成由作者审核的写作候选。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion#readme) |
 | [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | 按作用域维护术语、偏好和近期活动，并通过 Dream 整理记忆。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory#readme) |
 | [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | 配置模型档位、服务商连接和 AI 调用限额。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-model-center#readme) |
-| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 在智能体执行前澄清模糊需求。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
+| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 默认自主推进，仅在真正阻塞时询问，并支持按需梳理需求。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
 | [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | 生成会话回顾，并注入有长度限制的智能体检查点。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
 | [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | 根据结果证据积累有适用条件的方法，可选导出为技能。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
 | [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | 管理网页搜索服务商和公开页面抓取。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
@@ -70,7 +70,7 @@ pnpm check
 
 首次发布沿用包内版本；显式指定的更高版本优先。内容改变但版本未提高时，稳定版自动增加 patch，预发布版增加预发布序号。CI 同步 `package.json` 与存在的 `dsh.plugin.json`，完成检查后发布并验证归档，再提交版本写回 `main`。正式版使用 `latest`，预发布使用 `next`。新功能或不兼容改动应手动选择合适的 minor/major，自动 patch 不替代兼容性判断。
 
-发布串行执行，旧提交会跳过，版本写回使用普通快进推送；不会覆盖并发提交。机器人提交不会递归触发工作流。npm 返回的归档完整性必须与本次产物一致才算成功。失败后可在最新 `main` 上重跑；已成功发布且内容未变的包会跳过。
+发布串行执行，旧提交会跳过，版本回写使用普通快进推送；不会覆盖并发提交。机器人提交不会递归触发工作流。npm 返回的归档完整性必须与本次产物一致才算成功。失败后可在最新 `main` 上重跑；已成功发布且内容未变的包会跳过。
 
 npm 发布后可能先进行扫描。CI 先提交所有变更包，再等待最多 20 分钟，并匿名下载归档校验；超时会明确失败，已被接受的版本不会在重试时重复提交。
 

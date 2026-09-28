@@ -123,8 +123,8 @@
         "en": "Mood"
       },
       "summary": {
-        "zh": "请求含糊时，先把需求问清楚再让智能体动手。",
-        "en": "When a request is ambiguous, pin down what is wanted before the agent starts."
+        "zh": "默认自主推进，仅在真正阻塞时询问，并支持按需梳理需求。",
+        "en": "Proceed autonomously, ask only for genuine blockers, and summarize requirements on demand."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
@@ -264,7 +264,7 @@
       },
       "summary": {
         "zh": "在一个设置页里管理网页搜索服务商和公开页面抓取。",
-        "en": "Manage web search providers and public-page fetching from one settings page."
+        "en": "Manage web search providers and public-page fetching."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",

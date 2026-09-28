@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-mood",
   "version": "0.1.4",
-  "description": "Clarify ambiguous requests before agent execution in DeepSeek Harness.",
+  "description": "Autonomy-first task guidance with clarification only for genuine blockers in DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -54,7 +54,7 @@
       {
         "id": "mood",
         "title": "需求澄清",
-        "description": "在动手前确认目标、范围和验收",
+        "description": "默认自主推进，仅在真正阻塞时询问，支持按需梳理需求",
         "feature": "mood",
         "service": "aiMood"
       }
