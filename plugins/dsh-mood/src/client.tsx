@@ -258,3 +258,4 @@ export function apply(ctx: Context): void {
   ctx.effect(() => client.slots.inject(CHAT_EVENTS_SLOT, () => client.slots.register({
     name: CHAT_EVENTS_SLOT, id: 'mood', order: 10, label: '需求约定',
   }, (props: unknown) => <MoodChatCard client={client} props={props} />)), 'dsh-mood.card')
+}

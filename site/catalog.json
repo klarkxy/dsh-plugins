@@ -264,7 +264,7 @@
       },
       "summary": {
         "zh": "在一个设置页里管理网页搜索服务商和公开页面抓取。",
-        "en": "Manage web search providers and public-page fetching."
+        "en": "Manage web search providers and public-page fetching from one settings page."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
