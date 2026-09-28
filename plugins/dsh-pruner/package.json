@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-pruner",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Code Prune: review and simplify code while keeping existing behavior, cutting redundancy and needless abstraction.",
   "icon": "./icon.svg",
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/pruner/",
@@ -46,6 +46,6 @@
     "test": "vitest run"
   },
   "dshRelease": {
-    "contentHash": "3f97d53e85b96e008941e92f98649efa417fbc39522cf1ce5303fc798ba991fd"
+    "contentHash": "e8c8be8b3cf841a5c7e413530a2e6dbfd0c3c22d11992f19b760f34516ee033f"
   }
 }
