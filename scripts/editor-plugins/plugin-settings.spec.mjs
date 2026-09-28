@@ -73,7 +73,12 @@ describe('plugin settings page registrations', () => {
       expect(h.registered.filter(entry => entry.spec.name === slot)).toEqual([])
       h.declare(slot)
       const configs = () => h.registered.filter(entry => entry.spec.name === slot)
-      expect(configs().map(entry => entry.spec)).toEqual([{ name: slot, key: pkg }])
+      expect(configs().map(entry => entry.spec)).toEqual([
+        pkg === '@klarkxy/dsh-zhihu'
+          // Zhihu keeps its native page order and label from the earlier migration.
+          ? { name: slot, key: pkg, order: 120, label: '知乎' }
+          : { name: slot, key: pkg },
+      ])
       // Registering or opening a settings page must not perform inference or write data.
       expect(h.calls.every(([channel, endpoint]) => channel === '/dsh-model-center' && endpoint === 'status')).toBe(true)
       const html = renderToStaticMarkup(createElement(configs()[0].render, { view: 'page' }))
@@ -101,11 +106,12 @@ describe('plugin settings page registrations', () => {
     })
   }
 
-  it('does not expose duplicate credential settings in the Zhihu search dock', () => {
+  it('keeps Zhihu credentials only on its plugin page without a chat dock', () => {
     const source = readFileSync(new URL('../../plugins/dsh-zhihu/src/client.tsx', import.meta.url), 'utf8')
-    const tabs = source.match(/const OVERLAY_TABS[^=]*=\s*\[([^\]]+)\]/)?.[1]
-    expect(tabs).toBeDefined()
-    expect(tabs).not.toContain("'settings'")
-    expect(source).toContain('插件 → 知乎资料 → 设置')
+    // The Zhihu chat overlay was removed; credentials live solely in the
+    // plugins.bundle.config seat, so no duplicate settings can resurface.
+    expect(source).not.toContain('shell.overlay')
+    expect(source).not.toContain('OVERLAY_TABS')
+    expect(source).toContain('plugins.bundle.config')
   })
 })
