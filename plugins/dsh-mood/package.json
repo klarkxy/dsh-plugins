@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-mood",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Autonomy-first task guidance with clarification only for genuine blockers in DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -113,6 +113,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-c9d42e8b93f36a8345e1ef7a5f3a2e027cbe470680ea354e27f84e9017a44b76"
+    "contentHash": "8c60e371b6430509d20b1abe70668cba24afa3e9926ba123cbe661b526b201fa"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-recap",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Session Recap: write session recaps in the background and give the agent bounded progress checkpoints.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -118,6 +118,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-a764cf671a71c5b857dcba85e344c0b6a2fb87379b5754b1483cf6c7895c8c5e"
+    "contentHash": "8791d52a0902bcab5ca04fd856331b7b3866e8fb8b788932f8e5b696a5c4f3f9"
   }
 }

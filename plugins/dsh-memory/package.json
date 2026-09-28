@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-memory",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Long-term Memory: remember vocabulary, preferences, and recent activity per scope, consolidated by Dream.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -113,6 +113,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-f70449094d125dbfd32eb18c9b3a0f7f2373562850ac7fef07db59b13606396f"
+    "contentHash": "75a6aedec876c0873b6fb62789bfbe3c8d2668d61987cdb13775c575a2395577"
   }
 }

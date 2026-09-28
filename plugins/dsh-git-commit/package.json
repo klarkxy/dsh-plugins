@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-git-commit",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Git Commit: commit workspace changes from the conversation header, with AI-split commits via ai-services.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -103,6 +103,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "28afe3c04f600df39921b1bbacbb13057d1f5ca56d1287014236ac8c788872ff"
+    "contentHash": "07948051e4cb17b69f9cf58132fb6b277c2c86160da8cbac50719af77137eb92"
   }
 }
