@@ -216,6 +216,12 @@ describe('official envelope errors and transport lifecycle', () => {
     const { options } = fixture([])
     await assert.rejects(executeZhihuOpenPlatform('creator.account.stats', {}, options), { code: 'BAD_RESPONSE' })
   })
+  it('rejects non-JSON values at the tool output boundary', async () => {
+    for (const invalid of [undefined, NaN, Infinity, 1n, () => {}]) {
+      const { options } = fixture({ Metrics: { Value: invalid } })
+      await assert.rejects(executeZhihuOpenPlatform('creator.account.stats', {}, options), { code: 'BAD_RESPONSE' })
+    }
+  })
   for (const [status, code] of [[401, 'TOKEN_INVALID'], [403, 'TOKEN_INVALID'], [429, 'RATE_LIMITED'], [503, 'HTTP_ERROR']] as const) it(`maps bare HTTP ${status}`, async () => {
     const { options } = fixture()
     options.fetcher = async () => response(null, status, { 'Retry-After': '7' })

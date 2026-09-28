@@ -35,12 +35,13 @@ export type ZhihuPaging = {
   nextOffset?: string
   warning?: string
 }
+export type ZhihuJsonValue = string | number | boolean | null | ZhihuJsonValue[] | { [key: string]: ZhihuJsonValue }
 export type ZhihuOpenPlatformResult = {
   version: 1
   operation: ZhihuOpenPlatformOperation
   quotaId?: ZhihuQuotaId
   /** Original Data fields. Quota's top-level array is wrapped in { Items }. */
-  data: Record<string, unknown>
+  data: Record<string, ZhihuJsonValue>
   paging?: ZhihuPaging
 }
 export type ZhihuPageInput = { offset?: number | string; limit?: number }
@@ -49,6 +50,16 @@ export type ZhihuCreatorContentType = 'all' | 'answer' | 'article' | 'pin' | 'zv
 export type ZhihuCommentOrder = 'score' | 'reverse' | 'ascending'
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
+// Keep the free-form tool result compatible with the SDK's JSON value contract.
+function jsonValue(value: unknown): value is ZhihuJsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (Array.isArray(value)) return value.every(jsonValue)
+  return record(value) && Object.values(value).every(jsonValue)
+}
+function jsonRecord(value: unknown): value is Record<string, ZhihuJsonValue> {
+  return record(value) && Object.values(value).every(jsonValue)
+}
 function invalid(message: string): never { throw new ZhihuSearchError('INVALID_ARGUMENTS', message) }
 
 function inputObject(input: unknown): Record<string, unknown> {
@@ -164,7 +175,7 @@ export async function executeZhihuOpenPlatform(
   const api = ZHIHU_OPEN_PLATFORM_APIS[operation]
   const raw = await zhihuFetchJson(api.path, { params, envelope: true }, api.label, options)
   const data = operation === 'quota' && Array.isArray(raw) ? { Items: raw } : raw
-  if (!record(data)) throw new ZhihuSearchError('BAD_RESPONSE', `${api.label}的 Data 必须是对象。`)
+  if (!jsonRecord(data)) throw new ZhihuSearchError('BAD_RESPONSE', `${api.label}的 Data 必须是 JSON 对象。`)
   return {
     version: 1, operation, data,
     ...(api.quotaId ? { quotaId: api.quotaId } : {}),
