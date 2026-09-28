@@ -52,7 +52,7 @@ allowBuilds:
 
 然后再执行一次 add。该许可会在本机执行这个包的构建。需要固定插件来源时请钉住 commit。
 
-`@deepseek-ai/dsh-system-prompt` 和 `@deepseek-ai/dsh-agent-preset-registry` 的 peer 范围会对照正在运行的 `dsh` 版本检查。本包要求 DSH `>=0.1.7-rc.2 <0.2.0`；加载器不强制 `engines.dsh`。
+`@deepseek-ai/dsh-system-prompt` 和 `@deepseek-ai/dsh-agent-preset-registry` 的 peer 范围会对照正在运行的 `dsh` 版本检查。本包要求 DSH `>=0.1.7-rc.2`；加载器不强制 `engines.dsh`。
 
 ## 从本仓库安装
 

@@ -3,6 +3,6 @@
   "version": "0.1.0-rc.4",
   "main": "src/index.js",
   "description": "Safe Auto: budgeted preflight and one-shot escalation with conversation-following or independent reviewers.",
-  "engines": { "dsh": ">=0.1.7-rc.2 <0.2.0" },
+  "engines": { "dsh": ">=0.1.7-rc.2" },
   "contributes": { "tools": [], "skills": [] }
 }

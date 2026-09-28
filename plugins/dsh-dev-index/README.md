@@ -52,7 +52,7 @@ allowBuilds:
 
 Run the add again. That allowance executes this package's build on the machine. Pin a commit when the plugin source must not move.
 
-Peer ranges on `@deepseek-ai/dsh-system-prompt` and `@deepseek-ai/dsh-agent-preset-registry` are checked against the running `dsh` version. This package requires DSH `>=0.1.7-rc.2 <0.2.0`; `engines.dsh` is not enforced by the loader.
+Peer ranges on `@deepseek-ai/dsh-system-prompt` and `@deepseek-ai/dsh-agent-preset-registry` are checked against the running `dsh` version. This package requires DSH `>=0.1.7-rc.2`; `engines.dsh` is not enforced by the loader.
 
 ## Install from this checkout
 

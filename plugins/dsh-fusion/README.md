@@ -8,7 +8,7 @@ The plugin is **disabled by default**. Enable **副驾协作** in the host's plu
 
 ## Install
 
-Requires Node.js ≥22 and a compatible DSH `0.1.7-rc.2` host (peer dependencies pin `>=0.1.7-alpha.1 <0.2.0`). If your DSH distribution does not bundle this plugin, install it together with `@klarkxy/dsh-ai-services` and enable its `fusion` entry through the host plugin configuration.
+Requires Node.js ≥22 and a compatible DSH `0.1.7-rc.2+` host (peer dependencies use open lower bounds such as `>=0.1.7-alpha.1`). If your DSH distribution does not bundle this plugin, install it together with `@klarkxy/dsh-ai-services` and enable its `fusion` entry through the host plugin configuration.
 
 ```sh
 npm install @klarkxy/dsh-fusion
