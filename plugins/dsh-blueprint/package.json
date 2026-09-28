@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-blueprint",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha.4",
   "description": "Blueprint: share plugin sets, exact versions, and install order as blueprint codes.",
   "type": "module",
   "main": "index.mjs",
@@ -62,6 +62,6 @@
     }
   },
   "dshRelease": {
-    "contentHash": "ee20fcfe08874fec6d87d328d8db04c6303df6aee757c69620ae7fe4469e6717"
+    "contentHash": "381890dc51041dea7023633c58f0a0f66abd636d2191acea32cdd7e354ed8263"
   }
 }

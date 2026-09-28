@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-safe-auto",
-  "version": "0.1.0-rc.4",
+  "version": "0.1.0-rc.5",
   "description": "Safe Auto: budgeted preflight and one-shot escalation with conversation-following or independent reviewers.",
   "type": "module",
   "main": "src/index.js",
@@ -47,6 +47,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "72cd43dad96a7fa913973139c85efb817e472ee6a7c6caa0bfa2faa349fc0101"
+    "contentHash": "29a456b330ec9c7f4e4020bbb770a40747057e1271fb6d2ad997c2cf4b5ff71c"
   }
 }
