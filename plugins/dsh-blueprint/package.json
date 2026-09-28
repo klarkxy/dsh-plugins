@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-blueprint",
   "version": "0.1.0-alpha.2",
-  "description": "Import and export plugin blueprints from the official DSH plugin manager.",
+  "description": "Blueprint: share plugin sets, exact versions, and install order as blueprint codes.",
   "type": "module",
   "main": "index.mjs",
   "exports": {
@@ -13,18 +13,22 @@
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
+    "icon.svg",
     "*.mjs",
     "client.js",
     "cordis.patch.yml",
+    "skills/**/*.md",
     "locale/*.json",
     "README*.md",
+    "PROTOCOL.md",
+    "examples/*.json",
+    "examples/*.txt",
     "NOTICE.md",
     "LICENSE",
-    "ACCEPTANCE.md",
-    "SETTINGS-SCOPE.md"
+    "ACCEPTANCE.md"
   ],
   "scripts": {
-    "build": "node --check index.mjs && node --check client.js && node --check official.mjs && node --check engine.mjs && node --check blueprint.mjs && node --check codec.mjs",
+    "build": "node --check index.mjs && node --check host-rpc.mjs && node --check client.js && node --check official.mjs && node --check engine.mjs && node --check blueprint.mjs && node --check codec.mjs && node --check creator-guidance.mjs && node --check registry.mjs && node --check registry-tools.mjs",
     "test": "node --test tests/*.test.mjs"
   },
   "engines": {
