@@ -70,9 +70,9 @@ export async function handleMemoryRpc(
       await runtime.remove(parsed.data.id, parsed.data.expectedRevision)
       return ok({ id: parsed.data.id })
     }
-    if (endpoint === 'records.accept') return mutation(runtime.accept.bind(runtime), payload)
-    if (endpoint === 'records.reject') return mutation(runtime.reject.bind(runtime), payload)
-    if (endpoint === 'records.revoke') return mutation(runtime.revoke.bind(runtime), payload)
+    if (endpoint === 'records.accept') return await mutation(runtime.accept.bind(runtime), payload)
+    if (endpoint === 'records.reject') return await mutation(runtime.reject.bind(runtime), payload)
+    if (endpoint === 'records.revoke') return await mutation(runtime.revoke.bind(runtime), payload)
     if (endpoint === 'dream.run') {
       const sessionId = parseSessionId(payload)
       if (!sessionId) return fail('MEMORY_INVALID', '缺少会话。')

@@ -1,0 +1,162 @@
+{
+  "verifiedAt": "2026-09-24T19:34:22.670Z",
+  "host": "0.1.7-rc.2",
+  "plugin": "0.1.0-alpha.1",
+  "models": [
+    {
+      "id": "8481b3c8-bb04-4d77-b995-78bd50d3b6a4",
+      "requests": [
+        {
+          "provider": "ocg",
+          "model": "mimo-v2.6-flash",
+          "effort": null
+        }
+      ],
+      "toolResults": [],
+      "markers": [
+        "ACCEPTED_1"
+      ],
+      "turns": [
+        "completed"
+      ]
+    },
+    {
+      "id": "8c93f2eb-e5d7-4dc0-b919-73c3bd36e1fc",
+      "requests": [
+        {
+          "provider": "ocg",
+          "model": "minimax-m3",
+          "effort": "high"
+        },
+        {
+          "provider": "ocg",
+          "model": "minimax-m3",
+          "effort": "high"
+        }
+      ],
+      "toolResults": [],
+      "markers": [
+        "ACCEPTED_2",
+        "RECOVERED"
+      ],
+      "turns": [
+        "completed",
+        "completed"
+      ]
+    },
+    {
+      "id": "0e478039-f57b-4268-a7c1-ccb2fcf7984c",
+      "requests": [
+        {
+          "provider": "ocg",
+          "model": "step-5-preview",
+          "effort": null
+        }
+      ],
+      "toolResults": [],
+      "markers": [
+        "ACCEPTED_3"
+      ],
+      "turns": [
+        "completed"
+      ]
+    }
+  ],
+  "modelDrivenTeam": {
+    "lead": {
+      "id": "classmates-team-1790277961410",
+      "requests": [
+        {
+          "provider": "ocg",
+          "model": "mimo-v2.6-flash",
+          "effort": null
+        }
+      ],
+      "toolResults": [
+        {
+          "name": "classmates_list",
+          "error": false
+        },
+        {
+          "name": "classmates_spawn",
+          "error": true
+        },
+        {
+          "name": "classmates_spawn",
+          "error": true
+        },
+        {
+          "name": "classmates_spawn",
+          "error": false
+        },
+        {
+          "name": "wait_agent",
+          "error": false
+        },
+        {
+          "name": "send_message",
+          "error": false
+        },
+        {
+          "name": "list_agents",
+          "error": false
+        }
+      ],
+      "markers": [
+        "TASK_CREATED",
+        "ACK_RECEIVED",
+        "TEAM_PROOF_COMPLETE"
+      ],
+      "turns": [
+        "completed"
+      ]
+    },
+    "child": {
+      "id": "9409192c-d54a-43cb-bb39-5b40b3987487",
+      "requests": [
+        {
+          "provider": "ocg",
+          "model": "mimo-v2.6-flash",
+          "effort": null
+        },
+        {
+          "provider": "ocg",
+          "model": "mimo-v2.6-flash",
+          "effort": null
+        }
+      ],
+      "toolResults": [
+        {
+          "name": "team_task_create",
+          "error": false
+        },
+        {
+          "name": "send_message",
+          "error": false
+        }
+      ],
+      "markers": [
+        "TASK_CREATED",
+        "ACK_RECEIVED"
+      ],
+      "turns": [
+        "completed",
+        "completed"
+      ]
+    }
+  },
+  "recoveryWire": [
+    {
+      "model": "minimax-m3",
+      "reasoning_effort": "high"
+    },
+    {
+      "model": "mimo-v2.6-flash",
+      "reasoning_effort": null
+    }
+  ],
+  "limits": [
+    "One local OCG provider; no direct cross-provider claim.",
+    "Effort transport acceptance does not prove internal reasoning compute."
+  ]
+}

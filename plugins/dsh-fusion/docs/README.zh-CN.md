@@ -1,8 +1,8 @@
-# Fusion 协作
+# 副驾协作
 
 [English](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-fusion/README.md)
 
-在宿主的插件设置中启用「Fusion 协作」。插件默认关闭，启用后不需要再为每段对话打开开关。
+在宿主的插件设置中启用「副驾协作」。插件默认关闭，启用后不需要再为每段对话打开开关。
 
 需要 Node.js ≥22 与兼容的 DSH `0.1.7-rc.2` 宿主。若所用 DSH 发行版未内置本插件，可与 `@klarkxy/dsh-ai-services` 一同通过宿主插件配置启用 `fusion` 入口：
 

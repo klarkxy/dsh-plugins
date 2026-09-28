@@ -10,10 +10,18 @@ This README also catalogs klarkxy's public DSH plugins on npm, including package
 
 | Package | Purpose | npm |
 | --- | --- | --- |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | Browse official DSH docs and let Creator mode search and read them with native tools. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
-| [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.md) | Simplify mode: review and simplify code while preserving existing functionality. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: read official DSH docs in the Plugins page; Creator mode searches and fetches them with native tools. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
+| [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.md) | Code Prune: review and simplify code while keeping existing behavior. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
 
-Install individual plugins from npm:
+## Unpublished development packages
+
+| Package | Purpose | Status |
+| --- | --- | --- |
+| [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.md) | Teammate Roles: reusable teammate roles and native Team UI enhancements. | Local alpha; excluded from automatic npm publication and the plugin site. |
+
+Migrated from the local `dsh-teammates` directory. See the [migration record](docs/classmates-migration.md).
+
+Install published plugins from npm:
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-dev-index
@@ -41,21 +49,21 @@ Package names link to npm. Follow each plugin's documentation for installation, 
 
 | Package | Purpose | Documentation |
 | --- | --- | --- |
-| [`@klarkxy/dsh-ai-services`](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) | Shared model routing, bounded auxiliary calls, and usage receipts. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-ai-services#readme) |
-| [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | Update session titles from the latest human task while preserving manual names. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title#readme) |
-| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | Persistent Lead and Sidekick collaboration with author-reviewed writing candidates. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion#readme) |
-| [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | Scoped vocabulary, preferences, recent activity, and Dream memory consolidation. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory#readme) |
-| [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | Configure model tiers, provider connections, and AI call limits. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-model-center#readme) |
-| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | Proceed autonomously, ask only for genuine blockers, and summarize requirements on demand. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
-| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | Generate session recaps and inject bounded agent checkpoints. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
-| [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | Learn conditional methods from outcome evidence, with optional skill export. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
-| [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | Manage web search providers and public-page fetching. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
-| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | Zhihu search, agent tools, knowledge bases, and usage tracking. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
+| [`@klarkxy/dsh-ai-services`](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) | AI Services: shared model routing, bounded auxiliary calls, and usage receipts. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-ai-services#readme) |
+| [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | Auto Title: session titles follow the latest task; manual names stay put. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title#readme) |
+| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | Sidekick: persistent Lead–Sidekick collaboration with author-reviewed results. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion#readme) |
+| [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | Long-term Memory: scoped vocabulary, preferences, recent activity, and Dream consolidation. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory#readme) |
+| [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | Model Center: configure model tiers, provider connections, and AI call limits. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-model-center#readme) |
+| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | Mood: proceed autonomously, ask only for genuine blockers, and summarize requirements on demand. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
+| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | Session Recap: background recaps and bounded agent checkpoints. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
+| [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | Experience Learning: learn conditional methods from outcome evidence, with optional skill export. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
+| [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | Web Search: manage web search providers and public-page fetching from one settings page. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
+| [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | Zhihu: Zhihu search, agent tools, knowledge bases, and usage tracking. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
 | [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | Discover, review, and install reusable capabilities. | [Docs](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
 
 ## Development
 
-Requires Node.js 22 or newer and pnpm 10.
+Requires Node.js 24 or newer and pnpm 10.
 
 ```bash
 pnpm install
@@ -66,7 +74,7 @@ Each package owns its assets, tests, and release version. Native presets need no
 
 ## Automatic npm releases
 
-Every `plugins/dsh-xxx` package is named `@klarkxy/dsh-xxx` and selects the public npm registry. `.github/workflows/npm-publish.yml` checks packages on every `main` update. It can also be retried manually from Actions; release tags are not required.
+Every `plugins/dsh-xxx` package is named `@klarkxy/dsh-xxx`. Private development packages (`private: true`) participate in checks but are excluded from automatic releases. Public packages select the public npm registry. `.github/workflows/npm-publish.yml` checks packages on every `main` update. It can also be retried manually from Actions; release tags are not required.
 
 After building, CI fingerprints the files selected by `npm pack` and compares them with the published package. Only changed packages or explicitly higher versions are published. Repository docs, the index website and tests excluded from the archive do not cause npm releases. Version fields and CI's own `dshRelease.contentHash` are excluded from the fingerprint to avoid release loops.
 

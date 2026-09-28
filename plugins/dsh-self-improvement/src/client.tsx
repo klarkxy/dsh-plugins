@@ -238,7 +238,7 @@ export function ReviewPanel({ client, sessionId, locale }: {
         sessionId: request.sessionId,
         viewSessionId: sessionRef.current,
       })) return
-      setError(cause instanceof Error ? cause.message : (locale === 'en' ? 'Unable to read self-improvement state.' : '无法读取自我改进状态。'))
+      setError(cause instanceof Error ? cause.message : (locale === 'en' ? 'Unable to read Experience Learning state.' : '无法读取经验学习状态。'))
     })
     return () => disposeReviewRequest(gate.current, workRef.current ?? request.controller)
   }, [client, sessionId, locale])
@@ -288,7 +288,7 @@ export function ReviewPanel({ client, sessionId, locale }: {
     {note ? <p role="status">{note}</p> : null}
     {data.storageFailed ? <p role="alert">{locale === 'en' ? 'Save failed; previous state was kept.' : '保存失败，已保留上一次成功的状态。'}</p> : null}
     {data.memoryAvailable ? null : <p role="alert" className="si-error">{memoryUnavailableCopy(locale)}</p>}
-    <div className="si-tabs" role="tablist" aria-label={locale === 'en' ? 'Self-improvement' : '自我改进'} onKeyDown={event => {
+    <div className="si-tabs" role="tablist" aria-label={locale === 'en' ? 'Experience Learning' : '经验学习'} onKeyDown={event => {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
       const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
       const index = buttons.indexOf(event.target as HTMLButtonElement)

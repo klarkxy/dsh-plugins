@@ -1,33 +1,76 @@
 # Acceptance record
 
-Date: 2026-09-27. Status: implementation/source preview; native end-to-end acceptance is pending.
+Verified on 2026-09-28 with Windows, Node.js 24.16.0 and official DSH 0.1.7-rc.2.
+This record describes the current plugin-only implementation.
 
-## Executed in this development environment
+## Scope
 
-Node.js 22.16.0, Linux, isolated temporary directories.
+Blueprint shares exact package identities and ordered bundles. It has one Import /
+Export menu. There is no settings document, settings RPC mode, field selection,
+sharing-policy schema, Settings/Loader service dependency or settings mutation.
+The validator accepts only the current blueprint schema; no migration or legacy
+compatibility path is maintained. Reusable defaults belong in native composition
+plugins and remain subject to the host's configuration-layer rules.
 
-- `npm test`: 84 passed, 0 failed, 0 skipped. Pure-core cases cover strict JSON/J/Z parsing, Unicode and size limits, default inclusion and exclusions, preserved order, two-stage imports, native revision fences, one-use plans, partial failure reporting, connection-target guarding, schema secrets including intersections and new dictionary entries, interruption and final-order verification.
-- Adapter contract fixtures exercise the actual `official.mjs` and `index.mjs` implementations against a synthetic Context with the inspected upstream signatures. They verify redacted native reads, page-independent scope, package/row ownership, malformed policy handling, native install/mutate/cancel arguments, sanitized results and explicit confirmation. They do not load a real DSH host.
-- A VM client-registration test executes `client.js` with a synthetic module loader and React facade. It verifies the official manager page and contextual share action registrations. This is not a browser visual or interaction test.
-- `npm run build`: JavaScript syntax checks of all six executable source files.
-- Distribution contents checked with `npm pack --dry-run` and a real local `npm pack`; tests and development files are not shipped. The packed core can be imported and its codec round-tripped without third-party dependencies.
+Import is additive: the entire existing active sequence remains unchanged, and
+only requested inactive bundles are appended in blueprint preference order.
+Different incoming order alone is not a conflict. Import never disables bundles.
 
-The alpha.2 scope revision adds ten tests: custom-only storage is not read, plugin-list sharing still works, unsupported imported settings block before writes, stale selections fail, author policy cannot widen native access, inactive/mismatched entries are excluded, browser page metadata is rejected, native defaults remain shareable, and the client does not enumerate configuration slots. Existing presentation tests now verify native support regardless of page slots or `autoGenerate`.
+Codes use only `DSHBP2:<payload>` with raw DEFLATE and Base64url. There is no
+encoding selector or JSON import/download. Export returns only the code. Blueprint
+metadata contains a name and optional description, without its own revision number.
 
-No real `~/.dsh`, model provider, credential store or network installation was touched.
+## Completed checks
 
-## GitHub Actions verification
+- All 97 package tests pass. Coverage includes strict code/JSON parsing, exact
+  package identity, ordered export, additive prefix preservation, repeated-import
+  idempotence, activation without reinstall, protocol vectors, package conflicts, bounded one-use plans,
+  stale-state rejection, cancellation, partial failure, native installation calls,
+  authenticated RPC, Creator guidance, discovery tools and client registration.
+- Regression tests cover 1 MiB malformed interior whitespace and preserve outer
+  ASCII whitespace / raw byte limits. A 64 KB case that previously took about 2.9 s
+  now rejects in 0.19 ms; a 1 MiB case rejects in 0.52 ms in isolated Node 24.
+- Request abort and engine disposal are checked at the initial snapshot, native
+  inspection and final snapshot boundaries. Late replies cannot save plans/results.
+  Actual HTTP disconnect and plugin unload tests abort the native inspect signal.
+- Adapter tests run with Settings, Loader, pluginPackages, credential and storage
+  accessors that throw if read. Catalog, export and preview still work. Settings
+  operation requests, disable operations and non-blueprint input fail without mutation.
+- The package syntax build passes. A real npm tarball was extracted and loaded by
+  an isolated official host. PROTOCOL.md, the JSON example and its single code vector are packed;
+  the retired settings-scope document is not packaged.
+- Browser interaction with that packed plugin verified export/copy and import of
+  a different preference order without any mutation, then a blueprint requesting
+  an already installed inactive bundle. Exactly one enable operation appended it;
+  existing order, dependencies and the user patch were preserved on readback.
+- The packed page exports only a share code with no blueprint revision or JSON
+  download. A malformed 64 KB code is rejected through the actual isolated host.
+- Reimport, an install-only request for active bundles, and the shipped single-format
+  empty-document code produced no-op previews. Desktop and 390px screenshots
+  were inspected; mobile content did not overflow, Escape restored menu focus,
+  and there were no browser exceptions.
+- Independent read-only review found the engine/native adapter and protocol
+  consistent with the accepted additive rule before the single-format simplification.
+  A fresh independent review of the current fixes found no surviving bypass or
+  regression, reran all 97 tests, and checked non-ASCII whitespace rejection.
+  The parent also verified the packed browser flow.
 
-Implementation commit: `420336f78444ea7e02db190e2c2676c848a78171`.
+Local evidence: `.scratch/blueprint-fix/`
+(tarball, browser report and screenshots). These are not shipped assets.
 
-- [CI #42, push](https://github.com/klarkxy/dsh-plugins/actions/runs/36299619992) completed successfully. Its complete job log was inspected: Node.js 24.21.0, pnpm 10.29.2, `pnpm install --frozen-lockfile` and the full root `pnpm check` passed. The blueprint package ran all 84 tests with zero failures and zero skips. Release-target checks, site tests, existing TypeScript checks, other plugin tests, build and pack checks also passed.
-- [CI #43, pull request](https://github.com/klarkxy/dsh-plugins/actions/runs/36299637488) also completed successfully; its job steps confirm the frozen installation and full root check.
-- The package added no dependencies and did not change the root lockfile, workflows or unrelated packages. All 18 initial remote blobs were checked against the tested local source, tests and documentation. This record is a later documentation-only addition; the linked runs identify the implementation commit they actually tested.
+## Host and verification boundaries
 
-## Not established by those tests
+Stock rc.2 has no `plugins.list.actions` slot. The browser run used an isolated
+copy of its official client with the equivalent four-file host integration patch;
+the plugin's own configuration page remains available without that slot. This is
+not an upstream host release or an update of the user's installed application.
 
-The local shell cannot resolve GitHub and pnpm is not installed; dependency installation and the root monorepo checks were not run locally. They were verified in CI as recorded above, not by claiming a local run. No claim is made that a particular released DSH npm/desktop build has passed the whole workflow. Genuine HTTP authentication, HMR/plugin lifecycle behavior, cross-editor races and a real browser remain to be checked in a configured runtime.
+The installed package fixtures exercise native activation/order handling; a fresh
+public npm network installation and a packaged desktop titlebar were not tested.
+No production profile, credential store, publication or deployment was touched.
 
-Before a stable release, use a fresh throwaway DSH Home and a non-production profile to install the actual tarball, verify Plugins-page mounting, export/import a real npm bundle in both modes, inspect bundle order, confirm secrets remain local, exercise post-install configuration preview and native restart/failure cases, and test browser reload/cancellation. Repeat on supported hosts. Do not claim a green unit-test run covers these steps.
-
-The package remains a prerelease; it is not added to the site's npm-backed catalog until a published `latest` version exists. This change does not remove the source repository's v1 runtime, delete user blueprints, merge a PR or publish to npm.
+The prior full workspace check passed release checks, site tests, editor-build
+checks and typechecking, then failed in the unrelated dsh-safe-auto suite on
+Windows path expectations and file-symlink permissions. This removal was verified
+with the current package suite/build and packaging; it does not claim a green full
+workspace check.

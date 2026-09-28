@@ -51,4 +51,12 @@ pnpm check                                         # 全仓检查
 
 ## 与 npm 发布的关系
 
-`plugins/*` 下被 `npm pack` 打包的文件（含 `package.json`、README）内容一变，`npm-publish.yml` 就会自动发布 patch 版本。只改 `site/`、根 README 或测试不会触发发布。插件的 `homepage` 指向对应详情页 `https://klarkxy.github.io/dsh-plugins/plugins/<slug>/`。
+标记 `private: true` 的开发包参加构建、测试与打包检查，但 `scripts/release-target.mjs` 会将其排除在自动发布目标之外；未发布包不加入站点 catalog。
+
+公开包 `plugins/*` 下被 `npm pack` 打包的文件（含 `package.json`、README）内容一变，`npm-publish.yml` 就会自动发布 patch 版本。只改 `site/`、根 README 或测试不会触发发布。插件的 `homepage` 指向对应详情页 `https://klarkxy.github.io/dsh-plugins/plugins/<slug>/`。
+
+## 插件配置入口
+
+插件自己的设置统一注册到 `plugins.bundle.config`，`key` 必须为 npm 包名；某个 bundle 行自己的设置使用 `plugins.row.config`。不要注册 `settings.section`、`settings.plugins.tab` 或旧的 `dsh-editor.settings.*`，也不要在插件页未声明时回退到全局设置。`slots.inject()` 等待宿主声明并负责卸载回收；标题与导航由宿主插件页提供。功能性搜索面板可以保留，但不要在那里重复提供凭据设置。迁移入口时保留 RPC、凭据引用、存储结构和已保存的开关，不触发模型调用。
+
+新增或迁移配置入口时运行 `node --test scripts/plugin-settings.test.mjs`、`pnpm test:editor-build` 和相关插件测试；网络搜索还提供通过真实注册入口挂载的 `pnpm test:e2e:web-search` 浏览器回归。

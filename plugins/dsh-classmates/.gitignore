@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.tgz
+.test-output/
+.research/
+.npm-cache/
+test-results/
+
+# Local demo inputs and recordings are not plugin sources.
+demo/
+.playwright-cli/

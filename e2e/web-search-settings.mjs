@@ -25,7 +25,9 @@ const INDEX_HTML = `<!doctype html>
   <script type="module">
     import React from 'react'
     import { createRoot } from 'react-dom/client'
-    import { NetworkSearchSettings, apply } from '/plugins/dsh-web-search-manager/src/client.tsx'
+    import { apply } from '/plugins/dsh-web-search-manager/src/client.tsx'
+
+    let settingsRender
 
     function makeClient() {
       return {
@@ -43,7 +45,19 @@ const INDEX_HTML = `<!doctype html>
             unset(ref) { return window.rpc({ kind: 'credentials.unset', ref }) },
           },
         },
-        slots: { inject() { return () => {} }, register() { return () => {} } },
+        slots: {
+          inject(name, run) {
+            if (name !== 'plugins.bundle.config') throw new Error('Unexpected settings slot: ' + name)
+            return run()
+          },
+          register(spec, render) {
+            if (spec.name !== 'plugins.bundle.config' || spec.key !== '@klarkxy/dsh-web-search-manager') {
+              throw new Error('Settings must be registered on the web-search plugin page')
+            }
+            settingsRender = render
+            return () => { settingsRender = undefined }
+          },
+        },
       }
     }
 
@@ -53,7 +67,8 @@ const INDEX_HTML = `<!doctype html>
       const el = document.getElementById('root')
       if (root) root.unmount()
       root = createRoot(el)
-      root.render(React.createElement(NetworkSearchSettings, { client: makeClient() }))
+      if (!settingsRender) throw new Error('Plugin settings are not registered')
+      root.render(React.createElement(settingsRender, { view: 'page' }))
     }
     window.mountSettings()
   </script>
@@ -303,12 +318,11 @@ try {
   const rootRequire = createRequire(resolve(root, 'package.json'))
   const vitestRequire = createRequire(rootRequire.resolve('vitest/package.json'))
   const { createServer } = await import(pathToFileURL(vitestRequire.resolve('vite')).href)
-  const shellRequire = createRequire(resolve(root, 'packages/dsh-editor-shell/package.json'))
-  const react = viteAlias(shellRequire.resolve('react'))
-  const reactJsx = viteAlias(shellRequire.resolve('react/jsx-runtime'))
-  const reactJsxDev = viteAlias(shellRequire.resolve('react/jsx-dev-runtime'))
-  const reactDom = viteAlias(shellRequire.resolve('react-dom'))
-  const reactDomClient = viteAlias(shellRequire.resolve('react-dom/client'))
+  const react = viteAlias(rootRequire.resolve('react'))
+  const reactJsx = viteAlias(rootRequire.resolve('react/jsx-runtime'))
+  const reactJsxDev = viteAlias(rootRequire.resolve('react/jsx-dev-runtime'))
+  const reactDom = viteAlias(rootRequire.resolve('react-dom'))
+  const reactDomClient = viteAlias(rootRequire.resolve('react-dom/client'))
 
   vite = await createServer({
     configFile: false,
@@ -354,7 +368,7 @@ try {
     vite.ssrLoadModule('/plugins/dsh-web-search-manager/src/manager.ts'),
     vite.ssrLoadModule('/plugins/dsh-web-search-manager/src/rest-search.ts'),
     vite.ssrLoadModule('/plugins/dsh-web-search-manager/src/contracts.ts'),
-    vite.ssrLoadModule('/packages/dsh-zhihu/src/web-search-provider.ts'),
+    vite.ssrLoadModule('/plugins/dsh-zhihu/src/web-search-provider.ts'),
   ])
   host = createHost({ WebSearchManager, BraveSearchProvider, defaultSettings: contracts.defaultSettings,
     zhihuDescriptor: ZHIHU_WEB_SEARCH_DESCRIPTOR })

@@ -316,6 +316,6 @@ export function apply(ctx: Context): void {
     return () => style.remove()
   }, 'dsh-recap.styles')
   ctx.effect(() => client.slots.inject(CHAT_EVENTS_SLOT, () => client.slots.register({
-    name: CHAT_EVENTS_SLOT, id: 'recap', order: 40, label: '回顾',
+    name: CHAT_EVENTS_SLOT, id: 'recap', order: 40, label: '会话纪要',
   }, (props: unknown) => <RecapBackgroundSeat client={client} {...(props as object)} />)), 'dsh-recap.background')
 }

@@ -1,4 +1,4 @@
-# dsh-dev-index
+# DSH Docs
 
 [Chinese documentation](README.zh-CN.md)
 

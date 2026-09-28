@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-web-search-manager",
   "version": "0.1.7",
-  "description": "Manage web search providers and public-page fetching in DeepSeek Harness.",
+  "description": "Web Search: manage web search providers and public-page fetching from one settings page.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -31,6 +31,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "icon.svg",
     "lib",
     "cordis.patch.yml",
     "README.md",
@@ -59,8 +60,8 @@
     "entries": [
       {
         "id": "web-search-manager",
-        "title": "网络搜索",
-        "description": "主动授权联网搜索和网页读取，管理搜索供应商",
+        "title": "网页搜索",
+        "description": "在一个设置页管理搜索服务商和公开页面抓取",
         "feature": "web-search",
         "service": "webSearchManager"
       }

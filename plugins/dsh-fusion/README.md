@@ -1,10 +1,10 @@
-# Fusion
+# Sidekick
 
-Fusion pairs the current assistant with one persistent native Sidekick. The Lead delegates a bounded task, reads the exact result, and accepts it or requests a revision. DeepSeek Harness remains responsible for sessions, tools, permissions, models and execution history.
+Sidekick pairs the current assistant with one persistent native partner. The Lead delegates a bounded task, reads the exact result, and accepts it or requests a revision. DeepSeek Harness remains responsible for sessions, tools, permissions, models and execution history.
 
 [简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-fusion/docs/README.zh-CN.md)
 
-The plugin is **disabled by default**. Enable **Fusion 协作** in the host's plugin settings. There is no additional conversation switch. Existing writing conversations participate when enabled; child sessions do not become new Leads.
+The plugin is **disabled by default**. Enable **副驾协作** in the host's plugin settings. There is no additional conversation switch. Existing writing conversations participate when enabled; child sessions do not become new Leads.
 
 ## Install
 

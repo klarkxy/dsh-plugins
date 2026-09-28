@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "model switch clears effort",
+    "create and post-save interaction",
+    "conflict preserves draft and shows remote changes",
+    "320px mobile layout",
+    "native dark theme",
+    "delete and post-delete interaction"
+  ],
+  "pageErrors": []
+}

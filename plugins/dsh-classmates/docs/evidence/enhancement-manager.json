@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-09-25T07:09:22.486Z",
+  "remoteModelCalls": 0,
+  "modelTools": [
+    "classmates_batch",
+    "classmates_read"
+  ],
+  "checks": [
+    "real official preset mounting",
+    "read configured model directory",
+    "atomic two-role creation",
+    "stale revision rejected",
+    "manager team spawn refused",
+    "assembly omits execution tools",
+    "ordinary lead lacks management tools",
+    "batch cleanup",
+    "blank session standard-manager-standard switch removes manager authority"
+  ],
+  "sessionId": "session-b110a3f9-9b38-47e3-a59a-988831da3dce"
+}

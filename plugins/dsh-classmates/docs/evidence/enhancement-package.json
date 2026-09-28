@@ -1,0 +1,43 @@
+{
+  "archive": "klarkxy-dsh-classmates-0.2.0-alpha.1.tgz",
+  "installedRuntimeHashes": [
+    {
+      "path": "package.json",
+      "sha256": "1DB24564EFB3E03DC4C399E30E517D516E16F5FB09E976A879D82866F8E2BDAA"
+    },
+    {
+      "path": "cordis.patch.yml",
+      "sha256": "F4E9795E90580FDCEFEADAE33AEBEF69FCC93F492DC65905C210FEDEF80C1DB1"
+    },
+    {
+      "path": "dist/index.js",
+      "sha256": "663AA19669724BA40ECC50FB440B81172E8A83A2526DB89179870EEE20CF3109"
+    },
+    {
+      "path": "dist/client.js",
+      "sha256": "A2AA924773629F5428A884823DFD2F672853CFE8AD7B72A970CE38E1E013E87B"
+    },
+    {
+      "path": "dist/manager.js",
+      "sha256": "4A1C6D80E78B955FDA5E21B37476758F0BEE00BB99C2FE13DCE12E133BC5CA11"
+    }
+  ],
+  "checkedAt": "2026-09-25T07:11:01.8224795Z",
+  "reinstall": true,
+  "version": "0.2.0-alpha.1",
+  "officialCliInstall": true,
+  "uninstall": {
+    "at": "2026-09-25T07:08:34.611Z",
+    "checks": [
+      "official CLI uninstall",
+      "enhancement UI absent",
+      "one original native Team action",
+      "persisted roster still readable"
+    ],
+    "pageErrors": []
+  },
+  "published": false,
+  "fileCount": 18,
+  "allExtractedFilesMatch": true,
+  "sha256": "D89295BF1D6B37A04E4C550329CB7547F1261774DC72D1A59B4B02CC7B3931D2"
+}

@@ -36,6 +36,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "icon.svg",
     "lib/*.js",
     "lib/*.js.map",
     "lib/*.d.ts",
@@ -63,7 +64,7 @@
     "entries": [
       {
         "id": "zhihu",
-        "title": "知乎资料",
+        "title": "知乎",
         "description": "知乎搜索、知识库与用量",
         "feature": "zhihu",
         "service": "zhihu"

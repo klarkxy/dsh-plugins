@@ -91,7 +91,7 @@ export class FusionRuntime {
     await this.service.initialized()
     const scope = this.ai.activate(FUSION_PLUGIN)
     this.disposers.push(() => scope.dispose())
-    this.disposers.push(scope.registerPurpose({ id: FUSION_PURPOSE, label: 'Fusion 持久搭档', defaultTarget: { kind: 'role', role: 'normal' } }))
+    this.disposers.push(scope.registerPurpose({ id: FUSION_PURPOSE, label: '副驾持久搭档', defaultTarget: { kind: 'role', role: 'normal' } }))
     this.disposers.push(this.ctx.on('agent/created', async ({ agent }) => { await this.install(agent); return undefined }, { global: true }))
     this.disposers.push(this.ctx.on('agent/disposed', ({ agent }) => { this.uninstall(agent) }, { global: true }))
     for (const agent of this.ctx.agents.list()) await this.install(agent)

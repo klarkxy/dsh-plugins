@@ -1,0 +1,67 @@
+diff --git a/packages/client/ui-plugin-manager/src/client/slot-contract.ts b/packages/client/ui-plugin-manager/src/client/slot-contract.ts
+index 4c63681..c26facb 100644
+--- a/packages/client/ui-plugin-manager/src/client/slot-contract.ts
++++ b/packages/client/ui-plugin-manager/src/client/slot-contract.ts
+@@ -74,6 +74,8 @@ export interface PluginActivationOwnerProps {
+ 
+ declare module '@deepseek-ai/dsh-client-ui-slots' {
+   interface SlotMap {
++    /** Controls in the plugin list toolbar, before refresh and Add plugin. */
++    'plugins.list.actions': { kind: 'list'; scope: 'root'; owner: Record<string, never> }
+     /** Optional guidance after the user enables a bundle from the list, keyed by npm package name. */
+     'plugins.bundle.activation': { kind: 'keyed'; scope: 'root'; owner: PluginActivationOwnerProps }
+     /**
+diff --git a/packages/client/ui-plugin-manager/src/client/index.ts b/packages/client/ui-plugin-manager/src/client/index.ts
+index 0bceeab..fc1ce32 100644
+--- a/packages/client/ui-plugin-manager/src/client/index.ts
++++ b/packages/client/ui-plugin-manager/src/client/index.ts
+@@ -107,6 +107,7 @@ export function apply(ctx: ClientContext): void {
+       store,
+       inject: () => controller.inject(configLedger, text => ctx.locale.resolveText(text)),
+       children: {
++        'plugins.list.actions': { kind: 'list', scope: 'root' },
+         'plugins.item': { kind: 'list', scope: 'root' },
+         'plugins.bundle.activation': { kind: 'keyed', scope: 'root' },
+         'plugins.bundle.config': { kind: 'keyed', scope: 'root' },
+diff --git a/packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx b/packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx
+index 183ed40..91e3699 100644
+--- a/packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx
++++ b/packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx
+@@ -41,7 +41,7 @@ export type PluginManagerPageProps =
+   & PropsLocale<'pluginManager'>
+   & PropsRenderSlots<
+     | 'plugins.item' | 'plugins.bundle.config' | 'plugins.row.config' | 'plugins.bundle.activation'
+-    | 'plugins.detail.actions' | 'plugins.detail.badge' | 'plugins.detail.section'
++    | 'plugins.list.actions' | 'plugins.detail.actions' | 'plugins.detail.badge' | 'plugins.detail.section'
+   >
+   & InjectFace<PluginManagerFace>
+   & PropsStore<ReturnType<typeof createNavigationStore>>
+@@ -1233,6 +1233,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
+               <p className={css.pageIntro}>{t('intro')}</p>
+             </div>
+             <div className={css.toolbar}>
++              {renderSlot('plugins.list.actions', {})}
+               <button type="button" className={css.iconButton} aria-label={t('refresh')} title={t('refresh')} disabled={!loaded} onClick={props.refresh}>
+                 <span className={css.iconWrap} aria-hidden="true"><IconRefreshOutlineRegular /></span>
+               </button>
+diff --git a/packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css b/packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css
+index 9fafda5..3065afb 100644
+--- a/packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css
++++ b/packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css
+@@ -22,6 +22,7 @@
+ 
+ .pageHead {
+   display: flex;
++  flex-wrap: wrap;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: 16px;
+@@ -55,6 +56,8 @@
+ 
+ .toolbar {
+   display: flex;
++  flex-wrap: wrap;
++  -webkit-app-region: no-drag;
+   align-items: center;
+   justify-content: flex-end;
+   gap: 16px;

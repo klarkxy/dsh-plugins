@@ -140,5 +140,5 @@ export function fail(code: string, message: string): RpcResult<never> {
   return { ok: false, error: { code, message } }
 }
 
-export const MEMORY_UNAVAILABLE_MESSAGE = '记忆服务不可用。请先单独启用「记忆」插件；启用自我改进不会自动打开记忆。'
-export const MEMORY_UNAVAILABLE_MESSAGE_EN = 'Memory is unavailable. Enable the Memory plugin separately; turning on self-improvement does not enable Memory.'
+export const MEMORY_UNAVAILABLE_MESSAGE = '记忆服务不可用。请先单独启用「长期记忆」插件；启用经验学习不会自动打开记忆。'
+export const MEMORY_UNAVAILABLE_MESSAGE_EN = 'Memory is unavailable. Enable the Long-term Memory plugin separately; turning on Experience Learning does not enable Long-term Memory.'

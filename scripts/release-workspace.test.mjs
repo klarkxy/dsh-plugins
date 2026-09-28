@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { orderedPackages, packRelease, publishManifest, releaseCandidates } from './release-workspace.mjs';
+import { orderedPackages, packRelease, publishManifest, releaseCandidates, releaseWorkspace } from './release-workspace.mjs';
+import { validateHeldDependencies } from './publish-npm.mjs';
 function fixture(t) { const root = mkdtempSync(join(tmpdir(), 'dsh-workspace-release-')); t.after(() => rmSync(root, { recursive: true, force: true })); return root; }
 function writePackage(root, name, dependencies = {}) {
   const directory = `plugins/${name.split('/').pop()}`;
@@ -13,7 +14,7 @@ function writePackage(root, name, dependencies = {}) {
   writeFileSync(join(root, directory, 'package.json'), JSON.stringify({ name, version: pkg.version, type: 'module', files: ['index.js'], dependencies }));
   writeFileSync(join(root, directory, 'index.js'), 'export const ready = true;\n'); return pkg;
 }
-const npm = (args, cwd) => execFileSync('npm', args, { cwd, encoding: 'utf8', env: { ...process.env, npm_config_audit: 'false', npm_config_fund: 'false' } });
+const npm = (args, cwd) => execFileSync(process.platform === 'win32' ? 'cmd.exe' : 'npm', process.platform === 'win32' ? ['/d', '/s', '/c', 'npm', ...args] : args, { cwd, encoding: 'utf8', env: { ...process.env, npm_config_audit: 'false', npm_config_fund: 'false' } });
 test('orders workspace dependencies before dependants regardless of directory order', t => {
   const root = fixture(t), memory = writePackage(root, '@klarkxy/dsh-memory');
   const feature = writePackage(root, '@klarkxy/dsh-feature', { [memory.name]: 'workspace:*' });
@@ -63,4 +64,32 @@ test('release handoff gate holds only migrated packages and rejects malformed da
   assert.deepEqual(releaseCandidates(root, packages), packages);
   writeFileSync(file, JSON.stringify({ packages: [migrated] }));
   assert.throws(() => releaseCandidates(root, packages), /Invalid/);
+});
+
+test('held dependencies supply versions without joining the publication targets', t => {
+  const root = fixture(t), held = writePackage(root, '@klarkxy/dsh-held');
+  const child = writePackage(root, '@klarkxy/dsh-child', { [held.name]: 'workspace:*' });
+  mkdirSync(join(root, 'scripts'));
+  writeFileSync(join(root, 'scripts/editor-plugin-migration.json'), JSON.stringify({ holdPublish: true, packages: [held] }));
+  const workspace = releaseWorkspace(root, [child, held]);
+  assert.deepEqual(workspace.packages, [held, child]);
+  assert.deepEqual(workspace.candidates, [child]);
+  assert.deepEqual(workspace.heldDependencies, [held]);
+  const packed = packRelease(root, child, workspace.packages, npm, (_files, read) => {
+    assert.equal(JSON.parse(read('package.json')).dependencies[held.name], held.version);
+    return 'verified-held-version';
+  });
+  assert.equal(packed.hash, 'verified-held-version');
+});
+
+test('held dependency versions must already exist on npm', async () => {
+  const dependency = { name: '@klarkxy/dsh-held', version: '1.2.3' };
+  const calls = [];
+  await validateHeldDependencies([dependency], async (name, _fetcher, version) => {
+    calls.push([name, version]);
+    return { versions: { '1.2.3': { name, version } } };
+  });
+  assert.deepEqual(calls, [[dependency.name, dependency.version]]);
+  await assert.rejects(validateHeldDependencies([dependency], async () => ({ versions: {} })), /not published/);
+  await assert.rejects(validateHeldDependencies([dependency], async () => { throw new Error('registry unavailable'); }), /registry unavailable/);
 });

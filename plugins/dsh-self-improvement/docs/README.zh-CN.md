@@ -20,7 +20,7 @@ dsh plugin --profile web add @klarkxy/dsh-memory
 dsh plugin --profile web add @klarkxy/dsh-self-improvement
 ```
 
-Memory 必须明确启用为存储，Dream 可以关闭。本插件不会替用户打开其他插件。安装后默认启用，可单独停用；在「设置 → 记忆 → 自我改进」审计行动经验与技能草稿，不增加聊天管理面板或单独设置页。
+Memory 必须明确启用为存储，Dream 可以关闭。本插件不会替用户打开其他插件。安装后默认启用，可单独停用；在「设置 → 长期记忆 → 经验学习」审计行动经验与技能草稿，不增加聊天管理面板或单独设置页。
 
 ## 生效与证据
 
@@ -40,7 +40,7 @@ Skill 由已生效方法形成可审阅 Markdown 草稿。采纳、下载和撤�
 
 - `.`：Cordis 插件（`name`、`inject`、`apply`）、`SelfImprovementEngine` 类，以及共享常量 `CHAT_EVENTS_SLOT`、`SELF_IMPROVEMENT_RPC_CHANNEL`。`apply` 把引擎挂到 `ctx.selfImprovement`，并注册宿主 RPC 通道。
 - `./contracts`：浏览器安全的类型与常量——转引自 `@klarkxy/dsh-ai-services` 的冻结 AI/Memory 接口，另加 `SkillRecord`、`ReviewSnapshot`、`LessonTrigger`、注入上限与 `/dsh-self-improvement` 通道名。
-- `./client`：审计界面 bundle，提供 `dshSelfImprovementReview` 渲染服务；记忆设置页的「自我改进」一节嵌入的就是它。
+- `./client`：审计界面 bundle，提供 `dshSelfImprovementReview` 渲染服务；记忆设置页的「经验学习」一节嵌入的就是它。
 
 宿主 RPC 通道为 `/dsh-self-improvement`，端点包括 `status`、`extract`、`inspect`、`accept`、`reject`、`revoke`、`skill.preview`、`skill.accept`、`skill.reject`、`skill.revoke`、`skill.export`、`skill.exported`、`skill.unexport`。
 

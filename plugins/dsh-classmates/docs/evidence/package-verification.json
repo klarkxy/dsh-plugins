@@ -1,0 +1,33 @@
+{
+  "verifiedAt": "2026-09-24T19:46:58.964Z",
+  "artifact": "klarkxy-dsh-classmates-0.1.0-alpha.1.tgz",
+  "sha256": "22dc974c8fdfeabf7211d5d573ce02e2f15fbc856995e5556e051dc3ce78ef5d",
+  "bytes": 70812,
+  "installedFiles": {
+    "dist/index.js": "e7f7f74a642b1cf19eacb37f4813bc044f573ed7c4ab559b3d7bae3c7284ecf9",
+    "dist/client.js": "b5dd0d7a975dd5add900e69a85a2da1604a4827378949b6a8e27a21875debfce",
+    "package.json": "69450819b15781ff204f69650019115109bd982d89db8bcc2c2038bb78981d1b",
+    "README.zh-CN.md": "6f9b94c136be72e7bf2a5a9c472134b082d8f3d3d411d64612e45c03dda2f134",
+    "docs/compatibility.md": "533335800be0d2e49cc6102359a55cffbac651a9d8bc4eaa9d2c010c125c950b",
+    "docs/evidence/browser-acceptance.json": "1b68fc3308a53896ee562cdc745bc2ce62925cf575aced2ec068b78a3437febc"
+  },
+  "profilePackages": [
+    "@klarkxy"
+  ],
+  "duplicateCoreSdk": false,
+  "typecheck": "passed",
+  "automatedTests": 20,
+  "build": "passed",
+  "finalInstalledBrowserSmoke": {
+    "passed": true,
+    "checks": [
+      "model switch clears effort",
+      "create and post-save interaction",
+      "conflict preserves draft and shows remote changes",
+      "320px mobile layout",
+      "native dark theme",
+      "delete and post-delete interaction"
+    ],
+    "pageErrors": []
+  }
+}

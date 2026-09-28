@@ -1,4 +1,4 @@
-# Enabled when installed. It does not start inference; disabling restores native model settings.
+# Enabled when installed. Configuration lives on the plugin page; native model settings stay unchanged.
 - insert:
     - id: model-center
       name: '@klarkxy/dsh-model-center'

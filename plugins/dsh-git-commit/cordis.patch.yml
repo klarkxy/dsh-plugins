@@ -1,0 +1,5 @@
+# Enabled when installed. Adds a conversation-header Git commit action.
+- insert:
+    - id: git-commit
+      name: '@klarkxy/dsh-git-commit'
+      disabled: false

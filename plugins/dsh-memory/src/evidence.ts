@@ -24,7 +24,7 @@ export function assertCreatable(record: NewMemoryRecord): void {
   if (record.kind === 'lesson') {
     if (record.context) fail(MEMORY_INVALID, '教训不能包含作者用语或近期状态。')
     if (record.source !== 'self-improvement' && record.source !== 'user') {
-      fail(MEMORY_INVALID, '教训条目只能由自我改进或手动添加写入。')
+      fail(MEMORY_INVALID, '教训条目只能由经验学习或手动添加写入。')
     }
     return
   }

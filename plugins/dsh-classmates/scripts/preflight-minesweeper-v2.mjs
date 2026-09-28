@@ -1,0 +1,31 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { AclSandbox, workspaceWriteSid, tempWriteSid } from '@deepseek-ai/dsh-sandbox-windows-acl';
+const workspace = resolve('demo/minesweeper-v2-run');
+const temp = resolve('.test-output/minesweeper-v2-native/preflight-temp');
+const out = resolve('.test-output/minesweeper-v2-native');
+await mkdir(workspace,{recursive:true});
+await mkdir(temp,{recursive:true});
+const script = resolve('.test-output/minesweeper-v2-native/probe.mjs');
+await writeFile(script, `import {writeFile,readFile} from 'node:fs/promises';
+import {chromium} from '@playwright/test';
+await writeFile('sandbox-probe.txt','restricted workspace write succeeded');
+const endpoint=await readFile(${JSON.stringify(resolve('.test-output/minesweeper-v2-native/browser-endpoint.txt'))},'utf8');
+const browser=await chromium.connect(endpoint.trim());
+const page=await browser.newPage();
+await page.setContent('<button>浏览器预检</button>');
+await page.getByRole('button').click();
+await page.screenshot({path:'sandbox-browser-probe.png'});
+await browser.close();
+console.log('SANDBOX_AND_BROWSER_OK');`);
+process.env.TEMP=temp; process.env.TMP=temp;
+const sandbox=new AclSandbox({writableDirs:[workspace],tempDir:temp,writeSid:workspaceWriteSid(workspace),tempWriteSid:tempWriteSid(temp),mode:'workspace-write'});
+try {
+  await sandbox.init();
+  const quote=s=>"'"+s.replaceAll("'","''")+"'";
+  const child=sandbox.spawn({command:'C:/Program Files/PowerShell/7/pwsh.exe',args:['-NoProfile','-Command',`& ${quote(process.execPath)} ${quote(script)}`],cwd:workspace});
+  const result=await child.wait();
+  const evidence={exitCode:result.exitCode,stdout:result.stdout.toString(),stderr:result.stderr.toString()};
+  await writeFile(`${out}/preflight.json`,JSON.stringify(evidence,null,2));
+  console.log(JSON.stringify(evidence));
+} finally { sandbox.dispose(); }
