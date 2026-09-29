@@ -13,7 +13,7 @@ const ctx = {
   readmePath: "README.md",
   cdnBase: "https://cdn.jsdelivr.net/npm/@klarkxy/dsh-memory@1.0.0/",
   readmePages: { "packages/dsh-memory/docs/README.zh-CN.md": "../../plugins/memory/", "packages/dsh-memory/README.md": "./" },
-  packagePages: { "@klarkxy/dsh-ai-services": "../ai-services/" },
+  packagePages: { "@klarkxy/dsh-self-improvement": "../self-improvement/" },
 };
 
 test("README rendering drops the title and language switch, and rewrites links", () => {
@@ -23,7 +23,7 @@ test("README rendering drops the title and language switch, and rewrites links",
       "",
       "[简体中文](docs/README.zh-CN.md)",
       "",
-      "Needs [AI services](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) and [design](../../docs/design.md#limits).",
+      "Needs [Experience Learning](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) and [design](../../docs/design.md#limits).",
       "",
       "![shot](docs/shot.png) ![outside](../../assets/x.png)",
       "",
@@ -38,7 +38,7 @@ test("README rendering drops the title and language switch, and rewrites links",
     ctx,
   );
   assert.doesNotMatch(html, /<h1|简体中文/);
-  assert.match(html, /href="\.\.\/ai-services\/"/);
+  assert.match(html, /href="\.\.\/self-improvement\/"/);
   assert.match(html, /href="https:\/\/github\.com\/klarkxy\/dsh-editor\/blob\/HEAD\/docs\/design\.md#limits"/);
   assert.match(html, /src="https:\/\/cdn\.jsdelivr\.net\/npm\/@klarkxy\/dsh-memory@1\.0\.0\/docs\/shot\.png"/);
   assert.match(html, /src="https:\/\/raw\.githubusercontent\.com\/klarkxy\/dsh-editor\/HEAD\/assets\/x\.png"/);
@@ -77,7 +77,7 @@ test("catalog validation rejects duplicates and missing translations", () => {
 function fixture() {
   const data = {};
   for (const [i, p] of catalog.plugins.entries()) {
-    const deps = p.package === "@klarkxy/dsh-memory" ? { "@klarkxy/dsh-ai-services": "^0.1.0" } : {};
+    const deps = p.package === "@klarkxy/dsh-memory" ? { "@klarkxy/dsh-self-improvement": "^0.1.0" } : {};
     data[p.package] = {
       name: p.package,
       version: `0.1.${i}`,
@@ -101,14 +101,14 @@ test("site has every page, install order follows dependencies, and internal link
     assert.ok(files.has(`assets/icons/${p.slug}.svg`), p.slug);
   }
   const memory = files.get("plugins/memory/index.html");
-  const ai = memory.indexOf("add @klarkxy/dsh-ai-services");
-  assert.ok(ai > 0 && ai < memory.indexOf("add @klarkxy/dsh-memory"));
+  const dep = memory.indexOf("add @klarkxy/dsh-self-improvement");
+  assert.ok(dep > 0 && dep < memory.indexOf("add @klarkxy/dsh-memory"));
   assert.match(memory, /这个包没有中文 README/);
-  assert.match(files.get("plugins/ai-services/index.html"), /被依赖/);
+  assert.match(files.get("plugins/self-improvement/index.html"), /被依赖/);
 
   const json = JSON.parse(files.get("plugins.json"));
   assert.equal(json.plugins.length, catalog.plugins.length);
-  assert.deepEqual(json.plugins.find((p) => p.slug === "memory").dependsOn, ["@klarkxy/dsh-ai-services"]);
+  assert.deepEqual(json.plugins.find((p) => p.slug === "memory").dependsOn, ["@klarkxy/dsh-self-improvement"]);
   assert.match(files.get("404.html"), /areas/);
 
   // Assets written by build.mjs, not render.mjs.
