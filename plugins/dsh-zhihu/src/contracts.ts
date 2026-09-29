@@ -7,3 +7,18 @@ export const ZHIHU_RPC_CHANNEL = '/zhihu'
 export const ZHIHU_CREDENTIAL_REF = 'ZHIHU_ACCESS_TOKEN'
 export const ZHIHU_SEARCH_EVENT = 'dsh-editor/zhihu-search'
 export type ZhihuRpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: { code: string; message: string; details: Record<string, unknown> } }
+
+export const ZHIHU_QUESTION_RECOMMENDATIONS_TOOL_NAME = 'zhihu_question_recommendations'
+export const ZHIHU_QUESTION_ANSWERS_TOOL_NAME = 'zhihu_question_answers'
+export const ZHIHU_USER_CONTENT_DETAIL_TOOL_NAME = 'zhihu_user_content_detail'
+export const ZHIHU_USER_CONTENT_COMMENTS_TOOL_NAME = 'zhihu_user_content_comments'
+export const ZHIHU_CREATOR_ACCOUNT_STATS_TOOL_NAME = 'zhihu_creator_account_stats'
+export const ZHIHU_CREATOR_CONTENT_STATS_TOOL_NAME = 'zhihu_creator_content_stats'
+export const ZHIHU_QUOTA_TOOL_NAME = 'zhihu_quota'
+
+/** Official quota IDs, not local execution counters or predicted balances. */
+export const ZHIHU_QUOTA_IDS = [
+  'global_search', 'zhihu_search', 'hot_list', 'question_answers',
+  'zhida_openai', 'tools', 'knowledge', 'user_data', 'creator',
+] as const
+export type ZhihuQuotaId = typeof ZHIHU_QUOTA_IDS[number]
