@@ -1,14 +1,20 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
 import {
-  defaultSettings,
+  defaultModelRoute, defaultSettings,
   type RecapCard,
   type RecapPersistedState,
   type RecapSettings,
   type RecapStore,
 } from './contracts.ts'
 import { storedSettings } from './schema.ts'
-import type { TaskCheckpoint } from '@klarkxy/dsh-ai-services/contracts'
+import type { TaskCheckpoint } from '@klarkxy/dsh-plugin-kit/contracts'
+
+const modelRouteSchema = z.object({
+  provider: z.string().min(0).max(250),
+  model: z.string().min(0).max(250),
+  reasoningEffort: z.string().min(1).max(80).optional(),
+}).strict().default(defaultModelRoute())
 
 const settingsSchema = z.object({
   revision: z.number().int().nonnegative(),
@@ -16,6 +22,9 @@ const settingsSchema = z.object({
   checkpointsEnabled: z.boolean(),
   semanticCheckpointsEnabled: z.boolean(),
   idleReturnMs: z.number().int().min(60_000).max(180 * 60_000),
+  /** v3 adds plugin-page model routes; v2 rows lack them and fill defaults. */
+  displayModel: modelRouteSchema,
+  checkpointModel: modelRouteSchema,
 }).strict()
 
 const evidenceSchema = z.object({
@@ -69,7 +78,9 @@ export const recapStateSchema = z.object({
 
 export const recapDomain = defineDomain({
   name: 'dsh_editor_recap',
-  version: 2,
+  version: 3,
+  /** v2 rows stay readable: absent model routes fill defaults. */
+  compatibleVersions: [2],
   tables: {
     state: domainTable<string, RecapPersistedState>(recapStateSchema),
   },

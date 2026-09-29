@@ -4,15 +4,18 @@
 
 [English](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-recap/README.md)
 
-需要 Node.js ≥22、DSH `0.1.7-rc.2`。辅助生成依赖 `@klarkxy/dsh-ai-services`，并要求 `@deepseek-ai/dsh-llm` 与 `@deepseek-ai/dsh-session` 对等依赖。
+需要 Node.js ≥22、DSH `0.1.7-rc.2`。辅助生成直接调用宿主 `llm` 服务，并要求 `@deepseek-ai/dsh-llm` 与 `@deepseek-ai/dsh-session` 对等依赖。
 
 ```sh
 npm install @klarkxy/dsh-recap
-dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-recap
 ```
 
-较长轮次结束、或闲置间隔（默认 15 分钟，只计算文档与用户操作，不算助手输出，且聊天面板为 `hidden` 时不计）后返回，会在后台生成回顾。聊天事件座位是一个安静的生命周期控制器，不渲染卡片、按钮、空状态或错误。回顾没有单独设置页，也没有手动生成按钮。读取状态不调用模型；每个水位线最多生成一次，除非重试该卡片或请求一次手动 `refresh`。检查点只在宿主 `agent/pre-step` 的有意义边界注入，使用原生 `createUserMessage`。
+较长轮次结束、或闲置间隔（默认 15 分钟，只计算文档与用户操作，不算助手输出，且聊天面板为 `hidden` 时不计）后返回，会在后台生成回顾。聊天事件座位是一个安静的生命周期控制器，不渲染卡片、按钮、空状态或错误。读取状态不调用模型；每个水位线最多生成一次，除非重试该卡片或请求一次手动 `refresh`。检查点只在宿主 `agent/pre-step` 的有意义边界注入，使用原生 `createUserMessage`。
+
+## 插件页设置
+
+「设置 → 插件 → 任务回顾」下有两条模型菜单：**回顾卡片模型**用于回顾卡片，**语义检查点模型**用于语义检查点。两者都可留空。保存某个路由后，对应该功能的调用会使用这个显式模型；留空则使用当前会话模型，再回落到宿主默认对话模型。只有这两个功能受影响；保存路由只表示选定模型，不代表已连通。
 
 同一 profile 也启用需求澄清插件时，回顾通过 `ctx.aiMood.getContract(sessionId)` 读取它的任务约定，用于检查点上下文。
 
@@ -37,4 +40,4 @@ pnpm exec vitest run packages/dsh-recap/src
 pnpm --filter @klarkxy/dsh-recap build
 ```
 
-部分宿主会预装并默认启用本功能；宿主支持热切换时，通过「设置 → 插件」开关无需重启。独立 DSH 需先加载 `@klarkxy/dsh-ai-services` 再加载本包；宿主提示需要重启时，安装或移除后重启。
+部分宿主会预装并默认启用本功能；宿主支持热切换时，通过「设置 → 插件」开关无需重启。宿主提示需要重启时，安装或移除后重启。

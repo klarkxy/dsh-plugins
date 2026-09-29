@@ -1,17 +1,20 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { CHAT_EVENTS_SLOT } from '@klarkxy/dsh-ai-services/contracts'
-import { useFeatureRefresh, useNativeSeat, type NativeSurfaceClient } from '@klarkxy/dsh-ai-services/client-utils'
-import { useEffect, useRef, useState } from 'react'
+import { CHAT_EVENTS_SLOT } from '@klarkxy/dsh-plugin-kit/contracts'
+import { useFeatureRefresh, useNativeSeat, type NativeSurfaceClient } from '@klarkxy/dsh-plugin-kit/client-utils'
 import {
-  RECAP_RPC_CHANNEL, defaultSettings,
-  type RecapCard, type RecapStatus, type RpcResult,
+  modelMenuChoiceKey, modelMenuEffortOptions, parseModelMenuChoiceKey, parseModelMenuChoices, type ModelMenuChoice,
+} from '@klarkxy/dsh-plugin-kit/model-menu'
+import { useEffect, useId, useRef, useState } from 'react'
+import {
+  RECAP_PLUGIN, RECAP_RPC_CHANNEL, defaultSettings,
+  type RecapCard, type RecapModelRoute, type RecapSettings, type RecapStatus, type RpcResult,
 } from './contracts.ts'
 import {
   createRecapClientWork, shouldRequestIdleReturn, shouldSkipRecapAutoRefresh, type RecapClientWork,
 } from './idle.ts'
 
 export const name = 'dsh-recap-client'
-export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
+export const inject = ['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 export {
   createRecapClientWork, isCurrentRecapRequest, shouldRequestIdleReturn, shouldSkipRecapAutoRefresh,
   nextActivityTimestamp,
@@ -21,10 +24,11 @@ export { CHAT_EVENTS_SLOT }
 type RpcCaller = { call(channel: string, endpoint: string, payload: unknown): Promise<unknown> }
 type SlotHandle = {
   inject(key: string, callback: () => unknown): () => void
-  register(spec: { name: string; id: string; label: string; order: number }, render: unknown): () => void
+  register(spec: { name: string; id: string; label: string; order: number } | { name: string; key: string }, render: unknown): () => void
 }
 type RecapClient = Context & NativeSurfaceClient & {
   connection: { rpc: RpcCaller; generation?: { subscribe(listener: () => void): () => void } }
+  remote?: { session?: { modelCatalog?: () => Promise<unknown> } }
   slots: SlotHandle
 }
 
@@ -143,7 +147,13 @@ const styles = `
 .dsh-recap-card pre{margin:8px 0 0;white-space:pre-wrap;font:inherit}
 .dsh-recap-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .dsh-recap-error{color:var(--red-9,#b91c1c)}
-@media(prefers-reduced-motion:reduce){.dsh-recap-card button{transition:none}}
+.dsh-recap-settings{display:grid;gap:12px;max-width:42rem;color:inherit;font:inherit}
+.dsh-recap-settings p{margin:0;line-height:1.5}
+.dsh-recap-settings label{display:grid;gap:6px;font-size:var(--font-size-2,14px)}
+.dsh-recap-settings select{box-sizing:border-box;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--gray-7,color-mix(in srgb,currentColor 20%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit}
+.dsh-recap-settings select:focus-visible{border-color:var(--accent-9,currentColor);outline:2px solid var(--accent-9,currentColor);outline-offset:1px}
+.dsh-recap-meta{font-size:var(--font-size-1,13px);color:var(--gray-11,inherit)}
+@media(prefers-reduced-motion:reduce){.dsh-recap-settings select{transition:none}}
 `
 
 export function RecapEventsCard({
@@ -305,6 +315,145 @@ function RecapBackgroundSeat({ client, ...props }: { client: RecapClient } & Rec
   return <RecapEventsCard key={recapCardKey(seat)} client={client} sessionId={seat.sessionId} locale={seat.locale} hidden={seat.hidden} quiet />
 }
 
+/** One purpose's model select: empty choice keeps the shared role/chat-model default. */
+function RecapModelSelect(props: {
+  locale: string
+  label: string
+  route: RecapModelRoute
+  choices: ModelMenuChoice[]
+  busy: boolean
+  onChange: (route: RecapModelRoute) => void
+}) {
+  const optionsId = useId()
+  const selected = props.choices.find(
+    item => item.provider === props.route.provider && item.model === props.route.model,
+  )
+  const efforts = modelMenuEffortOptions(selected, props.route.reasoningEffort)
+  return <>
+    <label htmlFor={optionsId}>
+      <span>{props.label}</span>
+      <select
+        id={optionsId}
+        value={modelMenuChoiceKey(props.route.provider, props.route.model)}
+        disabled={props.busy}
+        onChange={event => {
+          const key = event.target.value
+          if (!key) { props.onChange({ provider: '', model: '' }); return }
+          const parsed = parseModelMenuChoiceKey(key)
+          if (parsed) props.onChange(parsed)
+        }}
+      >
+        <option value="">{copy(props.locale, '默认模型', 'Default model')}</option>
+        {props.choices.map(choice => (
+          <option key={modelMenuChoiceKey(choice.provider, choice.model)} value={modelMenuChoiceKey(choice.provider, choice.model)}>
+            {choice.label}
+          </option>
+        ))}
+      </select>
+    </label>
+    {selected && efforts.length > 0 && (
+      <label htmlFor={`${optionsId}-effort`}>
+        <span>{copy(props.locale, '思考强度', 'Reasoning effort')}</span>
+        <select
+          id={`${optionsId}-effort`}
+          value={props.route.reasoningEffort ?? ''}
+          disabled={props.busy}
+          onChange={event => props.onChange({ ...props.route, reasoningEffort: event.target.value || undefined })}
+        >
+          <option value="">{copy(props.locale, '默认', 'Default')}</option>
+          {efforts.map(effort => <option key={effort.id} value={effort.id}>{effort.name}</option>)}
+        </select>
+      </label>
+    )}
+  </>
+}
+
+/** Plugin-page settings row: recap card and checkpoint model picks. */
+export function RecapSettingsPanel({ client, ...props }: { client: RecapClient } & Record<string, unknown>) {
+  const seat = useNativeSeat(client, props)
+  const locale = seat.locale
+  const [status, setStatus] = useState<RecapStatus>()
+  const [choices, setChoices] = useState<ModelMenuChoice[]>([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+
+  const call = (endpoint: string, payload: unknown) => client.connection.rpc.call(RECAP_RPC_CHANNEL, endpoint, payload)
+
+  useEffect(() => {
+    let live = true
+    void call('status', {}).then(async value => {
+      const result = value as RpcResult<RecapStatus>
+      if (!live) return
+      if (!result || result.ok !== true) {
+        setError(copy(locale, '无法读取回顾设置。', 'Unable to load recap settings.'))
+        return
+      }
+      setStatus(result.value)
+      setError('')
+      void client.remote?.session?.modelCatalog?.()
+        ?.then(catalog => { if (live) setChoices(parseModelMenuChoices(catalog, result.value.settings.displayModel)) })
+        .catch(() => { if (live) setChoices([]) })
+    }).catch(() => { if (live) setError(copy(locale, '无法读取回顾设置。', 'Unable to load recap settings.')) })
+    return () => { live = false }
+  }, [client, locale])
+
+  async function save(patch: Partial<Pick<RecapSettings, 'displayModel' | 'checkpointModel'>>): Promise<void> {
+    if (!status) return
+    const draft = { ...defaultSettings(), ...status.settings, revision: status.settings.revision }
+    setBusy(true); setError(''); setNote('')
+    try {
+      const value = await call('update', {
+        expectedRevision: status.settings.revision,
+        settings: {
+          cardsEnabled: draft.cardsEnabled,
+          checkpointsEnabled: draft.checkpointsEnabled,
+          semanticCheckpointsEnabled: draft.semanticCheckpointsEnabled,
+          idleReturnMs: draft.idleReturnMs,
+          displayModel: patch.displayModel ?? draft.displayModel,
+          checkpointModel: patch.checkpointModel ?? draft.checkpointModel,
+        },
+      })
+      const result = value as RpcResult<RecapStatus>
+      if (!result || result.ok !== true) throw new Error(result && !result.ok ? result.error.message : 'failed')
+      setStatus(result.value)
+      setNote(copy(locale, '已保存。', 'Saved.'))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : copy(locale, '保存失败。', 'Save failed.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!status) {
+    return <section className="dsh-recap-settings" data-testid="recap-settings">
+      <p role="status">{error || copy(locale, '正在读取设置…', 'Loading settings…')}</p>
+    </section>
+  }
+
+  return <section className="dsh-recap-settings" data-testid="recap-settings">
+    {error && <p role="alert" className="dsh-recap-error">{error}</p>}
+    {note && <p role="status">{note}</p>}
+    <RecapModelSelect
+      locale={locale}
+      label={copy(locale, '回顾卡片模型', 'Recap card model')}
+      route={status.settings.displayModel}
+      choices={choices}
+      busy={busy}
+      onChange={route => void save({ displayModel: route })}
+    />
+    <RecapModelSelect
+      locale={locale}
+      label={copy(locale, '语义检查点模型', 'Semantic checkpoint model')}
+      route={status.settings.checkpointModel}
+      choices={choices}
+      busy={busy}
+      onChange={route => void save({ checkpointModel: route })}
+    />
+    <p className="dsh-recap-meta">{copy(locale, '留空则使用当前会话模型，再回落到宿主默认对话模型。', 'Leave empty to use the current session model, then the host default chat model.')}</p>
+  </section>
+}
+
 export function apply(ctx: Context): void {
   const client = ctx as RecapClient
   ctx.effect(() => {
@@ -315,6 +464,10 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'dsh-recap.styles')
+  ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
+    { name: 'plugins.bundle.config', key: RECAP_PLUGIN },
+    () => <RecapSettingsPanel client={client} />,
+  )), 'dsh-recap.settings')
   ctx.effect(() => client.slots.inject(CHAT_EVENTS_SLOT, () => client.slots.register({
     name: CHAT_EVENTS_SLOT, id: 'recap', order: 40, label: '会话纪要',
   }, (props: unknown) => <RecapBackgroundSeat client={client} {...(props as object)} />)), 'dsh-recap.background')

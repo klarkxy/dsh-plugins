@@ -1,13 +1,15 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { CHAT_EVENTS_SLOT } from '@klarkxy/dsh-ai-services/contracts'
+import { CHAT_EVENTS_SLOT } from '@klarkxy/dsh-plugin-kit/contracts'
+import { modelMenuOverride } from '@klarkxy/dsh-plugin-kit/model-menu'
 import {
   apply, createRecapClientWork, inject, recapCardKey, recapHasRunningGeneration, recapSeatProps,
   runRecapAct, runRecapIdleReturn, runRecapStatusLoad,
 } from './client.tsx'
 import { isCurrentRecapRequest, shouldRequestIdleReturn, shouldSkipRecapAutoRefresh } from './idle.ts'
-import { defaultSettings, type RecapStatus, type RpcResult } from './contracts.ts'
+import { parseSettingsPatch, storedSettings } from './schema.ts'
+import { RECAP_PLUGIN, defaultSettings, type RecapStatus, type RpcResult } from './contracts.ts'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -44,10 +46,10 @@ function statusFor(sessionId: string, title = '回顾'): RecapStatus {
 }
 
 describe('recap client seats', () => {
-  it('registers a quiet background chat controller without a settings page', () => {
-    expect([...inject]).toEqual(['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
+  it('registers its own plugin page settings row plus a quiet background chat controller', () => {
+    expect([...inject]).toEqual(['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
     const injected: string[] = []
-    const names: Array<{ name: string; id?: string; label?: string }> = []
+    const names: Array<{ name: string; id?: string; label?: string; key?: string }> = []
     apply({
       effect(fn: () => (() => void) | void) { fn() },
       slots: {
@@ -63,9 +65,10 @@ describe('recap client seats', () => {
       },
       connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
     } as never)
-    expect(injected).toEqual([CHAT_EVENTS_SLOT])
+    expect(injected).toEqual(['plugins.bundle.config', CHAT_EVENTS_SLOT])
     expect(CHAT_EVENTS_SLOT).toBe('dsh-editor.chat.events')
     expect(names).toEqual([
+      { name: 'plugins.bundle.config', key: RECAP_PLUGIN },
       { name: CHAT_EVENTS_SLOT, id: 'recap', order: 40, label: '会话纪要' },
     ])
     expect(readFileSync(fileURLToPath(new URL('./client.tsx', import.meta.url)), 'utf8')).toContain('hidden={seat.hidden} quiet')
@@ -228,5 +231,30 @@ describe('recap client seats', () => {
     await pending
     expect(applied).toEqual([])
     expect(errors).toEqual([])
+  })
+
+  it('exposes a plugin-page model menu for both recap purposes', () => {
+    const src = readFileSync(fileURLToPath(new URL('./client.tsx', import.meta.url)), 'utf8')
+    expect(src).toContain("from '@klarkxy/dsh-plugin-kit/model-menu'")
+    expect(src).toContain('data-testid="recap-settings"')
+    expect(src).toContain('parseModelMenuChoices(catalog, result.value.settings.displayModel)')
+    expect(src).toContain('displayModel: patch.displayModel ?? draft.displayModel')
+    expect(src).toContain('checkpointModel: patch.checkpointModel ?? draft.checkpointModel')
+    expect(src).toContain('modelMenuChoiceKey(props.route.provider, props.route.model)')
+  })
+
+  it('round-trips the persisted model routes and defaults them when absent', () => {
+    expect(defaultSettings().displayModel).toEqual({ provider: '', model: '' })
+    expect(defaultSettings().checkpointModel).toEqual({ provider: '', model: '' })
+    const roundTrip = parseSettingsPatch({
+      cardsEnabled: true, checkpointsEnabled: true, semanticCheckpointsEnabled: false, idleReturnMs: 900_000,
+      displayModel: { provider: 'deepseek', model: 'deepseek-chat', reasoningEffort: 'high' },
+      checkpointModel: { provider: 'oops' },
+    })
+    expect(roundTrip?.displayModel).toEqual({ provider: 'deepseek', model: 'deepseek-chat', reasoningEffort: 'high' })
+    expect(roundTrip?.checkpointModel).toEqual({ provider: '', model: '' })
+    expect(parseSettingsPatch({ ...roundTrip, unknown: 1 })).toBeUndefined()
+    expect(storedSettings(undefined).displayModel).toEqual({ provider: '', model: '' })
+    expect(modelMenuOverride(storedSettings(undefined).displayModel)).toBeUndefined()
   })
 })

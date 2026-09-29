@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { TaskCheckpoint, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
+import type { TaskCheckpoint, TaskContract } from '@klarkxy/dsh-plugin-kit/contracts'
 import {
   buildCheckpoint, checkpointInjectPayload, isCheckpointLineageStale,
   isMeaningfulCheckpointBoundary, shouldRunSemanticCheckpoint,
 } from './checkpoints.ts'
 import { collectFacts } from './log.ts'
-import { RECAP_PLUGIN, type RecapLogEvent } from './contracts.ts'
+import { recapStateSchema } from './storage.ts'
+import { RECAP_PLUGIN, defaultSettings, type RecapLogEvent } from './contracts.ts'
 
 function nativeCall(seq: number, name: string, callId: string): RecapLogEvent {
   return { seq, type: 'tool/call', time: seq, data: { turn: 1, step: 1, callId, name, arguments: '{}' } }
@@ -140,5 +141,19 @@ describe('checkpoint lineage', () => {
     expect(checkpoint.nextAction).toBe('等待作者确认修改，不要假定已写入')
     expect(checkpointInjectPayload(checkpoint).content[0]?.text).toContain('未确认已写入')
     expect(JSON.stringify(checkpoint)).not.toContain('已经写入')
+  })
+
+  it('bounds checkpoint items so a stored row always satisfies the schema', () => {
+    const log: RecapLogEvent[] = [{ seq: 0, type: 'turn/start', time: 0, data: { turn: 1 } }]
+    for (let seq = 1; seq <= 80; seq += 1) {
+      log.push(nativeCall(seq, `tool-${seq}`, `c${seq}`))
+      log.push(nativeResult(seq + 1, `c${seq}`, 'ok'))
+    }
+    log.push({ seq: 162, type: 'user/message', time: 162, data: { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '继续' }] } })
+    const checkpoint = buildCheckpoint(collectFacts('s1', log), { id: 'c-long', now: 3, revision: 1 })
+    expect(checkpoint.items).toHaveLength(32)
+    expect(checkpoint.items[0]?.label).toBe('作者要求')
+    expect(checkpoint.items.at(-1)?.label).toBe('tool-80')
+    expect(recapStateSchema.safeParse({ settings: defaultSettings(), cards: [], checkpoints: [checkpoint] }).success).toBe(true)
   })
 })

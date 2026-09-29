@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import type { AiFeatureScope, PurposeSpec, RpcResult, TaskCheckpoint, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
+import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import type { RpcResult, TaskCheckpoint, TaskContract } from '@klarkxy/dsh-plugin-kit/contracts'
+import { modelMenuOverride } from '@klarkxy/dsh-plugin-kit/model-menu'
 import {
-  fail, ok, parseSessionId, RECAP_CHECKPOINT_PURPOSE, RECAP_DISPLAY_PURPOSE,
+  fail, ok, parseSessionId,
   type RecapCard, type RecapLogEvent, type RecapPersistedState, type RecapSettings, type RecapStatus,
   type RecapStore, type RecapTrigger,
 } from './contracts.ts'
@@ -24,7 +26,8 @@ export interface RecapServiceOptions {
   id?: () => string
   readEvents: (sessionId: string) => RecapLogEvent[] | undefined
   readContract?: (sessionId: string) => TaskContract | undefined
-  activateAi?: () => AiFeatureScope | undefined
+  llm?: LlmTextCaller
+  host?: unknown
   createInjectMessage?: (payload: ReturnType<typeof checkpointInjectPayload>) => unknown
 }
 
@@ -36,20 +39,8 @@ type Job = {
   kind: 'card' | 'checkpoint'
 }
 
-const displayPurpose: PurposeSpec = {
-  id: RECAP_DISPLAY_PURPOSE,
-  label: '对话回顾',
-  defaultTarget: { kind: 'role', role: 'weak' },
-  maxOutputTokens: 512,
-  timeoutMs: 30_000,
-}
-const checkpointPurpose: PurposeSpec = {
-  id: RECAP_CHECKPOINT_PURPOSE,
-  label: '任务检查点',
-  defaultTarget: { kind: 'role', role: 'weak' },
-  maxOutputTokens: 512,
-  timeoutMs: 30_000,
-}
+const DISPLAY_MAX_TOKENS = 512
+const CHECKPOINT_MAX_TOKENS = 512
 
 export class RecapService {
   private settings: RecapSettings
@@ -61,8 +52,6 @@ export class RecapService {
   private cardEpoch = 0
   private checkpointEpoch = 0
   private jobs = new Map<string, Job>()
-  private ai?: AiFeatureScope
-  private unregisterPurposes: Array<() => void> = []
   private checkpointRevisions = new Map<string, number>()
   private checkpointInFlight = new Map<string, string>()
   private readonly now: () => number
@@ -76,7 +65,6 @@ export class RecapService {
     this.checkpointRevisions = recoverCheckpointRevisions(loaded.checkpoints)
     this.now = options.now ?? Date.now
     this.customId = options.id
-    this.syncAi()
   }
 
   status(sessionId?: string): RecapStatus {
@@ -102,7 +90,6 @@ export class RecapService {
     this.checkpointEpoch += 1
     this.abortKind('card')
     this.abortKind('checkpoint')
-    this.detachAi()
     await this.pending
   }
 
@@ -132,7 +119,6 @@ export class RecapService {
       } else if (semanticOff) {
         this.abortKind('checkpoint')
       }
-      this.syncAi()
       return this.status()
     })
   }
@@ -374,8 +360,7 @@ export class RecapService {
   private async generateCard(card: RecapCard, facts: ReturnType<typeof collectFacts>, epoch: number): Promise<void> {
     const started = await this.serialize(async () => {
       if (!this.isCardCurrent(card, epoch, false)) return undefined
-      const scope = this.ai
-      if (!scope || !this.settings.cardsEnabled) {
+      if (!this.options.llm || !this.settings.cardsEnabled) {
         const proposed = this.snapshot()
         proposed.cards = proposed.cards.map(row => row.id === card.id
           ? { ...row, generation: 'idle' as const, kind: 'deterministic' as const, updatedAt: this.now() }
@@ -386,29 +371,37 @@ export class RecapService {
       }
       const abort = new AbortController()
       this.jobs.set(card.id, { abort, epoch, sessionId: card.sessionId, sourceVersion: card.sourceVersion, kind: 'card' })
-      return { scope, abort }
+      return { abort }
     })
     if (!started) return
     try {
-      const result = await started.scope.run({
-        ...recapDisplayRequest(facts, card.id),
-        signal: started.abort.signal,
-        priority: 'background',
-        isCurrent: () => this.isCardCurrent(card, epoch),
-      })
+      const request = recapDisplayRequest(facts, card.id)
+      const route = this.route(this.settings.displayModel, card.sessionId)
+      const result = route
+        ? await callLlmText(this.options.llm!, {
+            plugin: '@klarkxy/dsh-recap',
+            route,
+            system: request.system,
+            text: request.input,
+            maxTokens: DISPLAY_MAX_TOKENS,
+            signal: started.abort.signal,
+            sessionId: card.sessionId,
+            isCurrent: () => this.isCardCurrent(card, epoch),
+          })
+        : undefined
       await this.serialize(async () => {
         if (!this.isCardCurrent(card, epoch)) return
         const current = this.cards.find(row => row.id === card.id)
         if (!current || current.generation !== 'running') return
-        const next = result.receipt.status !== 'success'
-          ? {
+        const next = result
+          ? applyGeneratedText(current, result.text, undefined, this.now())
+          : {
               ...current,
-              generation: result.receipt.status === 'cancelled' ? 'cancelled' as const : 'failed' as const,
+              generation: 'failed' as const,
               kind: 'deterministic' as const,
               body: deterministicBody(facts),
               updatedAt: this.now(),
             }
-          : applyGeneratedText(current, result.text, result.receipt.id, this.now())
         const proposed = this.snapshot()
         proposed.cards = proposed.cards.map(row => row.id === next.id ? next : row)
         await this.persistProposed(proposed)
@@ -440,18 +433,23 @@ export class RecapService {
   }
 
   private async enrichCheckpoint(checkpoint: TaskCheckpoint, facts: ReturnType<typeof collectFacts>): Promise<TaskCheckpoint | undefined> {
-    const scope = this.ai
     const epoch = this.checkpointEpoch
-    if (this.disposed || !scope || !this.settings.semanticCheckpointsEnabled || !this.settings.checkpointsEnabled) return checkpoint
+    if (this.disposed || !this.options.llm || !this.settings.semanticCheckpointsEnabled || !this.settings.checkpointsEnabled) return checkpoint
     const abort = new AbortController()
     const jobId = checkpoint.id
     this.jobs.set(jobId, { abort, epoch, sessionId: checkpoint.sessionId, sourceVersion: checkpoint.sourceVersion, kind: 'checkpoint' })
     const request = checkpointSemanticRequest(checkpoint, facts)
     try {
-      const result = await scope.run({
-        ...request,
+      const route = this.route(this.settings.checkpointModel, checkpoint.sessionId)
+      if (!route) return checkpoint
+      const result = await callLlmText(this.options.llm!, {
+        plugin: '@klarkxy/dsh-recap',
+        route,
+        system: request.system,
+        text: request.input,
+        maxTokens: CHECKPOINT_MAX_TOKENS,
         signal: abort.signal,
-        priority: 'background',
+        sessionId: checkpoint.sessionId,
         isCurrent: () => !this.disposed
           && this.checkpointEpoch === epoch
           && this.settings.checkpointsEnabled
@@ -462,7 +460,7 @@ export class RecapService {
       if (this.disposed || this.checkpointEpoch !== epoch || !this.settings.checkpointsEnabled || !this.settings.semanticCheckpointsEnabled) {
         return undefined
       }
-      if (result.receipt.status !== 'success' || !result.text.trim()) return checkpoint
+      if (!result.text.trim()) return checkpoint
       const nextAction = result.text.trim().split('\n')[0]?.slice(0, 400) || checkpoint.nextAction
       return { ...checkpoint, nextAction, constraints: checkpoint.constraints }
     } catch {
@@ -510,27 +508,8 @@ export class RecapService {
     }
   }
 
-  private syncAi(): void {
-    if (this.disposed) {
-      this.detachAi()
-      return
-    }
-    const want = this.settings.cardsEnabled || (this.settings.checkpointsEnabled && this.settings.semanticCheckpointsEnabled)
-    if (!want) {
-      this.detachAi()
-      return
-    }
-    if (this.ai) return
-    const scope = this.options.activateAi?.()
-    if (!scope) return
-    this.ai = scope
-    this.unregisterPurposes = [scope.registerPurpose(displayPurpose), scope.registerPurpose(checkpointPurpose)]
-  }
-
-  private detachAi(): void {
-    for (const off of this.unregisterPurposes.splice(0)) off()
-    this.ai?.dispose()
-    this.ai = undefined
+  private route(saved: RecapSettings['displayModel'], sessionId: string) {
+    return resolveFeatureModel(this.options.host, modelMenuOverride(saved), sessionId)
   }
 
   private mintId(): string {

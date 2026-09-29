@@ -1,15 +1,21 @@
-import { describe, expect, it } from 'vitest'
-import type { AiFeatureScope, AuxiliaryResult, TaskContract, UsageReceipt } from '@klarkxy/dsh-ai-services/contracts'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import * as kit from '@klarkxy/dsh-plugin-kit'
+import type { LlmTextRequest } from '@klarkxy/dsh-plugin-kit'
+import type { TaskContract } from '@klarkxy/dsh-plugin-kit/contracts'
 import { createPluginUserMessage, inject } from './index.ts'
-import { defaultSettings, RECAP_CHECKPOINT_PURPOSE, RECAP_DISPLAY_PURPOSE, RECAP_PLUGIN, type RecapCard, type RecapLogEvent } from './contracts.ts'
+import { defaultSettings, RECAP_DISPLAY_PURPOSE, RECAP_PLUGIN, type RecapCard, type RecapLogEvent } from './contracts.ts'
 import { RecapService, type RecapPersistedState, type RecapStore } from './service.ts'
 import { checkpointInjectPayload } from './checkpoints.ts'
 
-function receipt(status: UsageReceipt['status'], id = 'r1'): UsageReceipt {
-  return {
-    id, plugin: RECAP_PLUGIN, purpose: RECAP_DISPLAY_PURPOSE, sourceVersion: 's1#3',
-    status, attempts: 1, cost: null, startedAt: 1, finishedAt: 2,
-  }
+const hostModel = { agentDefaultModel: { currentSelection: () => ({ provider: 'host', model: 'chat' }) } }
+const unusedLlm = { prepareCall: async () => { throw new Error('unused') }, resolveCallConfig: async () => { throw new Error('unused') } }
+beforeEach(() => { vi.restoreAllMocks() })
+
+function stubModel(run: (request: LlmTextRequest) => Promise<{ text: string }>) {
+  vi.spyOn(kit, 'callLlmText').mockImplementation(async (_llm, request) => {
+    const answered = await run(request)
+    return { text: answered.text, provider: 'host', model: 'chat' }
+  })
 }
 
 function memoryStore(initial?: RecapPersistedState): RecapStore & { snapshot(): RecapPersistedState } {
@@ -106,8 +112,8 @@ function settingsOn(service: RecapService, patch: Partial<ReturnType<typeof defa
 }
 
 describe('recap service', () => {
-  it('requires host sessions and aiServices instead of optional lookups', () => {
-    expect([...inject]).toEqual(['connection', 'webServer', 'storageDomain', 'sessions', 'aiServices'])
+  it('requires host sessions and llm instead of optional lookups', () => {
+    expect([...inject]).toEqual(['connection', 'webServer', 'storageDomain', 'sessions', 'llm'])
   })
 
   it('deduplicates cards by session identity and log watermark', async () => {
@@ -133,33 +139,24 @@ describe('recap service', () => {
   })
 
   it('rejects late generation after the plugin is disposed', async () => {
-    let finish!: (result: AuxiliaryResult) => void
-    const pending = new Promise<AuxiliaryResult>(resolve => { finish = resolve })
+    let finish!: (result: { text: string }) => void
+    const pending = new Promise<{ text: string }>(resolve => { finish = resolve })
     let entered = false
-    const scope: AiFeatureScope = {
-      plugin: RECAP_PLUGIN,
-      signal: new AbortController().signal,
-      active: true,
-      registerPurpose: () => () => {},
-      run: async () => {
-        entered = true
-        return pending
-      },
-      dispose() {},
-    }
+    stubModel(async () => { entered = true; return pending })
     const log = longCompleted()
     const service = new RecapService({
       store: memoryStore(),
       readEvents: () => log,
       id: () => 'card-late',
-      activateAi: () => scope,
+      llm: unusedLlm,
+      host: hostModel,
     })
     await settingsOn(service)
     const started = service.onSessionEvent('s1', log[6]!)
     while (!entered) await Promise.resolve()
     expect(service.status().cards[0]?.generation).toBe('running')
     await service.dispose()
-    finish({ text: '不该出现', receipt: receipt('success') })
+    finish({ text: '不该出现' })
     await started
     const card = service.status().cards[0]
     expect(card?.kind).not.toBe('generated')
@@ -387,24 +384,18 @@ describe('recap service', () => {
 
   it('refreshes a short session with at most one model call per watermark', async () => {
     let runs = 0
-    const scope: AiFeatureScope = {
-      plugin: RECAP_PLUGIN,
-      signal: new AbortController().signal,
-      active: true,
-      registerPurpose: () => () => {},
-      run: async request => {
-        runs += 1
-        expect(request.isCurrent?.()).toBe(true)
-        return { text: '短回顾', receipt: receipt('success') }
-      },
-      dispose() {},
-    }
+    stubModel(async request => {
+      runs += 1
+      expect(request.isCurrent?.()).toBe(true)
+      return { text: '短回顾' }
+    })
     const log = shortCompleted()
     const service = new RecapService({
       store: memoryStore(),
       readEvents: () => log,
       id: () => 'short-1',
-      activateAi: () => scope,
+      llm: unusedLlm,
+      host: hostModel,
     })
     expect(await service.onSessionEvent('s1', log[2]!)).toBeUndefined()
     expect(await service.call('status', { sessionId: 's1' }, new AbortController().signal)).toEqual(expect.objectContaining({ ok: true }))
@@ -460,34 +451,20 @@ describe('recap service', () => {
       }],
     })
     let semantic = 0
-    const scope: AiFeatureScope = {
-      plugin: RECAP_PLUGIN,
-      signal: new AbortController().signal,
-      active: true,
-      registerPurpose: () => () => {},
-      run: async request => {
-        semantic += 1
-        expect(request.purpose).toBe(RECAP_CHECKPOINT_PURPOSE)
-        expect(request.input).not.toContain('已经写入')
-        if (semantic === 1) expect(request.input).toContain('writing_propose')
-        return {
-          text: '等待作者确认修改',
-          receipt: {
-            ...receipt('success', `sem-${semantic}`),
-            purpose: RECAP_CHECKPOINT_PURPOSE,
-            sourceVersion: request.sourceVersion,
-          },
-        }
-      },
-      dispose() {},
-    }
+    stubModel(async request => {
+      semantic += 1
+      expect(request.text).not.toContain('已经写入')
+      if (semantic === 1) expect(request.text).toContain('writing_propose')
+      return { text: '等待作者确认修改' }
+    })
     let ids = 0
     const options = {
       store,
       readEvents: () => log,
       readContract: () => contract,
       id: () => `cp-${++ids}`,
-      activateAi: () => scope,
+      llm: unusedLlm,
+      host: hostModel,
     }
     const service = new RecapService(options)
     const step = {
@@ -569,33 +546,18 @@ describe('recap service', () => {
       }],
     })
     let semantic = 0
-    const scope: AiFeatureScope = {
-      plugin: RECAP_PLUGIN,
-      signal: new AbortController().signal,
-      active: true,
-      registerPurpose: () => () => {},
-      run: async request => {
-        semantic += 1
-        expect(request.purpose).toBe(RECAP_CHECKPOINT_PURPOSE)
-        expect(request.contractVersion).toBe(2)
-        return {
-          text: '按新约束继续',
-          receipt: {
-            ...receipt('success', `sem-c${semantic}`),
-            purpose: RECAP_CHECKPOINT_PURPOSE,
-            sourceVersion: request.sourceVersion,
-          },
-        }
-      },
-      dispose() {},
-    }
+    stubModel(async () => {
+      semantic += 1
+      return { text: '按新约束继续' }
+    })
     let ids = 0
     const service = new RecapService({
       store,
       readEvents: () => log,
       readContract: () => v2,
       id: () => `c-${++ids}`,
-      activateAi: () => scope,
+      llm: unusedLlm,
+      host: hostModel,
     })
     const step = {
       sessionId: 's1',
@@ -627,8 +589,8 @@ describe('recap service', () => {
     const persistGate = new Promise<void>(resolve => { releasePersist = resolve })
     let persistEntered = false
     let modelEntered = false
-    let finishModel!: (result: AuxiliaryResult) => void
-    const model = new Promise<AuxiliaryResult>(resolve => { finishModel = resolve })
+    let finishModel!: (result: { text: string }) => void
+    const model = new Promise<{ text: string }>(resolve => { finishModel = resolve })
     const store: RecapStore = {
       load: () => ({ settings: { ...defaultSettings(), revision: 1 }, cards: [], checkpoints: [] }),
       save: async () => {
@@ -636,23 +598,14 @@ describe('recap service', () => {
         await persistGate
       },
     }
-    const scope: AiFeatureScope = {
-      plugin: RECAP_PLUGIN,
-      signal: new AbortController().signal,
-      active: true,
-      registerPurpose: () => () => {},
-      run: async () => {
-        modelEntered = true
-        return model
-      },
-      dispose() {},
-    }
+    stubModel(async () => { modelEntered = true; return model })
     const log = longCompleted()
     const service = new RecapService({
       store,
       readEvents: () => log,
       id: () => 'race-1',
-      activateAi: () => scope,
+      llm: unusedLlm,
+      host: hostModel,
     })
     const started = service.onSessionEvent('s1', log[6]!)
     while (!persistEntered) await Promise.resolve()
@@ -670,7 +623,7 @@ describe('recap service', () => {
     expect(result.ok && result.value.cards[0]).toMatchObject({ id: 'race-1', generation: 'running' })
     while (!modelEntered) await Promise.resolve()
     expect(modelEntered).toBe(true)
-    finishModel({ text: '完成后才应出现', receipt: receipt('success') })
+    finishModel({ text: '完成后才应出现' })
     await started
     expect(service.status().cards[0]?.generation).toBe('idle')
     expect(service.status().cards[0]?.body).toBe('完成后才应出现')

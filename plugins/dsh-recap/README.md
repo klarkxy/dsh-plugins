@@ -4,15 +4,18 @@
 
 Background recap generation and separate agent checkpoints. The plugin starts enabled and can be switched off under Settings → Plugins. Recaps, agent checkpoints, and semantic checkpoints use fixed automatic defaults. Recaps are display-only and are not model context.
 
-Requires Node.js ≥22 and DSH `0.1.7-rc.2`. Auxiliary generation requires `@klarkxy/dsh-ai-services`. `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-session` are required peers.
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. Auxiliary generation calls the host `llm` service directly. `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-session` are required peers.
 
 ```sh
 npm install @klarkxy/dsh-recap
-dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-recap
 ```
 
-Long turns and returning after the idle interval (default 15 minutes of focused document/user activity, not assistant streaming, and not while the chat panel is `hidden`) can generate recaps in the background. The chat events seat is a quiet lifecycle controller and renders no card, button, empty state, or error. There is no separate Recap settings page or manual generation control. Status reads do not call the model; each watermark gets at most one generation unless you retry the card or request a manual `refresh`. Checkpoints are injected only at host `agent/pre-step` on meaningful boundaries, using native `createUserMessage`.
+Long turns and returning after the idle interval (default 15 minutes of focused document/user activity, not assistant streaming, and not while the chat panel is `hidden`) can generate recaps in the background. The chat events seat is a quiet lifecycle controller and renders no card, button, empty state, or error. Status reads do not call the model; each watermark gets at most one generation unless you retry the card or request a manual `refresh`. Checkpoints are injected only at host `agent/pre-step` on meaningful boundaries, using native `createUserMessage`.
+
+## Plugin page settings
+
+`Settings → Plugins → Task Recap` carries one model row per feature: **Recap card model** for recap cards and **Semantic checkpoint model** for semantic checkpoints. Both are optional. A saved route is used for that feature's own call as an explicit model; an empty selection follows the live session model and then the host default chat model. Only these two features are affected; a saved route selects a model but is not evidence of connectivity.
 
 When Mood is active in the same profile, Recap reads its task contract through `ctx.aiMood.getContract(sessionId)` for checkpoint context.
 
@@ -37,4 +40,4 @@ pnpm exec vitest run packages/dsh-recap/src
 pnpm --filter @klarkxy/dsh-recap build
 ```
 
-Hosts that bundle this feature usually enable it by default; where the host supports live plugin switching, toggling needs no restart. Standalone DSH must load `@klarkxy/dsh-ai-services` before this package; installation or removal may require a restart when the host asks for one.
+Hosts that bundle this feature usually enable it by default; where the host supports live plugin switching, toggling needs no restart. Installation or removal may require a restart when the host asks for one.

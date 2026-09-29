@@ -1,4 +1,4 @@
-import type { EvidenceRef, ProducerMessageSource, TaskCheckpoint, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
+import type { EvidenceRef, ProducerMessageSource, TaskCheckpoint, TaskContract } from '@klarkxy/dsh-plugin-kit/contracts'
 import {
   MAX_CHECKPOINT_CHARS,
   MEANINGFUL_TOOL_DELTA,
@@ -56,6 +56,9 @@ export function isCheckpointLineageStale(
   return false
 }
 
+/** The stored schema bounds each checkpoint to 32 items; never write a row it would reject. */
+const MAX_CHECKPOINT_ITEMS = 32
+
 export function buildCheckpoint(
   facts: RecapFacts,
   input: {
@@ -77,6 +80,11 @@ export function buildCheckpoint(
       evidence: [{ sessionId: facts.sessionId, seq: facts.fromSeq, kind: 'user', excerpt: facts.lastUserExcerpt }],
     })
   }
+  // Long turns keep the author requirement plus the newest tool entries; the
+  // injected payload already shows at most 12 of them.
+  const bounded = items.length > MAX_CHECKPOINT_ITEMS
+    ? [items[0]!, ...items.slice(items.length - MAX_CHECKPOINT_ITEMS + 1)]
+    : items
   const constraints = [...(input.contract?.constraints ?? []), ...facts.constraints]
   const nextAction = facts.sourceStatus === 'running'
     ? (facts.proposals ? '等待作者确认修改，不要假定已写入' : '继续当前任务')
@@ -90,7 +98,7 @@ export function buildCheckpoint(
     toSeq: facts.toSeq,
     revision: input.revision,
     status: checkpointStatus(facts),
-    items,
+    items: bounded,
     constraints: [...new Set(constraints)],
     nextAction,
     createdAt: input.now,

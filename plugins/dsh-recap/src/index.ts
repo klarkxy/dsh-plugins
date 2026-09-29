@@ -1,8 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import type { AiServices } from '@klarkxy/dsh-ai-services/contracts'
-import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-ai-services/host-rpc'
+import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { checkpointInjectPayload } from './checkpoints.ts'
 import {
   RECAP_PLUGIN, RECAP_RPC_CHANNEL, type MoodContractApi, type RecapLogEvent, type RpcResult,
@@ -11,7 +11,7 @@ import { RecapService } from './service.ts'
 import { domainStore, recapDomain, type RecapDomainHandle } from './storage.ts'
 
 export const name = '@klarkxy/dsh-recap'
-export const inject = ['connection', 'webServer', 'storageDomain', 'sessions', 'aiServices'] as const
+export const inject = ['connection', 'webServer', 'storageDomain', 'sessions', 'llm'] as const
 
 export { RecapService } from './service.ts'
 export { domainStore, recapDomain } from './storage.ts'
@@ -26,7 +26,7 @@ type Host = Context & HostRpcContext & {
   sessions: {
     get(id: unknown): { snapshotEvents(): ReadonlyArray<{ seq: number | bigint; type: string; time: number; data: unknown }> } | undefined
   }
-  aiServices: AiServices
+  llm: LlmTextCaller
 }
 
 export function toLogEvent(event: { seq: number | bigint; type: string; time: number; data: unknown }): RecapLogEvent {
@@ -42,8 +42,8 @@ export function createPluginUserMessage(payload: ReturnType<typeof checkpointInj
 
 export async function apply(ctx: Context): Promise<void> {
   const host = ctx as Host
-  if (!host.storageDomain || !host.sessions || !host.aiServices) {
-    throw new Error('dsh-recap requires Host storageDomain, sessions, and aiServices')
+  if (!host.storageDomain || !host.sessions || !host.llm) {
+    throw new Error('dsh-recap requires Host storageDomain, sessions, and llm')
   }
   const domain = await host.storageDomain.open(recapDomain)
   const service = new RecapService({
@@ -56,7 +56,8 @@ export async function apply(ctx: Context): Promise<void> {
       const mood = ctx.get('aiMood') as MoodContractApi | undefined
       return mood?.getContract?.(sessionId)
     },
-    activateAi: () => host.aiServices.activate(RECAP_PLUGIN),
+    llm: host.llm,
+    host,
     createInjectMessage: payload => createPluginUserMessage(payload),
   })
   ctx.provide('recap', service)

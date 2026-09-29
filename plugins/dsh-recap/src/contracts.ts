@@ -1,35 +1,23 @@
-/** Recap-owned records. Shared TaskCheckpoint / RPC / slot names come from @klarkxy/dsh-ai-services/contracts. */
+/** Recap-owned records. Shared TaskCheckpoint / RPC / slot names come from @klarkxy/dsh-plugin-kit/contracts. */
 import type {
-  AiFeatureScope,
-  AiServices,
-  AuxiliaryRequest,
-  AuxiliaryResult,
   EvidenceRef,
-  PurposeSpec,
   ProducerMessageSource,
   RpcResult,
   TaskCheckpoint,
   TaskContract,
-  UsageReceipt,
-} from '@klarkxy/dsh-ai-services/contracts'
+} from '@klarkxy/dsh-plugin-kit/contracts'
 
 export type {
-  AiFeatureScope,
-  AiServices,
-  AuxiliaryRequest,
-  AuxiliaryResult,
   EvidenceRef,
-  PurposeSpec,
   ProducerMessageSource,
   RpcResult,
   TaskCheckpoint,
   TaskContract,
-  UsageReceipt,
 }
 
-export { CHAT_EVENTS_SLOT } from '@klarkxy/dsh-ai-services/contracts'
+export { CHAT_EVENTS_SLOT } from '@klarkxy/dsh-plugin-kit/contracts'
 
-/** DSH message source identity and aiServices.activate() plugin id. */
+/** DSH message source identity for this plugin's own messages. */
 export const RECAP_PLUGIN = '@klarkxy/dsh-recap'
 export const RECAP_SOURCE_KIND = 'plugin:@klarkxy/dsh-recap' as const
 export const RECAP_RPC_CHANNEL = '/dsh-recap'
@@ -50,13 +38,25 @@ export type RecapTrigger = 'turn-end' | 'idle-return' | 'retry' | 'manual'
 export type RecapCardKind = 'deterministic' | 'generated' | 'cached'
 export type RecapGeneration = 'idle' | 'running' | 'failed' | 'cancelled' | 'superseded'
 
+/** Plugin-page model selection. Empty provider/model means "follow the default". */
+export interface RecapModelRoute {
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
+}
+
 export interface RecapSettings {
   revision: number
   cardsEnabled: boolean
   checkpointsEnabled: boolean
   semanticCheckpointsEnabled: boolean
   idleReturnMs: number
+  /** Model for recap cards (display) and semantic checkpoints, chosen on the plugin page. */
+  displayModel: RecapModelRoute
+  checkpointModel: RecapModelRoute
 }
+
+export const defaultModelRoute = (): RecapModelRoute => ({ provider: '', model: '' })
 
 export const defaultSettings = (): RecapSettings => ({
   revision: 0,
@@ -64,6 +64,8 @@ export const defaultSettings = (): RecapSettings => ({
   checkpointsEnabled: true,
   semanticCheckpointsEnabled: true,
   idleReturnMs: DEFAULT_IDLE_RETURN_MS,
+  displayModel: defaultModelRoute(),
+  checkpointModel: defaultModelRoute(),
 })
 
 export interface RecapCard {
