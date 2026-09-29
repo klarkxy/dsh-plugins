@@ -3,13 +3,11 @@ import { closed, text } from './blueprint.mjs';
 import { BlueprintEngine } from './engine.mjs';
 import { officialPort } from './official.mjs';
 import { installCreatorGuidance } from './creator-guidance.mjs';
-import { installRegistryTools } from './registry-tools.mjs';
 import { registerHostRpc } from './host-rpc.mjs';
 export const name = 'dsh-blueprint';
 export const inject = ['connection', 'webServer', 'pluginManager', 'profileContext'];
 export function apply(ctx) {
   installCreatorGuidance(ctx);
-  installRegistryTools(ctx);
   const engine = new BlueprintEngine(officialPort(ctx));
   ctx.effect(() => () => engine.dispose());
   ctx.effect(() => registerHostRpc(ctx, async (endpoint, payload, signal) => {

@@ -34,16 +34,11 @@ The official DSH 0.1.7-rc.2 host lacks the list-toolbar slot. See the source pat
 
 When this plugin is loaded, Creator (`cordis`) receives the bundled [blueprint skill](skills/dsh-blueprint/SKILL.md), covering blueprint codes, import previews and native composition plugins. The body is injected directly into the Creator system prompt so it does not depend on a skill catalog or a separate skill tool. Other presets receive no guidance; switching away removes it on the next prompt assembly. Registration follows plugin and prompt-service lifetimes. Hosts without prompt services retain the Plugins-page workflow.
 
-The skill uses the read-only discovery tools below and the existing page and validation/codec exports. It adds no model-facing install/apply tools and does not imply permission to import or publish a blueprint. Without page access, the agent can prepare/review JSON and explain the remaining steps, but must not claim the import ran.
+The skill relies on the plugin page and the validation/codec exports; for discovery it points to the read-only plugin metadata tools of `@klarkxy/dsh-dev-index` when that plugin is loaded. It adds no model-facing install/apply tools and does not imply permission to import or publish a blueprint. Without page access, the agent can prepare/review JSON and explain the remaining steps, but must not claim the import ran.
 
-## Plugin search and versions
+## Plugin discovery
 
-Blueprint owns two read-only host tools (subject to the host's tool policies); it does not depend on the official-documentation plugin:
-
-- `blueprint_search_plugins({ query, source?, limit?, offset? })`: the default `catalog` source searches the site's published Chinese/English [plugin catalog](https://klarkxy.github.io/dsh-plugins/plugins.json). `source: "npm"` searches npm's `dsh-plugin` keyword candidates and filters for DSH names/keywords. Neither source is exhaustive; use exact package lookup for known packages. Results include source, fetch time and pagination, and remain candidates until version verification.
-- `blueprint_plugin_versions({ package, version?, limit?, offset? })`: queries public npm metadata, lists published releases and tags, and returns the selected exact version's bundle declaration, DSH/Node engine ranges, dependencies, peer dependencies and deprecation. `version` accepts an exact release or dist-tag, defaulting to `latest`; ranges are rejected. Versions are paged by publication time, not semver precedence. Use `selected.version` in the blueprint.
-
-Queries fetch current metadata without caching or a stale fallback. They do not download packages, execute scripts, install plugins or alter the profile. Native import preview remains the authority for installation and target compatibility. Built-in bundles still come from the current host; these tools do not discover private registry packages. Missing tool services leave the page operational; plugin/service unload unregisters tools and aborts pending requests. Tool registration uses the DSH 0.1.7-rc.2 output contract.
+This plugin no longer ships lookup tools. Discover candidate plugins and pin exact versions with `dsh_plugins_search` / `dsh_plugins_fetch` from [`@klarkxy/dsh-dev-index`](https://www.npmjs.com/package/@klarkxy/dsh-dev-index), which read the curated klarkxy catalog and public npm metadata without installing anything. Installs and removals go through the official plugin manager, including `github:owner/repo#commit` specs, which have no registry metadata. Native import preview remains the authority for installation and target compatibility; built-in bundles still come from the current host.
 
 ## Scope and defaults
 

@@ -1,1 +1,6 @@
-{"meta":{"name":"Blueprint","description":"Share plugin sets, exact versions and installation order as blueprint codes."}}
+{
+  "meta": {
+    "title": "Blueprint",
+    "description": "Share plugin sets, exact versions, and install order as blueprint codes."
+  }
+}
