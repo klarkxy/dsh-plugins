@@ -1,22 +1,27 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { useFeatureRefresh, useNativeSeat, type NativeSurfaceClient } from '@klarkxy/dsh-ai-services/client-utils'
+import { useFeatureRefresh, useNativeSeat, type NativeSurfaceClient } from '@klarkxy/dsh-plugin-kit/client-utils'
+import {
+  modelMenuChoiceKey, modelMenuEffortOptions, parseModelMenuChoiceKey, parseModelMenuChoices, type ModelMenuChoice,
+} from '@klarkxy/dsh-plugin-kit/model-menu'
 import { useEffect, useRef, useState } from 'react'
 import {
-  CHAT_EVENTS_SLOT, MOOD_RPC_CHANNEL, type MoodLocale, type MoodMode, type MoodStatus, type RpcResult, type TaskContract,
+  CHAT_EVENTS_SLOT, MOOD_PLUGIN, MOOD_RPC_CHANNEL, defaultModelRoute,
+  type MoodLocale, type MoodMode, type MoodModelRoute, type MoodStatus, type RpcResult, type TaskContract,
 } from './contracts.ts'
 import { readinessLabel } from './contracts.ts'
 
 export const name = 'dsh-mood-client'
-export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
+export const inject = ['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 
 type Client = NativeSurfaceClient & {
   connection: {
     rpc: { call(channel: string, endpoint: string, payload: unknown): Promise<unknown> }
     generation?: { subscribe(listener: () => void): () => void }
   }
+  remote?: { session?: { modelCatalog?: () => Promise<unknown> } }
   slots: {
     inject(key: string, callback: () => unknown): () => void
-    register(spec: { name: string; id: string; label: string; order: number }, render: unknown): () => void
+    register(spec: { name: string; id: string; label: string; order: number } | { name: string; key: string }, render: unknown): () => void
   }
 }
 
@@ -32,17 +37,23 @@ function unwrap<T>(result: RpcResult<T> | unknown): T {
 export function copy(locale: MoodLocale) {
   if (locale === 'en') return {
     settings: 'Requirements', auto: 'Auto', manual: 'Manual', strict: 'Strict',
+    model: 'Requirements analysis model', modelDefault: 'Default model', modelEffort: 'Reasoning effort',
+    modelEffortDefault: 'Default', modelHint: 'Leave empty to use the current session model, then the host default chat model.',
+    loading: 'Summarizing…', modelLoading: 'Loading…', stale: 'Settings changed; refresh and retry.',
     hint: 'Proceed autonomously by default. Investigate first, use safe defaults, and ask only for genuine blockers. Native approvals remain unchanged.',
     card: 'Optional task notes', amend: 'Amend', reanalyze: 'Summarize requirements', retry: 'Retry original', save: 'Save',
-    loading: 'Summarizing…', empty: 'No optional task notes.', goal: 'Goal', evidence: 'Evidence', questions: 'Open points',
+    empty: 'No optional task notes.', goal: 'Goal', evidence: 'Evidence', questions: 'Open points',
     recovery: 'A request held by an older Mood version is available for explicit retry. It does not block new work or grant approval.',
     sessionHint: 'Select a session to summarize its requirements on demand.',
   }
   return {
     settings: '需求澄清', auto: '自动', manual: '手动', strict: '严格',
+    model: '需求梳理模型', modelDefault: '默认模型', modelEffort: '思考强度',
+    modelEffortDefault: '默认', modelHint: '留空则使用当前会话模型，再回落到宿主默认对话模型。',
+    loading: '正在梳理…', modelLoading: '正在读取设置…', stale: '设置已更新，请刷新后重试。',
     hint: '默认自主推进：先调查，采用低风险默认方案，仅在真正阻塞时询问。原生权限与审批保持不变。',
     card: '可选任务摘要', amend: '修订', reanalyze: '梳理需求', retry: '按原请求重试', save: '保存',
-    loading: '正在梳理…', empty: '还没有可选任务摘要。', goal: '目标', evidence: '证据', questions: '未决事项',
+    empty: '还没有可选任务摘要。', goal: '目标', evidence: '证据', questions: '未决事项',
     recovery: '旧版 Mood 保留了一条可主动重试的请求。它不阻塞新任务，也不代表已获执行授权。',
     sessionHint: '选择一个会话后，可按需梳理该会话的需求。',
   }
@@ -210,11 +221,105 @@ function MoodContractCard({ client, sessionId, locale, hidden, surface = 'chat' 
 
 export function moodPanelKey(sessionId: string, locale: MoodLocale): string { return `${sessionId}:${locale}` }
 
+/** Plugin-page model select for the one analysis purpose this plugin registers. */
+function MoodModelMenu({ client, locale }: { client: Client; locale: MoodLocale }) {
+  const text = copy(locale)
+  const [status, setStatus] = useState<MoodStatus>()
+  const [choices, setChoices] = useState<ModelMenuChoice[]>([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const route = status?.settings.model ?? defaultModelRoute()
+  const selected = choices.find(item => item.provider === route.provider && item.model === route.model)
+  const efforts = modelMenuEffortOptions(selected, route.reasoningEffort)
+
+  useEffect(() => {
+    let live = true
+    void client.connection.rpc.call(MOOD_RPC_CHANNEL, 'status', {})
+      .then(result => { if (live) setStatus(unwrap<MoodStatus>(result)) })
+      .catch(() => { if (live) setError(text.modelLoading) })
+    void client.remote?.session?.modelCatalog?.()
+      ?.then(value => { if (live) setChoices(parseModelMenuChoices(value, route)) })
+      .catch(() => { if (live) setChoices([]) })
+    return () => { live = false }
+  }, [client, route.provider, route.model])
+
+  async function save(next: MoodModelRoute): Promise<void> {
+    if (!status) return
+    setBusy(true); setError('')
+    try {
+      const value = unwrap<MoodStatus>(await client.connection.rpc.call(MOOD_RPC_CHANNEL, 'model', {
+        expectedRevision: status.settings.revision, model: next,
+      }))
+      setStatus(value)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : text.stale)
+      const fresh = await client.connection.rpc.call(MOOD_RPC_CHANNEL, 'status', {}).then(result => {
+        try { return unwrap<MoodStatus>(result) } catch { return undefined }
+      }).catch(() => undefined)
+      if (fresh) setStatus(fresh)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <section className="mood-model" data-testid="mood-model">
+    {error && <p role="alert" className="mood-meta">{error}</p>}
+    <label>
+      {text.model}
+      <select
+        value={modelMenuChoiceKey(route.provider, route.model)}
+        disabled={busy || !status}
+        onChange={event => {
+          const key = event.target.value
+          if (!key) { void save(defaultModelRoute()); return }
+          const parsed = parseModelMenuChoiceKey(key)
+          if (parsed) void save(parsed)
+        }}
+      >
+        <option value="">{text.modelDefault}</option>
+        {choices.map(choice => (
+          <option key={modelMenuChoiceKey(choice.provider, choice.model)} value={modelMenuChoiceKey(choice.provider, choice.model)}>
+            {choice.label}
+          </option>
+        ))}
+      </select>
+    </label>
+    {selected && efforts.length > 0 && (
+      <label>
+        {text.modelEffort}
+        <select
+          value={route.reasoningEffort ?? ''}
+          disabled={busy}
+          onChange={event => void save({ ...route, reasoningEffort: event.target.value || undefined })}
+        >
+          <option value="">{text.modelEffortDefault}</option>
+          {efforts.map(effort => <option key={effort.id} value={effort.id}>{effort.name}</option>)}
+        </select>
+      </label>
+    )}
+    <p className="mood-meta">{text.modelHint}</p>
+  </section>
+}
+
+/** The plugin page renders the seat; the model menu works without a session. */
+function MoodSettingsSeat({ client }: { client: Client }) {
+  const seat = useNativeSeat(client, {})
+  return <div className="mood-settings-root" data-testid="mood-settings-root">
+    <section className="mood-settings" data-testid="mood-settings">
+      <h3>{copy(seat.locale).settings}</h3>
+      <p className="mood-meta">{copy(seat.locale).hint}</p>
+      <MoodModelMenu client={client} locale={seat.locale} />
+    </section>
+  </div>
+}
+
 export function MoodSettings({ client, props }: { client: Client; props: unknown }) {
   const seat = useNativeSeat(client, props)
   const text = copy(seat.locale)
   return <div className="mood-settings-root" data-testid="mood-settings-root" data-session={seat.sessionId || undefined}>
-    <section className="mood-settings" data-testid="mood-settings"><h3>{text.settings}</h3><p className="mood-meta">{text.hint}</p></section>
+    <section className="mood-settings" data-testid="mood-settings"><h3>{text.settings}</h3><p className="mood-meta">{text.hint}</p>
+      <MoodModelMenu client={client} locale={seat.locale} />
+    </section>
     {seat.sessionId
       ? <MoodContractCard key={`contract:${moodPanelKey(seat.sessionId, seat.locale)}`} client={client}
           sessionId={seat.sessionId} locale={seat.locale} surface="settings" />
@@ -244,6 +349,11 @@ const styles = `
 .mood-card button:hover:not(:disabled){background:var(--gray-3,color-mix(in srgb,currentColor 6%,transparent))}
 .mood-card button:disabled{opacity:.45;cursor:not-allowed}
 .mood-card :focus-visible,.mood-settings-root :focus-visible{outline:2px solid var(--accent-9,currentColor);outline-offset:3px}
+.mood-model{display:grid;gap:10px;margin-top:8px}
+.mood-model label{display:grid;gap:6px;font-size:var(--font-size-2,14px)}
+.mood-model select{box-sizing:border-box;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--gray-7,color-mix(in srgb,currentColor 20%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit}
+.mood-model select:focus-visible{border-color:var(--accent-9,currentColor);outline:2px solid var(--accent-9,currentColor);outline-offset:1px}
+@media(prefers-reduced-motion:reduce){.mood-model select{transition:none}}
 `
 
 export function apply(ctx: Context): void {
@@ -255,6 +365,10 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'dsh-mood.styles')
+  ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
+    { name: 'plugins.bundle.config', key: MOOD_PLUGIN },
+    () => <MoodSettingsSeat client={client} />,
+  )), 'dsh-mood.settings')
   ctx.effect(() => client.slots.inject(CHAT_EVENTS_SLOT, () => client.slots.register({
     name: CHAT_EVENTS_SLOT, id: 'mood', order: 10, label: '需求约定',
   }, (props: unknown) => <MoodChatCard client={client} props={props} />)), 'dsh-mood.card')

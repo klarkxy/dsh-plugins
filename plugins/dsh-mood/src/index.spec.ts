@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { CHAT_EVENTS_SLOT, MOOD_AI_PLUGIN, MOOD_PLUGIN, projectIdFromCwd } from './contracts.ts'
-import { projectIdFromCwd as sharedProjectIdFromCwd } from '@klarkxy/dsh-ai-services/contracts'
+import { projectIdFromCwd as sharedProjectIdFromCwd } from '@klarkxy/dsh-plugin-kit/contracts'
 import { inject, resumeHeldOnHost, type AgentsRegistry, type LiveAgent } from './index.ts'
 import { ASK_DETAIL_OPTION, toAskItems, pendingClarifications } from './questions.ts'
 
 describe('host wiring and shared SDK helpers', () => {
-  it('requires Host aiServices, storageDomain, sessions, userQuestions, and agents', () => {
-    expect([...inject]).toEqual(['aiServices', 'storageDomain', 'sessions', 'userQuestions', 'agents', 'connection', 'webServer'])
+  it('requires Host llm, storageDomain, sessions, userQuestions, and agents', () => {
+    expect([...inject]).toEqual(['llm', 'storageDomain', 'sessions', 'userQuestions', 'agents', 'connection', 'webServer'])
   })
 
   it('activates the scoped package name after the SDK pluginName fix', () => {

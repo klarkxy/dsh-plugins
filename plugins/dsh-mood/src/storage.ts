@@ -1,6 +1,6 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
-import { MAX_PROJECT_ID_CHARS, defaultSettings, type MoodSettings } from './contracts.ts'
+import { MAX_PROJECT_ID_CHARS, defaultModelRoute, defaultSettings, type MoodSettings } from './contracts.ts'
 import type { MoodPersistedState, MoodStoredSession, MoodStore } from './service.ts'
 
 const evidenceSchema = z.object({
@@ -50,9 +50,17 @@ const sessionSchema = z.object({
   heldRequest: heldRequestSchema.optional(),
 }).strict()
 
+const modelRouteSchema = z.object({
+  provider: z.string().min(0).max(250),
+  model: z.string().min(0).max(250),
+  reasoningEffort: z.string().min(1).max(80).optional(),
+}).strict().default(defaultModelRoute())
+
 const settingsSchema = z.object({
   revision: z.number().int().nonnegative(),
   mode: z.enum(['auto', 'manual', 'strict']),
+  /** v2 adds the plugin-page model route; v1 rows lack it and fill the default. */
+  model: modelRouteSchema,
 }).strict()
 
 export const moodStateSchema = z.object({
@@ -62,7 +70,9 @@ export const moodStateSchema = z.object({
 
 export const moodDomain = defineDomain({
   name: 'dsh_editor_mood',
-  version: 1,
+  version: 2,
+  /** v1 rows stay readable: the absent model route fills the default. */
+  compatibleVersions: [1],
   tables: {
     state: domainTable<string, MoodPersistedState>(moodStateSchema),
   },

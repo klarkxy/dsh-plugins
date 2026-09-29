@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
-import { describe, it } from 'vitest'
-import type { AiFeatureScope, AuxiliaryRequest, AuxiliaryResult, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
+import { beforeEach, describe, it, vi } from 'vitest'
+import * as kit from '@klarkxy/dsh-plugin-kit'
+import type { LlmTextRequest } from '@klarkxy/dsh-plugin-kit'
+import type { TaskContract } from '@klarkxy/dsh-plugin-kit/contracts'
 import { defaultSettings } from './contracts.ts'
 import { thinContract } from './analyze.ts'
 import { isMoodMessage, type SessionEventLike, type UserMessageLike } from './evidence.ts'
@@ -14,12 +16,11 @@ function deferred<T>() {
   const promise = new Promise<T>(done => { resolve = done })
   return { promise, resolve }
 }
-function result(questions: string[] = []): AuxiliaryResult {
-  return {
-    text: JSON.stringify({ goal: '保持 API，优化内部实现', assumptions: ['保持原行为'], questions }),
-    receipt: { id: 'r', plugin: '@klarkxy/dsh-mood', purpose: 'mood.analyze', sourceVersion: 'u1', status: 'success', attempts: 1, cost: null, startedAt: 1, finishedAt: 2 },
-  }
+function result(questions: string[] = []): { text: string } {
+  return { text: JSON.stringify({ goal: '保持 API，优化内部实现', assumptions: ['保持原行为'], questions }) }
 }
+const hostModel = { agentDefaultModel: { currentSelection: () => ({ provider: 'host', model: 'chat' }) } }
+beforeEach(() => { vi.restoreAllMocks() })
 function legacy(readiness: TaskContract['readiness'] = 'pending'): MoodPersistedState {
   return { settings: defaultSettings(), sessions: { s1: {
     contract: thinContract({ id: 'old', sessionId: 's1', sourceVersion: 'u0', revision: 1, goal: '旧任务', evidence: [], readiness, now: 1 }),
@@ -30,17 +31,21 @@ function legacy(readiness: TaskContract['readiness'] = 'pending'): MoodPersisted
 function setup(input: {
   state?: MoodPersistedState
   events?: SessionEventLike[]
-  run?: (request: AuxiliaryRequest) => Promise<AuxiliaryResult>
+  run?: (request: LlmTextRequest) => Promise<{ text: string }>
+  llm?: boolean
   save?: (state: MoodPersistedState) => Promise<void>
   resume?: (sessionId: string, messages: unknown[]) => Promise<void>
   options?: Partial<MoodServiceOptions>
 } = {}) {
-  const trace = { calls: [] as AuxiliaryRequest[], saves: [] as MoodPersistedState[], asks: 0, activations: 0, reads: 0, resumes: [] as unknown[][] }
+  const trace = { calls: [] as LlmTextRequest[], saves: [] as MoodPersistedState[], asks: 0, activations: 0, reads: 0, resumes: [] as unknown[][] }
   const started = deferred<void>()
-  const scope: AiFeatureScope = {
-    plugin: '@klarkxy/dsh-mood', active: true, signal: signal(), registerPurpose: () => () => {}, dispose() {},
-    async run(request) { trace.calls.push(request); started.resolve(); return input.run ? input.run(request) : result() },
-  }
+  vi.spyOn(kit, 'callLlmText').mockImplementation(async (_llm, request) => {
+    trace.calls.push(request)
+    trace.activations++
+    started.resolve()
+    const answered = input.run ? await input.run(request) : result()
+    return { text: answered.text, provider: request.route.provider, model: request.route.model }
+  })
   let ids = 0
   const service = new MoodService({
     id: () => `mood-${++ids}`, now: () => 10,
@@ -50,7 +55,10 @@ function setup(input: {
     },
     readEvents: () => { trace.reads++; return input.events ?? [] },
     liveSession: id => id.startsWith('s') ? { id, header: { cwd: '/work/project' } } : undefined,
-    activateAi: () => { trace.activations++; return scope },
+    ...(input.llm === false ? {} : {
+      llm: { prepareCall: async () => { throw new Error('unused') }, resolveCallConfig: async () => { throw new Error('unused') } },
+      host: hostModel,
+    }),
     askUser: async () => { trace.asks++; return { answers: [] } },
     createInjectMessage: text => ({ id: 'mood-context', ...contractMessageInput(text) }),
     resumeHeld: async (id, messages) => { trace.resumes.push(messages); await input.resume?.(id, messages) },
@@ -152,7 +160,7 @@ describe('explicit, non-blocking task notes', () => {
     assert.equal(contract.sourceVersion, 'u1')
     assert.equal(contract.evidence.some(ref => ref.kind === 'manual'), true)
     assert.equal(service.status('s1').session?.held, false)
-    assert.match(trace.calls[0]!.promptVersion!, /v2$/)
+    assert.match(trace.calls[0]!.system, /v2/)
   })
 
   it('keeps suggested questions in optional notes instead of invoking a question dialog', async () => {
@@ -173,7 +181,7 @@ describe('explicit, non-blocking task notes', () => {
     const { step, rpc, trace } = setup({ events })
     await step([human('u1', '按这个方案改')])
     await rpc()
-    const input = JSON.parse(trace.calls[0]!.input)
+    const input = JSON.parse(trace.calls[0]!.text)
     assert.deepEqual(input.turns.map((turn: { id: string }) => turn.id), ['u0', 'u1'])
     assert.equal(input.evidence.some((ref: { seq: number }) => ref.seq === 2), false)
     assert.match(input.turns[0].text, /保持 API/)
@@ -188,7 +196,7 @@ describe('explicit, non-blocking task notes', () => {
 
   for (const run of [
     async () => ({ ...result(), text: 'not JSON' }),
-    async () => ({ ...result(), receipt: { ...result().receipt, status: 'failed' as const } }),
+    async () => { throw new Error('模型调用失败。') },
     async () => { throw new Error('model offline') },
   ]) {
     it('reports explicit analysis failures without holding subsequent work', async () => {
@@ -203,7 +211,7 @@ describe('explicit, non-blocking task notes', () => {
   }
 
   it('does not require an auxiliary AI scope for normal work', async () => {
-    const { step, rpc } = setup({ options: { activateAi: () => undefined } })
+    const { step, rpc } = setup({ llm: false })
     enter(await step([human('u1', '改一下')]))
     assert.equal((await rpc()).ok, false)
     enter(await step([human('u2', '继续')]))
@@ -236,9 +244,45 @@ describe('explicit, non-blocking task notes', () => {
   })
 })
 
+describe('plugin-page model menu', () => {
+  it('passes the saved model as an override and none when the menu is empty', async () => {
+    const { rpc, trace, step, started } = setup({
+      state: { settings: { revision: 0, mode: 'auto', model: { provider: '', model: '' } }, sessions: {} },
+    })
+    await step([human('u1', '改一下')])
+    const pending = rpc(); await started.promise
+    assert.deepEqual(trace.calls[0]!.route, { provider: 'host', model: 'chat' })
+
+    const saved = await rpc('model', { expectedRevision: 0, model: { provider: 'deepseek', model: 'deepseek-chat', reasoningEffort: 'high' } })
+    assert.equal(saved.ok, true)
+    const gate = deferred<{ text: string }>()
+    const second = setup({
+      state: { settings: { revision: 1, mode: 'auto', model: { provider: 'deepseek', model: 'deepseek-chat', reasoningEffort: 'high' } }, sessions: {} },
+      run: () => gate.promise,
+    })
+    await second.step([human('u1', '改一下')])
+    const pending2 = second.rpc(); await second.started.promise
+    assert.deepEqual(second.trace.calls[0]!.route, { provider: 'deepseek', model: 'deepseek-chat', reasoningEffort: 'high' })
+    gate.resolve(result())
+    await pending2
+    await pending
+  })
+
+  it('rejects a stale model update and keeps the previous route', async () => {
+    const { rpc } = setup({
+      state: { settings: { revision: 4, mode: 'auto', model: { provider: '', model: '' } }, sessions: {} },
+    })
+    const rejected = await rpc('model', { expectedRevision: 0, model: { provider: 'deepseek', model: 'x' } })
+    assert.equal(rejected.ok, false)
+    if (!rejected.ok) assert.equal(rejected.error.code, 'MOOD_STALE')
+    const current = await rpc('status')
+    assert.equal(current.ok, true)
+  })
+})
+
 describe('cancellation, recovery, and persistence', () => {
   it('discards a late manual analysis after a new human request', async () => {
-    const gate = deferred<AuxiliaryResult>()
+    const gate = deferred<{ text: string }>()
     const { service, step, rpc, trace, started } = setup({ run: () => gate.promise })
     await step([human('u1', '改一下')])
     const pending = rpc()
@@ -252,7 +296,7 @@ describe('cancellation, recovery, and persistence', () => {
   })
 
   it('discards a late result after disable without blocking disposal', async () => {
-    const gate = deferred<AuxiliaryResult>()
+    const gate = deferred<{ text: string }>()
     const { service, step, rpc, trace, started } = setup({ run: () => gate.promise })
     await step([human('u1', '改一下')])
     const pending = rpc(); await started.promise
@@ -262,7 +306,7 @@ describe('cancellation, recovery, and persistence', () => {
   })
 
   it('keeps sessions isolated while an explicit analysis is running', async () => {
-    const gate = deferred<AuxiliaryResult>()
+    const gate = deferred<{ text: string }>()
     const { service, step, rpc, started } = setup({ run: () => gate.promise })
     await step([human('u1', '改一下')])
     const pending = rpc(); await started.promise

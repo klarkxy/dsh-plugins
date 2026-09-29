@@ -1,10 +1,10 @@
-/** Browser-safe Mood contracts. Shared TaskContract fields match frozen @klarkxy/dsh-ai-services. */
-import type { AiFeatureScope, EvidenceRef, ProducerMessageSource, RpcResult, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
+/** Browser-safe Mood contracts. Shared TaskContract fields match frozen @klarkxy/dsh-plugin-kit. */
+import type { EvidenceRef, ProducerMessageSource, RpcResult, TaskContract } from '@klarkxy/dsh-plugin-kit/contracts'
 
-export type { AiFeatureScope, EvidenceRef, ProducerMessageSource, RpcResult, TaskContract }
-export { projectIdFromCwd } from '@klarkxy/dsh-ai-services/contracts'
+export type { EvidenceRef, ProducerMessageSource, RpcResult, TaskContract }
+export { projectIdFromCwd } from '@klarkxy/dsh-plugin-kit/contracts'
 
-/** Frozen shared chat-events seat. Must stay equal to @klarkxy/dsh-ai-services CHAT_EVENTS_SLOT. */
+/** Frozen shared chat-events seat. Must stay equal to @klarkxy/dsh-plugin-kit CHAT_EVENTS_SLOT. */
 export const CHAT_EVENTS_SLOT = 'dsh-editor.chat.events'
 export const MOOD_PLUGIN = '@klarkxy/dsh-mood'
 export const MOOD_SOURCE_KIND = 'plugin:@klarkxy/dsh-mood' as const
@@ -25,16 +25,26 @@ export type MoodMode = 'auto' | 'manual' | 'strict'
 export type ClarificationStatus = 'pending' | 'answered' | 'skipped' | 'cancelled' | 'stale'
 export type MoodLocale = 'zh' | 'en'
 
+export interface MoodModelRoute {
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
+}
+
 export interface MoodSettings {
   revision: number
   mode: MoodMode
+  /** Plugin-page model selection. Empty provider/model means "follow the default". */
+  model: MoodModelRoute
 }
 
-export const defaultSettings = (): MoodSettings => ({ revision: 0, mode: 'auto' })
+export const defaultModelRoute = (): MoodModelRoute => ({ provider: '', model: '' })
+
+export const defaultSettings = (): MoodSettings => ({ revision: 0, mode: 'auto', model: defaultModelRoute() })
 
 /** Old mode names remain accepted aliases for the single non-blocking strategy. */
 export function operationalSettings(settings: MoodSettings): MoodSettings {
-  return { revision: settings.revision, mode: 'auto' }
+  return { revision: settings.revision, mode: 'auto', model: settings.model }
 }
 
 export interface ClarificationItem {

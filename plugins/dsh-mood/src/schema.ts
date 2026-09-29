@@ -1,9 +1,15 @@
 import type { MoodMode, TaskContract } from './contracts.ts'
-import { isMoodMode, parseSessionId } from './contracts.ts'
+import { defaultModelRoute, isMoodMode, parseSessionId, type MoodModelRoute } from './contracts.ts'
 
 export interface ModeUpdate {
   expectedRevision: number
   mode: MoodMode
+}
+
+/** Plugin-page model selection payload: empty route means "follow the default". */
+export interface ModelUpdate {
+  expectedRevision: number
+  model: MoodModelRoute
 }
 
 export interface ManualRequest {
@@ -43,6 +49,23 @@ export function parseModeUpdate(payload: unknown): ModeUpdate | undefined {
   if (typeof row.expectedRevision !== 'number' || !Number.isInteger(row.expectedRevision) || row.expectedRevision < 0) return undefined
   if (!isMoodMode(row.mode)) return undefined
   return { expectedRevision: row.expectedRevision, mode: row.mode }
+}
+
+/** A bad route collapses to the default so a malformed row never breaks analysis. */
+export function parseModelRoute(value: unknown): MoodModelRoute {
+  const row = asRecord(value)
+  const provider = row ? asString(row.provider, 250) : undefined
+  const model = row ? asString(row.model, 250) : undefined
+  if (!provider || !model) return defaultModelRoute()
+  const effort = row ? asString(row.reasoningEffort, 80) : undefined
+  return effort ? { provider, model, reasoningEffort: effort } : { provider, model }
+}
+
+export function parseModelUpdate(payload: unknown): ModelUpdate | undefined {
+  const row = asRecord(payload)
+  if (!row) return undefined
+  if (typeof row.expectedRevision !== 'number' || !Number.isInteger(row.expectedRevision) || row.expectedRevision < 0) return undefined
+  return { expectedRevision: row.expectedRevision, model: parseModelRoute(row.model) }
 }
 
 export function parseManual(payload: unknown): ManualRequest | undefined {

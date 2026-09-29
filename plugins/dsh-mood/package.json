@@ -2,6 +2,7 @@
   "name": "@klarkxy/dsh-mood",
   "version": "0.1.5",
   "description": "Autonomy-first task guidance with clarification only for genuine blockers in DeepSeek Harness.",
+  "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -23,10 +24,12 @@
     "./client": {
       "default": "./lib/client.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "icon.svg",
+    "locale/*.json",
     "lib",
     "cordis.patch.yml",
     "README.md",
@@ -41,6 +44,7 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-api-remotes",
         "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-session"
@@ -67,7 +71,7 @@
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-mood/src"
   },
   "dependencies": {
-    "@klarkxy/dsh-ai-services": "workspace:*",
+    "@klarkxy/dsh-plugin-kit": "workspace:*",
     "zod": "^4.1.5"
   },
   "peerDependencies": {

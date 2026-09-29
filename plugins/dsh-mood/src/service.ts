@@ -1,18 +1,20 @@
 import { randomUUID } from 'node:crypto'
-import type { AiFeatureScope, RpcResult, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
+import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import type { RpcResult, TaskContract } from '@klarkxy/dsh-plugin-kit/contracts'
+import { modelMenuOverride } from '@klarkxy/dsh-plugin-kit/model-menu'
 import {
-  MOOD_ANALYZE_PURPOSE, PROMPT_VERSION, SCHEMA_VERSION, cloneContract, defaultSettings, excerptOf, fail, ok,
-  operationalSettings, parseSessionId, projectIdFromCwd, sessionIdOf,
+  MOOD_PLUGIN, PROMPT_VERSION, SCHEMA_VERSION, cloneContract, defaultModelRoute, defaultSettings, excerptOf,
+  fail, ok, operationalSettings, parseSessionId, projectIdFromCwd, sessionIdOf,
   type AskUserRequest, type AskUserQuestionAnswer, type ClarificationItem, type HeldRequest,
-  type MoodSettings, type MoodStatus,
+  type MoodModelRoute, type MoodSettings, type MoodStatus,
 } from './contracts.ts'
-import { ANALYZE_SYSTEM, analyzePurpose, boundQuestions, contractFromDraft, parseAnalysis } from './analyze.ts'
+import { ANALYZE_SYSTEM, boundQuestions, contractFromDraft, parseAnalysis } from './analyze.ts'
 import {
   collectClaimedHumans, collectLogHumans, latestUserSeq, sourceVersionOf,
   type SessionEventLike, type UserMessageLike,
 } from './evidence.ts'
 import { AUTONOMY_POLICY, createMoodContextMessage, formatContract, mergeContractMessage } from './inject.ts'
-import { parseEdit, parseManual, parseModeUpdate, type ContractEdit } from './schema.ts'
+import { parseEdit, parseManual, parseModeUpdate, parseModelUpdate, type ContractEdit } from './schema.ts'
 import { isContinuationRequest } from './trigger.ts'
 
 export interface MoodPersistedState {
@@ -57,7 +59,8 @@ export interface MoodServiceOptions {
   id?: () => string
   readEvents: (sessionId: string) => readonly SessionEventLike[] | undefined
   liveSession?: (sessionId: string) => SessionLike | undefined
-  activateAi?: () => AiFeatureScope | undefined
+  llm?: LlmTextCaller
+  host?: unknown
   /** Kept for Host compatibility. The main Agent owns necessary native questions. */
   askUser?: (request: AskUserRequest) => Promise<AskUserQuestionAnswer>
   createInjectMessage?: (text: string) => unknown
@@ -77,8 +80,6 @@ export class MoodService {
   private sessions = new Map<string, InternalSession>()
   private storageFailed = false
   private active = true
-  private ai?: AiFeatureScope
-  private unregisterPurpose?: () => void
   private pending = Promise.resolve()
   private readonly now: () => number
   private readonly nextId: () => string
@@ -123,9 +124,6 @@ export class MoodService {
   async dispose(): Promise<void> {
     this.active = false
     for (const row of this.sessions.values()) this.cancelWork(row)
-    this.unregisterPurpose?.()
-    this.ai?.dispose()
-    this.ai = undefined
     await this.pending
   }
 
@@ -146,7 +144,20 @@ export class MoodService {
           this.assertLive()
           signal.throwIfAborted()
           if (parsed.expectedRevision !== this.settings.revision) coded('MOOD_STALE', '设置已更新，请刷新后重试。')
-          const settings = operationalSettings({ mode: parsed.mode, revision: this.settings.revision + 1 })
+          const settings = operationalSettings({ mode: parsed.mode, model: this.settings.model, revision: this.settings.revision + 1 })
+          await this.persist({ ...this.snapshot(), settings })
+          this.settings = settings
+          return this.status()
+        }))
+      }
+      if (endpoint === 'model') {
+        const parsed = parseModelUpdate(payload)
+        if (!parsed) return fail('MOOD_INVALID', '模型格式无效。')
+        return ok(await this.serialize(async () => {
+          this.assertLive()
+          signal.throwIfAborted()
+          if (parsed.expectedRevision !== this.settings.revision) coded('MOOD_STALE', '设置已更新，请刷新后重试。')
+          const settings = operationalSettings({ ...this.settings, revision: this.settings.revision + 1, model: parsed.model })
           await this.persist({ ...this.snapshot(), settings })
           this.settings = settings
           return this.status()
@@ -225,20 +236,25 @@ export class MoodService {
     const version = row.requestVersion ?? recent.at(-1)!.id
     row.requestVersion = version
     try {
-      const scope = this.scope()
-      const combined = AbortSignal.any([signal, work.signal, scope.signal, AbortSignal.timeout(analyzePurpose.timeoutMs)])
+      const llm = this.requireLlm()
+      const route = resolveFeatureModel(this.options.host, modelMenuOverride(this.settings.model), sessionId)
+      if (!route) coded('MOOD_NO_AI', '请先在插件页选择模型，或设置宿主默认对话模型。')
+      const combined = AbortSignal.any([signal, work.signal, AbortSignal.timeout(60_000)])
       const evidence = logged.filter(turn => recent.some(item => item.id === turn.id)).map(turn => turn.evidence)
       evidence.push({ sessionId, seq: latestUserSeq(this.options.readEvents(sessionId) ?? []), kind: 'manual', excerpt: '用户主动梳理需求；不是执行授权' })
-      const result = await scope.run({
-        purpose: MOOD_ANALYZE_PURPOSE, sessionId, sourceVersion: version,
-        promptVersion: PROMPT_VERSION, schemaVersion: SCHEMA_VERSION, system: ANALYZE_SYSTEM,
-        input: JSON.stringify({ turns: recent.map(turn => ({ ...turn, text: turn.text.slice(-2000) })), evidence }),
-        signal: combined, priority: 'interactive',
+      const result = await callLlmText(llm, {
+        plugin: MOOD_PLUGIN,
+        route,
+        system: `${ANALYZE_SYSTEM}\n${PROMPT_VERSION}\n${SCHEMA_VERSION}`,
+        text: JSON.stringify({ turns: recent.map(turn => ({ ...turn, text: turn.text.slice(-2000) })), evidence }),
+        maxTokens: 1024,
+        signal: combined,
+        sessionId,
         isCurrent: () => this.active && row.generation === generation && !combined.aborted,
       })
       combined.throwIfAborted()
       this.assertCurrent(row, generation)
-      const draft = result.receipt.status === 'success' ? parseAnalysis(result.text) : undefined
+      const draft = parseAnalysis(result.text)
       if (!draft) coded('MOOD_ANALYZE', '未能生成需求摘要；普通对话不受影响。')
       const contract = contractFromDraft({
         id: this.nextId(), sessionId, sourceVersion: version, revision: (row.contract?.revision ?? 0) + 1,
@@ -293,14 +309,9 @@ export class MoodService {
     } finally { row.retrying = false }
   }
 
-  private scope(): AiFeatureScope {
-    if (this.ai?.active) return this.ai
-    this.unregisterPurpose?.()
-    this.ai?.dispose()
-    this.ai = this.options.activateAi?.()
-    if (!this.ai?.active) coded('MOOD_NO_AI', '需求梳理服务不可用；普通对话不受影响。')
-    this.unregisterPurpose = this.ai.registerPurpose(analyzePurpose)
-    return this.ai
+  private requireLlm(): LlmTextCaller {
+    if (!this.options.llm) coded('MOOD_NO_AI', '需求梳理需要宿主 llm；普通对话不受影响。')
+    return this.options.llm
   }
 
   private hostSessionId(sessionId: string): string | undefined {

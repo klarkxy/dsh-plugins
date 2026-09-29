@@ -6,9 +6,12 @@ Mood is a lightweight, autonomy-first behavior policy for DeepSeek Harness. It h
 
 Requires Node.js ≥22 and DSH `0.1.7-rc.2`. Enable or disable it under **Settings → Plugins**. Native permissions, writing proposals, publishing confirmation, and Safe Auto decisions remain independent and unchanged.
 
+## Plugin page settings
+
+`Settings → Plugins → Requirements` carries a **Requirements analysis model** row for the requirements analysis call. It is optional. A saved route is used for that call as an explicit model; an empty selection follows the live session model and then the host default chat model. Only that call is affected; a saved route selects a model but is not evidence of connectivity.
+
 ```sh
 npm install @klarkxy/dsh-mood
-dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-mood
 ```
 
@@ -22,7 +25,7 @@ The Agent should read existing context and use authorized tools before asking. W
 
 ## Optional task notes
 
-Use **Summarize requirements** in the native Mood settings panel, or call `manual`, to explicitly request a summary. Only this operation activates `mood.analyze`. It uses recent real user messages, retains prior answers in that context, and excludes plugin-authored messages pretending to be user text.
+Use **Summarize requirements** in the native Mood settings panel, or call `manual`, to explicitly request a summary. Only this operation runs the requirements analysis call. It uses recent real user messages, retains prior answers in that context, and excludes plugin-authored messages pretending to be user text.
 
 The result uses the existing `TaskContract` interface for compatibility with Recap and other consumers. It is an optional summary, never an approval certificate or a prerequisite for execution. Empty question lists stay empty. Suggested questions appear as open points in the notes, not as blocking dialogs. The main Agent applies the normal necessary-question policy to them.
 

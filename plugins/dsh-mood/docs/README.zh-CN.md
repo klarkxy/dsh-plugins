@@ -6,9 +6,12 @@ Mood 是 DeepSeek Harness 的轻量自主推进策略：让主 Agent 先调查�
 
 需要 Node.js ≥22 和 DSH `0.1.7-rc.2`。在 **设置 → 插件** 中独立启停。原生权限、写作提案、发布确认和 Safe Auto 的审批保持独立，Mood 不替它们放行。
 
+## 插件页设置
+
+「设置 → 插件 → 需求澄清」下有**需求梳理模型**菜单，用于需求梳理调用，可留空。保存某个路由后，对应该调用会使用这个显式模型；留空则使用当前会话模型，再回落到宿主默认对话模型。只有这个调用受影响；保存路由只表示选定模型，不代表已连通。
+
 ```sh
 npm install @klarkxy/dsh-mood
-dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-mood
 ```
 

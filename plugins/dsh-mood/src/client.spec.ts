@@ -2,14 +2,17 @@ import { createElement, isValidElement } from 'react'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { CHAT_EVENTS_SLOT } from './contracts.ts'
+import { CHAT_EVENTS_SLOT, MOOD_PLUGIN } from './contracts.ts'
 import {
   apply, copy, inject, isCurrentMoodRequest, modeFromKey, MoodChatCard, MoodSettings, moodPanelKey,
   peekMoodStatus, shouldOfferRecovery, shouldShowCard, shouldSkipMoodRefresh,
 } from './client.tsx'
 
+const BUNDLE_CONFIG_SLOT = 'plugins.bundle.config'
+
 const client = {
-  connection: { rpc: { call: async () => ({ ok: true, value: { settings: { revision: 0, mode: 'auto' }, storageFailed: false } }) } },
+  connection: { rpc: { call: async () => ({ ok: true, value: { settings: { revision: 0, mode: 'auto', model: { provider: '', model: '' } }, storageFailed: false } }) } },
+  remote: { session: { modelCatalog: async () => ({ groups: [] }) } },
   slots: { inject() { return () => {} }, register() { return () => {} } },
 }
 
@@ -85,14 +88,15 @@ describe('mood settings and card helpers', () => {
 })
 
 describe('native settings seat and contract refresh', () => {
-  it('registers the shared chat events seat without a settings page', () => {
+  it('registers its own plugin page settings row plus the shared chat events seat', () => {
     const { names } = captureRenders()
     expect(names).toEqual([
+      { name: BUNDLE_CONFIG_SLOT, key: MOOD_PLUGIN },
       { name: CHAT_EVENTS_SLOT, id: 'mood', order: 10, label: '需求约定' },
     ])
   })
 
-  it('keeps MoodSettings available for native seat props without registering a nav page', () => {
+  it('keeps MoodSettings available for native seat props', () => {
     const close = () => {}
     expect(createElement(MoodSettings, { client, props: { close } }).type).toBe(MoodSettings)
     expect(createElement(MoodSettings, { client, props: { sessionId: 'sess-9', locale: 'en' } }).type).toBe(MoodSettings)
@@ -108,13 +112,18 @@ describe('native settings seat and contract refresh', () => {
   })
 
   it('resolves native settings seats and peeks without clobbering edits or writes', () => {
-    expect(inject).toEqual(['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
-    expect(clientSrc).toContain("from '@klarkxy/dsh-ai-services/client-utils'")
+    expect(inject).toEqual(['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
+    expect(clientSrc).toContain("from '@klarkxy/dsh-plugin-kit/client-utils'")
     expect(clientSrc).toContain('type Client = NativeSurfaceClient &')
     expect(clientSrc).toContain('useNativeSeat(client, props)')
     expect(clientSrc).toContain('useFeatureRefresh(')
     expect(clientSrc).toContain('void peekMoodStatus(')
     expect(clientSrc).toContain('surface="settings"')
+    expect(clientSrc).toContain("from '@klarkxy/dsh-plugin-kit/model-menu'")
+    expect(clientSrc).toContain('data-testid="mood-model"')
+    expect(clientSrc).toContain("client.connection.rpc.call(MOOD_RPC_CHANNEL, 'model', {")
+    expect(clientSrc).toContain('parseModelMenuChoices(value, route)')
+    expect(clientSrc).toContain('modelMenuChoiceKey(route.provider, route.model)')
     expect(clientSrc).toContain('if (seat.hidden || !seat.sessionId) return null')
     expect(clientSrc).not.toMatch(/beginMood|requestId\.current \+= 1[\s\S]{0,40}peekMoodStatus/)
     expect(shouldSkipMoodRefresh({ busy: true, editing: false })).toBe(true)

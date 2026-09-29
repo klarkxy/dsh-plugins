@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { AiServices, RpcResult } from '@klarkxy/dsh-ai-services/contracts'
-import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-ai-services/host-rpc'
+import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import type { RpcResult } from '@klarkxy/dsh-plugin-kit/contracts'
+import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import {
   MOOD_PLUGIN, MOOD_RPC_CHANNEL, type AskUserQuestionAnswer, type AskUserRequest,
 } from './contracts.ts'
@@ -10,7 +11,7 @@ import { MoodService, type PreStepDecision, type PreStepPayload } from './servic
 import { domainStore, moodDomain, type MoodDomainHandle } from './storage.ts'
 
 export const name = MOOD_PLUGIN
-export const inject = ['aiServices', 'storageDomain', 'sessions', 'userQuestions', 'agents', 'connection', 'webServer'] as const
+export const inject = ['llm', 'storageDomain', 'sessions', 'userQuestions', 'agents', 'connection', 'webServer'] as const
 
 export { MoodService } from './service.ts'
 export { createMoodContextMessage } from './inject.ts'
@@ -33,7 +34,7 @@ export type AgentsRegistry = {
 
 type Host = Context & HostRpcContext & {
   storageDomain: { open: (spec: typeof moodDomain) => Promise<MoodDomainHandle> }
-  aiServices: AiServices
+  llm: LlmTextCaller
   sessions: { get(id: unknown): { id?: unknown; header?: { cwd?: string }; meta?: { cwd?: string }; snapshotEvents(): readonly unknown[] } | undefined }
   userQuestions: { ask(input: AskUserRequest): Promise<AskUserQuestionAnswer> }
   agents: AgentsRegistry
@@ -41,15 +42,16 @@ type Host = Context & HostRpcContext & {
 
 export async function apply(ctx: Context): Promise<void> {
   const host = ctx as Host
-  if (!host.storageDomain || !host.aiServices || !host.sessions || !host.userQuestions || !host.agents) {
-    throw new Error('dsh-mood requires Host aiServices, storageDomain, sessions, userQuestions, and agents')
+  if (!host.storageDomain || !host.llm || !host.sessions || !host.userQuestions || !host.agents) {
+    throw new Error('dsh-mood requires Host llm, storageDomain, sessions, userQuestions, and agents')
   }
   const domain = await host.storageDomain.open(moodDomain)
   const service = new MoodService({
     store: domainStore(domain),
     readEvents: sessionId => readSessionEvents(host, sessionId),
     liveSession: sessionId => readLiveSession(host, sessionId),
-    activateAi: () => host.aiServices.activate(MOOD_PLUGIN),
+    llm: host.llm,
+    host,
     askUser: request => host.userQuestions.ask(request),
     createInjectMessage: text => createMoodContextMessage(text),
     resumeHeld: async (sessionId, messages) => { resumeHeldOnHost(host.agents, sessionId, messages) },
