@@ -4,7 +4,7 @@
 
 ## 所有权
 
-Dream 是公开包 `@klarkxy/dsh-memory` 的语境观察与整理能力，不另建一套存储。Self Improve 是公开包 `@klarkxy/dsh-self-improvement` 的行动经验能力。两者只使用 DSH 的会话、生命周期、存储域、RPC、原生 Web 扩展位以及公开的 `@klarkxy/dsh-ai-services`。不得导入 `dsh-editor-*`，不得把 Editor 私有服务作为必需依赖。
+Dream 是公开包 `@klarkxy/dsh-memory` 的语境观察与整理能力，不另建一套存储。Self Improve 是公开包 `@klarkxy/dsh-self-improvement` 的行动经验能力。两者只使用 DSH 的会话、生命周期、存储域、RPC、原生 Web 扩展位、宿主 `llm` 服务以及共享的 `@klarkxy/dsh-plugin-kit`。不得导入 `dsh-editor-*`，不得把 Editor 私有服务作为必需依赖。
 
 Memory 可以不安装 Self Improve；Self Improve 需要明确启用 Memory 作为存储，但不要求开启 Dream。设置页合用原生「记忆」入口，不依赖 Editor shell。关闭 Dream 停止语境观察和闲时整理，不关闭 Self Improve；关闭 Memory 不允许 Self Improve 绕过存储或创建第二套记忆。
 
@@ -22,7 +22,7 @@ Dream 维护描述性知识：偏好、项目事实、决策，以及新增的 `
 
 回合结束时，只观察真实 `user/message` 且 `source.kind=user` 的消息。不把助手自述、工具输出或插件注入当作者发言。首次启用只观察最新消息；后续每次最多取 4 条新消息，每条最多 2000 字符，最多生成 8 条记录。模型输出须包含真实 seq 和逐字引用，身份、别名和时间必须有引用依据。不确定时不写入，不用原文整段作为失败回退。
 
-`memory.observe-context` 使用共享模型路由、预算与取消机制。纯“继续”等确认消息不触发此调用。默认观察模型使用 normal 角色；强模型仍用于低频 Dream 整理。
+`memory.observe-context` 这一观察调用直接使用宿主 `llm`：插件页留空时按当前会话模型、宿主默认对话模型解析，自带预算与取消机制。纯“继续”等确认消息不触发此调用。低频 Dream 整理使用同一条已解析路由。
 
 活动状态默认具有 7 天的新鲜度上限。这不是事实失效日，更不代表任务完成；到期后不自动注入，新的明确报告可以更新。暂停、阻塞、完成等状态只表示上次报告。时间原话与宿主记录时间分开保存，不自动将“周末完成”改成“已经完成”。更新同一事项时，原记录标记 superseded，保留审计历史。
 
