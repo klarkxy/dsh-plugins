@@ -263,8 +263,8 @@
         "en": "DSH Docs"
       },
       "summary": {
-        "zh": "在插件页阅读 DSH 官方文档；创造模式用原生工具搜索和读取官方资料。",
-        "en": "Read the official DSH docs in the Plugins page; Creator mode searches and fetches them with native tools."
+        "zh": "在插件页阅读 DSH 官方文档；创造模式用原生工具搜索文档、查核插件 npm 元数据。",
+        "en": "Read the official DSH docs in the Plugins page; Creator mode searches docs and checks plugin npm metadata with native tools."
       },
       "readme": {
         "zh": "README.zh-CN.md",

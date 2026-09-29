@@ -8,7 +8,7 @@
 
 | 包 | 作用 | npm |
 | --- | --- | --- |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | DSH 文档：在插件页阅读官方文档；创造模式通过原生工具搜索和读取官方资料。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | DSH 文档：在插件页阅读官方文档；创造模式用原生工具搜索文档、查核插件 npm 元数据。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
 | [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.zh-CN.md) | 代码精简：审查并精简代码，保留现有行为，削减冗余和多余抽象。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
 
 ## 未发布的开发包
@@ -26,7 +26,7 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
-创造模式通过 `dsh-dev-index` 的 `dsh_docs_search` 和 `dsh_docs_fetch` 在线读取[官方 DSH 文档](https://deepseek-harness.github.io/deepseek-harness/)，并核对运行时接口。
+创造模式通过 `dsh-dev-index` 的 `dsh_docs_search`/`dsh_docs_fetch` 在线读取[官方 DSH 文档](https://deepseek-harness.github.io/deepseek-harness/)并核对运行时接口，用 `dsh_plugins_search`/`dsh_plugins_fetch` 在安装前查核插件的 npm 元数据。
 
 ## 插件站点
 

@@ -5,6 +5,8 @@ import type { ToolDefinition } from "@deepseek-ai/dsh-tools";
 import { CREATOR_GUIDANCE } from "./creator-guidance.js";
 import { DocsClient } from "./docs.js";
 import { docsTools } from "./docs-tools.js";
+import { PluginRegistry } from "./registry.js";
+import { registryTools } from "./registry-tools.js";
 
 export const name = "@klarkxy/dsh-dev-index";
 export const inject = ["systemPrompt", "agentPresets", "tools"];
@@ -42,6 +44,9 @@ export function apply(ctx: Context & CreatorPromptHost, config: Config): void {
   const client = new DocsClient();
   ctx.effect(() => () => client.dispose(), "dsh-dev-index.docs-client");
   for (const tool of docsTools(client)) ctx.tools.register(tool);
+  const registry = new PluginRegistry();
+  ctx.effect(() => () => registry.dispose(), "dsh-dev-index.plugin-registry");
+  for (const tool of registryTools(registry)) ctx.tools.register(tool);
   ctx.effect(() => ctx.systemPrompt.section({
     name: "dsh-dev-index.creator-docs",
     order: 100,

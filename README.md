@@ -10,7 +10,7 @@ This README also catalogs klarkxy's public DSH plugins on npm, including package
 
 | Package | Purpose | npm |
 | --- | --- | --- |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: read official DSH docs in the Plugins page; Creator mode searches and fetches them with native tools. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: read official DSH docs in the Plugins page; Creator mode searches docs and checks plugin npm metadata with native tools. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
 | [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.md) | Code Prune: review and simplify code while keeping existing behavior. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
 
 ## Unpublished development packages
@@ -28,7 +28,7 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
-Creator mode uses `dsh_docs_search` and `dsh_docs_fetch` from `dsh-dev-index` to read live [official DSH documentation](https://deepseek-harness.github.io/deepseek-harness/) and verify runtime contracts.
+Creator mode uses `dsh_docs_search`/`dsh_docs_fetch` from `dsh-dev-index` to read live [official DSH documentation](https://deepseek-harness.github.io/deepseek-harness/) and verify runtime contracts, and `dsh_plugins_search`/`dsh_plugins_fetch` to check plugin npm metadata before installing anything.
 
 ## Plugin site
 

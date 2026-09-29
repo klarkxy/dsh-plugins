@@ -2,7 +2,7 @@
 
 [English documentation](README.md)
 
-插件页嵌入 DSH 官方文档供人阅读；创造模式会收到一段简短指引，在开发 DSH 插件前查阅官方资料。
+插件页嵌入 DSH 官方文档供人阅读；创造模式会收到一段简短指引，在开发 DSH 插件前查阅官方资料。创造模式还会获得发现和核实 DSH 插件 npm 元数据的只读工具；安装和卸载始终由官方插件管理器完成。
 
 在正在运行的 DSH 里，这段指引要求创造模式使用只读的 `cordis_inspect_list` 和 `cordis_inspect_query` 核对接口。环境自己的工具与审批策略仍然适用。
 
@@ -16,10 +16,14 @@
 
 ## 创造模式指引
 
-宿主插件在会话使用 `cordis` 预设（创造模式）时加入一段系统提示，要求智能体先调用 `dsh_docs_search`，再调用 `dsh_docs_fetch` 阅读正文，随后选择 API。其他预设不注入额外提示。两个只读工具注册在宿主工具表中，仍受宿主工具策略约束。本插件不再注册 Skill。
+宿主插件在会话使用 `cordis` 预设（创造模式）时加入一段系统提示，要求智能体选择 API 前先调用 `dsh_docs_search`/`dsh_docs_fetch` 阅读官方文档，安装或依赖某个插件前先调用 `dsh_plugins_search`/`dsh_plugins_fetch` 核实元数据。其他预设不注入额外提示。四个只读工具都注册在宿主工具表中，仍受宿主工具策略约束。本插件不再注册 Skill。
 
 - `dsh_docs_search({ query: "插件", language: "zh" })` 在线读取官方 `llms.txt`，搜索标题、分类和路径。这是目录搜索，不是全文搜索；没有命中不代表正文不含相关内容，可以改用更宽泛的中文或英文关键词。
 - `dsh_docs_fetch({ id: "develop/basic/tool.md" })` 读取搜索结果中的文档 ID。结果包含来源、获取时间、内容修订值和 `nextOffset`。长文用该偏移量和相同的 `revision` 继续读取；正文更新时需要从头重读。默认每次返回 12,000 字符，上限 16,000。
+- `dsh_plugins_search({ query: "记忆" })` 查找候选插件。默认 `catalog` 数据源搜索 klarkxy 维护的中英文插件目录；`source: "npm"` 用 npm 的 `dsh-plugin` 关键词做更宽的发现。两个源都不是全量目录，命中结果只是候选，不代表兼容性已验证。
+- `dsh_plugins_fetch({ package: "@klarkxy/dsh-memory", version: "latest" })` 按确切包名读取 npm 注册表元数据：dist-tags、按发布时间排序的版本列表，以及选定版本的组合包声明、DSH／Node 版本要求、依赖和弃用说明。`version` 可填精确版本或标签，不接受范围。
+
+插件注册表工具是只读元数据查询：不下载、不安装、不执行任何代码，声明的 engines 范围也不是运行时兼容性证明。从 GitHub 安装的插件没有注册表元数据，直接用官方插件管理器以 `github:owner/repo#commit` 安装，并自行审阅其 `package.json`。
 
 请求由插件宿主执行，沿用 DSH 已有的 HTTP 代理策略，不执行命令，也不调用 `web_fetch`。只读取固定官方索引列出的 Markdown，拒绝任意 URL 和跳转，保留 TLS 证书校验。单次请求超时为 20 秒，单篇文档上限为 2 MiB。
 

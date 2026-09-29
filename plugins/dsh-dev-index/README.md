@@ -2,7 +2,7 @@
 
 [Chinese documentation](README.zh-CN.md)
 
-The plugin page embeds the official DSH documentation for readers. Creator mode receives a short instruction to consult official material before developing DSH plugins.
+The plugin page embeds the official DSH documentation for readers. Creator mode receives a short instruction to consult official material before developing DSH plugins. It also gets read-only tools to discover DSH plugins and verify their npm metadata; installation and removal stay with the official plugin manager.
 
 Inside a running DSH, the instruction points Creator mode to the read-only inspect tools `cordis_inspect_list` and `cordis_inspect_query`. The environment's own tool and approval policies still apply.
 
@@ -16,10 +16,14 @@ In DSH Web, open **Plugins → DSH development index**. The page displays the of
 
 ## Creator mode guidance
 
-The Host plugin adds one system-prompt section when the session uses the `cordis` preset (Creator mode). It directs the agent to `dsh_docs_search`, then `dsh_docs_fetch`, before choosing APIs. Other presets receive no extra prompt. Both read-only tools are registered with the host tool registry and remain subject to its tool policies. The plugin does not register a skill.
+The Host plugin adds one system-prompt section when the session uses the `cordis` preset (Creator mode). It directs the agent to `dsh_docs_search`/`dsh_docs_fetch` before choosing APIs, and to `dsh_plugins_search`/`dsh_plugins_fetch` before installing or depending on a plugin. Other presets receive no extra prompt. All four read-only tools are registered with the host tool registry and remain subject to its tool policies. The plugin does not register a skill.
 
 - `dsh_docs_search({ query: "plugin", language: "en" })` searches the live official `llms.txt` directory: titles, categories and paths. This is not full-text search. An empty result does not establish that a topic is absent from the document bodies; try broader Chinese or English keywords.
 - `dsh_docs_fetch({ id: "en/develop/basic/tool.md" })` reads a document ID returned by search. Results include the source URL, fetch time, content revision and `nextOffset`. Continue with that offset and the same `revision`; if the document changes, restart from offset zero. The default page size is 12,000 characters, at most 16,000.
+- `dsh_plugins_search({ query: "memory" })` finds candidate plugins. The default `catalog` source searches the curated klarkxy Chinese/English plugin catalog; `source: "npm"` searches npm's `dsh-plugin` keyword more broadly. Neither source is exhaustive, and hits are candidates rather than verified compatibility.
+- `dsh_plugins_fetch({ package: "@klarkxy/dsh-memory", version: "latest" })` reads npm registry metadata for an exact package name: dist-tags, published versions in publication-time order, and the selected version's bundle declaration, DSH/Node engine ranges, dependencies and deprecation. `version` accepts an exact release or a dist-tag; ranges are rejected.
+
+The plugin-registry tools are read-only metadata lookups: nothing is downloaded, installed or executed, and a declared engines range is not runtime compatibility proof. GitHub-installed plugins have no registry metadata; install those directly with the official plugin manager as `github:owner/repo#commit`, and review their `package.json` yourself.
 
 Requests run in the plugin host through its existing HTTP proxy policy, without shell commands or `web_fetch`. Only Markdown entries from the fixed official documentation index can be fetched. Redirects and arbitrary URLs are rejected; TLS verification remains enabled. Requests time out after 20 seconds and documents are capped at 2 MiB.
 
