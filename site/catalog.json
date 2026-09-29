@@ -214,46 +214,6 @@
       "directory": "plugins/dsh-self-improvement"
     },
     {
-      "slug": "model-center",
-      "package": "@klarkxy/dsh-model-center",
-      "category": "models",
-      "kind": "plugin",
-      "title": {
-        "zh": "模型中心",
-        "en": "Model Center"
-      },
-      "summary": {
-        "zh": "配置模型档位、服务商连接和 AI 调用限额。",
-        "en": "Configure model tiers, provider connections, and AI call limits."
-      },
-      "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugins",
-      "directory": "plugins/dsh-model-center"
-    },
-    {
-      "slug": "ai-services",
-      "package": "@klarkxy/dsh-ai-services",
-      "category": "models",
-      "kind": "service",
-      "title": {
-        "zh": "AI 服务",
-        "en": "AI Services"
-      },
-      "summary": {
-        "zh": "给其他插件用的共享服务：模型路由、有上限的辅助调用和用量记录。单独装没有可见功能。",
-        "en": "Shared service for other plugins: model routing, bounded auxiliary calls, and usage receipts. No visible feature on its own."
-      },
-      "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugins",
-      "directory": "plugins/dsh-ai-services"
-    },
-    {
       "slug": "web-search-manager",
       "package": "@klarkxy/dsh-web-search-manager",
       "category": "models",

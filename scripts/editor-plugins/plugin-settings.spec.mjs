@@ -2,13 +2,13 @@ import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { apply as modelCenter } from '../../plugins/dsh-model-center/src/client.tsx'
 import { apply as memory } from '../../plugins/dsh-memory/src/client.tsx'
 import { apply as webSearch } from '../../plugins/dsh-web-search-manager/src/client.tsx'
 import { apply as zhihu } from '../../plugins/dsh-zhihu/src/client.tsx'
 
 const slot = 'plugins.bundle.config'
 const forbidden = ['settings.section', 'settings.plugins.tab', 'dsh-editor.settings.models', 'dsh-editor.settings.zhihu']
+const statusChannels = ['/dsh-memory', '/dsh-web-search', '/zhihu']
 
 function host(initial = []) {
   const declared = new Set(initial)
@@ -58,7 +58,7 @@ function host(initial = []) {
 }
 
 const plugins = [
-  ['@klarkxy/dsh-model-center', modelCenter], ['@klarkxy/dsh-memory', memory],
+  ['@klarkxy/dsh-memory', memory],
   ['@klarkxy/dsh-web-search-manager', webSearch], ['@klarkxy/dsh-zhihu', zhihu],
 ]
 const settle = () => new Promise(resolve => setImmediate(resolve))
@@ -80,14 +80,14 @@ describe('plugin settings page registrations', () => {
           : { name: slot, key: pkg },
       ])
       // Registering or opening a settings page must not perform inference or write data.
-      expect(h.calls.every(([channel, endpoint]) => channel === '/dsh-model-center' && endpoint === 'status')).toBe(true)
+      expect(h.calls.every(([channel, endpoint]) => statusChannels.includes(channel) && endpoint === 'status')).toBe(true)
       const html = renderToStaticMarkup(createElement(configs()[0].render, { view: 'page' }))
       expect(html.length).toBeGreaterThan(0)
       if (pkg === '@klarkxy/dsh-zhihu') {
         expect(html).toContain('zhihu-settings-embed')
         expect(html).not.toContain('data-testid="zhihu-open"')
       }
-      expect(h.calls.every(([channel, endpoint]) => channel === '/dsh-model-center' && endpoint === 'status')).toBe(true)
+      expect(h.calls.every(([channel, endpoint]) => statusChannels.includes(channel) && endpoint === 'status')).toBe(true)
       h.undeclare(slot)
       expect(configs()).toEqual([])
       h.declare(slot); h.declare(slot)

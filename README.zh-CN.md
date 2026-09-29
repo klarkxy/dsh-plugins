@@ -47,11 +47,9 @@ pnpm site:test    # 离线渲染测试，也包含在 pnpm check 中
 
 | 包 | 作用 | 文档 |
 | --- | --- | --- |
-| [`@klarkxy/dsh-ai-services`](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) | AI 服务：共享模型路由、受限辅助调用和用量记录。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-ai-services#readme) |
 | [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | 自动标题：会话标题跟随最新任务更新，手动命名不被覆盖。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title#readme) |
 | [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | 副驾协作：常驻副驾与主助手搭配，结果由你确认后采纳。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion#readme) |
 | [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | 长期记忆：按作用域记住术语、偏好和近期动态，由 Dream 定期整理。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory#readme) |
-| [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | 模型中心：配置模型档位、服务商连接和 AI 调用限额。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-model-center#readme) |
 | [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 需求澄清：默认自主推进，仅在真正阻塞时询问，并支持按需梳理需求。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
 | [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | 会话纪要：后台生成纪要，并注入有长度限制的智能体检查点。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
 | [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | 经验学习：从结果证据总结带适用条件的做法，可选导出为技能。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |

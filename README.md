@@ -49,11 +49,9 @@ Package names link to npm. Follow each plugin's documentation for installation, 
 
 | Package | Purpose | Documentation |
 | --- | --- | --- |
-| [`@klarkxy/dsh-ai-services`](https://www.npmjs.com/package/@klarkxy/dsh-ai-services) | AI Services: shared model routing, bounded auxiliary calls, and usage receipts. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-ai-services#readme) |
 | [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | Auto Title: session titles follow the latest task; manual names stay put. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title#readme) |
 | [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | Sidekick: persistent Lead–Sidekick collaboration with author-reviewed results. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion#readme) |
 | [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | Long-term Memory: scoped vocabulary, preferences, recent activity, and Dream consolidation. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory#readme) |
-| [`@klarkxy/dsh-model-center`](https://www.npmjs.com/package/@klarkxy/dsh-model-center) | Model Center: configure model tiers, provider connections, and AI call limits. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-model-center#readme) |
 | [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | Mood: proceed autonomously, ask only for genuine blockers, and summarize requirements on demand. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
 | [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | Session Recap: background recaps and bounded agent checkpoints. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
 | [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | Experience Learning: learn conditional methods from outcome evidence, with optional skill export. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |

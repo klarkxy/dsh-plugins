@@ -1,5 +1,0 @@
-# Enabled when installed. Configuration lives on the plugin page; native model settings stay unchanged.
-- insert:
-    - id: model-center
-      name: '@klarkxy/dsh-model-center'
-      disabled: false
