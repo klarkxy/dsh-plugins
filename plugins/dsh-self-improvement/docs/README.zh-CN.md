@@ -12,15 +12,18 @@ Self Improve 负责“怎样做事”：目标、适用条件、推荐步骤、�
 npm install @klarkxy/dsh-self-improvement
 ```
 
-再安装公开共享服务并明确启用 Memory 存储：
+再安装公开包并明确启用 Memory 存储：
 
 ```sh
-dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-memory
 dsh plugin --profile web add @klarkxy/dsh-self-improvement
 ```
 
 Memory 必须明确启用为存储，Dream 可以关闭。本插件不会替用户打开其他插件。安装后默认启用，可单独停用；在「设置 → 长期记忆 → 经验学习」审计行动经验与技能草稿，不增加聊天管理面板或单独设置页。
+
+## 插件页设置
+
+「设置 → 插件 → 经验学习」下有本包自己的设置行，含**经验学习摘录模型**菜单，用于摘录调用，可留空；在此查看方法或技能草稿不会调用 Memory 的模型。保存某个路由后，对应该调用会使用这个显式模型；留空则使用当前会话模型，再回落到宿主默认对话模型。只有这个调用受影响；保存路由只表示选定模型，不代表已连通。
 
 ## 生效与证据
 
@@ -39,7 +42,7 @@ Skill 由已生效方法形成可审阅 Markdown 草稿。采纳、下载和撤�
 本包有三个入口：
 
 - `.`：Cordis 插件（`name`、`inject`、`apply`）、`SelfImprovementEngine` 类，以及共享常量 `CHAT_EVENTS_SLOT`、`SELF_IMPROVEMENT_RPC_CHANNEL`。`apply` 把引擎挂到 `ctx.selfImprovement`，并注册宿主 RPC 通道。
-- `./contracts`：浏览器安全的类型与常量——转引自 `@klarkxy/dsh-ai-services` 的冻结 AI/Memory 接口，另加 `SkillRecord`、`ReviewSnapshot`、`LessonTrigger`、注入上限与 `/dsh-self-improvement` 通道名。
+- `./contracts`：浏览器安全的类型与常量——转引自 `@klarkxy/dsh-plugin-kit` 的冻结 AI/Memory 接口，另加 `SkillRecord`、`ReviewSnapshot`、`LessonTrigger`、注入上限与 `/dsh-self-improvement` 通道名。
 - `./client`：审计界面 bundle，提供 `dshSelfImprovementReview` 渲染服务；记忆设置页的「经验学习」一节嵌入的就是它。
 
 宿主 RPC 通道为 `/dsh-self-improvement`，端点包括 `status`、`extract`、`inspect`、`accept`、`reject`、`revoke`、`skill.preview`、`skill.accept`、`skill.reject`、`skill.revoke`、`skill.export`、`skill.exported`、`skill.unexport`。

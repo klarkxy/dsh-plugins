@@ -1,9 +1,15 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { useFeatureRefresh, useNativeSeat, type NativeSurfaceClient } from '@klarkxy/dsh-ai-services/client-utils'
+import { useFeatureRefresh, useNativeSeat, type NativeSurfaceClient } from '@klarkxy/dsh-plugin-kit/client-utils'
+import {
+  modelMenuChoiceKey, modelMenuEffortOptions, normalizeModelMenuRoute, parseModelMenuChoiceKey, parseModelMenuChoices,
+  type ModelMenuChoice, type ModelMenuRoute,
+} from '@klarkxy/dsh-plugin-kit/model-menu'
 import { useEffect, useId, useRef, useState } from 'react'
 import {
   MEMORY_UNAVAILABLE_MESSAGE, MEMORY_UNAVAILABLE_MESSAGE_EN,
-  SELF_IMPROVEMENT_REVIEW_SERVICE, SELF_IMPROVEMENT_RPC_CHANNEL, type MemoryRecord, type ReviewSnapshot, type RpcResult, type SkillRecord,
+  SELF_IMPROVEMENT_PLUGIN, SELF_IMPROVEMENT_REVIEW_SERVICE, SELF_IMPROVEMENT_RPC_CHANNEL,
+  defaultSettings, type MemoryRecord, type ReviewSnapshot, type RpcResult, type SelfImprovementSettings,
+  type SkillRecord,
 } from './contracts.ts'
 import {
   beginReviewRequest, createReviewGeneration, disposeReviewRequest, exportSkillIfCurrent,
@@ -13,7 +19,7 @@ import { unwrap } from './rpc-result.ts'
 import { exportRevocationCopy, skillExportStateLabel } from './skills.ts'
 
 export const name = 'dsh-self-improvement-client'
-export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
+export const inject = ['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 export { unwrap }
 export {
   beginReviewRequest, createReviewGeneration, disposeReviewRequest, exportSkillIfCurrent,
@@ -25,9 +31,10 @@ type Client = NativeSurfaceClient & {
     rpc: { call(channel: string, endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown> }
     generation?: { subscribe(listener: () => void): () => void }
   }
+  remote?: { session?: { modelCatalog?: () => Promise<unknown> } }
   slots: {
     inject(key: string, callback: () => unknown): () => void
-    register(spec: { name: string; id: string; label: string; order: number }, render: unknown): () => void
+    register(spec: { name: string; id: string; label: string; order: number } | { name: string; key: string }, render: unknown): () => void
   }
 }
 
@@ -469,11 +476,107 @@ const styles = `
 .si-preview{margin:0;padding:8px 10px;border-radius:8px;background:var(--gray-2,color-mix(in srgb,currentColor 4%,transparent));white-space:pre-wrap;overflow:auto;max-height:240px;font:400 var(--font-size-1,13px)/1.45 var(--code-font-family,ui-monospace,monospace)}
 .si-select{margin:0;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:10px;padding:8px 12px;display:grid;gap:6px}
 .si-select label{display:flex;gap:8px;align-items:flex-start}
-@media(prefers-reduced-motion:reduce){.si-settings button{transition:none}}
+.si-model{display:grid;gap:10px;margin-top:8px}
+.si-model label{display:grid;gap:6px;font-size:var(--font-size-2,14px)}
+.si-model select{box-sizing:border-box;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--gray-7,color-mix(in srgb,currentColor 20%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit}
+.si-model select:focus-visible{border-color:var(--accent-9,#3b82f6);outline:2px solid var(--accent-9,#3b82f6);outline-offset:1px}
+@media(prefers-reduced-motion:reduce){.si-settings button,.si-model select{transition:none}}
 `
 
 export function reviewPanelKey(sessionId: string, locale: 'zh' | 'en'): string {
   return `${sessionId}:${locale}`
+}
+
+/** Plugin-page model menu for the one extraction purpose this plugin registers. */
+export function SelfImprovementModelMenu({ client, locale }: { client: Client; locale: 'zh' | 'en' }) {
+  const optionsId = useId()
+  const [settings, setSettings] = useState<SelfImprovementSettings>()
+  const [choices, setChoices] = useState<ModelMenuChoice[]>([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+  const route: ModelMenuRoute = settings?.model ?? defaultSettings().model
+  const selected = choices.find(item => item.provider === route.provider && item.model === route.model)
+  const efforts = modelMenuEffortOptions(selected, route.reasoningEffort)
+
+  useEffect(() => {
+    let live = true
+    void client.connection.rpc.call(SELF_IMPROVEMENT_RPC_CHANNEL, 'settings', {})
+      .then(result => { if (live) setSettings(unwrap(result as RpcResult<SelfImprovementSettings>)) })
+      .catch(() => { if (live) setError(locale === 'en' ? 'Unable to load settings.' : '无法读取设置。') })
+    void client.remote?.session?.modelCatalog?.()
+      ?.then(value => { if (live) setChoices(parseModelMenuChoices(value, route)) })
+      .catch(() => { if (live) setChoices([]) })
+    return () => { live = false }
+  }, [client, locale, route.provider, route.model])
+
+  async function save(next: ModelMenuRoute): Promise<void> {
+    if (!settings) return
+    setBusy(true); setError(''); setNote('')
+    try {
+      const value = await client.connection.rpc.call(SELF_IMPROVEMENT_RPC_CHANNEL, 'settings.update', {
+        expectedRevision: settings.revision, model: normalizeModelMenuRoute(next),
+      })
+      setSettings(unwrap(value as RpcResult<SelfImprovementSettings>))
+      setNote(locale === 'en' ? 'Saved.' : '已保存。')
+    } catch {
+      setError(locale === 'en' ? 'Settings changed; refresh and retry.' : '设置已更新，请刷新后重试。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <section className="si-model" data-testid="self-improvement-model">
+    {error && <p role="alert" className="si-error">{error}</p>}
+    {note && <p role="status" className="si-meta">{note}</p>}
+    <label htmlFor={optionsId}>
+      {locale === 'en' ? 'Extraction model' : '经验学习摘录模型'}
+      <select
+        id={optionsId}
+        value={modelMenuChoiceKey(route.provider, route.model)}
+        disabled={busy || !settings}
+        onChange={event => {
+          const key = event.target.value
+          if (!key) { void save({ provider: '', model: '' }); return }
+          const parsed = parseModelMenuChoiceKey(key)
+          if (parsed) void save(parsed)
+        }}
+      >
+        <option value="">{locale === 'en' ? 'Default model' : '默认模型'}</option>
+        {choices.map(choice => (
+          <option key={modelMenuChoiceKey(choice.provider, choice.model)} value={modelMenuChoiceKey(choice.provider, choice.model)}>
+            {choice.label}
+          </option>
+        ))}
+      </select>
+    </label>
+    {selected && efforts.length > 0 && (
+      <label htmlFor={`${optionsId}-effort`}>
+        {locale === 'en' ? 'Reasoning effort' : '思考强度'}
+        <select
+          id={`${optionsId}-effort`}
+          value={route.reasoningEffort ?? ''}
+          disabled={busy}
+          onChange={event => void save({ ...route, reasoningEffort: event.target.value || undefined })}
+        >
+          <option value="">{locale === 'en' ? 'Default' : '默认'}</option>
+          {efforts.map(effort => <option key={effort.id} value={effort.id}>{effort.name}</option>)}
+        </select>
+      </label>
+    )}
+    <p className="si-meta">{locale === 'en'
+      ? 'Leave empty to use the current session model, then the host default chat model.'
+      : '留空则使用当前会话模型，再回落到宿主默认对话模型。'}</p>
+  </section>
+}
+
+/** Plugin page seat: the model menu works without a session. */
+export function SelfImprovementSettingsSeat({ client }: { client: Client }) {
+  const seat = useNativeSeat(client, {})
+  return <section className="si-settings" data-testid="self-improvement-settings">
+    <SelfImprovementModelMenu client={client} locale={seat.locale} />
+    <SelfImprovementSettings client={client} props={{ sessionId: seat.sessionId, locale: seat.locale }} />
+  </section>
 }
 
 export function SelfImprovementSettings({ client, props }: { client: Client; props: unknown }) {
@@ -492,6 +595,10 @@ export function apply(ctx: Context): void {
   ctx.provide(SELF_IMPROVEMENT_REVIEW_SERVICE, {
     render: (props: unknown) => <SelfImprovementSettings client={client} props={props} />,
   })
+  ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
+    { name: 'plugins.bundle.config', key: SELF_IMPROVEMENT_PLUGIN },
+    () => <SelfImprovementSettingsSeat client={client} />,
+  )), 'self-improvement.settings')
   ctx.effect(() => {
     if (typeof document === 'undefined') return () => {}
     const style = document.createElement('style')

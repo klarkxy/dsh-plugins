@@ -12,15 +12,18 @@ Requires Node.js ≥22 and DSH `0.1.7-rc.2`. No application-specific runtime pac
 npm install @klarkxy/dsh-self-improvement
 ```
 
-Install the public shared service and explicitly enable Memory storage:
+Install the public packages and explicitly enable Memory storage:
 
 ```sh
-dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-memory
 dsh plugin --profile web add @klarkxy/dsh-self-improvement
 ```
 
 This plugin never enables Memory or Dream on the user's behalf. Dream may remain off. Review methods and Skill drafts under Settings → Long-term Memory → Experience Learning; there is no extra chat panel or separate settings page. The bundle starts enabled and can be switched off independently.
+
+## Plugin page settings
+
+`Settings → Plugins → Experience Learning` carries its own settings row with an optional **Extraction model** menu for the extraction call. Reviewing and counting methods here does not call Memory's model. A saved route is used for that call as an explicit model; an empty selection follows the live session model and then the host default chat model. Only that call is affected; a saved route selects a model but is not evidence of connectivity.
 
 ## Evidence and activation
 
@@ -39,7 +42,7 @@ Active methods can form a Skill Markdown draft with name/description frontmatter
 The package has three entry points:
 
 - `.` — the Cordis plugin (`name`, `inject`, `apply`), the `SelfImprovementEngine` class and the shared constants `CHAT_EVENTS_SLOT` and `SELF_IMPROVEMENT_RPC_CHANNEL`. `apply` provides the engine as `ctx.selfImprovement` and registers the host RPC channel.
-- `./contracts` — browser-safe types and constants: the frozen AI/Memory interfaces re-exported from `@klarkxy/dsh-ai-services`, plus `SkillRecord`, `ReviewSnapshot`, `LessonTrigger`, injection bounds and the `/dsh-self-improvement` channel name.
+- `./contracts` — browser-safe types and constants: the frozen AI/Memory interfaces from `@klarkxy/dsh-plugin-kit`, plus `SkillRecord`, `ReviewSnapshot`, `LessonTrigger`, injection bounds and the `/dsh-self-improvement` channel name.
 - `./client` — the review UI bundle. It provides the `dshSelfImprovementReview` render service that the Memory settings page embeds as its Experience Learning section.
 
 The host RPC channel is `/dsh-self-improvement` with endpoints `status`, `extract`, `inspect`, `accept`, `reject`, `revoke`, `skill.preview`, `skill.accept`, `skill.reject`, `skill.revoke`, `skill.export`, `skill.exported` and `skill.unexport`.

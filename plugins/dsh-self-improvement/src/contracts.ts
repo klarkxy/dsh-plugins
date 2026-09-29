@@ -2,12 +2,8 @@
 import {
   CHAT_EVENTS_SLOT as FROZEN_CHAT_EVENTS_SLOT,
   projectIdFromCwd as sharedProjectIdFromCwd,
-} from '@klarkxy/dsh-ai-services/contracts'
+} from '@klarkxy/dsh-plugin-kit/contracts'
 import type {
-  AiFeatureScope,
-  AiServices,
-  AuxiliaryRequest,
-  AuxiliaryResult,
   EvidenceRef,
   KnowledgeKind,
   KnowledgeScope,
@@ -16,17 +12,11 @@ import type {
   MemoryRecord,
   MemoryService,
   NewMemoryRecord,
-  PurposeSpec,
   ProducerMessageSource,
   RpcResult,
-  UsageReceipt,
-} from '@klarkxy/dsh-ai-services/contracts'
+} from '@klarkxy/dsh-plugin-kit/contracts'
 
 export type {
-  AiFeatureScope,
-  AiServices,
-  AuxiliaryRequest,
-  AuxiliaryResult,
   EvidenceRef,
   KnowledgeKind,
   KnowledgeScope,
@@ -35,10 +25,8 @@ export type {
   MemoryRecord,
   MemoryService,
   NewMemoryRecord,
-  PurposeSpec,
   ProducerMessageSource,
   RpcResult,
-  UsageReceipt,
 }
 
 export const CHAT_EVENTS_SLOT = FROZEN_CHAT_EVENTS_SLOT
@@ -57,6 +45,34 @@ export const MAX_INJECTED_LESSONS = 5
 export const MAX_INJECTION_TOKENS = 800
 export const MAX_PROJECT_ID_CHARS = 32_768
 export const MAX_RECALL_QUERY_CHARS = 200
+/** Plugin-page settings row key. */
+export const SETTINGS_KEY = 'current'
+
+/** Plugin-page model selection. Empty provider/model means "follow the default". */
+export interface SelfImprovementModelRoute {
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
+}
+
+export interface SelfImprovementSettings {
+  readonly revision: number
+  readonly model: SelfImprovementModelRoute
+}
+
+export const defaultModelRoute = (): SelfImprovementModelRoute => ({ provider: '', model: '' })
+export const defaultSettings = (): SelfImprovementSettings => ({ revision: 0, model: defaultModelRoute() })
+
+/** Untrusted stored routes collapse to the default so a bad row never breaks a run. */
+export function normalizeModelRoute(value: unknown): SelfImprovementModelRoute {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return defaultModelRoute()
+  const row = value as Record<string, unknown>
+  const provider = typeof row.provider === 'string' ? row.provider.trim() : ''
+  const model = typeof row.model === 'string' ? row.model.trim() : ''
+  if (!provider || !model || provider.length > 250 || model.length > 250) return defaultModelRoute()
+  const effort = typeof row.reasoningEffort === 'string' ? row.reasoningEffort.trim() : ''
+  return effort && effort.length <= 80 ? { provider, model, reasoningEffort: effort } : { provider, model }
+}
 
 export type SkillStatus = 'preview' | 'accepted' | 'rejected' | 'revoked'
 export type SkillExportState = 'none' | 'recorded' | 'revoked'

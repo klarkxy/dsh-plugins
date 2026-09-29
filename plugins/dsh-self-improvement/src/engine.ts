@@ -1,10 +1,12 @@
+import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import {
-  EXTRACT_PURPOSE, MEMORY_UNAVAILABLE_MESSAGE, SELF_IMPROVEMENT_ACTIVATE_ID,
-  fail, projectIdFromCwd, sessionCwd, type AiFeatureScope, type AiServices, type LessonTrigger,
+  EXTRACT_PURPOSE, MEMORY_UNAVAILABLE_MESSAGE, SELF_IMPROVEMENT_ACTIVATE_ID, SETTINGS_KEY, defaultSettings,
+  fail, normalizeModelRoute, projectIdFromCwd, sessionCwd, type LessonTrigger,
   type MemoryMutationOptions, type MemoryRecord, type MemoryService, type PreStepDecision, type ReviewSnapshot,
-  type RpcResult, type SkillRecord, type SessionWatermark,
+  type RpcResult, type SessionWatermark, type SkillRecord, type SelfImprovementSettings,
 } from './contracts.ts'
 import { detectLessonTriggers, lastHumanRequestText, requestTextFromMessages, type SessionEventLike } from './detect.ts'
+import { modelMenuOverride } from '@klarkxy/dsh-plugin-kit/model-menu'
 import { candidateRecord, draftFromTrigger, EXTRACT_SYSTEM, hasSameEvidence, parseExtraction } from './extract.ts'
 import { canAutoActivate, groundedProcedure } from './procedure.ts'
 import { injectLessonMessages } from './inject.ts'
@@ -28,10 +30,13 @@ export interface SessionLike {
 
 export interface EngineOptions {
   memory: () => MemoryService | undefined
-  ai: () => Pick<AiServices, 'activate'> | undefined
+  llm?: LlmTextCaller
+  host?: unknown
   sessionOf: (sessionId: string) => SessionLike | undefined
   skills: KvTableLike<SkillRecord>
   watermarks: KvTableLike<SessionWatermark>
+  /** Plugin-page settings row; absent keeps the shared purpose route. */
+  settings?: KvTableLike<SelfImprovementSettings>
   now?: () => number
 }
 
@@ -59,12 +64,31 @@ export class SelfImprovementEngine {
   private storageFailed = false
   private chain = Promise.resolve()
   private readonly extractJobs = new Map<string, number>()
-  private aiScope: AiFeatureScope | undefined
   private seenProjects = new Set<string>()
+  private settings: SelfImprovementSettings
   private readonly now: () => number
 
   constructor(private readonly options: EngineOptions) {
     this.now = options.now ?? Date.now
+    this.settings = structuredClone(options.settings?.get(SETTINGS_KEY) ?? defaultSettings())
+  }
+
+  getSettings(): SelfImprovementSettings {
+    return structuredClone(this.settings)
+  }
+
+  /** Empty saved route means no override at all. */
+  private modelOverride(): ReturnType<typeof modelMenuOverride> {
+    return modelMenuOverride(this.settings.model)
+  }
+
+  async updateSettings(model: SelfImprovementSettings['model'], expectedRevision: number): Promise<SelfImprovementSettings> {
+    if (!this.options.settings) return this.getSettings()
+    if (expectedRevision !== this.settings.revision) throw new Error('SELF_IMPROVEMENT_STALE')
+    const next: SelfImprovementSettings = { revision: expectedRevision + 1, model: structuredClone(model) }
+    await this.options.settings.put(SETTINGS_KEY, next)
+    this.settings = next
+    return this.getSettings()
   }
 
   getGeneration(): number { return this.generation }
@@ -74,8 +98,6 @@ export class SelfImprovementEngine {
     this.active = false
     this.generation += 1
     this.lifetime.abort()
-    this.aiScope?.dispose()
-    this.aiScope = undefined
   }
 
   private memoryOrError(): MemoryService | RpcResult<never> {
@@ -245,37 +267,28 @@ export class SelfImprovementEngine {
     }))
   }
 
-  private ensureAi(): AiFeatureScope | undefined {
-    if (this.aiScope?.active) return this.aiScope
-    const ai = this.options.ai()
-    if (!ai) return undefined
-    this.aiScope = ai.activate(SELF_IMPROVEMENT_ACTIVATE_ID)
-    this.aiScope.registerPurpose({
-      id: EXTRACT_PURPOSE,
-      label: '经验学习摘录',
-      defaultTarget: { kind: 'role', role: 'normal' },
-      maxOutputTokens: 1200,
-      maxInputChars: 8000,
-    })
-    return this.aiScope
-  }
-
   private async draftTrigger(trigger: LessonTrigger, sessionId: string, sourceVersion: string, signal: AbortSignal, generation: number) {
-    const scope = this.ensureAi()
-    if (!scope) return draftFromTrigger(trigger)
-    const result = await scope.run({
-      purpose: EXTRACT_PURPOSE,
-      sessionId,
-      sourceVersion,
-      system: EXTRACT_SYSTEM,
-      input: JSON.stringify({ kind: trigger.kind, evidence: trigger.evidence, hint: trigger.contentHint }),
-      signal,
-      isCurrent: () => this.active && this.generation === generation && scope.active,
-      priority: 'background',
-    })
+    const llm = this.options.llm
+    const route = llm ? resolveFeatureModel(this.options.host, this.modelOverride() ?? undefined, sessionId) : undefined
+    if (!llm || !route) return draftFromTrigger(trigger)
+    let text: string
+    try {
+      const result = await callLlmText(llm, {
+        plugin: SELF_IMPROVEMENT_ACTIVATE_ID,
+        route,
+        system: EXTRACT_SYSTEM,
+        text: JSON.stringify({ kind: trigger.kind, evidence: trigger.evidence, hint: trigger.contentHint }).slice(0, 8000),
+        maxTokens: 1200,
+        signal,
+        sessionId,
+        isCurrent: () => this.active && this.generation === generation,
+      })
+      text = result.text
+    } catch {
+      return undefined
+    }
     if (!this.active || this.generation !== generation) return undefined
-    if (result.receipt.status !== 'success') return undefined
-    const parsed = parseExtraction(result.text)
+    const parsed = parseExtraction(text)
     if (!parsed || 'skip' in parsed || !groundedProcedure(parsed, trigger)) return undefined
     return parsed
   }
@@ -587,6 +600,22 @@ export class SelfImprovementEngine {
       const sessionId = str(body, 'sessionId')
       const projectId = projectIdFromCwd(sessionCwd(this.options.sessionOf(sessionId)))
       if (endpoint === 'status') return await this.snapshot(sessionId || undefined)
+      if (endpoint === 'settings') return { ok: true, value: this.getSettings() }
+      if (endpoint === 'settings.update') {
+        const expectedRevision = int(body, 'expectedRevision')
+        if (expectedRevision === undefined) return fail('INVALID', '缺少预期版本。')
+        const model = normalizeModelRoute(body.model)
+        if (!model.provider || !model.model) {
+          if (body.model && typeof body.model === 'object' && !Array.isArray(body.model)
+            && (typeof (body.model as Record<string, unknown>).provider !== 'string'
+              || typeof (body.model as Record<string, unknown>).model !== 'string')) {
+            return fail('INVALID', '模型格式无效。')
+          }
+        }
+        try {
+          return { ok: true, value: await this.updateSettings(model, expectedRevision) }
+        } catch { return fail('SELF_IMPROVEMENT_STALE', '设置已更新，请刷新后重试。') }
+      }
       if (endpoint === 'extract') {
         const session = this.options.sessionOf(sessionId)
         if (!session) return fail('NOT_FOUND', '找不到会话。')

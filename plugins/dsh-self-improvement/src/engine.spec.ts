@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import * as kit from '@klarkxy/dsh-plugin-kit'
+import type { LlmTextCaller, LlmTextRequest } from '@klarkxy/dsh-plugin-kit'
 import { MemoryRuntime, defaultSettings } from '@klarkxy/dsh-memory'
 import type { MemoryPersistedState } from '@klarkxy/dsh-memory/contracts'
 import { MEMORY_UNAVAILABLE_MESSAGE } from './contracts.ts'
@@ -8,14 +10,28 @@ import {
 } from './fakes.ts'
 import { isSelfImprovementLessonMessage } from './inject.ts'
 import { downloadMarkdown } from './skills.ts'
-import type { AiServices, AuxiliaryResult } from './contracts.ts'
 
-function engine(memory?: MemoryFake, ai?: Pick<AiServices, 'activate'>, now = 50) {
+const hostModel = { agentDefaultModel: { currentSelection: () => ({ provider: 'host', model: 'chat' }) } }
+const unusedLlm: LlmTextCaller = {
+  prepareCall: async () => { throw new Error('unused') },
+  resolveCallConfig: async () => { throw new Error('unused') },
+}
+beforeEach(() => { vi.restoreAllMocks() })
+
+/** Stub one native extraction call; the host route resolves through the shared host face. */
+function stubExtract(run: (request: LlmTextRequest) => Promise<{ text: string }>) {
+  vi.spyOn(kit, 'callLlmText').mockImplementation(async (_llm, request) => {
+    const answered = await run(request)
+    return { text: answered.text, provider: 'host', model: 'chat' }
+  })
+}
+
+function engine(memory?: MemoryFake, llm?: LlmTextCaller, now = 50) {
   const store = tables()
   const sessions = new Map<string, ReturnType<typeof session>>()
   const impl = new SelfImprovementEngine({
     memory: () => memory,
-    ai: () => ai,
+    ...(llm ? { llm, host: hostModel } : {}),
     sessionOf: id => sessions.get(id),
     skills: store.skills,
     watermarks: store.watermarks,
@@ -200,16 +216,9 @@ describe('self-improvement engine', () => {
 
   it('rejects stale extraction after disable and stale revocation', async () => {
     const memory = new MemoryFake()
-    let finish: ((result: AuxiliaryResult) => void) | undefined
-    const ai: Pick<AiServices, 'activate'> = {
-      activate: () => ({
-        plugin: '@klarkxy/dsh-self-improvement', signal: new AbortController().signal, active: true,
-        registerPurpose: () => () => {},
-        dispose: () => {},
-        run: () => new Promise(resolve => { finish = resolve }),
-      }),
-    }
-    const { impl, sessions } = engine(memory, ai)
+    let finish: ((result: { text: string }) => void) | undefined
+    stubExtract(() => new Promise(resolve => { finish = resolve }))
+    const { impl, sessions } = engine(memory, unusedLlm)
     sessions.set('s1', liveSession('s1', '/novel', [
       assistantMessage(1, 'x'),
       userMessage(2, '不要再写绝对路径'),
@@ -218,13 +227,7 @@ describe('self-improvement engine', () => {
     for (let i = 0; i < 50 && !finish; i += 1) await Promise.resolve()
     expect(finish).toBeTypeOf('function')
     impl.dispose()
-    finish?.({
-      text: '{"title":"late","content":"should not land"}',
-      receipt: {
-        id: 'r', plugin: 'p', purpose: 'self-improvement.extract', sourceVersion: 'v',
-        status: 'success', attempts: 1, cost: null, startedAt: 1, finishedAt: 2,
-      },
-    })
+    finish?.({ text: '{"title":"late","content":"should not land"}' })
     const result = await pending
     expect(result.ok).toBe(false)
     if (result.ok) return
@@ -354,16 +357,12 @@ describe('self-improvement engine', () => {
 
   it('keeps correlated tool recovery as a candidate until independently accepted', async () => {
     const memory = new MemoryFake()
-    const ai: Pick<AiServices, 'activate'> = { activate: () => ({
-      plugin: 'test', active: true, signal: new AbortController().signal, dispose() {}, registerPurpose: () => () => {},
-      run: async request => ({
-        text: JSON.stringify({ kind: 'procedure', title: '相对路径写入', procedure: {
-          origin: 'observation', goal: '写入目标文件', when: ['写入失败'], steps: ['更正编码后重试'], avoid: [], verify: ['读取目标文件检查实际内容'],
-        }, evidenceQuotes: ['EACCES', 'wrote'], exceptions: [] }),
-        receipt: { id: 'r', plugin: 'test', purpose: request.purpose, sourceVersion: request.sourceVersion, status: 'success', attempts: 1, cost: null, startedAt: 1, finishedAt: 2 },
-      }),
-    }) }
-    const { impl, sessions } = engine(memory, ai)
+    stubExtract(async () => ({
+      text: JSON.stringify({ kind: 'procedure', title: '相对路径写入', procedure: {
+        origin: 'observation', goal: '写入目标文件', when: ['写入失败'], steps: ['更正编码后重试'], avoid: [], verify: ['读取目标文件检查实际内容'],
+      }, evidenceQuotes: ['EACCES', 'wrote'], exceptions: [] }),
+    }))
+    const { impl, sessions } = engine(memory, unusedLlm)
     sessions.set('s1', liveSession('s1', '/novel', [
       toolCall(1, 'write', 'c1', { path: 'chapter.md', encoding: 'bad' }),
       toolResult(2, 'c1', true, 'EACCES'),
@@ -487,23 +486,12 @@ describe('self-improvement engine', () => {
       ],
     }
     let runs = 0
-    let finish: ((result: AuxiliaryResult) => void) | undefined
-    const ai: Pick<AiServices, 'activate'> = {
-      activate: () => ({
-        plugin: '@klarkxy/dsh-self-improvement',
-        signal: new AbortController().signal,
-        active: true,
-        registerPurpose: () => () => {},
-        dispose: () => {},
-        run: () => {
-          runs += 1
-          return new Promise(resolve => { finish = resolve })
-        },
-      }),
-    }
+    let finish: ((result: { text: string }) => void) | undefined
+    stubExtract(() => { runs += 1; return new Promise(resolve => { finish = resolve }) })
     const impl = new SelfImprovementEngine({
       memory: () => memory,
-      ai: () => ai,
+      llm: unusedLlm,
+      host: hostModel,
       sessionOf: id => id === sessionId ? live : undefined,
       skills: store.skills,
       watermarks: store.watermarks,
@@ -533,10 +521,6 @@ describe('self-improvement engine', () => {
     if (still.ok) expect(still.value.extracting).toBe(true)
     finish?.({
       text: JSON.stringify({ kind: 'procedure', title: '保留剧情', procedure: { origin: 'instruction', goal: '调整语言', when: ['语言润色'], steps: ['保留已有剧情'], avoid: [], verify: ['核对修改前后的剧情'] }, evidenceQuotes: [correction], exceptions: [] }),
-      receipt: {
-        id: 'r', plugin: 'p', purpose: 'self-improvement.extract', sourceVersion: 'v',
-        status: 'success', attempts: 1, cost: null, startedAt: 1, finishedAt: 2,
-      },
     })
     const [autoDone, manualDone, cancelledDone] = await Promise.all([auto, manual, cancelled])
     expect(autoDone).toBeUndefined()

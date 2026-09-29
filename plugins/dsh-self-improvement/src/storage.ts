@@ -1,6 +1,9 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
-import { MAX_PROJECT_ID_CHARS } from './contracts.ts'
+import { MAX_PROJECT_ID_CHARS, SETTINGS_KEY, defaultSettings } from './contracts.ts'
+import type { SelfImprovementSettings } from './contracts.ts'
+
+export { SETTINGS_KEY }
 
 const knowledgeScopeSchema = z.union([
   z.object({ kind: z.literal('global') }).strict(),
@@ -43,11 +46,30 @@ export const watermarkSchema = z.object({
   updatedAt: z.number().int().nonnegative(),
 }).strict()
 
+/** Plugin-page model route. An empty provider/model keeps the shared default route. */
+const settingsSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  model: z.object({
+    provider: z.string().min(0).max(250),
+    model: z.string().min(0).max(250),
+    reasoningEffort: z.string().min(1).max(80).optional(),
+  }).strict().default(defaultSettings().model),
+}).strict()
+
 export const selfImprovementDomain = defineDomain({
   name: 'dsh_editor_self_improvement',
-  version: 1,
+  version: 2,
+  /** v1 rows stay readable: a missing settings record fills defaults on read. */
+  compatibleVersions: [1],
   tables: {
     skills: domainTable<string, z.output<typeof skillRecordSchema>>(skillRecordSchema),
     watermarks: domainTable<string, z.output<typeof watermarkSchema>>(watermarkSchema),
+    settings: domainTable<string, SelfImprovementSettings>(settingsSchema),
   },
 })
+
+export function parseSettings(value: unknown): SelfImprovementSettings {
+  const parsed = settingsSchema.safeParse(value)
+  if (!parsed.success) return defaultSettings()
+  return structuredClone(parsed.data)
+}

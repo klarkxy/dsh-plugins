@@ -1,11 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { SELF_IMPROVEMENT_RPC_CHANNEL, type AiServices, type MemoryService, type PreStepDecision, type SessionWatermark, type SkillRecord } from './contracts.ts'
+import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { SELF_IMPROVEMENT_RPC_CHANNEL, type MemoryService, type PreStepDecision, type SelfImprovementSettings, type SessionWatermark, type SkillRecord } from './contracts.ts'
 import { SelfImprovementEngine, type KvTableLike, type SessionLike } from './engine.ts'
-import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-ai-services/host-rpc'
+import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { selfImprovementDomain } from './storage.ts'
 
 export const name = '@klarkxy/dsh-self-improvement'
-export const inject = ['storageDomain', 'connection', 'webServer'] as const
+export const inject = ['storageDomain', 'connection', 'webServer', 'llm'] as const
 export { CHAT_EVENTS_SLOT, SELF_IMPROVEMENT_RPC_CHANNEL } from './contracts.ts'
 export { SelfImprovementEngine } from './engine.ts'
 
@@ -14,11 +15,13 @@ declare module '@deepseek-ai/cordis' { interface Context { selfImprovement: Self
 type DomainHandle = {
   table(name: 'skills'): KvTableLike<SkillRecord>
   table(name: 'watermarks'): KvTableLike<SessionWatermark>
+  table(name: 'settings'): KvTableLike<SelfImprovementSettings>
   close(): Promise<void>
 }
 
 type Host = Context & HostRpcContext & {
   storageDomain: { open(spec: typeof selfImprovementDomain): Promise<DomainHandle> }
+  llm: LlmTextCaller
 }
 
 function readService<T>(ctx: Context, key: string): T | undefined {
@@ -46,10 +49,12 @@ export async function apply(ctx: Context): Promise<void> {
   const domain = await host.storageDomain.open(selfImprovementDomain)
   const engine = new SelfImprovementEngine({
     memory: () => readService<MemoryService>(ctx, 'aiMemory'),
-    ai: () => readService<AiServices>(ctx, 'aiServices'),
+    llm: host.llm,
+    host,
     sessionOf: id => sessionOf(ctx, id),
     skills: domain.table('skills'),
     watermarks: domain.table('watermarks'),
+    settings: domain.table('settings'),
   })
   ctx.effect(() => async () => { engine.dispose(); await domain.close() }, 'self-improvement.dispose')
   ctx.provide('selfImprovement', engine)

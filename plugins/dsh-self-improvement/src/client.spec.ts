@@ -2,7 +2,7 @@ import { createElement, isValidElement, type ReactElement } from 'react'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { MEMORY_UNAVAILABLE_MESSAGE, SELF_IMPROVEMENT_REVIEW_SERVICE } from './contracts.ts'
+import { MEMORY_UNAVAILABLE_MESSAGE, SELF_IMPROVEMENT_PLUGIN, SELF_IMPROVEMENT_REVIEW_SERVICE } from './contracts.ts'
 import {
   apply, beginReviewRequest, disposeReviewRequest, exportSkillIfCurrent, inject, loadReviewSnapshot,
   memoryUnavailableCopy, parseSeatProps, peekReviewSnapshot, ReviewPanel, reviewPanelKey, SelfImprovementSettings,
@@ -98,8 +98,8 @@ describe('self-improvement client seats', () => {
   })
 
   it('resolves native settings seats and peeks without aborting an in-progress review action', () => {
-    expect(inject).toEqual(['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
-    expect(clientSrc).toContain("from '@klarkxy/dsh-ai-services/client-utils'")
+    expect(inject).toEqual(['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
+    expect(clientSrc).toContain("from '@klarkxy/dsh-plugin-kit/client-utils'")
     expect(clientSrc).toContain('type Client = NativeSurfaceClient &')
     expect(clientSrc).toContain('useNativeSeat(client, props)')
     expect(clientSrc).toContain('useFeatureRefresh(')
@@ -109,5 +109,34 @@ describe('self-improvement client seats', () => {
     expect(shouldSkipReviewRefresh({ busy: true, editing: false })).toBe(true)
     expect(shouldSkipReviewRefresh({ busy: false, editing: true })).toBe(true)
     expect(typeof peekReviewSnapshot).toBe('function')
+  })
+
+  it('registers its own plugin page settings row with a model menu', () => {
+    const names: Array<{ name: string; id?: string; key?: string }> = []
+    const injected: string[] = []
+    apply({
+      effect(fn: () => (() => void) | void) { fn() },
+      provide() {},
+      slots: {
+        inject(key: string, callback: () => unknown) {
+          injected.push(key)
+          callback()
+          return () => {}
+        },
+        register(spec: { name: string; id?: string; key?: string }, _render: unknown) {
+          names.push(spec)
+          return () => {}
+        },
+      },
+      connection: { rpc: { call: async () => ({ ok: true, value: { revision: 0, model: { provider: '', model: '' } } }) } },
+      remote: { session: { modelCatalog: async () => ({ groups: [] }) } },
+    } as never)
+    expect(injected).toContain('plugins.bundle.config')
+    expect(names).toContainEqual({ name: 'plugins.bundle.config', key: SELF_IMPROVEMENT_PLUGIN })
+    expect(clientSrc).toContain("from '@klarkxy/dsh-plugin-kit/model-menu'")
+    expect(clientSrc).toContain('data-testid="self-improvement-model"')
+    expect(clientSrc).toContain("SELF_IMPROVEMENT_RPC_CHANNEL, 'settings.update'")
+    expect(clientSrc).toContain('parseModelMenuChoices(value, route)')
+    expect(clientSrc).toContain('modelMenuChoiceKey(route.provider, route.model)')
   })
 })
