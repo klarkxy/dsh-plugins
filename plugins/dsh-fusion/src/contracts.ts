@@ -72,7 +72,16 @@ export interface FusionPair {
   tasks: FusionTask[]
   createdAt: number
 }
-export interface FusionState { version: 1; revision: number; pairs: FusionPair[] }
+/** Plugin-page model selection. Empty provider/model means "follow the default". */
+export interface FusionModelRoute { provider: string; model: string; reasoningEffort?: string }
+export interface FusionSettings {
+  revision: number
+  /** Model used when creating a new Fusion pair. Existing pairs keep their pinned route. */
+  model: FusionModelRoute
+}
+export const defaultModelRoute = (): FusionModelRoute => ({ provider: '', model: '' })
+export const defaultFusionSettings = (): FusionSettings => ({ revision: 0, model: defaultModelRoute() })
+export interface FusionState { version: 1; revision: number; pairs: FusionPair[]; settings: FusionSettings }
 export interface FusionStore { load(): FusionState; save(next: FusionState): Promise<void> }
 /** This port adapts native subagents. It must not own another Agent loop or inbox. */
 export interface FusionNative {
@@ -93,7 +102,7 @@ export interface FusionStatus {
 }
 export type RpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
 export const isWorking = (state: TaskState): boolean => ['dispatching', 'working', 'decision', 'review'].includes(state)
-export const emptyFusionState = (): FusionState => ({ version: 1, revision: 0, pairs: [] })
+export const emptyFusionState = (): FusionState => ({ version: 1, revision: 0, pairs: [], settings: defaultFusionSettings() })
 
 /** Browser commands identify stored authority; no command accepts replacement candidate text. */
 export interface FusionCandidateAction {

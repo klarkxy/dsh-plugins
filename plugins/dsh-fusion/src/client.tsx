@@ -1,23 +1,29 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { CHAT_EVENTS_SLOT } from '@klarkxy/dsh-ai-services/contracts'
-import { useNativeSeat, type NativeSurfaceClient } from '@klarkxy/dsh-ai-services/client-utils'
+import { CHAT_EVENTS_SLOT } from '@klarkxy/dsh-plugin-kit/contracts'
+import { useNativeSeat, type NativeSurfaceClient } from '@klarkxy/dsh-plugin-kit/client-utils'
+import {
+  modelMenuChoiceKey, modelMenuEffortOptions, parseModelMenuChoiceKey, parseModelMenuChoices, type ModelMenuChoice,
+} from '@klarkxy/dsh-plugin-kit/model-menu'
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react'
-import { FUSION_RPC_CHANNEL, type FusionCandidate, type FusionCandidateAction, type FusionPreview,
-  type FusionStatus, type FusionTask, type RpcResult } from './contracts.ts'
+import {
+  FUSION_PLUGIN, FUSION_RPC_CHANNEL, defaultModelRoute, type FusionCandidate, type FusionCandidateAction,
+  type FusionPreview, type FusionSettings, type FusionStatus, type FusionTask, type RpcResult,
+} from './contracts.ts'
 import { acceptedCandidate, actionIdentity, activityLabel, canAdopt, currentTask, isCurrentAction, notifyAppliedReceipt, reconciledReceipt, taskAnchorTurn, type ObservedPendingApplication, type TurnEntry } from './client-projection.ts'
 import { FusionClientStore, type FusionClientSources, type FusionEventSource } from './client-store.ts'
 import { taskView, type FusionLocale } from './presentation.ts'
 import { fusionClientStyles } from './client-styles.ts'
 
 export const name = 'dsh-fusion-client'
-export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
+export const inject = ['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 export const NATIVE_TURN_TAIL_SLOT = 'conversation.chat.turnTail'
 
 type FusionClient = Omit<NativeSurfaceClient, 'sessions' | 'connection'> & {
   connection: FusionClientSources['connection']
+  remote?: { session?: { modelCatalog?: () => Promise<unknown> } }
   slots: {
     inject(key: string, register: () => unknown): () => void
-    register(spec: { name: string; id: string; order: number; label: string }, render: unknown): () => void
+    register(spec: { name: string; id: string; order: number; label: string } | { name: string; key: string }, render: unknown): () => void
   }
   sidebarRight?: { openResource(address: string, options?: { kind?: string; preferNewPane?: boolean }): void }
   sessions: {
@@ -315,6 +321,101 @@ function NativeFusionSeat(props: { client: FusionClient; store: FusionClientStor
   return <FusionSeat client={props.client} store={props.store} native owner={props.owner} />
 }
 
+/** Plugin-page settings row: the model used when a new Fusion pair is created. */
+export function FusionSettingsPanel({ client }: { client: FusionClient }) {
+  const optionsId = useId()
+  const [settings, setSettings] = useState<FusionSettings>()
+  const [choices, setChoices] = useState<ModelMenuChoice[]>([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+  const route = settings?.model ?? defaultModelRoute()
+  const selected = choices.find(item => item.provider === route.provider && item.model === route.model)
+  const efforts = modelMenuEffortOptions(selected, route.reasoningEffort)
+
+  const call = useCallback(
+    (endpoint: string, payload: unknown) => client.connection.rpc.call(FUSION_RPC_CHANNEL, endpoint, payload),
+    [client],
+  )
+
+  useEffect(() => {
+    let live = true
+    void call('settings', {}).then(async value => {
+      if (!live) return
+      const result = value as RpcResult<FusionSettings>
+      if (!result || result.ok !== true) {
+        setError(result && !result.ok ? result.error.message : 'failed')
+        return
+      }
+      setSettings(result.value)
+      void client.remote?.session?.modelCatalog?.()
+        ?.then(catalog => { if (live) setChoices(parseModelMenuChoices(catalog, result.value.model)) })
+        .catch(() => { if (live) setChoices([]) })
+    }).catch(() => { if (live) setError('failed') })
+    return () => { live = false }
+  }, [call, client])
+
+  async function save(next: { provider: string; model: string; reasoningEffort?: string }): Promise<void> {
+    if (!settings) return
+    setBusy(true); setError(''); setNote('')
+    try {
+      const value = await call('settings.update', {
+        expectedRevision: settings.revision,
+        model: { provider: next.provider, model: next.model, ...(next.reasoningEffort ? { reasoningEffort: next.reasoningEffort } : {}) },
+      })
+      const result = value as RpcResult<FusionSettings>
+      if (!result || result.ok !== true) throw new Error(result && !result.ok ? result.error.message : 'failed')
+      setSettings(result.value)
+      setNote('已保存。')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <section className="fusion-settings" data-testid="fusion-settings">
+    {error && <p role="alert" className="fusion-settings-error">{error}</p>}
+    {note && <p role="status">{note}</p>}
+    <label htmlFor={optionsId}>
+      副驾模型
+      <select
+        id={optionsId}
+        value={modelMenuChoiceKey(route.provider, route.model)}
+        disabled={busy || !settings}
+        onChange={event => {
+          const key = event.target.value
+          if (!key) { void save(defaultModelRoute()); return }
+          const parsed = parseModelMenuChoiceKey(key)
+          if (parsed) void save(parsed)
+        }}
+      >
+        <option value="">默认模型</option>
+        {choices.map(choice => (
+          <option key={modelMenuChoiceKey(choice.provider, choice.model)} value={modelMenuChoiceKey(choice.provider, choice.model)}>
+            {choice.label}
+          </option>
+        ))}
+      </select>
+    </label>
+    {selected && efforts.length > 0 && (
+      <label htmlFor={`${optionsId}-effort`}>
+        思考强度
+        <select
+          id={`${optionsId}-effort`}
+          value={route.reasoningEffort ?? ''}
+          disabled={busy}
+          onChange={event => void save({ ...route, reasoningEffort: event.target.value || undefined })}
+        >
+          <option value="">默认</option>
+          {efforts.map(effort => <option key={effort.id} value={effort.id}>{effort.name}</option>)}
+        </select>
+      </label>
+    )}
+    <p className="fusion-settings-meta">新建搭档时生效；已有搭档保持其创建时的模型。</p>
+  </section>
+}
+
 export function apply(ctx: Context): void {
   const client = ctx as unknown as FusionClient
   const store = new FusionClientStore(client)
@@ -327,6 +428,10 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'dsh-fusion-client.styles')
+  ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
+    { name: 'plugins.bundle.config', key: FUSION_PLUGIN },
+    () => <FusionSettingsPanel client={client} />,
+  )), 'dsh-fusion-client.settings')
   ctx.effect(() => client.slots.inject(CHAT_EVENTS_SLOT, () => client.slots.register({
     name: CHAT_EVENTS_SLOT, id: 'fusion', order: 30, label: '协作',
   }, (owner: unknown) => <FusionSeat key={seatKey(owner)} client={client} store={store} native={false} owner={owner} />)),

@@ -8,7 +8,9 @@ export const fusionStateSchema = z.unknown().transform((value, ctx): FusionState
   try { return validateState(value) }
   catch (error) { ctx.addIssue({ code: 'custom', message: error instanceof Error ? error.message : 'Invalid Fusion state' }); return z.NEVER }
 })
-export const fusionDomain = defineDomain({ name: 'dsh_fusion', version: 1,
+export const fusionDomain = defineDomain({ name: 'dsh_fusion', version: 2,
+  /** v1 rows stay readable: the absent plugin-page settings fill defaults. */
+  compatibleVersions: [1],
   tables: { state: domainTable<string, FusionState>(fusionStateSchema) },
 })
 export const FUSION_STATE_KEY = 'state'

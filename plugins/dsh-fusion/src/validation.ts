@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { FusionBrief, FusionState, FusionTarget, Json, ModelRoute } from './contracts.ts'
+import { defaultFusionSettings, defaultModelRoute, type FusionBrief, type FusionPair, type FusionSettings, type FusionState, type FusionTarget, type Json, type ModelRoute } from './contracts.ts'
 
 export class FusionError extends Error {
   readonly code: string
@@ -58,10 +58,28 @@ export function target(value: unknown): FusionTarget | undefined {
 function timestamp(value: unknown): void {
   requireFusion(typeof value === 'number' && Number.isSafeInteger(value) && value >= 0, 'INVALID_STATE', 'Invalid record timestamp.')
 }
+/** Plugin-page settings, optional in storage: rows without them get the default. */
+function fusionSettings(value: unknown): FusionSettings {
+  if (value === undefined || value === null) return defaultFusionSettings()
+  const row = object(value)
+  requireFusion(
+    typeof row.revision === 'number' && Number.isSafeInteger(row.revision) && Number(row.revision) >= 0,
+    'INVALID_STATE', 'Invalid Fusion settings revision.',
+  )
+  const revision = Number(row.revision)
+  const model = object(row.model)
+  const provider = text(model.provider, 'model provider', 300, true)
+  const modelId = text(model.model, 'model id', 300, true)
+  const effort = model.reasoningEffort === undefined ? undefined : text(model.reasoningEffort, 'reasoningEffort', 100)
+  if (!provider || !modelId) return { revision, model: defaultModelRoute() }
+  return { revision, model: effort ? { provider, model: modelId, reasoningEffort: effort } : { provider, model: modelId } }
+}
+
 /** Validate persisted control records before allowing any native work to resume. */
 export function validateState(value: unknown): FusionState {
   const row = object(value)
-  requireFusion(row.version === 1 && Number.isSafeInteger(row.revision) && Number(row.revision) >= 0, 'INVALID_STATE', 'Unsupported Fusion storage version.')
+  const storedVersion = Number(row.version)
+  requireFusion((storedVersion === 1 || storedVersion === 2) && Number.isSafeInteger(row.revision) && Number(row.revision) >= 0, 'INVALID_STATE', 'Unsupported Fusion storage version.')
   requireFusion(Array.isArray(row.pairs) && row.pairs.length <= 512, 'INVALID_STATE', 'Invalid Fusion pair table.')
   const pairIds = new Set<string>(), leads = new Set<string>(), children = new Set<string>(), tasks = new Set<string>()
   for (const value of row.pairs) {
@@ -137,6 +155,8 @@ export function validateState(value: unknown): FusionState {
     }
   }
   requireFusion([...children].every(id => !leads.has(id)), 'INVALID_STATE', 'Recursive Fusion identity.')
-  requireFusion(JSON.stringify(row).length <= 16_000_000, 'CAPACITY', 'Fusion history capacity reached. Existing records were preserved.')
-  return structuredClone(row) as unknown as FusionState
+  const stored = JSON.stringify(row).length
+  requireFusion(stored <= 16_000_000, 'CAPACITY', 'Fusion history capacity reached. Existing records were preserved.')
+  const pairs = (row.pairs as unknown[]).map(item => structuredClone(item)) as FusionPair[]
+  return { version: 1, revision: Number(row.revision), pairs, settings: fusionSettings(row.settings) }
 }

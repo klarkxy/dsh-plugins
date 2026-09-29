@@ -7,8 +7,9 @@ import type {} from '@deepseek-ai/dsh-session-projection'
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import type { AiServices } from '@klarkxy/dsh-ai-services/contracts'
-import { FUSION_PLUGIN, FUSION_PURPOSE, FUSION_TOOLS, type FusionActor, type FusionCandidateAction, type FusionPair, type FusionProfile, type FusionStatus, type FusionStore } from './contracts.ts'
+import { resolveFeatureModel } from '@klarkxy/dsh-plugin-kit'
+import { modelMenuOverride } from '@klarkxy/dsh-plugin-kit/model-menu'
+import { FUSION_TOOLS, type FusionActor, type FusionCandidateAction, type FusionPair, type FusionProfile, type FusionSettings, type FusionStatus, type FusionStore, type ModelRoute } from './contracts.ts'
 import type { FusionWritingHost } from './host-contracts.ts'
 import { isOwnedChildNotice } from './presentation.ts'
 import { FusionService } from './service.ts'
@@ -19,13 +20,12 @@ import { brief, integer, object, requireFusion, text } from './validation.ts'
 export class FusionRuntime {
   readonly service: FusionService
   private readonly ctx: Context
-  private readonly ai: AiServices
   private readonly disposers: Array<() => unknown> = []
   private readonly installed = new Map<Agent, Array<() => unknown>>()
   private readonly pendingNoticeClaims = new Set<Promise<void>>()
   private closing?: Promise<void>
-  constructor(ctx: Context, store: FusionStore, ai: AiServices) {
-    this.ctx = ctx; this.ai = ai
+  constructor(ctx: Context, store: FusionStore) {
+    this.ctx = ctx
     const native = createNativeBridge({ agents: ctx.agents, subagents: ctx.subagents }, {
       scopedReport: true,
       verifyContinuation: async (pair, signal) => { requireFusion(await this.inspectAdmission(pair, signal) === 'present', 'CHILD_MISSING', 'The persistent Sidekick is missing. Explicitly resume to inspect recovery.') },
@@ -89,9 +89,6 @@ export class FusionRuntime {
   }
   async start(): Promise<void> {
     await this.service.initialized()
-    const scope = this.ai.activate(FUSION_PLUGIN)
-    this.disposers.push(() => scope.dispose())
-    this.disposers.push(scope.registerPurpose({ id: FUSION_PURPOSE, label: '副驾持久搭档', defaultTarget: { kind: 'role', role: 'normal' } }))
     this.disposers.push(this.ctx.on('agent/created', async ({ agent }) => { await this.install(agent); return undefined }, { global: true }))
     this.disposers.push(this.ctx.on('agent/disposed', ({ agent }) => { this.uninstall(agent) }, { global: true }))
     for (const agent of this.ctx.agents.list()) await this.install(agent)
@@ -224,11 +221,19 @@ export class FusionRuntime {
     const actor = this.actor(agent), row = object(input), pair = this.service.pairFor(actor.sessionId)
     requireFusion(!actor.parentSessionId, 'UNAUTHORIZED', 'Only root sessions delegate.')
     const profile = this.profile(agent, pair)
-    const route = pair?.route ?? await this.ai.resolve(FUSION_PURPOSE, actor.sessionId)
+    // A pair keeps the route selected when it was created. A new pair follows the
+    // plugin-page selection, then the live session model and the host default.
+    const route = pair?.route ?? this.resolveNewPairRoute(actor.sessionId)
     signal.throwIfAborted(); this.actor(agent)
     const target = profile === 'writing' ? await this.writing()!.capture(actor, row.target, signal) : undefined
     signal.throwIfAborted(); this.actor(agent)
     return this.service.delegate(actor, { profile, route: { provider: route.provider, model: route.model, ...(route.reasoningEffort ? { reasoningEffort: route.reasoningEffort } : {}) }, brief: brief(row), ...(target ? { target } : {}), signal })
+  }
+  /** Plugin-page selection first; otherwise the live session model, then the host default. */
+  private resolveNewPairRoute(sessionId: string): ModelRoute {
+    const route = resolveFeatureModel(this.ctx, modelMenuOverride(this.service.settings().model), sessionId)
+    if (!route) requireFusion(false, 'NO_ROUTE', 'No Sidekick model is available. Select one in the plugin settings, or set the host default chat model.')
+    return { provider: route.provider, model: route.model, ...(route.reasoningEffort ? { reasoningEffort: route.reasoningEffort } : {}) }
   }
   private rpcActor(sessionId: string): { actor: FusionActor; session: NonNullable<ReturnType<Context['sessions']['get']>> } {
     const session = this.ctx.sessions.get(sessionId as SessionId)
@@ -249,13 +254,22 @@ export class FusionRuntime {
     if (domain) await this.service.reconcile(actor, domain, signal)
     signal.throwIfAborted(); this.rpcActor(sessionId)
     if (endpoint === 'status') {
+      // A passive status read resolves configuration only; it never starts inference.
       let error: string | undefined
-      if (!pair) { try { await this.ai.resolve(FUSION_PURPOSE, sessionId) } catch (cause) { error = cause instanceof Error ? cause.message : String(cause) } }
+      if (!pair) {
+        try { this.resolveNewPairRoute(sessionId) }
+        catch (cause) { error = cause instanceof Error ? cause.message : String(cause) }
+      }
       const current = this.service.pairFor(sessionId)
       const status: FusionStatus = { available: true, configured: !error, profile, revision: this.service.snapshot().revision,
         ...(error ? { error } : {}), ...(current ? { pair: current } : {}), usage: { leadTokens: null, sidekickTokens: null, cost: null },
         activity: { lead: this.ctx.agents.get(sessionId as SessionId)?.status ?? 'idle', sidekick: current ? this.ctx.agents.get(current.childSessionId as SessionId)?.status ?? 'idle' : 'idle' } }
       return status
+    }
+    if (endpoint === 'settings') return this.service.settings()
+    if (endpoint === 'settings.update') {
+      const expectedRevision = integer(row.expectedRevision, 'expected revision')
+      return this.service.updateSettings(object(row.model), expectedRevision)
     }
     const taskId = text(row.taskId, 'task id', 200), taskRevision = integer(row.taskRevision, 'task revision')
     if (endpoint === 'cancel') { await this.service.cancel(actor, taskId, taskRevision, true); return null }

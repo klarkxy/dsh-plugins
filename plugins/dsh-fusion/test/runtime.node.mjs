@@ -4,7 +4,7 @@ import { FusionRuntime } from '../src/runtime.ts'
 import { emptyFusionState } from '../src/contracts.ts'
 const signal = () => new AbortController().signal
 function harness({ writing = false, domain = true, scopedAlias = false } = {}) {
-  const agents = new Map(), events = new Map(), calls = [], registered = [], scopes = []
+  const agents = new Map(), events = new Map(), calls = []
   let resolved = 0, saved = emptyFusionState()
   const on = (events, name, fn) => { const rows = events.get(name) ?? []; rows.push(fn); events.set(name, rows); return () => { const i = rows.indexOf(fn); if (i >= 0) rows.splice(i, 1) } }
   const emit = async (events, name, ...args) => { for (const fn of [...(events.get(name) ?? [])]) await fn(...args) }
@@ -22,8 +22,8 @@ function harness({ writing = false, domain = true, scopedAlias = false } = {}) {
   const lead = make('lead'), unrelated = make('unrelated', 'lead')
   const workspace = { sessionIds: ['lead'], attachSession: async id => { calls.push(['attach', id]); workspace.sessionIds.push(id) } }
   const host = { matches: header => header.agentPreset === 'dsh-editor-novel', writerTools: ['read'], allowLeadTool: name => name === 'read', capture: async (_actor, input) => ({ domain: 'editor', data: input }) }
-  const ai = { activate() { const scope = { dispose: () => scopes.push('disposed'), registerPurpose: spec => { registered.push(spec); return () => {} } }; return scope }, resolve: async () => { resolved++; return { provider: 'p', model: 'm', source: 'default' } } }
   const ctx = { agents: { get: id => agents.get(id), list: () => [...agents.values()] }, sessions: { get: id => agents.get(id)?.session }, on: (name, fn) => on(events, name, fn), logger: { warn: (...args) => calls.push(['warn', ...args]) },
+    agentDefaultModel: { currentSelection: () => { resolved++; return { provider: 'p', model: 'm' } } },
     get: key => key === 'fusionWriting' ? (domain ? host : undefined) : key === 'workspaceRegistry' ? { resolveByPath: async () => workspace } : undefined,
     subagents: {
       getProvider: () => ({ prepareContinuable() {}, inheritsParentContext: false, capabilities: { agentOptions: true, persona: true, toolFilter: true } }),
@@ -33,9 +33,9 @@ function harness({ writing = false, domain = true, scopedAlias = false } = {}) {
       interrupt() {},
     },
   }
-  const runtime = new FusionRuntime(ctx, { load: () => saved, save: async next => { saved = structuredClone(next) } }, ai)
+  const runtime = new FusionRuntime(ctx, { load: () => saved, save: async next => { saved = structuredClone(next) } })
   const guard = (agent, name, args = {}) => agent.guards.map(fn => fn({ agent, name, arguments: args })).find(Boolean)
-  return { runtime, lead, unrelated, make, emit, events, calls, agents, guard, registered, scopes, get resolved() { return resolved }, ctx }
+  return { runtime, lead, unrelated, make, emit, events, calls, agents, guard, get resolved() { return resolved }, ctx }
 }
 const brief = { title: 'Task', goal: 'Do task', target: { kind: 'create', path: 'scene.md' } }
 describe('Fusion runtime boundaries', () => {
@@ -44,7 +44,6 @@ describe('Fusion runtime boundaries', () => {
     assert.equal(h.lead.tools.has('fusion_delegate'), true); assert.equal(h.lead.tools.has('fusion_report'), false)
     assert.equal(h.unrelated.tools.size, 0); assert.match(h.guard(h.unrelated, 'fusion_delegate'), /Only the owned/)
     const second = h.make('new'); await h.emit(h.events, 'agent/created', { agent: second }); assert.equal(second.tools.has('fusion_delegate'), true)
-    assert.equal(h.registered[0].id, 'fusion.sidekick'); assert.deepEqual(h.registered[0].defaultTarget, { kind: 'role', role: 'normal' })
     assert.equal(h.calls.filter(row => row[0] === 'start').length, 0)
   })
   it('uses a child-local report tool and rechecks underlying Writer tools even through PTC', async () => {
@@ -85,7 +84,7 @@ describe('Fusion runtime boundaries', () => {
     const editor = harness({ writing: true, domain: false }); await editor.runtime.start()
     await assert.rejects(editor.runtime.delegate(editor.lead, brief, signal()), { code: 'DOMAIN_UNAVAILABLE' }); assert.match(editor.guard(editor.lead, 'write'), /unavailable/)
   })
-  it('uses the persisted pair route rather than resolving new AI policy per delegation', async () => {
+  it('resolves the host model for a new pair once and then reuses the pinned pair route', async () => {
     const h = harness(); await h.runtime.start(); let task = await h.runtime.delegate(h.lead, brief, signal()); assert.equal(h.resolved, 1)
     const pair = h.runtime.service.pairFor('lead'), child = h.agents.get(pair.childSessionId)
     task = await h.runtime.service.report({ sessionId: child.id, parentSessionId: 'lead', project: '/work' }, { taskId: task.id, taskRevision: 1, reportId: 'r', kind: 'candidate', text: 'Evidence', signal: signal() })

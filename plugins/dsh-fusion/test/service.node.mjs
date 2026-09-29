@@ -217,7 +217,8 @@ describe('Fusion business lifecycle', () => {
     assert.equal(restored.notifications.length, 0)
   })
   it('rejects malformed persistent identity and oversized input', async () => {
-    assert.throws(() => validateState({ version: 2, revision: 0, pairs: [] }), { code: 'INVALID_STATE' })
+    assert.throws(() => validateState({ version: 3, revision: 0, pairs: [] }), { code: 'INVALID_STATE' })
+    assert.throws(() => validateState({ version: 2, revision: -1, pairs: [] }), { code: 'INVALID_STATE' })
     const { service } = setup()
     await assert.rejects(service.delegate(lead, { ...request(), brief: { ...request().brief, goal: 'x'.repeat(8001) } }), { code: 'INVALID_INPUT' })
   })

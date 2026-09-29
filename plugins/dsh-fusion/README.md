@@ -8,7 +8,7 @@ The plugin is **disabled by default**. Enable **副驾协作** in the host's plu
 
 ## Install
 
-Requires Node.js ≥22 and a compatible DSH `0.1.7-rc.2+` host (peer dependencies use open lower bounds such as `>=0.1.7-alpha.1`). If your DSH distribution does not bundle this plugin, install it together with `@klarkxy/dsh-ai-services` and enable its `fusion` entry through the host plugin configuration.
+Requires Node.js ≥22 and a compatible DSH `0.1.7-rc.2+` host (peer dependencies use open lower bounds such as `>=0.1.7-alpha.1`). If your DSH distribution does not bundle this plugin, install it and enable its `fusion` entry through the host plugin configuration.
 
 ```sh
 npm install @klarkxy/dsh-fusion
@@ -22,7 +22,11 @@ In native Web, the Sidekick uses the existing native tool and permission system.
 
 ## Model and lifecycle
 
-Fusion registers the `fusion.sidekick` purpose with the shared AI services model settings. Its default is the host Chat role. A pair keeps the route selected when it was created; changed settings apply to new pairs. Fantasy models require explicit configuration.
+A pair's Sidekick is a native child session, so its route is pinned when the pair is created and checked on every later request. A new pair resolves its route from the plugin-page selection, then the live session model and the host default chat model; nothing is configured when no route can be resolved. Existing pairs keep their pinned route, so changing settings never repins a live pair.
+
+## Plugin page settings
+
+`Settings → Plugins → Sidekick` carries a **Sidekick model** row. It is optional and only applies when a new pair is created: a saved route becomes that pair's pinned model, while an empty selection follows the live session model and then the host default chat model. Existing pairs keep the route selected when they were created, so editing this row never repins a live pair. A saved route selects a model but is not evidence of connectivity.
 
 At most one task runs in each pair. Revisions and later tasks reuse the same native child session. Stop cancels participating work; closing a card only closes the view. Disabling the plugin stops owned work and preserves its records and candidates.
 

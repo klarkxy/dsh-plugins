@@ -38,4 +38,11 @@ export const fusionClientStyles = `
 .dsh-fusion-dialog .dsh-fusion-primary{background:var(--dsh-ui-accent-solid,var(--dsw-alias-button-primary-fill));border-color:var(--dsh-ui-accent-solid,var(--dsw-alias-button-primary-fill));color:var(--dsh-ui-on-accent,var(--dsw-alias-label-primary-foreground))}
 @media(max-width:700px){.dsh-fusion-compare{grid-template-columns:minmax(0,1fr)}.dsh-fusion-compare pre{max-height:30vh;min-height:6rem}.dsh-fusion-dialog{max-height:95vh}}
 @media(forced-colors:active){.dsh-fusion-card,.dsh-fusion-dialog,.dsh-fusion-compare pre{border:1px solid CanvasText}.dsh-fusion-card button:focus-visible,.dsh-fusion-dialog button:focus-visible{outline:2px solid Highlight}}
+.fusion-settings{display:grid;gap:12px;color:var(--dsh-ui-text,var(--dsw-alias-label-primary));font:inherit}
+.fusion-settings label{display:grid;gap:6px;font-size:var(--dsh-ui-text-base,var(--dsh-content-font-size,14px))}
+.fusion-settings select{box-sizing:border-box;width:100%;min-width:0;padding:var(--dsh-ui-space-2,8px) 10px;border:1px solid var(--dsh-ui-line-strong,var(--dsw-alias-border-l3));border-radius:var(--dsh-ui-radius-sm,6px);background:var(--dsh-ui-bg,var(--dsw-alias-bg-base));color:inherit;font:inherit}
+.fusion-settings select:focus-visible{outline:2px solid var(--dsh-ui-accent,var(--dsw-alias-button-info-fill));outline-offset:2px}
+.fusion-settings-meta{margin:0;color:var(--dsh-ui-muted,var(--dsw-alias-label-tertiary));font-size:var(--dsh-ui-text-sm,var(--dsh-content-font-size-secondary,13px));line-height:1.55}
+.fusion-settings-error{color:var(--dsh-ui-text,var(--dsw-alias-label-primary));font-weight:600}
+@media(prefers-reduced-motion:reduce){.fusion-settings select{transition:none}}
 `

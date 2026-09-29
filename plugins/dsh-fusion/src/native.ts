@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type {} from '@klarkxy/dsh-ai-services/contracts'
+import type {} from '@klarkxy/dsh-plugin-kit/contracts'
 import type { Agent, AgentOptions, AgentRegistry } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { MessageId, ReasoningEffortId } from '@deepseek-ai/dsh-llm'

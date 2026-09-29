@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { emptyFusionState, isWorking, type FusionActor, type FusionBrief, type FusionCandidate, type FusionNative, type FusionPair,
-  type FusionProfile, type FusionState, type FusionStore, type FusionTarget, type FusionTask, type ModelRoute } from './contracts.ts'
+import { defaultModelRoute, emptyFusionState, isWorking, type FusionActor, type FusionBrief, type FusionCandidate, type FusionNative, type FusionPair,
+  type FusionProfile, type FusionSettings, type FusionState, type FusionStore, type FusionTarget, type FusionTask, type ModelRoute } from './contracts.ts'
 import type { FusionWritingHost } from './host-contracts.ts'
 import type { FusionCandidateAction, FusionPreview } from './contracts.ts'
 import { brief as parseBrief, integer, requireFusion, route as parseRoute, target as parseTarget, text, validateState } from './validation.ts'
@@ -52,7 +52,21 @@ export class FusionService {
     const pair = this.state.pairs.find(pair => pair.leadSessionId === sessionId || pair.childSessionId === sessionId)
     return pair && (pair.leadSessionId === sessionId ? 'lead' : 'sidekick')
   }
-  private async persist(next: FusionState): Promise<void> {
+  /** Plugin-page settings; only used when a new pair is created. */
+  settings(): FusionSettings { return clone(this.state.settings) }
+  async updateSettings(model: Record<string, unknown>, expectedRevision: number): Promise<FusionSettings> {
+    return this.change(next => {
+      requireFusion(next.settings.revision === expectedRevision, 'STALE', 'Fusion settings changed; reload and retry.')
+      const parsed = parseRoute(model)
+      next.settings = {
+        revision: next.settings.revision + 1,
+        model: parsed.provider && parsed.model
+          ? { provider: parsed.provider, model: parsed.model, ...(parsed.reasoningEffort ? { reasoningEffort: parsed.reasoningEffort } : {}) }
+          : defaultModelRoute(),
+      }
+      return next.settings
+    })
+  }  private async persist(next: FusionState): Promise<void> {
     next.revision++
     validateState(next)
     try { await this.store.save(clone(next)) }
