@@ -70,28 +70,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@24.13.3)(yaml@2.9.1)
 
-  plugins/dsh-ai-services:
-    dependencies:
-      zod:
-        specifier: ^4.1.5
-        version: 4.5.4
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: ^4.0.4
-        version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)
-      '@deepseek-ai/dsh-llm':
-        specifier: 0.1.7-rc.2
-        version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)
-      '@deepseek-ai/dsh-storage-domain':
-        specifier: 0.1.7-rc.2
-        version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-storage@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))
-      '@types/react':
-        specifier: 18.3.31
-        version: 18.3.31
-      react:
-        specifier: ^18.2.0
-        version: 18.3.1
-
   plugins/dsh-blueprint: {}
 
   plugins/dsh-classmates:
@@ -231,9 +209,9 @@ importers:
 
   plugins/dsh-current-title:
     dependencies:
-      '@klarkxy/dsh-ai-services':
+      '@klarkxy/dsh-plugin-kit':
         specifier: workspace:*
-        version: link:../dsh-ai-services
+        version: link:../dsh-plugin-kit
       zod:
         specifier: ^4.1.5
         version: 4.5.4
@@ -241,6 +219,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: ^4.0.4
         version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)
+      '@deepseek-ai/dsh-llm':
+        specifier: 0.1.7-rc.2
+        version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)
       '@deepseek-ai/dsh-storage-domain':
         specifier: 0.1.7-rc.2
         version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-storage@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))
@@ -277,9 +258,9 @@ importers:
 
   plugins/dsh-fusion:
     dependencies:
-      '@klarkxy/dsh-ai-services':
+      '@klarkxy/dsh-plugin-kit':
         specifier: workspace:*
-        version: link:../dsh-ai-services
+        version: link:../dsh-plugin-kit
       zod:
         specifier: ^4.1.5
         version: 4.5.4
@@ -326,9 +307,12 @@ importers:
 
   plugins/dsh-git-commit:
     dependencies:
-      '@klarkxy/dsh-ai-services':
+      '@klarkxy/dsh-plugin-kit':
         specifier: workspace:*
-        version: link:../dsh-ai-services
+        version: link:../dsh-plugin-kit
+      zod:
+        specifier: ^4.1.5
+        version: 4.5.4
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.4
@@ -336,6 +320,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: 0.1.7-rc.2
         version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)
+      '@deepseek-ai/dsh-storage-domain':
+        specifier: 0.1.7-rc.2
+        version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-storage@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))
       '@types/react':
         specifier: 18.3.31
         version: 18.3.31
@@ -351,9 +338,9 @@ importers:
 
   plugins/dsh-memory:
     dependencies:
-      '@klarkxy/dsh-ai-services':
+      '@klarkxy/dsh-plugin-kit':
         specifier: workspace:*
-        version: link:../dsh-ai-services
+        version: link:../dsh-plugin-kit
       zod:
         specifier: ^4.1.5
         version: 4.5.4
@@ -367,22 +354,6 @@ importers:
       '@deepseek-ai/dsh-storage-domain':
         specifier: 0.1.7-rc.2
         version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-storage@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))
-      '@types/react':
-        specifier: 18.3.31
-        version: 18.3.31
-      react:
-        specifier: ^18.2.0
-        version: 18.3.1
-
-  plugins/dsh-model-center:
-    dependencies:
-      '@klarkxy/dsh-ai-services':
-        specifier: workspace:*
-        version: link:../dsh-ai-services
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: ^4.0.4
-        version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)
       '@types/react':
         specifier: 18.3.31
         version: 18.3.31
@@ -392,9 +363,9 @@ importers:
 
   plugins/dsh-mood:
     dependencies:
-      '@klarkxy/dsh-ai-services':
+      '@klarkxy/dsh-plugin-kit':
         specifier: workspace:*
-        version: link:../dsh-ai-services
+        version: link:../dsh-plugin-kit
       zod:
         specifier: ^4.1.5
         version: 4.5.4
@@ -408,6 +379,18 @@ importers:
       '@deepseek-ai/dsh-storage-domain':
         specifier: 0.1.7-rc.2
         version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-storage@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))
+      '@types/react':
+        specifier: 18.3.31
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+
+  plugins/dsh-plugin-kit:
+    devDependencies:
+      '@deepseek-ai/dsh-llm':
+        specifier: 0.1.7-rc.2
+        version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)
       '@types/react':
         specifier: 18.3.31
         version: 18.3.31
@@ -419,9 +402,9 @@ importers:
 
   plugins/dsh-recap:
     dependencies:
-      '@klarkxy/dsh-ai-services':
+      '@klarkxy/dsh-plugin-kit':
         specifier: workspace:*
-        version: link:../dsh-ai-services
+        version: link:../dsh-plugin-kit
       zod:
         specifier: ^4.1.5
         version: 4.5.4
@@ -445,16 +428,24 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1
 
-  plugins/dsh-safe-auto: {}
+  plugins/dsh-safe-auto:
+    dependencies:
+      zod:
+        specifier: ^4.1.5
+        version: 4.5.4
+    devDependencies:
+      '@deepseek-ai/dsh-storage-domain':
+        specifier: 0.1.7-rc.2
+        version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-storage@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))
 
   plugins/dsh-self-improvement:
     dependencies:
-      '@klarkxy/dsh-ai-services':
-        specifier: workspace:*
-        version: link:../dsh-ai-services
       '@klarkxy/dsh-memory':
         specifier: workspace:*
         version: link:../dsh-memory
+      '@klarkxy/dsh-plugin-kit':
+        specifier: workspace:*
+        version: link:../dsh-plugin-kit
       zod:
         specifier: ^4.1.5
         version: 4.5.4

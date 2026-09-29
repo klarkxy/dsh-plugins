@@ -17,11 +17,23 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@klarkxy/dsh-ai-services": [
-        "plugins/dsh-ai-services/src/index.ts"
+      "@klarkxy/dsh-plugin-kit": [
+        "plugins/dsh-plugin-kit/src/index.ts"
       ],
-      "@klarkxy/dsh-ai-services/contracts": [
-        "plugins/dsh-ai-services/src/contracts.ts"
+      "@klarkxy/dsh-plugin-kit/contracts": [
+        "plugins/dsh-plugin-kit/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-plugin-kit/host-rpc": [
+        "plugins/dsh-plugin-kit/src/host-rpc.ts"
+      ],
+      "@klarkxy/dsh-plugin-kit/client-utils": [
+        "plugins/dsh-plugin-kit/src/client-utils.ts"
+      ],
+      "@klarkxy/dsh-plugin-kit/model-menu": [
+        "plugins/dsh-plugin-kit/src/model-menu.ts"
+      ],
+      "@klarkxy/dsh-plugin-kit/llm-call": [
+        "plugins/dsh-plugin-kit/src/llm-call.ts"
       ],
       "@klarkxy/dsh-current-title": [
         "plugins/dsh-current-title/src/index.ts"
@@ -52,21 +64,6 @@
       ],
       "@klarkxy/dsh-self-improvement/contracts": [
         "plugins/dsh-self-improvement/src/contracts.ts"
-      ],
-      "@klarkxy/dsh-model-center": [
-        "plugins/dsh-model-center/src/index.ts"
-      ],
-      "@klarkxy/dsh-model-center/contracts": [
-        "plugins/dsh-model-center/src/contracts.ts"
-      ],
-      "@klarkxy/dsh-ai-services/host-rpc": [
-        "plugins/dsh-ai-services/src/host-rpc.ts"
-      ],
-      "@klarkxy/dsh-ai-services/client-utils": [
-        "plugins/dsh-ai-services/src/client-utils.ts"
-      ],
-      "@klarkxy/dsh-ai-services/insert-output": [
-        "plugins/dsh-ai-services/src/insert-output.ts"
       ],
       "@klarkxy/dsh-fusion": [
         "plugins/dsh-fusion/src/index.ts"

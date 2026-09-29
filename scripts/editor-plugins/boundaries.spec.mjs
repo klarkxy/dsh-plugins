@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const migration = JSON.parse(readFileSync(join(root, 'scripts/editor-plugin-migration.json'), 'utf8'))
 const selected = new Set(migration.packages.map(pkg => pkg.name))
+/** Shared support package every feature depends on; not an Editor plugin itself. */
+const sharedKit = '@klarkxy/dsh-plugin-kit'
 describe('portable Editor plugin boundaries', () => {
   it('has no Editor-private dependencies, including build-time workspaces', () => {
     for (const source of migration.packages) {
@@ -15,7 +17,7 @@ describe('portable Editor plugin boundaries', () => {
       for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
         for (const [name, range] of Object.entries(pkg[field] ?? {})) {
           expect(name.startsWith('dsh-editor-'), `${pkg.name}: ${name}`).toBe(false)
-          if (range.startsWith('workspace:')) expect(selected.has(name), `${pkg.name}: ${name}`).toBe(true)
+          if (range.startsWith('workspace:')) expect(selected.has(name) || name === sharedKit, `${pkg.name}: ${name}`).toBe(true)
         }
       }
     }

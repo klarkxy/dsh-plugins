@@ -1,0 +1,87 @@
+{
+  "name": "@klarkxy/dsh-plugin-kit",
+  "version": "0.1.0",
+  "description": "Shared types, model-menu helpers, and host RPC registration. Does not call models.",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./contracts": {
+      "types": "./lib/contracts.d.ts",
+      "import": "./lib/contracts.js",
+      "default": "./lib/contracts.js"
+    },
+    "./host-rpc": {
+      "types": "./lib/host-rpc.d.ts",
+      "import": "./lib/host-rpc.js",
+      "default": "./lib/host-rpc.js"
+    },
+    "./client-utils": {
+      "types": "./lib/client-utils.d.ts",
+      "import": "./lib/client-utils.js",
+      "default": "./lib/client-utils.js"
+    },
+    "./model-menu": {
+      "types": "./lib/model-menu.d.ts",
+      "import": "./lib/model-menu.js",
+      "default": "./lib/model-menu.js"
+    },
+    "./llm-call": {
+      "types": "./lib/llm-call.d.ts",
+      "import": "./lib/llm-call.js",
+      "default": "./lib/llm-call.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "README.md",
+    "docs/README.zh-CN.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-plugin-kit/src"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": ">=0.1.7-rc.2",
+    "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-llm": "0.1.7-rc.2",
+    "react": "^18.2.0",
+    "@types/react": "18.3.31"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klarkxy/dsh-plugins.git",
+    "directory": "plugins/dsh-plugin-kit"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
