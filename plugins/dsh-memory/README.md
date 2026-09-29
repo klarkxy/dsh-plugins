@@ -12,20 +12,23 @@ Requires Node.js ≥22 and DSH `0.1.7-rc.2`. On a standalone DSH Web host, insta
 npm install @klarkxy/dsh-memory
 ```
 
-Load it and the shared service explicitly:
+Load it explicitly:
 
 ```sh
-dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-memory
 ```
 
 No application-private packages or Self Improve are required. The bundle starts enabled; merely opening its UI does not call a model. Use Plugins → Memory to manage records, prompt injection and the Dream observation/consolidation switch.
 
+## Plugin page settings
+
+`Plugins → Long-term Memory` carries two optional model rows: **Dream model** for consolidation and **Observation model** for context observation. A saved route is used for that feature's own call as an explicit model; an empty selection follows the live session model and then the host default chat model. Only these two features are affected; a saved route selects a model but is not evidence of connectivity.
+
 ## Context, not procedures
 
 `ctx.aiMemory` implements the shared `MemoryService`. New `vocabulary` and `activity` records may carry subject, domain, term/topic key, aliases, host observation time, literal event-time text and activity status. Project scope comes from the native session cwd, never an arbitrary client path. Automatic observation without a cwd is skipped rather than promoted to global.
 
-At turn end, Dream observes original human messages only. A new session contributes its latest message; later batches include at most four new messages, each capped at 2000 characters. Accepted output requires exact quoted evidence from real human events. Pure continuation acknowledgements do not trigger inference. The `memory.observe-context` purpose uses the normal model role and shared budgets.
+At turn end, Dream observes original human messages only. A new session contributes its latest message; later batches include at most four new messages, each capped at 2000 characters. Accepted output requires exact quoted evidence from real human events. Pure continuation acknowledgements do not trigger inference. Context observation runs its own model call under the same resolved route rules.
 
 Activity has a default seven-day freshness bound. Expiry removes it from recall; it does not prove completion. A new explicit update supersedes the previous matching subject/domain/topic while preserving history. Stable vocabulary has no automatic activity expiry. Existing authoritative task records and project documents remain authoritative.
 
@@ -48,7 +51,7 @@ pnpm --filter @klarkxy/dsh-memory build
 The package has three entry points:
 
 - `.` — the Cordis plugin (`name`, `inject`, `apply`), the `MemoryRuntime` service class and the shared constants `CHAT_EVENTS_SLOT`, `MEMORY_RPC_CHANNEL`, `defaultSettings` and `projectIdFromCwd`. `apply` provides the runtime as `ctx.aiMemory` and registers the host RPC channel.
-- `./contracts` — browser-safe types and constants. `MemoryRecord`, `MemoryService`, `MemoryQuery`, `NewMemoryRecord` and the other shared interfaces are re-exported from the frozen `@klarkxy/dsh-ai-services` contracts; this package adds `MemorySettings`, `DreamPlan`, `MemoryStatus`, the recall/injection bounds and the `/dsh-memory` channel name.
+- `./contracts` — browser-safe types and constants. `MemoryRecord`, `MemoryService`, `MemoryQuery`, `NewMemoryRecord` and the other shared interfaces come from the frozen `@klarkxy/dsh-plugin-kit` contracts; this package adds `MemorySettings`, `DreamPlan`, `MemoryStatus`, the recall/injection bounds and the `/dsh-memory` channel name.
 - `./client` — the settings UI bundle loaded by the host web client.
 
 `MemoryRuntime` implements the frozen `MemoryService` surface — `list`, `create`, `update`, `promoteToGlobal`, `remove` and `recall` — and adds settings (`status`/`readStatus`, `updateSettings`), the candidate lifecycle (`accept`, `reject`, `revoke`), manual records (`createManualRecord`), turn hooks (`handlePreStep`, `observeSession`) and the Dream lifecycle (`previewDream`, `runIdleDream`, `applyDream`, `cancelDream`).

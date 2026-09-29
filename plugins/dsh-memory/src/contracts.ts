@@ -1,13 +1,9 @@
-/** Browser-safe contracts. MemoryRecord / MemoryService match frozen @klarkxy/dsh-ai-services. */
+/** Browser-safe contracts. MemoryRecord / MemoryService match frozen @klarkxy/dsh-plugin-kit. */
 import {
   CHAT_EVENTS_SLOT as FROZEN_CHAT_EVENTS_SLOT,
   projectIdFromCwd as frozenProjectIdFromCwd,
-} from '@klarkxy/dsh-ai-services/contracts'
+} from '@klarkxy/dsh-plugin-kit/contracts'
 import type {
-  AiFeatureScope,
-  AiServices,
-  AuxiliaryRequest,
-  AuxiliaryResult,
   EvidenceRef,
   KnowledgeKind,
   KnowledgeScope,
@@ -15,17 +11,11 @@ import type {
   MemoryRecord,
   MemoryService,
   NewMemoryRecord,
-  PurposeSpec,
   ProducerMessageSource,
   RpcResult,
-  UsageReceipt,
-} from '@klarkxy/dsh-ai-services/contracts'
+} from '@klarkxy/dsh-plugin-kit/contracts'
 
 export type {
-  AiFeatureScope,
-  AiServices,
-  AuxiliaryRequest,
-  AuxiliaryResult,
   EvidenceRef,
   KnowledgeKind,
   KnowledgeScope,
@@ -33,13 +23,11 @@ export type {
   MemoryRecord,
   MemoryService,
   NewMemoryRecord,
-  PurposeSpec,
   ProducerMessageSource,
   RpcResult,
-  UsageReceipt,
 }
 
-/** Frozen shared chat-events seat. Must stay equal to @klarkxy/dsh-ai-services CHAT_EVENTS_SLOT. */
+/** Frozen shared chat-events seat. Must stay equal to @klarkxy/dsh-plugin-kit CHAT_EVENTS_SLOT. */
 export const CHAT_EVENTS_SLOT = FROZEN_CHAT_EVENTS_SLOT
 /** Shared untruncated cwd identity. Drive roots (`/` / `C:/`) stay intact. */
 export const projectIdFromCwd = frozenProjectIdFromCwd
@@ -65,18 +53,32 @@ export const RECALL_EXCLUDED_STATUSES: readonly MemoryRecord['status'][] = [
   'candidate', 'rejected', 'revoked', 'deleted', 'superseded',
 ]
 
+/** Plugin-page model selection. Empty provider/model means "follow the default". */
+export interface MemoryModelRoute {
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
+}
+
 export interface MemorySettings {
   revision: number
   injectEnabled: boolean
   dreamIdleEnabled: boolean
   idleMs: number
+  /** Model for memory consolidation (dream) and context observation, chosen on the plugin page. */
+  dreamModel: MemoryModelRoute
+  observeModel: MemoryModelRoute
 }
+
+export const defaultModelRoute = (): MemoryModelRoute => ({ provider: '', model: '' })
 
 export const defaultSettings = (): MemorySettings => ({
   revision: 0,
   injectEnabled: true,
   dreamIdleEnabled: true,
   idleMs: DEFAULT_IDLE_MS,
+  dreamModel: defaultModelRoute(),
+  observeModel: defaultModelRoute(),
 })
 
 export type DreamPlanStatus = 'preview' | 'applied' | 'cancelled' | 'stale' | 'failed' | 'noop'

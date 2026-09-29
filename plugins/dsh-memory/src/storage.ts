@@ -1,8 +1,8 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
 import {
-  DEFAULT_IDLE_MS, defaultSettings, MAX_PROJECT_ID_CHARS, type DreamPlan, type MemoryPersistedState, type MemoryRecord,
-  type MemorySettings, type MemoryTombstone,
+  DEFAULT_IDLE_MS, defaultModelRoute, defaultSettings, MAX_PROJECT_ID_CHARS, type DreamPlan, type MemoryPersistedState,
+  type MemoryRecord, type MemorySettings, type MemoryTombstone,
 } from './contracts.ts'
 
 export const evidenceSchema = z.object({
@@ -66,11 +66,20 @@ export const newMemoryRecordSchema = memoryRecordSchema.omit({
   id: true, revision: true, createdAt: true, updatedAt: true,
 })
 
+const modelRouteSchema = z.object({
+  provider: z.string().min(0).max(250),
+  model: z.string().min(0).max(250),
+  reasoningEffort: z.string().min(1).max(80).optional(),
+}).strict().default(defaultSettings().dreamModel)
+
 export const settingsSchema = z.object({
   revision: z.number().int().nonnegative(),
   injectEnabled: z.boolean(),
   dreamIdleEnabled: z.boolean(),
   idleMs: z.number().int().min(60_000).max(180 * 60_000),
+  /** v3 adds plugin-page model routes; v2 rows lack them and fill defaults. */
+  dreamModel: modelRouteSchema,
+  observeModel: modelRouteSchema,
 }).strict()
 
 export const updateSettingsSchema = z.object({
@@ -176,7 +185,9 @@ export const memoryStateSchema = z.object({
 
 export const memoryDomain = defineDomain({
   name: 'dsh_editor_memory',
-  version: 2,
+  version: 3,
+  /** v2 rows stay readable: absent model routes fill defaults. */
+  compatibleVersions: [2],
   tables: {
     state: domainTable<string, MemoryPersistedState>(memoryStateSchema),
   },
@@ -184,7 +195,12 @@ export const memoryDomain = defineDomain({
 
 export function storedSettings(value: MemorySettings | undefined): MemorySettings {
   const merged = value ? { ...defaultSettings(), ...value } : defaultSettings()
-  return { ...merged, idleMs: DEFAULT_IDLE_MS }
+  return {
+    ...merged,
+    idleMs: DEFAULT_IDLE_MS,
+    dreamModel: merged.dreamModel ?? defaultModelRoute(),
+    observeModel: merged.observeModel ?? defaultModelRoute(),
+  }
 }
 
 export type { DreamPlan, MemoryRecord, MemoryTombstone }

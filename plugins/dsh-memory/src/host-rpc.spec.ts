@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http'
 import { once } from 'node:events'
 import { afterEach, expect, it } from 'vitest'
-import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-ai-services/host-rpc'
+import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { MEMORY_RPC_CHANNEL } from './contracts.ts'
 
 const servers: Server[] = []

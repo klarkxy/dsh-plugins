@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import type { AiFeatureScope, AuxiliaryResult, DreamPlan, MemoryPersistedState, MemoryQuery, MemoryRecord, NewMemoryRecord } from './contracts.ts'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import * as kit from '@klarkxy/dsh-plugin-kit'
+import type { DreamPlan, MemoryPersistedState, MemoryQuery, MemoryRecord, NewMemoryRecord } from './contracts.ts'
 import { defaultSettings } from './contracts.ts'
 import { dreamSourceVersion } from './dream.ts'
 import { MemoryError } from './errors.ts'
@@ -22,7 +23,18 @@ function draft(patch: Partial<NewMemoryRecord> = {}): NewMemoryRecord {
   }
 }
 
-function runtime(options?: { failAfter?: number; ai?: AiFeatureScope; id?: () => string; store?: ReturnType<typeof createMemoryStore> }) {
+const hostModel = { agentDefaultModel: { currentSelection: () => ({ provider: 'host', model: 'chat' }) } }
+const unusedLlm = { prepareCall: async () => { throw new Error('unused') }, resolveCallConfig: async () => { throw new Error('unused') } }
+
+function stubCall(answer: (request: { text: string }) => Promise<{ text: string }> | { text: string } | Error) {
+  vi.spyOn(kit, 'callLlmText').mockImplementation(async (_llm, request) => {
+    const value = await answer(request)
+    if (value instanceof Error) throw value
+    return { text: value.text, provider: 'host', model: 'chat' }
+  })
+}
+
+function runtime(options?: { failAfter?: number; ai?: boolean; id?: () => string; store?: ReturnType<typeof createMemoryStore> }) {
   let n = 0
   const store = options?.store ?? createMemoryStore({ failAfter: options?.failAfter })
   return {
@@ -31,32 +43,13 @@ function runtime(options?: { failAfter?: number; ai?: AiFeatureScope; id?: () =>
       store,
       now: () => 1_000,
       id: options?.id ?? (() => `id-${++n}`),
-      activateAi: () => options?.ai,
+      ...(options?.ai ? { llm: unusedLlm, host: hostModel } : {}),
       createInjectMessage: payload => payload,
     }),
   }
 }
 
-function aiScope(run: AiFeatureScope['run']): AiFeatureScope {
-  return {
-    plugin: 'dsh-memory',
-    get signal() { return new AbortController().signal },
-    active: true,
-    registerPurpose: () => () => {},
-    run,
-    dispose() {},
-  }
-}
-
-function success(text: string, sourceVersion: string): AuxiliaryResult {
-  return {
-    text,
-    receipt: {
-      id: 'u1', plugin: 'dsh-memory', purpose: 'memory.dream', sourceVersion,
-      status: 'success', attempts: 1, cost: null, startedAt: 1, finishedAt: 2,
-    },
-  }
-}
+beforeEach(() => { vi.restoreAllMocks() })
 
 function humanEnter(text: string) {
   return {
@@ -135,11 +128,10 @@ describe('storage CAS and lifecycle', () => {
 
 describe('dream CAS', () => {
   it('applies merges into active injectable records and supersedes the sources', async () => {
-    const { memory } = runtime({
-      ai: aiScope(async request => success(JSON.stringify({
-        proposals: [{ title: '合并语气', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
-      }), request.sourceVersion)),
-    })
+    stubCall(() => ({ text: JSON.stringify({
+      proposals: [{ title: '合并语气', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
+    }) }))
+    const { memory } = runtime({ ai: true })
     const created = await memory.create(draft())
     const plan = await memory.previewDream('s1', '/work/novel')
     expect(plan.status).toBe('preview')
@@ -158,11 +150,10 @@ describe('dream CAS', () => {
   })
 
   it('fails apply after correction or deletion and never resurrects', async () => {
-    const { memory } = runtime({
-      ai: aiScope(async request => success(JSON.stringify({
-        proposals: [{ title: '合并', content: 'x', kind: 'preference', sourceIds: ['id-1'] }],
-      }), request.sourceVersion)),
-    })
+    stubCall(() => ({ text: JSON.stringify({
+      proposals: [{ title: '合并', content: 'x', kind: 'preference', sourceIds: ['id-1'] }],
+    }) }))
+    const { memory } = runtime({ ai: true })
     const created = await memory.create(draft())
     const plan = await memory.previewDream('s1', '/work/novel')
     await memory.update(created.id, { content: '已修正' }, created.revision)
@@ -178,12 +169,8 @@ describe('dream CAS', () => {
   it('drops late dream results after disable', async () => {
     let release!: () => void
     const blocked = new Promise<void>(resolve => { release = resolve })
-    const { memory } = runtime({
-      ai: aiScope(async request => {
-        await blocked
-        return success('{"proposals":[]}', request.sourceVersion)
-      }),
-    })
+    stubCall(async () => { await blocked; return { text: '{"proposals":[]}' } })
+    const { memory } = runtime({ ai: true })
     await memory.create(draft())
     const pending = memory.previewDream('s1', '/work/novel')
     await memory.updateSettings({ injectEnabled: false, dreamIdleEnabled: false, idleMs: 15 * 60_000 }, 0)
@@ -196,11 +183,10 @@ describe('dream CAS', () => {
 
 describe('idle dream auto-run', () => {
   it('applies a non-empty plan, stamps the attempt time, and injects the derived record immediately', async () => {
-    const { memory } = runtime({
-      ai: aiScope(async request => success(JSON.stringify({
-        proposals: [{ title: '合并语气', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
-      }), request.sourceVersion)),
-    })
+    stubCall(() => ({ text: JSON.stringify({
+      proposals: [{ title: '合并语气', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
+    }) }))
+    const { memory } = runtime({ ai: true })
     await memory.create(draft())
     const applied = await memory.runIdleDream('s1', '/work/novel', 'idle')
     expect(applied.status).toBe('applied')
@@ -214,9 +200,8 @@ describe('idle dream auto-run', () => {
   })
 
   it('marks an empty plan as noop, stamps the attempt, and writes no candidates', async () => {
-    const { memory } = runtime({
-      ai: aiScope(async request => success('{"proposals":[]}', request.sourceVersion)),
-    })
+    stubCall(() => ({ text: '{"proposals":[]}' }))
+    const { memory } = runtime({ ai: true })
     await memory.create(draft())
     const plan = await memory.runIdleDream('s1', '/work/novel', 'idle')
     expect(plan.status).toBe('noop')
@@ -226,15 +211,8 @@ describe('idle dream auto-run', () => {
   })
 
   it('stamps the attempt and records a failed dream when the model run fails', async () => {
-    const { memory } = runtime({
-      ai: aiScope(async request => ({
-        text: '',
-        receipt: {
-          id: 'u1', plugin: 'dsh-memory', purpose: 'memory.dream', sourceVersion: request.sourceVersion,
-          status: 'failed', attempts: 1, cost: null, startedAt: 1, finishedAt: 2, error: '模型调用失败。',
-        },
-      })),
-    })
+    stubCall(() => new Error('模型调用失败。'))
+    const { memory } = runtime({ ai: true })
     await memory.create(draft())
     const plan = await memory.runIdleDream('s1', '/work/novel', 'idle')
     expect(plan.status).toBe('failed')
@@ -256,16 +234,18 @@ describe('idle dream auto-run', () => {
   it('keeps a stale plan stale when apply no longer validates, and still stamps the attempt', async () => {
     let now = 10
     let n = 0
+    stubCall(() => {
+      now = 2_000
+      return { text: JSON.stringify({
+        proposals: [{ title: '合并', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
+      }) }
+    })
     const memory = new MemoryRuntime({
       store: createMemoryStore(),
       now: () => now,
       id: () => `id-${++n}`,
-      activateAi: () => aiScope(async request => {
-        now = 2_000
-        return success(JSON.stringify({
-          proposals: [{ title: '合并', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
-        }), request.sourceVersion)
-      }),
+      llm: unusedLlm,
+      host: hostModel,
       createInjectMessage: payload => payload,
     })
     await memory.create(draft({ expiresAt: 1_000 }))
@@ -306,11 +286,10 @@ describe('uuid restart, aggregate persist, basis, and inject races', () => {
   })
 
   it('persists apply supersede and accept in one aggregate write, and rolls back when save fails', async () => {
-    const { memory, store } = runtime({
-      ai: aiScope(async request => success(JSON.stringify({
-        proposals: [{ title: '合并语气', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
-      }), request.sourceVersion)),
-    })
+    stubCall(() => ({ text: JSON.stringify({
+      proposals: [{ title: '合并语气', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
+    }) }))
+    const { memory, store } = runtime({ ai: true })
     const source = await memory.create(draft())
     const plan = await memory.previewDream('s1', '/work/novel')
     const applied = await memory.applyDream(plan.id, plan.revision)
@@ -380,11 +359,10 @@ describe('uuid restart, aggregate persist, basis, and inject races', () => {
   })
 
   it('does not publish a partial dream apply when the aggregate save fails', async () => {
-    const { memory, store } = runtime({
-      ai: aiScope(async request => success(JSON.stringify({
-        proposals: [{ title: '合并语气', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
-      }), request.sourceVersion)),
-    })
+    stubCall(() => ({ text: JSON.stringify({
+      proposals: [{ title: '合并语气', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
+    }) }))
+    const { memory, store } = runtime({ ai: true })
     await memory.create(draft())
     const plan = await memory.previewDream('s1', '/work/novel')
     store.failNext()
@@ -401,16 +379,19 @@ describe('dream expiry liveness', () => {
     let n = 0
     let payload = ''
     const store = createMemoryStore()
+    stubCall(request => {
+      payload = request.text
+      const records = JSON.parse(request.text).records as Array<{ id: string }>
+      return { text: JSON.stringify({
+        proposals: [{ title: '合并', content: '更克制', kind: 'preference', sourceIds: records.map(row => row.id) }],
+      }) }
+    })
     const memory = new MemoryRuntime({
       store,
       now: () => now,
       id: () => `id-${++n}`,
-      activateAi: () => aiScope(async request => {
-        payload = request.input
-        return success(JSON.stringify({
-          proposals: [{ title: '合并', content: '更克制', kind: 'preference', sourceIds: JSON.parse(request.input).records.map((row: { id: string }) => row.id) }],
-        }), request.sourceVersion)
-      }),
+      llm: unusedLlm,
+      host: hostModel,
       createInjectMessage: item => item,
     })
     return {
@@ -650,12 +631,12 @@ function filled(patch: Partial<MemoryPersistedState> = {}): MemoryPersistedState
   return { settings: defaultSettings(), records: [], tombstones: [], dreams: [], ...patch }
 }
 
-function reopen(store: ReturnType<typeof createMemoryStore>, options?: { id?: () => string; ai?: AiFeatureScope }) {
+function reopen(store: ReturnType<typeof createMemoryStore>, options?: { id?: () => string; ai?: boolean }) {
   return new MemoryRuntime({
     store,
     now: () => 1_000,
     id: options?.id,
-    activateAi: () => options?.ai,
+    ...(options?.ai ? { llm: unusedLlm, host: hostModel } : {}),
     createInjectMessage: payload => payload,
   })
 }
@@ -713,10 +694,8 @@ describe('bounded persist, capacity, and fail-closed history', () => {
         })),
       }),
     })
-    const dreaming = reopen(dreamStore, {
-      id: () => 'new-dream',
-      ai: aiScope(async request => success('{"proposals":[]}', request.sourceVersion)),
-    })
+    stubCall(() => ({ text: '{"proposals":[]}' }))
+    const dreaming = reopen(dreamStore, { id: () => 'new-dream', ai: true })
     await expect(dreaming.previewDream('s1', '/work/novel')).rejects.toMatchObject({ code: 'MEMORY_CAPACITY' })
     expect(dreaming.status().storageFailed).toBe(false)
     expect(dreamStore.snapshot().dreams).toHaveLength(MAX_MEMORY_DREAMS)
@@ -763,10 +742,8 @@ describe('bounded persist, capacity, and fail-closed history', () => {
       }),
     })
     let nextId = 'gone'
-    const memory = reopen(store, {
-      id: () => nextId,
-      ai: aiScope(async request => success('{"proposals":[]}', request.sourceVersion)),
-    })
+    stubCall(() => ({ text: '{"proposals":[]}' }))
+    const memory = reopen(store, { id: () => nextId, ai: true })
     await expect(memory.applyDream('stale-preview', 1)).rejects.toMatchObject({ code: 'MEMORY_TOMBSTONE' })
     expect(memory.status().records.map(item => item.id)).toEqual(['live'])
     expect(store.snapshot().records.map(item => item.id)).toEqual(['live'])
@@ -859,11 +836,8 @@ it('exposes a running Dream before model completion and rejects premature apply'
   let began!: () => void
   const started = new Promise<void>(resolve => { began = resolve })
   const held = new Promise<void>(resolve => { finish = resolve })
-  const { memory } = runtime({ ai: aiScope(async request => {
-    began()
-    await held
-    return success(JSON.stringify({ proposals: [] }), request.sourceVersion)
-  }) })
+  stubCall(async () => { began(); await held; return { text: JSON.stringify({ proposals: [] }) } })
+  const { memory } = runtime({ ai: true })
   await memory.create(draft())
   const pending = memory.previewDream('s1', '/work/novel')
   await started

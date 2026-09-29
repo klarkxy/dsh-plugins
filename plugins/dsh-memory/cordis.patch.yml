@@ -1,4 +1,4 @@
-# Enabled when installed. Dream uses its own persisted switch; load ai-services explicitly.
+# Enabled when installed. Dream uses its own persisted switch; the host provides llm natively.
 - insert:
     - id: memory
       name: '@klarkxy/dsh-memory'

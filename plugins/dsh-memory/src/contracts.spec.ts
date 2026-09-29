@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { CHAT_EVENTS_SLOT, MEMORY_ACTIVATE_ID, MEMORY_PLUGIN, projectIdFromCwd } from './contracts.ts'
-import { CHAT_EVENTS_SLOT as FROZEN_SLOT, projectIdFromCwd as frozenProjectIdFromCwd } from '@klarkxy/dsh-ai-services/contracts'
+import { CHAT_EVENTS_SLOT as FROZEN_SLOT, projectIdFromCwd as frozenProjectIdFromCwd } from '@klarkxy/dsh-plugin-kit/contracts'
 
 it('reexports frozen chat seat and untruncated project identity', () => {
-  const frozen = readFileSync(fileURLToPath(new URL('../../dsh-ai-services/src/contracts.ts', import.meta.url)), 'utf8')
+  const frozen = readFileSync(fileURLToPath(new URL('../../dsh-plugin-kit/src/contracts.ts', import.meta.url)), 'utf8')
   expect(CHAT_EVENTS_SLOT).toBe(FROZEN_SLOT)
   expect(CHAT_EVENTS_SLOT).toBe('dsh-editor.chat.events')
   expect(frozen).toContain('basis?: Array<{ id: string; revision: number }>')

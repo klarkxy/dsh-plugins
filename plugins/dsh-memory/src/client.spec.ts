@@ -152,8 +152,8 @@ describe('memory settings and host locale', () => {
   })
 
   it('resolves native settings seats and refreshes without clobbering edits or writes', () => {
-    expect(inject).toEqual(['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
-    expect(clientSrc).toContain("from '@klarkxy/dsh-ai-services/client-utils'")
+    expect(inject).toEqual(['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
+    expect(clientSrc).toContain("from '@klarkxy/dsh-plugin-kit/client-utils'")
     expect(clientSrc).toContain('type Client = NativeSurfaceClient &')
     expect(clientSrc).toContain('useNativeSeat(client, props)')
     expect(clientSrc).toContain('useFeatureRefresh(')
@@ -162,6 +162,11 @@ describe('memory settings and host locale', () => {
     expect(clientSrc).toContain('key={`settings:${memoryPanelKey(seat.sessionId, seat.locale)}`}')
     expect(clientSrc).toContain("get('dshSelfImprovementReview')")
     expect(clientSrc).toContain('data-testid="self-improvement-entry"')
+    expect(clientSrc).toContain("from '@klarkxy/dsh-plugin-kit/model-menu'")
+    expect(clientSrc).toContain('parseModelMenuChoices(value, draft?.dreamModel)')
+    expect(clientSrc).toContain('modelMenuChoiceKey(props.route.provider, props.route.model)')
+    expect(clientSrc).toContain('dreamModel: route')
+    expect(clientSrc).toContain('observeModel: route')
     expect(clientSrc).not.toContain('空闲间隔')
     expect(clientSrc).toContain('void peekMemoryStatus(')
     expect(clientSrc).not.toMatch(/beginMemoryRequest\([^)]*\)[\s\S]{0,80}peekMemoryStatus/)

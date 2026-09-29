@@ -1,9 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { AiServices } from '@klarkxy/dsh-ai-services/contracts'
-import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-ai-services/host-rpc'
+import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import {
-  MEMORY_ACTIVATE_ID, MEMORY_PLUGIN, MEMORY_RPC_CHANNEL, projectIdFromCwd, sessionCwd,
+  MEMORY_PLUGIN, MEMORY_RPC_CHANNEL, projectIdFromCwd, sessionCwd,
   type InjectedMemoryMessage, type MemoryPersistedState, type PreStepDecision, type RpcResult,
 } from './contracts.ts'
 import { shouldRunIdleDream } from './idle.ts'
@@ -13,7 +13,7 @@ import { cloneState, emptyMemoryState, type MemoryStore } from './store.ts'
 import { memoryDomain, storedSettings } from './storage.ts'
 
 export const name = MEMORY_PLUGIN
-export const inject = ['storageDomain', 'connection', 'webServer', 'aiServices', 'sessions'] as const
+export const inject = ['storageDomain', 'connection', 'webServer', 'llm', 'sessions'] as const
 export { MemoryRuntime } from './service.ts'
 export { CHAT_EVENTS_SLOT, MEMORY_RPC_CHANNEL, defaultSettings, projectIdFromCwd } from './contracts.ts'
 
@@ -33,7 +33,7 @@ type DomainHandle = {
 
 type Host = Context & HostRpcContext & {
   storageDomain: { open: (spec: typeof memoryDomain) => Promise<DomainHandle> }
-  aiServices: AiServices
+  llm: LlmTextCaller
   sessions: { get(id: string): unknown }
 }
 
@@ -44,7 +44,8 @@ export async function apply(ctx: Context): Promise<void> {
   const idle = { agentIdle: new Map<string, boolean>(), lastActivity: new Map<string, number>(), timers: new Map<string, ReturnType<typeof setTimeout>>() }
   const runtime = new MemoryRuntime({
     store,
-    activateAi: () => host.aiServices.activate(MEMORY_ACTIVATE_ID),
+    llm: host.llm,
+    host,
     createInjectMessage: payload => createPluginUserMessage(payload),
   })
   ctx.provide('aiMemory', runtime)

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { modelMenuOverride } from '@klarkxy/dsh-plugin-kit/model-menu'
 import { defaultSettings, type DreamPlan, type MemoryRecord } from './contracts.ts'
 import {
   createRpcSchema, MAX_MEMORY_DREAMS, MAX_MEMORY_RECORDS, MAX_MEMORY_TOMBSTONES, memoryStateSchema, newMemoryRecordSchema,
@@ -71,7 +72,13 @@ describe('memory aggregate schema bounds', () => {
     expect(memoryStateSchema.safeParse({ ...minimal, lastAttemptAt: -1 }).success).toBe(false)
     expect(memoryStateSchema.safeParse({ ...minimal, lastAttemptAt: 1.5 }).success).toBe(false)
     const legacy = { revision: 3, injectEnabled: true, idleMs: 60_000 } as unknown as Parameters<typeof storedSettings>[0]
-    expect(storedSettings(legacy)).toEqual({ revision: 3, injectEnabled: true, dreamIdleEnabled: true, idleMs: 15 * 60_000 })
-    expect(storedSettings(undefined).dreamIdleEnabled).toBe(true)
+    expect(storedSettings(legacy)).toEqual({
+      revision: 3, injectEnabled: true, dreamIdleEnabled: true, idleMs: 15 * 60_000,
+      dreamModel: { provider: '', model: '' }, observeModel: { provider: '', model: '' },
+    })
+    const stored = storedSettings(undefined)
+    expect(stored.dreamIdleEnabled).toBe(true)
+    expect(stored.dreamModel).toEqual({ provider: '', model: '' })
+    expect(modelMenuOverride(stored.dreamModel)).toBeUndefined()
   })
 })

@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import { ACTIVITY_RETENTION_MS, contextIdentity, humanObservations, OBSERVE_PURPOSE, parseObservations } from './observe.ts'
+import { describe, expect, it, vi } from 'vitest'
+import * as kit from '@klarkxy/dsh-plugin-kit'
+import type { LlmTextRequest } from '@klarkxy/dsh-plugin-kit'
+import { ACTIVITY_RETENTION_MS, contextIdentity, humanObservations, OBSERVE_SYSTEM, parseObservations } from './observe.ts'
 import { MemoryRuntime } from './service.ts'
 import { createMemoryStore } from './store.ts'
-import { defaultSettings, type AiFeatureScope, type AuxiliaryResult, type MemoryRecord } from './contracts.ts'
+import { defaultSettings, type MemoryRecord } from './contracts.ts'
 import { assertDreamApply, dreamSourceVersion, parseDreamText, snapshotRecords } from './dream.ts'
 
 const scope = { kind: 'project' as const, projectId: '/book' }
@@ -13,13 +15,18 @@ const term = { kind: 'vocabulary', title: '蓝图的用法', content: '蓝图指
 const task = { kind: 'activity', title: '修改第三章', content: '正在修改第三章，周末计划完成。', subject: 'user', domain: 'general', key: '第三章', aliases: [], activityStatus: 'in-progress', eventTime: '周末', evidence: [{ seq: 2, quote: activity }] }
 const output = (...items: unknown[]) => JSON.stringify({ items })
 const sig = () => new AbortController().signal
-function result(text: string): AuxiliaryResult {
-  return { text, receipt: { id: 'r', plugin: 'test', purpose: OBSERVE_PURPOSE, sourceVersion: 'v', status: 'success', attempts: 1, cost: null, startedAt: 1, finishedAt: 2 } }
-}
-function setup(run: AiFeatureScope['run'], store = createMemoryStore()) {
+function setup(run: (request: LlmTextRequest) => Promise<{ text: string }>, store = createMemoryStore()) {
   let calls = 0, now = 100, serial = 0
-  const ai: AiFeatureScope = { plugin: 'test', active: true, signal: sig(), dispose() {}, registerPurpose: () => () => {}, run: request => { calls++; return run(request) } }
-  const memory = new MemoryRuntime({ store, now: () => now, id: () => `record-${++serial}`, activateAi: () => ai })
+  vi.spyOn(kit, 'callLlmText').mockImplementation(async (_llm, request) => {
+    calls++
+    const answered = await run(request)
+    return { text: answered.text, provider: 'host', model: 'chat' }
+  })
+  const memory = new MemoryRuntime({
+    store, now: () => now, id: () => `record-${++serial}`,
+    llm: { prepareCall: async () => { throw new Error('unused') }, resolveCallConfig: async () => { throw new Error('unused') } },
+    host: { agentDefaultModel: { currentSelection: () => ({ provider: 'host', model: 'chat' }) } },
+  })
   const events = [user(1, meaning)]
   const session = { id: 's', header: { cwd: '/book' }, snapshotEvents: () => events }
   return { memory, store, events, session, calls: () => calls, advance: (time: number) => { now = time } }
@@ -75,8 +82,8 @@ describe('human-only contextual observation', () => {
 describe('portable observer lifecycle', () => {
   it('observes once, supersedes a matching identity, isolates scope, and does not refresh stale activity on continue', async () => {
     const env = setup(async request => {
-      expect(request.purpose).toBe(OBSERVE_PURPOSE)
-      return result(env.events.length === 1 ? output(term) : output(task))
+      expect(request.system).toBe(OBSERVE_SYSTEM)
+      return { text: env.events.length === 1 ? output(term) : output(task) }
     })
     await env.memory.observeSession('s', env.session, sig())
     await env.memory.observeSession('s', env.session, sig())
@@ -97,7 +104,7 @@ describe('portable observer lifecycle', () => {
 
   it('replaces recent state atomically while retaining auditable history', async () => {
     const paused = '我先暂停第三章。'
-    const env = setup(async () => result(output(env.events.at(-1)?.seq === 2 ? task : { ...task, activityStatus: 'paused', content: '第三章已暂停', eventTime: undefined, evidence: [{ seq: 3, quote: paused }] })))
+    const env = setup(async () => ({ text: output(env.events.at(-1)?.seq === 2 ? task : { ...task, activityStatus: 'paused', content: '第三章已暂停', eventTime: undefined, evidence: [{ seq: 3, quote: paused }] }) }))
     env.events.splice(0, 1, user(2, activity))
     await env.memory.observeSession('s', env.session, sig())
     env.events.push(user(3, paused)); env.advance(200)
@@ -109,19 +116,19 @@ describe('portable observer lifecycle', () => {
   })
 
   it('does not replay removed evidence after restart', async () => {
-    const env = setup(async () => result(output(term)))
+    const env = setup(async () => ({ text: output(term) }))
     await env.memory.observeSession('s', env.session, sig())
     const saved = env.memory.status().records[0]!
     await env.memory.remove(saved.id, saved.revision)
     await env.memory.dispose()
-    const restarted = setup(async () => result(output(term)), env.store)
+    const restarted = setup(async () => ({ text: output(term) }), env.store)
     await restarted.memory.observeSession('s', restarted.session, sig())
     expect(restarted.calls()).toBe(0)
     expect(restarted.memory.status().records).toEqual([])
   })
 
   it.each(['delete', 'edit', 'disable', 'new-message', 'same-seq-edit', 'scope-change'] as const)('rejects stale observation after %s', async mutation => {
-    let finish!: (value: AuxiliaryResult) => void
+    let finish!: (value: { text: string }) => void
     let started!: () => void
     const ready = new Promise<void>(resolve => { started = resolve })
     const env = setup(async () => { started(); return new Promise(resolve => { finish = resolve }) })
@@ -135,7 +142,7 @@ describe('portable observer lifecycle', () => {
     if (mutation === 'new-message') env.events.push(user(2, '另一个任务'))
     if (mutation === 'same-seq-edit') env.events.splice(0, 1, user(1, '蓝图的解释已经修改'))
     if (mutation === 'scope-change') env.session.header.cwd = '/other'
-    finish(result(output(term)))
+    finish({ text: output(term) })
     await pending
     expect(env.memory.status().records).toHaveLength(mutation === 'delete' ? 0 : 1)
     if (mutation === 'edit') expect(env.memory.status().records[0]?.content).toBe('手动修订')
@@ -146,7 +153,7 @@ describe('portable observer lifecycle', () => {
   })
 
   it('deduplicates concurrent hooks and never falls back to raw text on malformed model output', async () => {
-    const env = setup(async () => result('invalid JSON'))
+    const env = setup(async () => ({ text: 'invalid JSON' }))
     await Promise.all([env.memory.observeSession('s', env.session, sig()), env.memory.observeSession('s', env.session, sig())])
     expect(env.calls()).toBe(1)
     expect(env.memory.status().records).toEqual([])
@@ -154,7 +161,7 @@ describe('portable observer lifecycle', () => {
   })
 
   it('fails closed without a native cwd and when persistence fails', async () => {
-    const env = setup(async () => result(output(term)))
+    const env = setup(async () => ({ text: output(term) }))
     await env.memory.observeSession('s', { snapshotEvents: () => env.events }, sig())
     expect(env.calls()).toBe(0)
     env.store.failNext()
@@ -191,7 +198,7 @@ describe('Dream cannot launder contextual claims', () => {
 
   it('does not automatically activate candidate sources or fabricate evidence for old manual records', async () => {
     let id = ''
-    const env = setup(async () => result(JSON.stringify({ proposals: [proposal([id])] })))
+    const env = setup(async () => ({ text: JSON.stringify({ proposals: [proposal([id])] }) }))
     const draft = parseObservations(output(term), [{ seq: 1, text: meaning }], 's', scope, 100)[0]!
     const candidate = await env.memory.create({ ...draft, status: 'candidate' })
     id = candidate.id

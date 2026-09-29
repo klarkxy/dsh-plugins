@@ -1,9 +1,11 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
+import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { modelMenuOverride } from '@klarkxy/dsh-plugin-kit/model-menu'
 import type {
-  AiFeatureScope, DreamPlan, InjectedMemoryMessage, KnowledgeScope, MemoryMutationOptions, MemoryPersistedState,
-  MemoryQuery, MemoryRecord, MemoryService, MemorySettings, MemoryStatus, NewMemoryRecord, PreStepDecision, PurposeSpec,
+  DreamPlan, InjectedMemoryMessage, KnowledgeScope, MemoryMutationOptions, MemoryPersistedState,
+  MemoryQuery, MemoryRecord, MemoryService, MemorySettings, MemoryStatus, NewMemoryRecord, PreStepDecision,
 } from './contracts.ts'
-import { cloneRecord, DEFAULT_IDLE_MS, INJECT_KINDS, MEMORY_DREAM_PURPOSE, projectIdFromCwd, sessionCwd } from './contracts.ts'
+import { cloneRecord, DEFAULT_IDLE_MS, INJECT_KINDS, MEMORY_PLUGIN, projectIdFromCwd, sessionCwd } from './contracts.ts'
 import {
   DREAM_SYSTEM, assertBasisCurrent, assertDreamApply, basisFromSnapshot, inheritEvidence, isDreamSource,
   parseDreamText, recordMap, snapshotRecords, stampInheritedExpiry, tombstoneSet, dreamSourceVersion,
@@ -22,25 +24,20 @@ import { cloneState, type MemoryStore } from './store.ts'
 import { memoryStateSchema, newMemoryRecordSchema } from './storage.ts'
 import {
   ACTIVITY_RETENTION_MS, contextIdentity, contextVersion, humanObservations, MAX_OBSERVATION_SESSIONS,
-  OBSERVE_PURPOSE, OBSERVE_SYSTEM, parseObservations,
+  OBSERVE_SYSTEM, parseObservations,
 } from './observe.ts'
 
 export interface MemoryRuntimeOptions {
   store: MemoryStore
   now?: () => number
   id?: () => string
-  activateAi?: () => AiFeatureScope | undefined
+  llm?: LlmTextCaller
+  host?: unknown
   createInjectMessage?: (payload: InjectedMemoryMessage) => unknown
 }
 
-const dreamPurpose: PurposeSpec = {
-  id: MEMORY_DREAM_PURPOSE,
-  label: '记忆整理',
-  defaultTarget: { kind: 'role', role: 'strong' },
-  maxOutputTokens: 1024,
-  maxInputChars: 12_000,
-  timeoutMs: 60_000,
-}
+const DREAM_MAX_TOKENS = 1024
+const OBSERVE_MAX_TOKENS = 1600
 
 type DreamJob = { abort: AbortController; generation: number; planId: string }
 
@@ -50,9 +47,6 @@ export class MemoryRuntime implements MemoryService {
   private disposed = false
   private storageFailed = false
   private pending = Promise.resolve()
-  private ai?: AiFeatureScope
-  private unregisterPurpose?: () => void
-  private unregisterObserverPurpose?: () => void
   private readonly observationJobs = new Map<string, { abort: AbortController; promise: Promise<void> }>()
   private readonly jobs = new Map<string, DreamJob>()
   private readonly now: () => number
@@ -63,7 +57,6 @@ export class MemoryRuntime implements MemoryService {
     this.live.settings = { ...this.live.settings, idleMs: DEFAULT_IDLE_MS }
     this.now = options.now ?? Date.now
     this.customId = options.id
-    this.syncAi()
   }
 
   get pluginActive(): boolean { return !this.disposed }
@@ -83,7 +76,7 @@ export class MemoryRuntime implements MemoryService {
       runningDreams: dreams.filter(plan => this.jobs.has(plan.id)).map(plan => plan.id),
       projectId,
       storageFailed: this.storageFailed,
-      aiAvailable: Boolean(this.ai?.active),
+      aiAvailable: Boolean(this.options.llm),
     }
   }
 
@@ -97,7 +90,6 @@ export class MemoryRuntime implements MemoryService {
     this.disposed = true
     this.generation += 1
     this.abortDreams()
-    this.detachAi()
     await this.pending
   }
 
@@ -115,7 +107,6 @@ export class MemoryRuntime implements MemoryService {
         this.generation += 1
         this.abortDreams()
       }
-      this.syncAi()
       return structuredClone(this.live.settings)
     })
   }
@@ -325,18 +316,27 @@ export class MemoryRuntime implements MemoryService {
     const now = this.now()
     let records: NewMemoryRecord[] = []
     if (messages.some(row => !/^(?:继续|好的?|同意|谢谢|ok|thanks|continue)[。.!！]?$/i.test(row.text.trim()))) {
-      const ai = this.requireAi()
+      this.requireLlm()
       const existing = this.live.records.filter(record => record.scope.kind === 'project'
         && record.scope.projectId === projectId && record.context && record.status === 'active' && !isExpired(record, now)).slice(-4)
       const input = JSON.stringify({ messages, existing: existing.map(record => ({
         kind: record.kind, context: record.context, content: record.content.slice(0, 240),
       })) })
-      const result = await ai.run({
-        purpose: OBSERVE_PURPOSE, sessionId, sourceVersion: createHash('sha256').update(`${version}:${lastSeq}:${input}`).digest('hex'),
-        system: OBSERVE_SYSTEM, input, signal, isCurrent: current, priority: 'background',
-      })
-      if (!current()) return
-      if (result.receipt.status === 'success') records = parseObservations(result.text, messages, sessionId, scope, now)
+      try {
+        const result = await this.callModel({
+          plugin: MEMORY_PLUGIN,
+          saved: this.live.settings.observeModel,
+          sessionId,
+          system: OBSERVE_SYSTEM,
+          text: input,
+          maxTokens: OBSERVE_MAX_TOKENS,
+          signal,
+          isCurrent: current,
+        })
+        if (current()) records = parseObservations(result.text, messages, sessionId, scope, now)
+      } catch {
+        if (!current()) return
+      }
     }
     await this.serialize(async () => {
       if (!current()) return
@@ -366,7 +366,7 @@ export class MemoryRuntime implements MemoryService {
   }
 
   async previewDream(sessionId: string, projectId: string | undefined, trigger: 'manual' | 'idle' = 'manual'): Promise<DreamPlan> {
-    this.requireAi()
+    this.requireLlm()
     const prepared = await this.serialize(async () => {
       this.assertOpen()
       if (trigger === 'idle' && !this.live.settings.dreamIdleEnabled) fail(MEMORY_DISABLED, '闲时整理未开启。')
@@ -397,14 +397,14 @@ export class MemoryRuntime implements MemoryService {
       this.jobs.set(plan.id, { abort, generation, planId: plan.id })
       return { plan, records, snapshot, scope, generation, abort }
     })
-    const ai = this.requireAi()
+    this.requireLlm()
     try {
-      const result = await ai.run({
-        purpose: MEMORY_DREAM_PURPOSE,
+      const result = await this.callModel({
+        plugin: MEMORY_PLUGIN,
+        saved: this.live.settings.dreamModel,
         sessionId,
-        sourceVersion: prepared.plan.sourceVersion,
         system: DREAM_SYSTEM,
-        input: JSON.stringify({
+        text: JSON.stringify({
           scope: prepared.scope,
           records: prepared.records.map(record => ({
             id: record.id, kind: record.kind, title: record.title, content: record.content,
@@ -412,17 +412,13 @@ export class MemoryRuntime implements MemoryService {
             status: record.status, revision: record.revision, expiresAt: record.expiresAt ?? null, context: record.context,
           })),
         }),
-        priority: trigger === 'idle' ? 'background' : 'interactive',
+        maxTokens: DREAM_MAX_TOKENS,
         signal: prepared.abort.signal,
         isCurrent: () => this.isDreamCurrent(prepared.plan.id, prepared.generation),
       })
       return this.serialize(async () => {
         if (!this.isDreamCurrent(prepared.plan.id, prepared.generation)) {
           return this.markDream(prepared.plan.id, { status: 'stale', error: '已取消或设置已关闭。' })
-        }
-        if (result.receipt.status !== 'success') {
-          const status = result.receipt.status === 'cancelled' ? 'cancelled' : 'failed'
-          return this.markDream(prepared.plan.id, { status, error: result.receipt.error ?? '整理未完成。' })
         }
         const proposals = parseDreamText(result.text, prepared.snapshot, prepared.scope).map(proposal => ({
           ...proposal,
@@ -761,37 +757,36 @@ export class MemoryRuntime implements MemoryService {
   private isDreamCurrent(planId: string, generation: number): boolean {
     if (this.disposed || this.generation !== generation) return false
     const plan = this.live.dreams.find(item => item.id === planId)
-    return Boolean(plan && plan.status === 'preview' && this.ai?.active)
+    return Boolean(plan && plan.status === 'preview' && this.options.llm)
   }
 
-  private requireAi(): AiFeatureScope {
-    this.syncAi()
-    if (!this.ai?.active) fail(MEMORY_AI_UNAVAILABLE, '需要先加载 @klarkxy/dsh-ai-services，记忆插件不会自动启用它。')
-    return this.ai
+  private requireLlm(): LlmTextCaller {
+    if (!this.options.llm) fail(MEMORY_AI_UNAVAILABLE, '需要宿主 llm。记忆插件不会自行选择或启用模型。')
+    return this.options.llm
   }
 
-  private syncAi(): void {
-    if (this.disposed) { this.detachAi(); return }
-    if (this.ai?.active) return
-    const ai = this.options.activateAi?.()
-    this.ai = ai
-    if (ai) {
-      try { this.unregisterPurpose = ai.registerPurpose(dreamPurpose) }
-      catch { this.unregisterPurpose = undefined }
-      try { this.unregisterObserverPurpose = ai.registerPurpose({
-        id: OBSERVE_PURPOSE, label: '语境观察', defaultTarget: { kind: 'role', role: 'normal' },
-        maxOutputTokens: 1600, maxInputChars: 12000, timeoutMs: 30_000,
-      }) } catch { this.unregisterObserverPurpose = undefined }
-    }
-  }
-
-  private detachAi(): void {
-    this.unregisterObserverPurpose?.()
-    this.unregisterObserverPurpose = undefined
-    this.unregisterPurpose?.()
-    this.unregisterPurpose = undefined
-    this.ai?.dispose()
-    this.ai = undefined
+  private callModel(request: {
+    plugin: string
+    saved: MemorySettings['dreamModel']
+    sessionId: string
+    system: string
+    text: string
+    maxTokens: number
+    signal: AbortSignal
+    isCurrent: () => boolean
+  }) {
+    const route = resolveFeatureModel(this.options.host, modelMenuOverride(request.saved), request.sessionId)
+    if (!route) fail(MEMORY_AI_UNAVAILABLE, '请先在插件页选择模型，或设置宿主默认对话模型。')
+    return callLlmText(this.requireLlm(), {
+      plugin: request.plugin,
+      route,
+      system: request.system,
+      text: request.text,
+      maxTokens: request.maxTokens,
+      signal: request.signal,
+      sessionId: request.sessionId,
+      isCurrent: request.isCurrent,
+    })
   }
 
   private assertOpen(): void {

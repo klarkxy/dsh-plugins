@@ -1,5 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { useFeatureRefresh, useNativeSeat, type NativeSurfaceClient } from '@klarkxy/dsh-ai-services/client-utils'
+import { useFeatureRefresh, useNativeSeat, type NativeSurfaceClient } from '@klarkxy/dsh-plugin-kit/client-utils'
+import {
+  modelMenuChoiceKey, modelMenuEffortOptions, parseModelMenuChoiceKey, parseModelMenuChoices,
+  type ModelMenuChoice, type ModelMenuRoute,
+} from '@klarkxy/dsh-plugin-kit/model-menu'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import {
   MEMORY_RPC_CHANNEL,
@@ -11,7 +15,7 @@ import {
 } from './view-lifetime.ts'
 
 export const name = 'dsh-memory-client'
-export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
+export const inject = ['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 export {
   beginMemoryRequest, createMemoryGeneration, disposeMemoryRequest, loadMemoryStatus, memoryRequestStillCurrent,
   peekMemoryStatus, shouldSkipMemoryRefresh, unwrapMemoryResult,
@@ -22,6 +26,7 @@ type Client = NativeSurfaceClient & {
     rpc: { call(channel: string, endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown> }
     generation?: { subscribe(listener: () => void): () => void }
   }
+  remote?: { session?: { modelCatalog?: () => Promise<unknown> } }
   slots: {
     inject(key: string, callback: () => unknown): () => void
     register(spec: { name: string; key: string }, render: unknown): () => void
@@ -98,12 +103,22 @@ function MemorySettingsPanel({ client, sessionId, locale }: { client: Client; se
   sessionRef.current = sessionId
   const [status, setStatus] = useState<MemoryStatus>()
   const [draft, setDraft] = useState<MemorySettings>()
+  const [choices, setChoices] = useState<ModelMenuChoice[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
   const busyRef = useRef(false)
   const settingsDirty = useRef(false)
   busyRef.current = busy
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    let live = true
+    void client.remote?.session?.modelCatalog?.()
+      ?.then(value => { if (live) setChoices(parseModelMenuChoices(value, draft?.dreamModel)) })
+      .catch(() => { if (live) setChoices([]) })
+    return () => { live = false }
+  }, [client, draft?.dreamModel])
 
   async function rpc(endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown> {
     const result = await client.connection.rpc.call(MEMORY_RPC_CHANNEL, endpoint, payload, signal)
@@ -190,7 +205,7 @@ function MemorySettingsPanel({ client, sessionId, locale }: { client: Client; se
     {error && <p role="alert" className="dsh-memory-error">{error}</p>}
     {note && <p role="status">{note}</p>}
     {status.storageFailed && <p role="alert">{t(locale, '保存失败，已保留原内容。', 'Save failed; previous content was kept.')}</p>}
-    {!status.aiAvailable && <p className="dsh-memory-meta">{t(locale, '梦境整理需要单独加载 @klarkxy/dsh-ai-services。', 'Dream needs @klarkxy/dsh-ai-services loaded separately.')}</p>}
+    {!status.aiAvailable && <p className="dsh-memory-meta">{t(locale, '梦境整理需要宿主 llm。请在插件页选择模型，或设置宿主默认对话模型。', 'Dream needs the host llm. Pick a model on this page, or set the host default chat model.')}</p>}
     <article className="dsh-memory-card">
       <header>
         <div>
@@ -229,6 +244,33 @@ function MemorySettingsPanel({ client, sessionId, locale }: { client: Client; se
         </button>
       </header>
       <p className="dsh-memory-meta">{t(locale, '闲时整理在会话空闲约 15 分钟后尝试。', 'Idle organization waits about 15 minutes of inactivity.')}</p>
+      <ModelSelect
+        locale={locale}
+        label={t(locale, 'Dream 整理模型', 'Dream model')}
+        route={draft.dreamModel}
+        choices={choices}
+        busy={busy}
+        onChange={route => { setDraft({ ...draft, dreamModel: route }); void action(async () => {
+          await rpc('settings.update', {
+            expectedRevision: draft.revision,
+            settings: { ...editable(draft), dreamModel: route },
+          })
+        }) }}
+      />
+      <ModelSelect
+        locale={locale}
+        label={t(locale, '语境观察模型', 'Observation model')}
+        route={draft.observeModel}
+        choices={choices}
+        busy={busy}
+        onChange={route => { setDraft({ ...draft, observeModel: route }); void action(async () => {
+          await rpc('settings.update', {
+            expectedRevision: draft.revision,
+            settings: { ...editable(draft), observeModel: route },
+          })
+        }) }}
+      />
+      <p className="dsh-memory-meta">{t(locale, '留空则使用当前会话模型，再回落到宿主默认对话模型。', 'Leave empty to use the current session model, then the host default chat model.')}</p>
     </article>
   </section>
 }
@@ -236,6 +278,59 @@ function MemorySettingsPanel({ client, sessionId, locale }: { client: Client; se
 function editable(settings: MemorySettings): Omit<MemorySettings, 'revision'> {
   const { revision: _revision, ...rest } = settings
   return rest
+}
+
+/** One purpose's model select: empty choice keeps the shared role/chat-model default. */
+function ModelSelect(props: {
+  locale: Locale
+  label: string
+  route: ModelMenuRoute
+  choices: ModelMenuChoice[]
+  busy: boolean
+  onChange: (route: ModelMenuRoute) => void
+}) {
+  const optionsId = useId()
+  const selected = props.choices.find(
+    item => item.provider === props.route.provider && item.model === props.route.model,
+  )
+  const efforts = modelMenuEffortOptions(selected, props.route.reasoningEffort)
+  return <>
+    <label className="dsh-memory-model" htmlFor={optionsId}>
+      <span>{props.label}</span>
+      <select
+        id={optionsId}
+        value={modelMenuChoiceKey(props.route.provider, props.route.model)}
+        disabled={props.busy}
+        onChange={event => {
+          const key = event.target.value
+          if (!key) { props.onChange({ provider: '', model: '' }); return }
+          const parsed = parseModelMenuChoiceKey(key)
+          if (parsed) props.onChange(parsed)
+        }}
+      >
+        <option value="">{t(props.locale, '默认模型', 'Default model')}</option>
+        {props.choices.map(choice => (
+          <option key={modelMenuChoiceKey(choice.provider, choice.model)} value={modelMenuChoiceKey(choice.provider, choice.model)}>
+            {choice.label}
+          </option>
+        ))}
+      </select>
+    </label>
+    {selected && efforts.length > 0 && (
+      <label className="dsh-memory-model" htmlFor={`${optionsId}-effort`}>
+        <span>{t(props.locale, '思考强度', 'Reasoning effort')}</span>
+        <select
+          id={`${optionsId}-effort`}
+          value={props.route.reasoningEffort ?? ''}
+          disabled={props.busy}
+          onChange={event => props.onChange({ ...props.route, reasoningEffort: event.target.value || undefined })}
+        >
+          <option value="">{t(props.locale, '默认', 'Default')}</option>
+          {efforts.map(effort => <option key={effort.id} value={effort.id}>{effort.name}</option>)}
+        </select>
+      </label>
+    )}
+  </>
 }
 
 function MemoryChatPanel({ client, sessionId, locale }: { client: Client; sessionId: string; locale: Locale }) {
@@ -550,6 +645,10 @@ const styles = `
 .dsh-memory-card,.dsh-memory-dream,.dsh-memory-add,.dsh-memory-si{display:grid;gap:10px;padding:14px 16px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:12px}
 .dsh-memory-card header,.dsh-memory-chat-body header{display:flex;justify-content:space-between;gap:12px;align-items:center}
 .dsh-memory-card h3,.dsh-memory-add h4,.dsh-memory-dream h4{margin:0;font-size:var(--font-size-3,16px);font-weight:600}
+.dsh-memory-model{display:grid;gap:6px;font-size:var(--font-size-2,14px)}
+.dsh-memory-model select{box-sizing:border-box;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--gray-7,color-mix(in srgb,currentColor 20%,transparent));border-radius:8px;background:var(--dsw-alias-bg-layer-1,inherit);color:inherit;font:inherit}
+.dsh-memory-model select:focus-visible{border-color:var(--dsw-alias-brand-primary,#3b82f6);outline:2px solid var(--dsw-alias-brand-primary,#3b82f6);outline-offset:1px}
+@media(prefers-reduced-motion:reduce){.dsh-memory-model select{transition:none}}
 .dsh-memory-settings input,.dsh-memory-chat input,.dsh-memory-chat textarea,.dsh-memory-chat select{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit;transition:border-color 150ms ease,box-shadow 150ms ease}
 .dsh-memory-settings input:focus,.dsh-memory-chat input:focus,.dsh-memory-chat textarea:focus,.dsh-memory-chat select:focus{border-color:var(--accent-9,#3b82f6);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-9,#3b82f6) 25%,transparent)}
 .dsh-memory-settings button:not([role="switch"]),.dsh-memory-chat button:not([role="switch"]){min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start;transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease}
