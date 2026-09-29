@@ -1,5 +1,5 @@
-/** Browser-safe contracts. Shared RPC/result types stay on @klarkxy/dsh-ai-services. */
-export type { RpcResult } from '@klarkxy/dsh-ai-services/contracts'
+/** Browser-safe contracts. Shared RPC/result types stay on @klarkxy/dsh-plugin-kit. */
+export type { RpcResult } from '@klarkxy/dsh-plugin-kit/contracts'
 
 export const PLUGIN_NAME = '@klarkxy/dsh-git-commit'
 export const FEATURE_ID = 'git-commit'
@@ -21,12 +21,48 @@ export const RECENT_LOG_COUNT = 10
 export const MAX_MESSAGE_CHARS = 120
 /** git subprocess timeout. */
 export const GIT_TIMEOUT_MS = 30_000
+export const SETTINGS_KEY = 'current'
+
+/** Plugin-page model selection. Empty provider/model means "follow the default". */
+export interface CommitModelRoute {
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
+}
+
+export interface GitCommitSettings {
+  readonly revision: number
+  readonly model: CommitModelRoute
+}
+
+export const defaultModelRoute = (): CommitModelRoute => ({ provider: '', model: '' })
+
+export const defaultSettings = (): GitCommitSettings => ({ revision: 0, model: defaultModelRoute() })
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
+}
+
+function asText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+/** Untrusted stored routes collapse to the default so a bad row never breaks the run. */
+export function normalizeModelRoute(value: unknown): CommitModelRoute {
+  const row = asRecord(value)
+  if (!row) return defaultModelRoute()
+  const provider = asText(row.provider) ?? ''
+  const model = asText(row.model) ?? ''
+  const effort = asText(row.reasoningEffort)
+  if (!provider || !model || provider.length > 250 || model.length > 250) return defaultModelRoute()
+  return effort && effort.length <= 80 ? { provider, model, reasoningEffort: effort } : { provider, model }
+}
 
 export interface CommitModelInfo {
   readonly provider: string
   readonly model: string
-  /** 'purpose' means the user configured an AI-services route; 'default' means the fallback default model. */
-  readonly source: 'override' | 'purpose' | 'default'
+  /** 'page' is the plugin-page selection; 'default' is the host chat model. */
+  readonly source: 'page' | 'default'
 }
 
 export interface GitCommitStatus {

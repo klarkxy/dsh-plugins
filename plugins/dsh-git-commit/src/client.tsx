@@ -1,9 +1,14 @@
 import type { Context } from '@deepseek-ai/cordis'
+import {
+  modelMenuChoiceKey, modelMenuEffortOptions, parseModelMenuChoiceKey, parseModelMenuChoices,
+  type ModelMenuChoice,
+} from '@klarkxy/dsh-plugin-kit/model-menu'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Tooltip, useAnchoredPosition, useDismissOnOutsidePointer } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
-  GIT_COMMIT_CLIENT_SERVICE, RPC_CHANNEL, type CommitRunResult, type GitCommitStatus, type RpcResult,
+  GIT_COMMIT_CLIENT_SERVICE, PLUGIN_NAME, RPC_CHANNEL, type CommitModelRoute, type CommitRunResult,
+  type GitCommitSettings, type GitCommitStatus, type RpcResult,
 } from './contracts.ts'
 
 export const name = 'dsh-git-commit-client'
@@ -79,7 +84,7 @@ export interface GitCommitActionProps {
   t: Translate
 }
 
-async function rpc<T>(call: GitCommitActionProps['call'], endpoint: string, payload: unknown): Promise<T> {
+async function rpc<T>(call: GitCommitActionProps['call'], endpoint: string, payload: unknown = {}): Promise<T> {
   const result = await call(endpoint, payload) as RpcResult<T> | undefined
   if (!result || result.ok !== true) {
     throw new Error(result && 'error' in result ? result.error.message : 'request failed')
@@ -200,7 +205,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
   const workspaceCount = status?.workspace.files ?? 0
   const canCommit = available && !running && !sessionRunning && workspaceCount > 0
   const modelLabel = status?.model
-    ? `${status.model.provider}/${status.model.model} · ${status.model.source === 'purpose' || status.model.source === 'override' ? t('modelCustom') : t('modelDefault')}`
+    ? `${status.model.provider}/${status.model.model} · ${status.model.source === 'page' ? t('modelCustom') : t('modelDefault')}`
     : undefined
 
   return (
@@ -296,6 +301,11 @@ const css = `
 .gcm-result{display:grid;gap:4px}
 .gcm-commits{margin:0;padding-left:18px;display:grid;gap:2px;font-size:12px;overflow-wrap:anywhere}
 .gcm-commits code{font-size:12px;background:var(--dsw-alias-bg-layer-2);padding:0 4px;border-radius:4px}
+.gcm-settings{display:grid;gap:10px;color:var(--dsw-alias-label-primary);font:400 var(--font-size-2,13px)/1.5 var(--default-font-family,system-ui,sans-serif)}
+.gcm-settings label{display:grid;gap:6px;font-size:var(--font-size-2,13px)}
+.gcm-settings select{box-sizing:border-box;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit}
+.gcm-settings select:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+@media(prefers-reduced-motion:reduce){.gcm-settings select{transition:none}}
 `
 
 declare module '@deepseek-ai/cordis' {
@@ -304,17 +314,140 @@ declare module '@deepseek-ai/cordis' {
 
 type Client = Context & {
   connection: ConnectionLike
+  remote?: { session?: { modelCatalog?: () => Promise<unknown> } }
   slots: {
     inject(key: string, callback: () => unknown): () => void
-    register(spec: { name: string; id: string; order: number; locale: string; inject: () => unknown }, render: unknown): () => void
+    register(spec: { name: string; id: string; order: number; locale: string; inject: () => unknown } | { name: string; key: string }, render: unknown): () => void
   }
   locale: { register(ns: string, locales: { zh: Record<string, string>; en: Record<string, string> }): () => void }
+}
+
+const settingsZh = {
+  pageTitle: 'Git 提交',
+  model: '提交规划模型',
+  modelDefault: '默认模型',
+  modelEffort: '思考强度',
+  modelHint: '留空则使用当前会话模型，再回落到宿主默认对话模型。',
+  loading: '正在读取设置…',
+  saved: '已保存。',
+  stale: '设置已更新，请刷新后重试。',
+  failed: '无法读取提交设置。',
+  retry: '重试',
+}
+
+const settingsEn: Record<keyof typeof settingsZh, string> = {
+  pageTitle: 'Git Commit',
+  model: 'Commit planning model',
+  modelDefault: 'Default model',
+  modelEffort: 'Reasoning effort',
+  modelHint: 'Leave empty to use the current session model, then the host default chat model.',
+  loading: 'Loading settings…',
+  saved: 'Saved.',
+  stale: 'Settings changed; refresh and retry.',
+  failed: 'Could not load commit settings.',
+  retry: 'Retry',
+}
+
+function settingsCopy(locale: string): Record<keyof typeof settingsZh, string> {
+  return String(locale).startsWith('zh') ? settingsZh : settingsEn
+}
+
+/** Plugin-page settings row: pick the model this plugin's planning call uses. */
+export function GitCommitSettingsPanel(props: { client: Client; locale?: string }) {
+  const text = settingsCopy(props.locale ?? 'zh')
+  const [settings, setSettings] = useState<GitCommitSettings | undefined>(undefined)
+  const [choices, setChoices] = useState<ModelMenuChoice[]>([])
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const call = useCallback(
+    (endpoint: string, payload: unknown = {}) => props.client.connection.rpc.call(RPC_CHANNEL, endpoint, payload),
+    [props.client],
+  )
+
+  useEffect(() => {
+    let live = true
+    void rpc<GitCommitSettings>(call, 'settings').then(next => {
+      if (live) { setSettings(next); setError('') }
+    }).catch(() => { if (live) setError(text.failed) })
+    void props.client.remote?.session?.modelCatalog?.()
+      ?.then(value => { if (live) setChoices(parseModelMenuChoices(value, settings?.model)) })
+      .catch(() => { if (live) setChoices([]) })
+    return () => { live = false }
+  }, [call, props.client, settings?.model, text.failed])
+
+  const save = useCallback((model: CommitModelRoute) => {
+    if (!settings) return
+    setBusy(true); setNote(''); setError('')
+    void rpc<GitCommitSettings>(call, 'settings.update', {
+      settings: { model },
+      expectedRevision: settings.revision,
+    }).then(next => {
+      setSettings(next); setNote(text.saved); setBusy(false)
+    }).catch(() => {
+      setError(text.stale); setBusy(false)
+    })
+  }, [call, settings, text.saved, text.stale])
+
+  if (!settings) {
+    return <section className="gcm-settings"><p role="status">{error || text.loading}</p></section>
+  }
+
+  const current = settings.model
+  const selected = choices.find(item => item.provider === current.provider && item.model === current.model)
+  const efforts = modelMenuEffortOptions(selected, current.reasoningEffort)
+
+  return (
+    <section className="gcm-settings" data-testid="git-commit-settings">
+      {error && <p role="alert" className="gcm-error">{error}</p>}
+      {note && <p role="status">{note}</p>}
+      <label>
+        {text.model}
+        <select
+          value={modelMenuChoiceKey(current.provider, current.model)}
+          disabled={busy}
+          onChange={event => {
+            const key = event.target.value
+            if (!key) { save({ provider: '', model: '' }); return }
+            const parsed = parseModelMenuChoiceKey(key)
+            if (parsed) save(parsed)
+          }}
+        >
+          <option value="">{text.modelDefault}</option>
+          {choices.map(choice => (
+            <option key={modelMenuChoiceKey(choice.provider, choice.model)} value={modelMenuChoiceKey(choice.provider, choice.model)}>
+              {choice.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {selected && efforts.length > 0 && (
+        <label>
+          {text.modelEffort}
+          <select
+            value={current.reasoningEffort ?? ''}
+            disabled={busy}
+            onChange={event => save({ ...current, reasoningEffort: event.target.value || undefined })}
+          >
+            <option value="">{text.modelDefault}</option>
+            {efforts.map(effort => <option key={effort.id} value={effort.id}>{effort.name}</option>)}
+          </select>
+        </label>
+      )}
+      <p className="gcm-meta">{text.modelHint}</p>
+    </section>
+  )
 }
 
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
   ctx.provide(GIT_COMMIT_CLIENT_SERVICE, { active: true })
   ctx.effect(() => client.locale.register(NS, { zh: { ...zh }, en: { ...en } }), 'git-commit.locale')
+  ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
+    { name: 'plugins.bundle.config', key: PLUGIN_NAME },
+    () => <GitCommitSettingsPanel client={client} />,
+  )), 'git-commit.settings')
   ctx.effect(() => client.slots.inject('conversation.session.header.actions', () => client.slots.register(
     {
       name: 'conversation.session.header.actions',

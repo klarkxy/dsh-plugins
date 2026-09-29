@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import type { AiServices, AuxiliaryRequest, AuxiliaryResult, ResolvedRoute } from '@klarkxy/dsh-ai-services/contracts'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import * as kit from '@klarkxy/dsh-plugin-kit'
+import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import { GitCommitService, type SessionStoreLike } from './service.ts'
 import type { GitRunner } from './git.ts'
 
@@ -24,45 +25,33 @@ function makeSessions(cwd = 'D:/repo'): SessionStoreLike {
   }
 }
 
-const route: ResolvedRoute = {
-  provider: 'deepseek', model: 'deepseek-chat', source: 'default',
-  target: { kind: 'role', role: 'weak' }, policyRevision: 0,
+const host = { agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'deepseek-chat' }) } }
+
+function makeLlm(): LlmTextCaller {
+  return {
+    prepareCall: async () => { throw new Error('unused') },
+    resolveCallConfig: async () => { throw new Error('unused') },
+  }
 }
 
-function makeAi(planText: string | Error, beforeReturn?: () => Promise<void> | void): AiServices {
-  let active = true
-  const scope = {
-    plugin: 'test',
-    signal: new AbortController().signal,
-    get active() { return active },
-    registerPurpose: () => () => {},
-    async run(_request: AuxiliaryRequest): Promise<AuxiliaryResult> {
-      await beforeReturn?.()
-      if (planText instanceof Error) throw planText
-      return {
-        text: planText,
-        receipt: { id: 'r1', plugin: 'test', purpose: 'git-commit.plan', sourceVersion: 'v', status: 'success', attempts: 1, cost: null, startedAt: 0, finishedAt: 1, route },
-      }
-    },
-    dispose() { active = false },
-  }
-  return {
-    activate: () => scope,
-    importPurposes: async () => { throw new Error('unused') },
-    getPolicy: () => { throw new Error('unused') },
-    updatePolicy: async () => { throw new Error('unused') },
-    resolve: async () => route,
-    purposes: () => [],
-    usage: () => [],
-  }
+beforeEach(() => { vi.restoreAllMocks() })
+
+function stubPlan(planText: string | Error, beforeReturn?: () => Promise<void> | void) {
+  vi.spyOn(kit, 'callLlmText').mockImplementation(async () => {
+    await beforeReturn?.()
+    if (planText instanceof Error) throw planText
+    return { text: planText, provider: 'deepseek', model: 'deepseek-chat' }
+  })
 }
 
 const porcelain = [' M src/a.ts', ' M src/b.ts', '?? docs/c.md', ''].join(NUL)
 
 function makeService(planText: string | Error, run: GitRunner & { calls: string[][] }) {
+  stubPlan(planText)
   const service = new GitCommitService({
     plugin: 'test',
-    ai: makeAi(planText),
+    llm: makeLlm(),
+    host,
     sessions: makeSessions(),
     run,
     preview: async path => ({ path, preview: 'new file body', binary: false }),
@@ -159,9 +148,10 @@ describe('GitCommitService.commit', () => {
       if (args[0] === 'add') { await gate; return '' }
       return inner(args, options)
     }
+    stubPlan(plan)
     const service = new GitCommitService({
       plugin: 'test',
-      ai: makeAi(plan),
+      llm: makeLlm(), host,
       sessions: makeSessions(),
       run: blocking,
       preview: async path => ({ path, preview: '', binary: false }),
@@ -184,7 +174,8 @@ describe('GitCommitService.commit', () => {
       if (args[0] === 'status' && ++statuses > 1) return [' M src/a.ts', '?? new-after-plan.txt', ''].join(NUL)
       return inner(args, options)
     }
-    const service = new GitCommitService({ plugin: 'test', ai: makeAi(plan), sessions: makeSessions(), run,
+    stubPlan(plan)
+    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
       preview: async path => ({ path, preview: '', binary: false }) })
     service.start()
     await expect(service.commit('s1')).rejects.toMatchObject({ code: 'workspace-changed' })
@@ -199,7 +190,8 @@ describe('GitCommitService.commit', () => {
       'symbolic-ref': 'main\n',
       'status --porcelain': porcelain,
     })
-    const service = new GitCommitService({ plugin: 'test', ai: makeAi(plan, () => gate), sessions: makeSessions(), run,
+    stubPlan(plan, () => gate)
+    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
       preview: async path => ({ path, preview: '', binary: false }) })
     service.start()
     const committing = service.commit('s1')

@@ -1,7 +1,9 @@
-import type { AiFeatureScope, AiServices, ResolvedRoute } from '@klarkxy/dsh-ai-services/contracts'
+import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { modelMenuOverride } from '@klarkxy/dsh-plugin-kit/model-menu'
 import {
-  CONTRACT_VERSION, DEFAULT_MAX_OUTPUT_TOKENS, PROMPT_VERSION, PURPOSE_ID, RECENT_LOG_COUNT, SCHEMA_VERSION,
-  type CommitGroupResult, type CommitModelInfo, type CommitRunResult, type GitCommitStatus,
+  DEFAULT_MAX_OUTPUT_TOKENS, RECENT_LOG_COUNT,
+  defaultSettings, type CommitGroupResult, type CommitModelInfo, type CommitRunResult,
+  type GitCommitSettings, type GitCommitStatus,
 } from './contracts.ts'
 import {
   commitGroups, diffAgainstHead, execGit, fallbackGroup, isGitMissing, pathVersions, recentSubjects, repoInfo,
@@ -24,11 +26,17 @@ export interface AgentStoreLike {
 
 export interface GitCommitServiceDeps {
   readonly plugin: string
-  readonly ai: AiServices
+  readonly llm: LlmTextCaller
+  readonly host?: unknown
   readonly sessions: SessionStoreLike
   readonly agents?: AgentStoreLike
   readonly run?: GitRunner
   readonly preview?: (root: string, path: string) => Promise<UntrackedPreview>
+  /** Plugin-page settings row; absent keeps the shared purpose route. */
+  readonly settings?: {
+    load(): Promise<GitCommitSettings>
+    save(settings: GitCommitSettings): Promise<void>
+  }
 }
 
 export class CommitRunError extends Error {
@@ -40,9 +48,9 @@ export class CommitRunError extends Error {
   }
 }
 
-function modelInfo(route: ResolvedRoute | undefined): CommitModelInfo | undefined {
+function modelInfo(route: { provider: string; model: string } | undefined, source: CommitModelInfo['source']): CommitModelInfo | undefined {
   if (!route?.provider || !route.model) return undefined
-  return { provider: route.provider, model: route.model, source: route.source }
+  return { provider: route.provider, model: route.model, source }
 }
 
 function looksChinese(subjects: readonly string[]): boolean {
@@ -60,32 +68,50 @@ export class GitCommitService {
   private readonly deps: GitCommitServiceDeps
   private readonly run: GitRunner
   private readonly preview: (root: string, path: string) => Promise<UntrackedPreview>
-  private scope: AiFeatureScope | undefined
-  private disposePurpose: (() => void) | undefined
   private running: Promise<unknown> | undefined
+  private settings: GitCommitSettings
+  private disposed = false
 
   constructor(deps: GitCommitServiceDeps) {
     this.deps = deps
     this.run = deps.run ?? execGit
     this.preview = deps.preview ?? untrackedPreview
+    this.settings = defaultSettings()
+    // The stored row is adopted once it resolves; a failed read keeps the default.
+    void deps.settings?.load().then(
+      loaded => { if (loaded) this.settings = structuredClone(loaded) },
+      () => { this.settings = defaultSettings() },
+    )
   }
 
-  start(): void {
-    this.scope = this.deps.ai.activate(this.deps.plugin)
-    this.disposePurpose = this.scope.registerPurpose({
-      id: PURPOSE_ID,
-      label: 'Git 提交',
-      // Configurable in advance via the AI-services purpose route; unset roles
-      // inherit the normal tier and finally the default chat model.
-      defaultTarget: { kind: 'role', role: 'weak' },
-      maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
-    })
+  /** Apply a freshly loaded settings row; the default stays until a row is read. */
+  adoptSettings(next: GitCommitSettings): void {
+    this.settings = structuredClone(next)
   }
+
+  getSettings(): GitCommitSettings {
+    return structuredClone(this.settings)
+  }
+
+  private selectedModel() {
+    const page = modelMenuOverride(this.settings.model)
+    return { route: resolveFeatureModel(this.deps.host, page), source: page ? 'page' as const : 'default' as const }
+  }
+
+  async updateSettings(patch: Omit<GitCommitSettings, 'revision'>, expectedRevision: number): Promise<GitCommitSettings> {
+    if (expectedRevision !== this.settings.revision) {
+      throw new CommitRunError('stale', 'dsh-git-commit: settings changed; reload and retry')
+    }
+    const next: GitCommitSettings = { revision: expectedRevision + 1, model: structuredClone(patch.model) }
+    await this.deps.settings?.save(next)
+    this.settings = next
+    return this.getSettings()
+  }
+
+  start(): void {}
 
   async dispose(): Promise<void> {
-    this.disposePurpose?.()
-    this.scope?.dispose()
-    this.scope = undefined
+    this.disposed = true
     await this.running?.catch(() => {})
   }
 
@@ -113,10 +139,8 @@ export class GitCommitService {
       throw error
     }
     const changes = await workingTreeChanges(this.run, resolved.root)
-    let model: CommitModelInfo | undefined
-    if (this.scope?.active) {
-      model = await this.deps.ai.resolve(PURPOSE_ID, sessionId).then(modelInfo, () => undefined)
-    }
+    const selected = this.selectedModel()
+    const model = modelInfo(selected.route, selected.source)
     return {
       available: true,
       root: resolved.root,
@@ -143,7 +167,7 @@ export class GitCommitService {
     const resolved = await this.resolveRepo(sessionId)
     const assertReady = () => {
       signal?.throwIfAborted()
-      if (!this.scope?.active) throw new CommitRunError('cancelled', 'dsh-git-commit: plugin is no longer active')
+      if (this.disposed || !this.deps.llm) throw new CommitRunError('cancelled', 'dsh-git-commit: plugin is no longer active')
       const currentSession = this.deps.sessions.get(sessionId)
       if (currentSession !== session || normalizeCwd(currentSession?.header?.cwd) !== sessionCwd) {
         throw new CommitRunError('session-changed', 'dsh-git-commit: session workspace changed during planning')
@@ -172,23 +196,19 @@ export class GitCommitService {
 
     let groups: PlanGroup[] | undefined
     let model: CommitModelInfo | undefined
-    const scope = this.scope
-    if (scope?.active) {
+    const planned = this.selectedModel()
+    if (planned.route) {
       try {
-        const result = await scope.run({
-          purpose: PURPOSE_ID,
-          sessionId,
-          input: buildPlanInput({ files: selected, recentSubjects: subjects, stat, diff, untracked }),
+        const result = await callLlmText(this.deps.llm, {
+          plugin: this.deps.plugin,
+          route: planned.route,
           system: planSystemPrompt(),
-          sourceVersion: `${sessionId}:${initial.fingerprint}`,
-          contractVersion: CONTRACT_VERSION,
-          promptVersion: PROMPT_VERSION,
-          schemaVersion: SCHEMA_VERSION,
-          signal,
-          priority: 'interactive',
+          text: buildPlanInput({ files: selected, recentSubjects: subjects, stat, diff, untracked }),
+          maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+          signal: signal ?? new AbortController().signal,
+          sessionId,
         })
-        model = modelInfo(result.receipt.route)
-        if (result.receipt.status === 'cancelled') throw new CommitRunError('cancelled', 'dsh-git-commit: planning was cancelled')
+        model = modelInfo(result, planned.source)
         groups = parsePlan(result.text, selected)
       } catch (error) {
         if (error instanceof CommitRunError) throw error

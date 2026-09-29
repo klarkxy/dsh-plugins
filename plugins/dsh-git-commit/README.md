@@ -8,12 +8,20 @@ directory.
 
 A model splits the change set into a small number of coherent commits with
 proper messages, then the groups are applied in order as path-scoped commits.
-The model route comes from
-[@klarkxy/dsh-ai-services](https://klarkxy.github.io/dsh-plugins/plugins/ai-services/):
-configure the **Git 提交** (`git-commit.plan`) purpose there in advance to pin
-a dedicated model; when nothing is configured, the request inherits the normal
-model tier and finally the default chat model. If the model call fails or
-returns an invalid plan, the changes land in one fallback commit instead.
+The model route comes from this plugin's own settings row: configure the
+**Commit planning model** there in advance to pin a dedicated model; when
+nothing is configured, the request follows the live session model and then the
+host default chat model. If the model call fails or returns an invalid plan,
+the changes land in one fallback commit instead.
+
+## Plugin page settings
+
+`Settings → Plugins → Git Commit` carries a **Commit planning model** row for
+the commit planning call. It is optional. A saved route is used for that call
+as an explicit model; an empty selection follows the live session model and
+then the host default chat model. The conversation header panel reports which
+of the two is in effect. Only that call is affected; a saved route selects a
+model but is not evidence of connectivity.
 
 ## Usage
 
