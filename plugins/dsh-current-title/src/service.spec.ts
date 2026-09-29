@@ -1,35 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { AiFeatureScope, AiServices, AuxiliaryResult } from '@klarkxy/dsh-ai-services/contracts'
-import { PLUGIN_NAME, PROVIDER_ID, PURPOSE_ID, type TitleSettings } from './contracts.ts'
+import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { PLUGIN_NAME, PROVIDER_ID, type TitleSettings } from './contracts.ts'
 import { CurrentTitleService } from './service.ts'
 import type { LoaderEntry, LoaderFace, SessionTitleServiceLike } from './native-slot.ts'
 
-function receipt(text: string): AuxiliaryResult {
+function llm(): LlmTextCaller {
   return {
-    text,
-    receipt: {
-      id: 'r1', plugin: PLUGIN_NAME, purpose: PURPOSE_ID, sourceVersion: 's',
-      status: 'success', attempts: 1, cost: null, startedAt: 0, finishedAt: 1,
-    },
-  }
-}
-
-function ai(run: AiFeatureScope['run'] = async () => receipt('{"type":"fix","summary":"登录"}')): AiServices {
-  const activate = vi.fn((): AiFeatureScope => ({
-    plugin: PLUGIN_NAME,
-    signal: new AbortController().signal,
-    active: true,
-    registerPurpose: vi.fn(() => () => {}),
-    run,
-    dispose: vi.fn(),
-  }))
-  return {
-    activate,
-    getPolicy: () => ({ revision: 0, roles: {}, purposes: {}, limits: { concurrency: 1, timeoutMs: 1, maxInputChars: 1, maxOutputTokens: 1, maxAttempts: 1 } }),
-    updatePolicy: async policy => ({ ...policy, revision: 1 }),
-    resolve: async () => ({ provider: 'p', model: 'm', source: 'default', target: { kind: 'role', role: 'weak' }, policyRevision: 0 }),
-    purposes: () => [],
-    usage: () => [],
+    prepareCall: vi.fn(async () => { throw new Error('unused') }),
+    resolveCallConfig: vi.fn(async () => { throw new Error('unused') }),
   }
 }
 
@@ -37,11 +15,14 @@ function nativeExclusive(initial?: string) {
   let registration: { id: string } | undefined = initial ? { id: initial } : undefined
   const active = new Set<Promise<unknown>>()
   const titles = new Map<string, { title: string; source: { kind: 'user' | 'provider' | 'fallback' } }>()
+  const modes: string[] = []
   const service: SessionTitleServiceLike & {
     occupant(): string | undefined
     hold(work: Promise<unknown>): void
     drop(id: string): Promise<void>
+    modes: string[]
   } = {
+    modes,
     occupant: () => registration?.id,
     hold(work) { active.add(work); void work.finally(() => active.delete(work)) },
     async drop(id) {
@@ -51,6 +32,7 @@ function nativeExclusive(initial?: string) {
     },
     register(provider) {
       if (registration !== undefined) throw new Error(`session-title provider "${registration.id}" is already registered`)
+      modes.push(provider.automatic)
       const current = { id: provider.id }
       registration = current
       return async () => {
@@ -100,18 +82,18 @@ function store(initial?: TitleSettings) {
 
 describe('CurrentTitleService', () => {
   it('stays inert when required host services are missing', async () => {
-    const services = ai()
+    const services = llm()
     const update = vi.fn()
     const service = new CurrentTitleService({
       plugin: PLUGIN_NAME,
-      ai: services,
+      llm: services,
       loader: { entries: () => [], update },
     })
     await service.start()
     expect(service.support.weOwn).toBe(false)
     expect(service.support.limitation).toMatch(/required host services/)
     expect(update).not.toHaveBeenCalled()
-    expect(services.activate).not.toHaveBeenCalled()
+    expect(services.prepareCall).not.toHaveBeenCalled()
     await service.dispose()
     expect(update).not.toHaveBeenCalled()
   })
@@ -121,7 +103,7 @@ describe('CurrentTitleService', () => {
     const exclusive = nativeExclusive()
     const service = new CurrentTitleService({
       plugin: PLUGIN_NAME,
-      ai: ai(),
+      llm: llm(),
       sessionTitle: exclusive,
       sessions: { get: () => undefined },
       loader: loader([]),
@@ -129,27 +111,27 @@ describe('CurrentTitleService', () => {
     })
     await service.start()
     expect((await service.updateLocale('en', 0)).locale).toBe('auto')
-    expect(persisted.value()?.locale).toBe('auto')
+    expect(persisted.value()).toMatchObject({ locale: 'auto', prompt: '', model: { provider: '', model: '' } })
     await expect(service.updateLocale('zh', 0)).rejects.toThrow(/changed/)
     expect(service.status().settings.locale).toBe('auto')
     await service.dispose()
     const again = new CurrentTitleService({
       plugin: PLUGIN_NAME,
-      ai: ai(),
+      llm: llm(),
       sessionTitle: nativeExclusive(),
       sessions: { get: () => undefined },
       loader: loader([]),
       store: persisted,
     })
     await again.start()
-    expect(again.status().settings).toEqual({ revision: 1, locale: 'auto' })
+    expect(again.status().settings).toEqual({ revision: 1, locale: 'auto', prompt: '', model: { provider: '', model: '' }, cadence: 'all-prompts' })
     await again.dispose()
   })
 
   it('does not keep a saved locale when storage write fails', async () => {
     const service = new CurrentTitleService({
       plugin: PLUGIN_NAME,
-      ai: ai(),
+      llm: llm(),
       sessionTitle: nativeExclusive(),
       sessions: { get: () => undefined },
       loader: loader([]),
@@ -162,17 +144,17 @@ describe('CurrentTitleService', () => {
   })
 
   it('ignores a persisted locale and runs auto without dropping revision', async () => {
-    const persisted = store({ revision: 4, locale: 'en' })
+    const persisted = store({ revision: 4, locale: 'en', prompt: '', model: { provider: '', model: '' }, cadence: 'all-prompts' })
     const service = new CurrentTitleService({
       plugin: PLUGIN_NAME,
-      ai: ai(),
+      llm: llm(),
       sessionTitle: nativeExclusive(),
       sessions: { get: () => undefined },
       loader: loader([]),
       store: persisted,
     })
     await service.start()
-    expect(service.status().settings).toEqual({ revision: 4, locale: 'auto' })
+    expect(service.status().settings).toEqual({ revision: 4, locale: 'auto', prompt: '', model: { provider: '', model: '' }, cadence: 'all-prompts' })
     await service.dispose()
   })
 
@@ -185,7 +167,7 @@ describe('CurrentTitleService', () => {
     const host = loader(rows, exclusive)
     const service = new CurrentTitleService({
       plugin: PLUGIN_NAME,
-      ai: ai(),
+      llm: llm(),
       sessionTitle: exclusive,
       sessions: { get: () => undefined },
       loader: host,
@@ -212,7 +194,7 @@ describe('CurrentTitleService', () => {
     const host = loader([])
     const service = new CurrentTitleService({
       plugin: PLUGIN_NAME,
-      ai: ai(),
+      llm: llm(),
       sessionTitle: exclusive,
       sessions: { get: () => undefined },
       loader: host,
@@ -224,12 +206,67 @@ describe('CurrentTitleService', () => {
     expect(host.updates).toEqual([])
   })
 
+  it('saves a custom prompt and model without dropping them on restart', async () => {
+    const persisted = store()
+    const service = new CurrentTitleService({
+      plugin: PLUGIN_NAME,
+      llm: llm(),
+      sessionTitle: nativeExclusive(),
+      sessions: { get: () => undefined },
+      loader: loader([]),
+      store: persisted,
+    })
+    await service.start()
+    const saved = await service.updateSettings({
+      prompt: '用项目代号命名',
+      model: { provider: 'deepseek', model: 'chat', reasoningEffort: 'high' },
+      expectedRevision: 0,
+    })
+    expect(saved.prompt).toBe('用项目代号命名')
+    expect(saved.model).toEqual({ provider: 'deepseek', model: 'chat', reasoningEffort: 'high' })
+    await service.dispose()
+    const again = new CurrentTitleService({
+      plugin: PLUGIN_NAME,
+      llm: llm(),
+      sessionTitle: nativeExclusive(),
+      sessions: { get: () => undefined },
+      loader: loader([]),
+      store: persisted,
+    })
+    await again.start()
+    expect(again.status().settings.prompt).toBe('用项目代号命名')
+    expect(again.status().settings.model).toEqual({ provider: 'deepseek', model: 'chat', reasoningEffort: 'high' })
+    await again.dispose()
+  })
+
+  it('re-registers the provider when the cadence setting changes', async () => {
+    const exclusive = nativeExclusive()
+    const service = new CurrentTitleService({
+      plugin: PLUGIN_NAME,
+      llm: llm(),
+      sessionTitle: exclusive,
+      sessions: { get: () => undefined },
+      loader: loader([]),
+    })
+    await service.start()
+    expect(exclusive.modes).toEqual(['all-prompts'])
+    const saved = await service.updateSettings({ cadence: 'first-prompt', expectedRevision: 0 })
+    expect(saved.cadence).toBe('first-prompt')
+    expect(exclusive.modes).toEqual(['all-prompts', 'first-prompt'])
+    expect(exclusive.occupant()).toBe(PROVIDER_ID)
+    expect(service.support.weOwn).toBe(true)
+    // An unchanged cadence must not re-register.
+    await service.updateSettings({ prompt: '用项目代号命名', expectedRevision: 1 })
+    expect(exclusive.modes).toEqual(['all-prompts', 'first-prompt'])
+    await service.dispose()
+  })
+
   it('regenerates through native refresh', async () => {
     const exclusive = nativeExclusive()
     const session = { id: 's1', snapshotEvents: () => [] }
     const service = new CurrentTitleService({
       plugin: PLUGIN_NAME,
-      ai: ai(),
+      llm: llm(),
       sessionTitle: exclusive,
       sessions: { get: id => id === 's1' ? session : undefined },
       loader: loader([]),

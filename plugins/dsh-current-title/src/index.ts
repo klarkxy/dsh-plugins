@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { AiServices } from '@klarkxy/dsh-ai-services/contracts'
-import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-ai-services/host-rpc'
+import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { isTitleLocaleMode, PLUGIN_NAME, RPC_CHANNEL, SETTINGS_KEY, type TitleLocaleMode } from './contracts.ts'
 import { CurrentTitleService, handleRpc, hostLocalePreference } from './service.ts'
 import type { LoaderFace, SessionTitleServiceLike } from './native-slot.ts'
@@ -8,7 +8,7 @@ import type { SessionLike } from './messages.ts'
 import { parseTitleSettings, titleDomain } from './storage.ts'
 
 export const name = PLUGIN_NAME
-export const inject = ['sessionTitle', 'aiServices', 'sessions', 'loader', 'storageDomain', 'connection', 'webServer'] as const
+export const inject = ['sessionTitle', 'llm', 'sessions', 'loader', 'storageDomain', 'connection', 'webServer'] as const
 export { CurrentTitleService }
 export { selectRecentMessages, frameMessages } from './input.ts'
 export { parseModelTitle, formatTitle, resolveTitleLocale } from './output.ts'
@@ -27,7 +27,7 @@ type DomainHandle = {
 
 type Host = Context & HostRpcContext & {
   sessionTitle: SessionTitleServiceLike
-  aiServices: AiServices
+  llm: LlmTextCaller
   sessions: { get(id: string): SessionLike | undefined }
   loader: LoaderFace
   storageDomain: { open: (spec: typeof titleDomain) => Promise<DomainHandle> }
@@ -40,7 +40,8 @@ export async function apply(ctx: Context, config: { locale?: TitleLocaleMode } =
   const locale = isTitleLocaleMode(config.locale) ? config.locale : 'auto'
   const service = new CurrentTitleService({
     plugin: PLUGIN_NAME,
-    ai: host.aiServices,
+    llm: host.llm,
+    host,
     sessionTitle: host.sessionTitle,
     loader: host.loader,
     sessions: host.sessions,

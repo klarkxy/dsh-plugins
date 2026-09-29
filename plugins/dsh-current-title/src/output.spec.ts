@@ -9,13 +9,12 @@ describe('title output', () => {
     expect(localMonthDay(new Date(2026, 0, 9, 12))).toBe('0109')
   })
 
-  it('rejects invalid JSON and unknown types', () => {
-    expect(() => parseModelTitle('```json {} ```', 5, 10)).toThrow(/invalid JSON/)
-    expect(() => parseModelTitle('{"type":"other","summary":"任务"}', 5, 10)).toThrow(/unsupported type/)
-  })
-
-  it('rejects extra response fields', () => {
-    expect(() => parseModelTitle('{"type":"test","summary":"标题测试","extra":true}', 5, 10)).toThrow(/only type and summary/)
+  it('accepts fenced JSON, extra keys, unknown types, and a plain title line', () => {
+    expect(parseModelTitle('```json\n{"type":"fix","summary":"登录"}\n```', 5, 10)).toEqual({ type: 'fix', summary: '登录' })
+    expect(parseModelTitle('{"type":"other","summary":"任务"}', 5, 10)).toEqual({ type: 'discuss', summary: '任务' })
+    expect(parseModelTitle('{"type":"test","summary":"标题测试","extra":true}', 5, 10)).toEqual({ type: 'test', summary: '标题测试' })
+    expect(parseModelTitle('登录回调失败', 5, 10)).toEqual({ type: 'discuss', summary: '登录回调失败' })
+    expect(() => parseModelTitle('{"type":"fix","summary":"   "}', 5, 10)).toThrow(/empty summary/)
   })
 
   it('normalizes one line and caps CJK code points', () => {

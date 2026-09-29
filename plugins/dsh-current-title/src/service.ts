@@ -1,13 +1,14 @@
-import type { AiFeatureScope, AiServices, RpcResult } from '@klarkxy/dsh-ai-services/contracts'
+import type { RpcResult } from '@klarkxy/dsh-plugin-kit/contracts'
+import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import type { GenerateConfig, TitleSettings, TitleSnapshot, TitleStatus, TitleSupport } from './contracts.ts'
-import { PROVIDER_ID, defaultGenerateConfig, isTitleLocaleMode } from './contracts.ts'
-import { generateCurrentTitle, registerTitlePurpose } from './generate.ts'
+import { PROVIDER_ID, defaultGenerateConfig } from './contracts.ts'
+import { generateCurrentTitle } from './generate.ts'
 import { collectHumanMessages, type SessionLike } from './messages.ts'
 import {
   createNativeTitleSlot, restoreOwnDisplacement, type LoaderFace, type SessionTitleServiceLike,
 } from './native-slot.ts'
 import { claimTitleSlot, releaseTitleSlot, type OwnershipClaim } from './ownership.ts'
-import { storedSettings } from './storage.ts'
+import { settingsPatch, storedSettings } from './storage.ts'
 import type { TitleLocaleMode } from './output.ts'
 
 export interface TitleSettingsStore {
@@ -22,8 +23,6 @@ export interface CurrentTitleHost {
 export class CurrentTitleService {
   private settings: TitleSettings
   private config: GenerateConfig
-  private scope?: AiFeatureScope
-  private unregisterPurpose?: () => void
   private claim?: OwnershipClaim
   private nativeSlot?: ReturnType<typeof createNativeTitleSlot>
   private generation = 0
@@ -32,7 +31,8 @@ export class CurrentTitleService {
 
   constructor(private readonly options: {
     plugin: string
-    ai?: AiServices
+    llm?: LlmTextCaller
+    host?: unknown
     sessionTitle?: SessionTitleServiceLike
     loader?: LoaderFace
     sessions?: { get(id: string): SessionLike | undefined }
@@ -48,17 +48,16 @@ export class CurrentTitleService {
   }
 
   async start(): Promise<void> {
-    const { ai, sessionTitle, loader, sessions } = this.options
-    if (!ai || !sessionTitle?.register || !sessions || !loader) {
+    const { llm, sessionTitle, loader, sessions } = this.options
+    if (!llm || !sessionTitle?.register || !sessions || !loader) {
       this.support.weOwn = false
       this.support.limitation = 'required host services are missing'
       return
     }
-    this.scope = ai.activate(this.options.plugin)
-    this.unregisterPurpose = registerTitlePurpose(this.scope)
     this.nativeSlot = createNativeTitleSlot({
       sessionTitle,
       loader,
+      automatic: () => this.settings.cadence,
       generate: request => this.nativeGenerate(request),
     })
     try {
@@ -86,17 +85,13 @@ export class CurrentTitleService {
     if (outcome === 'left-other-owner') {
       this.support.limitation = 'another title provider owns the slot; previous owner was not restored'
     }
-    this.unregisterPurpose?.()
-    this.unregisterPurpose = undefined
-    this.scope?.dispose()
-    this.scope = undefined
   }
 
   status(sessionId?: string): TitleStatus {
     const session = sessionId && this.options.sessions ? this.options.sessions.get(sessionId) : undefined
     const snapshot = session ? this.read(session) : undefined
     return {
-      settings: { ...this.settings },
+      settings: { ...this.settings, model: { ...this.settings.model } },
       support: { ...this.support, nativeOwner: this.nativeSlot?.owner() ?? this.support.nativeOwner },
       ...(sessionId ? {
         session: {
@@ -110,15 +105,54 @@ export class CurrentTitleService {
     }
   }
 
-  async updateLocale(_locale: TitleLocaleMode, expectedRevision: number): Promise<TitleSettings> {
-    if (this.settings.revision !== expectedRevision) {
+  async updateSettings(patch: {
+    prompt?: unknown
+    model?: unknown
+    cadence?: unknown
+    expectedRevision: number
+  }): Promise<TitleSettings> {
+    if (this.settings.revision !== patch.expectedRevision) {
       throw Object.assign(new Error('current-title settings changed'), { code: 'revision' })
     }
-    const next = { revision: this.settings.revision + 1, locale: 'auto' as const }
+    const previous = this.settings
+    const next: TitleSettings = {
+      revision: this.settings.revision + 1,
+      ...settingsPatch(this.settings, patch),
+    }
     if (this.options.store) await this.options.store.save(next)
     this.settings = next
     this.config = { ...this.config, locale: 'auto' }
-    return { ...this.settings }
+    if (next.cadence !== previous.cadence) await this.reclaimWithCadence()
+    return {
+      revision: next.revision,
+      locale: next.locale,
+      prompt: next.prompt,
+      model: { ...next.model },
+      cadence: next.cadence,
+    }
+  }
+
+  /** Re-register the provider so a cadence change takes effect without a restart. */
+  private async reclaimWithCadence(): Promise<void> {
+    if (!this.claim || !this.nativeSlot) return
+    const stale = this.claim
+    this.claim = undefined
+    await stale.dispose()
+    try {
+      this.claim = await claimTitleSlot(this.nativeSlot, PROVIDER_ID)
+      this.support.weOwn = true
+      this.support.nativeOwner = PROVIDER_ID
+      delete this.support.limitation
+    } catch (error) {
+      this.support.weOwn = false
+      this.support.nativeOwner = this.nativeSlot.owner() ?? null
+      this.support.limitation = error instanceof Error ? error.message : 'native title provider slot is occupied'
+    }
+  }
+
+  /** @deprecated Locale is always auto. Kept so older clients still save a revision. */
+  async updateLocale(_locale: TitleLocaleMode, expectedRevision: number): Promise<TitleSettings> {
+    return this.updateSettings({ expectedRevision })
   }
 
   async regenerate(sessionId: string, signal: AbortSignal): Promise<TitleSnapshot | undefined> {
@@ -150,14 +184,14 @@ export class CurrentTitleService {
     messages: ReadonlyArray<{ seq: number; text: string }>
     signal: AbortSignal
   }) {
-    const scope = this.scope
-    if (!scope) throw new Error('dsh-current-title: aiServices is not available')
+    const llm = this.options.llm
+    if (!llm) throw new Error('dsh-current-title: llm is not available')
     const generation = this.generation
     const controller = new AbortController()
     this.inFlight.get(request.session.id)?.abort(new Error('newer title generation superseded older work'))
     this.inFlight.set(request.session.id, controller)
     try {
-      const combined = AbortSignal.any([request.signal, controller.signal, scope.signal])
+      const combined = AbortSignal.any([request.signal, controller.signal])
       const session = this.options.sessions?.get(request.session.id)
       const messages = collectHumanMessages(
         request.messages.map(message => ({
@@ -167,13 +201,16 @@ export class CurrentTitleService {
         })),
       )
       const generated = await generateCurrentTitle({
-        scope,
+        llm,
+        host: this.options.host ?? {},
         config: this.config,
         sessionId: request.session.id,
         messages: messages.length > 0 ? messages : [...request.messages],
+        prompt: this.settings.prompt,
+        model: this.settings.model,
         localePreference: this.options.localePreference?.(),
         signal: combined,
-        isCurrent: () => this.generation === generation && scope.active && this.support.weOwn
+        isCurrent: () => this.generation === generation && this.support.weOwn
           && (!session || this.options.sessions?.get(request.session.id) === session),
         now: this.options.now?.(),
       })
@@ -203,11 +240,19 @@ export async function handleRpc(service: CurrentTitleService, endpoint: string, 
     return { ok: true, value: service.status(typeof body.sessionId === 'string' ? body.sessionId : undefined) }
   }
   if (endpoint === 'settings') {
-    if (!isTitleLocaleMode(body.locale) || typeof body.expectedRevision !== 'number') {
-      return { ok: false, error: { code: 'bad-request', message: '标题语言设置无效。' } }
+    if (typeof body.expectedRevision !== 'number') {
+      return { ok: false, error: { code: 'bad-request', message: '标题设置无效。' } }
     }
     try {
-      return { ok: true, value: await service.updateLocale(body.locale, body.expectedRevision) }
+      return {
+        ok: true,
+        value: await service.updateSettings({
+          ...(body.prompt !== undefined ? { prompt: body.prompt } : {}),
+          ...(body.model !== undefined ? { model: body.model } : {}),
+          ...(body.cadence !== undefined ? { cadence: body.cadence } : {}),
+          expectedRevision: body.expectedRevision,
+        }),
+      }
     } catch (error) {
       const code = error instanceof Error && 'code' in error ? String((error as { code?: string }).code) : 'failed'
       if (code === 'revision') return { ok: false, error: { code, message: '设置已更新，请刷新后重试。' } }

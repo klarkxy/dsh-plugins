@@ -101,6 +101,8 @@ export async function restoreOwnDisplacement(loader: LoaderFace | undefined, sna
 export function createNativeTitleSlot(options: {
   sessionTitle: SessionTitleServiceLike
   loader: LoaderFace
+  /** Read at each occupy so a settings change can re-register with a new cadence. */
+  automatic: () => SessionTitleProvider['automatic']
   generate: SessionTitleProvider['generate']
 }): TitleSlot & { displacement?: Displacement } {
   let owner: string | undefined
@@ -109,7 +111,7 @@ export function createNativeTitleSlot(options: {
     async occupy(id: string) {
       const provider: SessionTitleProvider = {
         id: PROVIDER_ID,
-        automatic: 'all-prompts',
+        automatic: options.automatic(),
         generate: options.generate,
       }
       try {

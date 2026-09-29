@@ -117,40 +117,47 @@ function truncateSummary(value: string, targetWords: number, targetCjkCharacters
   return value.split(/\s+/u).filter(Boolean).slice(0, targetWords).join(' ')
 }
 
+function unwrapModelText(raw: string): string {
+  const trimmed = raw.trim()
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed)
+  return (fenced?.[1] ?? trimmed).trim()
+}
+
+function readJsonObject(raw: string): Record<string, unknown> | undefined {
+  const text = unwrapModelText(raw)
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start === -1 || end <= start) return undefined
+  try {
+    const value = JSON.parse(text.slice(start, end + 1))
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+/**
+ * Accept the required JSON shape, including a code fence or a short preface.
+ * Extra keys are ignored. A plain one-line title still becomes a title so a
+ * chatty model does not leave the session on the built-in fallback.
+ */
 export function parseModelTitle(
   raw: string,
   targetWords: number,
   targetCjkCharacters: number,
 ): ParsedTitle {
-  let value: unknown
-  try {
-    value = JSON.parse(raw.trim())
-  } catch (cause) {
-    throw new Error('dsh-current-title: title model returned invalid JSON', { cause })
-  }
-
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('dsh-current-title: title model response must be an object')
-  }
-
-  const candidate = value as Record<string, unknown>
-  if (Object.keys(candidate).sort().join(',') !== 'summary,type') {
-    throw new Error('dsh-current-title: title model response must contain only type and summary')
-  }
-  if (typeof candidate.type !== 'string' || !isTitleType(candidate.type)) {
-    throw new Error('dsh-current-title: title model returned an unsupported type')
-  }
-  if (typeof candidate.summary !== 'string') {
-    throw new Error('dsh-current-title: title model summary must be a string')
-  }
-
-  const normalized = normalizeSessionTitle(removeTitleSyntax(candidate.summary), Number.MAX_SAFE_INTEGER)
+  const candidate = readJsonObject(raw)
+  const typeValue = typeof candidate?.type === 'string' ? candidate.type.trim().toLowerCase() : ''
+  const summaryValue = typeof candidate?.summary === 'string' ? candidate.summary : ''
+  const type = isTitleType(typeValue) ? typeValue : 'discuss'
+  const source = summaryValue || (candidate ? '' : unwrapModelText(raw).replace(/^["'`]+|["'`]+$/gu, ''))
+  const normalized = normalizeSessionTitle(removeTitleSyntax(source), Number.MAX_SAFE_INTEGER)
   const summary = truncateSummary(normalized, targetWords, targetCjkCharacters)
   if (summary.length === 0) {
     throw new Error('dsh-current-title: title model returned an empty summary')
   }
-
-  return { type: candidate.type, summary }
+  return { type, summary }
 }
 
 export function localMonthDay(now: Date): string {

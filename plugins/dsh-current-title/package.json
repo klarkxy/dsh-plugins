@@ -2,6 +2,7 @@
   "name": "@klarkxy/dsh-current-title",
   "version": "0.1.5",
   "description": "Auto Title: keep session titles following the latest task; names you set by hand stay put.",
+  "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -23,10 +24,12 @@
     "./client": {
       "default": "./lib/client.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "icon.svg",
+    "locale/*.json",
     "lib",
     "cordis.patch.yml",
     "README.md",
@@ -41,6 +44,7 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-api-remotes",
         "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-session"
@@ -67,20 +71,23 @@
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-current-title/src"
   },
   "dependencies": {
-    "@klarkxy/dsh-ai-services": "workspace:*",
+    "@klarkxy/dsh-plugin-kit": "workspace:*",
     "zod": "^4.1.5"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-llm": ">=0.1.7-rc.2",
     "@deepseek-ai/dsh-storage-domain": ">=0.1.7-rc.2"
   },
   "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-llm": { "optional": true },
     "@deepseek-ai/dsh-storage-domain": {
       "optional": true
     }
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-llm": "0.1.7-rc.2",
     "@deepseek-ai/dsh-storage-domain": "0.1.7-rc.2",
     "react": "^18.2.0",
     "@types/react": "18.3.31"

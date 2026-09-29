@@ -67,6 +67,7 @@ describe('native title occupancy', () => {
     const exclusive = nativeExclusive('session-title-first-prompt-llm')
     const host = loader([{ ...firstPrompt, options: { ...firstPrompt.options } }], exclusive)
     const slot = createNativeTitleSlot({
+      automatic: () => 'all-prompts' as const,
       sessionTitle: exclusive as unknown as SessionTitleServiceLike,
       loader: host,
       generate: async () => ({ title: 't', messageSeqs: [] }),
@@ -92,6 +93,7 @@ describe('native title occupancy', () => {
       options: { name: '@deepseek-ai/dsh-session-title-first-prompt-llm', disabled: true },
     }])
     const slot = createNativeTitleSlot({
+      automatic: () => 'all-prompts' as const,
       sessionTitle: exclusive as unknown as SessionTitleServiceLike,
       loader: host,
       generate: async () => ({ title: 't', messageSeqs: [] }),
@@ -106,6 +108,7 @@ describe('native title occupancy', () => {
     const other: LoaderEntry = { id: 'other-title', options: { name: 'other-title-plugin', disabled: true } }
     const host = loader([{ ...firstPrompt, options: { ...firstPrompt.options } }, other], exclusive)
     const slot = createNativeTitleSlot({
+      automatic: () => 'all-prompts' as const,
       sessionTitle: exclusive as unknown as SessionTitleServiceLike,
       loader: host,
       generate: async () => ({ title: 't', messageSeqs: [] }),
@@ -131,6 +134,7 @@ describe('native title occupancy', () => {
     const held = new Promise<void>(resolve => { resume = resolve })
     exclusive.hold(held.then(() => { released = true }))
     const slot = createNativeTitleSlot({
+      automatic: () => 'all-prompts' as const,
       sessionTitle: exclusive as unknown as SessionTitleServiceLike,
       loader: loader([]),
       generate: async () => ({ title: 't', messageSeqs: [] }),

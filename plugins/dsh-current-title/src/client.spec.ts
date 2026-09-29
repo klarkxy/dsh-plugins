@@ -22,7 +22,7 @@ function ok<T>(value: T): RpcResult<T> {
 
 function titleStatus(sessionId: string, title: string): TitleStatus {
   return {
-    settings: { revision: 1, locale: 'zh' },
+    settings: { revision: 1, locale: 'zh', prompt: '', model: { provider: '', model: '' } },
     support: { weOwn: true, nativeOwner: '@klarkxy/dsh-current-title' },
     session: { sessionId, title, generating: false, pinned: false },
   }
@@ -30,9 +30,10 @@ function titleStatus(sessionId: string, title: string): TitleStatus {
 
 describe('current title UI', () => {
   it('injects native session and locale for the title marker', () => {
-    expect(clientSource).toContain("from '@klarkxy/dsh-ai-services/client-utils'")
+    expect(clientSource).toContain("from '@klarkxy/dsh-plugin-kit/client-utils'")
     expect(clientSource).toContain('type Client = NativeSurfaceClient &')
-    expect(clientSource).toContain("export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const")
+    expect(clientSource).toContain("export const inject = ['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const")
+    expect(clientSource).toContain("client.slots.inject('plugins.bundle.config'")
     expect(clientSource).toContain("ctx.provide(TITLE_CLIENT_SERVICE, marker)")
     expect(clientSource).not.toContain('settings.section')
     expect(settingsCopy('zh').regenerate).toBe('重新生成')
@@ -229,7 +230,7 @@ describe('current title UI', () => {
     const busy: boolean[] = []
     const pending = runTitleSettingsSave({
       call: async () => firstSave.promise,
-      locale: 'en',
+      prompt: 'custom',
       expectedRevision: 0,
       isCurrent: () => work.isRequest(firstToken),
       savedMessage: '已保存。',
@@ -240,7 +241,7 @@ describe('current title UI', () => {
       onError: message => { errors.push(message) },
     })
     work.beginRequest()
-    firstSave.resolve(ok({ revision: 1, locale: 'en' }))
+    firstSave.resolve(ok({ revision: 1, locale: 'auto', prompt: 'custom', model: { provider: '', model: '' } }))
     await pending
     expect(locales).toEqual([])
     expect(notes).toEqual([])

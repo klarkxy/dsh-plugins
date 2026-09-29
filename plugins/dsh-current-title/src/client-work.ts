@@ -1,4 +1,4 @@
-import type { RpcResult, TitleLocaleMode, TitleStatus } from './contracts.ts'
+import type { RpcResult, TitleCadence, TitleModelRoute, TitleStatus } from './contracts.ts'
 
 export const titleCopy = {
   zh: {
@@ -8,8 +8,16 @@ export const titleCopy = {
     regenerate: '重新生成',
     locale: '类型标签语言',
     auto: '自动',
+    prompt: '标题提示词',
+    promptHint: '留空使用内置说明。仍会要求模型返回类型和摘要。',
+    model: '标题模型',
+    modelDefault: '跟随会话模型',
+    cadence: '更新节奏',
+    cadenceAll: '跟随当前任务（每条消息）',
+    cadenceFirst: '仅首条消息',
     saved: '已保存。',
     failed: '无法读取标题设置。',
+    inactive: '标题服务未接管，新消息暂时不会自动更新。',
   },
   en: {
     label: 'Auto Title',
@@ -18,8 +26,16 @@ export const titleCopy = {
     regenerate: 'Regenerate',
     locale: 'Type-label language',
     auto: 'Auto',
+    prompt: 'Title prompt',
+    promptHint: 'Leave empty to use the built-in instruction. The model still returns a type and summary.',
+    model: 'Title model',
+    modelDefault: 'Use the session model',
+    cadence: 'Update cadence',
+    cadenceAll: 'Track the current task (every message)',
+    cadenceFirst: 'First message only',
     saved: 'Saved.',
     failed: 'Could not read title settings.',
+    inactive: 'Title generation is not active, so new messages will not rename this session.',
   },
 } as const
 
@@ -130,7 +146,9 @@ export async function runTitleRegenerateFlow(input: {
 
 export async function runTitleSettingsSave(input: {
   call: TitleClientCall
-  locale: TitleLocaleMode
+  prompt?: string
+  model?: TitleModelRoute
+  cadence?: TitleCadence
   expectedRevision: number
   isCurrent: () => boolean
   savedMessage: string
@@ -143,7 +161,9 @@ export async function runTitleSettingsSave(input: {
   input.onBusy(true)
   try {
     const settings = await invoke<TitleStatus['settings']>(input.call, 'settings', {
-      locale: input.locale,
+      ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+      ...(input.model !== undefined ? { model: input.model } : {}),
+      ...(input.cadence !== undefined ? { cadence: input.cadence } : {}),
       expectedRevision: input.expectedRevision,
     })
     if (!input.isCurrent()) return
