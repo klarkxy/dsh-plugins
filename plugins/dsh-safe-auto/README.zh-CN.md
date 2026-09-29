@@ -27,7 +27,17 @@ shellCandidates:
 # 模型字段不填，默认跟随本对话。
 ```
 
-另行选择原生 Workspace Write；工作区必须是规范绝对路径，与会话 cwd 和沙箱 root 完全相同。配置严格校验，修改后重载插件。**目前通过 profile 配置，未提供图形化模型选择器或自动设置表单。**
+工作区必须是规范绝对路径，与会话 cwd 和沙箱 root 完全相同。授权范围、候选命令、提权名单和预算仍通过 profile 配置，严格校验且修改后重载插件。
+
+## 会话权限菜单与插件设置
+
+安装新版 bundle 并加载两个 Host 条目后，输入框权限菜单保留宿主原有选项，并增加 **安全自动 / Safe Auto**。选择它时，插件通过宿主权限预设设置 **Workspace Write + ask**，只在当前会话启用有界审核；不使用固定为 Full Access 的官方 `registerAuto()` 接口。原生 `approval: never` 仍不可绕过。
+
+在插件页 **Safe Auto** 设置快速/深度审核模型、各自思考强度及最多 4096 字符的额外审核提示词。模型目录和档位来自宿主；快速模型为空表示跟随本会话，深审为空表示关闭。选新模型清空旧档位，未列出的已保存配置不会被静默替换。原生模型不支持指定档位时失败关闭。提示词只能增加审核条件，不能替换固定安全规则或扩大授权。保存不调用模型、不改变会话权限、不重置预算；会使未完成的旧授权失效。思考模型若需要更高输出预算，请在 profile 调整 `fastOutputTokens/deepOutputTokens`。HTTP 模式面板只读，仍保留 profile 配置，不支持原生思考档位。
+
+UI Host 条目 `dsh-safe-auto-ui` 使用 `storageDomain` 持久保存审核偏好，覆盖同名 profile 模型字段；不保存会话授权。启用状态仅属于当前活跃会话对象：切回原生选项、外部权限变更、重启或 UI Host 卸载都会关闭自动审核，分叉及子会话不继承。UI 接管后，旧版 profile 的 smart/unattended 不会自动启用未选择的会话；单独加载核心 Host 条目时保留旧配置模式。卸载 Client 后原生权限控件恢复。
+
+**选择模式不等于扩大授权名单。** 候选列表为空仍不会产生自动批准。Windows 自动提权、PowerShell 及普通文件自动放行暂未支持，仍走原生人工审批；菜单会提示平台限制。插件设置页不会改这些边界。
 
 ## 审批模型可以单独设置
 
@@ -70,7 +80,7 @@ apiKeyEnv: DSH_SAFE_AUTO_API_KEY
 
 这是完整 OpenAI-compatible Chat Completions URL，可接兼容 lapp 网关。此模式不要填写 `fastProvider/deepProvider`；与原生路由混填会报错。只有 HTTP 模式读取上述 API Key 环境变量。仅允许 HTTPS 或 loopback HTTP，拒绝重定向、URL 凭据、查询参数和 fragment。恢复跟随时要同时清空 endpoint 和 HTTP fastModel，不能只删 endpoint。
 
-普通预检和单次提权都使用这套选择。一次审核固定两阶段路由；审核期间模型变化会作废自动放行结果，最终 guard 再次核对。模型服务失效不会导致安全 guard 一并卸载。切换模型不重置预算；已经明确拒绝的操作也不会因为换模型被改成可再次争取放行。
+普通预检和单次提权都使用这套选择。一次审核固定两阶段路由；审核期间模型变化会作废自动放行结果，最终 guard 再次核对。模型服务失效不会导致安全 guard 一并卸载。切换模型不重置预算；已经明确拒绝的操作也不会因为换模型或用户意图变化被改成可再次争取放行。普通模型预检也会在审查前绑定动作、工作区、沙箱策略和直接用户意图，并在下游策略结束后的最终 guard 中拒绝过期授权。
 
 ## 默认行为与单次提权
 
@@ -118,11 +128,11 @@ DSH workspace-write 只约束文件效果，不是网络隔离或全面敏感读
 
 ## 验证与剩余范围
 
-运行 npm test、npm run build（JavaScript 语法检查，不是 TypeScript typecheck）、npm pack --dry-run 和全仓 pnpm check。测试包括路由/并发/失效/取消，以及真实 DSH LlmRuntime、ToolRuntime、ApprovalService 和受控适配器集成。CI 必须运行真实 DSH tests；缺依赖的离线本地环境可以明确跳过。
+运行 npm test、npm run build（JavaScript 语法检查与浏览器 bundle 构建，不是 TypeScript typecheck）、npm pack --dry-run 和全仓 pnpm check。测试包括路由/并发/失效/取消，以及真实 DSH LlmRuntime、ToolRuntime、ApprovalService 和受控适配器集成。CI 必须运行真实 DSH tests；缺依赖的离线本地环境可以明确跳过。Windows 上显式跳过 POSIX 专用文件授权与提权用例，并验证失败关闭行为，原生模型路由测试仍运行。若 Windows 沙箱阻止测试运行器创建子进程管道，可逐文件执行 `node --test --test-isolation=none test/<file>.test.js`。
 
 受控模型和 fixture 的 session/tool/policy 不是在线模型准确率、OS 沙箱或 authenticated Web/Headless 验收。剩余清单在 ADR-0002。日志区分 assessment、escalation 和实际 result，不记录原始命令/提示/Key，留存由宿主管理。
 
-PowerShell、PTC/MCP、远程、复杂 Shell、子代理模型提权和 read-only 到 workspace-write 仍未纳入自动放行。没有持久化预算/审计库、跨调用批准缓存、PI probe 或图形化模型选择器。不承诺绝对安全或固定节省比例。
+PowerShell、PTC/MCP、远程、复杂 Shell、子代理模型提权和 read-only 到 workspace-write 仍未纳入自动放行。没有持久化预算/审计库、跨调用批准缓存、或 PI probe。不承诺绝对安全或固定节省比例。
 
 ## 许可证
 

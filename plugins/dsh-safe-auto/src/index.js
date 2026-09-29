@@ -26,6 +26,16 @@ export function authority(session) {
 /** Public DSH seams only. Standing sandbox policy is NEVER written or temporarily switched. */
 export function apply(ctx, raw = {}) {
   const config = parseConfig(raw);
+  let control;
+  let controlEpoch = 0;
+  ctx.provide?.('safeAutoRuntime', { base: config, attach(next) {
+    if (control) throw new Error('Safe Auto controls already attached');
+    control = next; controlEpoch++;
+    return () => { if (control === next) { control = undefined; controlEpoch++; } };
+  } });
+  const inactiveConfig = parseConfig({ ...config, mode: 'off' });
+  const configFor = exec => control?.config(exec.agent?.session) ?? (controlEpoch ? inactiveConfig : config);
+  const controlBinding = exec => JSON.stringify({ epoch: controlEpoch, state: control?.state(exec.agent?.session) });
   if (config.mode === 'off') return;
   if (typeof ctx.tools?.guard !== 'function' || typeof ctx.sandboxPolicy?.resolve !== 'function') throw new Error('DSH Safe Auto requires tools.guard and sandboxPolicy.resolve');
   const decisions = new Map();
@@ -63,19 +73,24 @@ export function apply(ctx, raw = {}) {
   }
 
   function currentEscalation(exec, saved) {
+    const config = configFor(exec);
     const call = callOf(exec, true);
     const assessment = assessEscalation(call, config);
     return { call, assessment, unchanged: bindingOf(call, assessment) === saved.binding };
   }
 
   function sameReviewer(exec, decision) {
+    const config = configFor(exec);
     if (!decision.reviewRoutes) return true;
     return sameRoutes(decision.reviewRoutes, resolveReviewRoutes(config, callOf(exec))) &&
       (decision.reviewRoutes.fast.transport !== 'dsh' || decision.reviewLlm === llm);
   }
 
   ctx.tools.guard(exec => {
-    if (config.mode === 'shadow') return undefined;
+    const config = configFor(exec);
+    const pending = decisions.get(exec.token);
+    if (pending?.controlBinding !== undefined && pending.controlBinding !== controlBinding(exec)) return 'safe-auto: SETTINGS_CHANGED';
+    if (config.mode === 'shadow' || config.mode === 'off') return undefined;
     if (exec.signal.aborted || lifetime.signal.aborted) return 'safe-auto: CANCELLED';
     try {
       const hard = assess(callOf(exec), config);
@@ -83,6 +98,10 @@ export function apply(ctx, raw = {}) {
       const saved = decisions.get(exec.token);
       if (!saved) return 'safe-auto: PREFLIGHT_NOT_RUN';
       if (!sameReviewer(exec, saved)) return 'safe-auto: REVIEW_MODEL_CHANGED';
+      if (saved.preflightBinding) {
+        const current = callOf(exec, true);
+        if (bindingOf(current, assess(current, config)) !== saved.preflightBinding) return 'safe-auto: PREFLIGHT_CHANGED';
+      }
       if (saved.kind === 'escalation') {
         const current = currentEscalation(exec, saved);
         if (current.assessment.kind === 'deny') return `safe-auto: ${current.assessment.code}`;
@@ -96,6 +115,9 @@ export function apply(ctx, raw = {}) {
   });
 
   ctx.on('tools/pre-execute', async (exec, next) => {
+    const config = configFor(exec);
+    const selectedControl = controlBinding(exec);
+    if (config.mode === 'off') return next();
     let decision;
     try {
       if (decisions.size >= 1024) decision = { kind: 'deny', code: 'TOO_MANY_PENDING_CALLS' };
@@ -108,11 +130,16 @@ export function apply(ctx, raw = {}) {
             kind: 'escalation', code: assessed.code, binding: bindingOf(call, assessed), signal: exec.signal,
           };
         } else {
-          if (assess(call, config).kind === 'review') Object.assign(call, authority(call.session));
-          decision = await gate.decide(call);
+          const assessment = assess(call, config);
+          if (assessment.kind === 'review') Object.assign(call, authority(call.session));
+          // Capture before awaiting: session/policy state can change during review or downstream policy.
+          const preflightBinding = assessment.kind === 'review' ? bindingOf(call, assessment) : undefined;
+          decision = await gate.decide(call, 'preflight', config);
+          if (decision.kind === 'allow' && preflightBinding) decision = { ...decision, preflightBinding };
           const latest = assess(callOf(exec), config);
           if (latest.kind === 'deny' || (decision.kind === 'allow' && latest.kind === 'ask')) decision = latest;
-          if (call.intent !== undefined) {
+          // An explicit denial or cancellation must never be downgraded into a fresh approval chance.
+          if (call.intent !== undefined && decision.kind !== 'deny' && decision.kind !== 'cancel') {
             const current = authority(call.session);
             if (current.task !== call.task || current.intent !== call.intent) decision = { kind: 'ask', code: 'AUTHORITY_CHANGED' };
           }
@@ -121,7 +148,8 @@ export function apply(ctx, raw = {}) {
     } catch { decision = { kind: 'ask', code: 'POLICY_UNAVAILABLE' }; }
     if (exec.signal.aborted || lifetime.signal.aborted) decision = { kind: 'cancel', code: 'CANCELLED' };
     if (config.mode === 'unattended' && decision.kind === 'ask') decision = { ...decision, kind: 'deny' };
-    if (config.mode === 'shadow') return next();
+    if (config.mode === 'shadow' || config.mode === 'off') return next();
+    decision = { ...decision, controlBinding: selectedControl };
     if (decisions.size < 1024) decisions.set(exec.token, decision);
     if (decision.kind === 'deny') return { kind: 'deny', reason: `safe-auto: ${decision.code}` };
     if (decision.kind === 'cancel') return { kind: 'cancel' };
@@ -132,7 +160,8 @@ export function apply(ctx, raw = {}) {
 
   // Bind the approval to the active execution, never a process-wide visible callId cache.
   ctx.on('tools/execute', async (exec, next) => {
-    if (config.mode === 'shadow') return next();
+    const config = configFor(exec);
+    if (config.mode === 'shadow' || config.mode === 'off') return next();
     const saved = decisions.get(exec.token);
     if (saved?.kind !== 'escalation') return next();
     const store = { exec, saved, active: true, claimed: false };
@@ -147,8 +176,10 @@ export function apply(ctx, raw = {}) {
   });
 
   ctx.on('approval/request', async (req, next) => {
-    if (config.mode === 'shadow') return next();
     const store = execution.getStore();
+    const config = configFor(store?.exec ?? { agent: req.agent });
+    if (store?.saved.controlBinding !== undefined && store.saved.controlBinding !== controlBinding(store.exec)) return 'rejected';
+    if (config.mode === 'shadow' || config.mode === 'off') return next();
     if (!store) return config.mode === 'unattended' ? (req.signal?.aborted ? 'cancelled' : 'rejected') : next();
     const { exec, saved } = store;
     if (!store.active || store.claimed) return 'rejected';
@@ -163,7 +194,7 @@ export function apply(ctx, raw = {}) {
     const requestReason = req.reason;
     let reviewed;
     function stillBound() {
-      if (signal.aborted || !store.active || decisions.get(exec.token) !== saved) return false;
+      if (signal.aborted || !store.active || decisions.get(exec.token) !== saved || saved.controlBinding !== controlBinding(exec)) return false;
       if (req.agent !== exec.agent || req.toolName !== exec.name || req.callId !== exec.callId ||
           req.signal !== exec.signal || req.reason !== requestReason) return false;
       try { return currentEscalation(exec, saved).unchanged && (!reviewed || sameReviewer(exec, reviewed)); }
@@ -182,7 +213,7 @@ export function apply(ctx, raw = {}) {
     }
     if (!stillBound()) return finish('rejected', 'binding', 'ESCALATION_CHANGED');
     let decision;
-    try { decision = await gate.decide({ ...callOf(exec, true), signal }, 'escalation'); }
+    try { decision = await gate.decide({ ...callOf(exec, true), signal }, 'escalation', config); }
     catch { decision = { kind: 'ask', code: 'REVIEW_UNAVAILABLE' }; }
     if (decision.kind === 'allow') reviewed = decision;
     if (!stillBound()) return finish('rejected', 'binding', 'ESCALATION_CHANGED');

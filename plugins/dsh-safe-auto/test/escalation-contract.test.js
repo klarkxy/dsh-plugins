@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import * as safeAuto from '../src/index.js';
@@ -28,7 +28,7 @@ try {
 }
 
 test('real Cordis, ToolRuntime, ApprovalService and approveEscalation with loopback HTTP reviewer',
-  { skip: !host && 'DSH dependencies unavailable locally; mandatory in CI' }, async t => {
+  { skip: sep !== '/' ? 'Native escalation requires POSIX' : !host && 'DSH dependencies unavailable locally; mandatory in CI' }, async t => {
     const { Context, Service } = host.cordis;
     const base = realpathSync(mkdtempSync(join(tmpdir(), 'safe-auto-native-')));
     const root = join(base, 'workspace'); const outside = join(base, 'external');

@@ -2,13 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, symlinkSync, linkSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
+
 import { parseConfig, Config } from '../src/config.js';
 import { assess, simpleCommand } from '../src/policy.js';
 import { review, reserve, parseVerdict } from '../src/reviewer.js';
 import { createGate } from '../src/gate.js';
 import { apply, authority } from '../src/index.js';
 
+const posixOnly = { skip: sep !== '/' && 'Path grants require a POSIX local filesystem' };
 const root = mkdtempSync(join(tmpdir(), 'safe-auto-'));
 writeFileSync(join(root, 'a.txt'), 'hello');
 mkdirSync(join(root, 'src'));
@@ -37,7 +39,12 @@ test('standard schema validates and defaults to shadow without external calls', 
   assert.ok(Object.isFrozen(config().workspaceRoots));
   assert.equal(modelConfig({ endpoint: 'http://[::1]:9999/v1' }).fastModel, 'fast');
 });
-test('workspace reads and new ordinary source edits are L0', () => {
+test('non-POSIX ordinary paths fail closed without file grants', { skip: sep === '/' && 'Non-POSIX path policy' }, () => {
+  for (const req of [call(), call('write', { file_path: 'src/new.js', content: 'code' })]) {
+    assert.deepEqual(assess(req, config()), { kind: 'ask', code: 'AMBIGUOUS_PATH' });
+  }
+});
+test('workspace reads and new ordinary source edits are L0', posixOnly, () => {
   assert.equal(assess(call(), config()).kind, 'allow');
   assert.equal(assess(call('write', { file_path: 'src/new.js', content: 'code' }), config()).kind, 'allow');
 });
@@ -47,7 +54,7 @@ for (const file of ['.env', '.env.local', '.git/config', '.ssh/id_rsa', 'AGENTS.
 for (const file of ['../escape', '/tmp/outside-safe-auto', 'src/../a.txt', 'C:\\Windows\\x', 'a.txt:stream', root]) {
   test(`no path exemption ${file}`, () => assert.notEqual(assess(call('write', { file_path: file }), config()).kind, 'allow'));
 }
-test('symlinks, dangling symlinks and hard-linked writes are not allowed', () => {
+test('symlinks, dangling symlinks and hard-linked writes are not allowed', posixOnly, () => {
   symlinkSync(join(root, 'a.txt'), join(root, 'link'));
   symlinkSync('/nonexistent', join(root, 'dangling'));
   linkSync(join(root, 'a.txt'), join(root, 'hard'));
@@ -205,7 +212,7 @@ test('shadow never gates, including hard denies; off installs nothing', async ()
   assert.equal(h.guard(e), undefined); h.dispose();
   assert.deepEqual(Object.keys(host('off').listeners), []);
 });
-test('final guard catches a symlink swap and a sandbox change after preflight', async () => {
+test('final guard catches a symlink swap and a sandbox change after preflight', posixOnly, async () => {
   const h = host();
   const path = join(root, 'race.txt');
   writeFileSync(path, 'before');

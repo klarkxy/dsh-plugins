@@ -30,7 +30,17 @@ config:
   # No endpoint or model override: follow this conversation's DSH provider/model.
 ```
 
-Select native Workspace Write separately. The enrolled canonical root must exactly match session cwd and the resolved sandbox root. Config is strictly validated and immutable per plugin instance; reload after edits. This release exposes profile configuration, not a graphical model picker or generated settings form.
+The enrolled canonical root must exactly match session cwd and the resolved sandbox root. Operator envelopes, candidates and budgets remain strictly validated profile configuration; reload after editing them.
+
+## Session permission menu and plugin settings
+
+The updated bundle loads a separate UI Host row and adds **Safe Auto** to the composer's permission control while retaining the host's native options. Selecting it uses the host's **Workspace Write + ask** preset and enables bounded review for that session only. It does not call the official `registerAuto()` hook, whose fixed bundle is Full Access. Native `approval: never` remains authoritative.
+
+The Safe Auto plugin page selects fast/deep reviewer models, their advertised reasoning efforts, and an additional review prompt (up to 4096 characters). Empty fast route follows the current conversation; empty deep route disables deep review. Selecting a new model clears its previous effort; saved unlisted values are retained rather than silently replaced. Unsupported explicit efforts fail closed. The additional prompt can only add restrictions, never replace the fixed safety instructions or enlarge an envelope. Saving settings performs no inference, changes no session permission, keeps the budget ledger and invalidates pending old grants. Reasoning-heavy models may need larger `fastOutputTokens/deepOutputTokens` in the profile. HTTP mode is read-only in this panel and rejects native effort overrides.
+
+The `dsh-safe-auto-ui` Host row persists reviewer preferences through `storageDomain`, overriding corresponding profile model fields, but never persists session authorization. Activation belongs to the exact live session object; native selection, external permission changes, restart or UI Host disposal disables it. Forks and children do not inherit activation. While UI control is attached, legacy smart/unattended profiles do not automatically activate untouched sessions; loading only the original core Host row retains legacy operation. Removing the Client restores the original permission control.
+
+**Choosing the mode does not enlarge the operator envelope.** Empty candidate lists still authorize nothing automatically. Windows escalation, PowerShell and ordinary file auto-passes are not supported yet; native human approval remains required and the menu shows the platform limitation.
 
 ## Choose the approval model
 
@@ -71,7 +81,7 @@ apiKeyEnv: DSH_SAFE_AUTO_API_KEY
 
 `endpoint` is the complete OpenAI-compatible Chat Completions URL. This explicit endpoint uses the existing HTTP transport, including compatible lapp gateways; omit `fastProvider` and `deepProvider`. Combining native providers with an HTTP endpoint is rejected rather than guessed. Only this mode reads the named API key environment variable. HTTPS is required except loopback HTTP; redirects, URL credentials, query and fragment are rejected. To restore following, clear the endpoint and its fast model, not just the endpoint.
 
-Both ordinary preflight and one-shot escalation use the selected reviewer. Routes are snapshotted for each review. A change during an outstanding native review invalidates automatic allowance; final guards recheck the route. Removing the model service leaves the policy guards installed. Switching models does not reset budgets. Explicit denials remain denials even if the route changes.
+Both ordinary preflight and one-shot escalation use the selected reviewer. Routes are snapshotted for each review. A change during an outstanding native review invalidates automatic allowance; final guards recheck the route. Removing the model service leaves the policy guards installed. Switching models does not reset budgets. Explicit denials remain denials even if the route or user authority changes. Ordinary reviewed grants are bound before review to the action, workspace, sandbox policy and direct-user authority; the final guard rejects a stale grant after downstream policy completes.
 
 ## Policy and one-shot escalation
 
@@ -138,9 +148,9 @@ Tests, builds, installation and Git hooks can run repository-controlled code and
 
 ## Verification
 
-Run `npm test`, `npm run build` (JavaScript syntax checks, not TypeScript checking), and `npm pack --dry-run` in this package, plus repository `pnpm check`. Tests cover routing, concurrent sessions, native streams, caps, stale decisions, model service removal, preflight/escalation binding, real loopback HTTP, and real Cordis/ToolRuntime/ApprovalService/LlmRuntime contracts. CI requires installed DSH dependencies; offline source-only tests may explicitly skip native contracts.
+Run `npm test`, `npm run build` (JavaScript syntax checks plus the browser bundle, not TypeScript checking), and `npm pack --dry-run` in this package, plus repository `pnpm check`. Tests cover routing, concurrent sessions, native streams, caps, stale decisions, model service removal, preflight/escalation binding, real loopback HTTP, and real Cordis/ToolRuntime/ApprovalService/LlmRuntime contracts. CI requires installed DSH dependencies; offline source-only tests may explicitly skip native contracts. POSIX-only file and escalation grant cases are explicitly skipped on Windows, while Windows tests assert fail-closed behavior; native model routing still runs. If the Windows sandbox blocks the test runner's subprocess pipes, run each test file separately with `node --test --test-isolation=none test/<file>.test.js`.
 
-The native test uses a controlled adapter and fixture session/tool/policy. It proves runtime integration, not live model accuracy, OS isolation or authenticated Web/Headless acceptance. These remain in [ADR-0002's checklist](docs/ADR-0002.md). Logs separate assessment, escalation outcome and final result without raw commands/prompts/keys; host retention is operator-managed. No durable budget/audit database, cross-call grant cache, PI probe or graphical model picker is bundled. No absolute safety or savings percentage is claimed.
+The native test uses a controlled adapter and fixture session/tool/policy. It proves runtime integration, not live model accuracy, OS isolation or authenticated Web/Headless acceptance. These remain in [ADR-0002's checklist](docs/ADR-0002.md). Logs separate assessment, escalation outcome and final result without raw commands/prompts/keys; host retention is operator-managed. No durable budget/audit database, cross-call grant cache, or PI probe is bundled. No absolute safety or savings percentage is claimed.
 
 ## License
 

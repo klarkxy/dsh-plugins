@@ -6,6 +6,7 @@ const defaults = Object.freeze({
   mode: 'shadow', workspaceRoots: [], shellCandidates: [], escalationCandidates: [],
   escalationApprovalTtlMs: 30000, escalationMaxTimeoutMs: 30000,
   endpoint: '', fastProvider: '', fastModel: '', deepProvider: '', deepModel: '', apiKeyEnv: 'DSH_SAFE_AUTO_API_KEY',
+  fastReasoningEffort: '', deepReasoningEffort: '', reviewerPrompt: '',
   tokenField: 'max_tokens', timeoutMs: 8000, maxInputBytes: 8192,
   fastOutputTokens: 64, deepOutputTokens: 256,
   fastCallsPerTask: 20, deepCallsPerTask: 3, sessionBudgetUnits: 100000,
@@ -25,7 +26,7 @@ export function parseConfig(raw = {}) {
   for (const key of Object.keys(raw)) if (!Object.hasOwn(defaults, key)) throw new Error(`unknown config field: ${key}`);
   const c = { ...defaults, ...raw };
   if (!['off', 'shadow', 'smart', 'unattended'].includes(c.mode)) throw new Error('invalid mode');
-  for (const key of ['endpoint', 'fastProvider', 'fastModel', 'deepProvider', 'deepModel', 'apiKeyEnv', 'tokenField']) {
+  for (const key of ['endpoint', 'fastProvider', 'fastModel', 'deepProvider', 'deepModel', 'apiKeyEnv', 'tokenField', 'fastReasoningEffort', 'deepReasoningEffort', 'reviewerPrompt']) {
     if (typeof c[key] !== 'string' || c[key].length > 4096) throw new Error(`${key} must be a string`);
   }
   for (const key of ['workspaceRoots', 'shellCandidates']) {

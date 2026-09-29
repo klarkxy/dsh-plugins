@@ -7,7 +7,13 @@ export function validateModelConfig(config) {
   for (const value of [fastProvider, fastModel, deepProvider, deepModel]) {
     if (value !== '' && !id(value)) throw new Error('invalid reviewer provider/model identifier');
   }
+  for (const key of ['fastReasoningEffort', 'deepReasoningEffort']) {
+    const value = config[key] === undefined ? '' : config[key];
+    if (value !== '' && !id(value)) throw new Error(`invalid ${key} identifier`);
+  }
+  if (config.deepReasoningEffort && !deepModel) throw new Error('deepReasoningEffort requires a deep reviewer model');
   if (endpoint) {
+    if (config.fastReasoningEffort || config.deepReasoningEffort) throw new Error('HTTP reviewer does not support reasoning effort; use a native DSH route');
     if (fastProvider || deepProvider) throw new Error('HTTP endpoint cannot be combined with native reviewer providers');
     if (!fastModel) throw new Error('endpoint requires fastModel');
   } else {
@@ -36,8 +42,10 @@ export function resolveReviewRoutes(config, owner) {
   });
   const selected = config.fastProvider ? { provider: config.fastProvider, model: config.fastModel } : conversationRoute(owner);
   return Object.freeze({
-    fast: Object.freeze({ transport: 'dsh', ...selected }),
-    deep: config.deepModel ? Object.freeze({ transport: 'dsh', provider: config.deepProvider, model: config.deepModel }) : null,
+    fast: Object.freeze({ transport: 'dsh', ...selected,
+      ...(config.fastReasoningEffort ? { reasoningEffort: config.fastReasoningEffort } : {}) }),
+    deep: config.deepModel ? Object.freeze({ transport: 'dsh', provider: config.deepProvider, model: config.deepModel,
+      ...(config.deepReasoningEffort ? { reasoningEffort: config.deepReasoningEffort } : {}) }) : null,
   });
 }
 
@@ -56,8 +64,10 @@ function usageTotal(usage) {
 export async function nativeCompletion(llm, route, system, input, maxTokens, signal) {
   if (typeof llm?.stream !== 'function') throw new Error('NATIVE_REVIEWER_UNAVAILABLE');
   signal.throwIfAborted();
+  if (route.reasoningEffort !== undefined && route.reasoningEffort !== '' && !id(route.reasoningEffort)) throw new Error('INVALID_REASONING_EFFORT');
   const options = {
     provider: route.provider, model: route.model,
+    ...(route.reasoningEffort ? { reasoningEffort: route.reasoningEffort } : {}),
     system, messages: [{ role: 'user', content: [{ type: 'text', text: input }] }],
     tools: [], maxTokens, signal,
   };

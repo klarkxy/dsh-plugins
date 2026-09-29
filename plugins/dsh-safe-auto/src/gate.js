@@ -21,7 +21,9 @@ export function createGate(config, { fetcher = globalThis.fetch, audit = () => {
   }
   return {
     dispose() { abort.abort(); },
-    async decide(call, phase = 'preflight') {
+    async decide(call, phase = 'preflight', currentConfig = config) {
+      // One ledger survives reviewer preference changes; settings edits do not refill budgets.
+      const config = currentConfig;
       const start = Date.now();
       let result = phase === 'escalation' ? assessEscalation(call, config) : assess(call, config);
       let s;

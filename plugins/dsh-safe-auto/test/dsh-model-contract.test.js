@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as safeAuto from '../src/index.js';
 
@@ -78,5 +78,6 @@ test('real DSH native reviewer: conversation switch, independent route and servi
     assert.deepEqual(selected, { provider: 'conversation', model: 'two' });
     await modelFiber.dispose();
     assert.equal((await run()).isError, true, 'model service loss cannot make the policy disappear');
-    assert.equal((await run('read', { file_path: 'read.txt' })).isError, false, 'deterministic path remains usable');
+    assert.equal((await run('read', { file_path: 'read.txt' })).isError, sep !== '/',
+      'deterministic path remains usable only on POSIX; other platforms fail closed');
   });

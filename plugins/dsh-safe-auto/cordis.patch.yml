@@ -1,3 +1,5 @@
 - insert:
     - id: dsh-safe-auto
       name: '@klarkxy/dsh-safe-auto'
+    - id: dsh-safe-auto-ui
+      name: '@klarkxy/dsh-safe-auto/ui-host'

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { parseConfig } from '../src/config.js';
 import { conversationRoute, resolveReviewRoutes, nativeCompletion } from '../src/model-route.js';
 import { review } from '../src/reviewer.js';
@@ -198,7 +198,8 @@ test('final guard catches a model change after the preflight result', async () =
   o.state.config = selected('p', 'changed');
   assert.match(h.guard(exec), /REVIEW_MODEL_CHANGED/); h.dispose();
 });
-test('one-shot escalation uses the same conversation-following native reviewer', async () => {
+test('one-shot escalation uses the same conversation-following native reviewer',
+  { skip: sep !== '/' && 'Native escalation requires POSIX' }, async () => {
   const target = join(root, 'grant.txt'); writeFileSync(target, 'old');
   const h = mockHost({ escalationCandidates: [{ tool: 'write', cwd: root, mode: 'danger-full-access', filePath: target }] });
   const o = owner();

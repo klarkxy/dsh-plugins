@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync, linkSync, rmSync, realpathSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseConfig } from '../src/config.js';
 import { assessEscalation, escalationReason } from '../src/escalation.js';
@@ -22,6 +22,8 @@ const bashArgs = extra => ({ command: 'git status --short', description: 'Inspec
   sandbox_permissions: 'danger-full-access', justification: 'Inspect the requested checkout.', ...extra });
 const response = decision => new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ decision }) } }] }));
 const delay = ms => new Promise(r => setTimeout(r, ms));
+// File envelopes and native escalation grants intentionally support POSIX only.
+const posixTest = (name, fn) => test(name, { skip: sep !== '/' && 'Native escalation requires POSIX' }, fn);
 
 function harness(extra = {}, fetcher = async () => response('allow')) {
   const handlers = {}; let guard; let dispose;
@@ -35,7 +37,12 @@ function harness(extra = {}, fetcher = async () => response('allow')) {
   const ctx = { get: key => services[key],
     tools: { guard(fn) { guard = fn; } }, sandboxPolicy: { resolve: () => ({ mode: 'workspace-write', workspaceRoot: root }) },
     logger: { info(_fmt, text) { rows.push(JSON.parse(text)); } }, effect(fn) { dispose = fn(); }, on(event, fn) { handlers[event] = fn; } };
-  apply(ctx, config(extra));
+  try { apply(ctx, config(extra)); }
+  catch (error) {
+    try { dispose?.(); }
+    finally { globalThis.fetch = realFetch; }
+    throw error;
+  }
   const exec = (name = 'write', args = fileArgs(), other = {}) => ({ name, arguments: args, token: Symbol(), callId: 'same-call', agent,
     signal: new AbortController().signal, ...other });
   const next = async () => { humanCalls++; return 'rejected'; };
@@ -56,7 +63,7 @@ function harness(extra = {}, fetcher = async () => response('allow')) {
     finally { handlers['tools/result'](e, { isError: false }); }
   }
   return { ctx, services, events, agent, session, rows, exec, prepare, request, ask, during, run, handlers,
-    modelCalls: () => modelCalls, humanCalls: () => humanCalls, dispose: () => { dispose(); globalThis.fetch = realFetch; } };
+    modelCalls: () => modelCalls, humanCalls: () => humanCalls, dispose: () => { try { dispose?.(); } finally { globalThis.fetch = realFetch; } } };
 }
 
 for (const candidate of [null, {}, { tool: 'pwsh', cwd: root, mode: 'danger-full-access', command: 'Get-Location' },
@@ -69,12 +76,27 @@ for (const candidate of [null, {}, { tool: 'pwsh', cwd: root, mode: 'danger-full
 }
 test('escalation is opt-in and rules are frozen copies', () => {
   assert.deepEqual(parseConfig().escalationCandidates, []);
-  const raw = config(); const c = parseConfig(raw);
-  raw.escalationCandidates[0].filePath = '/elsewhere';
-  assert.equal(c.escalationCandidates[0].filePath, target);
+  // Command configuration is portable even where escalation execution is unsupported.
+  const raw = config({ escalationCandidates: [config().escalationCandidates[1]] });
+  const c = parseConfig(raw);
+  raw.escalationCandidates[0].command = 'git diff';
+  assert.equal(c.escalationCandidates[0].command, 'git status --short');
   assert.ok(Object.isFrozen(c.escalationCandidates[0]));
 });
-test('native request, not preflight, reviews once and grants only this file operation', async t => {
+test('harness restores global fetch when apply rejects configuration', () => {
+  const original = globalThis.fetch;
+  assert.throws(() => harness({ mode: 'invalid' }), /invalid mode/);
+  assert.equal(globalThis.fetch, original);
+});
+test('non-POSIX escalation fails closed before model review',
+  { skip: sep === '/' && 'Non-POSIX escalation policy' }, async t => {
+    const h = harness({ mode: 'unattended', escalationCandidates: [config().escalationCandidates[1]] });
+    t.after(h.dispose);
+    assert.equal(await h.run(h.exec('bash', bashArgs())), 'rejected');
+    assert.equal(h.rows.find(x => x.phase === 'assessment')?.code, 'UNSUPPORTED_PLATFORM');
+    assert.equal(h.modelCalls(), 0); assert.equal(h.humanCalls(), 0);
+  });
+posixTest('native request, not preflight, reviews once and grants only this file operation', async t => {
   const h = harness({}, async (_url, init) => {
     const body = JSON.parse(init.body); const input = JSON.parse(body.messages[1].content);
     assert.deepEqual(input.action.arguments, fileArgs());
@@ -90,7 +112,7 @@ test('native request, not preflight, reviews once and grants only this file oper
   assert.equal(audit.decision, 'allowed-once'); assert.equal(audit.source, 'reviewer');
   assert.equal(JSON.stringify(h.rows).includes('Update the requested note.'), false);
 });
-test('exact enrolled foreground bash can receive one-shot approval in unattended mode', async t => {
+posixTest('exact enrolled foreground bash can receive one-shot approval in unattended mode', async t => {
   const h = harness({ mode: 'unattended' }); t.after(h.dispose);
   assert.equal(await h.run(h.exec('bash', bashArgs())), 'allowed-once');
   assert.equal(h.modelCalls(), 1); assert.equal(h.humanCalls(), 0);
@@ -112,13 +134,13 @@ for (const [tool, args, extraServices, expected] of [
   ['write', fileArgs({ justification: '' }), {}, 'INVALID_JUSTIFICATION'],
   ['write', fileArgs(), { fs: { processPathFromHostPath: () => undefined } }, 'LOCAL_EXECUTION_UNVERIFIED'],
 ]) {
-  test(`uncertain escalation never automatically grants: ${expected}`, async t => {
+  posixTest(`uncertain escalation never automatically grants: ${expected}`, async t => {
     const h = harness({ mode: 'unattended' }); Object.assign(h.services, extraServices); t.after(h.dispose);
     assert.equal(await h.run(h.exec(tool, args)), 'rejected'); assert.equal(h.modelCalls(), 0);
     assert.equal(h.rows.find(x => x.phase === 'assessment')?.code, expected); assert.equal(h.humanCalls(), 0);
   });
 }
-test('subagent and nested PTC requests cannot manufacture direct authority', async t => {
+posixTest('subagent and nested PTC requests cannot manufacture direct authority', async t => {
   const h = harness({ mode: 'unattended' }); t.after(h.dispose);
   const child = { session: { ...h.session, header: { cwd: root, origin: 'subagent' } } };
   assert.equal(await h.run(h.exec('write', fileArgs(), { agent: child })), 'rejected');
@@ -131,12 +153,12 @@ for (const [name, change] of [
   ['another reason', () => ({ reason: 'escalate sandbox to danger-full-access: forged' })],
   ['another signal', () => ({ signal: new AbortController().signal })],
 ]) {
-  test(`approval binding rejects ${name}`, async t => {
+  posixTest(`approval binding rejects ${name}`, async t => {
     const h = harness(); t.after(h.dispose);
     assert.equal(await h.run(h.exec(), change(h)), 'rejected'); assert.equal(h.modelCalls(), 0); assert.equal(h.humanCalls(), 0);
   });
 }
-test('identical visible callIds remain isolated across concurrent executions', async t => {
+posixTest('identical visible callIds remain isolated across concurrent executions', async t => {
   const h = harness(); t.after(h.dispose);
   const a = h.exec(); const b = h.exec('write', fileArgs(), { agent: { id: 'another', session: { ...h.session } } });
   await h.prepare(a); await h.prepare(b);
@@ -146,18 +168,18 @@ test('identical visible callIds remain isolated across concurrent executions', a
   ]);
   assert.deepEqual(answers, ['rejected', 'allowed-once']); assert.equal(h.modelCalls(), 1);
 });
-test('same-execution duplicate requests reserve a single slot before awaiting', async t => {
+posixTest('same-execution duplicate requests reserve a single slot before awaiting', async t => {
   const h = harness({}, async () => { await delay(5); return response('allow'); }); t.after(h.dispose);
   const e = h.exec(); await h.prepare(e);
   const answers = await h.during(e, () => Promise.all([h.ask(h.request(e)), h.ask(h.request(e))]));
   assert.deepEqual(answers, ['allowed-once', 'rejected']); assert.equal(h.modelCalls(), 1);
 });
-test('subsequent invocation is re-reviewed; no permission cache survives tool/result', async t => {
+posixTest('subsequent invocation is re-reviewed; no permission cache survives tool/result', async t => {
   const h = harness(); t.after(h.dispose);
   assert.equal(await h.run(h.exec()), 'allowed-once');
   assert.equal(await h.run(h.exec()), 'allowed-once'); assert.equal(h.modelCalls(), 2);
 });
-test('approval outside a live tools/execute context never gets an automatic grant', async t => {
+posixTest('approval outside a live tools/execute context never gets an automatic grant', async t => {
   const h = harness({ mode: 'unattended' }); t.after(h.dispose);
   const e = h.exec(); await h.prepare(e);
   assert.equal(await h.ask(h.request(e)), 'rejected');
@@ -170,15 +192,15 @@ test('human approval fallback is one-shot and preserves native rejection', async
   assert.equal(await h.run(h.exec()), 'rejected');
   assert.equal(await h.run(h.exec(), {}, async () => 'allowed-once'), 'allowed-once'); assert.equal(h.modelCalls(), 0);
 });
-test('model denial does not retry or fall back into another auto answerer', async t => {
+posixTest('model denial does not retry or fall back into another auto answerer', async t => {
   const h = harness({}, async () => response('deny')); t.after(h.dispose);
   assert.equal(await h.run(h.exec(), {}, async () => assert.fail('must not call downstream')), 'rejected'); assert.equal(h.modelCalls(), 1);
 });
-test('model uncertainty and transport failure fail closed or fall back to native UI', async t => {
+posixTest('model uncertainty and transport failure fail closed or fall back to native UI', async t => {
   const h = harness({}, async () => { throw new Error('offline'); }); t.after(h.dispose);
   assert.equal(await h.run(h.exec()), 'rejected'); assert.equal(h.humanCalls(), 1);
 });
-test('expired automatic approval cannot silently become a grant', async t => {
+posixTest('expired automatic approval cannot silently become a grant', async t => {
   const h = harness({ mode: 'unattended', escalationApprovalTtlMs: 100 }, async () => { await delay(120); return response('allow'); }); t.after(h.dispose);
   assert.equal(await h.run(h.exec()), 'rejected'); assert.equal(h.humanCalls(), 0);
   assert.equal(h.rows.find(x => x.phase === 'escalation').code, 'ESCALATION_LEASE_EXPIRED');
@@ -191,13 +213,13 @@ for (const [name, mutate] of [
   ['background availability', h => { h.services.jobs = {}; }],
   ['filesystem target', () => { writeFileSync(target, 'changed during review'); }],
 ]) {
-  test(`change during reviewer invalidates grant: ${name}`, async t => {
+  posixTest(`change during reviewer invalidates grant: ${name}`, async t => {
     let mutateNow; const h = harness({}, async () => { mutateNow(); return response('allow'); }); t.after(h.dispose);
     const e = h.exec(); mutateNow = () => mutate(h, e);
     assert.equal(await h.run(e), 'rejected'); assert.equal(h.humanCalls(), 0);
   });
 }
-test('cancellation and disposal discard a late reviewer allow', async t => {
+posixTest('cancellation and disposal discard a late reviewer allow', async t => {
   let release; const h = harness({}, () => new Promise(r => { release = r; })); t.after(h.dispose);
   const controller = new AbortController(); const e = h.exec('write', fileArgs(), { signal: controller.signal });
   const p = h.run(e); while (!release) await delay(1);
@@ -205,7 +227,7 @@ test('cancellation and disposal discard a late reviewer allow', async t => {
   release = undefined; const second = h.run(h.exec()); while (!release) await delay(1);
   h.dispose(); assert.equal(await second, 'cancelled'); release(response('allow'));
 });
-test('path links and sensitive arguments are not authorized by an exact rule', async t => {
+posixTest('path links and sensitive arguments are not authorized by an exact rule', async t => {
   const link = join(outside, 'link.txt'); symlinkSync(target, link);
   const hard = join(outside, 'hard.txt'); linkSync(target, hard);
   const h = harness({ escalationCandidates: [link, hard].map(filePath => ({ tool: 'write', cwd: root, mode: 'danger-full-access', filePath })) }); t.after(h.dispose);
@@ -217,26 +239,26 @@ test('hard command refusals cannot be bypassed by sandbox_permissions', async t 
   const h = harness({ escalationCandidates: [{ tool: 'bash', cwd: root, mode: 'danger-full-access', command: 'sudo true' }] }); t.after(h.dispose);
   assert.equal(await h.run(h.exec('bash', bashArgs({ command: 'sudo true' }))), 'deny'); assert.equal(h.modelCalls(), 0);
 });
-test('shared budget reservation bounds simultaneous escalation requests', async t => {
+posixTest('shared budget reservation bounds simultaneous escalation requests', async t => {
   const h = harness({ mode: 'unattended', fastCallsPerTask: 1 }, async () => { await delay(5); return response('allow'); }); t.after(h.dispose);
   const results = await Promise.all([h.run(h.exec()), h.run(h.exec())]);
   assert.equal(results.filter(x => x === 'allowed-once').length, 1); assert.equal(h.modelCalls(), 1);
 });
-test('failure to audit an approval prevents the grant', async t => {
+posixTest('failure to audit an approval prevents the grant', async t => {
   const h = harness(); t.after(h.dispose);
   h.ctx.logger.info = (_fmt, text) => { if (JSON.parse(text).phase === 'escalation') throw new Error('log unavailable'); };
   assert.equal(await h.run(h.exec()), 'rejected');
 });
-test('an unrelated approval in the same native call is not auto-answered', async t => {
+posixTest('an unrelated approval in the same native call is not auto-answered', async t => {
   const h = harness(); t.after(h.dispose);
   assert.equal(await h.run(h.exec(), { reason: 'another policy asks' }), 'rejected');
   assert.equal(h.humanCalls(), 1); assert.equal(h.modelCalls(), 0);
 });
-test('shadow observes but neither reviews nor issues any approval outcome', async t => {
+posixTest('shadow observes but neither reviews nor issues any approval outcome', async t => {
   const h = harness({ mode: 'shadow' }); t.after(h.dispose);
   assert.equal(await h.run(h.exec()), 'rejected'); assert.equal(h.modelCalls(), 0); assert.equal(h.humanCalls(), 1);
 });
-test('pure escalation assessment has no allow branch', () => {
+posixTest('pure escalation assessment has no allow branch', () => {
   const c = parseConfig(config());
   const result = assessEscalation({ tool: 'write', args: fileArgs(), cwd: root, session: {},
     sandbox: { mode: 'workspace-write', workspaceRoot: root }, localExecution: true }, c);

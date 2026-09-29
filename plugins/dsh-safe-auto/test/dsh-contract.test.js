@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { mkdtempSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import * as safeAuto from '../src/index.js';
 
 // Reuse the workspace's pinned real DSH packages, not a second drifting set of versions.
@@ -23,7 +23,7 @@ try {
 }
 
 test('real Cordis + DSH ToolRuntime: schema, preflight, final guard, policy composition and disposal',
-  { skip: !host && 'DSH workspace dependencies are not installed (mandatory in CI)' }, async t => {
+  { skip: sep !== '/' ? 'File-grant contract requires POSIX' : !host && 'DSH workspace dependencies are not installed (mandatory in CI)' }, async t => {
     const { Context, Service } = host.cordis;
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'safe-auto-contract-')));
     writeFileSync(join(root, 'hello.txt'), 'hello');
