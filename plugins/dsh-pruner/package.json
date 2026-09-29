@@ -23,6 +23,10 @@
   "bin": {
     "dsh-pruner-install": "./install.mjs"
   },
+  "exports": {
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
   "files": [
     "icon.svg",
     "locale/*.json",

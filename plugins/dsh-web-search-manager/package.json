@@ -2,6 +2,7 @@
   "name": "@klarkxy/dsh-web-search-manager",
   "version": "0.1.8",
   "description": "Web Search: manage web search providers and public-page fetching from one settings page.",
+  "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -28,10 +29,12 @@
     "./client": {
       "default": "./lib/client.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "icon.svg",
+    "locale/*.json",
     "lib",
     "cordis.patch.yml",
     "README.md",
