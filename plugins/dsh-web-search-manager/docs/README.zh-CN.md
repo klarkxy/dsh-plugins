@@ -39,7 +39,11 @@ dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 - **Firecrawl**：网页搜索与提取 API，需要 `DSH_EDITOR_WEB_FIRECRAWL_API_KEY`。
 - **Tavily**：Search API，固定 basic 检索深度，不自动升级；需要 `DSH_EDITOR_WEB_TAVILY_API_KEY`。适配器已并入本插件，原独立的 `dsh-web-search-tavily` 包已退役。
 
-开启搜索也会启用公开网页读取，由内置 HTTP 读取后端直接从本机读取页面，无需密钥、不产生搜索费用。请求限制包括每条查询的结果上限（`maxResults`）、每次工具调用的查询上限（`maxQueries`）、请求超时（`timeoutMs`）和网页正文字符上限（`maxFetchChars`）。连接测试发送固定查询，不发送作品内容，可能产生一次调用费用。
+开启搜索也会启用公开网页读取。内置 `http` 路由优先匿名请求 `https://r.jina.ai/<目标 URL>`，返回 Reader 的文本/Markdown；HTTP 错误（含 429）、Reader 超时、网络失败、空内容或无效响应时，回退一次到原有 HTTP 直连读取。此回退仅用于网页读取，不改变搜索后端选择。无需注册 Jina、配置 API Key 或计费设置，也不增加依赖。
+
+目标 URL 会发送给第三方服务 Jina，请勿提交含私密令牌或其它敏感信息的 URL。请求不附带 Cookie 或授权头。IP 字面量、明显的本地主机名、带用户名密码的 URL，以及已经带 Reader 前缀的地址跳过 Jina，继续受原 HTTP 读取器的策略约束。两阶段均复用原 HTTP 传输；Reader 最多使用 `timeoutMs` 的一半，且不超过 15 秒，为直连回退预留时间。用户取消、关闭联网或总超时到期时直接停止，不再发起回退。结果保留请求的目标 URL，不将 Reader 代理地址当作来源。
+
+请求限制包括每条查询的结果上限（`maxResults`）、每次工具调用的查询上限（`maxQueries`）、整个请求的总超时（`timeoutMs`）和网页正文字符上限（`maxFetchChars`）。每次 HTTP 响应仍受 5 MB 字节上限约束。连接测试发送固定查询，不发送作品内容，可能产生一次调用费用。
 
 加入 tools 入口后，模型获得 `@deepseek-ai/dsh-tool-web` 的官方 `web_search` 与 `web_fetch` 工具，仅在搜索与网页读取开启时挂载。
 

@@ -39,7 +39,11 @@ Built-in search backends:
 - **Firecrawl**: a web search and extraction API; requires `DSH_EDITOR_WEB_FIRECRAWL_API_KEY`.
 - **Tavily**: a Search API fixed to basic search depth, never auto-upgraded; requires `DSH_EDITOR_WEB_TAVILY_API_KEY`. The adapter is built into this plugin; the former standalone `dsh-web-search-tavily` package is retired.
 
-Enabling search also enables public-page fetching through the built-in HTTP fetch provider, which reads pages directly from your machine: no key and no search charges. Request limits cap each query's results (`maxResults`), queries per tool call (`maxQueries`), request timeout (`timeoutMs`), and fetched page characters (`maxFetchChars`). A connection test sends a fixed query, not manuscript content, and may incur a provider charge.
+Enabling search also enables public-page fetching. The built-in `http` route first requests `https://r.jina.ai/<target URL>` anonymously and returns Reader's text/Markdown. HTTP errors (including 429), Reader timeouts, network failures, and empty or invalid responses fall back once to the existing direct HTTP fetcher. This fallback is only for page fetching; search backend selection is unchanged. No Jina registration, API key, billing configuration, or new dependency is required.
+
+Target URLs are sent to Jina, a third-party service; do not submit URLs containing private tokens or other sensitive data. No cookies or authorization headers are added. IP literals, obvious local hostnames, credentialed URLs, and already-prefixed Reader URLs skip Jina and remain subject to the original HTTP fetcher's policy. Both stages use the existing HTTP transport; the Reader stage uses at most half of `timeoutMs`, capped at 15 seconds, leaving time for direct fallback. Caller cancellation, disabling network access, or the overall deadline stops the request without starting a fallback. Results retain the requested URL rather than the Reader proxy URL.
+
+Request limits cap each query's results (`maxResults`), queries per tool call (`maxQueries`), the total request timeout (`timeoutMs`), and fetched page characters (`maxFetchChars`). Each HTTP response retains the 5 MB byte cap. A connection test sends a fixed query, not manuscript content, and may incur a provider charge.
 
 With the tools entry enabled, the agent receives the official `web_search` and `web_fetch` tools from `@deepseek-ai/dsh-tool-web`, mounted only while search and fetching are enabled.
 
