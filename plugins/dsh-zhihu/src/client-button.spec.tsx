@@ -1,6 +1,7 @@
 import { createRef, forwardRef, type ReactElement, type Ref } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { ZhihuButton, type HostButton, type HostButtonProps } from './client-host-ui.tsx'
 
 type Props = HostButtonProps & { host?: HostButton }
@@ -12,15 +13,14 @@ function render(props: Props, ref: Ref<HTMLButtonElement> = null) {
 
 describe('portable Zhihu button adapter', () => {
   it.each([
-    [undefined, ''], ['default', ''], ['primary', 'primary-action'],
-    ['danger', 'danger-action'], ['icon', 'icon-button'],
-  ] as const)('keeps standalone variant %s without a host dependency', (variant, expected) => {
+    [undefined, 'outline'], ['default', 'outline'], ['primary', 'primary'],
+    ['danger', 'outline'], ['icon', 'ghost'],
+  ] as const)('renders the official Button for standalone variant %s without a host dependency', (variant, expected) => {
     const button = render({ variant, className: 'zhihu-button', children: '搜索' })
-    expect(button.type).toBe('button')
-    expect(button.props.type).toBe('button')
-    expect(button.props.className).toBe([expected, 'zhihu-button'].filter(Boolean).join(' '))
+    expect(button.type).toBe(Button)
+    expect(button.props.variant).toBe(expected)
+    expect(button.props.className).toBe('zhihu-button')
     expect(button.props).not.toHaveProperty('host')
-    expect(button.props).not.toHaveProperty('variant')
   })
 
   it('preserves native events, focus refs, disabled state and accessible tab properties', () => {
@@ -48,14 +48,15 @@ describe('portable Zhihu button adapter', () => {
   })
 
   it('defaults to a non-submitting button but preserves an explicit submit type', () => {
-    expect(render({}).props.type).toBe('button')
-    expect(render({ type: 'submit' }).props.type).toBe('submit')
+    expect(renderToStaticMarkup(<ZhihuButton>查找</ZhihuButton>)).toContain('type="button"')
+    expect(renderToStaticMarkup(<ZhihuButton type="submit">查找</ZhihuButton>)).toContain('type="submit"')
   })
 
-  it('renders standalone disabled and ARIA attributes through React', () => {
-    const html = renderToStaticMarkup(<ZhihuButton variant="primary" disabled aria-label="搜索">查找</ZhihuButton>)
+  it('renders standalone disabled and ARIA attributes through React without leaking the adapter props', () => {
+    const html = renderToStaticMarkup(<ZhihuButton variant="primary" className="zhihu-danger" disabled aria-label="搜索">查找</ZhihuButton>)
     expect(html).toContain('type="button"')
-    expect(html).toContain('class="primary-action"')
+    // The primitive owns the button's own classes; the caller's class rides along.
+    expect(html).toContain('zhihu-danger')
     expect(html).toContain('disabled=""')
     expect(html).toContain('aria-label="搜索"')
     expect(html).not.toContain('variant=')

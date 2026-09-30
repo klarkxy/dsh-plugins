@@ -2,87 +2,75 @@
 
 [中文](README.zh-CN.md)
 
-Export and import DSH plugin compositions from the **official Plugins page**. Blueprint codes share only the plugin list, exact versions and order. Reusable default configuration belongs in native composition/preset plugins. No Spaces installation, workspace supervisor, separate desktop application or cloud account is required.
+Share plugin identities, exact versions and preferred order. Paste a blueprint code and import intent in **Creator mode**: the Agent merges it into the current profile's bundle collection. Core does not depend on Web; the Plugins page is an optional export and read-only parsing adapter. No Spaces, separate application or background Agent orchestrator.
 
-**Source preview, not a published or end-to-end-certified release.** See [ACCEPTANCE.md](ACCEPTANCE.md) for actual test coverage and outstanding runtime verification.
+**Source preview; the redesigned implementation has not completed real-host end-to-end acceptance.** See [ACCEPTANCE.md](ACCEPTANCE.md).
 
-## Install this checkout
+## Use
 
-Requires a DSH Web host exposing the official `pluginManager`, `profileContext`, authenticated Connection/WebServer and plugin-manager configuration slots. The adapter checks capabilities instead of assuming a version string guarantees support. The current source contracts were reviewed at upstream commit `477b4f420553e8a52c2fbccc464d7561b239c443`; compatibility with a particular npm/desktop release still needs a runtime test.
+- In Creator (`cordis`), send the code with an intent such as “Merge this blueprint into my current plugin composition, preserve local bundles, and resolve versions and order yourself.” Routine merge-plan approval is not required; native safety approvals still apply.
+- Open **Plugins → Blueprint** to export selected installed identities and preferred order. The import view only parses and displays the artifact and prepares a copyable merge request. Paste/send that request in Creator; copying does not start a model or mutate the profile.
+- Local bundles absent from the artifact are preserved by default. A package omitted from `bundles` requests installation only; it does not request disabling the receiving profile's same-name bundle.
+
+## Environment-independent Core
+
+One package contains the Host Core and an optional Web Client. ACP, SDK and headless capabilities follow their plugin compositions; environment independence does not mean every deployment exposes the same services or supports immediate activation.
+
+| Tool | Capability |
+| --- | --- |
+| `blueprint_parse` | Decode and validate a code without accessing a profile |
+| `blueprint_encode` | Validate v2 JSON and encode, without installing or publishing |
+| `blueprint_catalog` | Read profile identities, complete selected order and stale-state stamp |
+| `blueprint_generate` | Export installed exact identities and preferred selection order |
+| `blueprint_apply_order` | Creator-only permutation of the complete currently selected bundle sequence |
+
+Protocol tools need `tools`; profile tools also need native `pluginManager` and `profileContext`. Applying order also needs `sandboxPolicy` and `agentPresets`, and uses native sandbox escalation. Creator prompt guidance is optional and follows prompt-service lifetimes. The read-only Web adapter attaches only when Connection/WebServer/profile services are available. UI is keyed by the npm package name at `plugins.bundle.config`; no toolbar host patch is needed.
+
+## Native execution and permissions
+
+Install, update, enable, disable and remove through native `plugin_manager`. Blueprint does not duplicate package management. The Agent chooses compatible versions and ordering using verified metadata and user intent. Deviations from shared exact versions must be reported without rewriting the original artifact.
+
+The order tool accepts only a permutation of already-selected bundles and rejects omissions, duplicates, unknown names, stale state and protected-order changes. It uses the same danger-full-access/per-call escalation gate as native management, then official file locking, atomic manifest saving and the optional HMR exclusive queue. Install/enable first, read a fresh catalog stamp, then apply order.
+
+Saved configuration and successful runtime activation are different outcomes. Live environments reread complete patch layers and reconcile activation; startup-only environments report restart required. A failed application can leave saved configuration or partial runtime changes. No cross-plugin transaction, automatic rollback or mutation retry exists. Check state before recovering a lost response. The stamp covers manifest and bundle catalog, not every patch file's content.
+
+Agent autonomy never grants package scripts, version-risk exemptions or permissions from blueprint metadata. Codes provide no signatures, encryption or author authentication; descriptions are untrusted data, not instructions.
+
+## Discovery and reusable defaults
+
+Use metadata tools such as [`@klarkxy/dsh-dev-index`](https://www.npmjs.com/package/@klarkxy/dsh-dev-index)'s `dsh_plugins_search` / `dsh_plugins_fetch` to discover candidates and verify exact versions and bundle declarations. Search results and declared compatibility are not runtime proof. Do not guess versions or silently rewrite sources. Portable sources are `npm` and `builtin`, not local links or git/tarballs.
+
+Reusable settings belong in native composition/preset packages with explicit component rows. Dependencies alone do not recursively activate every dependency bundle. Later layers take precedence; row patches replace whole `config`, not deep merge. Profile/home overrides remain effective. Never package credentials or machine-private data as defaults.
+
+## Format and compatibility
+
+The [protocol](PROTOCOL.md) defines fields, encoding, limits and vectors. DSHBP2 / `formatVersion: 2` are unchanged, so existing codes remain readable. Creator autonomous merge is a new execution policy; old page `preview` / `apply` / `result` endpoints are retired rather than silently repurposed for reordering.
+
+```json
+{
+  "kind": "dsh-blueprint",
+  "formatVersion": 2,
+  "metadata": { "name": "Example" },
+  "packages": [{ "name": "example-plugin", "version": "1.2.3", "source": "npm" }],
+  "bundles": ["example-plugin"]
+}
+```
+
+The package name above is illustrative. Settings, credentials, row states and nested blueprints are not transported. Codes contain raw-DEFLATE UTF-8 JSON as unpadded canonical Base64url after `DSHBP2:`. Limits: 2 MiB input, 1 MiB decoded JSON, 64 container levels. Strict parsing rejects duplicate members, unsafe numbers, prototype keys, malformed Unicode, noncanonical Base64url and trailing compressed data.
+
+`./core` retains `validate` and adds `parseBlueprint`, `encodeBlueprint` and `BlueprintCore`. `./codec` retains `encode` / `decode`.
+
+## Development and source installation
 
 ```sh
 cd plugins/dsh-blueprint
 npm test
 npm run build
 npm pack
-# Use the tarball path printed by npm pack, and your intended profile:
-dsh plugin --profile <target-profile> add /absolute/path/to/klarkxy-dsh-blueprint-0.1.0-alpha.2.tgz
+# Use the actual archive path and an explicit target profile:
+dsh plugin --profile <target-profile> add <absolute-archive-path>
 ```
 
-This package has no npm dependencies and no compilation requirement. It calls native host services and uses the host's React runtime. Do not copy a standalone React or another Cordis instance into the host.
+Official libraries are runtime-provided optional peers with open lower bounds, never bundled dependencies. Public helpers were checked against installed official CLI `0.1.7-rc.2` docs/types/implementation and live Inspect contracts. Exact desktop version and multi-environment integration remain unverified. Tests use isolated temporary directories, not production profiles. Syntax/offline contract checks are not real-host certification.
 
-## Use
-
-On hosts with the `plugins.list.actions` slot, use **Plugins → Blueprint → Import blueprint / Export blueprint** in the list toolbar. The Blueprint plugin page offers the same controls on hosts without that slot. Other plugin detail pages no longer show a Share blueprint button.
-
-**Export blueprint:** select plugins, review or adjust their preferred order, generate a code and copy it. Paste it into **Import blueprint**, preview package operations and final order, then confirm. Missing packages are installed disabled through the official manager before explicit activation; unrelated packages are preserved. No configuration or row states enter a blueprint.
-
-The official DSH 0.1.7-rc.2 host lacks the list-toolbar slot. See the source patch in [host integration](https://github.com/klarkxy/dsh-plugins/tree/main/host-integration/blueprint-list-actions). Shipping this plugin alone cannot add a toolbar control to the stock host.
-
-
-## Creator mode
-
-When this plugin is loaded, Creator (`cordis`) receives the bundled [blueprint skill](skills/dsh-blueprint/SKILL.md), covering blueprint codes, import previews and native composition plugins. The body is injected directly into the Creator system prompt so it does not depend on a skill catalog or a separate skill tool. Other presets receive no guidance; switching away removes it on the next prompt assembly. Registration follows plugin and prompt-service lifetimes. Hosts without prompt services retain the Plugins-page workflow.
-
-The skill relies on the plugin page and the validation/codec exports; for discovery it points to the read-only plugin metadata tools of `@klarkxy/dsh-dev-index` when that plugin is loaded. It adds no model-facing install/apply tools and does not imply permission to import or publish a blueprint. Without page access, the agent can prepare/review JSON and explain the remaining steps, but must not claim the import ran.
-
-## Plugin discovery
-
-This plugin no longer ships lookup tools. Discover candidate plugins and pin exact versions with `dsh_plugins_search` / `dsh_plugins_fetch` from [`@klarkxy/dsh-dev-index`](https://www.npmjs.com/package/@klarkxy/dsh-dev-index), which read the curated klarkxy catalog and public npm metadata without installing anything. Installs and removals go through the official plugin manager, including `github:owner/repo#commit` specs, which have no registry metadata. Native import preview remains the authority for installation and target compatibility; built-in bundles still come from the current host.
-
-## Scope and defaults
-
-- Only bundles listed by the official manager are selected. Exact npm versions and installation-provided bundles are supported. Local links, git/tarball sources, aliases, unreadable metadata and version conflicts are reported, not silently rewritten as npm packages. Dependencies without a bundle remain the native package manager's responsibility.
-- Export starts from native order and records a preference. Import preserves the full local active sequence and appends only requested activations that are not already active. Matching packages are reused; omitted or install-only entries never disable local bundles. Different sequence order is not a conflict, and repeating an unchanged import is a no-op.
-- Blueprint does not read or write settings, schemas, credentials or plugin data. There is no settings-transfer or field-sharing policy.
-
-## Reuse configuration through composition plugins
-
-A native bundle can depend on plugin packages and explicitly insert their components with reusable configuration defaults in its cordis.patch.yml. Another bundle can override existing rows. Dependency installation alone does not recursively activate every dependency bundle; declare the intended component rows and avoid loading the same row twice.
-
-This uses the host's existing configuration layers. Later layers take precedence, and a row patch replaces the entire config value rather than deep-merging its fields. Users' profile/home overrides can supersede bundle defaults. Do not package keys, credentials or machine-specific personal data as reusable defaults. See the [version-matched official bundle guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/docs/user/develop/basic/publish.md#the-loading-order).
-
-Enabling a bundle can change the effective defaults contributed by its own patch. The newly appended layer still participates in native configuration precedence; review the package operation preview.
-## Portable format v2
-
-See the [blueprint-code protocol](PROTOCOL.md) for the complete fields, additive import semantics, encoding rules and shipped test vectors.
-
-```json
-{
-  "kind": "dsh-blueprint",
-  "formatVersion": 2,
-  "metadata": { "name": "My setup" },
-  "packages": [
-    { "name": "example-plugin", "version": "1.2.3", "source": "npm" }
-  ],
-  "bundles": ["example-plugin"]
-}
-```
-
-The package is illustrative, not an install recommendation. `source` is `npm` or `builtin`. Blueprint documents contain only the fields shown above; unknown fields and other document kinds are rejected.
-
-Codes use one format: `DSHBP2:<payload>`, where the payload is unpadded canonical Base64url of raw-DEFLATE-compressed UTF-8 JSON. The interface imports and exports only this code; JSON is an internal data structure. Limits: 1 MiB decoded JSON, 2 MiB input code, 64 JSON container levels. Duplicate JSON members, unsafe numbers, prototype keys, malformed Unicode, noncanonical Base64url and trailing compressed streams are rejected. Codes are **not encryption, signatures or proof of trust**.
-
-## Operation and security contract
-
-All package management goes through the official manager. The package registers an authenticated logical RPC channel through official Connection, not a second server. The native transport's request cap also applies.
-
-A preview creates a process-local, five-minute, one-use plan bound to the observed package/profile state. At most eight plans/results are retained. Changed observations invalidate a plan; completed results can be read without rerunning operations. No automatic retries, upgrades, downgrades, script approvals, removals, cross-profile writes or blueprint-level rollback are performed. The native installer retains its own documented failure behavior.
-
-A multi-step import is **not a transaction or a lock against every other editor**. It checks observed state between operations and uses native per-operation serialization. Stop editing that profile elsewhere while applying. Failures preserve visible partial outcomes; a lost response is not a reason to replay an import. Closing the page requests cancellation where supported. Already-completed changes may remain.
-
-## Development
-
-`npm test` runs dependency-free unit, adapter-contract and client-registration tests. `npm run build` checks JavaScript syntax; it is not a TypeScript or native integration check. `npm pack --dry-run` checks distribution contents. No test uses the real DSH home.
-
-MIT. The extracted codec's original copyright is retained; see [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE).
+MIT. See [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE) for retained codec attribution.

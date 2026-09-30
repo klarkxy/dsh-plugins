@@ -40,6 +40,11 @@
       "import": "./lib/llm-call.js",
       "default": "./lib/llm-call.js"
     },
+    "./official-ui": {
+      "types": "./lib/official-ui.d.ts",
+      "import": "./lib/official-ui.js",
+      "default": "./lib/official-ui.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

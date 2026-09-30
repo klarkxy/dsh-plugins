@@ -16,6 +16,8 @@ const INDEX_HTML = `<!doctype html>
   <meta charset="utf-8">
   <title>web-search-settings</title>
   <style>
+    /* The host theme defines these; the bare harness must too, or focus outlines are invalid. */
+    :root { --dsw-focus-ring-width: 2px; --dsw-focus-ring-color: #4c8dff; --dsw-alias-state-business-primary: #4c8dff; }
     html, body { margin: 0; background: #111; color: #eee; font: 15px/1.5 sans-serif; }
     #root { max-width: 760px; margin: 24px auto; padding: 0 16px; }
   </style>
@@ -332,6 +334,8 @@ try {
     server: { middlewareMode: true, hmr: false, watch: null },
     resolve: {
       alias: {
+        /* The host injects the primitives at runtime; like vitest, the e2e uses the local stub. */
+        '@deepseek-ai/dsh-client-ui-primitives': viteAlias(resolve(root, 'scripts/editor-plugins/ui-primitives-stub.tsx')),
         'react-dom/client': reactDomClient,
         'react-dom': reactDom,
         'react/jsx-dev-runtime': reactJsxDev,
@@ -488,8 +492,8 @@ try {
     assert.equal(await page.locator('style[data-dsh-web-search]').count(), 1)
     assert.equal(await page.getByText('未开启', { exact: true }).count(), 0)
     assert.equal(await page.getByRole('button', { name: '提高 DuckDuckGo 优先级' }).count(), 0)
-    await page.getByRole('switch', { name: '关闭联网搜索' }).focus()
-    assert.notEqual(await page.getByRole('switch', { name: '关闭联网搜索' }).evaluate(el => getComputedStyle(el).outlineStyle), 'none')
+    await page.getByRole('switch', { name: '联网搜索', exact: true }).focus()
+    assert.notEqual(await page.getByRole('switch', { name: '联网搜索', exact: true }).evaluate(el => getComputedStyle(el).outlineStyle), 'none')
     await page.setViewportSize({ width: 760, height: 900 })
     await shot(page, 'compact-dark.png')
     await page.evaluate(() => {
@@ -515,7 +519,7 @@ try {
       const ddg = document.querySelector('[data-testid="web-search-rank-ddg"] .web-search-rank-index')
       return tool?.getAttribute('data-on') === 'true' && ddg?.textContent?.trim() === '1'
     })
-    await page.getByRole('switch', { name: '开启 Brave' }).click()
+    await page.getByRole('switch', { name: 'Brave', exact: true }).click()
     await settle(page)
     await page.getByRole('button', { name: '拖动排序 Brave' }).waitFor()
     await page.getByRole('button', { name: '拖动排序 Brave' }).dragTo(page.getByTestId('web-search-rank-ddg'))
@@ -526,7 +530,7 @@ try {
     assert.deepEqual(host.snapshot().status.settings.searchOrder, ['brave', 'ddg'])
     const keyBox = page.locator('[data-testid="web-search-rank-brave"] input[type="password"]')
     await keyBox.fill('synthetic-key-1')
-    await page.getByRole('button', { name: '保存' }).click()
+    await page.getByRole('button', { name: '保存', exact: true }).click()
     await settle(page)
     const afterSave = host.snapshot()
     assert.ok(
@@ -609,7 +613,7 @@ try {
     await remount(page)
     const before = host.state.setLog.length
     await page.locator('[data-testid="web-search-rank-brave"] input[type="password"]').fill('')
-    await page.getByRole('button', { name: '保存' }).click()
+    await page.getByRole('button', { name: '保存', exact: true }).click()
     await settle(page)
     const snap = host.snapshot()
     assert.equal(snap.setLog.length, before)
@@ -659,11 +663,11 @@ try {
       settings: { searchEnabled: true, searchOrder: ['brave', 'ddg'], searchProvider: 'brave' },
     })
     await remount(page)
-    await page.getByRole('switch', { name: '关闭联网搜索' }).click()
+    await page.getByRole('switch', { name: '联网搜索', exact: true }).click()
     await settle(page)
     await page.waitForFunction(() => document.querySelector('[data-testid="web-search-tool"]')?.getAttribute('data-on') === 'false')
     await page.locator('[data-testid="web-search-rank-brave"] input[type="password"]').fill('synthetic-key-off')
-    await page.getByRole('button', { name: '保存' }).click()
+    await page.getByRole('button', { name: '保存', exact: true }).click()
     await settle(page)
     const snap = host.snapshot()
     assert.equal(snap.status.searchActive, false)
@@ -697,7 +701,7 @@ try {
       settings: { searchEnabled: false, fetchEnabled: false, searchProvider: '', searchOrder: [] },
     })
     await remount(page)
-    await page.getByRole('switch', { name: '开启 Brave' }).click()
+    await page.getByRole('switch', { name: 'Brave', exact: true }).click()
     await settle(page)
     const keyBox = page.locator('[data-testid="web-search-rank-brave"] input[type="password"]')
     await page.waitForFunction(() => {
@@ -705,10 +709,10 @@ try {
       return Boolean(input) && !input.disabled
     })
     await keyBox.fill('synthetic-key-new')
-    await page.getByRole('button', { name: '保存' }).click()
+    await page.getByRole('button', { name: '保存', exact: true }).click()
     await settle(page)
     assert.equal(host.snapshot().keys[BRAVE_REF], 'synthetic-key-new')
-    const master = page.getByRole('switch', { name: '启用联网搜索' })
+    const master = page.getByRole('switch', { name: '联网搜索', exact: true })
     if (await master.isEnabled()) {
       await master.click()
       await settle(page)

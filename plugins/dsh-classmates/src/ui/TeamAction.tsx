@@ -10,6 +10,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  Button,
   IconChevronDownOutlineRegular,
   IconUserOutlineRegular,
   IconUsersOutlineRegular,
@@ -20,6 +21,7 @@ import {
   useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives';
 import type { ModelBinding, TeamDetails, TeamIdentity } from '../contracts.js';
+import { errorMessage } from './errors.js';
 import {
   createTeamMetadataLoader,
   currentRunningRefreshKey,
@@ -212,7 +214,7 @@ function TeamMemberRow({
           try {
             openTeammate(sessionId, member.id);
           } catch (reason) {
-            onError(String(reason));
+            onError(errorMessage(reason));
           }
         }}
       >
@@ -229,23 +231,23 @@ function TeamMemberRow({
             )}
           </span>
           {showInstance && (
-            <small>{member.name}</small>
+            <small className="dsh-ui-hint">{member.name}</small>
           )}
-          <small>
+          <small className="dsh-ui-hint">
             {t(memberStatusKey(status))}
             {provenance !== undefined && ` · ${provenance}`}
           </small>
           {ownedTasks.length > 0 && (
-            <small>
+            <small className="dsh-ui-hint">
               {t('memberTasks')}: {ownedTasks[0].subject}
               {ownedTasks.length > 1 && `（+${ownedTasks.length - 1}）`}
             </small>
           )}
           {identity?.issue !== undefined && (
-            <small className="cmt-issue">{identity.issue}</small>
+            <small className="dsh-ui-hint dsh-ui-warn">{identity.issue}</small>
           )}
           {member.error !== undefined && (
-            <small className="cmt-diagnostic">{member.error}</small>
+            <small className="dsh-ui-error">{member.error}</small>
           )}
         </span>
       </button>
@@ -283,28 +285,29 @@ function TaskCard({ task, ownerDisplay, t }: TaskCardProps) {
   return (
     <article className="cmt-task">
       <div className="cmt-taskTitle">
-        <strong>{task.subject}</strong>
-        <span className="cmt-taskState">
+        <strong className="dsh-ui-heading">{task.subject}</strong>
+        <span className="cmt-taskState dsh-ui-hint">
           <StateDot state={taskDotState(task)} />
           <span>{t(statusKey(task.status))}</span>
         </span>
       </div>
-      <p ref={textRef} className={expanded ? undefined : 'cmt-clampedDescription'}>
+      <p ref={textRef} className={expanded ? 'dsh-ui-meta' : 'dsh-ui-meta cmt-clampedDescription'}>
         {task.description}
       </p>
-      <div className="cmt-meta">
+      <div className="cmt-meta dsh-ui-meta">
         {(clamped || expanded) && (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             className="cmt-expandToggle"
+            icon={<IconChevronDownOutlineRegular size={12} className={expanded ? 'cmt-expandToggleOpen' : undefined} />}
             aria-expanded={expanded}
             onClick={() => {
               setExpanded(current => !current);
             }}
           >
             {t(expanded ? 'task.collapse' : 'task.expand')}
-            <IconChevronDownOutlineRegular size={12} className={expanded ? 'cmt-expandToggleOpen' : undefined} />
-          </button>
+          </Button>
         )}
         <span>{task.id}</span>
         <span>{t('owner')}: {ownerDisplay ?? task.ownerName ?? t('unowned')}</span>
@@ -318,7 +321,7 @@ function TaskCard({ task, ownerDisplay, t }: TaskCardProps) {
           <span>{t('writeScopes')}: {task.writeScopes.join(', ')}</span>
         )}
         {task.writeScopeWarnings.map(warning => (
-          <span key={warning} className="cmt-warning">{warning}</span>
+          <span key={warning} className="dsh-ui-error">{warning}</span>
         ))}
       </div>
     </article>
@@ -496,11 +499,13 @@ export function ClassmatesTeamAction({
   return (
     <div ref={rootRef} className="cmt-root" data-team-action="true" onMouseLeave={scheduleHoverClose}>
       <style>{classmatesTeamCss}</style>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         ref={triggerRef}
         onMouseEnter={scheduleHoverOpen}
         className="cmt-trigger"
+        icon={<IconUsersOutlineRegular size={14} />}
         aria-label={ariaText}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -511,13 +516,12 @@ export function ClassmatesTeamAction({
           else panelRef.current?.focus();
         }}
       >
-        <IconUsersOutlineRegular size={14} />
-        <span ref={triggerLabelRef} className="cmt-triggerLabel">{triggerText}</span>
-      </button>
+        <span ref={triggerLabelRef} className="dsh-ui-truncate cmt-triggerLabel">{triggerText}</span>
+      </Button>
       {open && createPortal(
         <div
           ref={panelRef}
-          className={compact ? 'cmt-panel cmt-panelCompact' : 'cmt-panel'}
+          className={compact ? 'cmt-root dsh-ui-surface cmt-panel cmt-panelCompact' : 'cmt-root dsh-ui-surface cmt-panel'}
           style={position ?? { visibility: 'hidden', left: 0, top: 0 }}
           role="dialog"
           tabIndex={-1}
@@ -528,13 +532,13 @@ export function ClassmatesTeamAction({
         >
           <div className="cmt-body">
             {error !== null && (
-              <div className="cmt-error" role="alert">
+              <div className="dsh-ui-notice dsh-ui-notice--error cmt-notice" role="alert">
                 <StateDot state="error" />
                 {error}
               </div>
             )}
             {team === undefined && (
-              <div className="cmt-notice" role="status">
+              <div className="dsh-ui-hint cmt-notice" role="status">
                 <StateDot state={opening || listing ? 'ongoing' : 'warning'} />
                 {t(opening || listing ? 'loading' : 'unavailable')}
               </div>
@@ -542,20 +546,20 @@ export function ClassmatesTeamAction({
             {team !== undefined && (
               <>
                 {team.failure !== undefined && (
-                  <div className="cmt-error" role="alert">
+                  <div className="dsh-ui-notice dsh-ui-notice--error cmt-notice" role="alert">
                     <StateDot state="error" />
                     {t('failure', { message: team.failure })}
                   </div>
                 )}
                 <section>
-                  <h3>
+                  <h3 className="dsh-ui-heading">
                     {t('roster')}
                     {team.members.length > 1 && (
-                      <span className="cmt-count">{team.members.length}</span>
+                      <span className="dsh-ui-meta">{team.members.length}</span>
                     )}
                   </h3>
                   {metadataFailed && (
-                    <p className="cmt-emptyNotice" role="status">{t('metadataError')}</p>
+                    <p className="dsh-ui-hint cmt-emptyNotice" role="status">{t('metadataError')}</p>
                   )}
                   <div className="cmt-roster">
                     {team.members.map(member => (
@@ -577,12 +581,12 @@ export function ClassmatesTeamAction({
                 </section>
                 <section>
                   {team.tasks.length === 0 ? (
-                    <p className="cmt-emptyNotice">{t('empty')}</p>
+                    <p className="dsh-ui-hint cmt-emptyNotice">{t('empty')}</p>
                   ) : (
                     <>
-                      <h3>
+                      <h3 className="dsh-ui-heading">
                         {t('tasks')}
-                        <span className="cmt-count">{team.tasks.length}</span>
+                        <span className="dsh-ui-meta">{team.tasks.length}</span>
                       </h3>
                       <div className="cmt-tasks">
                         {team.tasks.map(task => (

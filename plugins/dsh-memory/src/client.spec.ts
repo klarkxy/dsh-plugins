@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { CHAT_EVENTS_SLOT, projectIdFromCwd, sessionCwd } from './contracts.ts'
 import {
-  apply, beginMemoryRequest, candidateAvailabilityLabel, canAccept, canReject, canRevoke,
+  activityStatusLabel, apply, beginMemoryRequest, candidateAvailabilityLabel, canAccept, canDelete, canReject, canRevoke,
+  contextSummary, evidenceFallback, matchesStatusFilter, organizeBlockedReason, rawContextDetail,
   chatSummaryTitle, disposeMemoryRequest, dreamStatusLabel, inject, loadMemoryStatus, MemoryChatShell, MemorySettings,
   memoryPanelKey, parseSeatProps, peekMemoryStatus, shouldSkipMemoryRefresh,
 } from './client.tsx'
@@ -96,6 +97,46 @@ describe('frozen seat and project identity', () => {
   })
 })
 
+describe('record display and gating', () => {
+  const context = {
+    subject: 'user', domain: 'general', key: 'PR', aliases: [], observedAt: 0,
+    activityStatus: 'planned' as const, eventTime: 'unspecified',
+  }
+
+  it('hides delete for tombstoned records and filters by status', () => {
+    expect(canDelete({ status: 'deleted' } as never)).toBe(false)
+    expect(canDelete({ status: 'revoked' } as never)).toBe(true)
+    expect(matchesStatusFilter({ status: 'active' } as never, 'current')).toBe(true)
+    expect(matchesStatusFilter({ status: 'candidate' } as never, 'current')).toBe(true)
+    expect(matchesStatusFilter({ status: 'rejected' } as never, 'current')).toBe(false)
+    expect(matchesStatusFilter({ status: 'rejected' } as never, 'all')).toBe(true)
+  })
+
+  it('localizes context and folds raw identifiers', () => {
+    const zh = contextSummary(context, 'zh')
+    expect(zh).toContain('计划中')
+    expect(zh).not.toContain('planned')
+    expect(zh).not.toContain('unspecified')
+    expect(contextSummary(context, 'en')).toContain('Planned')
+    expect(activityStatusLabel('in-progress', 'en')).toBe('In progress')
+    expect(rawContextDetail(context)).toContain('subject=user')
+    expect(evidenceFallback({ sessionId: 's', seq: 3, kind: 'user' }, 'en')).toBe('Chat message #3')
+  })
+
+  it('explains why organizing is unavailable', () => {
+    expect(organizeBlockedReason({ aiAvailable: false, running: false }, 'zh')).toBeTruthy()
+    expect(organizeBlockedReason({ aiAvailable: true, running: false }, 'zh')).toBeUndefined()
+  })
+
+  it('keeps drafts until a save succeeds and uses fixed switch labels', () => {
+    expect(clientSrc).toContain('props.onSave(title, content).then(saved => { if (saved) setRowEditing(false) })')
+    expect(clientSrc).toContain('action(async () => {}, false)')
+    expect(clientSrc).not.toContain('关闭记忆注入')
+    expect(clientSrc).not.toContain('review.render(')
+    expect(clientSrc).not.toMatch(/font-size:\s*13px/)
+  })
+})
+
 describe('memory settings and host locale', () => {
   it('registers management on its own plugin page without exposing memory in chat', () => {
     const { names, renders } = captureRenders()
@@ -152,7 +193,7 @@ describe('memory settings and host locale', () => {
   })
 
   it('resolves native settings seats and refreshes without clobbering edits or writes', () => {
-    expect(inject).toEqual(['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
+    expect(inject).toEqual(['slots', 'connection', 'remote', 'remote.session', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
     expect(clientSrc).toContain("from '@klarkxy/dsh-plugin-kit/client-utils'")
     expect(clientSrc).toContain('type Client = NativeSurfaceClient &')
     expect(clientSrc).toContain('useNativeSeat(client, props)')

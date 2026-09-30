@@ -21,8 +21,14 @@ describe("bundle contract", () => {
       bundle: { patch: "./cordis.patch.yml" },
       client: {
         platform: "web",
-        immediately: true,
-        inject: ["@deepseek-ai/dsh-client-ui-plugin-manager", "@deepseek-ai/dsh-client-locale"],
+        // The client half composes its controls from the host primitives, so
+        // that module has to be in the host's table for `require` to resolve.
+        // `slots.inject` already waits for the Plugins page seat, so neither a
+        // stage-one prefetch nor a plugin-manager edge is needed.
+        inject: [
+          "@deepseek-ai/dsh-client-ui-primitives",
+          "@deepseek-ai/dsh-client-locale",
+        ],
       },
     });
     expect(packageJson.exports).toMatchObject({ "./client": "./client.js" });

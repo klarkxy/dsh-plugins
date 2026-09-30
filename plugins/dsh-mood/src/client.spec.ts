@@ -2,9 +2,9 @@ import { createElement, isValidElement } from 'react'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { CHAT_EVENTS_SLOT, MOOD_PLUGIN } from './contracts.ts'
+import { CHAT_EVENTS_SLOT, MOOD_PLUGIN, readinessLabel } from './contracts.ts'
 import {
-  apply, copy, inject, isCurrentMoodRequest, modeFromKey, MoodChatCard, MoodSettings, moodPanelKey,
+  apply, copy, inject, isCurrentMoodRequest, MoodChatCard, MoodSettings, moodPanelKey,
   peekMoodStatus, shouldOfferRecovery, shouldShowCard, shouldSkipMoodRefresh,
 } from './client.tsx'
 
@@ -46,12 +46,13 @@ function deferred() {
 }
 
 describe('mood settings and card helpers', () => {
-  it('uses the frozen chat seat and compact mode keys', () => {
+  it('uses the frozen chat seat and localized copy', () => {
     expect(CHAT_EVENTS_SLOT).toBe('dsh-editor.chat.events')
-    expect(modeFromKey('auto', 'ArrowRight')).toBe('manual')
-    expect(modeFromKey('manual', 'ArrowRight')).toBe('strict')
-    expect(modeFromKey('strict', 'Home')).toBe('auto')
     expect(copy('zh').settings).toBe('需求澄清')
+    expect(copy('en').settings).toBe('Requirement clarification')
+    expect(copy('en').evidenceFallback(3)).toBe('Chat message #3')
+    expect(readinessLabel('clear-request', 'en')).toBe('Clearly stated')
+    expect(readinessLabel('clear-request')).toBe('表述清楚')
     expect(copy('zh').retry).toBe('按原请求重试')
     expect(copy('zh').sessionHint).toContain('会话')
   })
@@ -92,8 +93,21 @@ describe('native settings seat and contract refresh', () => {
     const { names } = captureRenders()
     expect(names).toEqual([
       { name: BUNDLE_CONFIG_SLOT, key: MOOD_PLUGIN },
-      { name: CHAT_EVENTS_SLOT, id: 'mood', order: 10, label: '需求约定' },
+      { name: CHAT_EVENTS_SLOT, id: 'mood', order: 10, label: '需求澄清' },
     ])
+  })
+
+  it('renders the session task summary on the plugin page and keeps drafts cancellable', () => {
+    const { renders } = captureRenders()
+    const page = renders[BUNDLE_CONFIG_SLOT]!({ sessionId: 's1' })
+    expect(isValidElement(page)).toBe(true)
+    expect((page as { type: unknown }).type).toBe(MoodSettings)
+    expect(clientSrc).not.toContain('MoodSettingsSeat')
+    expect(clientSrc).toContain('{text.cancel}</Button>')
+    // Load errors report the cause, not the loading copy; saving does not refetch.
+    expect(clientSrc).not.toContain('setError(text.modelLoading)')
+    expect(clientSrc).toContain('}, [client, locale])')
+    expect(clientSrc).not.toMatch(/font-size:\s*13px/)
   })
 
   it('keeps MoodSettings available for native seat props', () => {
@@ -112,7 +126,7 @@ describe('native settings seat and contract refresh', () => {
   })
 
   it('resolves native settings seats and peeks without clobbering edits or writes', () => {
-    expect(inject).toEqual(['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
+    expect(inject).toEqual(['slots', 'connection', 'remote', 'remote.session', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
     expect(clientSrc).toContain("from '@klarkxy/dsh-plugin-kit/client-utils'")
     expect(clientSrc).toContain('type Client = NativeSurfaceClient &')
     expect(clientSrc).toContain('useNativeSeat(client, props)')
@@ -122,7 +136,7 @@ describe('native settings seat and contract refresh', () => {
     expect(clientSrc).toContain("from '@klarkxy/dsh-plugin-kit/model-menu'")
     expect(clientSrc).toContain('data-testid="mood-model"')
     expect(clientSrc).toContain("client.connection.rpc.call(MOOD_RPC_CHANNEL, 'model', {")
-    expect(clientSrc).toContain('parseModelMenuChoices(value, route)')
+    expect(clientSrc).toContain('parseModelMenuChoices(value, saved)')
     expect(clientSrc).toContain('modelMenuChoiceKey(route.provider, route.model)')
     expect(clientSrc).toContain('if (seat.hidden || !seat.sessionId) return null')
     expect(clientSrc).not.toMatch(/beginMood|requestId\.current \+= 1[\s\S]{0,40}peekMoodStatus/)

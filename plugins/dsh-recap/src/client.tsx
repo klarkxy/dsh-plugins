@@ -5,6 +5,8 @@ import {
   modelMenuChoiceKey, modelMenuEffortOptions, parseModelMenuChoiceKey, parseModelMenuChoices, type ModelMenuChoice,
 } from '@klarkxy/dsh-plugin-kit/model-menu'
 import { useEffect, useId, useRef, useState } from 'react'
+import { Button, Input, StateDot, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import {
   RECAP_PLUGIN, RECAP_RPC_CHANNEL, defaultSettings,
   type RecapCard, type RecapModelRoute, type RecapSettings, type RecapStatus, type RpcResult,
@@ -14,7 +16,7 @@ import {
 } from './idle.ts'
 
 export const name = 'dsh-recap-client'
-export const inject = ['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
+export const inject = ['slots', 'connection', 'remote', 'remote.session', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 export {
   createRecapClientWork, isCurrentRecapRequest, shouldRequestIdleReturn, shouldSkipRecapAutoRefresh,
   nextActivityTimestamp,
@@ -76,10 +78,45 @@ export async function runRecapStatusLoad(input: {
     const status = await recapCall<RecapStatus>(input.rpc, 'status', input.sessionId ? { sessionId: input.sessionId } : {})
     if (!input.isCurrent()) return
     input.onStatus(status)
-  } catch {
+  } catch (cause) {
     if (!input.isCurrent()) return
-    input.onError(input.failedMessage)
+    input.onError(cause instanceof Error && cause.message ? cause.message : input.failedMessage)
   }
+}
+
+/** Recap's single user-facing name, shared by the chat seat label and copy. */
+export function recapTitle(locale: string | undefined): string {
+  return copy(locale, '回顾', 'Recap')
+}
+
+/** Maps every generation outcome to a dot state instead of reading anything non-running as done. */
+export function recapGenerationDot(generation: RecapCard['generation']): 'ongoing' | 'error' | 'warning' | 'idle' | 'done' {
+  switch (generation) {
+    case 'running': return 'ongoing'
+    case 'failed': return 'error'
+    case 'cancelled': return 'warning'
+    case 'superseded': return 'idle'
+    default: return 'done'
+  }
+}
+
+export function recapGenerationLabel(generation: RecapCard['generation'], locale: string | undefined): string {
+  switch (generation) {
+    case 'running': return copy(locale, '生成中', 'Generating')
+    case 'failed': return copy(locale, '生成失败', 'Failed')
+    case 'cancelled': return copy(locale, '已取消', 'Cancelled')
+    case 'superseded': return copy(locale, '已被新回顾替代', 'Replaced by a newer recap')
+    default: return copy(locale, '已完成', 'Done')
+  }
+}
+
+/**
+ * The chat seat stays a quiet lifecycle controller until there is something to
+ * show: stored cards or a generation in flight. Only then does it render the card UI.
+ */
+export function recapCardVisible(input: { hidden?: boolean; cards: readonly RecapCard[] }): boolean {
+  // A running generation always belongs to a stored card, so "has cards" covers both cases.
+  return !input.hidden && input.cards.length > 0
 }
 
 export async function runRecapAct(input: {
@@ -136,25 +173,47 @@ export async function runRecapIdleReturn(input: {
   }
 }
 
-const styles = `
-.dsh-recap-card{font:inherit;color:inherit;max-width:42rem}
-.dsh-recap-card button{font:inherit;min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:8px;background:transparent;color:inherit;cursor:pointer;justify-self:start;transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease}
-.dsh-recap-card button:hover:not(:disabled){background:var(--gray-3,color-mix(in srgb,currentColor 6%,transparent));border-color:color-mix(in srgb,currentColor 35%,transparent)}
-.dsh-recap-card button:active:not(:disabled){transform:scale(.97)}
-.dsh-recap-card button:disabled{opacity:.45;cursor:not-allowed}
-.dsh-recap-card :focus-visible{outline:2px solid var(--accent-9,currentColor);outline-offset:3px}
-.dsh-recap-card details{padding:10px 4px;border-top:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:10px}
-.dsh-recap-card pre{margin:8px 0 0;white-space:pre-wrap;font:inherit}
-.dsh-recap-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-.dsh-recap-error{color:var(--red-9,#b91c1c)}
-.dsh-recap-settings{display:grid;gap:12px;max-width:42rem;color:inherit;font:inherit}
-.dsh-recap-settings p{margin:0;line-height:1.5}
-.dsh-recap-settings label{display:grid;gap:6px;font-size:var(--font-size-2,14px)}
-.dsh-recap-settings select{box-sizing:border-box;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--gray-7,color-mix(in srgb,currentColor 20%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit}
-.dsh-recap-settings select:focus-visible{border-color:var(--accent-9,currentColor);outline:2px solid var(--accent-9,currentColor);outline-offset:1px}
-.dsh-recap-meta{font-size:var(--font-size-1,13px);color:var(--gray-11,inherit)}
-@media(prefers-reduced-motion:reduce){.dsh-recap-settings select{transition:none}}
+const css = `${officialUiCss(['dsh-recap-card', 'dsh-recap-settings'])}
+/* The two surfaces take their measure and rhythm from the contract; what stays
+ * here is the native <details> header the primitives do not cover, and the
+ * generated body, which is prose rather than the monospaced code block the
+ * contract's own code well is for. */
+.dsh-recap-card, .dsh-recap-settings { max-width: 760px; }
+.dsh-recap-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.dsh-recap-summary { display: flex; align-items: center; gap: 8px; min-width: 0; cursor: pointer; }
+.dsh-recap-body {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-secondary);
+}
 `
+
+/** Retry; when it would overwrite a finished recap, a second click within 3s confirms. */
+function RetryButton(props: { locale?: string; disabled?: boolean; confirm: boolean; onRetry(): void }) {
+  const [armed, setArmed] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const disarm = () => { clearTimeout(timer.current); setArmed(false) }
+  const confirmLabel = copy(props.locale, '再点一次以覆盖当前回顾', 'Click again to replace this recap')
+  return <>
+    <Button variant="outline" size="sm" disabled={props.disabled} onBlur={disarm}
+      onClick={() => {
+        if (props.confirm && !armed) {
+          setArmed(true)
+          timer.current = setTimeout(() => setArmed(false), 3000)
+          return
+        }
+        disarm()
+        props.onRetry()
+      }}>{armed ? confirmLabel : copy(props.locale, '重新生成', 'Regenerate')}</Button>
+    <span role="status" className="dsh-recap-sr">{armed ? confirmLabel : ''}</span>
+  </>
+}
 
 export function RecapEventsCard({
   client, sessionId, locale, hidden, idle = true, quiet = false,
@@ -288,21 +347,32 @@ export function RecapEventsCard({
     })
   }
 
-  if (hidden || quiet) return null
+  // `quiet` keeps the seat a background controller: nothing renders until there is a card to show.
+  if (quiet ? !recapCardVisible({ hidden, cards }) : hidden) return null
   if (!cardsOn && cards.length === 0 && !error) return null
-  return <section className="dsh-recap-card" data-session={sessionId}>
-    {error ? <p role="alert" className="dsh-recap-error">{error}</p> : null}
-    {cardsOn ? <div className="dsh-recap-actions">
-      <button type="button" disabled={busy || recapHasRunningGeneration(cards)}
-        onClick={() => act('refresh')}>{copy(locale, '生成回顾', 'Generate recap')}</button>
+  const running = recapHasRunningGeneration(cards)
+  return <section className="dsh-recap-card dsh-ui-stack" data-session={sessionId} aria-label={recapTitle(locale)}>
+    {error ? <p role="alert" className="dsh-ui-error">{error}</p> : null}
+    {cardsOn ? <div className="dsh-ui-actions">
+      <Button variant="primary" size="sm" disabled={busy || running}
+        onClick={() => act('refresh')}>{copy(locale, '生成回顾', 'Generate recap')}</Button>
+      <span role="status" className="dsh-ui-hint">{running ? copy(locale, '正在生成回顾…', 'Generating recap…') : ''}</span>
     </div> : null}
     {cards.map(card => (
-      <details key={card.id}>
-        <summary>{card.title}</summary>
-        <pre>{card.body}</pre>
-        <div className="dsh-recap-actions">
-          {card.generation === 'running' ? <button type="button" onClick={() => act('cancel', card.id)}>{copy(locale, '取消', 'Cancel')}</button> : null}
-          <button type="button" disabled={card.generation === 'running'} onClick={() => act('retry', card.id)}>{copy(locale, '重试', 'Retry')}</button>
+      <details className="dsh-ui-card dsh-ui-card--flat" key={card.id}>
+        <summary className="dsh-recap-summary">
+          <StateDot state={recapGenerationDot(card.generation)} />
+          <span className="dsh-ui-heading dsh-ui-truncate">{card.title}</span>
+          <span className="dsh-ui-meta">{recapGenerationLabel(card.generation, locale)}</span>
+        </summary>
+        <pre className="dsh-recap-body">{card.body}</pre>
+        <div className="dsh-ui-actions">
+          {card.generation === 'running'
+            ? <Button variant="outline" size="sm" disabled={busy} onClick={() => act('cancel', card.id)}>{copy(locale, '取消', 'Cancel')}</Button>
+            : <RetryButton locale={locale} disabled={busy}
+              // Retrying a finished recap replaces its text, so that one path asks first.
+              confirm={card.generation === 'idle' && Boolean(card.body.trim())}
+              onRetry={() => act('retry', card.id)} />}
         </div>
       </details>
     ))}
@@ -330,10 +400,11 @@ function RecapModelSelect(props: {
   )
   const efforts = modelMenuEffortOptions(selected, props.route.reasoningEffort)
   return <>
-    <label htmlFor={optionsId}>
-      <span>{props.label}</span>
+    <label className="dsh-ui-field" htmlFor={optionsId}>
+      <span className="dsh-ui-label">{props.label}</span>
       <select
         id={optionsId}
+        className="dsh-ui-select"
         value={modelMenuChoiceKey(props.route.provider, props.route.model)}
         disabled={props.busy}
         onChange={event => {
@@ -352,10 +423,11 @@ function RecapModelSelect(props: {
       </select>
     </label>
     {selected && efforts.length > 0 && (
-      <label htmlFor={`${optionsId}-effort`}>
-        <span>{copy(props.locale, '思考强度', 'Reasoning effort')}</span>
+      <label className="dsh-ui-field" htmlFor={`${optionsId}-effort`}>
+        <span className="dsh-ui-label">{copy(props.locale, '思考强度', 'Reasoning effort')}</span>
         <select
           id={`${optionsId}-effort`}
+          className="dsh-ui-select"
           value={props.route.reasoningEffort ?? ''}
           disabled={props.busy}
           onChange={event => props.onChange({ ...props.route, reasoningEffort: event.target.value || undefined })}
@@ -368,7 +440,49 @@ function RecapModelSelect(props: {
   </>
 }
 
-/** Plugin-page settings row: recap card and checkpoint model picks. */
+function RecapToggle(props: {
+  locale: string; label: string; hint: string; checked: boolean; busy: boolean; onChange(next: boolean): void
+}) {
+  return <div className="dsh-ui-toggle-row">
+    <div className="dsh-ui-toggle-text">
+      <span className="dsh-ui-toggle-label">{props.label}</span>
+      <span className="dsh-ui-hint">{props.hint}</span>
+    </div>
+    <Switch checked={props.checked} label={props.label} disabled={props.busy} onChange={props.onChange} />
+  </div>
+}
+
+/** Minutes bounds mirror the server schema (60_000..180 * 60_000 ms). */
+export const RECAP_IDLE_MIN_MINUTES = 1
+export const RECAP_IDLE_MAX_MINUTES = 180
+
+/** Parses the minutes field; undefined when out of range or not a whole number. */
+export function parseIdleMinutes(text: string): number | undefined {
+  const minutes = Number(text.trim())
+  if (!Number.isInteger(minutes) || minutes < RECAP_IDLE_MIN_MINUTES || minutes > RECAP_IDLE_MAX_MINUTES) return undefined
+  return minutes * 60_000
+}
+
+function IdleMinutesField(props: { locale: string; value: number; busy: boolean; onCommit(ms: number): void }) {
+  const id = useId()
+  const [text, setText] = useState(String(Math.round(props.value / 60_000)))
+  useEffect(() => { setText(String(Math.round(props.value / 60_000))) }, [props.value])
+  const parsed = parseIdleMinutes(text)
+  const invalid = parsed === undefined
+  const commit = () => { if (parsed !== undefined && parsed !== props.value) props.onCommit(parsed) }
+  return <div className="dsh-ui-field">
+    <label className="dsh-ui-label" htmlFor={id}>{copy(props.locale, '离开多久后生成回顾（分钟）', 'Recap after being away (minutes)')}</label>
+    <Input id={id} className="dsh-ui-control" inputMode="numeric" value={text} disabled={props.busy}
+      aria-invalid={invalid || undefined} aria-describedby={`${id}-hint`}
+      onChange={event => setText(event.target.value)} onBlur={commit}
+      onKeyDown={event => { if (event.key === 'Enter') commit() }} />
+    <p id={`${id}-hint`} className={invalid ? 'dsh-ui-error' : 'dsh-ui-hint'}>
+      {copy(props.locale, `填写 ${RECAP_IDLE_MIN_MINUTES}–${RECAP_IDLE_MAX_MINUTES} 之间的整数。`, `A whole number from ${RECAP_IDLE_MIN_MINUTES} to ${RECAP_IDLE_MAX_MINUTES}.`)}
+    </p>
+  </div>
+}
+
+/** Plugin-page settings row: recap abilities, idle interval and model picks. */
 export function RecapSettingsPanel({ client, ...props }: { client: RecapClient } & Record<string, unknown>) {
   const seat = useNativeSeat(client, props)
   const locale = seat.locale
@@ -386,7 +500,7 @@ export function RecapSettingsPanel({ client, ...props }: { client: RecapClient }
       const result = value as RpcResult<RecapStatus>
       if (!live) return
       if (!result || result.ok !== true) {
-        setError(copy(locale, '无法读取回顾设置。', 'Unable to load recap settings.'))
+        setError(result && result.ok === false && result.error.message ? result.error.message : copy(locale, '无法读取回顾设置。', 'Unable to load recap settings.'))
         return
       }
       setStatus(result.value)
@@ -394,13 +508,13 @@ export function RecapSettingsPanel({ client, ...props }: { client: RecapClient }
       void client.remote?.session?.modelCatalog?.()
         ?.then(catalog => { if (live) setChoices(parseModelMenuChoices(catalog, result.value.settings.displayModel)) })
         .catch(() => { if (live) setChoices([]) })
-    }).catch(() => { if (live) setError(copy(locale, '无法读取回顾设置。', 'Unable to load recap settings.')) })
+    }).catch(cause => { if (live) setError(cause instanceof Error && cause.message ? cause.message : copy(locale, '无法读取回顾设置。', 'Unable to load recap settings.')) })
     return () => { live = false }
   }, [client, locale])
 
-  async function save(patch: Partial<Pick<RecapSettings, 'displayModel' | 'checkpointModel'>>): Promise<void> {
+  async function save(patch: Partial<Omit<RecapSettings, 'revision'>>): Promise<void> {
     if (!status) return
-    const draft = { ...defaultSettings(), ...status.settings, revision: status.settings.revision }
+    const draft = { ...defaultSettings(), ...status.settings, ...patch }
     setBusy(true); setError(''); setNote('')
     try {
       const value = await call('update', {
@@ -410,8 +524,8 @@ export function RecapSettingsPanel({ client, ...props }: { client: RecapClient }
           checkpointsEnabled: draft.checkpointsEnabled,
           semanticCheckpointsEnabled: draft.semanticCheckpointsEnabled,
           idleReturnMs: draft.idleReturnMs,
-          displayModel: patch.displayModel ?? draft.displayModel,
-          checkpointModel: patch.checkpointModel ?? draft.checkpointModel,
+          displayModel: draft.displayModel,
+          checkpointModel: draft.checkpointModel,
         },
       })
       const result = value as RpcResult<RecapStatus>
@@ -426,14 +540,34 @@ export function RecapSettingsPanel({ client, ...props }: { client: RecapClient }
   }
 
   if (!status) {
-    return <section className="dsh-recap-settings" data-testid="recap-settings">
-      <p role="status">{error || copy(locale, '正在读取设置…', 'Loading settings…')}</p>
+    return <section className="dsh-recap-settings dsh-ui-panel" data-testid="recap-settings">
+      {error
+        ? <p role="alert" className="dsh-ui-error">{error}</p>
+        : <p role="status" className="dsh-ui-hint">{copy(locale, '正在读取设置…', 'Loading settings…')}</p>}
     </section>
   }
 
-  return <section className="dsh-recap-settings" data-testid="recap-settings">
-    {error && <p role="alert" className="dsh-recap-error">{error}</p>}
-    {note && <p role="status">{note}</p>}
+  return <section className="dsh-recap-settings dsh-ui-panel" data-testid="recap-settings">
+    {error && <p role="alert" className="dsh-ui-error">{error}</p>}
+    {note && <p role="status" className="dsh-ui-notice">{note}</p>}
+    <RecapToggle locale={locale} busy={busy}
+      label={copy(locale, '回顾卡片', 'Recap cards')}
+      hint={copy(locale, '长对话结束或离开一段时间后回来时，生成一段回顾。', 'Writes a short recap after long turns or when you come back.')}
+      checked={status.settings.cardsEnabled}
+      onChange={next => void save({ cardsEnabled: next })} />
+    <RecapToggle locale={locale} busy={busy}
+      label={copy(locale, '任务检查点', 'Task checkpoints')}
+      hint={copy(locale, '在关键节点提醒助手当前进度。', 'Reminds the assistant of progress at key points.')}
+      checked={status.settings.checkpointsEnabled}
+      onChange={next => void save({ checkpointsEnabled: next })} />
+    <RecapToggle locale={locale} busy={busy || !status.settings.checkpointsEnabled}
+      label={copy(locale, '语义检查点', 'Semantic checkpoints')}
+      hint={copy(locale, '用模型总结检查点内容，需先开启任务检查点。', 'Uses a model to summarize checkpoints. Needs task checkpoints on.')}
+      checked={status.settings.semanticCheckpointsEnabled}
+      onChange={next => void save({ semanticCheckpointsEnabled: next })} />
+    <IdleMinutesField locale={locale} busy={busy || !status.settings.cardsEnabled}
+      value={status.settings.idleReturnMs}
+      onCommit={ms => void save({ idleReturnMs: ms })} />
     <RecapModelSelect
       locale={locale}
       label={copy(locale, '回顾卡片模型', 'Recap card model')}
@@ -450,7 +584,7 @@ export function RecapSettingsPanel({ client, ...props }: { client: RecapClient }
       busy={busy}
       onChange={route => void save({ checkpointModel: route })}
     />
-    <p className="dsh-recap-meta">{copy(locale, '留空则使用当前会话模型，再回落到宿主默认对话模型。', 'Leave empty to use the current session model, then the host default chat model.')}</p>
+    <p className="dsh-ui-help">{copy(locale, '留空则使用当前会话模型，再回落到宿主默认对话模型。', 'Leave empty to use the current session model, then the host default chat model.')}</p>
   </section>
 }
 
@@ -460,7 +594,7 @@ export function apply(ctx: Context): void {
     if (typeof document === 'undefined') return () => {}
     const style = document.createElement('style')
     style.setAttribute('data-plugin', '@klarkxy/dsh-recap')
-    style.textContent = styles
+    style.textContent = css
     document.head.appendChild(style)
     return () => style.remove()
   }, 'dsh-recap.styles')
@@ -469,6 +603,6 @@ export function apply(ctx: Context): void {
     () => <RecapSettingsPanel client={client} />,
   )), 'dsh-recap.settings')
   ctx.effect(() => client.slots.inject(CHAT_EVENTS_SLOT, () => client.slots.register({
-    name: CHAT_EVENTS_SLOT, id: 'recap', order: 40, label: '会话纪要',
+    name: CHAT_EVENTS_SLOT, id: 'recap', order: 40, label: recapTitle(undefined),
   }, (props: unknown) => <RecapBackgroundSeat client={client} {...(props as object)} />)), 'dsh-recap.background')
 }

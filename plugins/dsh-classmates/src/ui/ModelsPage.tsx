@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, StateDot, Switch } from '@deepseek-ai/dsh-client-ui-primitives';
+import { Button, Input, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives';
+import type { ConfirmRequest } from './ConfirmDialog.js';
+import { errorMessage } from './errors.js';
+import { createPageTranslator, type PageTranslate } from './page-locales.js';
 import type {
   ClassmatesClient,
   ClassmatesState,
@@ -22,7 +25,14 @@ export interface ModelsPageProps {
   onState(next: ClassmatesState): void;
   onDirtyChange?(dirty: boolean): void;
   onEditingChange?(editing: boolean): void;
+  /** Page translator; defaults to the zh copy. */
+  t?: PageTranslate;
+  /** Host-Modal confirmation owned by the parent page. */
+  confirm?(request: ConfirmRequest): Promise<boolean>;
 }
+
+const DEFAULT_T = createPageTranslator('zh');
+const DECLINE = async () => false;
 
 export const PROFILE_NAME_MAX = 100;
 export const PROFILE_DESCRIPTION_MAX = 200;
@@ -34,13 +44,6 @@ type ProfileHealth = 'enabled' | 'disabled' | 'unconfigured' | 'invalid';
 
 /** Editor draft: the model route stays unchosen until the user picks one. */
 type ProfileDraft = Omit<ModelProfile, 'model'> & { model: ModelBinding | null };
-
-const HEALTH_LABEL: Record<ProfileHealth, string> = {
-  enabled: '已启用',
-  disabled: '已停用',
-  unconfigured: '未配置',
-  invalid: '配置错误',
-};
 
 function cloneBinding(binding: ModelBinding): ModelBinding {
   return binding.reasoningEffort === undefined
@@ -95,32 +98,22 @@ function snapshot(draft: ProfileDraft): string {
   });
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
-function validateDraft(draft: ProfileDraft, models: ModelChoice[]): FieldErrors {
+/** Length limits are enforced by maxLength and shown by the counters; only emptiness is reported here. */
+function validateDraft(draft: ProfileDraft, models: ModelChoice[], t: PageTranslate): FieldErrors {
   const errors: FieldErrors = {};
-  if (!draft.name.trim()) {
-    errors.name = '请填写名称。';
-  } else if (draft.name.length > PROFILE_NAME_MAX) {
-    errors.name = `名称不能超过 ${PROFILE_NAME_MAX} 个字符（当前 ${draft.name.length}）。`;
-  }
-  if (!draft.description.trim()) {
-    errors.description = '请填写用途说明。';
-  } else if (draft.description.length > PROFILE_DESCRIPTION_MAX) {
-    errors.description = `用途说明不能超过 ${PROFILE_DESCRIPTION_MAX} 个字符（当前 ${draft.description.length}）。`;
-  }
+  if (!draft.name.trim()) errors.name = t('common.nameRequired');
+  if (!draft.description.trim()) errors.description = t('profile.descriptionRequired');
   if (!draft.model) {
-    errors.model = '请选择模型。';
+    errors.model = t('profile.modelRequired');
   } else if (draft.enabled && !findModel(models, draft.model)) {
-    errors.model = '所选模型当前不可用，请重新选择后启用。';
+    errors.model = t('profile.modelUnavailable');
   }
   const effort = draft.model?.reasoningEffort;
   if (draft.enabled && draft.model && effort) {
     const chosen = findModel(models, draft.model);
     if (!chosen?.efforts.some(option => option.id === effort)) {
-      errors.effort = '所选模型不支持此思考强度，请重新选择。';
+      errors.effort = t('profile.effortUnsupported');
     }
   }
   return errors;
@@ -135,23 +128,55 @@ function profileHealth(profile: ProfileDraft, models: ModelChoice[]): ProfileHea
   return profile.enabled ? 'enabled' : 'disabled';
 }
 
-function formatProfileModelSummary(profile: ProfileDraft, models: ModelChoice[]): string {
-  if (!profile.model) return '未选择模型';
+function formatProfileModelSummary(profile: ProfileDraft, models: ModelChoice[], t: PageTranslate): string {
+  if (!profile.model) return t('profile.noModel');
   const model = findModel(models, profile.model);
   const modelLabel = `${model ? formatProviderLabel(model) : profile.model.provider} · ${model?.name ?? profile.model.id}`;
   const effort = profile.model.reasoningEffort;
   const effortLabel = effort
     ? model?.efforts.find(option => option.id === effort)?.name ?? effort
-    : '模型默认';
-  return `${modelLabel} · 思考强度：${effortLabel}`;
+    : t('common.modelDefault');
+  return t('profile.summary', { model: modelLabel, effort: effortLabel });
 }
 
-function StatusBadge({ health }: { health: ProfileHealth }) {
+/** Live character count shown beside a field label; the control's maxLength enforces it. */
+function CharCount({ id, count, max }: { id: string; count: number; max: number }) {
+  return <span id={id} className="dsh-ui-hint" aria-live="off">{count}/{max}</span>;
+}
+
+/** Health reads as one tag plus its state dot; the tone says the same thing twice. */
+const HEALTH_TONE = {
+  enabled: 'quiet',
+  disabled: 'quiet',
+  unconfigured: 'warning',
+  invalid: 'danger',
+} as const;
+
+function StatusBadge({ health, t }: { health: ProfileHealth; t: PageTranslate }) {
   const state = { enabled: 'done', disabled: 'idle', unconfigured: 'warning', invalid: 'error' } as const;
-  return <span className="classmates-badge"><StateDot state={state[health]} size={6} />{HEALTH_LABEL[health]}</span>;
+  return (
+    <Tag tone={HEALTH_TONE[health]} className="classmates-status">
+      <StateDot state={state[health]} size={6} />{t(`health.${health}`)}
+    </Tag>
+  );
 }
 
-export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, onEditingChange }: ModelsPageProps) {
+/**
+ * The `Input` primitive renders a wrapper span around the native control and
+ * does not forward a ref, so the name field's ref sits on its `dsh-ui-field`
+ * wrapper; focus still has to land on the control inside, which is what
+ * saving with a validation error relies on.
+ */
+function focusField(host: HTMLElement | null): void {
+  if (host === null) return;
+  const selector = 'input, textarea, select';
+  const control = host.matches(selector) ? host : host.querySelector<HTMLElement>(selector);
+  control?.focus();
+}
+
+export function ModelsPage({
+  client, state, readOnly, onState, onDirtyChange, onEditingChange, t = DEFAULT_T, confirm = DECLINE,
+}: ModelsPageProps) {
   const saveModelProfile = client.saveModelProfile;
   const removeModelProfile = client.removeModelProfile;
   const setModelProtection = client.setModelProtection;
@@ -176,7 +201,7 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
   const mountedRef = useRef(true);
   const draftGenRef = useRef(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const nameRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLDivElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const modelRef = useRef<HTMLSelectElement>(null);
   const effortRef = useRef<HTMLSelectElement>(null);
@@ -202,10 +227,14 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
     if (draft) headingRef.current?.focus();
   }, [selectedId, isNew]);
 
-  const confirmDiscard = useCallback((): boolean => {
+  const confirmDiscard = useCallback(async (): Promise<boolean> => {
     if (!dirty) return true;
-    return window.confirm('当前模型预设的修改尚未保存，离开将丢弃这些修改。确定继续吗？');
-  }, [dirty]);
+    return confirm({
+      title: t('confirm.discardTitle'),
+      message: t('profile.confirmDiscard'),
+      confirmLabel: t('common.discard'),
+    });
+  }, [dirty, confirm, t]);
 
   const openProfile = useCallback((profile: ModelProfile) => {
     draftGenRef.current += 1;
@@ -230,13 +259,13 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
     setRemoteVersion(null);
   }, []);
 
-  const requestOpenProfile = useCallback((profile: ModelProfile) => {
-    if (!confirmDiscard()) return;
+  const requestOpenProfile = useCallback(async (profile: ModelProfile) => {
+    if (!(await confirmDiscard()) || !mountedRef.current) return;
     openProfile(profile);
   }, [confirmDiscard, openProfile]);
 
-  const requestNewProfile = useCallback(() => {
-    if (!confirmDiscard()) return;
+  const requestNewProfile = useCallback(async () => {
+    if (!(await confirmDiscard()) || !mountedRef.current) return;
     draftGenRef.current += 1;
     const next = createDraft();
     setDraft(next);
@@ -249,8 +278,8 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
     setRemoteVersion(null);
   }, [confirmDiscard]);
 
-  const requestBack = useCallback(() => {
-    if (!confirmDiscard()) return;
+  const requestBack = useCallback(async () => {
+    if (!(await confirmDiscard()) || !mountedRef.current) return;
     closeEditor();
   }, [confirmDiscard, closeEditor]);
 
@@ -270,26 +299,23 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
           ? { ...current, revision: latest.revision, enabled: latest.enabled }
           : current));
         setRemoteVersion(latest);
-        setNotice(
-          '已加载最新版本，可在下方对照。'
-          + '你的输入已保留，尚未合并。请检查差异后保存，或放弃自己的修改。',
-        );
+        setNotice(t('reload.kept'));
       } else if (!latest && !isNew) {
         setDraft(current => (current && current.id === targetId ? { ...current, revision: 0 } : current));
         setIsNew(true);
         setRemoteVersion(null);
-        setNotice('该预设已在最新版本中被删除。你的输入仍保留，保存将创建一个同内容的新预设。');
+        setNotice(t('profile.deletedRemote'));
       } else {
         setRemoteVersion(null);
-        setNotice('已加载最新版本，你的输入保留在表单中。');
+        setNotice(t('reload.plain'));
       }
     } catch (error) {
       if (!mountedRef.current || draftGenRef.current !== generation) return;
-      setRequestError(`加载最新版本失败：${errorMessage(error)}。你的输入仍保留，可稍后重试。`);
+      setRequestError(t('reload.failed', { message: errorMessage(error) }));
     } finally {
       if (mountedRef.current && draftGenRef.current === generation) setBusy(null);
     }
-  }, [client, draft, busy, isNew, onState]);
+  }, [client, draft, busy, isNew, onState, t]);
 
   const onSave = useCallback(async () => {
     if (!saveModelProfile || !draft || busy) return;
@@ -299,7 +325,7 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
       model: draft.model ? cloneBinding(draft.model) : null,
       enabled: isNew ? false : profiles.find(item => item.id === draft.id)?.enabled ?? draft.enabled,
     };
-    const errors = validateDraft(form, state.models);
+    const errors = validateDraft(form, state.models, t);
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
       const focusMap = {
@@ -309,7 +335,7 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
         effort: effortRef,
       } as const;
       const first = (Object.keys(errors) as FieldKey[])[0];
-      focusMap[first]?.current?.focus();
+      focusField(focusMap[first]?.current);
       return;
     }
     const input: ModelProfile = { ...form, model: form.model as ModelBinding };
@@ -329,14 +355,14 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
       } else {
         closeEditor();
       }
-      setNotice('已保存。');
+      setNotice(t('common.saved'));
     } catch (error) {
       if (!mountedRef.current || draftGenRef.current !== generation) return;
-      setRequestError(`保存失败：${errorMessage(error)}。可加载最新版本进行对照。`);
+      setRequestError(t('profile.saveFailed', { message: errorMessage(error) }));
     } finally {
       if (mountedRef.current && draftGenRef.current === generation) setBusy(null);
     }
-  }, [saveModelProfile, draft, busy, isNew, profiles, state, onState, openProfile, closeEditor]);
+  }, [saveModelProfile, draft, busy, isNew, profiles, state, onState, openProfile, closeEditor, t]);
 
   const toggleProfile = useCallback(async (profile: ModelProfile, enabled: boolean) => {
     if (!saveModelProfile || readOnly || busy) return;
@@ -361,17 +387,17 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
         } else {
           // A separately edited profile must still take the normal conflict path.
           setRemoteVersion(saved);
-          setRequestError('模型预设内容已有更新。你的输入仍保留，请对照最新版本后再保存。');
+          setRequestError(t('profile.conflict'));
         }
       }
     } catch (error) {
       if (mountedRef.current) setToggleError(
-        '未能确认「' + profile.name + '」的启停结果：' + errorMessage(error) + '。请刷新列表后重试。',
+        t('toggle.failed', { name: profile.name.trim() || profile.id, message: errorMessage(error) }),
       );
     } finally {
       if (mountedRef.current) setBusy(null);
     }
-  }, [saveModelProfile, readOnly, busy, state.settingsRevision, draft, baseline, onState]);
+  }, [saveModelProfile, readOnly, busy, state.settingsRevision, draft, baseline, onState, t]);
 
   const toggleProtection = useCallback(async (route: ModelRoute, required: boolean) => {
     if (!setModelProtection || readOnly || busy) return;
@@ -385,13 +411,15 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
       onState(next);
     } catch (error) {
       if (mountedRef.current) setProtectionError(
-        `未能${required ? '开启' : '关闭'}「${formatRouteLabel(route, state.models)}」的使用前确认：${errorMessage(error)}。`
-        + '列表保持原样；如果配置被其他窗口修改过，请刷新后重试。',
+        t(required ? 'protection.enableFailed' : 'protection.disableFailed', {
+          model: formatRouteLabel(route, state.models),
+          message: errorMessage(error),
+        }),
       );
     } finally {
       if (mountedRef.current) setBusy(null);
     }
-  }, [setModelProtection, readOnly, busy, state.settingsRevision, state.models, onState]);
+  }, [setModelProtection, readOnly, busy, state.settingsRevision, state.models, onState, t]);
 
   const refreshProfileList = useCallback(async () => {
     if (busy) return;
@@ -410,23 +438,32 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
         else closeEditor();
       }
     } catch (error) {
-      if (mountedRef.current) setToggleError('刷新失败：' + errorMessage(error) + '。你的输入仍保留。');
+      if (mountedRef.current) setToggleError(t('refresh.failed', { message: errorMessage(error) }));
     } finally {
       if (mountedRef.current) setBusy(null);
     }
-  }, [client, busy, dirty, draft, isNew, onState, openProfile, closeEditor]);
+  }, [client, busy, dirty, draft, isNew, onState, openProfile, closeEditor, t]);
 
   const onRemove = useCallback(async () => {
     if (!removeModelProfile || !draft || busy) return;
+    // The confirmation is asynchronous; a different draft opened meanwhile
+    // (generation bump) cancels this removal.
+    const asked = draftGenRef.current;
     if (isNew) {
-      if (window.confirm('放弃这个尚未保存的新预设草稿？')) closeEditor();
+      const discard = await confirm({
+        title: t('confirm.draftTitle'),
+        message: t('profile.confirmDraft'),
+        confirmLabel: t('common.discardDraft'),
+      });
+      if (discard && mountedRef.current && draftGenRef.current === asked) closeEditor();
       return;
     }
-    const confirmed = window.confirm(
-      `确定删除模型预设“${draft.name.trim() || draft.id}”？\n`
-      + '删除后主智能体选择模型时将不再参考此预设。',
-    );
-    if (!confirmed) return;
+    const confirmed = await confirm({
+      title: t('profile.confirmDeleteTitle'),
+      message: t('profile.confirmDelete', { name: draft.name.trim() || draft.id }),
+      confirmLabel: t('common.delete'),
+    });
+    if (!confirmed || !mountedRef.current || draftGenRef.current !== asked) return;
     const generation = draftGenRef.current;
     setBusy('remove');
     setRequestError(null);
@@ -437,16 +474,14 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
       onState(next);
       closeEditor();
       setBusy(null);
-      setNotice('已删除。');
+      setNotice(t('common.deleted'));
     } catch (error) {
       if (!mountedRef.current || draftGenRef.current !== generation) return;
-      setRequestError(
-        `删除失败：${errorMessage(error)}。可以直接重试；如果配置被其他窗口修改过，请加载最新版本后再操作。`,
-      );
+      setRequestError(t('delete.failed', { message: errorMessage(error) }));
     } finally {
       if (mountedRef.current && draftGenRef.current === generation) setBusy(null);
     }
-  }, [removeModelProfile, draft, busy, isNew, state.settingsRevision, onState, closeEditor]);
+  }, [removeModelProfile, draft, busy, isNew, state.settingsRevision, onState, closeEditor, confirm, t]);
 
   const patchDraft = useCallback((patch: Partial<ProfileDraft>) => {
     setDraft(current => (current ? { ...current, ...patch } : current));
@@ -472,65 +507,69 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
   const selectedRouteLabel = selectedRoute ? formatRouteLabel(selectedRoute, state.models) : null;
 
   const protectionSection = (
-    <section className="classmates-protection" aria-label="启动审批" aria-busy={busy === 'protect' || undefined}>
-      <h2 className="classmates-protection-title">启动审批</h2>
-      <p className="classmates-help">
-        新建使用此模型的 Classmates 子智能体前请求审批，同一模型的所有用途和思考强度共用；已有子智能体不受影响。
-      </p>
+    // Page-level section below the two-column layout (not inside the sticky
+    // list column): the setting is per model, shared by every preset.
+    <section
+      className="dsh-ui-section dsh-ui-stack classmates-protection"
+      aria-labelledby="classmates-protection-heading"
+      aria-busy={busy === 'protect' || undefined}
+    >
+      <h2 id="classmates-protection-heading" className="dsh-ui-heading">{t('protection.title')}</h2>
+      <p className="dsh-ui-help">{t('protection.help')}</p>
       {!protectionSupported && (
-        <p className="classmates-help">当前版本暂不支持启动审批设置。</p>
+        <p className="dsh-ui-help">{t('protection.unsupported')}</p>
       )}
-      <div className="classmates-field">
-        <label className="classmates-label" htmlFor="classmates-protection-model">模型</label>
+      <div className="dsh-ui-field">
+        <label className="dsh-ui-label" htmlFor="classmates-protection-model">{t('common.model')}</label>
         <select
           id="classmates-protection-model"
-          className="classmates-select"
+          className="dsh-ui-select"
           value={routeSelection}
           onChange={event => setRouteSelection(event.target.value)}
           disabled={protectionDisabled || state.models.length === 0}
         >
-          <option value="">{state.models.length === 0 ? '暂无可选模型' : '请选择模型'}</option>
+          <option value="">{state.models.length === 0 ? t('common.noModels') : t('common.chooseModel')}</option>
           {state.models.map(model => {
             const value = JSON.stringify({ provider: model.provider, id: model.id });
             return <option key={value} value={value}>{formatModelOption(model)}</option>;
           })}
         </select>
       </div>
-      <div className="classmates-protection-toggle">
+      <div className="dsh-ui-row-wrap">
         <Switch
-          label={selectedRouteLabel ? `使用前确认：${selectedRouteLabel}` : '使用前确认（先选择模型）'}
+          label={selectedRouteLabel ? t('protection.switch', { model: selectedRouteLabel }) : t('protection.switchEmpty')}
           checked={selectedProtected}
           onChange={required => {
             if (selectedRoute) void toggleProtection(selectedRoute, required);
           }}
           disabled={protectionDisabled || !selectedRoute}
-          title="立即保存，对该模型的所有用途预设和思考强度生效。"
+          title={t('protection.switchTitle')}
         />
-        {busy === 'protect' && <span className="classmates-help" role="status">正在保存…</span>}
+        {busy === 'protect' && <span className="dsh-ui-meta" role="status">{t('common.saving')}</span>}
       </div>
       {protectionError && (
-        <div className="classmates-list-error" role="alert">
-          <p>{protectionError}</p>
-          <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void refreshProfileList()}>刷新</Button>
+        <div className="dsh-ui-stack" role="alert">
+          <p className="dsh-ui-error dsh-ui-wrap">{protectionError}</p>
+          <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void refreshProfileList()}>{t('protection.refresh')}</Button>
         </div>
       )}
       {protectedRoutes.length > 0 && (
-        <ul className="classmates-protection-list" aria-label="已开启使用前确认的模型">
+        <ul className="dsh-ui-list" aria-label={t('protection.list')}>
           {protectedRoutes.map(route => {
             const label = formatRouteLabel(route, state.models);
             const missing = !findModel(state.models, route);
             return (
-              <li key={JSON.stringify(route)} className="classmates-protection-row">
+              <li key={JSON.stringify(route)} className="dsh-ui-row">
                 <span className="classmates-protection-route">
-                  <span className="classmates-item-name">{label}</span>
-                  {missing && <span className="classmates-item-desc">此模型已不在当前目录中，可在此关闭确认。</span>}
+                  <span className="dsh-ui-list-name">{label}</span>
+                  {missing && <span className="dsh-ui-list-desc">{t('protection.missing')}</span>}
                 </span>
                 <Switch
-                  label={`关闭使用前确认：${label}`}
+                  label={t('protection.off', { model: label })}
                   checked
                   onChange={() => void toggleProtection(route, false)}
                   disabled={protectionDisabled}
-                  title="立即保存。"
+                  title={t('common.savesNow')}
                 />
               </li>
             );
@@ -542,23 +581,21 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
 
   if (!supported) {
     return (
-      <div className="classmates-models">
-        <p className="classmates-banner" role="status" style={{ marginTop: 14 }}>
-          当前 DSH 版本暂不支持管理模型预设，请升级到最新版本后重试。
-        </p>
+      <div className="dsh-ui-stack classmates-models">
+        <p className="dsh-ui-banner" role="status">{t('profile.unsupported')}</p>
         {profiles.length > 0 && (
-          <ul className="classmates-list classmates-models-readonly" aria-label="已有模型预设（只读）">
+          <ul className="dsh-ui-list dsh-ui-list-scroll classmates-list" aria-label={t('profile.readonlyList')}>
             {profiles.map(profile => (
-              <li key={profile.id} className="classmates-row">
-                <div className="classmates-item classmates-item--static">
-                  <span className="classmates-item-name">{profile.name.trim() || '未命名预设'}</span>
-                  <span className="classmates-item-desc" title={profile.description}>
-                    {profile.description.trim() || '暂无用途说明'}
+              <li key={profile.id} className="dsh-ui-list-row">
+                <div className="dsh-ui-list-item classmates-static">
+                  <span className="dsh-ui-list-name">{profile.name.trim() || t('profile.unnamed')}</span>
+                  <span className="dsh-ui-list-desc" title={profile.description}>
+                    {profile.description.trim() || t('profile.noDescription')}
                   </span>
-                  <span className="classmates-item-desc">{formatProfileModelSummary(profile, state.models)}</span>
-                  <StatusBadge health={profile.enabled ? 'enabled' : 'disabled'} />
+                  <span className="dsh-ui-list-desc">{formatProfileModelSummary(profile, state.models, t)}</span>
+                  <StatusBadge health={profile.enabled ? 'enabled' : 'disabled'} t={t} />
                   {protectedRoutes.some(route => sameRoute(route, profile.model)) && (
-                    <span className="classmates-badge classmates-badge--protected">使用前确认</span>
+                    <Tag tone="info" className="classmates-status">{t('protection.tag')}</Tag>
                   )}
                 </div>
               </li>
@@ -580,151 +617,153 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
   const selectedEffortInfo = effortOptions.find(option => option.id === selectedEffort);
   const missingEffort = selectedEffort !== '' && !selectedEffortInfo;
   const modelHelp = draft?.model && selectedModel
-    ? [selectedModel.description, catalogConnectivityUnknown(selectedModel) ? '连接尚未验证。' : undefined]
+    ? [selectedModel.description, catalogConnectivityUnknown(selectedModel) ? t('profile.unverified') : undefined]
       .filter(Boolean).join(' ') || undefined
     : !draft?.model && state.models.length === 0
-      ? '暂无可选模型。'
+      ? t('common.noModels')
       : undefined;
   const effortHelp = selectedEffortInfo?.description
-    ?? (selectedEffort === '' ? '不选择时使用模型自身的默认强度，与当前聊天无关。' : undefined);
+    ?? (selectedEffort === '' ? t('profile.effortDefaultHelp') : undefined);
 
   return (
-    <div className="classmates-models">
+    <div className="dsh-ui-stack classmates-models">
       {notice && (
-        <p className="classmates-notice" style={{ marginTop: 14 }} aria-live="polite">{notice}</p>
+        <p className="dsh-ui-notice" aria-live="polite">{notice}</p>
       )}
 
       <div className="classmates-body">
-        <section className="classmates-list-pane" aria-label="模型预设列表">
-          <div className="classmates-list-head">
-            <h2>模型预设（{profiles.length}）</h2>
+        <section className="dsh-ui-stack classmates-list-pane" aria-labelledby="classmates-profiles-heading">
+          <div className="dsh-ui-row classmates-list-head">
+            <h2 id="classmates-profiles-heading" className="dsh-ui-heading">
+              {t('profile.heading', { count: profiles.length })}
+            </h2>
             <Button variant="outline" size="sm"
               type="button"
-              onClick={requestNewProfile}
+              onClick={() => void requestNewProfile()}
               disabled={readOnly || busy !== null}
             >
-              新建模型预设
+              {t('profile.new')}
             </Button>
           </div>
-          <p className="classmates-help classmates-models-lead">
-            记录什么任务适合哪个模型、哪种思考强度，供主智能体派发子智能体时参考。同一个模型可以建立多个不同强度的预设。
-          </p>
+          <p className="dsh-ui-help classmates-lead">{t('profile.lead')}</p>
           {toggleError && (
-            <div className="classmates-list-error" role="alert">
-              <p>{toggleError}</p>
-              <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void refreshProfileList()}>刷新预设列表</Button>
+            <div className="dsh-ui-stack" role="alert">
+              <p className="dsh-ui-error dsh-ui-wrap">{toggleError}</p>
+              <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void refreshProfileList()}>{t('common.refresh')}</Button>
             </div>
           )}
           {profiles.length === 0 ? (
-            <p className="classmates-empty">
-              暂无模型预设。可点击「新建模型预设」创建，也可以在创造模式中配置。
-            </p>
+            <p className="dsh-ui-empty">{t('profile.empty')}</p>
           ) : (
-            <ul className="classmates-list">
+            <ul className="dsh-ui-list dsh-ui-list-scroll classmates-list">
               {profiles.map(profile => {
                 const health = profileHealth(profile, state.models);
                 return (
-                  <li key={profile.id} className="classmates-row" data-selected={selectedId === profile.id && !isNew || undefined}>
+                  <li key={profile.id} className="dsh-ui-list-row" data-selected={selectedId === profile.id && !isNew || undefined}>
                     <button
                       type="button"
-                      className="classmates-item"
+                      className="dsh-ui-list-item"
                       aria-current={selectedId === profile.id && !isNew ? 'true' : undefined}
-                      onClick={() => requestOpenProfile(profile)}
+                      onClick={() => void requestOpenProfile(profile)}
                       disabled={busy !== null}
                     >
-                      <span className="classmates-item-name">{profile.name.trim() || '未命名预设'}</span>
-                      <span className="classmates-item-desc" title={profile.description}>
-                        {profile.description.trim() || '暂无用途说明'}
+                      <span className="dsh-ui-list-name">{profile.name.trim() || t('profile.unnamed')}</span>
+                      <span className="dsh-ui-list-desc" title={profile.description}>
+                        {profile.description.trim() || t('profile.noDescription')}
                       </span>
-                      <span className="classmates-item-desc">{formatProfileModelSummary(profile, state.models)}</span>
-                      {health === 'invalid' && <StatusBadge health={health} />}
+                      <span className="dsh-ui-list-desc">{formatProfileModelSummary(profile, state.models, t)}</span>
+                      {health === 'invalid' && <StatusBadge health={health} t={t} />}
                       {protectedRoutes.some(route => sameRoute(route, profile.model)) && (
-                        <span className="classmates-badge classmates-badge--protected">使用前确认</span>
+                        <Tag tone="info" className="classmates-status">{t('protection.tag')}</Tag>
                       )}
                     </button>
                     <Switch
-                      label={'启用模型预设 ' + (profile.name.trim() || profile.id)}
+                      label={t('profile.enable', { name: profile.name.trim() || profile.id })}
                       checked={profile.enabled}
                       onChange={enabled => void toggleProfile(profile, enabled)}
                       disabled={readOnly || busy !== null}
-                      title="立即保存启用状态。"
+                      title={t('common.savesNow')}
                     />
                   </li>
                 );
               })}
             </ul>
           )}
-          {protectionSection}
         </section>
 
-        <section className="classmates-editor" aria-label="模型预设编辑">
+        <section className="dsh-ui-stack classmates-editor" aria-label={t('profile.editor')}>
           {draft ? (
             <>
-              <Button variant="outline" type="button" className="classmates-back" onClick={requestBack} disabled={busy !== null}>
-                ← 返回列表
+              <Button variant="outline" type="button" className="classmates-back" onClick={() => void requestBack()} disabled={busy !== null}>
+                {t('common.back')}
               </Button>
-              <div className="classmates-editor-head">
-                <h2 ref={headingRef} tabIndex={-1}>
-                  {isNew ? '新建模型预设' : (draft.name.trim() || '未命名预设')}
-                </h2>
+              <div className="dsh-ui-row-wrap classmates-editor-head">
+                <h3 className="dsh-ui-title" ref={headingRef} tabIndex={-1}>
+                  {isNew ? t('profile.newTitle') : (draft.name.trim() || t('profile.unnamed'))}
+                </h3>
                 {isNew
-                  ? <span className="classmates-badge classmates-badge--unconfigured">未保存</span>
-                  : <StatusBadge health={profileHealth(draft, state.models)} />}
-                {dirty && <span className="classmates-dirty">有未保存的修改</span>}
+                  ? <Tag tone="warning" className="classmates-status">{t('common.unsaved')}</Tag>
+                  : <StatusBadge health={profileHealth(draft, state.models)} t={t} />}
+                {dirty && <span className="dsh-ui-meta dsh-ui-warn">{t('common.dirty')}</span>}
               </div>
 
               <form
-                className="classmates-form"
-                aria-label={isNew ? '新建模型预设表单' : `编辑模型预设 ${draft.name.trim() || draft.id}`}
+                className="dsh-ui-stack"
+                aria-label={isNew ? t('profile.formNew') : t('profile.formEdit', { name: draft.name.trim() || draft.id })}
                 onSubmit={event => {
                   event.preventDefault();
                   void onSave();
                 }}
               >
-                <fieldset disabled={readOnly || busy !== null} className="classmates-fields">
+                <fieldset disabled={readOnly || busy !== null} className="dsh-ui-stack classmates-fields">
                   {requestError && (
-                    <div className="classmates-alert" role="alert">
+                    <div className="dsh-ui-banner dsh-ui-banner--danger" role="alert">
                       <p>{requestError}</p>
-                      <div className="classmates-alert-actions">
+                      <div className="dsh-ui-actions">
                         <Button variant="outline"
                           type="button"
                           className="classmates-button"
                           onClick={() => void onSave()}
                         >
-                          重试保存
+                          {t('common.retrySave')}
                         </Button>
                         <Button variant="outline"
                           type="button"
                           className="classmates-button"
                           onClick={() => void reloadKeepingDraft()}
                         >
-                          加载最新版本（保留我的输入）
+                          {t('common.reloadKeep')}
                         </Button>
                       </div>
                     </div>
                   )}
-                  <div className="classmates-field">
-                    <label className="classmates-label" htmlFor="classmates-profile-name">名称</label>
-                    <input
+                  <div className="dsh-ui-field" ref={nameRef}>
+                    <div className="dsh-ui-label-row">
+                      <label className="dsh-ui-label" htmlFor="classmates-profile-name">{t('common.name')}</label>
+                      <CharCount id="classmates-profile-name-count" count={draft.name.length} max={PROFILE_NAME_MAX} />
+                    </div>
+                    <Input
+                      className={`dsh-ui-control classmates-input${fieldErrors.name ? ' classmates-invalid' : ''}`}
                       id="classmates-profile-name"
-                      ref={nameRef}
-                      className="classmates-input"
                       type="text"
                       value={draft.name}
                       onChange={event => patchDraft({ name: event.target.value })}
                       maxLength={PROFILE_NAME_MAX}
                       required
                       aria-invalid={fieldErrors.name ? 'true' : undefined}
-                      aria-describedby={fieldErrors.name ? 'classmates-profile-name-error' : undefined}
+                      aria-describedby={fieldErrors.name ? 'classmates-profile-name-error classmates-profile-name-count' : 'classmates-profile-name-count'}
                       autoComplete="off"
                     />
                     {fieldErrors.name && (
-                      <p id="classmates-profile-name-error" className="classmates-field-error">{fieldErrors.name}</p>
+                      <p id="classmates-profile-name-error" className="dsh-ui-error">{fieldErrors.name}</p>
                     )}
                   </div>
 
-                  <div className="classmates-field">
-                    <label className="classmates-label" htmlFor="classmates-profile-description">用途说明</label>
+                  <div className="dsh-ui-field">
+                    <div className="dsh-ui-label-row">
+                      <label className="dsh-ui-label" htmlFor="classmates-profile-description">{t('profile.description')}</label>
+                      <CharCount id="classmates-profile-description-count" count={draft.description.length} max={PROFILE_DESCRIPTION_MAX} />
+                    </div>
                     <textarea
                       id="classmates-profile-description"
                       ref={descriptionRef}
@@ -737,25 +776,23 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
                       aria-invalid={fieldErrors.description ? 'true' : undefined}
                       aria-describedby={
                         fieldErrors.description
-                          ? 'classmates-profile-description-error classmates-profile-description-help'
-                          : 'classmates-profile-description-help'
+                          ? 'classmates-profile-description-error classmates-profile-description-help classmates-profile-description-count'
+                          : 'classmates-profile-description-help classmates-profile-description-count'
                       }
                     />
-                    <p id="classmates-profile-description-help" className="classmates-help">
-                      什么任务适合使用此预设，主智能体选择模型时会参考。
-                    </p>
+                    <p id="classmates-profile-description-help" className="dsh-ui-help">{t('profile.descriptionHelp')}</p>
                     {fieldErrors.description && (
-                      <p id="classmates-profile-description-error" className="classmates-field-error">{fieldErrors.description}</p>
+                      <p id="classmates-profile-description-error" className="dsh-ui-error">{fieldErrors.description}</p>
                     )}
                   </div>
 
                   <div className="classmates-model-fields">
-                    <div className="classmates-field">
-                      <label className="classmates-label" htmlFor="classmates-profile-model">模型</label>
+                    <div className="dsh-ui-field">
+                      <label className="dsh-ui-label" htmlFor="classmates-profile-model">{t('common.model')}</label>
                       <select
                         id="classmates-profile-model"
                         ref={modelRef}
-                        className="classmates-select"
+                        className="dsh-ui-select"
                         value={modelSelectValue}
                         onChange={event => onModelChange(event.target.value)}
                         aria-invalid={fieldErrors.model ? 'true' : undefined}
@@ -763,7 +800,7 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
                           [fieldErrors.model && 'classmates-profile-model-error', modelHelp && 'classmates-profile-model-help'].filter(Boolean).join(' ') || undefined
                         }
                       >
-                        <option value="-1">请选择模型</option>
+                        <option value="-1">{t('common.chooseModel')}</option>
                         {state.models.map((model, index) => (
                           <option key={`${model.provider}/${model.id}`} value={String(index)}>
                             {formatModelOption(model)}
@@ -771,22 +808,22 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
                         ))}
                         {modelSelectValue === 'missing' && draft.model && (
                           <option value="missing">
-                            {`当前模型：${draft.model.provider}/${draft.model.id}（当前不可用，请重新选择）`}
+                            {t('profile.missingModel', { model: `${draft.model.provider}/${draft.model.id}` })}
                           </option>
                         )}
                       </select>
-                      {modelHelp && <p id="classmates-profile-model-help" className="classmates-help">{modelHelp}</p>}
+                      {modelHelp && <p id="classmates-profile-model-help" className="dsh-ui-help">{modelHelp}</p>}
                       {fieldErrors.model && (
-                        <p id="classmates-profile-model-error" className="classmates-field-error">{fieldErrors.model}</p>
+                        <p id="classmates-profile-model-error" className="dsh-ui-error">{fieldErrors.model}</p>
                       )}
                     </div>
 
-                    <div className="classmates-field">
-                      <label className="classmates-label" htmlFor="classmates-profile-effort">思考强度</label>
+                    <div className="dsh-ui-field">
+                      <label className="dsh-ui-label" htmlFor="classmates-profile-effort">{t('common.effort')}</label>
                       <select
                         id="classmates-profile-effort"
                         ref={effortRef}
-                        className="classmates-select"
+                        className="dsh-ui-select"
                         value={selectedEffort}
                         disabled={!draft.model}
                         onChange={event => {
@@ -804,66 +841,66 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
                           [fieldErrors.effort && 'classmates-profile-effort-error', effortHelp && 'classmates-profile-effort-help'].filter(Boolean).join(' ') || undefined
                         }
                       >
-                        <option value="">模型默认</option>
+                        <option value="">{t('common.modelDefault')}</option>
                         {effortOptions.map(effort => (
                           <option key={effort.id} value={effort.id} title={effort.description}>{effort.name}</option>
                         ))}
                         {missingEffort && (
-                          <option value={selectedEffort}>{selectedEffort}（当前模型不支持，请重新选择）</option>
+                          <option value={selectedEffort}>{t('profile.missingEffort', { effort: selectedEffort })}</option>
                         )}
                       </select>
-                      {effortHelp && <p id="classmates-profile-effort-help" className="classmates-help">{effortHelp}</p>}
+                      {effortHelp && <p id="classmates-profile-effort-help" className="dsh-ui-help">{effortHelp}</p>}
                       {fieldErrors.effort && (
-                        <p id="classmates-profile-effort-error" className="classmates-field-error">{fieldErrors.effort}</p>
+                        <p id="classmates-profile-effort-error" className="dsh-ui-error">{fieldErrors.effort}</p>
                       )}
                     </div>
                   </div>
                 </fieldset>
 
                 {remoteVersion && (
-                  <div className="classmates-remote" role="group" aria-label="最新版本对照">
-                    <p className="classmates-remote-title">
-                      最新版本对照（版本 {remoteVersion.revision}）
+                  <div className="dsh-ui-banner" role="group" aria-label={t('remote.label')}>
+                    <p className="dsh-ui-banner-title">
+                      {t('remote.title', { revision: remoteVersion.revision })}
                     </p>
-                    <p className="classmates-help">
-                      以下是其他页面保存的内容。你的输入保留在上方，尚未合并。请检查差异后保存，或放弃自己的修改。
-                    </p>
+                    <p className="dsh-ui-help">{t('remote.help')}</p>
                     <dl className="classmates-remote-fields">
                       <div>
-                        <dt>名称</dt>
-                        <dd>{remoteVersion.name}</dd>
+                        <dt className="dsh-ui-meta">{t('common.name')}</dt>
+                        <dd className="dsh-ui-compact">{remoteVersion.name}</dd>
                       </div>
                       <div>
-                        <dt>用途说明</dt>
-                        <dd>{remoteVersion.description}</dd>
+                        <dt className="dsh-ui-meta">{t('profile.description')}</dt>
+                        <dd className="dsh-ui-compact">{remoteVersion.description}</dd>
                       </div>
                       <div>
-                        <dt>模型 / 思考强度</dt>
-                        <dd>{formatProfileModelSummary(remoteVersion, state.models)}</dd>
+                        <dt className="dsh-ui-meta">{t('remote.model')}</dt>
+                        <dd className="dsh-ui-compact">{formatProfileModelSummary(remoteVersion, state.models, t)}</dd>
                       </div>
                       <div>
-                        <dt>启用</dt>
-                        <dd>{remoteVersion.enabled ? '已启用' : '已停用'}</dd>
+                        <dt className="dsh-ui-meta">{t('remote.enabled')}</dt>
+                        <dd className="dsh-ui-compact">{t(remoteVersion.enabled ? 'health.enabled' : 'health.disabled')}</dd>
                       </div>
                     </dl>
-                    <Button variant="outline"
-                      type="button"
-                      className="classmates-button"
-                      onClick={() => openProfile(remoteVersion)}
-                      disabled={busy !== null}
-                    >
-                      放弃我的修改，加载最新版本
-                    </Button>
+                    <div className="dsh-ui-actions">
+                      <Button variant="outline"
+                        type="button"
+                        className="classmates-button"
+                        onClick={() => openProfile(remoteVersion)}
+                        disabled={busy !== null}
+                      >
+                        {t('remote.discard')}
+                      </Button>
+                    </div>
                   </div>
                 )}
 
-                <div className="classmates-actions">
+                <div className="dsh-ui-actions">
                   <Button variant="primary"
                     type="submit"
-                    className="classmates-button classmates-button--primary"
+                    className="classmates-button"
                     disabled={readOnly || busy !== null}
                   >
-                    {busy === 'save' ? '正在保存…' : '保存'}
+                    {busy === 'save' ? t('common.saving') : t('common.save')}
                   </Button>
                   <Button variant="outline"
                     type="button"
@@ -871,18 +908,20 @@ export function ModelsPage({ client, state, readOnly, onState, onDirtyChange, on
                     onClick={() => void onRemove()}
                     disabled={readOnly || busy !== null}
                   >
-                    {busy === 'remove' ? '正在删除…' : (isNew ? '放弃草稿' : '删除预设')}
+                    {busy === 'remove' ? t('common.deleting') : (isNew ? t('common.discardDraft') : t('profile.delete'))}
                   </Button>
                 </div>
               </form>
             </>
           ) : (
-            <div className="classmates-editor-placeholder">
-              <p>选择或新建模型预设。</p>
+            <div className="dsh-ui-empty">
+              <p>{t('profile.emptyEditor')}</p>
             </div>
           )}
         </section>
       </div>
+
+      {protectionSection}
     </div>
   );
 }

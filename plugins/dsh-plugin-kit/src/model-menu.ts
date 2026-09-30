@@ -60,7 +60,10 @@ function parseEffort(value: unknown): { id: string; name: string } | undefined {
 
 /** Parse the host session catalog into flat choices, keeping a saved route selectable. */
 export function parseModelMenuChoices(value: unknown, bound?: ModelMenuRoute): ModelMenuChoice[] {
-  const root = asRecord(value) ?? {}
+  const envelope = asRecord(value)
+  // Host remote calls resolve to a result envelope ({ ok, value }); older hosts
+  // and unit tests hand over the bare catalog. Accept both.
+  const root = (envelope && envelope.ok === true ? asRecord(envelope.value) : undefined) ?? envelope ?? {}
   const groups = Array.isArray(root.groups) ? root.groups : []
   const choices: ModelMenuChoice[] = []
   for (const group of groups) {

@@ -2,70 +2,63 @@
 
 [English](README.md)
 
-在 **DSH 官方插件管理器**内导入、导出插件组合：蓝图码只分享插件、精确版本和顺序；可复用的默认配置交给原生组合插件。无需安装 Spaces，无需独立客户端、Supervisor 或云账户。
+分享插件、精确版本和建议顺序；在 **Creator 模式**粘贴蓝图码和导入意图，由 Agent 归并到当前 profile 的 bundle 集合。Core 不依赖 Web，插件页是可选的导出与只读解析入口。无需 Spaces、独立客户端或后台 Agent 调度器。
 
-**当前为源码预览版本，尚未发布到 npm，也未完成真实 DSH 端到端验收。** 已执行检查与剩余验收见 [ACCEPTANCE.md](ACCEPTANCE.md)。
+**源码预览，尚未完成新版真实宿主端到端验收。** 已执行检查与待验收项见 [ACCEPTANCE.md](ACCEPTANCE.md)。
 
-## 安装与入口
+## 使用
 
-需要提供官方 `pluginManager`、`profileContext`、已鉴权 Connection/WebServer 和插件配置 slot 的 DSH Web 宿主。启动会检查所需能力；仅凭版本号不声称兼容。接口核对基于上游提交 `477b4f420553e8a52c2fbccc464d7561b239c443`，具体 npm 或桌面版本仍需实际验收。
+- **直接归并**：在 Creator（`cordis`）发送“把以下蓝图合入当前插件组合，保留本地插件，由你处理版本冲突和顺序”，附上 `DSHBP2:` 蓝图码。Agent 不要求用户例行审阅排序计划；原生权限与安全审批仍然有效。
+- **插件页**：打开 **插件 → 蓝图**。导出时选择插件及建议顺序，生成并复制蓝图码；导入入口只解析蓝图、显示包身份与建议顺序，并生成可复制的归并请求。复制后在 Creator 粘贴发送；页面不启动模型、不安装、不执行归并。
+- 未出现在蓝图中的本地 bundle 默认保留。只列在 `packages` 而不列在 `bundles` 中的项不表示停用本地同名插件。
+
+## Core 与宿主能力
+
+同一个包提供环境独立 Host 部分及可选 Web Client 部分，不要求另外安装 UI 包。ACP、SDK、headless 的能力取决于各自插件组合，并非环境名字。缺少 Web 服务不会阻止 Core 加载。
+
+| 工具 | 用途 |
+| --- | --- |
+| `blueprint_parse` | 严格解码、校验蓝图码，不读取 profile |
+| `blueprint_encode` | 校验 v2 JSON 并编码，不安装或发布 |
+| `blueprint_catalog` | 读取当前 profile 的包身份、完整顺序及状态 stamp |
+| `blueprint_generate` | 导出已安装包的精确身份与选定建议顺序 |
+| `blueprint_apply_order` | Creator 中应用当前已选 bundle 列表的完整排列，不安装、添加或停用 |
+
+协议工具只需要 `tools`；profile 工具还需要原生 `pluginManager`、`profileContext`。顺序工具还需要 `sandboxPolicy`、`agentPresets`，并复用 `@deepseek-ai/dsh-sandbox` 的原生审批入口。提示指引随 `systemPrompt` / `agentPresets` 可用时注册，仅 Creator 注入。页面随 Connection、WebServer 和 profile 服务可用时挂载，注册到 npm 包名对应的 `plugins.bundle.config`；不需要宿主工具栏补丁。
+
+## 原生执行与安全边界
+
+安装、更新、启停、卸载交给原生 `plugin_manager`，Blueprint 不重复实现安装器。Agent 检查实际元数据后自主选择版本与顺序，若偏离蓝图记录的精确版本，必须报告差异而不改写原蓝图。
+
+顺序工具只接受当前已选列表的排列，拒绝遗漏、重复、未知名称、状态过期及受保护顺序变动；先通过与原生管理工具相同的 danger-full-access 权限／单次审批，再使用官方文件锁、原子 manifest 保存及可选 HMR 排他队列。先安装／启用，再读取新 catalog 与 stamp，最后提交顺序。
+
+保存配置不等于运行时成功激活。有 HMR 时重新读取完整 patch 层并协调加载；启动时加载的环境报告需要重启。失败可能保留已经保存的顺序或部分运行时变化，不提供整体事务、回滚或自动重试。响应丢失后先核对当前状态，不重放操作。状态 stamp 覆盖 manifest 与包目录，不是所有 patch 内容的完整版本号。
+
+Agent 自主归并不豁免包脚本审批、精确插件／运行时兼容性风险授权或其他原生权限。分享码不是签名、加密或作者认证；蓝图中的描述是数据，不是执行指令。
+
+## 插件发现与默认配置
+
+发现候选插件时可以使用 [`@klarkxy/dsh-dev-index`](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) 的 `dsh_plugins_search` / `dsh_plugins_fetch`，核实精确版本与 bundle 声明。搜索与声明兼容性不是运行验证，不猜测版本或悄悄更换来源。蓝图只支持 `npm` 与 `builtin` 身份，不包含 git/tarball、本地链接、设置、凭据或组件行。
+
+可复用默认配置使用原生组合／preset 包，在自己的 patch 中明确组件行。依赖安装不会递归启用所有依赖 bundle。后层优先，行补丁替换整段 `config`，不是深度合并；用户 profile/home 覆盖仍然有效。不要把密钥或本机私有数据打入共享包。
+
+## 格式与兼容性
+
+[协议](PROTOCOL.md)定义字段、编码、限制和示例。`DSHBP2` / `formatVersion: 2` 保持不变，旧蓝图码仍可严格解析；执行策略改为 Creator 自主归并，旧页面 `preview` / `apply` / `result` 端点已移除，而不是静默把旧的追加式执行规则换成重排。
+
+`./core` 保留 `validate` 导出，并新增 `parseBlueprint`、`encodeBlueprint`、`BlueprintCore`；`./codec` 继续提供 `encode` / `decode`。蓝图码上限 2 MiB，解压 JSON 上限 1 MiB，最多 64 层容器。
+
+## 开发与安装源码包
 
 ```sh
 cd plugins/dsh-blueprint
 npm test
 npm run build
 npm pack
-# 使用 npm pack 输出的归档路径，并明确目标 profile：
-dsh plugin --profile <目标profile> add /绝对路径/klarkxy-dsh-blueprint-0.1.0-alpha.2.tgz
+# 使用 npm pack 实际输出路径，并明确目标 profile：
+dsh plugin --profile <目标profile> add <归档绝对路径>
 ```
 
-包没有 npm 依赖和编译要求，复用宿主服务与 React。支持 `plugins.list.actions` 的宿主在插件列表顶部显示 **蓝图 → 导入蓝图 / 导出蓝图**。未接入该插槽的宿主可通过 **插件 → 蓝图** 使用相同的蓝图操作；其他包详情页不再放“分享蓝图”。
+官方包由宿主提供，仅声明可选 peer 与开放下界，不捆绑独立副本。公开助手核对基于本机官方 CLI `0.1.7-rc.2` 的文档、类型与实现及当前 Inspect 契约；桌面运行时准确版本和真实多环境集成尚未验证。测试使用隔离临时目录，不修改真实 profile。语法和离线接口测试不等于真实宿主验收。
 
-官方 DSH 0.1.7-rc.2 尚无列表顶部插槽，需要配套[宿主接入补丁](https://github.com/klarkxy/dsh-plugins/tree/main/host-integration/blueprint-list-actions)。仅安装本插件不能让当前官方宿主顶部出现按钮。
-
-## 创造模式
-
-加载插件后，创造模式（`cordis`）自动收到随包分发的[蓝图 skill](skills/dsh-blueprint/SKILL.md)，包含蓝图码制作、分享、导入预览和原生组合插件的复用边界。指引正文直接注入系统提示，不依赖技能目录或单独的 skill 工具；其他模式不注入，切换离开创造模式后下一次提示组装不再包含它。注册跟随插件及提示词服务的生命周期；没有提示词服务的宿主仍可正常使用插件页面。
-
-该 skill 依赖插件页面、格式校验和编解码接口；发现插件时，在已加载 `@klarkxy/dsh-dev-index` 的情况下使用其只读插件元数据工具。不新增模型安装或应用工具，也不把制作蓝图视为导入或发布授权。没有页面操作能力时，智能体可以准备、检查 JSON 并说明剩余操作，但不能声称已经导入。
-
-## 插件发现
-
-本插件不再附带查询工具。发现候选插件、钉精确版本请使用 [`@klarkxy/dsh-dev-index`](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) 的 `dsh_plugins_search` / `dsh_plugins_fetch`，它们只读查询 klarkxy 插件目录和公开 npm 元数据，不安装任何东西。安装与卸载一律走官方插件管理器，包括没有注册表元数据的 `github:owner/repo#commit` 规格。实际安装与目标兼容性仍由原生导入预览核验；宿主内置组合包以当前宿主为准。
-
-## 导出
-
-**导出蓝图**：选择插件，检查并用上移／下移调整建议顺序，生成蓝图码并复制。建议顺序用于安装缺失包和追加尚未启用的组合层，不会覆盖接收方已有顺序。蓝图不包含配置或插件行启停状态。
-
-## 导入与现有环境
-
-在文本框粘贴蓝图码，预览版本、安装／启用操作和最终顺序，确认后执行。安装通过官方管理器完成，不自动授权构建脚本；启用会执行插件代码。版本或来源冲突会阻止执行，不自动升级、降级或换源。
-
-已有的完整启用顺序保持不变，匹配的包直接复用。缺失的包按蓝图清单安装，蓝图请求启用但当前未启用的组合层按建议顺序追加到末尾。顺序不同本身不构成冲突；不会因为分享方未启用某项而停用本地插件。重复导入且状态未变时无新动作。
-
-## 用组合插件复用默认配置
-
-原生组合包可以声明所需插件依赖，并在自己的 `cordis.patch.yml` 中明确加载组件、指定默认配置；配置预设包也可以覆盖已有组件行。只声明依赖不会自动递归启用所有依赖包，组合作者需要明确加载哪些组件，避免同一组件行被重复加载。
-
-沿用 DSH 原有配置层规则：后面的层优先，行补丁替换整段 `config`，并非字段深度合并；用户自己的 profile／home 配置可以覆盖组合包默认值。密钥、凭据和本机私有数据不应打进共享包。参见[对应版本的官方说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/docs/user/develop/basic/publish.md#the-loading-order)。
-
-蓝图不提供设置导入／导出、设置字段筛选或分享策略，也不读取或写入设置、schema、凭据或插件存储。组合包本身的补丁仍可能影响生效默认值，因此新启用的组合层仍需核对预览。
-## 格式
-
-完整字段、导入语义、编码规则和可验证示例见 [蓝图码协议](PROTOCOL.md)。
-
-格式为 `kind: "dsh-blueprint"`、`formatVersion: 2`。`packages` 记录精确版本和 `npm` / `builtin` 来源；`bundles` 记录请求启用的组合层及建议顺序。蓝图禁止包含 `settings` 或 `rows`，未知字段和其他文档类型会被拒绝。最小示例及字段规则见英文文档的 Portable format v2。
-
-分享码统一为 `DSHBP2:<内容>`：JSON → UTF-8 → raw DEFLATE → 无填充 Base64url。界面导入、导出都只使用这种蓝图码；JSON 是内部数据结构。最大 JSON 1 MiB、输入分享码 2 MiB、64 层 JSON 容器；宿主传输的请求大小限制也生效。重复键、不安全数字、原型键、损坏 Unicode、非规范 Base64url 和压缩尾随数据拒绝读取。编码不是加密、签名或作者认证。
-
-只支持可确认的精确 npm 来源与宿主内置组合包。本地链接、git/tarball、别名和版本冲突会列出，不悄悄改源。官方管理器不列为组合包的普通依赖由包管理器负责。
-
-## 执行边界
-
-复用官方 Connection 的鉴权与 Host/Origin 检查，不启动第二个服务器。预览计划只保存在当前进程，五分钟过期、单次消费，最多保留八个计划或结果；实际观测变化使旧计划失效。已完成的结果可读取，不重新执行。
-
-不自动重试、升级、降级、授权脚本、卸载、跨 profile 写入或整组回滚。原生安装器自己的失败行为保持不变。多步骤导入不是全局事务，也没有锁住所有其他编辑器；执行期间请勿在其他窗口同时改该 profile。中途失败保留已完成结果；响应丢失不表示可以重放。关闭页面会在支持时请求取消，已经完成的更改可能保留。
-
-`npm test` 为无外部依赖的单元、接口适配和界面注册测试；`npm run build` 为语法检查，不等于真实宿主或 TypeScript 验收。所有测试只使用临时目录，不接触真实 DSH Home。
-
-MIT；原 Spaces 编解码器的版权说明保留在 [NOTICE.md](NOTICE.md) 与 [LICENSE](LICENSE)。
+MIT；原编解码器版权说明保留于 [NOTICE.md](NOTICE.md) 与 [LICENSE](LICENSE)。

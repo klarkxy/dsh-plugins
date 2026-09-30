@@ -5,9 +5,17 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 // Node does not load .jsx natively. This file uses plain createElement syntax:
-// resolve its sole import and load the exact source, without a build or loader.
+// resolve its imports and load the exact source, without a build or loader.
+// The UI primitives are stubbed because their browser bundle needs the host's
+// CSS modules; see client-primitives-stub.mjs.
 const source = await readFile(new URL('../src/client.jsx', import.meta.url), 'utf8');
-const client = await import(`data:text/javascript;base64,${Buffer.from(source.replace("from 'react'", `from '${import.meta.resolve('react')}'`)).toString('base64')}`);
+const resolve = specifier => specifier === '@deepseek-ai/dsh-client-ui-primitives'
+  ? new URL('./client-primitives-stub.mjs', import.meta.url).href
+  : import.meta.resolve(specifier);
+const client = await import(`data:text/javascript;base64,${Buffer.from(source
+  .replace("from 'react'", `from '${resolve('react')}'`)
+  .replace("from '@deepseek-ai/dsh-client-ui-primitives'", `from '${resolve('@deepseek-ai/dsh-client-ui-primitives')}'`)
+  .replace("from '@klarkxy/dsh-plugin-kit/official-ui'", `from '${resolve('@klarkxy/dsh-plugin-kit/official-ui')}'`)).toString('base64')}`);
 const render = (Component, props) => renderToStaticMarkup(React.createElement(Component, props));
 const values = { fastProvider: '', fastModel: '', deepProvider: 'retired', deepModel: 'legacy', fastReasoningEffort: '', deepReasoningEffort: 'unlisted', reviewerPrompt: '' };
 const catalog = { groups: [{ id: 'provider', name: 'Provider', models: [{ id: 'reasoner', name: 'Reasoner', reasoning: { efforts: [{ id: 'medium', name: 'Medium' }] } }, { id: 'plain', name: 'Plain' }] }] };
@@ -17,15 +25,14 @@ test('exact slot registrations use injection, replacement rank and bundle key; a
   const waiting = [], registered = [], calls = [];
   client.apply({ slots: { inject: (name, fn) => waiting.push([name, fn]), register: (options, component) => registered.push({ options, component }) }, connection: { rpc: { call: (...args) => { calls.push(args); return Promise.resolve({ ok: true, value: {} }); } } }, remote: { session: { modelCatalog: () => catalog } } });
   assert.deepEqual(client.inject, ['slots', 'connection', 'remote', 'locale']);
-  assert.deepEqual(waiting.map(([name]) => name), ['conversation.input.permission', 'plugins.bundle.config']);
+  assert.deepEqual(waiting.map(([name]) => name), ['plugins.bundle.config']);
   assert.equal(registered.length, 0);
   waiting.forEach(([, fn]) => fn());
-  assert.equal(registered[0].options.priority, -10);
-  assert.equal(registered[1].options.key, '@klarkxy/dsh-safe-auto');
-  assert.equal(registered[0].component, client.PermissionMenu);
-  assert.equal(registered[1].component, client.SettingsPanel);
+  assert.equal(registered[0].options.key, '@klarkxy/dsh-safe-auto');
+  assert.equal(registered[0].component, client.SettingsPanel);
+  assert.equal(client.PermissionMenu, undefined);
   assert.deepEqual(calls, []);
-  assert.deepEqual(Object.keys(registered[0].options.inject()), ['api']);
+  assert.deepEqual(Object.keys(registered[0].options.inject()), ['api', 'locale']);
 });
 
 test('RPC envelope uses exact channel, rejects errors and preserves values', async () => {
@@ -56,41 +63,93 @@ test('explicit model selection clears only corresponding effort and retains all 
   assert.equal(values.deepReasoningEffort, 'unlisted');
 });
 
-test('permission SSR preserves native and custom names, selection and lock', () => {
-  const options = ['read-only', 'workspace-write', 'danger-full-access', 'custom', 'safe-auto'].map(value => ({ value, name: `Host ${value}`, description: 'Host explanation' }));
-  const html = render(client.PermissionMenu, { sessionId: 's', locked: true, api: {}, initialSnapshot: { revision: 2, current: 'custom', available: true, options } });
-  for (const name of ['Host read-only', 'Host workspace-write', 'Host danger-full-access', 'Host custom', '安全自动 / Safe Auto']) assert.ok(html.includes(name));
-  assert.match(html, /aria-pressed="true"/);
-  assert.match(html, /disabled=""/);
-  assert.match(html, /Permissions locked/);
-  assert.ok(!html.includes('Host safe-auto'));
-});
-
-test('unavailable Safe Auto keeps native exit selectable and unknown custom permission visible', () => {
-  const html = render(client.PermissionMenu, { sessionId: 's', locked: false, api: {}, initialSnapshot: { revision: 1, current: 'unknown-custom', available: false, options: [{ value: 'read-only', name: 'Original read only' }, { value: 'safe-auto', name: 'Safe Auto' }] } });
-  assert.match(html, /unknown-custom/);
-  assert.match(html, /display only/);
-  assert.match(html, /<button type="button" aria-pressed="false">Original read only/);
-  assert.match(html, /<button type="button" disabled="" aria-pressed="false">安全自动/);
-});
+const zhLocale = { getSnapshot: () => ({ active: 'zh-CN' }), subscribe: () => () => {} };
 
 test('settings SSR provides prompt limits, output budget warning and unknown saved values', () => {
   const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values, http: false }, initialCatalog: catalog });
-  assert.match(html, /额外审核提示词/);
+  assert.match(html, /Additional reviewer prompt/);
   assert.match(html, /maxLength="4096"/i);
   assert.match(html, /never expand authorization/);
-  assert.match(html, /fastOutputTokens/);
-  assert.match(html, /deepOutputTokens/);
   assert.match(html, /retired \/ legacy/);
   assert.match(html, /unlisted/);
   assert.match(html, /--dsw-alias-label-primary/);
+  /* The output budget warning lives in the collapsed safety details. */
+  assert.match(html, /Safety and budget details/);
+  assert.match(source, /fastOutputTokens \/ deepOutputTokens/);
+});
+
+test('copy renders in one language chosen from the host locale', () => {
+  const props = { view: 'page', api: {}, initialSettings: { revision: 1, values, http: false }, initialCatalog: catalog };
+  const en = render(client.SettingsPanel, props);
+  const zh = render(client.SettingsPanel, { ...props, locale: zhLocale });
+  assert.match(en, /Review mode/);
+  assert.doesNotMatch(en, /审核模式/);
+  assert.match(zh, /审核模式/);
+  assert.doesNotMatch(zh, /Review mode/);
+  assert.doesNotMatch(zh, / \/ [A-Z][a-z]+ /, 'no "中文 / English" pairs');
+});
+
+test('prompt counter describes the textarea', () => {
+  const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 1, values, http: false }, initialCatalog: catalog });
+  assert.match(html, /<textarea[^>]*aria-describedby="sa-prompt-hint"/);
+  assert.match(html, /id="sa-prompt-hint"[^>]*>0\/4096/);
+});
+
+test('session controls follow the save action and show a short session label', () => {
+  const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 1, values: { ...values, approvalReview: true }, platform: 'win32', http: false }, initialCatalog: catalog });
+  assert.match(html, /Approve for me/);
+  assert.match(html, /Independent approval reviewer/);
+  assert.match(html, /Windows/);
+  assert.match(html, /no standing permission grant/i);
+  assert.ok(html.indexOf('>Save<') < html.indexOf('Approve for me'), 'session controls come after Save');
+  const session = { sessionId: 'root-0123456789abcdef', header: { cwd: 'D:\\work\\project' }, revision: '1:1', current: 'workspace-write', available: true, safeAuto: true };
+  assert.equal(client.sessionLabel(session), 'project · root-012 · enabled');
+  assert.equal(client.sessionLabel(session, client.translator('zh')), 'project · root-012 · 已启用');
+  const controls = render(client.SessionControls, { api: {}, initialSessions: [session] });
+  assert.match(controls, /Workspace Write \+ ask/);
+  assert.match(controls, /Choose a live session/);
+  assert.match(controls, /project · root-012/);
+  assert.doesNotMatch(controls, /· ON/);
+});
+
+test('enable is blocked while settings have unsaved changes', () => {
+  const rows = [{ sessionId: 'root', header: { cwd: '/p' }, revision: '1', current: 'workspace-write', available: true, safeAuto: false }];
+  const clean = render(client.SessionControls, { api: {}, initialSessions: rows });
+  const dirty = render(client.SessionControls, { api: {}, initialSessions: rows, dirty: true });
+  assert.doesNotMatch(clean, /unsaved changes/);
+  assert.match(dirty, /unsaved changes/);
+  assert.match(source, /disabled: !row \|\| !row\.available \|\| row\.safeAuto \|\| dirty/);
+});
+
+test('independent approval shows the fixed reject policy as static text without a saved field', () => {
+  const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 1, values: { ...values, approvalReview: true }, http: false }, initialCatalog: catalog, locale: zhLocale });
+  assert.match(html, /无法自动判断时/);
+  assert.match(html, /直接拒绝/);
+  assert.match(html, /id="sa-human-unavailable"/);
+  assert.doesNotMatch(html, /value="human"/);
+  assert.match(html, /此策略固定且不保存/);
+  assert.doesNotMatch(source, /change\(\{[^\n]*(?:human|fallbackPolicy)/);
+  const legacy = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 1, values: { ...values, approvalReview: false }, http: false }, initialCatalog: catalog });
+  assert.doesNotMatch(legacy, /sa-human-unavailable/);
 });
 
 test('follow-conversation effort is not selectable and saved nondefault effort is warned', () => {
   const html = render(client.ModelFields, { stage: 'fast', values: { ...values, fastReasoningEffort: 'high' }, catalog, onChange() {} });
   assert.equal((html.match(/<select/g) || []).length, 1);
   assert.match(html, /high/);
-  assert.match(html, /Saved effort retained/);
+  assert.match(html, /Saved effort .* retained/);
+  assert.doesNotMatch(html, /clears this stage/, 'the clear-effort hint only applies to an explicit model');
+});
+
+test('deep review uses a switch and keeps the saved config shape', () => {
+  const off = render(client.ModelFields, { stage: 'deep', values: { ...values, deepProvider: '', deepModel: '', deepReasoningEffort: '' }, catalog, onChange() {} });
+  assert.match(off, /role="switch" aria-checked="false"/);
+  assert.doesNotMatch(off, /<select/);
+  const on = render(client.ModelFields, { stage: 'deep', values: { ...values, deepProvider: 'provider', deepModel: 'reasoner', deepReasoningEffort: '' }, catalog, onChange() {} });
+  assert.match(on, /role="switch" aria-checked="true"/);
+  assert.match(on, /clears this stage/);
+  const next = client.selectModel(values, 'deep', client.modelChoices(catalog)[0]);
+  assert.deepEqual([next.deepProvider, next.deepModel, next.deepReasoningEffort], ['', '', '']);
 });
 
 test('HTTP settings SSR is read-only and summary contains no editing form', () => {

@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useModalLayer } from '@deepseek-ai/dsh-client-ui-primitives';
+import { Button, useModalLayer } from '@deepseek-ai/dsh-client-ui-primitives';
+import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui';
 import type { HandoffGate, HandoffPhase } from './handoff.js';
+import { useLocaleId, type LocaleSource } from './hooks.js';
+import { createPageTranslator, type PageKey } from './page-locales.js';
 
 export interface HandoffOverlayProps {
   open: boolean;
@@ -11,46 +14,37 @@ export interface HandoffOverlayProps {
   cancellable?: boolean;
 }
 
-const overlayCss = `
-.cmt-handoffMask {
+/**
+ * The handoff mask is a blocking modal: it keeps the platform `<div
+ * role="dialog">` so the existing aria wiring and the `data-modal-autofocus`
+ * hook stay exactly as they were, and styles it from the host's own tokens.
+ * The cancel action is the `Button` primitive rather than a styled <button>.
+ */
+const overlayCss = `${officialUiCss('cmt-handoff')}
+.cmt-handoff .cmt-handoffMask {
   position: fixed;
   inset: 0;
+  /* Literal on purpose: the host publishes no --dsw-* z-index token
+   * (OFFICIAL_THEME_TOKEN_NAMES has none); this sits just under the int32 max
+   * so the mask covers every host layer during the session switch. */
   z-index: 2147483646;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: color-mix(in srgb, var(--dsw-alias-bg-base, #111) 62%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-bg-base) 62%, transparent);
 }
-.cmt-handoffDialog {
+.cmt-handoff .cmt-handoffDialog {
   box-sizing: border-box;
   width: min(360px, 100%);
   padding: 18px 16px 14px;
-  border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-base, #fff));
-  color: var(--dsw-alias-label-primary, #1c1f24);
-  box-shadow: var(--dsw-elevation-prominent, 0 12px 40px rgba(0, 0, 0, 0.28));
+  border: 0;
+  border-radius: var(--dsw-radius-panel);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: var(--dsw-elevation-prominent);
 }
-.cmt-handoffDialog p {
-  margin: 0 0 14px;
-  font-size: 14px;
-  line-height: 1.5;
-}
-.cmt-handoffDialog button {
-  appearance: none;
-  min-height: 36px;
-  padding: 8px 12px;
-  border: 1px solid var(--dsw-alias-border-l, #d3d7dd);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-base, #fff);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-.cmt-handoffDialog button:hover,
-.cmt-handoffDialog button:focus-visible {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(15, 23, 42, 0.05));
-}
+.cmt-handoff .cmt-handoffDialog p { margin: 0 0 14px; }
 `;
 
 /** Blocks the old composer until the official main view owns the target session. */
@@ -65,7 +59,7 @@ export function HandoffOverlay({
   useModalLayer(dialogRef, open, cancellable ? onCancel : () => {});
   if (!open) return null;
   return createPortal(
-    <div className="cmt-handoffMask" data-classmates-handoff="true">
+    <div className="cmt-handoff cmt-handoffMask" data-classmates-handoff="true">
       <style>{overlayCss}</style>
       <div
         ref={dialogRef}
@@ -77,7 +71,11 @@ export function HandoffOverlay({
       >
         <p id="classmates-handoff-title">{title}</p>
         {cancellable && (
-          <button type="button" data-modal-autofocus onClick={onCancel}>{cancelLabel}</button>
+          <div className="dsh-ui-actions dsh-ui-actions-end">
+            <Button variant="outline" type="button" data-modal-autofocus onClick={onCancel}>
+              {cancelLabel}
+            </Button>
+          </div>
         )}
       </div>
     </div>,
@@ -85,14 +83,14 @@ export function HandoffOverlay({
   );
 }
 
-const PHASE_TITLE: Record<Exclude<HandoffPhase, 'idle'>, string> = {
-  task: '正在打开任务会话…',
+const PHASE_TITLE_KEY: Record<Exclude<HandoffPhase, 'idle'>, PageKey> = {
+  task: 'handoff.task',
 };
 
-const COMMITTED_TITLE = '正在切换会话…';
-
 /** Root-owned overlay so a session switch cannot uncover the previous composer. */
-export function HandoffOverlayRoot({ gate }: { gate: HandoffGate }) {
+export function HandoffOverlayRoot({ gate, locale }: { gate: HandoffGate; locale?: LocaleSource }) {
+  const localeId = useLocaleId(locale);
+  const t = useMemo(() => createPageTranslator(localeId), [localeId]);
   const [snapshot, setSnapshot] = useState(gate.snapshot);
   useEffect(() => gate.subscribe(() => {
     setSnapshot(gate.snapshot);
@@ -100,12 +98,12 @@ export function HandoffOverlayRoot({ gate }: { gate: HandoffGate }) {
   const open = snapshot.busy && snapshot.phase !== 'idle';
   const title = snapshot.phase === 'idle'
     ? ''
-    : snapshot.cancellable ? PHASE_TITLE[snapshot.phase] : COMMITTED_TITLE;
+    : t(snapshot.cancellable ? PHASE_TITLE_KEY[snapshot.phase] : 'handoff.committed');
   return (
     <HandoffOverlay
       open={open}
       title={title}
-      cancelLabel="取消"
+      cancelLabel={t('common.cancel')}
       onCancel={() => gate.cancel()}
       cancellable={snapshot.cancellable}
     />

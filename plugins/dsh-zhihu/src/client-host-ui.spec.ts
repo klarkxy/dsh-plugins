@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { apply } from './client.tsx'
 import {
   dockEscapeKeyDown,
@@ -57,7 +58,7 @@ describe('public zhihu host compatibility', () => {
     })
   })
 
-  it('uses the host Input when provided and a native input otherwise', () => {
+  it('uses the host Input when provided and the official field otherwise', () => {
     const hosted = renderInput(MockInput, {
       value: '港口',
       type: 'search',
@@ -68,15 +69,24 @@ describe('public zhihu host compatibility', () => {
     expect(hosted.props.value).toBe('港口')
     expect(hosted.props.type).toBe('search')
 
+    const onChange = vi.fn()
     const native = renderInput(undefined, {
       value: '港口',
       type: 'password',
-      onChange() {},
+      onChange,
       'aria-label': '密钥',
-    }) as { type: unknown; props: { value?: string; type?: string } }
-    expect(native.type).toBe('input')
+    }) as { type: unknown; props: { value?: string; type?: string; onChange(event: unknown): void } }
+    expect(native.type).toBe(Input)
     expect(native.props.value).toBe('港口')
     expect(native.props.type).toBe('password')
+    // The plugin's own callback speaks values, so the adapter unwraps the DOM
+    // event here instead of letting a call site read event.target.
+    native.props.onChange({ target: { value: '港口新区' } })
+    expect(onChange).toHaveBeenCalledWith('港口新区')
+    const html = renderToStaticMarkup(native as never)
+    expect(html).toContain('<input')
+    expect(html).toContain('type="password"')
+    expect(html).toContain('aria-label="密钥"')
   })
 
   it('query consumer ignores synthetic isComposing and blocks native IME Enter/229', () => {
@@ -146,7 +156,10 @@ describe('public zhihu host compatibility', () => {
     const html = renderToStaticMarkup(standalone as never)
     expect(html).toContain('zhihu-settings-embed')
     expect(html).toContain('知乎凭证设置')
-    for (const label of ['设置', '用量', '知识库', '搜索']) expect(html).toContain(label)
+    // The page is mounted on the shared contract, not on a private palette.
+    expect(html).toContain('dsh-ui-stack')
+    // Tab labels; the capability list is folded, so "搜索" is no longer in the initial markup.
+    for (const label of ['设置', '用量', '知识库', '测试', '可用能力']) expect(html).toContain(label)
     expect(html).not.toContain('zhihu-open')
     expect(html).not.toContain('zhihu-dock')
     const hosted = renders[0]!({ owner: { Select: MockSelect, Button: MockButton, Input: MockInput } })

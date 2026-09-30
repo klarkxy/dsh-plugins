@@ -99,6 +99,26 @@ describe('Fusion client projection', () => {
   })
 })
 
+describe('Fusion client hook order', () => {
+  it('declares every FusionTaskCard hook before its early return', async () => {
+    const { readFileSync } = await import('node:fs')
+    const source = readFileSync(new URL('../src/client.tsx', import.meta.url), 'utf8')
+    const start = source.indexOf('function FusionTaskCard(')
+    const end = source.indexOf('\nfunction ', start + 1)
+    const body = source.slice(start, end)
+    const earlyReturn = body.indexOf("if (!pair || !task || pair.leadSessionId !== sessionId) return null")
+    assert.ok(earlyReturn > 0)
+    const after = body.slice(earlyReturn)
+    assert.doesNotMatch(after, /\buse(Callback|Effect|LayoutEffect|State|Ref|Memo|SyncExternalStore)\(/)
+  })
+
+  it('calls useSession unconditionally in the native seat', async () => {
+    const { readFileSync } = await import('node:fs')
+    const source = readFileSync(new URL('../src/client.tsx', import.meta.url), 'utf8')
+    assert.doesNotMatch(source, /if \(!useSession\) return null/)
+  })
+})
+
 describe('Fusion status subscription', () => {
   it('discards an old Session response after switching sessions', async () => {
     const pending = new Map()

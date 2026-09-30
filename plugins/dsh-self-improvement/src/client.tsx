@@ -1,9 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { Button, Checkbox, PathLabel, SegmentedTabs, Tag, type TagTone } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useFeatureRefresh, useNativeSeat, type NativeSurfaceClient } from '@klarkxy/dsh-plugin-kit/client-utils'
 import {
   modelMenuChoiceKey, modelMenuEffortOptions, normalizeModelMenuRoute, parseModelMenuChoiceKey, parseModelMenuChoices,
   type ModelMenuChoice, type ModelMenuRoute,
 } from '@klarkxy/dsh-plugin-kit/model-menu'
+import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { useEffect, useId, useRef, useState } from 'react'
 import {
   MEMORY_UNAVAILABLE_MESSAGE, MEMORY_UNAVAILABLE_MESSAGE_EN,
@@ -19,7 +21,7 @@ import { unwrap } from './rpc-result.ts'
 import { exportRevocationCopy, skillExportStateLabel } from './skills.ts'
 
 export const name = 'dsh-self-improvement-client'
-export const inject = ['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
+export const inject = ['slots', 'connection', 'remote', 'remote.session', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 export { unwrap }
 export {
   beginReviewRequest, createReviewGeneration, disposeReviewRequest, exportSkillIfCurrent,
@@ -56,9 +58,39 @@ export function memoryUnavailableCopy(locale: 'zh' | 'en'): string {
 }
 
 function statusLabel(status: MemoryRecord['status'], locale: 'zh' | 'en'): string {
-  const zh = { candidate: '候选', active: '已生效', rejected: '已拒绝', superseded: '已替代', revoked: '已撤回', deleted: '已删除' }
+  const zh = { candidate: '候选', active: '已生效', rejected: '已拒绝', superseded: '已替代', revoked: '已撤销', deleted: '已删除' }
   const en = { candidate: 'Candidate', active: 'Active', rejected: 'Rejected', superseded: 'Superseded', revoked: 'Revoked', deleted: 'Deleted' }
   return (locale === 'en' ? en : zh)[status]
+}
+
+export function skillStatusLabel(status: SkillRecord['status'], locale: 'zh' | 'en'): string {
+  const zh = { preview: '草稿', accepted: '已接受', rejected: '已拒绝', revoked: '已撤销' }
+  const en = { preview: 'Draft', accepted: 'Accepted', rejected: 'Rejected', revoked: 'Revoked' }
+  return (locale === 'en' ? en : zh)[status]
+}
+
+/** Readable evidence line: where it came from and a short session id instead of the full raw id. */
+export function evidenceLabel(ref: MemoryRecord['evidence'][number], locale: 'zh' | 'en'): string {
+  const kinds = {
+    user: ['你的消息', 'Your message'], tool: ['工具结果', 'Tool result'], turn: ['对话回合', 'Chat turn'], manual: ['手动添加', 'Added manually'],
+  } as const
+  const kind = kinds[ref.kind]?.[locale === 'en' ? 1 : 0] ?? ref.kind
+  if (ref.kind === 'manual') return kind
+  const session = ref.sessionId.length > 8 ? ref.sessionId.slice(0, 8) : ref.sessionId
+  return locale === 'en' ? `${kind} #${ref.seq} · session ${session}` : `${kind} #${ref.seq} · 会话 ${session}`
+}
+
+/** A record's lifecycle reads as a state, so it wears the tag of that state. */
+function statusTone(status: MemoryRecord['status'] | SkillRecord['status']): TagTone {
+  switch (status) {
+    case 'active':
+    case 'accepted': return 'success'
+    case 'candidate':
+    case 'preview': return 'info'
+    case 'rejected': return 'warning'
+    case 'revoked': return 'danger'
+    default: return 'quiet'
+  }
 }
 
 const emptySnapshot = (): ReviewSnapshot => ({
@@ -68,11 +100,11 @@ const emptySnapshot = (): ReviewSnapshot => ({
 
 function LessonEvidence({ record, locale }: { record: MemoryRecord; locale: 'zh' | 'en' }) {
   return record.evidence.length === 0
-    ? <p className="si-meta">{locale === 'en' ? 'No evidence refs.' : '没有依据引用。'}</p>
-    : <ul className="si-evidence">
+    ? <p className="dsh-ui-hint">{locale === 'en' ? 'No evidence recorded.' : '没有记录依据。'}</p>
+    : <ul className="si-evidence" aria-label={locale === 'en' ? 'Evidence' : '依据'}>
       {record.evidence.map(ref => (
-        <li key={`${ref.sessionId}:${ref.seq}:${ref.kind}`}>
-          {ref.kind} · {ref.sessionId}#{ref.seq}{ref.excerpt ? ` — ${ref.excerpt}` : ''}
+        <li key={`${ref.sessionId}:${ref.seq}:${ref.kind}`} title={`${ref.kind} · ${ref.sessionId}#${ref.seq}`}>
+          {evidenceLabel(ref, locale)}{ref.excerpt ? ` — ${ref.excerpt}` : ''}
         </li>
       ))}
     </ul>
@@ -86,7 +118,7 @@ function ConfirmButton(props: { label: string; confirmLabel: string; disabled?: 
     clearTimeout(timer.current)
     setArmed(false)
   }
-  return <button type="button" className="si-danger" disabled={props.disabled}
+  return <Button variant="outline" size="sm" className="si-danger" disabled={props.disabled} data-armed={armed || undefined}
     onClick={() => {
       if (!armed) {
         setArmed(true)
@@ -96,7 +128,7 @@ function ConfirmButton(props: { label: string; confirmLabel: string; disabled?: 
       disarm()
       props.onConfirm()
     }}
-    onBlur={disarm}>{armed ? props.confirmLabel : props.label}</button>
+    onBlur={disarm}>{armed ? props.confirmLabel : props.label}</Button>
 }
 
 function LessonList(props: {
@@ -111,38 +143,43 @@ function LessonList(props: {
 }) {
   const { lessons, locale, busy, projectId, onAccept, onPromote, onReject, onRevoke } = props
   if (lessons.length === 0) {
-    return <p className="si-empty">{locale === 'en' ? 'No lessons yet.' : '还没有教训。'}</p>
+    return <p className="dsh-ui-empty">{locale === 'en' ? 'No methods yet.' : '还没有经验。'}</p>
   }
   return <ol className="si-list">
     {lessons.map(record => {
       const candidate = record.status === 'candidate'
       const active = record.status === 'active'
       const foreignProject = record.scope.kind === 'project' && Boolean(projectId) && record.scope.projectId !== projectId
-      const scope = record.scope.kind === 'global' ? (locale === 'en' ? 'global' : '全局') : record.scope.projectId
-      return <li key={record.id} className="si-card" data-status={record.status}>
-        <header>
-          <h3>{record.title}</h3>
-          <span className="si-meta">{statusLabel(record.status, locale)} · {scope}</span>
+      const scope = record.scope.kind === 'global'
+        ? (locale === 'en' ? 'Global' : '全局')
+        : <PathLabel path={record.scope.projectId} className="dsh-ui-truncate" />
+      return <li key={record.id} className="si-card dsh-ui-card dsh-ui-card--flat" data-status={record.status}>
+        <header className="dsh-ui-row-wrap">
+          <h3 className="dsh-ui-title">{record.title}</h3>
+          <span className="dsh-ui-row">
+            <Tag tone={statusTone(record.status)}>{statusLabel(record.status, locale)}</Tag>
+            <span className="dsh-ui-meta dsh-ui-row">· {scope}</span>
+          </span>
         </header>
-        <p>{record.content}</p>
+        <p className="dsh-ui-compact dsh-ui-wrap">{record.content}</p>
         <LessonEvidence record={record} locale={locale} />
-        <div className="si-actions">
-          {candidate && !foreignProject ? <button type="button" disabled={busy} onClick={() => onAccept(record)}>
+        <div className="dsh-ui-actions">
+          {candidate && !foreignProject ? <Button variant="outline" size="sm" disabled={busy} onClick={() => onAccept(record)}>
             {locale === 'en' ? 'Accept in this scope' : '按当前范围采纳'}
-          </button> : null}
-          {active && record.scope.kind === 'project' && !foreignProject ? <button type="button" disabled={busy} onClick={() => onPromote(record)}>
+          </Button> : null}
+          {active && record.scope.kind === 'project' && !foreignProject ? <Button variant="outline" size="sm" disabled={busy} onClick={() => onPromote(record)}>
             {locale === 'en' ? 'Promote to global' : '提升为全局'}
-          </button> : null}
+          </Button> : null}
           {candidate ? <ConfirmButton disabled={busy}
             label={locale === 'en' ? 'Reject' : '拒绝'}
             confirmLabel={locale === 'en' ? 'Confirm reject?' : '确认拒绝？'}
             onConfirm={() => onReject(record)} /> : null}
           {active ? <ConfirmButton disabled={busy}
-            label={locale === 'en' ? 'Revoke' : '撤回'}
-            confirmLabel={locale === 'en' ? 'Confirm revoke?' : '确认撤回？'}
+            label={locale === 'en' ? 'Revoke' : '撤销'}
+            confirmLabel={locale === 'en' ? 'Confirm revoke?' : '确认撤销？'}
             onConfirm={() => onRevoke(record)} /> : null}
           {foreignProject
-            ? <p className="si-meta">{locale === 'en' ? 'Other project — promotion is blocked here.' : '其他项目的教训，此处不能提升。'}</p>
+            ? <p className="dsh-ui-hint">{locale === 'en' ? 'From another project; it can’t be changed here.' : '来自其他项目的经验，此处不能操作。'}</p>
             : null}
         </div>
       </li>
@@ -162,33 +199,37 @@ function SkillList(props: {
 }) {
   const { skills, locale, busy } = props
   if (skills.length === 0) {
-    return <p className="si-empty">{locale === 'en' ? 'No skill drafts.' : '没有技能草稿。'}</p>
+    return <p className="dsh-ui-empty">{locale === 'en' ? 'No skill drafts.' : '没有技能草稿。'}</p>
   }
   return <ol className="si-list">
     {skills.map(record => (
-      <li key={record.id} className="si-card" data-skill-status={record.status} data-export={record.exportState}>
-        <header>
-          <h3>{record.title}</h3>
-          <span className="si-meta">{record.status} · {skillExportStateLabel(record, locale)}</span>
+      <li key={record.id} className="si-card dsh-ui-card dsh-ui-card--flat" data-skill-status={record.status} data-export={record.exportState}>
+        <header className="dsh-ui-row-wrap">
+          <h3 className="dsh-ui-title">{record.title}</h3>
+          <span className="dsh-ui-row">
+            <Tag tone={statusTone(record.status)}>{skillStatusLabel(record.status, locale)}</Tag>
+            <span className="dsh-ui-meta">· {skillExportStateLabel(record, locale)}</span>
+          </span>
         </header>
-        <pre className="si-preview">{record.markdown}</pre>
-        <div className="si-actions">
-          {record.status === 'preview' ? <button type="button" disabled={busy} onClick={() => props.onAccept(record)}>
+        <pre className="dsh-ui-code si-preview">{record.markdown}</pre>
+        <div className="dsh-ui-actions">
+          {record.status === 'preview' ? <Button variant="outline" size="sm" disabled={busy} onClick={() => props.onAccept(record)}>
             {locale === 'en' ? 'Accept draft' : '接受草稿'}
-          </button> : null}
-          {record.status === 'preview' ? <button type="button" disabled={busy} onClick={() => props.onReject(record)}>
-            {locale === 'en' ? 'Reject draft' : '拒绝草稿'}
-          </button> : null}
-          {record.status === 'accepted' || record.status === 'preview' ? <button type="button" disabled={busy} onClick={() => props.onExport(record)}>
+          </Button> : null}
+          {record.status === 'preview' ? <ConfirmButton disabled={busy}
+            label={locale === 'en' ? 'Reject draft' : '拒绝草稿'}
+            confirmLabel={locale === 'en' ? 'Confirm reject?' : '确认拒绝？'}
+            onConfirm={() => props.onReject(record)} /> : null}
+          {record.status === 'accepted' || record.status === 'preview' ? <Button variant="outline" size="sm" disabled={busy} onClick={() => props.onExport(record)}>
             {locale === 'en' ? 'Download Markdown' : '下载 Markdown'}
-          </button> : null}
+          </Button> : null}
           {record.exportState === 'recorded' ? <ConfirmButton disabled={busy}
-            label={locale === 'en' ? 'Revoke export record' : '撤回导出记录'}
-            confirmLabel={locale === 'en' ? 'Confirm revoke export record?' : '确认撤回导出记录？'}
+            label={locale === 'en' ? 'Revoke download record' : '撤销下载记录'}
+            confirmLabel={locale === 'en' ? 'Confirm revoke?' : '确认撤销？'}
             onConfirm={() => props.onUnexport(record)} /> : null}
           {record.status === 'accepted' ? <ConfirmButton disabled={busy}
-            label={locale === 'en' ? 'Revoke skill' : '撤回技能'}
-            confirmLabel={locale === 'en' ? 'Confirm revoke skill?' : '确认撤回技能？'}
+            label={locale === 'en' ? 'Revoke skill' : '撤销技能'}
+            confirmLabel={locale === 'en' ? 'Confirm revoke?' : '确认撤销？'}
             onConfirm={() => props.onRevoke(record)} /> : null}
         </div>
       </li>
@@ -281,7 +322,7 @@ export function ReviewPanel({ client, sessionId, locale }: {
         signal: request.signal,
         viewSessionId: () => sessionRef.current,
       }).catch(() => undefined)
-      if (next) setSnapshot(next)
+      if (next && still()) setSnapshot(next)
     } finally {
       if (still()) setBusy(false)
     }
@@ -291,33 +332,35 @@ export function ReviewPanel({ client, sessionId, locale }: {
   const visibleLessons = data.lessons
 
   const body = <>
-    {error ? <p role="alert" className="si-error">{error}</p> : null}
-    {note ? <p role="status">{note}</p> : null}
-    {data.storageFailed ? <p role="alert">{locale === 'en' ? 'Save failed; previous state was kept.' : '保存失败，已保留上一次成功的状态。'}</p> : null}
-    {data.memoryAvailable ? null : <p role="alert" className="si-error">{memoryUnavailableCopy(locale)}</p>}
-    <div className="si-tabs" role="tablist" aria-label={locale === 'en' ? 'Experience Learning' : '经验学习'} onKeyDown={event => {
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-      const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
-      const index = buttons.indexOf(event.target as HTMLButtonElement)
-      if (index < 0) return
-      event.preventDefault()
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
-        : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
-      buttons[next]?.focus()
-      buttons[next]?.click()
-    }}>
-      {([['lessons', locale === 'en' ? 'Methods' : '行动经验'], ['skills', locale === 'en' ? 'Skills' : '技能草稿']] as const).map(([key, label]) => (
-        <button key={key} type="button" role="tab" id={`${tabsId}-${key}-tab`}
-          aria-controls={`${tabsId}-${key}-panel`} aria-selected={tab === key}
-          tabIndex={tab === key ? 0 : -1} onClick={() => setTab(key)}>{label}</button>
-      ))}
-    </div>
+    {error ? <p role="alert" className="dsh-ui-error dsh-ui-wrap">{error}</p> : null}
+    {note ? <p role="status" className="dsh-ui-notice">{note}</p> : null}
+    {data.storageFailed ? <p role="alert" className="dsh-ui-banner dsh-ui-banner--danger">{locale === 'en' ? 'Save failed; previous state was kept.' : '保存失败，已保留上一次成功的状态。'}</p> : null}
+    {data.memoryAvailable ? null : <p role="alert" className="dsh-ui-banner dsh-ui-banner--danger">{memoryUnavailableCopy(locale)}</p>}
+    <SegmentedTabs<'lessons' | 'skills'>
+      value={tab}
+      onChange={setTab}
+      label={locale === 'en' ? 'Experience Learning' : '经验学习'}
+      items={[
+        {
+          value: 'lessons',
+          label: locale === 'en' ? 'Methods' : '经验',
+          id: `${tabsId}-lessons-tab`,
+          panelId: `${tabsId}-lessons-panel`,
+        },
+        {
+          value: 'skills',
+          label: locale === 'en' ? 'Skills' : '技能草稿',
+          id: `${tabsId}-skills-tab`,
+          panelId: `${tabsId}-skills-panel`,
+        },
+      ]}
+    />
     <div role="tabpanel" id={`${tabsId}-lessons-panel`}
       aria-labelledby={`${tabsId}-lessons-tab`} hidden={tab !== 'lessons'} tabIndex={0}>
-      <p className="si-meta">{locale === 'en'
-        ? 'Explicit method requirements can take effect directly. Outcome observations remain candidates until accepted. Vocabulary and recent activity belong to Dream.'
-        : '明确的方法要求可直接生效；结果观察保留为候选，采纳后才参与行动。用语与近期状态由 Dream 管理。'}</p>
-      {sessionId ? <button type="button" disabled={busy || !data.memoryAvailable} onClick={() => void action(async ctx => {
+      <p className="dsh-ui-help">{locale === 'en'
+        ? 'Methods you ask for directly take effect right away. Methods learned from outcomes stay as candidates until you accept them. Vocabulary and recent activity are kept by Long-term Memory.'
+        : '你明确要求的做法会直接生效；从结果中观察到的做法先作为候选，采纳后才会使用。用语和近期状态由长期记忆管理。'}</p>
+      {sessionId ? <div className="dsh-ui-actions"><Button variant="primary" size="md" disabled={busy || !data.memoryAvailable} onClick={() => void action(async ctx => {
         if (!reviewRequestStillCurrent({
           token: ctx.token, gate: gate.current, signal: ctx.signal, sessionId: ctx.sessionId, viewSessionId: sessionRef.current,
         })) return
@@ -328,7 +371,7 @@ export function ReviewPanel({ client, sessionId, locale }: {
         if (!next) return
         setSnapshot(next)
         setNote(locale === 'en' ? 'Extracted from this session when evidence was sufficient.' : '已按明确依据尝试摘录。')
-      })}>{locale === 'en' ? 'Extract from this session' : '从本会话摘录'}</button> : null}
+      })}>{locale === 'en' ? 'Extract from this session' : '从本会话摘录'}</Button></div> : null}
       <LessonList
         lessons={visibleLessons}
         locale={locale}
@@ -371,27 +414,29 @@ export function ReviewPanel({ client, sessionId, locale }: {
 
   function skillManagement() {
     return <>
-      <fieldset className="si-select" disabled={busy || !data.memoryAvailable}>
-        <legend>{locale === 'en' ? 'Active lessons for a skill draft' : '从已生效的教训生成草稿'}</legend>
+      <fieldset className="si-lessons" disabled={busy || !data.memoryAvailable}>
+        <legend className="dsh-ui-label">{locale === 'en' ? 'Build a skill draft from active methods' : '从已生效的经验生成技能草稿'}</legend>
         {data.lessons.filter(record => record.status === 'active').map(record => (
-          <label key={record.id}>
-            <input type="checkbox" checked={selected.includes(record.id)}
-              onChange={event => setSelected(current => event.target.checked ? [...current, record.id] : current.filter(id => id !== record.id))} />
-            {record.title}
-          </label>
+          <Checkbox key={record.id} className="si-lesson-option"
+            checked={selected.includes(record.id)}
+            disabled={busy || !data.memoryAvailable}
+            label={record.title}
+            onChange={next => setSelected(current => next ? [...current, record.id] : current.filter(id => id !== record.id))} />
         ))}
         {data.lessons.some(record => record.status === 'active') ? null
-          : <p className="si-meta">{locale === 'en' ? 'No active lessons yet.' : '还没有已生效的教训。'}</p>}
+          : <p className="dsh-ui-hint">{locale === 'en' ? 'No active methods yet.' : '还没有已生效的经验。'}</p>}
       </fieldset>
-      <button type="button" disabled={busy || selected.length === 0 || !data.memoryAvailable} onClick={() => void action(async ctx => {
-        await call('skill.preview', { lessonIds: selected, sessionId: ctx.sessionId })
-        const next = await loadReviewSnapshot({
-          rpc, sessionId: ctx.sessionId, token: ctx.token, gate: gate.current, signal: ctx.signal, viewSessionId: () => sessionRef.current,
-        })
-        if (!next) return
-        setSnapshot(next)
-        setTab('skills')
-      })}>{locale === 'en' ? 'Preview skill Markdown' : '预览技能 Markdown'}</button>
+      <div className="dsh-ui-actions">
+        <Button variant="primary" size="md" disabled={busy || selected.length === 0 || !data.memoryAvailable} onClick={() => void action(async ctx => {
+          await call('skill.preview', { lessonIds: selected, sessionId: ctx.sessionId })
+          const next = await loadReviewSnapshot({
+            rpc, sessionId: ctx.sessionId, token: ctx.token, gate: gate.current, signal: ctx.signal, viewSessionId: () => sessionRef.current,
+          })
+          if (!next) return
+          setSnapshot(next)
+          setTab('skills')
+        })}>{locale === 'en' ? 'Preview skill Markdown' : '预览技能 Markdown'}</Button>
+      </div>
       <SkillList
         skills={data.skills}
         locale={locale}
@@ -443,44 +488,51 @@ export function ReviewPanel({ client, sessionId, locale }: {
     </>
   }
 
-  return <section className="si-settings" data-testid="self-improvement-settings" data-session={sessionId || undefined}>
-    {sessionId ? null : <p className="si-meta">{locale === 'en'
-      ? 'Select a session to view lessons for the current project.'
-      : '选择一个会话后可查看当前项目的教训。'}</p>}
-    {body}
+  return <section className="si-settings dsh-ui-panel" data-testid="self-improvement-settings" data-session={sessionId || undefined}>
+    {sessionId ? body : <p className="dsh-ui-empty">{locale === 'en'
+      ? 'Open a session to review methods for its project.'
+      : '打开一个会话后，可审阅该项目的经验。'}</p>}
   </section>
 }
 
-const styles = `
-.si-settings{max-width:760px;color:inherit;font:400 var(--font-size-2,14px)/1.5 var(--default-font-family,system-ui,sans-serif)}
-.si-settings{display:grid;gap:16px}
-.si-settings p{margin:0;line-height:1.5}
-.si-meta,.si-empty{font-size:var(--font-size-1,13px);color:var(--gray-11,inherit)}
-.si-error{color:var(--red-11,#b42318)}
-.si-card{display:grid;gap:8px;padding:12px 14px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:12px}
-.si-card h3{margin:0;font-size:var(--font-size-3,16px);font-weight:600}
-.si-list{margin:0;padding:0;list-style:none}
-.si-evidence{margin:0;padding-left:1.2em;font-size:var(--font-size-1,13px)}
-.si-actions{display:flex;flex-wrap:wrap;gap:8px}
-.si-settings button:not([role="tab"]){min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start;transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease}
-.si-settings button:not([role="tab"]):hover:not(:disabled){background:var(--gray-3,color-mix(in srgb,currentColor 6%,transparent));border-color:color-mix(in srgb,currentColor 35%,transparent)}
-.si-settings button:not([role="tab"]):active:not(:disabled){transform:scale(.97)}
-.si-danger:hover:not(:disabled){border-color:var(--red-11,#b42318);color:var(--red-11,#b42318);background:color-mix(in srgb,var(--red-11,#b42318) 8%,transparent)}
-.si-settings button:disabled{opacity:.45;cursor:not-allowed}
-.si-tabs{display:flex;gap:20px;border-bottom:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
-.si-tabs button[role="tab"]{padding:8px 0;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--gray-11,inherit);cursor:pointer;font:inherit;transition:color 150ms ease,border-color 150ms ease}
-.si-tabs button[role="tab"]:hover{color:inherit}
-.si-tabs button[aria-selected="true"]{border-bottom-color:var(--accent-9,#3b82f6);color:var(--accent-11,inherit);font-weight:600}
-.si-settings [role="tabpanel"]{border-radius:12px}
-.si-settings :focus-visible{outline:2px solid var(--accent-9,currentColor);outline-offset:3px}
-.si-preview{margin:0;padding:8px 10px;border-radius:8px;background:var(--gray-2,color-mix(in srgb,currentColor 4%,transparent));white-space:pre-wrap;overflow:auto;max-height:240px;font:400 var(--font-size-1,13px)/1.45 var(--code-font-family,ui-monospace,monospace)}
-.si-select{margin:0;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:10px;padding:8px 12px;display:grid;gap:6px}
-.si-select label{display:flex;gap:8px;align-items:flex-start}
-.si-model{display:grid;gap:10px;margin-top:8px}
-.si-model label{display:grid;gap:6px;font-size:var(--font-size-2,14px)}
-.si-model select{box-sizing:border-box;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--gray-7,color-mix(in srgb,currentColor 20%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit}
-.si-model select:focus-visible{border-color:var(--accent-9,#3b82f6);outline:2px solid var(--accent-9,#3b82f6);outline-offset:1px}
-@media(prefers-reduced-motion:reduce){.si-settings button,.si-model select{transition:none}}
+/* The contract owns the type tiers, the card, the field, the button row, the
+ * banner and the focus ring. What is left is this panel's own geometry: the
+ * reading width, the stacked record cards, the evidence indent, the lesson
+ * picker's option list and the scroll box around a skill's Markdown. */
+const styles = `${officialUiCss('si-root')}
+.si-root { max-width: 760px; }
+.si-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.si-evidence {
+  margin: 0;
+  padding-inline-start: 18px;
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+.si-preview { margin: 0; max-height: 240px; overflow: auto; }
+.si-lessons {
+  margin: 0;
+  border: 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  padding: 12px 0 0;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.si-lessons > legend { padding: 0 8px 0 0; }
+.si-lesson-option { padding: 2px 0; }
+/* A destructive row only shows its colour once the pointer is on it or the
+ * two-step confirmation is armed; the resting appearance stays the outlined
+ * one every other action uses. */
+.si-danger:hover:not(:disabled),
+.si-danger[data-armed] {
+  color: var(--dsw-alias-state-error-primary);
+  border-color: var(--dsw-alias-state-error-primary);
+}
+.si-danger:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover-danger); }
 `
 
 export function reviewPanelKey(sessionId: string, locale: 'zh' | 'en'): string {
@@ -499,16 +551,29 @@ export function SelfImprovementModelMenu({ client, locale }: { client: Client; l
   const selected = choices.find(item => item.provider === route.provider && item.model === route.model)
   const efforts = modelMenuEffortOptions(selected, route.reasoningEffort)
 
+  // Load once per client/locale. Saving must not refetch: the catalog is parsed
+  // against the saved route read here, and later saves only update `settings`.
   useEffect(() => {
     let live = true
-    void client.connection.rpc.call(SELF_IMPROVEMENT_RPC_CHANNEL, 'settings', {})
-      .then(result => { if (live) setSettings(unwrap(result as RpcResult<SelfImprovementSettings>)) })
-      .catch(() => { if (live) setError(locale === 'en' ? 'Unable to load settings.' : '无法读取设置。') })
-    void client.remote?.session?.modelCatalog?.()
-      ?.then(value => { if (live) setChoices(parseModelMenuChoices(value, route)) })
-      .catch(() => { if (live) setChoices([]) })
+    void (async () => {
+      let saved: ModelMenuRoute = defaultSettings().model
+      try {
+        const next = unwrap(await client.connection.rpc.call(SELF_IMPROVEMENT_RPC_CHANNEL, 'settings', {}) as RpcResult<SelfImprovementSettings>)
+        if (!live) return
+        setSettings(next)
+        saved = next.model
+      } catch (cause) {
+        if (live) setError(cause instanceof Error && cause.message ? cause.message : (locale === 'en' ? 'Unable to load settings.' : '无法读取设置。'))
+      }
+      try {
+        const value = await client.remote?.session?.modelCatalog?.()
+        if (live) setChoices(parseModelMenuChoices(value, saved))
+      } catch {
+        if (live) setChoices([])
+      }
+    })()
     return () => { live = false }
-  }, [client, locale, route.provider, route.model])
+  }, [client, locale])
 
   async function save(next: ModelMenuRoute): Promise<void> {
     if (!settings) return
@@ -519,20 +584,21 @@ export function SelfImprovementModelMenu({ client, locale }: { client: Client; l
       })
       setSettings(unwrap(value as RpcResult<SelfImprovementSettings>))
       setNote(locale === 'en' ? 'Saved.' : '已保存。')
-    } catch {
-      setError(locale === 'en' ? 'Settings changed; refresh and retry.' : '设置已更新，请刷新后重试。')
+    } catch (cause) {
+      setError(cause instanceof Error && cause.message ? cause.message : (locale === 'en' ? 'Unable to save settings.' : '无法保存设置。'))
     } finally {
       setBusy(false)
     }
   }
 
-  return <section className="si-model" data-testid="self-improvement-model">
-    {error && <p role="alert" className="si-error">{error}</p>}
-    {note && <p role="status" className="si-meta">{note}</p>}
-    <label htmlFor={optionsId}>
-      {locale === 'en' ? 'Extraction model' : '经验学习摘录模型'}
+  return <section className="si-model dsh-ui-stack" data-testid="self-improvement-model">
+    {error && <p role="alert" className="dsh-ui-error">{error}</p>}
+    {note && <p role="status" className="dsh-ui-notice">{note}</p>}
+    <label className="dsh-ui-field" htmlFor={optionsId}>
+      <span className="dsh-ui-label">{locale === 'en' ? 'Extraction model' : '摘录模型'}</span>
       <select
         id={optionsId}
+        className="dsh-ui-select"
         value={modelMenuChoiceKey(route.provider, route.model)}
         disabled={busy || !settings}
         onChange={event => {
@@ -551,10 +617,11 @@ export function SelfImprovementModelMenu({ client, locale }: { client: Client; l
       </select>
     </label>
     {selected && efforts.length > 0 && (
-      <label htmlFor={`${optionsId}-effort`}>
-        {locale === 'en' ? 'Reasoning effort' : '思考强度'}
+      <label className="dsh-ui-field" htmlFor={`${optionsId}-effort`}>
+        <span className="dsh-ui-label">{locale === 'en' ? 'Reasoning effort' : '思考强度'}</span>
         <select
           id={`${optionsId}-effort`}
+          className="dsh-ui-select"
           value={route.reasoningEffort ?? ''}
           disabled={busy}
           onChange={event => void save({ ...route, reasoningEffort: event.target.value || undefined })}
@@ -564,7 +631,7 @@ export function SelfImprovementModelMenu({ client, locale }: { client: Client; l
         </select>
       </label>
     )}
-    <p className="si-meta">{locale === 'en'
+    <p className="dsh-ui-hint">{locale === 'en'
       ? 'Leave empty to use the current session model, then the host default chat model.'
       : '留空则使用当前会话模型，再回落到宿主默认对话模型。'}</p>
   </section>
@@ -573,7 +640,7 @@ export function SelfImprovementModelMenu({ client, locale }: { client: Client; l
 /** Plugin page seat: the model menu works without a session. */
 export function SelfImprovementSettingsSeat({ client }: { client: Client }) {
   const seat = useNativeSeat(client, {})
-  return <section className="si-settings" data-testid="self-improvement-settings">
+  return <section className="si-settings si-root dsh-ui-panel" data-testid="self-improvement-settings">
     <SelfImprovementModelMenu client={client} locale={seat.locale} />
     <SelfImprovementSettings client={client} props={{ sessionId: seat.sessionId, locale: seat.locale }} />
   </section>

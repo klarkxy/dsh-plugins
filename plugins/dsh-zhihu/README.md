@@ -28,7 +28,7 @@ To enable agent tools, add this entry to the plugin list in the agent's `agent.c
 
 ## Use
 
-DSH Web provides search, settings, usage, and knowledge-base views. Open **Plugins → @klarkxy/dsh-zhihu** for configuration, usage, knowledge bases, and search. Question discovery, creator data, and official quota queries are available through the agent tools and shared RPC service; this update does not add dedicated Web views for them.
+Open **Plugins → @klarkxy/dsh-zhihu** for settings, **Statistics**, **Official usage**, knowledge bases, and **Test**. **Test** uses one function selector and dynamically displays the selected function's parameters and results, covering search and question/creator queries, including question recommendations, answer excerpts, your published content and comments, and account/content statistics. **Statistics** shows locally recorded daily calls, failures, and returned results. The separate **Official usage** tab fetches all official quota categories on opening and on manual refresh, displaying metric charts and values rather than raw JSON. Missing totals or used amounts are not inferred; separate API categories are not summed. **Test** contains business queries only, which require an explicit click. No request is automatically retried or paginated. Existing agent tools and RPC endpoints remain available.
 
 Twelve agent tools are available once the tools entry is enabled. The five existing tools are unchanged:
 

@@ -1,5 +1,6 @@
 import { WebError, type WebSearchProvider, type WebSearchRequest, type WebSearchResult, type WebSearchSource } from '@deepseek-ai/dsh-web'
 import { httpsEndpoint, readJSON, record, sourceFrom } from './http-json.ts'
+import { HttpStatusError, providerError } from './provider-error.ts'
 
 export interface RestSearchOptions { apiKey: string; baseURL?: string; fetch?: typeof fetch }
 
@@ -39,14 +40,13 @@ function createRestSearch(spec: RestSpec): new (options: RestSearchOptions) => W
         })
         if (!response.ok) {
           await response.body?.cancel().catch(() => {})
-          throw new WebError(`搜索请求失败（HTTP ${response.status}）。`, 'WEB_PROVIDER_ERROR')
+          throw new HttpStatusError(response.status)
         }
         const sources = spec.parse(await readJSON(response, signal))
         return { sources: sources.slice(0, count), truncated: sources.length > count }
       } catch (error) {
         if (signal?.aborted) throw new WebError('搜索已取消。', 'WEB_ABORTED')
-        if (error instanceof WebError) throw error
-        throw new WebError('无法完成搜索请求。', 'WEB_PROVIDER_ERROR')
+        throw providerError(error, [this.options.apiKey])
       }
     }
   }

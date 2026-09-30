@@ -3,7 +3,7 @@ import { parseEscalationCandidates } from './escalation.js';
 import { validateModelConfig } from './model-route.js';
 
 const defaults = Object.freeze({
-  mode: 'shadow', workspaceRoots: [], shellCandidates: [], escalationCandidates: [],
+  mode: 'shadow', approvalReview: false, workspaceRoots: [], shellCandidates: [], escalationCandidates: [],
   escalationApprovalTtlMs: 30000, escalationMaxTimeoutMs: 30000,
   endpoint: '', fastProvider: '', fastModel: '', deepProvider: '', deepModel: '', apiKeyEnv: 'DSH_SAFE_AUTO_API_KEY',
   fastReasoningEffort: '', deepReasoningEffort: '', reviewerPrompt: '',
@@ -26,6 +26,7 @@ export function parseConfig(raw = {}) {
   for (const key of Object.keys(raw)) if (!Object.hasOwn(defaults, key)) throw new Error(`unknown config field: ${key}`);
   const c = { ...defaults, ...raw };
   if (!['off', 'shadow', 'smart', 'unattended'].includes(c.mode)) throw new Error('invalid mode');
+  if (typeof c.approvalReview !== 'boolean') throw new Error('approvalReview must be a boolean');
   for (const key of ['endpoint', 'fastProvider', 'fastModel', 'deepProvider', 'deepModel', 'apiKeyEnv', 'tokenField', 'fastReasoningEffort', 'deepReasoningEffort', 'reviewerPrompt']) {
     if (typeof c[key] !== 'string' || c[key].length > 4096) throw new Error(`${key} must be a string`);
   }

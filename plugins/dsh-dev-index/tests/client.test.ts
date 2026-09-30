@@ -19,8 +19,11 @@ function loadBrowser(active: string) {
     useEffect: () => {},
   };
   const client = definition!.factory((id: string) => {
-    expect(id).toBe("react");
-    return React;
+    /* The host resolves its own modules by id: React here, and the shared
+     * control primitives as a named placeholder the test never renders. */
+    if (id === "react") return React;
+    if (id === "@deepseek-ai/dsh-client-ui-primitives") return { Button: () => null, SegmentedTabs: () => null };
+    throw new Error(`unexpected host module: ${id}`);
   }) as {
     inject: string[];
     apply: (ctx: unknown) => void;
@@ -62,5 +65,35 @@ describe("Plugins page documentation browser", () => {
     expect(frame?.props.src).toBe(url);
     expect(frame?.props.sandbox).toBe("allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox");
     expect(elements.find(element => element.type === "a")?.props.href).toBe(url);
+  });
+
+  it("offers the language as focusable tabs and hides the fallback banner while loading", () => {
+    const elements = descendants(loadBrowser("en"));
+    const tabs = elements.find(element => Array.isArray(element.props.items));
+    expect(tabs?.props.value).toBe("en");
+    expect((tabs?.props.items as Array<{ value: string }>).map(item => item.value)).toEqual(["zh", "en"]);
+    expect(elements.some(element => element.props.disabled === true)).toBe(false);
+    expect(elements.some(element => element.props.className === "dsh-ui-banner")).toBe(false);
+    expect(elements.find(element => element.props.role === "status")?.props.children).toEqual(["Loading documentation…"]);
+  });
+
+  it("does not hard-code page spacing or stack two viewport heights", () => {
+    expect(source).not.toMatch(/margin-top:\s*20px/);
+    expect(source).not.toMatch(/min-height:\s*420px/);
+    expect(source).toMatch(/LOAD_TIMEOUT_MS/);
+  });
+
+  it("requires only host modules the package declares in dsh.client.inject", () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    ) as { dsh: { client: { inject: string[] } } };
+    const ids = [...new Set(Array.from(source.matchAll(/require\('([^']+)'\)/g), match => match[1]))];
+    expect(ids.sort()).toEqual(["@deepseek-ai/dsh-client-ui-primitives", "react"]);
+    for (const id of ids) {
+      // React is the one module every client half gets; the rest is what
+      // decides what the host puts in its module table.
+      if (id === "react") continue;
+      expect(manifest.dsh.client.inject).toContain(id);
+    }
   });
 });

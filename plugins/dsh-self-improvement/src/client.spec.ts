@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { MEMORY_UNAVAILABLE_MESSAGE, SELF_IMPROVEMENT_PLUGIN, SELF_IMPROVEMENT_REVIEW_SERVICE } from './contracts.ts'
 import {
   apply, beginReviewRequest, disposeReviewRequest, exportSkillIfCurrent, inject, loadReviewSnapshot,
-  memoryUnavailableCopy, parseSeatProps, peekReviewSnapshot, ReviewPanel, reviewPanelKey, SelfImprovementSettings,
+  evidenceLabel, memoryUnavailableCopy, parseSeatProps, skillStatusLabel, peekReviewSnapshot, ReviewPanel, reviewPanelKey, SelfImprovementSettings,
   shouldSkipReviewRefresh, unwrap,
 } from './client.tsx'
 import { exportRevocationCopy } from './skills.ts'
@@ -70,7 +70,7 @@ describe('self-improvement client seats', () => {
   it('keeps Memory-unavailable copy actionable and does not claim downloaded files are recalled', () => {
     expect(memoryUnavailableCopy('zh')).toBe(MEMORY_UNAVAILABLE_MESSAGE)
     expect(memoryUnavailableCopy('en')).toMatch(/Enable the Long-term Memory plugin separately/)
-    expect(exportRevocationCopy('zh')).toContain('不会收回')
+    expect(exportRevocationCopy('zh')).toContain('不会被收回')
     expect(unwrap({ ok: true, value: 1 })).toBe(1)
     expect(() => unwrap({ ok: false, error: { code: 'X', message: 'no' } })).toThrow('no')
   })
@@ -98,7 +98,7 @@ describe('self-improvement client seats', () => {
   })
 
   it('resolves native settings seats and peeks without aborting an in-progress review action', () => {
-    expect(inject).toEqual(['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
+    expect(inject).toEqual(['slots', 'connection', 'remote', 'remote.session', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
     expect(clientSrc).toContain("from '@klarkxy/dsh-plugin-kit/client-utils'")
     expect(clientSrc).toContain('type Client = NativeSurfaceClient &')
     expect(clientSrc).toContain('useNativeSeat(client, props)')
@@ -136,7 +136,37 @@ describe('self-improvement client seats', () => {
     expect(clientSrc).toContain("from '@klarkxy/dsh-plugin-kit/model-menu'")
     expect(clientSrc).toContain('data-testid="self-improvement-model"')
     expect(clientSrc).toContain("SELF_IMPROVEMENT_RPC_CHANNEL, 'settings.update'")
-    expect(clientSrc).toContain('parseModelMenuChoices(value, route)')
+    expect(clientSrc).toContain('parseModelMenuChoices(value, saved)')
     expect(clientSrc).toContain('modelMenuChoiceKey(route.provider, route.model)')
+    // Saving must not refetch settings/catalog: the load effect keys only on client and locale.
+    expect(clientSrc).toContain('}, [client, locale])')
+    expect(clientSrc).not.toContain('[client, locale, route.provider, route.model]')
+    // Save failures surface the server's cause instead of a fixed "refresh and retry".
+    expect(clientSrc).not.toContain('设置已更新，请刷新后重试')
+  })
+})
+
+describe('review display', () => {
+  it('shows only an empty state without a session and drops the nested root class', () => {
+    expect(clientSrc).toContain('{sessionId ? body : <p className="dsh-ui-empty">')
+    expect(clientSrc).toContain('className="si-model dsh-ui-stack"')
+    expect(clientSrc.match(/si-root dsh-ui-panel/g)?.length).toBe(1)
+  })
+
+  it('checks the view is current before refilling after an error', () => {
+    expect(clientSrc).toContain('if (next && still()) setSnapshot(next)')
+  })
+
+  it('localizes skill status and evidence', () => {
+    expect(skillStatusLabel('preview', 'zh')).toBe('草稿')
+    expect(skillStatusLabel('revoked', 'en')).toBe('Revoked')
+    const label = evidenceLabel({ sessionId: 'session-1234567890', seq: 4, kind: 'user' }, 'en')
+    expect(label).toBe('Your message #4 · session session-')
+    expect(evidenceLabel({ sessionId: 's', seq: 0, kind: 'manual' }, 'zh')).toBe('手动添加')
+  })
+
+  it('confirms draft rejection and uses unified terminology', () => {
+    expect(clientSrc).toMatch(/ConfirmButton disabled=\{busy\}\s+label=\{locale === 'en' \? 'Reject draft' : '拒绝草稿'\}/)
+    expect(clientSrc).not.toMatch(/教训|行动经验|撤回/)
   })
 })

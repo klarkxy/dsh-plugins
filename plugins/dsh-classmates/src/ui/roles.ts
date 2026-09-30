@@ -35,16 +35,31 @@ export function catalogConnectivityUnknown(model: ModelChoice | undefined): bool
   return model === undefined || model.availability === 'unverified' || model.availability === undefined;
 }
 
-export function formatRoleModelSummary(role: ClassmateDefinition, models: ModelChoice[]): string {
+/** Copy for the model summary; the default is the Chinese text used in task drafts. */
+export interface ModelSummaryCopy {
+  follow: string;
+  summary(model: string, effort: string): string;
+}
+
+const ZH_MODEL_SUMMARY: ModelSummaryCopy = {
+  follow: '跟随当前聊天',
+  summary: (model, effort) => `模型：${model} · 思考强度：${effort}`,
+};
+
+export function formatRoleModelSummary(
+  role: ClassmateDefinition,
+  models: ModelChoice[],
+  copy: ModelSummaryCopy = ZH_MODEL_SUMMARY,
+): string {
   const model = role.model ? findModel(models, role.model) : undefined;
   const modelLabel = role.model
     ? `${model ? formatProviderLabel(model) : role.model.provider} · ${model?.name ?? role.model.id}`
-    : '跟随当前聊天';
+    : copy.follow;
   const selectedEffort = role.reasoningEffort ?? role.model?.reasoningEffort;
   const effortLabel = selectedEffort
     ? (model?.efforts ?? models.flatMap(choice => choice.efforts)).find(entry => entry.id === selectedEffort)?.name ?? selectedEffort
-    : '跟随当前聊天';
-  return `模型：${modelLabel} · 思考强度：${effortLabel}`;
+    : copy.follow;
+  return copy.summary(modelLabel, effortLabel);
 }
 
 export function buildTaskDraft(roles: ClassmateDefinition[], models: ModelChoice[]): string {

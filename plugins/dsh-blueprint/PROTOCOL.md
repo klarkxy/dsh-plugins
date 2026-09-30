@@ -4,7 +4,7 @@
 JSON 的 `formatVersion` 为 **2**。这是插件组合分享协议，不是环境备份或设置迁移协议。
 
 参考实现：`blueprint.mjs`（数据校验）、`codec.mjs`（文本编解码）、
-`engine.mjs`（导出、预览及执行）。三个层次分别负责结构、编码和操作，
+`core.mjs`（协议操作与只读导出）。三个层次分别负责结构、编码和操作，
 解码成功不等于数据符合蓝图结构，更不等于可以直接执行。
 
 ## 1. 数据结构
@@ -51,32 +51,19 @@ JSON 的 `formatVersion` 为 **2**。这是插件组合分享协议，不是环�
 `npm` 包缺失时由官方管理器安装精确版本；`builtin` 必须由接收方宿主提供。
 顶层安装请求顺序不替代包管理器的依赖解析，也不定义异步插件启动顺序。
 
-## 2. 导入语义
+## 2. 执行策略与迁移
 
-导入是向当前组合补充插件，不能把蓝图顺序当作强制重排或依赖声明。
+DSHBP2 是可移植数据格式，不是执行脚本或完整合并计划。精确版本记录分享方的身份，顺序是归并参考；不从包名或排列猜测依赖关系。
 
-1. 已存在、来源和版本匹配的可管理包复用；不同来源、不同版本或受保护／不可用的目标列为阻碍，不自动升级、降级或换源。
-2. 缺失的 npm 包按 `packages` 顺序安装，安装时不启用。
-3. 当前启用的完整列表记作 `L`，蓝图的 `bundles` 记作 `B`。
-   最终顺序为 `L + B 中尚未存在于 L 的项`，保留这些新增项在 B 中的先后。
-4. 只启用尚未启用且在 `bundles` 中的项，不重装已匹配的包，不停用或移动任何现有层。
-5. 未出现在蓝图中的本地插件保留；重复导入同一蓝图且本地状态未变化时，无需执行任何动作。
-6. 先预览安装／启用动作和最终顺序，确认后执行。顺序不同本身不构成冲突。
+当前执行入口为 Creator：用户提供码和导入意图，Agent 读取当前 profile，自主选择经过核实的版本和最终顺序，复用原生 `plugin_manager` 安装／启用，再以 `blueprint_apply_order` 提交当前已选列表的完整排列。原蓝图保持不变；偏离记录版本时报告差异。未列出的本地 bundle 默认保留，安装-only 项不授权停用本地插件。
 
-| 当前 L | 外来 B | 结果 |
-| --- | --- | --- |
-| A → B → C | C → D → A | A → B → C → D |
-| A → X → B → C | A → D → B | A → X → B → C → D |
-| A → B → C | C → A | A → B → C（无操作） |
-| A → C，B 已安装但未启用 | B → A | A → C → B（只启用 B） |
+顺序入口不安装、不添加、不停用 bundle；拒绝过期 stamp、重复／遗漏／未知名称，以及受保护位置与分段变化。安装、脚本与兼容性风险授权继续走原生权限体系，Agent 自主决策不代替安全审批。不要求用户例行审阅合并排序计划。
 
-当前协议没有 `before`、`after` 或其他硬顺序约束字段，不从排列或包名猜测依赖。
-需要严格封装组件及默认配置关系时，使用 DSH 原生组合插件。顺序合并成功不证明
-任意插件之间语义兼容；组合包自身的配置层仍可能改变最终生效默认值。
+旧实现采用固定追加策略 `L + B 中尚未存在于 L 的项`，并提供页面 `preview` / `apply` / `result`。这些执行端点现已退役，不将旧端点静默改成重排；已有 v2 文档、字段和蓝图码仍可解析。没有新增格式版本，因为数据含义与编码未改变，而执行策略与入口已显式迁移。
 
-导入后保存的是宿主的一份平面组合，外来蓝图不会成为持续同步的子蓝图。
-安装与启用使用宿主接口；整个多步骤导入不提供跨插件事务、自动重试或整体回滚。
-状态变化会使预览失效；需要重启、操作失败或中断时停止并报告已完成部分。
+归并结果仍是一份平面 profile，不是持续同步的子蓝图。保存配置与运行时生效分别报告：live profile 使用官方重新协调路径，startup profile 需要重启。多步骤导入不是全局事务，失败可能保留已完成更改；不整体回滚、自动重试或重放丢失的响应。顺序 stamp 不是全部 patch 文件的内容版本号。
+
+严格封装组件及默认配置关系时使用原生组合插件；顺序成功不证明插件语义兼容，后层可能影响默认值，profile/home/launch overlays 仍按原生优先级参与。
 
 ## 3. 文本编码
 
@@ -123,21 +110,22 @@ const checked = validate(decode(code));   // 解码之后仍须校验文档
 ```
 
 `encode`／`decode` 负责 JSON 和编码安全边界，`validate` 负责蓝图结构。
-制作工具应在编码前、解码后调用 `validate`。随后还需要当前宿主的导入预览；
+制作工具应在编码前、解码后调用 `validate`。随后还需要核实当前宿主的包身份、权限与实际生效结果；
 不要把生成蓝图码当作执行授权。
 
 ## English summary
 
 DSHBP2 transports a plugin-only JSON document with exact package identities.
 `packages` gives top-level installation request order; `bundles` gives requested
-activations in preferred order. Import keeps the full current active sequence and
-appends only requested names not already active. Matching packages are reused;
-version/source conflicts block application. Absence never disables a local bundle.
+activations in preferred order. Creator resolves versions and ordering under the
+user's import intent, using native management and a guarded permutation-only order
+tool. Version deviations are verified and reported; absence never disables a local bundle.
+The former additive page execution endpoints are retired; v2 artifacts remain readable.
 There are no hard ordering constraints, settings transfers or nested blueprint links.
 
 `DSHBP2:` is the only code format and carries unpadded canonical Base64url of
 raw-DEFLATE-compressed UTF-8 JSON. Raw JSON is not accepted for import. The caps are
 2 MiB input, 1 MiB decoded JSON, and 64 JSON container levels. No signatures or
-encryption are implied. Use `validate(decode(text))` before host preview and
+encryption are implied. Use `validate(decode(text))` before planning native operations and
 `encode(validate(document))` when authoring. The shipped empty-document vectors
 are safe no-op examples; compressed byte-for-byte equality is not required.

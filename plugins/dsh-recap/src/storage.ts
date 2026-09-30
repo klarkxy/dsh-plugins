@@ -70,10 +70,26 @@ const checkpointSchema = z.object({
   createdAt: z.number().int().nonnegative(),
 }).strict()
 
+/**
+ * Persisted card/checkpoint history is append-mostly derived data. Older
+ * builds appended without a cap, so a record past the 1024 limit failed the
+ * whole domain open and disabled the plugin on every boot. Trimming to the
+ * newest entries while parsing lets such records self-heal on the next save;
+ * `domainStore.save` trims again so writes never exceed the limit.
+ */
+export const MAX_STORED_ITEMS = 1024
+
+function boundedItems<S extends z.ZodTypeAny>(item: S) {
+  return z.preprocess(
+    value => (Array.isArray(value) && value.length > MAX_STORED_ITEMS ? value.slice(-MAX_STORED_ITEMS) : value),
+    z.array(item).max(MAX_STORED_ITEMS),
+  )
+}
+
 export const recapStateSchema = z.object({
   settings: settingsSchema,
-  cards: z.array(cardSchema).max(1024),
-  checkpoints: z.array(checkpointSchema).max(1024),
+  cards: boundedItems(cardSchema),
+  checkpoints: boundedItems(checkpointSchema),
 }).strict()
 
 export const recapDomain = defineDomain({
@@ -119,8 +135,8 @@ export function domainStore(domain: RecapDomainHandle): RecapStore {
     async save(state) {
       await table.put('global', {
         settings: { ...state.settings },
-        cards: state.cards.map(card => ({ ...card })),
-        checkpoints: state.checkpoints.map(row => ({
+        cards: state.cards.slice(-MAX_STORED_ITEMS).map(card => ({ ...card })),
+        checkpoints: state.checkpoints.slice(-MAX_STORED_ITEMS).map(row => ({
           ...row,
           items: row.items.map(item => ({ ...item, evidence: [...item.evidence] })),
           constraints: [...row.constraints],

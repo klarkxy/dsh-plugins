@@ -1,6 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { isAbsolute } from 'node:path';
 import { parseConfig } from './config.js';
-import { assess } from './policy.js';
+import { assess, hardRisk } from './policy.js';
+import { assessApproval } from './approval-review.js';
 import { createGate } from './gate.js';
 import { assessEscalation, bindingOf, escalationReason, isNativeEscalation } from './escalation.js';
 import { resolveReviewRoutes, sameRoutes } from './model-route.js';
@@ -34,6 +36,8 @@ export function apply(ctx, raw = {}) {
     return () => { if (control === next) { control = undefined; controlEpoch++; } };
   } });
   const inactiveConfig = parseConfig({ ...config, mode: 'off' });
+  // UI activation owns review, independently of the native preset identity.
+  // Never register official Auto: its fixed FullAccess bundle is not our policy.
   const configFor = exec => control?.config(exec.agent?.session) ?? (controlEpoch ? inactiveConfig : config);
   const controlBinding = exec => JSON.stringify({ epoch: controlEpoch, state: control?.state(exec.agent?.session) });
   if (config.mode === 'off') return;
@@ -60,12 +64,14 @@ export function apply(ctx, raw = {}) {
       cwd: session?.header?.cwd, sandbox, signal: exec.signal,
       subagent: Boolean(session?.header?.parentSession) || session?.header?.origin === 'subagent',
       nested: exec.parent !== undefined, ...info };
-    if (isNativeEscalation(call)) {
+    if (isNativeEscalation(call) || (configFor(exec).approvalReview && ['write', 'edit', 'pwsh', 'bash'].includes(call.tool) &&
+        ['workspace-write', 'danger-full-access'].includes(call.args?.sandbox_permissions))) {
       // These are optional capability reads, not model assertions about its environment.
       const fs = ctx.get?.('fs');
       const shell = ctx.get?.('shell');
-      const paths = [call.cwd, ...(call.tool === 'bash' ? [] : [call.args.file_path])];
-      call.localExecution = paths.every(p => typeof p === 'string' && fs?.processPathFromHostPath?.(p) === p);
+      const paths = [call.cwd, ...(['bash', 'pwsh'].includes(call.tool)
+        ? (call.args.workdir === undefined ? [] : [call.args.workdir]) : [call.args.file_path])];
+      call.localExecution = paths.every(p => typeof p === 'string' && isAbsolute(p) && fs?.processPathFromHostPath?.(p) === p);
       call.jobsAvailable = typeof ctx.get !== 'function' || ctx.get('jobs') !== undefined;
       call.shellConfined = ['read-only', 'workspace-write', 'danger-full-access'].includes(shell?.sandboxMode);
     }
@@ -93,6 +99,10 @@ export function apply(ctx, raw = {}) {
     if (config.mode === 'shadow' || config.mode === 'off') return undefined;
     if (exec.signal.aborted || lifetime.signal.aborted) return 'safe-auto: CANCELLED';
     try {
+      if (config.approvalReview) {
+        const hard = hardRisk(callOf(exec));
+        return hard ? `safe-auto: ${hard.code}` : undefined;
+      }
       const hard = assess(callOf(exec), config);
       if (hard.kind === 'deny') return `safe-auto: ${hard.code}`;
       const saved = decisions.get(exec.token);
@@ -118,6 +128,13 @@ export function apply(ctx, raw = {}) {
     const config = configFor(exec);
     const selectedControl = controlBinding(exec);
     if (config.mode === 'off') return next();
+    if (config.approvalReview) {
+      if (exec.signal.aborted || lifetime.signal.aborted) return { kind: 'cancel' };
+      const hard = hardRisk(callOf(exec));
+      if (hard && config.mode !== 'shadow') return { kind: 'deny', reason: `safe-auto: ${hard.code}` };
+      // Native policy remains authoritative; this opt-in never manufactures asks.
+      return next();
+    }
     let decision;
     try {
       if (decisions.size >= 1024) decision = { kind: 'deny', code: 'TOO_MANY_PENDING_CALLS' };
@@ -162,8 +179,15 @@ export function apply(ctx, raw = {}) {
   ctx.on('tools/execute', async (exec, next) => {
     const config = configFor(exec);
     if (config.mode === 'shadow' || config.mode === 'off') return next();
-    const saved = decisions.get(exec.token);
-    if (saved?.kind !== 'escalation') return next();
+    let saved = decisions.get(exec.token);
+    if (config.approvalReview) {
+      if (!['write', 'edit', 'pwsh', 'bash'].includes(exec.name) ||
+          !['workspace-write', 'danger-full-access'].includes(exec.arguments?.sandbox_permissions)) return next();
+      const call = callOf(exec, true);
+      saved = { kind: 'approval', binding: bindingOf(call, assessApproval(call, config)), signal: exec.signal, controlBinding: controlBinding(exec) };
+      if (decisions.size >= 1024) return next();
+      decisions.set(exec.token, saved);
+    } else if (saved?.kind !== 'escalation') return next();
     const store = { exec, saved, active: true, claimed: false };
     try { return await execution.run(store, next); }
     finally { store.active = false; }
@@ -180,6 +204,50 @@ export function apply(ctx, raw = {}) {
     const config = configFor(store?.exec ?? { agent: req.agent });
     if (store?.saved.controlBinding !== undefined && store.saved.controlBinding !== controlBinding(store.exec)) return 'rejected';
     if (config.mode === 'shadow' || config.mode === 'off') return next();
+    if (config.approvalReview) {
+      // The waterfall is not a human-only channel. Active opt-in owns all asks:
+      // missing evidence must reject, never delegate to another automatic answerer.
+      if (req.signal?.aborted || lifetime.signal.aborted) return 'cancelled';
+      if (!store || store.saved.kind !== 'approval') return 'rejected';
+      const { exec, saved } = store;
+      const matches = () => req.agent === exec.agent && req.toolName === exec.name && req.callId === exec.callId &&
+        req.signal === exec.signal && req.reason === escalationReason(callOf(exec));
+      if (!matches()) return 'rejected';
+      if (!store.active || store.claimed) return 'rejected';
+      store.claimed = true;
+      const signal = AbortSignal.any([saved.signal, exec.signal, req.signal, lifetime.signal]);
+      const started = performance.now();
+      let reviewed;
+      const bound = () => {
+        if (signal.aborted || !store.active || decisions.get(exec.token) !== saved || saved.controlBinding !== controlBinding(exec) || !matches()) return false;
+        try {
+          const current = configFor(exec), call = callOf(exec, true);
+          return current.approvalReview && current.mode !== 'off' && current.mode !== 'shadow' &&
+            bindingOf(call, assessApproval(call, current)) === saved.binding && (!reviewed || sameReviewer(exec, reviewed));
+        } catch { return false; }
+      };
+      const finish = (outcome, source, decision) => {
+        if (signal.aborted) outcome = 'cancelled';
+        else if (!bound()) outcome = 'rejected';
+        try { ctx.logger.info('safe-auto %s', JSON.stringify({ phase: 'approval', tool: exec.name, callId: String(exec.callId),
+          decision: outcome, source, code: decision?.code, scope: 'this-call-only', durationMs: Math.round(performance.now() - started) })); }
+        catch { return 'rejected'; }
+        return outcome;
+      };
+      if (!bound()) return finish('rejected', 'binding');
+      let decision;
+      try { decision = await gate.decide({ ...callOf(exec, true), signal }, 'approval', config); }
+      catch { decision = { kind: 'ask', code: 'REVIEW_UNAVAILABLE' }; }
+      if (decision.kind === 'allow') reviewed = decision;
+      if (!bound()) return finish('rejected', 'binding', decision);
+      if (performance.now() - started > config.escalationApprovalTtlMs) decision = { kind: 'ask', code: 'APPROVAL_LEASE_EXPIRED' };
+      if (decision.kind === 'allow') return finish('allowed-once', 'reviewer', decision);
+      if (decision.kind === 'deny') return finish('rejected', 'reviewer', decision);
+      if (decision.kind === 'cancel') return finish('cancelled', 'reviewer', decision);
+      // Uncertainty, unavailable review, budget exhaustion and expired leases
+      // fail closed. No verified human-only DSH contract is available here.
+      return finish('rejected', 'policy', decision);
+    }
     if (!store) return config.mode === 'unattended' ? (req.signal?.aborted ? 'cancelled' : 'rejected') : next();
     const { exec, saved } = store;
     if (!store.active || store.claimed) return 'rejected';

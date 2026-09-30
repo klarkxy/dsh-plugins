@@ -64,6 +64,24 @@ pnpm check                                         # 全仓检查
 - `engines.dsh` 也只写开放下界。
 - 例外：确实需要独立副本的无状态工具包可以进 `dependencies`（官方文档允许的口径），但先确认它不在宿主安装目录里。
 
+## 客户端 UI：@deepseek-ai/dsh-client-ui-primitives
+
+宿主提供的纯 React 原子组件包（控件、图标、Markdown、JSON 检视器，不依赖 cordis）。功能插件的浏览器端界面用它拼装，不重画宿主已有的控件：`Button`、`Input`、`Checkbox`、`Switch`、`Tag`、`Pill`、`SegmentedTabs`、`Menu`、`Modal`、`Tooltip`、`Toast`、`DisclosureRow`、`StateDot`、`PathLabel`、设置表单套件，以及 `useAnchoredPosition`、`useDismissOnOutsidePointer`、`useModalLayer` 等 hook。几何、焦点环、状态和本地化都由宿主掌握，抄一份就会在下次换肤时掉队。原生 `<select>` 是唯一例外：官方组件里没有它，保留平台控件并套用 plugin-kit 契约的 `dsh-ui-select` 即可。
+
+声明与打包是固定的三步，新插件照抄现有插件（如 `plugins/dsh-zhihu`）：
+
+- `package.json` 的 `dsh.bundle.client.inject` 里列出 `@deepseek-ai/dsh-client-ui-primitives`，运行时由宿主注入，插件不带物理副本。
+- 它是「官方包依赖约定」的例外：**不进 `dependencies`，也不进 `peerDependencies`**，只在 `devDependencies` 写精确版本供本地 typecheck/测试（它的版本兼容由 inject 机制保证，不走 loader 的 peer 范围检查）。
+- `tsdown.config.ts` 的 `deps.neverBundle` 必须包含 `react`、`react/jsx-runtime`、`@deepseek-ai/dsh-client-ui-primitives`（用到 `react-dom` 时一并加入）；`@klarkxy/dsh-plugin-kit` 的浏览器安全入口（`client-utils`、`official-ui`、`model-menu`、`contracts`）放 `alwaysBundle`。
+
+样式与布局：
+
+- 排版、卡片、表单、横幅、空态、浮层用 `@klarkxy/dsh-plugin-kit/official-ui` 的 `officialUiCss(roots)`，样式限定在插件自己的根类名下，两个插件可挂同名类互不影响。
+- 颜色、圆角、层级、焦点环直接写宿主 `--dsw-*` token（白名单即 `OFFICIAL_THEME_TOKEN_NAMES`），不另起私有别名、不带字面量回落；写错 token 不报错而是静默丢样式，token 守卫测试会拦截白名单外的引用。
+- `Modal` 和 `Menu` 会 portal 到 `document.body`，脱离插件子树，portal 出来的浮层要在 portal 内部的元素上单独挂根类名才有样式。
+
+测试：vitest 用 `vitest.editor-plugins.config.ts` 里的别名把该包指到 `scripts/editor-plugins/ui-primitives-stub.tsx`；Node SSR 测试（如 dsh-safe-auto、dsh-blueprint）在 `require` 层打桩。不要为了在测试里跑通而引入真实组件包或 jsdom 之外的渲染环境。
+
 ## 插件配置入口
 
 插件自己的设置统一注册到 `plugins.bundle.config`，`key` 必须为 npm 包名；某个 bundle 行自己的设置使用 `plugins.row.config`。不要注册 `settings.section`、`settings.plugins.tab` 或旧的 `dsh-editor.settings.*`，也不要在插件页未声明时回退到全局设置。`slots.inject()` 等待宿主声明并负责卸载回收；标题与导航由宿主插件页提供。功能性搜索面板可以保留，但不要在那里重复提供凭据设置。迁移入口时保留 RPC、凭据引用、存储结构和已保存的开关，不触发模型调用。

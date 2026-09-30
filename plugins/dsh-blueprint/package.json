@@ -7,7 +7,7 @@
   "main": "index.mjs",
   "exports": {
     ".": "./index.mjs",
-    "./core": "./blueprint.mjs",
+    "./core": "./core.mjs",
     "./codec": "./codec.mjs",
     "./client": "./client.js",
     "./package.json": "./package.json",
@@ -29,12 +29,24 @@
     "ACCEPTANCE.md"
   ],
   "scripts": {
-    "build": "node --check index.mjs && node --check host-rpc.mjs && node --check client.js && node --check official.mjs && node --check engine.mjs && node --check blueprint.mjs && node --check codec.mjs && node --check creator-guidance.mjs",
+    "build": "node --check index.mjs && node --check host-rpc.mjs && node --check client.js && node --check official.mjs && node --check core.mjs && node --check tools.mjs && node --check order.mjs && node --check blueprint.mjs && node --check codec.mjs && node --check creator-guidance.mjs",
     "test": "node --test tests/*.test.mjs"
   },
   "engines": {
     "node": ">=22",
     "dsh": ">=0.1.7-0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-app-boot": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-atomic-write": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-plugin-manager": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-sandbox": ">=0.1.7-rc.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-app-boot": { "optional": true },
+    "@deepseek-ai/dsh-atomic-write": { "optional": true },
+    "@deepseek-ai/dsh-plugin-manager": { "optional": true },
+    "@deepseek-ai/dsh-sandbox": { "optional": true }
   },
   "license": "MIT",
   "author": "klarkxy",
@@ -54,13 +66,15 @@
     },
     "client": {
       "platform": "web",
-      "immediately": true,
       "inject": [
-        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-client-ui-primitives",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-connection"
       ]
     }
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.2"
   },
   "dshRelease": {
     "contentHash": "381890dc51041dea7023633c58f0a0f66abd636d2191acea32cdd7e354ed8263"

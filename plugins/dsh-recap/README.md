@@ -11,15 +11,15 @@ npm install @klarkxy/dsh-recap
 dsh plugin --profile web add @klarkxy/dsh-recap
 ```
 
-Long turns and returning after the idle interval (default 15 minutes of focused document/user activity, not assistant streaming, and not while the chat panel is `hidden`) can generate recaps in the background. The chat events seat is a quiet lifecycle controller and renders no card, button, empty state, or error. Status reads do not call the model; each watermark gets at most one generation unless you retry the card or request a manual `refresh`. Checkpoints are injected only at host `agent/pre-step` on meaningful boundaries, using native `createUserMessage`.
+Long turns and returning after the idle interval (default 15 minutes of focused document/user activity, not assistant streaming, and not while the chat panel is `hidden`) can generate recaps in the background. The chat events seat is a quiet lifecycle controller: it renders nothing until the session has a stored recap, then shows the recap cards with Generate, Cancel, and Regenerate (regenerating a finished recap asks for a second click). Status reads do not call the model; each watermark gets at most one generation unless you retry the card or request a manual `refresh`. Checkpoints are injected only at host `agent/pre-step` on meaningful boundaries, using native `createUserMessage`.
 
 ## Plugin page settings
 
-`Settings → Plugins → Task Recap` carries one model row per feature: **Recap card model** for recap cards and **Semantic checkpoint model** for semantic checkpoints. Both are optional. A saved route is used for that feature's own call as an explicit model; an empty selection follows the live session model and then the host default chat model. Only these two features are affected; a saved route selects a model but is not evidence of connectivity.
+`Settings → Plugins → Task Recap` has switches for recap cards, task checkpoints, and semantic checkpoints, the away interval in minutes (1–180), and one model row per feature: **Recap card model** for recap cards and **Semantic checkpoint model** for semantic checkpoints. Both are optional. A saved route is used for that feature's own call as an explicit model; an empty selection follows the live session model and then the host default chat model. Only these two features are affected; a saved route selects a model but is not evidence of connectivity.
 
 When Mood is active in the same profile, Recap reads its task contract through `ctx.aiMood.getContract(sessionId)` for checkpoint context.
 
-The per-ability switches have no settings UI: they can be changed through the `update` RPC, or by disabling the whole plugin under Settings → Plugins. Turning an ability off cancels in-flight generation and stops auto injection. Stored recaps remain. Unloading the plugin waits for pending writes and ignores later session events.
+The same switches can also be changed through the `update` RPC. Turning an ability off cancels in-flight generation and stops auto injection. Stored recaps remain. Unloading the plugin waits for pending writes and ignores later session events.
 
 ## Host RPC
 

@@ -7,16 +7,28 @@ import {
   useState,
   type ChangeEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
 } from 'react';
+import {
+  Modal,
+  Pill,
+  SegmentedTabs,
+  StateDot,
+  type SegmentedTab,
+} from '@deepseek-ai/dsh-client-ui-primitives';
+import { translator, useHostLocale, useT, ZhihuLocaleContext, type HostLocaleService, type Translate } from './client-locale.ts'
 import { ZHIHU_CREDENTIAL_REF, ZHIHU_RPC_CHANNEL, type ZhihuRpcResult } from './contracts.ts'
 import { createZhihuClientState, type ZhihuClientState } from './client-state.ts'
 import { zhihuClientStyles } from './client-styles.ts'
 import { hostComponentsFromRenderProps, renderInput, renderSelect, zhihuQueryKeyDown, type HostButton, type HostInput, type HostSelect } from './client-host-ui.tsx'
-import { ZhihuButton } from './client-host-ui.tsx'
+import { ZhihuButton, ZhihuDetails } from './client-host-ui.tsx'
+import { openPlatformOptions, ZhihuOpenPlatformSection } from './client-open-platform.tsx'
+import type { ZhihuOpenPlatformOperation } from './open-platform.ts'
+import { ZhihuQuotaSection } from './client-quota.tsx'
 
 export const name = 'dsh-zhihu-client'
-export const inject = ['slots', 'connection', 'remote', 'remote.credentials'] as const
+export const inject = ['slots', 'connection', 'remote', 'remote.credentials', 'locale'] as const
 
 const PACKAGE_NAME = '@klarkxy/dsh-zhihu'
 const SLOT_ORDER = 120
@@ -58,6 +70,7 @@ type ZhihuClientContext = Context & {
   slots: SlotHandle
   connection: { rpc: RpcCaller }
   remote: { credentials: RemoteCredentials }
+  locale?: HostLocaleService
 }
 
 function wrapCredentials(remote: RemoteCredentials): CredentialsApi {
@@ -93,15 +106,35 @@ function safeUrl(url: string): string | null {
 type Failure = { kind: 'credential' | 'network' | 'request'; text: string }
 
 /** Credential absence and transport failure read differently from a plain bad request. */
-function failureOf(code: string, message: string): Failure {
+function failureOf(code: string, message: string, t: Translate = translator()): Failure {
   if (code === 'token-missing') {
-    return { kind: 'credential', text: '未配置知乎 Access Secret 或凭证不可用，请到「设置」页完成配置。' }
+    return { kind: 'credential', text: t('未配置知乎 Access Secret 或凭证不可用，请到「设置」页完成配置。', 'Zhihu Access Secret is missing or unavailable. Set it on the Settings tab.') }
   }
-  return { kind: 'request', text: `请求失败：${message}` }
+  return { kind: 'request', text: t(`请求失败：${message}`, `Request failed: ${message}`) }
 }
 
-function networkFailure(cause: unknown): Failure {
-  return { kind: 'network', text: `网络或连接失败：${cause instanceof Error ? cause.message : String(cause)}` }
+function networkFailure(cause: unknown, t: Translate = translator()): Failure {
+  const detail = cause instanceof Error ? cause.message : String(cause)
+  return { kind: 'network', text: t(`网络或连接失败：${detail}`, `Network or connection failed: ${detail}`) }
+}
+
+/**
+ * One external-link behaviour for the whole page: an http(s) anchor that the
+ * desktop bridge opens in the system browser when present, and a plain new tab
+ * otherwise. Anything that is not http(s) degrades to text.
+ */
+export function ExternalLink(props: { url: string; children: ReactNode; className?: string }): ReactNode {
+  const url = safeUrl(props.url)
+  if (!url) return <span className={props.className}>{props.children}</span>
+  const open = (event: MouseEvent<HTMLAnchorElement>) => {
+    const bridge = (globalThis as { dshWindow?: { openExternal?(url: string): void } }).dshWindow
+    if (bridge?.openExternal) { event.preventDefault(); bridge.openExternal(url) }
+  }
+  return (
+    <a className={props.className ?? 'zhihu-link'} href={url} target="_blank" rel="noreferrer noopener" onClick={open}>
+      {props.children}
+    </a>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -110,12 +143,37 @@ function networkFailure(cause: unknown): Failure {
 
 type Mode = 'search' | 'global' | 'hot' | 'knowledge' | 'ask'
 
-const MODE_LABEL: Record<Mode, string> = {
-  search: '站内搜索',
-  global: '全网搜索',
-  hot: '知乎热榜',
-  knowledge: '知识库检索',
-  ask: '直答',
+const MODES: readonly Mode[] = ['search', 'global', 'hot', 'knowledge', 'ask']
+
+function modeLabel(mode: Mode, t: Translate): string {
+  switch (mode) {
+    case 'search': return t('站内搜索', 'Zhihu search')
+    case 'global': return t('全网搜索', 'Web search')
+    case 'hot': return t('知乎热榜', 'Trending')
+    case 'knowledge': return t('知识库检索', 'Knowledge base search')
+    case 'ask': return t('直答', 'Direct answer')
+  }
+}
+
+function testOptions(t: Translate) {
+  return [
+    ...MODES.map(value => ({ value, label: modeLabel(value, t) })),
+    ...openPlatformOptions(t).filter(option => option.value !== 'quota'),
+  ]
+}
+
+export const TEST_OPTIONS = testOptions(translator('zh'))
+type TestOperation = Mode | Exclude<ZhihuOpenPlatformOperation, 'quota'>
+
+export function ZhihuTestSelector({ value, onChange, Select }: {
+  value: TestOperation; onChange(value: TestOperation): void; Select?: HostSelect
+}) {
+  const t = useT()
+  const options = testOptions(t)
+  return renderSelect(Select, {
+    'aria-label': t('测试功能', 'Feature to test'), value, options,
+    onChange: next => { if (options.some(option => option.value === next)) onChange(next as TestOperation) },
+  }, 'dsh-ui-select')
 }
 
 const MODE_ENDPOINT: Record<Mode, string> = {
@@ -129,16 +187,16 @@ const MODE_ENDPOINT: Record<Mode, string> = {
 // Mirrors ZHIHU_ASK_MODELS in ./operations.ts; the backend validates the value
 // and falls back to its own default when the model is unknown.
 const ASK_MODELS = [
-  { value: 'zhida-thinking-1p5', label: '思考' },
-  { value: 'zhida-fast-1p5', label: '快速' },
-  { value: 'zhida-agent', label: '智能体' },
+  { value: 'zhida-thinking-1p5', zh: '思考', en: 'Thinking' },
+  { value: 'zhida-fast-1p5', zh: '快速', en: 'Fast' },
+  { value: 'zhida-agent', zh: '智能体', en: 'Agent' },
 ] as const
 type AskModel = (typeof ASK_MODELS)[number]['value']
 
 const SCOPE_OPTIONS = [
-  { value: 'public', label: '公开库' },
-  { value: 'personal', label: '个人库' },
-  { value: 'subscription', label: '订阅库' },
+  { value: 'public', zh: '公开库', en: 'Public' },
+  { value: 'personal', zh: '个人库', en: 'Personal' },
+  { value: 'subscription', zh: '订阅库', en: 'Subscribed' },
 ] as const
 type RecallScope = (typeof SCOPE_OPTIONS)[number]['value']
 
@@ -194,14 +252,14 @@ function parseOutcome(mode: Mode, value: unknown): SearchOutcome | null {
   if (mode === 'hot') {
     return {
       mode: 'hot',
-      items: items.map((item) => ({ title: text(item.title, '(无标题)'), url: text(item.url), summary: text(item.summary) })),
+      items: items.map((item) => ({ title: text(item.title, '—'), url: text(item.url), summary: text(item.summary) })),
     }
   }
   if (mode === 'knowledge') {
     return {
       mode: 'knowledge',
       items: items.map((item) => ({
-        docName: text(item.docName, '(未命名文档)'),
+        docName: text(item.docName, '—'),
         originUrl: text(item.originUrl),
         snippets: Array.isArray(item.snippets) ? item.snippets.filter((s): s is string => typeof s === 'string') : [],
       })),
@@ -214,121 +272,110 @@ function parseOutcome(mode: Mode, value: unknown): SearchOutcome | null {
     mode,
     emptyReason,
     items: items.map((item) => ({
-      title: text(item.title, '(无标题)'),
-      type: text(item.type, '内容'),
+      title: text(item.title, '—'),
+      type: text(item.type),
       url: text(item.url),
       summary: text(item.summary),
       votes: typeof item.votes === 'number' ? item.votes : 0,
       comments: typeof item.comments === 'number' ? item.comments : 0,
-      author: text(item.author, '匿名'),
+      author: text(item.author),
       editTime: text(item.editTime),
     })),
   }
 }
 
 function LinkOrText(props: { url: string; label: string; className?: string }): ReactNode {
-  const url = safeUrl(props.url)
-  if (!url) return (
-    <span className={props.className}>
-      {props.label}
-    </span>
-  );
-  return (
-    <a
-      className={props.className ?? 'zhihu-link'}
-      href={url}
-      target="_blank"
-      rel="noreferrer">
-      {props.label}
-    </a>
-  );
+  return <ExternalLink url={props.url} className={props.className}>{props.label}</ExternalLink>
 }
 
 function OutcomeView(props: { outcome: SearchOutcome; stale: boolean }): ReactNode {
   const { outcome, stale } = props
+  const t = useT()
+  const staleBanner = stale ? <div className="dsh-ui-banner" role="status">
+    {t('查询已变化，以下内容对应旧查询，请重新搜索。', 'The query changed; these results are for the previous query. Search again.')}
+  </div> : null
   let body: ReactNode = null
   let summary = ''
   if (outcome.mode === 'ask') {
-    summary = `直答（${outcome.answer.model || '默认模型'}）`
+    summary = t(`直答（${outcome.answer.model || '默认模型'}）`, `Direct answer (${outcome.answer.model || 'default model'})`)
     body = <div>
       {outcome.answer.reasoning
-        ? <details className="zhihu-ask-reasoning">
-        <summary>
-          思考过程
+        ? <details className="zhihu-ask-reasoning dsh-ui-card dsh-ui-card--flat">
+        <summary className="dsh-ui-heading">
+          {t('思考过程', 'Reasoning')}
         </summary>
-        <p>
+        <p className="dsh-ui-help">
           {outcome.answer.reasoning}
         </p>
       </details>
         : null}
-      <p className="zhihu-ask-content">
+      <p className="zhihu-ask-content dsh-ui-wrap">
         {outcome.answer.content}
       </p>
     </div>
   } else if (outcome.items.length === 0) {
     const reason = outcome.mode === 'search' || outcome.mode === 'global' ? outcome.emptyReason : undefined
     return (
-      <div data-testid="zhihu-results" className="zhihu-results">
-        {stale ? <div className="zhihu-stale" role="status">
-          查询已变化，以下内容对应旧查询，请重新搜索。
-        </div> : null}
-        <p className="zhihu-results-summary">
-          {`未找到相关结果${reason ? `（${reason}）` : ''}。`}
+      <div data-testid="zhihu-results" className="dsh-ui-stack">
+        {staleBanner}
+        <p className="dsh-ui-empty">
+          {t(`未找到相关结果${reason ? `（${reason}）` : ''}。`, `No results${reason ? ` (${reason})` : ''}.`)}
         </p>
       </div>
     );
   } else if (outcome.mode === 'knowledge') {
-    summary = `知识库检索共 ${outcome.items.length} 条`
-    body = <ul className="zhihu-result-list">
-      {outcome.items.map((item, index) => <li key={`${item.docName}:${index}`} className="zhihu-result-item">
-        <span className="zhihu-result-title">
+    summary = t(`知识库检索共 ${outcome.items.length} 条`, `${outcome.items.length} knowledge base results`)
+    body = <ul className="dsh-ui-list">
+      {outcome.items.map((item, index) => <li key={`${item.docName}:${index}`} className="dsh-ui-card dsh-ui-card--flat dsh-ui-list-row">
+        <span className="dsh-ui-list-name">
           {item.docName}
         </span>
         {item.originUrl && safeUrl(item.originUrl)
           ? <LinkOrText url={item.originUrl} label={item.originUrl} />
           : null}
         {item.snippets.map((snippet, snippetIndex) =>
-          <span key={snippetIndex} className="zhihu-result-snippet">
+          <span key={snippetIndex} className="zhihu-result-snippet dsh-ui-help">
             {snippet}
           </span>)}
       </li>)}
     </ul>
   } else if (outcome.mode === 'hot') {
-    summary = `知乎热榜共 ${outcome.items.length} 条`
-    body = <ul className="zhihu-result-list">
-      {outcome.items.map((item, index) => <li key={`${index}`} className="zhihu-result-item">
+    summary = t(`知乎热榜共 ${outcome.items.length} 条`, `${outcome.items.length} trending items`)
+    body = <ul className="dsh-ui-list">
+      {outcome.items.map((item, index) => <li key={`${index}`} className="dsh-ui-card dsh-ui-card--flat dsh-ui-list-row">
         <LinkOrText
           url={item.url}
           label={item.title}
-          className="zhihu-result-title zhihu-link" />
-        {item.summary ? <span className="zhihu-result-summary">
+          className="dsh-ui-list-name zhihu-link" />
+        {item.summary ? <span className="dsh-ui-meta">
           {item.summary}
         </span> : null}
       </li>)}
     </ul>
   } else {
-    summary = `${MODE_LABEL[outcome.mode]}共 ${outcome.items.length} 条`
-    body = <ul className="zhihu-result-list">
-      {outcome.items.map((item, index) => <li key={`${item.title}:${index}`} className="zhihu-result-item">
+    summary = t(`${modeLabel(outcome.mode, t)}共 ${outcome.items.length} 条`, `${modeLabel(outcome.mode, t)}: ${outcome.items.length} results`)
+    body = <ul className="dsh-ui-list">
+      {outcome.items.map((item, index) => <li key={`${item.title}:${index}`} className="dsh-ui-card dsh-ui-card--flat dsh-ui-list-row">
         <LinkOrText
           url={item.url}
           label={item.title}
-          className="zhihu-result-title zhihu-link" />
-        <span className="zhihu-result-meta">
-          {`类型：${item.type}　作者：${item.author}　赞同 ${item.votes}　评论 ${item.comments}${item.editTime ? `　时间：${item.editTime}` : ''}`}
+          className="dsh-ui-list-name zhihu-link" />
+        <span className="dsh-ui-list-desc">
+          {t(
+            `${item.type || '内容'} · ${item.author || '匿名'} · 赞同 ${item.votes} · 评论 ${item.comments}${item.editTime ? ` · ${item.editTime}` : ''}`,
+            `${item.type || 'Content'} · ${item.author || 'Anonymous'} · ${item.votes} upvotes · ${item.comments} comments${item.editTime ? ` · ${item.editTime}` : ''}`,
+          )}
         </span>
-        {item.summary ? <span className="zhihu-result-summary">
+        {item.summary ? <span className="dsh-ui-meta">
           {item.summary}
         </span> : null}
       </li>)}
     </ul>
   }
   return (
-    <div data-testid="zhihu-results" className="zhihu-results">
-      {stale ? <div className="zhihu-stale" role="status">
-        查询已变化，以下内容对应旧查询，请重新搜索。
-      </div> : null}
-      <p className="zhihu-results-summary" aria-live="polite">
+    <div data-testid="zhihu-results" className="dsh-ui-stack">
+      {staleBanner}
+      <p className="dsh-ui-heading">
         {summary}
       </p>
       {body}
@@ -372,32 +419,53 @@ function useAlive() {
   return alive
 }
 
-function CapabilitiesNote(): ReactNode {
+/**
+ * Collapsible detail block. The primitive owns the row chrome; the body keeps
+ * the contract's help tier so a long explanation never sits in the page flow.
+ */
+export function CapabilitiesNote(props: { defaultOpen?: boolean }): ReactNode {
+  const t = useT()
   return (
-    <details className="zhihu-guide" data-testid="zhihu-capabilities">
-      <summary>可用能力</summary>
-      <p className="zhihu-hint">站内搜索、全网搜索、热榜、直答和知识库检索。全网搜索可在「网络搜索」中启用。</p>
-    </details>
+    <ZhihuDetails title={t('可用能力', 'What this plugin does')} defaultOpen={props.defaultOpen} testId="zhihu-capabilities">
+      <li>{t('测试：站内搜索、全网搜索、热榜、直答、知识库检索，以及问题与创作查询。', 'Test: Zhihu search, web search, trending, direct answers, knowledge base search, and question/creator queries.')}</li>
+      <li>{t('问题与创作：问题推荐、回答摘要、本人已发布内容及评论、账号与单篇创作数据。', 'Questions and creator: question recommendations, answer summaries, your published content and comments, account and per-post stats.')}</li>
+      <li>{t('统计：本地记录的每日调用次数、失败次数与结果条数。', 'Stats: daily calls, failures and result counts recorded locally.')}</li>
+      <li>{t('官方用量：知乎返回的官方剩余额度。', 'Official quota: the remaining quota Zhihu reports.')}</li>
+      <li>{t('知识库：读取列表和上传参考资料，文件进入知乎云端。', 'Knowledge base: list bases and upload references; files go to Zhihu cloud.')}</li>
+      <li>{t('全部能力共用此 Access Secret，不支持 OAuth 身份切换。', 'Every feature shares this Access Secret; OAuth identity switching is not supported.')}</li>
+      <li>{t('模型工具需在 Agent 中加载 ', 'For model tools, load ')}<code>@klarkxy/dsh-zhihu/tools</code>{t('，仅配置密钥不会启用工具。', ' in the Agent; a key alone does not enable them.')}</li>
+      <li>{t('请求均需手动触发（官方用量在打开页签时加载），不会自动重试。', 'Requests run only when you trigger them (official quota loads when its tab opens) and are never retried automatically.')}</li>
+    </ZhihuDetails>
   )
 }
 
 function SettingsShell(props: { children?: ReactNode }): ReactNode {
+  const t = useT()
+  // Credentials lead the tab; what the plugin can do is secondary and folded.
   return (
-    <section className="zhihu-settings" data-testid="zhihu-settings" aria-label="知乎凭证设置">
-      <CapabilitiesNote />
+    <section className="dsh-ui-stack" data-testid="zhihu-settings" aria-label={t('知乎凭证设置', 'Zhihu credential settings')}>
       {props.children}
+      <CapabilitiesNote />
     </section>
   );
 }
 
+/** Which credential action is in flight; the two never share a spinner. */
+export type CredentialAction = 'save' | 'clear' | null
+
 function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButton; Input?: HostInput }): ReactNode {
   const { credentials } = props
+  const t = useT()
   const alive = useAlive()
   const [state, setState] = useState<CredentialLoad>({ status: 'loading' })
   const [keyDraft, setKeyDraft] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<CredentialAction>(null)
+  const [confirmClear, setConfirmClear] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [note, setNote] = useState<string | undefined>(undefined)
+  const busy = pending !== null
+  // Typing again means the previous "saved" note no longer describes the field.
+  const editDraft = (value: string) => { setKeyDraft(value); setNote(undefined) }
 
   const load = useCallback(async (): Promise<void> => {
     setState((current) => (current.status === 'ready' ? current : { status: 'loading' }))
@@ -417,9 +485,9 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
   if (state.status === 'loading') {
     return (
       <SettingsShell>
-        <p className="zhihu-status" role="status">
+        <p className="dsh-ui-loading" role="status">
           {activityDots()}
-          正在读取凭证状态…
+          {t('正在读取凭证状态…', 'Loading credential status…')}
         </p>
       </SettingsShell>
     );
@@ -428,12 +496,14 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
   if (state.status === 'error') {
     return (
       <SettingsShell>
-        <p className="zhihu-error" role="alert">
-          {`读取失败：${state.error} `}
-          <ZhihuButton host={props.Button} className="zhihu-button" onClick={() => void load()}>
-            重试
-          </ZhihuButton>
+        <p className="dsh-ui-error" role="alert">
+          {t(`读取失败：${state.error}`, `Could not load: ${state.error}`)}
         </p>
+        <div className="dsh-ui-actions">
+          <ZhihuButton host={props.Button} onClick={() => void load()}>
+            {t('重试', 'Retry')}
+          </ZhihuButton>
+        </div>
       </SettingsShell>
     );
   }
@@ -445,78 +515,76 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
   const keyValue = keyDraft.trim()
 
   const statusText = keyLocked
-    ? '由环境变量提供（只读）'
+    ? t('由环境变量提供（只读）', 'Provided by an environment variable (read-only)')
     : configured
-      ? `已保存${credential?.source ? `（来源：${credential.source}）` : ''}`
-      : '未配置'
-  const dotClass = keyLocked
-    ? 'zhihu-dot zhihu-dot-locked'
-    : configured
-      ? 'zhihu-dot zhihu-dot-configured'
-      : 'zhihu-dot zhihu-dot-missing'
+      ? t(`已保存${credential?.source ? `（来源：${credential.source}）` : ''}`, `Saved${credential?.source ? ` (source: ${credential.source})` : ''}`)
+      : t('未配置', 'Not set')
+  // A locked key needs the reader's attention but is not a failure, so it takes
+  // the warning dot rather than the error one the old palette drew it with.
+  const dotState = keyLocked ? 'warning' : configured ? 'done' : 'idle'
   const placeholder = keyLocked
-    ? '由环境变量提供，无法在界面修改'
+    ? t('由环境变量提供，无法在界面修改', 'Set by an environment variable; cannot be edited here')
     : configured
-      ? '已保存，输入新密钥可覆盖'
-      : '粘贴知乎开放平台 Access Secret'
+      ? t('已保存，输入新密钥可覆盖', 'Saved. Enter a new key to replace it')
+      : t('粘贴知乎开放平台 Access Secret', 'Paste your Zhihu Open Platform Access Secret')
 
   const save = async (): Promise<void> => {
     if (keyLocked || draftFailure !== undefined || keyValue.length === 0 || busy) return
-    setBusy(true)
+    setPending('save')
     setFailure(undefined)
+    setNote(undefined)
     try {
       const result = await credentials.set({ ref: ZHIHU_CREDENTIAL_REF, value: keyValue })
       if (!alive.current) return
       if (!result.ok) { setFailure(result.error.message); return }
       setKeyDraft('')
-      setNote('已保存。')
+      setNote(t('已保存。', 'Saved.'))
       await load()
     } catch (cause) {
       if (!alive.current) return
       setFailure(cause instanceof Error ? cause.message : String(cause))
     } finally {
-      if (alive.current) setBusy(false)
+      if (alive.current) setPending(null)
     }
   }
 
+  // Runs only from the confirmation dialog; the button just opens it.
   const clear = async (): Promise<void> => {
+    setConfirmClear(false)
     if (keyLocked || !configured || busy) return
-    setBusy(true)
+    setPending('clear')
     setFailure(undefined)
+    setNote(undefined)
     try {
       const result = await credentials.unset({ ref: ZHIHU_CREDENTIAL_REF })
       if (!alive.current) return
       if (!result.ok) { setFailure(result.error.message); return }
       setKeyDraft('')
-      setNote('已清除。')
+      setNote(t('已清除。', 'Cleared.'))
       await load()
     } catch (cause) {
       if (!alive.current) return
       setFailure(cause instanceof Error ? cause.message : String(cause))
     } finally {
-      if (alive.current) setBusy(false)
+      if (alive.current) setPending(null)
     }
   }
 
   return (
     <SettingsShell>
-      <dl className="zhihu-status-grid">
-        <dt className="zhihu-status-label">
-          状态
+      <dl className="dsh-ui-readonly">
+        <dt>
+          {t('状态', 'Status')}
         </dt>
-        <dd className="zhihu-status-value">
-          <span className={dotClass} aria-hidden={true} />
+        <dd className="dsh-ui-row">
+          <StateDot state={dotState} />
           {statusText}
         </dd>
       </dl>
-      <div className="zhihu-field">
-        <div className="zhihu-field-heading">
-          <span className="zhihu-field-label" id="zhihu-access-secret-label">Access Secret</span>
-          <a className="zhihu-link" href={ZHIHU_CONSOLE_URL} target="_blank" rel="noreferrer noopener"
-            onClick={event => {
-              const bridge = (globalThis as { dshWindow?: { openExternal?(url: string): void } }).dshWindow
-              if (bridge?.openExternal) { event.preventDefault(); bridge.openExternal(ZHIHU_CONSOLE_URL) }
-            }}>获取密钥</a>
+      <div className="dsh-ui-field">
+        <div className="dsh-ui-label-row">
+          <span className="dsh-ui-label" id="zhihu-access-secret-label">Access Secret</span>
+          <ExternalLink url={ZHIHU_CONSOLE_URL}>{t('获取密钥', 'Get a key')}</ExternalLink>
         </div>
         {renderInput(props.Input, {
           type: 'password',
@@ -525,44 +593,63 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
           placeholder,
           disabled: busy || keyLocked,
           'aria-label': 'Access Secret',
-          onChange: setKeyDraft,
+          onChange: editDraft,
         })}
         {draftFailure === undefined
           ? null
-          : <p className="zhihu-warning" role="alert">
-          {draftFailure === 'blank' ? '密钥不能只包含空白字符。' : '密钥含有非法字符（应为可打印 ASCII，且不是 ENV 赋值行）。'}
+          : <p className="dsh-ui-error" role="alert">
+          {draftFailure === 'blank'
+            ? t('密钥不能只包含空白字符。', 'The key cannot be only whitespace.')
+            : t('密钥含有非法字符（应为可打印 ASCII，且不是 ENV 赋值行）。', 'The key has invalid characters (use printable ASCII, not an ENV assignment line).')}
         </p>}
       </div>
-      {failure !== undefined ? <p className="zhihu-warning" role="alert">
+      {failure !== undefined ? <p className="dsh-ui-error" role="alert">
         {failure}
       </p> : null}
-      {note !== undefined ? <p className="zhihu-saved" role="status">
+      {note !== undefined ? <p className="dsh-ui-notice" role="status">
         {note}
       </p> : null}
-      <div className="zhihu-row">
+      <div className="dsh-ui-actions">
         <ZhihuButton
           host={props.Button}
           variant="danger"
-          className="zhihu-button zhihu-button-danger"
+          className="zhihu-button-danger"
           disabled={busy || keyLocked || !configured}
-          onClick={() => void clear()}>
-          {busy ? <Fragment>
+          onClick={() => setConfirmClear(true)}>
+          {pending === 'clear' ? <Fragment>
             {activityDots()}
-            处理中…
-          </Fragment> : '清除'}
+            {t('清除中…', 'Clearing…')}
+          </Fragment> : t('清除', 'Clear')}
         </ZhihuButton>
         <ZhihuButton
           host={props.Button}
           variant="primary"
-          className="zhihu-button zhihu-button-primary"
           disabled={busy || keyLocked || keyValue.length === 0 || draftFailure !== undefined}
           onClick={() => void save()}>
-          {busy ? <Fragment>
+          {pending === 'save' ? <Fragment>
             {activityDots()}
-            保存中…
-          </Fragment> : '保存'}
+            {t('保存中…', 'Saving…')}
+          </Fragment> : t('保存', 'Save')}
         </ZhihuButton>
       </div>
+      <Modal
+        open={confirmClear}
+        onClose={() => setConfirmClear(false)}
+        title={t('清除 Access Secret？', 'Clear Access Secret?')}
+        closeLabel={t('关闭', 'Close')}
+        // The dialog portals to body; its own element carries the plugin root
+        // class so the contract classes inside it resolve.
+        className="zhihu-panel"
+        footer={<div className="dsh-ui-actions">
+          <ZhihuButton host={props.Button} onClick={() => setConfirmClear(false)}>{t('取消', 'Cancel')}</ZhihuButton>
+          <ZhihuButton host={props.Button} variant="danger" className="zhihu-button-danger" onClick={() => void clear()}>
+            {t('清除', 'Clear')}
+          </ZhihuButton>
+        </div>}>
+        <p className="dsh-ui-help">
+          {t('清除后，搜索、工具和知识库请求会失败，直到重新保存密钥。', 'Search, tools and knowledge base requests will fail until you save a key again.')}
+        </p>
+      </Modal>
     </SettingsShell>
   );
 }
@@ -659,7 +746,24 @@ const CHART_WIDTH = 600
 const CHART_HEIGHT = 176
 const CHART_PAD = { top: 20, right: 12, bottom: 24, left: 36 }
 
+/** Indexes whose bar prints its count: the first maximum and the latest active day. */
+export function usageValueLabels(days: readonly { calls: number }[]): Set<number> {
+  const chosen = new Set<number>()
+  let max = -1
+  let maxIndex = -1
+  let latest = -1
+  days.forEach((day, index) => {
+    if (day.calls <= 0) return
+    if (day.calls > max) { max = day.calls; maxIndex = index }
+    latest = index
+  })
+  if (maxIndex >= 0) chosen.add(maxIndex)
+  if (latest >= 0) chosen.add(latest)
+  return chosen
+}
+
 function UsageChart(props: { days: DailyUsage[]; totals: UsageTotals }): ReactNode {
+  const t = useT()
   const days = props.days
   const maxCalls = Math.max(1, ...days.map((day) => day.calls))
   const plotLeft = CHART_PAD.left
@@ -688,12 +792,16 @@ function UsageChart(props: { days: DailyUsage[]; totals: UsageTotals }): ReactNo
     );
   })
 
+  const labelled = usageValueLabels(days)
   const bars = days.map((day, index) => {
     const x = plotLeft + index * slot + (slot - barWidth) / 2
     const okCalls = Math.max(0, day.calls - day.failures)
     const failHeight = (day.failures / maxCalls) * plotHeight
     const okHeight = (okCalls / maxCalls) * plotHeight
-    const label = `${day.date}：调用 ${day.calls} 次，成功 ${okCalls} 次，失败 ${day.failures} 次，结果 ${day.results} 条`
+    const label = t(
+      `${day.date}：调用 ${day.calls} 次，成功 ${okCalls} 次，失败 ${day.failures} 次，结果 ${day.results} 条`,
+      `${day.date}: ${day.calls} calls, ${okCalls} succeeded, ${day.failures} failed, ${day.results} results`,
+    )
     const parts: ReactNode[] = [
       <rect
         key="hit"
@@ -721,7 +829,9 @@ function UsageChart(props: { days: DailyUsage[]; totals: UsageTotals }): ReactNo
         width={barWidth}
         height={failHeight} />)
     }
-    if (day.calls > 0) {
+    // Only the busiest day and the latest active day carry a figure; every
+    // other bar reads through its tooltip, so the plot stays legible.
+    if (day.calls > 0 && labelled.has(index)) {
       parts.push(<text
         key="n"
         className="zhihu-chart-value"
@@ -764,7 +874,10 @@ function UsageChart(props: { days: DailyUsage[]; totals: UsageTotals }): ReactNo
       className="zhihu-chart"
       viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
       role="img"
-      aria-label={`近 ${USAGE_DAYS} 天知乎工具调用 ${props.totals.calls} 次，失败 ${props.totals.failures} 次，结果 ${props.totals.results} 条`}>
+      aria-label={t(
+        `近 ${USAGE_DAYS} 天知乎工具调用 ${props.totals.calls} 次，失败 ${props.totals.failures} 次，结果 ${props.totals.results} 条`,
+        `Last ${USAGE_DAYS} days: ${props.totals.calls} Zhihu calls, ${props.totals.failures} failed, ${props.totals.results} results`,
+      )}>
       {grid}
       {bars}
       {ticks}
@@ -779,6 +892,7 @@ type UsageLoad =
 
 function UsageSection(props: { rpc: RpcCaller; Button?: HostButton }): ReactNode {
   const { rpc } = props
+  const t = useT()
   const gateRef = useRef<ZhihuClientState | null>(null)
   if (!gateRef.current) gateRef.current = createZhihuClientState()
   const gate = gateRef.current
@@ -797,7 +911,7 @@ function UsageSection(props: { rpc: RpcCaller; Button?: HostButton }): ReactNode
       if (!gate.isCurrent(ticket)) return
       const result = raw as ZhihuRpcResult
       if (!result.ok) { setState({ status: 'error', error: result.error.message }); return }
-      if (!isUsageSummary(result.value)) { setState({ status: 'error', error: '响应格式与契约不符。' }); return }
+      if (!isUsageSummary(result.value)) { setState({ status: 'error', error: 'invalid response shape' }); return }
       setState({ status: 'ready', days: result.value.days })
     } catch (cause) {
       if (!gate.isCurrent(ticket)) return
@@ -807,12 +921,13 @@ function UsageSection(props: { rpc: RpcCaller; Button?: HostButton }): ReactNode
 
   useEffect(() => { void load() }, [load])
 
+  const sectionLabel = t('知乎调用用量', 'Zhihu call usage')
   if (state.status === 'loading') {
     return (
-      <section data-testid="zhihu-usage" aria-label="知乎调用用量">
-        <p className="zhihu-status" role="status">
+      <section data-testid="zhihu-usage" aria-label={sectionLabel}>
+        <p className="dsh-ui-loading" role="status">
           {activityDots()}
-          正在读取用量…
+          {t('正在读取用量…', 'Loading usage…')}
         </p>
       </section>
     );
@@ -820,67 +935,63 @@ function UsageSection(props: { rpc: RpcCaller; Button?: HostButton }): ReactNode
 
   if (state.status === 'error') {
     return (
-      <section data-testid="zhihu-usage" aria-label="知乎调用用量">
-        <p className="zhihu-error" role="alert">
-          {`读取失败：${state.error} `}
-          <ZhihuButton host={props.Button} className="zhihu-button" onClick={() => void load()}>
-            重试
-          </ZhihuButton>
+      <section className="dsh-ui-stack" data-testid="zhihu-usage" aria-label={sectionLabel}>
+        <p className="dsh-ui-error" role="alert">
+          {t(`读取失败：${state.error}`, `Could not load: ${state.error}`)}
         </p>
+        <div className="dsh-ui-actions">
+          <ZhihuButton host={props.Button} onClick={() => void load()}>
+            {t('重试', 'Retry')}
+          </ZhihuButton>
+        </div>
       </section>
     );
   }
 
   const totals = summarizeUsage(state.days, localDayKey())
   const hasAny = totals.calls > 0
+  const times = t('次', '')
   return (
-    <section className="zhihu-usage" data-testid="zhihu-usage" aria-label="知乎调用用量">
-      <p className="zhihu-usage-intro">
-        本机搜索、问答、热榜和知识库的调用次数，不是知乎官方配额或费用。
+    <section className="dsh-ui-stack" data-testid="zhihu-usage" aria-label={sectionLabel}>
+      <p className="dsh-ui-help">
+        {t('本地记录的调用次数，不是知乎官方额度或费用。', 'Calls recorded locally; not Zhihu official quota or billing.')}
       </p>
+      <div className="dsh-ui-actions">
+        <ZhihuButton host={props.Button} onClick={() => void load()}>{t('刷新统计', 'Refresh')}</ZhihuButton>
+      </div>
       <div className="zhihu-usage-cards">
-        <UsageCard label="今日调用" value={totals.todayCalls} unit="次" />
-        <UsageCard label={`近 ${USAGE_DAYS} 天`} value={totals.calls} unit="次" />
-        <UsageCard label="失败" value={totals.failures} unit="次" />
-        <UsageCard label="结果条数" value={totals.results} unit="条" />
+        <UsageCard label={t('今日调用', 'Today')} value={totals.todayCalls} unit={times} />
+        <UsageCard label={t(`近 ${USAGE_DAYS} 天`, `Last ${USAGE_DAYS} days`)} value={totals.calls} unit={times} />
+        <UsageCard label={t('失败', 'Failed')} value={totals.failures} unit={times} />
+        <UsageCard label={t('结果条数', 'Results')} value={totals.results} unit={t('条', '')} />
       </div>
       {hasAny ? <Fragment>
-        <h3 className="zhihu-usage-heading">
-          每日调用次数
+        <h3 className="dsh-ui-heading">
+          {t('每日调用次数', 'Daily calls')}
         </h3>
         <UsageChart days={state.days} totals={totals} />
-        <ul className="zhihu-usage-legend">
-          <li>
+        <ul className="dsh-ui-row-wrap dsh-ui-meta">
+          <li className="dsh-ui-row">
             <span className="zhihu-chart-chip zhihu-chart-chip-ok" aria-hidden="true" />
-            成功
+            {t('成功', 'Succeeded')}
           </li>
-          <li>
+          <li className="dsh-ui-row">
             <span className="zhihu-chart-chip zhihu-chart-chip-fail" aria-hidden="true" />
-            失败
+            {t('失败', 'Failed')}
           </li>
         </ul>
-        <h3 className="zhihu-usage-heading">
-          有记录的日期
+        <h3 className="dsh-ui-heading">
+          {t('有记录的日期', 'Days with calls')}
         </h3>
         <div className="zhihu-usage-table-wrap">
           <table className="zhihu-usage-table">
             <thead>
               <tr>
-                <th scope="col">
-                  日期
-                </th>
-                <th scope="col">
-                  调用
-                </th>
-                <th scope="col">
-                  成功
-                </th>
-                <th scope="col">
-                  失败
-                </th>
-                <th scope="col">
-                  结果条数
-                </th>
+                <th scope="col">{t('日期', 'Date')}</th>
+                <th scope="col">{t('调用', 'Calls')}</th>
+                <th scope="col">{t('成功', 'Succeeded')}</th>
+                <th scope="col">{t('失败', 'Failed')}</th>
+                <th scope="col">{t('结果条数', 'Results')}</th>
               </tr>
             </thead>
             <tbody>
@@ -904,8 +1015,8 @@ function UsageSection(props: { rpc: RpcCaller; Button?: HostButton }): ReactNode
             </tbody>
           </table>
         </div>
-      </Fragment> : <p className="zhihu-status">
-        近 30 天暂无调用记录。
+      </Fragment> : <p className="dsh-ui-empty">
+        {t(`近 ${USAGE_DAYS} 天暂无调用记录。`, `No calls in the last ${USAGE_DAYS} days.`)}
       </p>}
     </section>
   );
@@ -913,13 +1024,13 @@ function UsageSection(props: { rpc: RpcCaller; Button?: HostButton }): ReactNode
 
 function UsageCard(props: { label: string; value: number; unit: string }): ReactNode {
   return (
-    <div className="zhihu-usage-card">
-      <span className="zhihu-usage-card-label">
+    <div className="dsh-ui-card dsh-ui-card--flat dsh-ui-list-row">
+      <span className="dsh-ui-meta">
         {props.label}
       </span>
-      <span className="zhihu-usage-card-value">
+      <span className="dsh-ui-heading zhihu-usage-value">
         {String(props.value)}
-        <span className="zhihu-usage-card-unit">
+        <span className="dsh-ui-meta">
           {props.unit}
         </span>
       </span>
@@ -965,6 +1076,7 @@ function formatSize(size: number): string {
 
 function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?: HostButton }): ReactNode {
   const { rpc } = props
+  const t = useT()
   const gateRef = useRef<ZhihuClientState | null>(null)
   if (!gateRef.current) gateRef.current = createZhihuClientState()
   const gate = gateRef.current
@@ -972,7 +1084,6 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
   const [baseId, setBaseId] = useState('')
   const [file, setFile] = useState<File | undefined>(undefined)
   const [fileKey, setFileKey] = useState(0)
-  const fileRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | undefined>(undefined)
   const [failure, setFailure] = useState<string | undefined>(undefined)
@@ -990,14 +1101,14 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
       const raw = await rpc.call(ZHIHU_RPC_CHANNEL, 'knowledge.bases', {}, signal)
       if (!gate.isCurrent(ticket)) return
       const result = raw as ZhihuRpcResult
-      if (!result.ok) { setList({ status: 'error', failure: failureOf(result.error.code, result.error.message) }); return }
-      if (!isKnowledgeBaseList(result.value)) { setList({ status: 'error', failure: { kind: 'request', text: '响应格式与契约不符。' } }); return }
+      if (!result.ok) { setList({ status: 'error', failure: failureOf(result.error.code, result.error.message, t) }); return }
+      if (!isKnowledgeBaseList(result.value)) { setList({ status: 'error', failure: { kind: 'request', text: t('响应格式与契约不符。', 'The response does not match the expected shape.') } }); return }
       setList({ status: 'ready', bases: result.value.bases })
     } catch (cause) {
       if (!gate.isCurrent(ticket)) return
-      setList({ status: 'error', failure: networkFailure(cause) })
+      setList({ status: 'error', failure: networkFailure(cause, t) })
     }
-  }, [gate, rpc])
+  }, [gate, rpc, t])
 
   useEffect(() => { void load() }, [load])
 
@@ -1006,7 +1117,7 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
     if (!file || busy) return
     setFailure(undefined)
     setNote(undefined)
-    if (file.size > KB_MAX_BYTES) { setFailure('文件超过 20 MB 上限。'); return }
+    if (file.size > KB_MAX_BYTES) { setFailure(t('文件超过 20 MB 上限。', 'The file exceeds the 20 MB limit.')); return }
     const { ticket, signal } = gate.begin()
     setBusy(true)
     try {
@@ -1021,117 +1132,121 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
       }, signal)
       if (!gate.isCurrent(ticket)) return
       const result = raw as ZhihuRpcResult
-      if (!result.ok) { setFailure(`上传失败：${result.error.message}`); return }
-      setNote('已上传到知乎知识库。')
+      if (!result.ok) { setFailure(t(`上传失败：${result.error.message}`, `Upload failed: ${result.error.message}`)); return }
+      setNote(t('已上传到知乎知识库。', 'Uploaded to the Zhihu knowledge base.'))
       setFile(undefined)
       setFileKey((key) => key + 1)
       await load()
     } catch (cause) {
       if (!gate.isCurrent(ticket)) return
-      setFailure(`上传失败：${cause instanceof Error ? cause.message : String(cause)}`)
+      const detail = cause instanceof Error ? cause.message : String(cause)
+      setFailure(t(`上传失败：${detail}`, `Upload failed: ${detail}`))
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <section className="zhihu-knowledge" data-testid="zhihu-knowledge" aria-label="知乎知识库">
-      <p className="zhihu-intro">
-        把参考资料上传到知乎知识库，供搭档检索。文件会进入知乎云端，请勿上传未发表手稿。
+    <section className="dsh-ui-stack" data-testid="zhihu-knowledge" aria-label={t('知乎知识库', 'Zhihu knowledge base')}>
+      <p className="dsh-ui-help">
+        {t('上传参考资料供搭档检索；文件会进入知乎云端，请勿上传未发表手稿。', 'Upload references for retrieval. Files go to Zhihu cloud, so avoid unpublished drafts.')}
+        {' '}
+        <ExternalLink url={KB_MANAGE_URL}>{t('管理知识库', 'Manage knowledge bases')}</ExternalLink>
       </p>
-      <p>
-        <a
-          className="zhihu-link"
-          href={KB_MANAGE_URL}
-          target="_blank"
-          rel="noreferrer">
-          管理知识库
-        </a>
-      </p>
-      {list.status === 'loading' ? <p className="zhihu-status" role="status">
+      {list.status === 'loading' ? <p className="dsh-ui-loading" role="status">
         {activityDots()}
-        正在读取知识库列表…
+        {t('正在读取知识库列表…', 'Loading knowledge bases…')}
       </p> : null}
-      {list.status === 'error' ? <p className="zhihu-error" role="alert">
-        {`${list.failure.text} `}
+      {list.status === 'error' ? <Fragment>
+        <p className="dsh-ui-error" role="alert">{list.failure.text}</p>
         {list.failure.kind !== 'credential'
-          ? <ZhihuButton host={props.Button} className="zhihu-button" onClick={() => void load()}>
-          重试
-        </ZhihuButton>
+          ? <div className="dsh-ui-actions">
+            <ZhihuButton host={props.Button} onClick={() => void load()}>{t('重试', 'Retry')}</ZhihuButton>
+          </div>
           : null}
-      </p> : null}
-      {list.status === 'ready' ? <div className="zhihu-field">
-        <label className="zhihu-field-label" htmlFor="zhihu-kb-base">
-          目标知识库
+      </Fragment> : null}
+      {list.status === 'ready' ? <div className="dsh-ui-field">
+        <label className="dsh-ui-label" htmlFor="zhihu-kb-base">
+          {t('目标知识库', 'Target knowledge base')}
         </label>
-        <div className="zhihu-row">
+        <div className="dsh-ui-row">
           {renderSelect(props.Select, {
+            id: 'zhihu-kb-base',
             value: baseId,
             disabled: busy,
-            'aria-label': '目标知识库',
+            'aria-label': t('目标知识库', 'Target knowledge base'),
             onChange: setBaseId,
             options: [
-              { value: '', label: '默认知识库' },
+              { value: '', label: t('默认知识库', 'Default knowledge base') },
               ...list.bases.map((base) => ({
                 value: base.id,
-                label: `${base.name}${base.isDefault ? '（默认）' : ''} · ${base.contentCount} 篇`,
+                label: t(
+                  `${base.name}${base.isDefault ? '（默认）' : ''} · ${base.contentCount} 篇`,
+                  `${base.name}${base.isDefault ? ' (default)' : ''} · ${base.contentCount} docs`,
+                ),
               })),
             ],
-          }, 'zhihu-select')}
+          }, 'dsh-ui-select')}
           <ZhihuButton
             host={props.Button}
-            className="zhihu-button"
             disabled={busy}
             onClick={() => void load()}>
-            刷新
+            {t('刷新', 'Refresh')}
           </ZhihuButton>
         </div>
-        {list.bases.length === 0 ? <p className="zhihu-hint">
-          暂无可用知识库。
+        {list.bases.length === 0 ? <p className="dsh-ui-hint">
+          {t('暂无可用知识库，将上传到默认知识库。', 'No knowledge bases yet; uploads go to the default one.')}
         </p> : null}
       </div> : null}
-      {list.status === 'ready' ? <div className="zhihu-field">
-        <span className="zhihu-field-label">
-          选择文件
+      {list.status === 'ready' ? <div className="dsh-ui-field">
+        <span className="dsh-ui-label" id="zhihu-kb-file-label">
+          {t('参考资料', 'Reference file')}
         </span>
+        {/* Visually hidden but still focusable and in the accessibility tree;
+            the visible label below is the real trigger, so no script click is needed. */}
         <input
           key={fileKey}
-          ref={fileRef}
           id="zhihu-kb-file"
           type="file"
           accept={KB_ACCEPT}
-          hidden={true}
           className="zhihu-file"
+          aria-labelledby="zhihu-kb-file-label"
           disabled={busy}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0])} />
-        <ZhihuButton
-          host={props.Button}
-          className="zhihu-button"
-          disabled={busy}
-          onClick={() => fileRef.current?.click()}>
-          {file ? file.name : '选择文件'}
-        </ZhihuButton>
+        <div className="dsh-ui-row">
+          <label
+            htmlFor="zhihu-kb-file"
+            className="zhihu-file-trigger"
+            aria-disabled={busy || undefined}>
+            {t('选择文件', 'Choose file')}
+          </label>
+          <span className="dsh-ui-meta dsh-ui-wrap">
+            {file ? `${file.name} · ${formatSize(file.size)}` : t('未选择文件（最大 20 MB）', 'No file chosen (max 20 MB)')}
+          </span>
+        </div>
       </div> : null}
-      {list.status === 'ready' && file ? <div className="zhihu-upload-confirm">
-        {`确认将「${file.name}」（${formatSize(file.size)}）上传到${baseId ? '所选知识库' : '默认知识库'}？文件会进入知乎云端。`}
+      {list.status === 'ready' && file ? <div className="dsh-ui-banner">
+        {t(
+          `确认将「${file.name}」上传到${baseId ? '所选知识库' : '默认知识库'}？文件会进入知乎云端。`,
+          `Upload "${file.name}" to the ${baseId ? 'selected' : 'default'} knowledge base? The file goes to Zhihu cloud.`,
+        )}
       </div> : null}
-      {list.status === 'ready' ? <div className="zhihu-row">
+      {list.status === 'ready' ? <div className="dsh-ui-actions">
         <ZhihuButton
           host={props.Button}
           variant="primary"
-          className="zhihu-button zhihu-button-primary"
           disabled={busy || !file}
           onClick={() => void upload()}>
           {busy ? <Fragment>
             {activityDots()}
-            上传中…
-          </Fragment> : '确认上传'}
+            {t('上传中…', 'Uploading…')}
+          </Fragment> : t('确认上传', 'Upload')}
         </ZhihuButton>
       </div> : null}
-      {note ? <p className="zhihu-saved" role="status">
+      {note ? <p className="dsh-ui-notice" role="status">
         {note}
       </p> : null}
-      {failure ? <p className="zhihu-warning" role="alert">
+      {failure ? <p className="dsh-ui-error" role="alert">
         {failure}
       </p> : null}
     </section>
@@ -1142,25 +1257,40 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
 // 面板与插槽注册
 // ---------------------------------------------------------------------------
 
-type Tab = 'search' | 'settings' | 'usage' | 'knowledge'
+type Tab = 'settings' | 'usage' | 'quota' | 'knowledge' | 'test'
 
-const TAB_LABEL: Record<Tab, string> = {
-  search: '搜索',
-  settings: '设置',
-  usage: '用量',
-  knowledge: '知识库',
+function tabLabel(tab: Tab, t: Translate): string {
+  switch (tab) {
+    case 'settings': return t('设置', 'Settings')
+    case 'usage': return t('统计', 'Stats')
+    case 'quota': return t('官方用量', 'Official quota')
+    case 'knowledge': return t('知识库', 'Knowledge base')
+    case 'test': return t('测试', 'Test')
+  }
 }
 
-const SETTINGS_TABS: Tab[] = ['settings', 'usage', 'knowledge', 'search']
+export const SETTINGS_TABS: Tab[] = ['settings', 'usage', 'quota', 'knowledge', 'test']
+
+/**
+ * Tabs that have been opened stay mounted (hidden when inactive), so their
+ * loaded data is cached here instead of being refetched on every switch.
+ */
+export function nextVisitedTabs(visited: readonly Tab[], next: Tab): Tab[] {
+  return visited.includes(next) ? [...visited] : [...visited, next]
+}
 
 function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?: HostSelect; Button?: HostButton; Input?: HostInput }) {
   const { rpc, credentials, Select, Button, Input } = props
+  const t = useT()
   const gateRef = useRef<ZhihuClientState | null>(null)
   if (!gateRef.current) gateRef.current = createZhihuClientState()
   const gate = gateRef.current
   const [tab, setTab] = useState<Tab>('settings')
+  const [visited, setVisited] = useState<Tab[]>(['settings'])
   const [query, setQuery] = useState('')
-  const [mode, setMode] = useState<Mode>('search')
+  const [testOperation, setTestOperation] = useState<TestOperation>('search')
+  const isSearchOperation = (MODES as readonly string[]).includes(testOperation)
+  const mode: Mode = isSearchOperation ? testOperation as Mode : 'search'
   const [askModel, setAskModel] = useState<AskModel>('zhida-thinking-1p5')
   const [scopes, setScopes] = useState<RecallScope[]>(['public'])
   const [phase, setPhase] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
@@ -1168,7 +1298,6 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
   const [outcome, setOutcome] = useState<SearchOutcome | null>(null)
   const [revision, setRevision] = useState(0)
   const [resultRevision, setResultRevision] = useState(0)
-  const queryRef = useRef<HTMLInputElement | null>(null)
 
   // Unmount (slot collapse, plugin unload): cancel the in-flight request.
   useEffect(() => () => gate.cancel(), [gate])
@@ -1193,7 +1322,7 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
       if (response.ok) {
         const parsed = parseOutcome(mode, response.value)
         if (!parsed) {
-          setFailure({ kind: 'request', text: '响应格式与契约不符。' })
+          setFailure({ kind: 'request', text: t('响应格式与契约不符。', 'The response does not match the expected shape.') })
           setPhase('error')
           return
         }
@@ -1203,15 +1332,15 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
       } else if (response.error.code === 'cancelled') {
         setPhase('idle')
       } else {
-        setFailure(failureOf(response.error.code, response.error.message))
+        setFailure(failureOf(response.error.code, response.error.message, t))
         setPhase('error')
       }
     } catch (cause) {
       if (!gate.isCurrent(ticket)) return
-      setFailure(networkFailure(cause))
+      setFailure(networkFailure(cause, t))
       setPhase('error')
     }
-  }, [gate, rpc, mode, query, askModel, scopes])
+  }, [gate, rpc, mode, query, askModel, scopes, t])
 
   // Input changes abort the in-flight request (noteInput aborts and stales
   // its ticket) and drop the UI back to idle so a rerun is possible; a stale
@@ -1228,11 +1357,13 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
     resetToIdle()
   }
 
-  const onModeChange = (next: Mode) => {
-    if (next === mode) return
+  const onTestOperationChange = (next: TestOperation) => {
+    if (next === testOperation) return
     setRevision(gate.noteInput())
-    setMode(next)
-    resetToIdle()
+    setTestOperation(next)
+    setOutcome(null)
+    setPhase('idle')
+    setFailure(null)
   }
 
   const onTabChange = (next: Tab) => {
@@ -1240,15 +1371,16 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
     gate.cancel()
     setPhase((current) => (current === 'loading' ? 'idle' : current))
     setTab(next)
+    setVisited((current) => nextVisitedTabs(current, next))
   }
 
   const toggleScope = (scope: RecallScope) => {
+    // Deselecting the only remaining scope is a no-op the control announces
+    // (aria-disabled plus the hint), so it must not stale the current result.
+    if (scopes.length === 1 && scopes[0] === scope) return
     setRevision(gate.noteInput())
     resetToIdle()
-    setScopes((current) => {
-      const next = current.includes(scope) ? current.filter((item) => item !== scope) : [...current, scope]
-      return next.length > 0 ? next : current
-    })
+    setScopes((current) => current.includes(scope) ? current.filter((item) => item !== scope) : [...current, scope])
   }
 
   const onAskModelChange = (next: AskModel) => {
@@ -1267,115 +1399,119 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
   const stale = outcome !== null && resultRevision !== revision
   const searchDisabled = isSearchDisabled()
 
-  const tablist = <div key="tabs" className="zhihu-tabs" role="tablist" aria-label="知乎资料分区" onKeyDown={event => {
-        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-        const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
-        const index = buttons.indexOf(event.target as HTMLButtonElement)
-        if (index < 0) return
-        event.preventDefault()
-        const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
-          : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
-        buttons[next]?.focus()
-        buttons[next]?.click()
-      }}>
-    {SETTINGS_TABS.map((key) => <ZhihuButton
-      key={key}
-      host={Button}
-      type="button"
-      role="tab"
-      aria-selected={tab === key}
-      tabIndex={tab === key ? 0 : -1}
-      className="zhihu-tab"
-      onClick={() => onTabChange(key)}>
-      {TAB_LABEL[key]}
-    </ZhihuButton>)}
-  </div>
-  const body = <div key="body" className="zhihu-panel-body">
-    {tab === 'search' ? <div role="tabpanel" className="zhihu-field">
-      <div className="zhihu-row">
-        {renderSelect(Select, {
-          'aria-label': '搜索方式',
-          value: mode,
-          onChange: (next) => onModeChange(next as Mode),
-          options: (Object.keys(MODE_LABEL) as Mode[]).map((key) => ({ value: key, label: MODE_LABEL[key] })),
-        }, 'zhihu-select')}
+  // The primitive owns the roving tab stop and the arrow-key walk; the panel
+  // ids stay the ones the panels below already carry.
+  const [firstTab, ...restTabs] = SETTINGS_TABS.map((key): SegmentedTab<Tab> => ({
+    value: key,
+    label: tabLabel(key, t),
+    id: `zhihu-tab-${key}`,
+    panelId: `zhihu-tabpanel-${key}`,
+  }))
+  const tablist = <SegmentedTabs
+    value={tab}
+    onChange={onTabChange}
+    label={t('知乎资料分区', 'Zhihu sections')}
+    className="zhihu-tabs"
+    items={[firstTab, ...restTabs]} />
+  const panel = (key: Tab, content: ReactNode) => visited.includes(key) || key === tab
+    ? <div key={key} id={`zhihu-tabpanel-${key}`} role="tabpanel" aria-labelledby={`zhihu-tab-${key}`}
+      hidden={key !== tab} className="dsh-ui-panel">
+      {content}
+    </div>
+    : null
+  const testPanel = <div className="dsh-ui-field">
+      <ZhihuTestSelector value={testOperation} onChange={onTestOperationChange} Select={Select} />
+      {isSearchOperation ? <Fragment>
+      <div className="dsh-ui-row">
         {mode === 'ask' ? renderSelect(Select, {
-          'aria-label': '直答模型',
+          'aria-label': t('直答模型', 'Answer model'),
           value: askModel,
           onChange: (next) => onAskModelChange(next as AskModel),
-          options: ASK_MODELS.map((model) => ({ value: model.value, label: model.label })),
-        }, 'zhihu-select') : null}
+          options: ASK_MODELS.map((model) => ({ value: model.value, label: t(model.zh, model.en) })),
+        }, 'dsh-ui-select') : null}
       </div>
-      {mode === 'knowledge' ? <div className="zhihu-scopes" role="group" aria-label="检索范围">
-        {SCOPE_OPTIONS.map((scope) => <ZhihuButton
-          key={scope.value}
-          host={Button}
-          role="checkbox"
-          aria-checked={scopes.includes(scope.value)}
-          className={`zhihu-scope${scopes.includes(scope.value) ? ' is-on' : ''}`}
-          onClick={() => toggleScope(scope.value)}>
-          {scope.label}
-        </ZhihuButton>)}
-      </div> : null}
+      {mode === 'knowledge' ? <Fragment>
+        <div className="dsh-ui-row-wrap" role="group" aria-label={t('检索范围', 'Search scope')} aria-describedby="zhihu-scope-hint">
+          {SCOPE_OPTIONS.map((scope) => {
+            const checked = scopes.includes(scope.value)
+            // The last selected scope cannot be turned off; say so instead of ignoring the click.
+            const locked = checked && scopes.length === 1
+            return <Pill
+              key={scope.value}
+              active={checked}
+              role="checkbox"
+              aria-checked={checked}
+              aria-disabled={locked || undefined}
+              onClick={() => toggleScope(scope.value)}>
+              {t(scope.zh, scope.en)}
+            </Pill>
+          })}
+        </div>
+        <p className="dsh-ui-hint" id="zhihu-scope-hint">{t('至少保留一个检索范围。', 'Keep at least one scope selected.')}</p>
+      </Fragment> : null}
       {renderInput(Input, {
-        ref: queryRef,
         type: 'search',
         className: 'zhihu-input',
         'data-testid': 'zhihu-query',
-        'aria-label': '搜索关键词',
-        placeholder: mode === 'hot' ? '热榜无需关键词' : '输入关键词…',
+        'aria-label': t('搜索关键词', 'Search keywords'),
+        placeholder: mode === 'hot' ? t('热榜无需关键词', 'Trending needs no keywords') : t('输入关键词…', 'Enter keywords…'),
         value: query,
         disabled: mode === 'hot',
         onChange: onQueryChange,
         onKeyDown: onQueryKeyDown,
       })}
-      <div className="zhihu-row">
+      <div className="dsh-ui-actions">
         <ZhihuButton
           host={Button}
           variant="primary"
-          className="zhihu-button zhihu-button-primary"
           data-testid="zhihu-search"
           disabled={searchDisabled}
           onClick={() => void runSearch()}>
-          {phase === 'loading' ? <Fragment>
-            {activityDots()}
-            请求中…
-          </Fragment> : mode === 'hot' ? '获取热榜' : '搜索'}
+          {mode === 'hot' ? t('获取热榜', 'Get trending') : t('搜索', 'Search')}
         </ZhihuButton>
         {phase === 'loading'
           ? <ZhihuButton
           host={Button}
-          className="zhihu-button"
           onClick={() => { gate.cancel(); setPhase('idle') }}>
-          取消
+          {t('取消', 'Cancel')}
         </ZhihuButton>
           : null}
       </div>
-      {phase === 'idle' && mode !== 'hot' && !query.trim() ? <div className="zhihu-status" role="status">
-        输入关键词后搜索。
-      </div> : null}
-      {phase === 'loading' ? <div className="zhihu-status" role="status">
-        {activityDots()}
-        正在请求知乎…
-      </div> : null}
-      {phase === 'error' && failure ? <div className="zhihu-error" role="alert">
+      {/* One live region carries both the idle hint and the loading notice. */}
+      <div className={phase === 'loading' ? 'dsh-ui-loading' : 'dsh-ui-hint'} role="status">
+        {phase === 'loading' ? <Fragment>
+          {activityDots()}
+          {t('正在请求知乎…', 'Requesting Zhihu…')}
+        </Fragment> : phase === 'idle' && mode !== 'hot' && !query.trim() ? t('输入关键词后搜索。', 'Enter keywords to search.') : null}
+      </div>
+      {phase === 'error' && failure ? <div className="dsh-ui-error" role="alert">
         {failure.text}
       </div> : null}
       {phase === 'done' && outcome ? <OutcomeView outcome={outcome} stale={stale} /> : null}
-    </div> : null}
-    {tab === 'settings' ? <SettingsSection credentials={credentials} Button={Button} Input={Input} /> : null}
-    {tab === 'usage' ? <UsageSection rpc={rpc} Button={Button} /> : null}
-    {tab === 'knowledge' ? <KnowledgeSection rpc={rpc} Select={Select} Button={Button} /> : null}
-  </div>
+      </Fragment> : <ZhihuOpenPlatformSection
+        key={testOperation} selectedOperation={testOperation as ZhihuOpenPlatformOperation}
+        rpc={rpc} Button={Button} Input={Input} Select={Select} />}
+    </div>
   return (
     <section
       className="zhihu-panel zhihu-settings-embed"
       data-testid="zhihu-settings-embed"
-      aria-label={SLOT_LABEL}>
+      aria-label={t('知乎', 'Zhihu')}>
       {tablist}
-      {body}
+      {panel('settings', <SettingsSection credentials={credentials} Button={Button} Input={Input} />)}
+      {panel('usage', <UsageSection rpc={rpc} Button={Button} />)}
+      {panel('quota', <ZhihuQuotaSection rpc={rpc} Button={Button} />)}
+      {panel('knowledge', <KnowledgeSection rpc={rpc} Select={Select} Button={Button} />)}
+      {panel('test', testPanel)}
     </section>
   )
+}
+
+/** Settings root: resolves the host locale once and hands it to every section. */
+function ZhihuSettingsRoot(props: Parameters<typeof ZhihuSettings>[0] & { locale?: HostLocaleService }) {
+  const { locale, ...rest } = props
+  const active = useHostLocale(locale)
+  return <ZhihuLocaleContext.Provider value={active}><ZhihuSettings {...rest} /></ZhihuLocaleContext.Provider>
 }
 
 export function apply(ctx: Context): void {
@@ -1384,9 +1520,14 @@ export function apply(ctx: Context): void {
     return () => style?.remove()
   }, 'zhihu.styles')
   const client = ctx as ZhihuClientContext
-  const settingsRender = (props: unknown) => <ZhihuSettings
+  // `locale` is an optional service: reading it through a Cordis proxy that
+  // lacks it throws, so the lookup is guarded and a missing one stays Chinese.
+  let locale: HostLocaleService | undefined
+  try { locale = client.locale } catch { locale = undefined }
+  const settingsRender = (props: unknown) => <ZhihuSettingsRoot
     rpc={client.connection.rpc}
     credentials={wrapCredentials(client.remote.credentials)}
+    locale={locale}
     {...hostComponentsFromRenderProps(props)} />
   // DSH 0.1.7-rc.2 renders a bundle's configuration on its Plugins detail page.
   ctx.effect(() => client.slots.inject('plugins.bundle.config', () =>

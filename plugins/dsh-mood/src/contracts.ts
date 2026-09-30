@@ -141,11 +141,13 @@ export function cloneContract(contract: TaskContract): TaskContract {
   return structuredClone(contract)
 }
 
-export function readinessLabel(readiness: TaskContract['readiness']): string {
-  if (readiness === 'clear-request') return '表述清楚'
-  if (readiness === 'user-confirmed') return '作者已确认'
-  if (readiness === 'disclosed-assumptions') return '按已披露假定继续'
-  if (readiness === 'cancelled') return '已取消，未确认'
-  if (readiness === 'stale') return '已过期'
-  return '待确认'
+/** Defaults to zh: the injected model-context section (inject.ts) stays Chinese. */
+export function readinessLabel(readiness: TaskContract['readiness'], locale: 'zh' | 'en' = 'zh'): string {
+  const en = locale === 'en'
+  if (readiness === 'clear-request') return en ? 'Clearly stated' : '表述清楚'
+  if (readiness === 'user-confirmed') return en ? 'Confirmed by you' : '作者已确认'
+  if (readiness === 'disclosed-assumptions') return en ? 'Proceeding on stated assumptions' : '按已披露假定继续'
+  if (readiness === 'cancelled') return en ? 'Cancelled, not confirmed' : '已取消，未确认'
+  if (readiness === 'stale') return en ? 'Out of date' : '已过期'
+  return en ? 'Awaiting confirmation' : '待确认'
 }

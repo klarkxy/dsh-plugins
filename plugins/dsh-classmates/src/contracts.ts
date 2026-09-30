@@ -94,6 +94,14 @@ export interface ClassmatesClient {
   team?(leadId: string): Promise<TeamDetails>;
   /** Open a fresh ordinary session with an editable team handoff draft. */
   startTask?(): void | Promise<void>;
+  /**
+   * Live availability of `startTask`'s implementation. When present, the UI
+   * offers the action only while this reports true.
+   */
+  startTaskAvailability?: {
+    getSnapshot(): boolean;
+    subscribe(listener: () => void): () => void;
+  };
 }
 
 export const SETTINGS_NS = 'classmates';

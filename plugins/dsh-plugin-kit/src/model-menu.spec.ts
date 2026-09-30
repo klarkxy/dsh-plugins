@@ -29,6 +29,12 @@ describe('plugin-page model menu', () => {
     ])
   })
 
+  it('unwraps the host remote result envelope around the catalog', () => {
+    const wrapped = { ok: true, value: CATALOG }
+    expect(parseModelMenuChoices(wrapped)).toEqual(parseModelMenuChoices(CATALOG))
+    expect(parseModelMenuChoices({ ok: false, error: { code: 'X', message: 'no' } })).toEqual([])
+  })
+
   it('keeps a saved route selectable when the catalog does not list it', () => {
     const choices = parseModelMenuChoices(CATALOG, { provider: 'legacy', model: 'legacy-1' })
     expect(choices.at(-1)).toEqual({ provider: 'legacy', model: 'legacy-1', label: 'legacy / legacy-1', efforts: [] })

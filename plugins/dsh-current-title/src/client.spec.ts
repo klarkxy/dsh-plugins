@@ -3,9 +3,29 @@ import { describe, expect, it } from 'vitest'
 import { TITLE_CLIENT_SERVICE, type RpcResult, type TitleStatus } from './contracts.ts'
 import { applyMarkerFromStatus, createTitleClientMarker, disposeTitleClientMarker } from './marker.ts'
 import {
-  createTitleClientWork, runTitleRegenerateFlow, runTitleSettingsSave, runTitleStatusLoad,
+  createTitleClientWork, promptFieldValue, promptToSave, runTitleRegenerateFlow, runTitleSettingsSave, runTitleStatusLoad,
   settingsCopy, shouldSkipTitleRefresh,
 } from './client-work.ts'
+
+describe('title prompt draft', () => {
+  it('lets the user clear a saved prompt', () => {
+    expect(promptFieldValue(undefined, 'custom')).toBe('custom')
+    expect(promptFieldValue('', 'custom')).toBe('')
+    expect(promptToSave('', 'custom')).toBe('')
+    expect(promptToSave('  ', 'custom')).toBe('')
+  })
+
+  it('skips saving when untouched or unchanged', () => {
+    expect(promptToSave(undefined, 'custom')).toBeUndefined()
+    expect(promptToSave(' custom ', 'custom')).toBeUndefined()
+    expect(promptToSave('next', 'custom')).toBe('next')
+  })
+
+  it('keeps loading copy in the locale table', () => {
+    expect(settingsCopy('en').loading).toBe('Loading title settings…')
+    expect(clientSource).not.toContain("seat.locale === 'en' ?")
+  })
+})
 
 const clientSource = readFileSync(new URL('./client.tsx', import.meta.url), 'utf8')
 
@@ -32,7 +52,7 @@ describe('current title UI', () => {
   it('injects native session and locale for the title marker', () => {
     expect(clientSource).toContain("from '@klarkxy/dsh-plugin-kit/client-utils'")
     expect(clientSource).toContain('type Client = NativeSurfaceClient &')
-    expect(clientSource).toContain("export const inject = ['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const")
+    expect(clientSource).toContain("export const inject = ['slots', 'connection', 'remote', 'remote.session', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const")
     expect(clientSource).toContain("client.slots.inject('plugins.bundle.config'")
     expect(clientSource).toContain("ctx.provide(TITLE_CLIENT_SERVICE, marker)")
     expect(clientSource).not.toContain('settings.section')

@@ -1,4 +1,21 @@
-import { forwardRef, type ChangeEvent, type ComponentType, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref } from 'react';
+import { forwardRef, useCallback, useState, type ChangeEvent, type ComponentType, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref } from 'react';
+import { Button, DisclosureRow, IconChecklistOutlineRegular, Input as OfficialInput, type ButtonVariant } from '@deepseek-ai/dsh-client-ui-primitives';
+
+/**
+ * Folded fine print: one concise sentence stays in the flow, the detail list
+ * sits behind the host disclosure row. Children are `<li>` items.
+ */
+export function ZhihuDetails(props: { title: string; children: ReactNode; testId?: string; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(props.defaultOpen === true)
+  const toggle = useCallback(() => setOpen(value => !value), [])
+  return (
+    <div className="zhihu-guide" data-testid={props.testId}>
+      <DisclosureRow icon={<IconChecklistOutlineRegular />} title={props.title} open={open} expandable expandOnRowClick onToggle={toggle}>
+        <ul className="zhihu-guide-list dsh-ui-help">{props.children}</ul>
+      </DisclosureRow>
+    </div>
+  )
+}
 
 /** Structural host Select — no private package import. */
 export type HostSelectProps = {
@@ -8,6 +25,8 @@ export type HostSelectProps = {
   disabled?: boolean
   'aria-label': string
   placeholder?: string
+  /** Lets a visible `<label htmlFor>` name the control. */
+  id?: string
 }
 
 /** Structural host Button — no private package import. */
@@ -42,6 +61,7 @@ export type HostInputProps = {
   placeholder?: string
   type?: 'text' | 'search' | 'password'
   'aria-label'?: string
+  'aria-describedby'?: string
   autoFocus?: boolean
   className?: string
   'data-testid'?: string
@@ -147,18 +167,20 @@ export function renderInput(Input: HostInput | undefined, props: RenderInputProp
     const Host = Input as ComponentType<RenderInputProps>
     return <Host {...props} />;
   }
-  const { onChange, ...rest } = props
-  return (
-    <input
-      {...rest}
-      onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)} />
-  );
+  // The official field is a controlled native input, so this adapter keeps
+  // speaking the plugin's own "hand me the value" callback and unwraps the
+  // event here instead of leaking it to a call site. Its wrapper span owns the
+  // visible box, so the caller's class rides on the wrapper and the caller's
+  // ref — which only the host field can take — is left behind.
+  const { onChange, ref, ...rest } = props
+  return <OfficialInput {...rest} onChange={event => onChange(event.target.value)} />;
 }
 
 export function renderSelect(Select: HostSelect | undefined, props: HostSelectProps, className?: string) {
   if (Select) return <Select {...props} />;
   return (
     <select
+      id={props.id}
       className={className}
       value={props.value}
       disabled={props.disabled}
@@ -171,20 +193,28 @@ export function renderSelect(Select: HostSelect | undefined, props: HostSelectPr
   );
 }
 
-/** Prefer a structurally supplied host control; standalone Web needs no private UI package. */
+/**
+ * The host's own Button still wins whenever the slot supplies one, so a page
+ * rendered inside DSH keeps the surrounding chrome. Standalone there is no host
+ * to defer to, and the plugin renders the official primitive instead of a
+ * hand-rolled `<button>`: the two legacy variant names the call sites use are
+ * mapped onto it here. `danger` has no primitive variant, so it keeps the
+ * outlined appearance and takes its tone from a class in the plugin stylesheet
+ * — the way every other destructive action in the host reads.
+ */
+const BUTTON_VARIANT: Record<NonNullable<HostButtonProps['variant']>, ButtonVariant> = {
+  default: 'outline',
+  primary: 'primary',
+  danger: 'outline',
+  icon: 'ghost',
+}
+
 export const ZhihuButton = forwardRef<HTMLButtonElement, HostButtonProps & { host?: HostButton }>(
   function ZhihuButton({ host, variant, className, ...rest }, ref) {
     if (host) {
       const Host = host as ComponentType<HostButtonProps & { ref?: Ref<HTMLButtonElement> }>
       return <Host ref={ref} variant={variant} className={className} {...rest} />
     }
-    const variantClass = variant === 'primary'
-      ? 'primary-action'
-      : variant === 'danger'
-        ? 'danger-action'
-        : variant === 'icon'
-          ? 'icon-button'
-          : ''
-    return <button ref={ref} type="button" className={[variantClass, className].filter(Boolean).join(' ')} {...rest} />
+    return <Button ref={ref} variant={BUTTON_VARIANT[variant ?? 'default']} className={className} {...rest} />
   },
 )

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { RecapPersistedState } from './contracts.ts'
+import { defaultSettings, type RecapPersistedState } from './contracts.ts'
 import { RecapService } from './service.ts'
-import { domainStore, recapDomain, type RecapDomainHandle } from './storage.ts'
+import { domainStore, MAX_STORED_ITEMS, recapDomain, recapStateSchema, type RecapDomainHandle } from './storage.ts'
 
 function card(id: string, sessionId = 's1'): RecapPersistedState['cards'][number] {
   return {
@@ -84,6 +84,35 @@ const previous: RecapPersistedState = {
   cards: [card('keep-a'), card('keep-b')],
   checkpoints: [checkpoint('cp-1')],
 }
+
+describe('recap history bounds', () => {
+  it('trims an over-limit stored record to the newest entries instead of failing the domain open', () => {
+    const parsed = recapStateSchema.parse({
+      settings: defaultSettings(),
+      cards: Array.from({ length: MAX_STORED_ITEMS + 3 }, (_, i) => card(`card-${i}`)),
+      checkpoints: Array.from({ length: MAX_STORED_ITEMS + 2 }, (_, i) => checkpoint(`cp-${i}`)),
+    })
+    expect(parsed.cards).toHaveLength(MAX_STORED_ITEMS)
+    expect(parsed.checkpoints).toHaveLength(MAX_STORED_ITEMS)
+    expect(parsed.cards[0]?.id).toBe('card-3')
+    expect(parsed.checkpoints[0]?.id).toBe('cp-2')
+    expect(parsed.checkpoints.at(-1)?.id).toBe(`cp-${MAX_STORED_ITEMS + 1}`)
+  })
+
+  it('caps persisted history at the newest entries on save', async () => {
+    const disk = createRecapDomain()
+    const store = domainStore(disk.open())
+    await store.save({
+      settings: defaultSettings(),
+      cards: Array.from({ length: MAX_STORED_ITEMS + 5 }, (_, i) => card(`card-${i}`)),
+      checkpoints: Array.from({ length: MAX_STORED_ITEMS + 1 }, (_, i) => checkpoint(`cp-${i}`)),
+    })
+    expect(disk.snapshot()?.cards).toHaveLength(MAX_STORED_ITEMS)
+    expect(disk.snapshot()?.cards[0]?.id).toBe('card-5')
+    expect(disk.snapshot()?.checkpoints).toHaveLength(MAX_STORED_ITEMS)
+    expect(disk.snapshot()?.checkpoints[0]?.id).toBe('cp-1')
+  })
+})
 
 describe('aggregate recap domain adapter', () => {
   it('persists the whole record in one state put', async () => {

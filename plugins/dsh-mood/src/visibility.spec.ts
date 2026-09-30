@@ -30,9 +30,9 @@ describe('quiet task-note presentation', () => {
     status.session.held = true
     assert.equal(shouldOfferRecovery(status), true)
   })
-  it('explains autonomous defaults and retained approvals in both languages', () => {
-    assert.match(copy('zh').hint, /默认自主推进/)
-    assert.match(copy('zh').hint, /原生权限与审批/)
-    assert.match(copy('en').hint, /Native approvals remain unchanged/)
+  it('describes the plugin in one user-facing sentence in both languages', () => {
+    assert.match(copy('zh').hint, /会话/)
+    assert.match(copy('en').hint, /session/)
+    assert.doesNotMatch(copy('zh').hint, /原生权限/)
   })
 })

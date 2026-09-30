@@ -1,9 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import { defaultSettings, type ProviderView, type WebStatus } from './contracts.ts'
 import {
-  canEnableSearch, catalogSearchBackends, isProviderOn, nextSearchEnabled,
+  canEnableSearch, catalogSearchBackends, immediateUpdate, isProviderOn, nextSearchEnabled, parseLimit,
   searchBackends, selectedSearchBackend,
 } from './client.tsx'
+
+describe('web search settings save semantics', () => {
+  it('keeps an empty or out-of-range limit invalid instead of coercing it to 0', () => {
+    expect(parseLimit('', 1, 20)).toBeUndefined()
+    expect(parseLimit('0', 1, 20)).toBeUndefined()
+    expect(parseLimit('21', 1, 20)).toBeUndefined()
+    expect(parseLimit('2.5', 1, 20)).toBeUndefined()
+    expect(parseLimit(' 8 ', 1, 20)).toBe(8)
+  })
+
+  it('writes only order and switches for immediate actions, keeping saved limits', () => {
+    const saved = { ...defaultSettings(), revision: 3, maxResults: 7 }
+    const next = immediateUpdate(saved, false, ['ddg'])
+    expect(next).not.toHaveProperty('revision')
+    expect(next.maxResults).toBe(7)
+    expect(next.searchOrder).toEqual(['ddg'])
+    expect(next.searchEnabled).toBe(false)
+    expect(next.fetchEnabled).toBe(false)
+  })
+})
 
 function provider(partial: Partial<ProviderView> & Pick<ProviderView, 'id' | 'kind'>): ProviderView {
   return {

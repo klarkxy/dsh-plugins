@@ -12,15 +12,36 @@ export interface NativeSurfaceClient {
 
 /** The Editor retains its manuscript session separately; native DSH exposes the main-view binding. */
 export function selectedSessionId(client: Pick<NativeSurfaceClient, 'uiWorkspace' | 'uiSession'>): string {
-  return client.uiWorkspace.current
-    ? client.uiWorkspace.current.getSnapshot()?.sessionId ?? ''
+  const workspace = client.uiWorkspace?.current
+  return workspace
+    ? workspace.getSnapshot()?.sessionId ?? ''
     : client.uiSession.adapter.current.getSnapshot().key ?? ''
 }
 
+/**
+ * Owner props are data the host composed, never a Cordis context: reading an
+ * undeclared property off one throws instead of returning undefined, which
+ * would crash the slot entry and abdicate its cell for good. Tolerate a
+ * throwing read so a mistaken prop degrades to "not supplied".
+ */
+function read(source: unknown, key: string): unknown {
+  if (source === null || typeof source !== 'object') return undefined
+  try {
+    return (source as Record<string, unknown>)[key]
+  } catch {
+    return undefined
+  }
+}
+
+function readString(source: unknown, key: string): string | undefined {
+  const value = read(source, key)
+  return typeof value === 'string' ? value : undefined
+}
+
 /** Owner props win; native settings only supplies close, so resolve its selected session. */
-export function useNativeSeat(client: NativeSurfaceClient, props: unknown) {
+export function useNativeSeat(client: NativeSurfaceClient, props?: unknown) {
   const current = useSyncExternalStore(
-    useCallback((fn: () => void) => (client.uiWorkspace.current ?? client.uiSession.adapter.current).subscribe(fn), [client]),
+    useCallback((fn: () => void) => (client.uiWorkspace?.current ?? client.uiSession.adapter.current).subscribe(fn), [client]),
     useCallback(() => selectedSessionId(client), [client]),
     () => '',
   )
@@ -29,13 +50,10 @@ export function useNativeSeat(client: NativeSurfaceClient, props: unknown) {
     useCallback(() => client.locale.getSnapshot().active, [client]),
     () => 'en',
   )
-  const row = props && typeof props === 'object' ? props as Record<string, unknown> : {}
-  const owner = row.owner && typeof row.owner === 'object' ? row.owner as Record<string, unknown> : {}
-  const sessionId = typeof row.sessionId === 'string' ? row.sessionId
-    : typeof owner.sessionId === 'string' ? owner.sessionId : current
-  const requestedLocale = row.locale ?? owner.locale ?? language
+  const sessionId = readString(props, 'sessionId') ?? readString(read(props, 'owner'), 'sessionId') ?? current
+  const requestedLocale = read(props, 'locale') ?? read(read(props, 'owner'), 'locale') ?? language
   return { sessionId, locale: (String(requestedLocale).startsWith('zh') ? 'zh' : 'en') as 'zh' | 'en',
-    hidden: row.hidden === true || owner.hidden === true }
+    hidden: read(props, 'hidden') === true || read(read(props, 'owner'), 'hidden') === true }
 }
 
 /** Refresh on native log boundaries/reconnect/focus. Read-only settling is bounded to an observed job. */

@@ -5,6 +5,8 @@ import { classmatesRemote } from './rpc.js';
 import { ClassmatesPage } from './ui/ClassmatesPage.js';
 import { HandoffOverlayRoot } from './ui/HandoffOverlay.js';
 import { createHandoffGate, runStartTask, type HandoffHost } from './ui/handoff.js';
+import type { LocaleSource } from './ui/hooks.js';
+import { createPageTranslator } from './ui/page-locales.js';
 import { ClassmatesTeamAction } from './ui/TeamAction.js';
 import { CLASSMATES_TEAM_NS, classmatesTeamEn, classmatesTeamZh } from './ui/team-locales.js';
 
@@ -58,7 +60,7 @@ interface ClientContext {
       component: React.ComponentType<any>,
     ): () => void;
   };
-  locale: {
+  locale: LocaleSource & {
     register(ns: string, dicts: { zh: Record<string, string>; en: Record<string, string> }): () => void;
   };
   sessions: {
@@ -101,12 +103,12 @@ function toHandoffHost(ctx: ClientContext): HandoffHost {
   return ctx;
 }
 
-function mountHandoffOverlay(gate: ReturnType<typeof createHandoffGate>): () => void {
+function mountHandoffOverlay(gate: ReturnType<typeof createHandoffGate>, locale: LocaleSource): () => void {
   const node = document.createElement('div');
   node.dataset.classmatesHandoffHost = 'true';
   document.body.appendChild(node);
   const root: Root = createRoot(node);
-  root.render(<HandoffOverlayRoot gate={gate} />);
+  root.render(<HandoffOverlayRoot gate={gate} locale={locale} />);
   return () => {
     root.unmount();
     node.remove();
@@ -123,19 +125,34 @@ async function install(ctx: ClientContext): Promise<void> {
 
   const gate = createHandoffGate();
   ctx.effect(() => {
-    const unmount = mountHandoffOverlay(gate);
+    const unmount = mountHandoffOverlay(gate, ctx.locale);
     return () => {
       gate.cancel();
       unmount();
     };
   });
 
+  // The implementation arrives only once the host provides presets,
+  // workspaces and conversation; the page subscribes so "Start task" appears
+  // and disappears with it instead of always rendering and then throwing.
   let startTaskImpl: (() => Promise<void>) | undefined;
+  const startTaskListeners = new Set<() => void>();
+  const setStartTaskImpl = (next: (() => Promise<void>) | undefined) => {
+    startTaskImpl = next;
+    for (const listener of startTaskListeners) listener();
+  };
+  const startTaskAvailability = {
+    getSnapshot: () => startTaskImpl !== undefined,
+    subscribe(listener: () => void) {
+      startTaskListeners.add(listener);
+      return () => { startTaskListeners.delete(listener); };
+    },
+  };
   ctx.inject(['remote.agentPresets', 'remote.classmates', 'workspaces', 'conversation'], scope => {
     const host = toHandoffHost(scope);
-    startTaskImpl = () => gate.run('task', (signal, commit) => runStartTask(host, signal, commit));
+    setStartTaskImpl(() => gate.run('task', (signal, commit) => runStartTask(host, signal, commit)));
     scope.effect(() => () => {
-      startTaskImpl = undefined;
+      setStartTaskImpl(undefined);
       gate.cancel();
     });
   });
@@ -159,10 +176,11 @@ async function install(ctx: ClientContext): Promise<void> {
       team: fetchTeam,
       startTask: () => {
         if (!startTaskImpl) {
-          throw new Error('开始任务暂时不可用：当前 DSH 不支持创建会话或选择预设。');
+          throw new Error(createPageTranslator(ctx.locale.getSnapshot().active)('startTask.unavailable'));
         }
         return startTaskImpl();
       },
+      startTaskAvailability,
     };
 
     const openTeammate = (sessionId: string, childSessionId: string) => {
@@ -178,7 +196,7 @@ async function install(ctx: ClientContext): Promise<void> {
 
     child.effect(() => child.slots.inject('plugins.bundle.config', () => child.slots.register(
       { name: 'plugins.bundle.config', key: '@klarkxy/dsh-classmates' },
-      () => <ClassmatesPage client={client} />,
+      () => <ClassmatesPage client={client} locale={ctx.locale} />,
     )));
 
     child.effect(() => child.slots.inject('conversation.session.header.actions', () => child.slots.register(

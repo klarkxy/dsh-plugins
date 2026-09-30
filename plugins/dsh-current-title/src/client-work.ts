@@ -9,9 +9,12 @@ export const titleCopy = {
     locale: '类型标签语言',
     auto: '自动',
     prompt: '标题提示词',
-    promptHint: '留空使用内置说明。仍会要求模型返回类型和摘要。',
+    promptHint: '留空使用内置说明。仍会要求模型返回类型和摘要。离开输入框时自动保存。',
+    loading: '正在读取标题设置…',
     model: '标题模型',
     modelDefault: '跟随会话模型',
+    effort: '思考强度',
+    effortDefault: '默认',
     cadence: '更新节奏',
     cadenceAll: '跟随当前任务（每条消息）',
     cadenceFirst: '仅首条消息',
@@ -27,9 +30,12 @@ export const titleCopy = {
     locale: 'Type-label language',
     auto: 'Auto',
     prompt: 'Title prompt',
-    promptHint: 'Leave empty to use the built-in instruction. The model still returns a type and summary.',
+    promptHint: 'Leave empty to use the built-in instruction. The model still returns a type and summary. Saves when you leave the field.',
+    loading: 'Loading title settings…',
     model: 'Title model',
     modelDefault: 'Use the session model',
+    effort: 'Reasoning effort',
+    effortDefault: 'Default',
     cadence: 'Update cadence',
     cadenceAll: 'Track the current task (every message)',
     cadenceFirst: 'First message only',
@@ -41,6 +47,18 @@ export const titleCopy = {
 
 export function settingsCopy(locale: 'zh' | 'en') {
   return titleCopy[locale] ?? titleCopy.zh
+}
+
+/** `undefined` draft = not edited; an empty string is a real edit (use built-in instruction). */
+export function promptFieldValue(draft: string | undefined, saved: string): string {
+  return draft ?? saved
+}
+
+/** The prompt to persist on blur, or `undefined` when nothing changed. */
+export function promptToSave(draft: string | undefined, saved: string): string | undefined {
+  if (draft === undefined) return undefined
+  const next = draft.trim()
+  return next === saved ? undefined : next
 }
 
 export function shouldSkipTitleRefresh(input: { busy: boolean }): boolean {

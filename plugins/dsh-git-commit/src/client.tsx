@@ -3,16 +3,19 @@ import {
   modelMenuChoiceKey, modelMenuEffortOptions, parseModelMenuChoiceKey, parseModelMenuChoices,
   type ModelMenuChoice,
 } from '@klarkxy/dsh-plugin-kit/model-menu'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { Tooltip, useAnchoredPosition, useDismissOnOutsidePointer } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Button, IconRefreshOutlineRegular, Tag, Tooltip, useAnchoredPosition, useDismissOnOutsidePointer,
+} from '@deepseek-ai/dsh-client-ui-primitives'
+import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import {
   GIT_COMMIT_CLIENT_SERVICE, PLUGIN_NAME, RPC_CHANNEL, type CommitModelRoute, type CommitRunResult,
   type GitCommitSettings, type GitCommitStatus, type RpcResult,
 } from './contracts.ts'
 
 export const name = 'dsh-git-commit-client'
-export const inject = ['slots', 'connection', 'locale'] as const
+export const inject = ['slots', 'connection', 'remote', 'remote.session', 'locale'] as const
 
 const NS = 'dsh-git-commit.action'
 
@@ -23,7 +26,12 @@ const zh = {
   files: '个文件',
   model: '模型',
   modelDefault: '默认模型',
-  modelCustom: 'AI 服务配置',
+  modelCustom: '插件设置',
+  filesCount: '（{n} 个文件）',
+  confirmPrompt: '将把 {n} 个文件的全部修改分次提交到当前分支。',
+  confirm: '确认提交',
+  cancel: '取消',
+  loading: '正在读取仓库状态…',
   running: '正在整理修改并分次提交…',
   done: '已创建提交',
   fallback: '模型不可用，已合并为单个提交',
@@ -46,7 +54,12 @@ const en: Record<keyof typeof zh, string> = {
   files: 'files',
   model: 'Model',
   modelDefault: 'default model',
-  modelCustom: 'AI services route',
+  modelCustom: 'Plugin settings',
+  filesCount: ' ({n} files)',
+  confirmPrompt: 'All changes in {n} files will be committed to the current branch in one or more commits.',
+  confirm: 'Commit now',
+  cancel: 'Cancel',
+  loading: 'Reading repository status…',
   running: 'Organizing changes into commits…',
   done: 'Commits created',
   fallback: 'Model unavailable; used a single commit',
@@ -84,10 +97,12 @@ export interface GitCommitActionProps {
   t: Translate
 }
 
-async function rpc<T>(call: GitCommitActionProps['call'], endpoint: string, payload: unknown = {}): Promise<T> {
+async function rpc<T>(
+  call: GitCommitActionProps['call'], endpoint: string, payload: unknown = {}, fallback = 'Operation failed',
+): Promise<T> {
   const result = await call(endpoint, payload) as RpcResult<T> | undefined
   if (!result || result.ok !== true) {
-    throw new Error(result && 'error' in result ? result.error.message : 'request failed')
+    throw new Error(result && 'error' in result && result.error?.message ? result.error.message : fallback)
   }
   return result.value
 }
@@ -121,6 +136,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<CommitRunResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -130,11 +146,18 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
 
   const changeOpen = useCallback((next: boolean) => {
     setOpen(next)
+    setConfirming(false)
     if (next) {
       setResult(null)
       setError(null)
     }
   }, [])
+
+  // Move focus into the dialog once it is positioned, so keyboard users land inside it.
+  const positioned = Boolean(position)
+  useEffect(() => {
+    if (open && positioned) panelRef.current?.focus()
+  }, [open, positioned])
 
   useDismissOnOutsidePointer(rootRef, open, changeOpen, panelRef)
 
@@ -152,7 +175,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
     setLoading(true)
     setError(null)
     try {
-      const next = await rpc<GitCommitStatus>(call, 'status', { sessionId })
+      const next = await rpc<GitCommitStatus>(call, 'status', { sessionId }, t('failed'))
       if (generationRef.current !== generation) return
       setStatus(next)
     } catch (reason) {
@@ -162,7 +185,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
     } finally {
       if (generationRef.current === generation) setLoading(false)
     }
-  }, [call, sessionId])
+  }, [call, sessionId, t])
 
   useEffect(() => {
     if (!open) return
@@ -183,11 +206,12 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
 
   const runCommit = useCallback(async () => {
     const generation = generationRef.current
+    setConfirming(false)
     setRunning(true)
     setResult(null)
     setError(null)
     try {
-      const value = await rpc<CommitRunResult>(call, 'commit', { sessionId })
+      const value = await rpc<CommitRunResult>(call, 'commit', { sessionId }, t('failed'))
       if (generationRef.current !== generation) return
       setResult(value)
       const next = await rpc<GitCommitStatus>(call, 'status', { sessionId }).catch(() => undefined)
@@ -199,66 +223,84 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
     } finally {
       if (generationRef.current === generation) setRunning(false)
     }
-  }, [call, sessionId])
+  }, [call, sessionId, t])
 
   const available = status?.available === true
   const workspaceCount = status?.workspace.files ?? 0
   const canCommit = available && !running && !sessionRunning && workspaceCount > 0
-  const modelLabel = status?.model
-    ? `${status.model.provider}/${status.model.model} · ${status.model.source === 'page' ? t('modelCustom') : t('modelDefault')}`
-    : undefined
 
   return (
     <div ref={rootRef} className="gcm-root">
-      <style>{css}</style>
       <Tooltip label={t('title')} side="bottom" gap={4}>
-        <button
-          type="button"
+        <Button
           ref={triggerRef}
-          className="gcm-trigger"
+          variant="ghost"
+          size="sm"
+          icon={<GitBranchIcon />}
           aria-label={t('title')}
           aria-haspopup="dialog"
           aria-expanded={open}
           onClick={() => changeOpen(!open)}
         >
-          <GitBranchIcon />
-          <span className="gcm-triggerLabel">{t('action')}</span>
-        </button>
+          {t('action')}
+        </Button>
       </Tooltip>
       {open && createPortal(
         <div
           ref={panelRef}
-          className="gcm-panel"
+          className="gcm-root dsh-ui-surface gcm-panel"
           style={position ?? { visibility: 'hidden', left: 0, top: 0 }}
           role="dialog"
           tabIndex={-1}
           aria-label={t('title')}
         >
-          <div className="gcm-body">
-            <div className="gcm-header">
-              <span className="gcm-title">{t('title')}</span>
-              {status?.branch ? <span className="gcm-branch">{status.branch}</span> : null}
-              <button type="button" className="gcm-iconButton" aria-label={t('refresh')}
-                disabled={loading || running} onClick={() => void loadStatus()}>⟳</button>
+          <div className="dsh-ui-surface-body">
+            <div className="dsh-ui-surface-head">
+              <span className="dsh-ui-surface-title">{t('title')}</span>
+              {status?.branch ? <span className="dsh-ui-hint dsh-ui-truncate">{status.branch}</span> : null}
+              <span className="dsh-ui-spacer" />
+              <Tooltip label={t('refresh')} side="bottom" gap={4}>
+                <Button variant="ghost" size="sm" aria-label={t('refresh')} icon={<IconRefreshOutlineRegular size={14} />}
+                  disabled={loading || running} onClick={() => void loadStatus()} />
+              </Tooltip>
             </div>
-            {error !== null && <p className="gcm-error" role="alert">{error}</p>}
-            {status && !available && <p className="gcm-notice" role="status">{reasonText(t, status)}</p>}
+            {loading && !status && <p className="dsh-ui-hint" role="status">{t('loading')}</p>}
+            {error !== null && <p className="dsh-ui-error" role="alert">{error}</p>}
+            {status && !available && <p className="dsh-ui-meta" role="status">{reasonText(t, status)}</p>}
             {available && (
               <>
-                {modelLabel ? <p className="gcm-meta">{t('model')}: {modelLabel}</p> : null}
-                <button type="button" className="gcm-action gcm-primary"
-                  disabled={!canCommit}
-                  onClick={() => void runCommit()}>
-                  {t('commitAction')}（{workspaceCount} {t('files')}）
-                </button>
-                {workspaceCount === 0 && <p className="gcm-notice">{t('noWorkspace')}</p>}
-                {sessionRunning && <p className="gcm-notice">{t('sessionRunning')}</p>}
+                {status?.model ? (
+                  <p className="gcm-model">
+                    <span className="dsh-ui-hint">{t('model')}</span>
+                    <span className="dsh-ui-truncate">{status.model.provider}/{status.model.model}</span>
+                    <Tag tone={status.model.source === 'page' ? 'info' : 'neutral'}>
+                      {status.model.source === 'page' ? t('modelCustom') : t('modelDefault')}
+                    </Tag>
+                  </p>
+                ) : null}
+                {confirming && canCommit ? (
+                  <div className="dsh-ui-stack" role="group" aria-label={t('commitAction')}>
+                    <p className="dsh-ui-hint dsh-ui-wrap">{t('confirmPrompt').replace('{n}', String(workspaceCount))}</p>
+                    <div className="dsh-ui-actions">
+                      <Button variant="ghost" size="md" onClick={() => setConfirming(false)}>{t('cancel')}</Button>
+                      <Button variant="primary" size="md" onClick={() => void runCommit()}>{t('confirm')}</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button variant="primary" size="md"
+                    disabled={!canCommit}
+                    onClick={() => setConfirming(true)}>
+                    {t('commitAction')}{t('filesCount').replace('{n}', String(workspaceCount))}
+                  </Button>
+                )}
+                {workspaceCount === 0 && <p className="dsh-ui-hint">{t('noWorkspace')}</p>}
+                {sessionRunning && <p className="dsh-ui-hint">{t('sessionRunning')}</p>}
               </>
             )}
-            {running && <p className="gcm-notice" role="status">{t('running')}</p>}
+            {running && <p className="dsh-ui-hint" role="status">{t('running')}</p>}
             {result && (
-              <div className="gcm-result">
-                <p className="gcm-meta">{t('done')} · {result.branch}</p>
+              <div className="dsh-ui-stack">
+                <p className="dsh-ui-hint dsh-ui-wrap">{t('done')} · {result.branch}</p>
                 <ul className="gcm-commits">
                   {result.commits.map(commit => (
                     <li key={commit.hash || commit.message}>
@@ -266,7 +308,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
                     </li>
                   ))}
                 </ul>
-                {result.fallback && <p className="gcm-notice">{t('fallback')}</p>}
+                {result.fallback && <p className="dsh-ui-hint">{t('fallback')}</p>}
               </div>
             )}
           </div>
@@ -277,35 +319,15 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
   )
 }
 
-const css = `
-.gcm-root{position:relative;display:inline-flex}
-.gcm-trigger{min-height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:none;border:0;border-radius:6px;align-items:center;gap:5px;padding:3px 7px;font-size:12px;display:inline-flex}
-.gcm-trigger:hover,.gcm-trigger:focus-visible{color:var(--dsw-alias-label-primary)}
-.gcm-triggerLabel{white-space:nowrap}
-.gcm-panel{--dsw-elevation-stroke-color:var(--dsw-alias-border-l1);z-index:100;box-sizing:border-box;width:min(360px,100vw - 32px);max-height:min(560px,100vh - 32px);box-shadow:var(--dsw-elevation-prominent);border:0;border-radius:12px;display:flex;flex-direction:column;position:fixed;overflow:hidden;color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.5;font-family:var(--default-font-family,system-ui,sans-serif)}
-.gcm-panel::before{content:"";z-index:-1;background:var(--dsw-specific-menu);backdrop-filter:var(--dsw-menu-backdrop-filter);border-radius:12px;position:absolute;inset:0}
-.gcm-body{display:grid;gap:8px;padding:12px 14px 14px;overflow-y:auto}
-.gcm-header{display:flex;align-items:center;gap:8px}
-.gcm-title{font-weight:600}
-.gcm-branch{color:var(--dsw-alias-label-caption);overflow-wrap:anywhere;font-size:12px}
-.gcm-iconButton{margin-left:auto;border:0;background:none;color:var(--dsw-alias-label-tertiary);cursor:pointer;font-size:14px;padding:2px 6px;border-radius:6px}
-.gcm-iconButton:hover:not(:disabled){color:var(--dsw-alias-label-primary)}
-.gcm-iconButton:disabled{opacity:.45;cursor:not-allowed}
-.gcm-action{--dsw-elevation-stroke-color:var(--dsw-alias-border-l2);display:block;width:100%;text-align:left;padding:7px 10px;border:0;box-shadow:var(--dsw-elevation-stroke);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;cursor:pointer}
-.gcm-action:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2)}
-.gcm-action:disabled{opacity:.45;cursor:not-allowed}
-.gcm-primary{--dsw-elevation-stroke-color:var(--dsw-alias-brand-primary)}
-.gcm-meta{margin:0;font-size:12px;color:var(--dsw-alias-label-caption);overflow-wrap:anywhere}
-.gcm-notice{margin:0;font-size:12px;color:var(--dsw-alias-label-secondary)}
-.gcm-error{margin:0;font-size:12px;color:var(--dsw-alias-state-error-primary)}
-.gcm-result{display:grid;gap:4px}
-.gcm-commits{margin:0;padding-left:18px;display:grid;gap:2px;font-size:12px;overflow-wrap:anywhere}
-.gcm-commits code{font-size:12px;background:var(--dsw-alias-bg-layer-2);padding:0 4px;border-radius:4px}
-.gcm-settings{display:grid;gap:10px;color:var(--dsw-alias-label-primary);font:400 var(--font-size-2,13px)/1.5 var(--default-font-family,system-ui,sans-serif)}
-.gcm-settings label{display:grid;gap:6px;font-size:var(--font-size-2,13px)}
-.gcm-settings select{box-sizing:border-box;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit}
-.gcm-settings select:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
-@media(prefers-reduced-motion:reduce){.gcm-settings select{transition:none}}
+const css = `${officialUiCss('gcm-root')}
+/* Only the floating panel's geometry is this plugin's own: the material, the
+ * rounded edge and the scrollbar tokens all come from the shared contract. */
+.gcm-panel { position: fixed; width: min(360px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 32px)); overflow: auto; }
+.gcm-model { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-primary); }
+.gcm-commits { margin: 0; padding-inline-start: 18px; display: grid; gap: 2px; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.gcm-commits code { font-size: 12px; background: var(--dsw-alias-bg-layer-2); padding: 0 4px; border-radius: var(--dsw-radius-sm); }
+.gcm-settings { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.gcm-settings-status { display: flex; flex-direction: column; gap: 4px; }
 `
 
 declare module '@deepseek-ai/cordis' {
@@ -319,7 +341,21 @@ type Client = Context & {
     inject(key: string, callback: () => unknown): () => void
     register(spec: { name: string; id: string; order: number; locale: string; inject: () => unknown } | { name: string; key: string }, render: unknown): () => void
   }
-  locale: { register(ns: string, locales: { zh: Record<string, string>; en: Record<string, string> }): () => void }
+  locale: {
+    register(ns: string, locales: { zh: Record<string, string>; en: Record<string, string> }): () => void
+    getSnapshot?(): { active: string }
+    subscribe?(listener: () => void): () => void
+  }
+}
+
+/** Host UI language, following live switches; falls back to zh when the service lacks a snapshot. */
+function useHostLocale(client: Client): string {
+  const subscribe = useCallback(
+    (listener: () => void) => client.locale.subscribe?.(listener) ?? (() => {}),
+    [client],
+  )
+  const snapshot = useCallback(() => client.locale.getSnapshot?.().active ?? 'zh', [client])
+  return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
 
 const settingsZh = {
@@ -354,7 +390,8 @@ function settingsCopy(locale: string): Record<keyof typeof settingsZh, string> {
 
 /** Plugin-page settings row: pick the model this plugin's planning call uses. */
 export function GitCommitSettingsPanel(props: { client: Client; locale?: string }) {
-  const text = settingsCopy(props.locale ?? 'zh')
+  const hostLocale = useHostLocale(props.client)
+  const text = settingsCopy(props.locale ?? hostLocale)
   const [settings, setSettings] = useState<GitCommitSettings | undefined>(undefined)
   const [choices, setChoices] = useState<ModelMenuChoice[]>([])
   const [error, setError] = useState('')
@@ -366,16 +403,26 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
     [props.client],
   )
 
+  // Settings load once per client; the catalog effect below is keyed on route
+  // strings, so saving a new settings object never re-triggers either fetch.
   useEffect(() => {
     let live = true
-    void rpc<GitCommitSettings>(call, 'settings').then(next => {
+    void rpc<GitCommitSettings>(call, 'settings', {}, text.failed).then(next => {
       if (live) { setSettings(next); setError('') }
     }).catch(() => { if (live) setError(text.failed) })
+    return () => { live = false }
+  }, [call, text.failed])
+
+  const boundProvider = settings?.model.provider ?? ''
+  const boundModel = settings?.model.model ?? ''
+  useEffect(() => {
+    let live = true
+    const bound = boundProvider && boundModel ? { provider: boundProvider, model: boundModel } : undefined
     void props.client.remote?.session?.modelCatalog?.()
-      ?.then(value => { if (live) setChoices(parseModelMenuChoices(value, settings?.model)) })
+      ?.then(value => { if (live) setChoices(parseModelMenuChoices(value, bound)) })
       .catch(() => { if (live) setChoices([]) })
     return () => { live = false }
-  }, [call, props.client, settings?.model, text.failed])
+  }, [props.client, boundProvider, boundModel])
 
   const save = useCallback((model: CommitModelRoute) => {
     if (!settings) return
@@ -383,7 +430,7 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
     void rpc<GitCommitSettings>(call, 'settings.update', {
       settings: { model },
       expectedRevision: settings.revision,
-    }).then(next => {
+    }, text.stale).then(next => {
       setSettings(next); setNote(text.saved); setBusy(false)
     }).catch(() => {
       setError(text.stale); setBusy(false)
@@ -391,7 +438,13 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
   }, [call, settings, text.saved, text.stale])
 
   if (!settings) {
-    return <section className="gcm-settings"><p role="status">{error || text.loading}</p></section>
+    return (
+      <section className="gcm-root gcm-settings">
+        {error
+          ? <p role="alert" className="dsh-ui-error">{error}</p>
+          : <p role="status" className="dsh-ui-hint">{text.loading}</p>}
+      </section>
+    )
   }
 
   const current = settings.model
@@ -399,12 +452,15 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
   const efforts = modelMenuEffortOptions(selected, current.reasoningEffort)
 
   return (
-    <section className="gcm-settings" data-testid="git-commit-settings">
-      {error && <p role="alert" className="gcm-error">{error}</p>}
-      {note && <p role="status">{note}</p>}
-      <label>
-        {text.model}
+    <section className="gcm-root gcm-settings" data-testid="git-commit-settings">
+      <div className="gcm-settings-status">
+        {error && <p role="alert" className="dsh-ui-error">{error}</p>}
+        {note && <p role="status" className="dsh-ui-notice">{note}</p>}
+      </div>
+      <label className="dsh-ui-field">
+        <span className="dsh-ui-label">{text.model}</span>
         <select
+          className="dsh-ui-select"
           value={modelMenuChoiceKey(current.provider, current.model)}
           disabled={busy}
           onChange={event => {
@@ -423,9 +479,10 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
         </select>
       </label>
       {selected && efforts.length > 0 && (
-        <label>
-          {text.modelEffort}
+        <label className="dsh-ui-field">
+          <span className="dsh-ui-label">{text.modelEffort}</span>
           <select
+            className="dsh-ui-select"
             value={current.reasoningEffort ?? ''}
             disabled={busy}
             onChange={event => save({ ...current, reasoningEffort: event.target.value || undefined })}
@@ -435,7 +492,7 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
           </select>
         </label>
       )}
-      <p className="gcm-meta">{text.modelHint}</p>
+      <p className="dsh-ui-meta">{text.modelHint}</p>
     </section>
   )
 }
@@ -444,6 +501,16 @@ export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
   ctx.provide(GIT_COMMIT_CLIENT_SERVICE, { active: true })
   ctx.effect(() => client.locale.register(NS, { zh: { ...zh }, en: { ...en } }), 'git-commit.locale')
+  // One stylesheet for both the header popover and the plugin-page settings,
+  // so the settings page is styled even when no session header is mounted.
+  ctx.effect(() => {
+    if (typeof document === 'undefined') return () => {}
+    const style = document.createElement('style')
+    style.setAttribute('data-plugin', name)
+    style.textContent = css
+    document.head.appendChild(style)
+    return () => style.remove()
+  }, 'git-commit.styles')
   ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
     { name: 'plugins.bundle.config', key: PLUGIN_NAME },
     () => <GitCommitSettingsPanel client={client} />,

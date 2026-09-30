@@ -3,15 +3,17 @@ import { useFeatureRefresh, useNativeSeat, type NativeSurfaceClient } from '@kla
 import {
   modelMenuChoiceKey, modelMenuEffortOptions, parseModelMenuChoiceKey, parseModelMenuChoices, type ModelMenuChoice,
 } from '@klarkxy/dsh-plugin-kit/model-menu'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import {
   CHAT_EVENTS_SLOT, MOOD_PLUGIN, MOOD_RPC_CHANNEL, defaultModelRoute,
-  type MoodLocale, type MoodMode, type MoodModelRoute, type MoodStatus, type RpcResult, type TaskContract,
+  type MoodLocale, type MoodModelRoute, type MoodStatus, type RpcResult, type TaskContract,
 } from './contracts.ts'
 import { readinessLabel } from './contracts.ts'
 
 export const name = 'dsh-mood-client'
-export const inject = ['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
+export const inject = ['slots', 'connection', 'remote', 'remote.session', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 
 type Client = NativeSurfaceClient & {
   connection: {
@@ -27,47 +29,45 @@ type Client = NativeSurfaceClient & {
 
 export interface MoodSeatProps { sessionId?: string; locale?: MoodLocale; hidden?: boolean }
 
-function unwrap<T>(result: RpcResult<T> | unknown): T {
+/** `fallback` is the localized message used when the response is not an RpcResult at all. */
+function unwrap<T>(result: RpcResult<T> | unknown, fallback = 'Request failed.'): T {
   const row = result as RpcResult<T>
-  if (!row || typeof row !== 'object' || !('ok' in row)) throw new Error('请求失败。')
+  if (!row || typeof row !== 'object' || !('ok' in row)) throw new Error(fallback)
   if (!row.ok) throw new Error(row.error.message)
   return row.value
 }
 
-export function copy(locale: MoodLocale) {
-  if (locale === 'en') return {
-    settings: 'Requirements', auto: 'Auto', manual: 'Manual', strict: 'Strict',
-    model: 'Requirements analysis model', modelDefault: 'Default model', modelEffort: 'Reasoning effort',
-    modelEffortDefault: 'Default', modelHint: 'Leave empty to use the current session model, then the host default chat model.',
-    loading: 'Summarizing…', modelLoading: 'Loading…', stale: 'Settings changed; refresh and retry.',
-    hint: 'Proceed autonomously by default. Investigate first, use safe defaults, and ask only for genuine blockers. Native approvals remain unchanged.',
-    card: 'Optional task notes', amend: 'Amend', reanalyze: 'Summarize requirements', retry: 'Retry original', save: 'Save',
-    empty: 'No optional task notes.', goal: 'Goal', evidence: 'Evidence', questions: 'Open points',
-    recovery: 'A request held by an older Mood version is available for explicit retry. It does not block new work or grant approval.',
-    sessionHint: 'Select a session to summarize its requirements on demand.',
-  }
-  return {
-    settings: '需求澄清', auto: '自动', manual: '手动', strict: '严格',
-    model: '需求梳理模型', modelDefault: '默认模型', modelEffort: '思考强度',
-    modelEffortDefault: '默认', modelHint: '留空则使用当前会话模型，再回落到宿主默认对话模型。',
-    loading: '正在梳理…', modelLoading: '正在读取设置…', stale: '设置已更新，请刷新后重试。',
-    hint: '默认自主推进：先调查，采用低风险默认方案，仅在真正阻塞时询问。原生权限与审批保持不变。',
-    card: '可选任务摘要', amend: '修订', reanalyze: '梳理需求', retry: '按原请求重试', save: '保存',
-    empty: '还没有可选任务摘要。', goal: '目标', evidence: '证据', questions: '未决事项',
-    recovery: '旧版 Mood 保留了一条可主动重试的请求。它不阻塞新任务，也不代表已获执行授权。',
-    sessionHint: '选择一个会话后，可按需梳理该会话的需求。',
-  }
+function errorText(cause: unknown, fallback: string): string {
+  return cause instanceof Error && cause.message ? cause.message : fallback
 }
 
-/** Legacy export; mode selection is no longer shown in the UI. */
-export function modeFromKey(current: MoodMode, key: string): MoodMode | undefined {
-  const order: MoodMode[] = ['auto', 'manual', 'strict']
-  const index = order.indexOf(current)
-  if (key === 'Home') return 'auto'
-  if (key === 'End') return 'strict'
-  if (key === 'ArrowRight' || key === 'ArrowDown') return order[(index + 1) % order.length]
-  if (key === 'ArrowLeft' || key === 'ArrowUp') return order[(index + order.length - 1) % order.length]
-  return undefined
+export function copy(locale: MoodLocale) {
+  if (locale === 'en') return {
+    settings: 'Requirement clarification',
+    model: 'Requirement analysis model', modelDefault: 'Default model', modelEffort: 'Reasoning effort',
+    modelEffortDefault: 'Default', modelHint: 'Leave empty to use the current session model, then the default chat model.',
+    loading: 'Summarizing…', modelLoadFailed: 'Unable to load settings.', saveFailed: 'Unable to save settings.',
+    requestFailed: 'Request failed.', loadFailed: 'Unable to load the task summary.', actionFailed: 'Something went wrong.',
+    hint: 'Summarizes what you asked for in a session so the assistant can work without extra questions.',
+    card: 'Task summary', amend: 'Edit', reanalyze: 'Summarize requirements', retry: 'Retry original request', save: 'Save', cancel: 'Cancel',
+    empty: 'No task summary yet. Use “Summarize requirements” to create one.', goal: 'Goal', evidence: 'Based on', questions: 'Open questions',
+    evidenceFallback: (seq: number) => `Chat message #${seq}`, separator: ': ',
+    recovery: 'An older version kept one request you can retry. It does not block new work or grant approval.',
+    sessionHint: 'Open a session to summarize its requirements.',
+  }
+  return {
+    settings: '需求澄清',
+    model: '需求梳理模型', modelDefault: '默认模型', modelEffort: '思考强度',
+    modelEffortDefault: '默认', modelHint: '留空则使用当前会话模型，再回落到默认对话模型。',
+    loading: '正在梳理…', modelLoadFailed: '无法读取设置。', saveFailed: '无法保存设置。',
+    requestFailed: '请求失败。', loadFailed: '无法读取任务摘要。', actionFailed: '操作失败。',
+    hint: '整理你在会话中提出的要求，让助手少问多做。',
+    card: '任务摘要', amend: '修改', reanalyze: '梳理需求', retry: '按原请求重试', save: '保存', cancel: '取消',
+    empty: '还没有任务摘要。点“梳理需求”生成一份。', goal: '目标', evidence: '依据', questions: '待确认的问题',
+    evidenceFallback: (seq: number) => `会话消息 #${seq}`, separator: '：',
+    recovery: '旧版本保留了一条可以重试的请求。它不会阻塞新任务，也不代表已获执行授权。',
+    sessionHint: '打开一个会话后，可梳理该会话的需求。',
+  }
 }
 
 export function shouldShowCard(hidden: boolean, contract: TaskContract | undefined, pendingManual: boolean, recovery = false): boolean {
@@ -117,6 +117,7 @@ function MoodContractCard({ client, sessionId, locale, hidden, surface = 'chat' 
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
   const [goal, setGoal] = useState('')
+  const headingId = useId()
   const requestId = useRef(0)
   const viewSession = useRef(sessionId ?? '')
   const liveRef = useRef(true)
@@ -126,7 +127,7 @@ function MoodContractCard({ client, sessionId, locale, hidden, surface = 'chat' 
   editingRef.current = editing
 
   async function call<T>(endpoint: string, payload: unknown): Promise<T> {
-    return unwrap(await client.connection.rpc.call(MOOD_RPC_CHANNEL, endpoint, payload) as RpcResult<T>)
+    return unwrap(await client.connection.rpc.call(MOOD_RPC_CHANNEL, endpoint, payload) as RpcResult<T>, text.requestFailed)
   }
   function current(view: string, id: number): boolean {
     return isCurrentMoodRequest({ mounted: liveRef.current, sessionId: view, viewSessionId: viewSession.current, requestId: id, latestRequestId: requestId.current })
@@ -142,7 +143,7 @@ function MoodContractCard({ client, sessionId, locale, hidden, surface = 'chat' 
       if (!mounted || !current(sessionId, id)) return
       setStatus(next); setGoal(next.session?.contract?.goal ?? '')
     }).catch(cause => {
-      if (mounted && current(sessionId, id)) setError(cause instanceof Error ? cause.message : '无法读取任务摘要。')
+      if (mounted && current(sessionId, id)) setError(errorText(cause, text.loadFailed))
     })
     return () => { mounted = false }
   }, [client, sessionId])
@@ -175,44 +176,57 @@ function MoodContractCard({ client, sessionId, locale, hidden, surface = 'chat' 
       setStatus(next); setGoal(next.session?.contract?.goal ?? '')
       if (endpoint === 'edit') setEditing(false)
     } catch (cause) {
-      if (current(view, id)) setError(cause instanceof Error ? cause.message : '操作失败。')
+      if (current(view, id)) setError(errorText(cause, text.actionFailed))
     } finally {
       if (current(view, id)) { busyRef.current = false; setBusy(false) }
     }
   }
 
-  return <article className="mood-card" data-testid="mood-contract-card" data-session={sessionId || undefined}>
-    {error ? <p role="alert">{error}</p> : null}
-    {pendingManual ? <p role="status">{text.loading}</p> : null}
-    {recovery ? <p role="status">{text.recovery}</p> : null}
+  return <article className="mood-card dsh-ui-card" data-testid="mood-contract-card" data-session={sessionId || undefined}>
+    {error ? <p role="alert" className="dsh-ui-error">{error}</p> : null}
+    {pendingManual ? <p role="status" className="dsh-ui-hint">{text.loading}</p> : null}
+    {recovery ? <p role="status" className="dsh-ui-banner dsh-ui-banner--info">{text.recovery}</p> : null}
     <details open={surface === 'settings' || recovery || pendingManual || undefined}>
-      <summary>{text.card}{contract?.goal ? `：${contract.goal.slice(0, 60)}` : ''}</summary>
-      <div className="mood-details">
-        {contract ? <p className="mood-meta">{readinessLabel(contract.readiness)}</p> : null}
-        <p>{contract?.goal ? `${text.goal}：${contract.goal}` : text.empty}</p>
-        {contract?.evidence.length ? <ul aria-label={text.evidence}>
-          {contract.evidence.map((item, index) => <li key={`${item.kind}-${item.seq}-${index}`}>{item.excerpt ?? `#${item.seq}`}</li>)}
-        </ul> : null}
-        {contract?.questions.length ? <ul aria-label={text.questions}>
-          {contract.questions.map((question, index) => <li key={index}>{question}</li>)}
-        </ul> : null}
+      <summary className="mood-summary dsh-ui-heading">{text.card}{contract?.goal ? `${text.separator}${contract.goal.slice(0, 60)}` : ''}</summary>
+      <div className="mood-details dsh-ui-stack">
+        {contract ? <p className="dsh-ui-meta">{readinessLabel(contract.readiness, locale === 'en' ? 'en' : 'zh')}</p> : null}
+        <p className="dsh-ui-wrap">{contract?.goal ? `${text.goal}${text.separator}${contract.goal}` : text.empty}</p>
+        {contract?.evidence.length ? <section className="dsh-ui-readonly">
+          <h4 className="dsh-ui-label" id={`${headingId}-evidence`}>{text.evidence}</h4>
+          <ul className="mood-items dsh-ui-compact" aria-labelledby={`${headingId}-evidence`}>
+            {contract.evidence.map((item, index) => <li key={`${item.kind}-${item.seq}-${index}`}>{item.excerpt ?? text.evidenceFallback(item.seq)}</li>)}
+          </ul>
+        </section> : null}
+        {contract?.questions.length ? <section className="dsh-ui-readonly">
+          <h4 className="dsh-ui-label" id={`${headingId}-questions`}>{text.questions}</h4>
+          <ul className="mood-items dsh-ui-compact" aria-labelledby={`${headingId}-questions`}>
+            {contract.questions.map((question, index) => <li key={index}>{question}</li>)}
+          </ul>
+        </section> : null}
         {(status?.session?.clarification ?? []).filter(item => item.status === 'answered').map(item => (
-          <p key={item.id}>{item.question}{item.answer ? ` → ${item.answer}` : ''}</p>
+          <p className="dsh-ui-wrap" key={item.id}>{item.question}{item.answer ? ` → ${item.answer}` : ''}</p>
         ))}
-        {editing ? <label>{text.goal}<textarea aria-label={text.goal} rows={3} value={goal} disabled={busy}
-          onChange={event => setGoal(event.target.value)} /></label> : null}
-        <div className="mood-actions">
-          <button type="button" disabled={busy || !contract} onClick={() => {
+        {editing ? <label className="dsh-ui-field">
+          <span className="dsh-ui-label">{text.goal}</span>
+          <textarea className="mood-text" aria-label={text.goal} rows={3} value={goal} disabled={busy}
+            onChange={event => setGoal(event.target.value)} />
+        </label> : null}
+        <div className="dsh-ui-actions">
+          <Button variant="primary" size="sm" disabled={busy || !contract} onClick={() => {
             if (editing && contract && sessionId) {
               void action('edit', { sessionId, expectedRevision: contract.revision, patch: { goal } })
             } else setEditing(true)
-          }}>{editing ? text.save : text.amend}</button>
-          <button type="button" disabled={busy || !sessionId} onClick={() => {
+          }}>{editing ? text.save : text.amend}</Button>
+          {editing ? <Button variant="ghost" size="sm" disabled={busy} onClick={() => {
+            // Discard the draft and restore the stored goal.
+            setGoal(contract?.goal ?? ''); setEditing(false)
+          }}>{text.cancel}</Button> : null}
+          <Button variant="outline" size="sm" disabled={busy || !sessionId} onClick={() => {
             if (sessionId) void action('manual', { sessionId })
-          }}>{text.reanalyze}</button>
-          {recovery ? <button type="button" disabled={busy || !sessionId} onClick={() => {
+          }}>{text.reanalyze}</Button>
+          {recovery ? <Button variant="outline" size="sm" disabled={busy || !sessionId} onClick={() => {
             if (sessionId) void action('retry', { sessionId })
-          }}>{text.retry}</button> : null}
+          }}>{text.retry}</Button> : null}
         </div>
       </div>
     </details>
@@ -232,16 +246,29 @@ function MoodModelMenu({ client, locale }: { client: Client; locale: MoodLocale 
   const selected = choices.find(item => item.provider === route.provider && item.model === route.model)
   const efforts = modelMenuEffortOptions(selected, route.reasoningEffort)
 
+  // Load once per client/locale. Saving only updates `status`, so it must not refetch;
+  // the catalog is parsed against the saved route read here.
   useEffect(() => {
     let live = true
-    void client.connection.rpc.call(MOOD_RPC_CHANNEL, 'status', {})
-      .then(result => { if (live) setStatus(unwrap<MoodStatus>(result)) })
-      .catch(() => { if (live) setError(text.modelLoading) })
-    void client.remote?.session?.modelCatalog?.()
-      ?.then(value => { if (live) setChoices(parseModelMenuChoices(value, route)) })
-      .catch(() => { if (live) setChoices([]) })
+    void (async () => {
+      let saved: MoodModelRoute = defaultModelRoute()
+      try {
+        const next = unwrap<MoodStatus>(await client.connection.rpc.call(MOOD_RPC_CHANNEL, 'status', {}), text.requestFailed)
+        if (!live) return
+        setStatus(next)
+        saved = next.settings.model ?? saved
+      } catch (cause) {
+        if (live) setError(errorText(cause, text.modelLoadFailed))
+      }
+      try {
+        const value = await client.remote?.session?.modelCatalog?.()
+        if (live) setChoices(parseModelMenuChoices(value, saved))
+      } catch {
+        if (live) setChoices([])
+      }
+    })()
     return () => { live = false }
-  }, [client, route.provider, route.model])
+  }, [client, locale])
 
   async function save(next: MoodModelRoute): Promise<void> {
     if (!status) return
@@ -252,7 +279,7 @@ function MoodModelMenu({ client, locale }: { client: Client; locale: MoodLocale 
       }))
       setStatus(value)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : text.stale)
+      setError(errorText(cause, text.saveFailed))
       const fresh = await client.connection.rpc.call(MOOD_RPC_CHANNEL, 'status', {}).then(result => {
         try { return unwrap<MoodStatus>(result) } catch { return undefined }
       }).catch(() => undefined)
@@ -262,11 +289,12 @@ function MoodModelMenu({ client, locale }: { client: Client; locale: MoodLocale 
     }
   }
 
-  return <section className="mood-model" data-testid="mood-model">
-    {error && <p role="alert" className="mood-meta">{error}</p>}
-    <label>
-      {text.model}
+  return <section className="dsh-ui-stack" data-testid="mood-model">
+    {error && <p role="alert" className="dsh-ui-error">{error}</p>}
+    <label className="dsh-ui-field">
+      <span className="dsh-ui-label">{text.model}</span>
       <select
+        className="dsh-ui-select"
         value={modelMenuChoiceKey(route.provider, route.model)}
         disabled={busy || !status}
         onChange={event => {
@@ -285,9 +313,10 @@ function MoodModelMenu({ client, locale }: { client: Client; locale: MoodLocale 
       </select>
     </label>
     {selected && efforts.length > 0 && (
-      <label>
-        {text.modelEffort}
+      <label className="dsh-ui-field">
+        <span className="dsh-ui-label">{text.modelEffort}</span>
         <select
+          className="dsh-ui-select"
           value={route.reasoningEffort ?? ''}
           disabled={busy}
           onChange={event => void save({ ...route, reasoningEffort: event.target.value || undefined })}
@@ -297,33 +326,27 @@ function MoodModelMenu({ client, locale }: { client: Client; locale: MoodLocale 
         </select>
       </label>
     )}
-    <p className="mood-meta">{text.modelHint}</p>
+    <p className="dsh-ui-help">{text.modelHint}</p>
   </section>
 }
 
-/** The plugin page renders the seat; the model menu works without a session. */
-function MoodSettingsSeat({ client }: { client: Client }) {
-  const seat = useNativeSeat(client, {})
-  return <div className="mood-settings-root" data-testid="mood-settings-root">
-    <section className="mood-settings" data-testid="mood-settings">
-      <h3>{copy(seat.locale).settings}</h3>
-      <p className="mood-meta">{copy(seat.locale).hint}</p>
-      <MoodModelMenu client={client} locale={seat.locale} />
-    </section>
-  </div>
-}
-
+/**
+ * Plugin page: model menu plus the current session's task summary, which is the
+ * persistent entry to "Summarize requirements" (the chat card only appears once
+ * a summary was requested). The host page already shows the plugin title.
+ */
 export function MoodSettings({ client, props }: { client: Client; props: unknown }) {
   const seat = useNativeSeat(client, props)
   const text = copy(seat.locale)
-  return <div className="mood-settings-root" data-testid="mood-settings-root" data-session={seat.sessionId || undefined}>
-    <section className="mood-settings" data-testid="mood-settings"><h3>{text.settings}</h3><p className="mood-meta">{text.hint}</p>
+  return <div className="mood-settings-root dsh-ui-panel" data-testid="mood-settings-root" data-session={seat.sessionId || undefined}>
+    <section className="mood-settings dsh-ui-card" data-testid="mood-settings">
+      <p className="dsh-ui-hint">{text.hint}</p>
       <MoodModelMenu client={client} locale={seat.locale} />
     </section>
     {seat.sessionId
       ? <MoodContractCard key={`contract:${moodPanelKey(seat.sessionId, seat.locale)}`} client={client}
           sessionId={seat.sessionId} locale={seat.locale} surface="settings" />
-      : <p className="mood-meta">{text.sessionHint}</p>}
+      : <p className="dsh-ui-empty">{text.sessionHint}</p>}
   </div>
 }
 
@@ -334,26 +357,35 @@ export function MoodChatCard({ client, props }: { client: Client; props: unknown
     sessionId={seat.sessionId} locale={seat.locale} hidden={seat.hidden} />
 }
 
-const styles = `
-.mood-settings-root,.mood-settings,.mood-card,.mood-details{max-width:760px;display:grid;gap:12px;color:inherit;font:400 var(--font-size-2,14px)/1.5 var(--default-font-family,system-ui,sans-serif)}
-.mood-settings h3{margin:0;font-size:var(--font-size-3,16px);font-weight:600}
-.mood-settings p,.mood-card p{margin:0;line-height:1.5}
-.mood-meta{font-size:var(--font-size-1,13px);color:var(--gray-11,inherit)}
-.mood-card summary{cursor:pointer;overflow-wrap:anywhere}
-.mood-details{margin-top:12px}
-.mood-card ul{margin:0;padding-left:1.2em}
-.mood-card{padding:10px 14px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:10px}
-.mood-card textarea{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit}
-.mood-actions{display:flex;flex-wrap:wrap;gap:8px}
-.mood-card button{min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:inherit}
-.mood-card button:hover:not(:disabled){background:var(--gray-3,color-mix(in srgb,currentColor 6%,transparent))}
-.mood-card button:disabled{opacity:.45;cursor:not-allowed}
-.mood-card :focus-visible,.mood-settings-root :focus-visible{outline:2px solid var(--accent-9,currentColor);outline-offset:3px}
-.mood-model{display:grid;gap:10px;margin-top:8px}
-.mood-model label{display:grid;gap:6px;font-size:var(--font-size-2,14px)}
-.mood-model select{box-sizing:border-box;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--gray-7,color-mix(in srgb,currentColor 20%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit}
-.mood-model select:focus-visible{border-color:var(--accent-9,currentColor);outline:2px solid var(--accent-9,currentColor);outline-offset:1px}
-@media(prefers-reduced-motion:reduce){.mood-model select{transition:none}}
+const css = `${officialUiCss(['mood-settings-root', 'mood-card'])}
+/* The card and the plugin page take their measure and rhythm from the contract;
+ * only the native disclosure header, the evidence lists and the multi-line
+ * field — none of which the primitives cover — keep geometry here. */
+.mood-settings-root { max-width: 760px; }
+.mood-summary { cursor: pointer; list-style: revert; overflow-wrap: anywhere; }
+.mood-details { margin-top: 12px; }
+.mood-items {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 1.2em;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+.mood-text {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-3);
+  font: inherit;
+  color: var(--dsw-alias-label-primary);
+  resize: vertical;
+}
+.mood-text:focus-visible { outline: none; border-color: var(--dsw-alias-state-business-primary); }
+.mood-text:disabled { color: var(--dsw-alias-label-tertiary); }
 `
 
 export function apply(ctx: Context): void {
@@ -361,15 +393,15 @@ export function apply(ctx: Context): void {
   ctx.effect(() => {
     if (typeof document === 'undefined') return () => {}
     const style = document.createElement('style')
-    style.setAttribute('data-plugin', '@klarkxy/dsh-mood'); style.textContent = styles
+    style.setAttribute('data-plugin', '@klarkxy/dsh-mood'); style.textContent = css
     document.head.appendChild(style)
     return () => style.remove()
   }, 'dsh-mood.styles')
   ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
     { name: 'plugins.bundle.config', key: MOOD_PLUGIN },
-    () => <MoodSettingsSeat client={client} />,
+    (props: unknown) => <MoodSettings client={client} props={props} />,
   )), 'dsh-mood.settings')
   ctx.effect(() => client.slots.inject(CHAT_EVENTS_SLOT, () => client.slots.register({
-    name: CHAT_EVENTS_SLOT, id: 'mood', order: 10, label: '需求约定',
+    name: CHAT_EVENTS_SLOT, id: 'mood', order: 10, label: copy('zh').settings,
   }, (props: unknown) => <MoodChatCard client={client} props={props} />)), 'dsh-mood.card')
 }

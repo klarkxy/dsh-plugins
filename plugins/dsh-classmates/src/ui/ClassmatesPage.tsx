@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, SegmentedTabs, StateDot, Switch } from '@deepseek-ai/dsh-client-ui-primitives';
+import { Button, Input, SegmentedTabs, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives';
 import type {
   ClassmatesClient,
   ClassmatesState,
@@ -7,7 +7,11 @@ import type {
   ModelChoice,
 } from '../contracts.js';
 import { createPresets } from '../presets.js';
+import { useConfirmDialog } from './ConfirmDialog.js';
+import { errorMessage } from './errors.js';
 import { isAbortError, isHandoffBusy } from './handoff.js';
+import { useLocaleId, useStartTaskAvailable, type LocaleSource } from './hooks.js';
+import { createPageTranslator, type PageTranslate } from './page-locales.js';
 import {
   findModel,
   formatRoleModelSummary,
@@ -19,6 +23,8 @@ import { ModelsPage } from './ModelsPage.js';
 
 export interface ClassmatesPageProps {
   client: ClassmatesClient;
+  /** Host locale runtime; absent in tests, where the page falls back to zh. */
+  locale?: LocaleSource;
 }
 
 type LoadStatus = 'loading' | 'load-error' | 'ready';
@@ -27,43 +33,29 @@ type BusyAction = 'save' | 'remove' | 'reload' | 'toggle' | null;
 type FieldKey = 'name' | 'description' | 'instructions' | 'model' | 'effort';
 type FieldErrors = Partial<Record<FieldKey, string>>;
 
-const HEALTH_LABEL: Record<RoleHealth, string> = {
-  enabled: '已启用',
-  disabled: '已停用',
-  unconfigured: '未配置',
-  invalid: '配置错误',
-};
-
 export const NAME_MAX = 100;
 export const DESCRIPTION_MAX = 200;
 export const INSTRUCTIONS_MAX = 32000;
 
-function validateDraft(draft: ClassmateDefinition, models: ModelChoice[]): FieldErrors {
+/**
+ * Length limits are enforced by the controls' maxLength (and again on the
+ * host), so the form only reports empty fields; the live counter next to each
+ * label is how a user sees the limit.
+ */
+function validateDraft(draft: ClassmateDefinition, models: ModelChoice[], t: PageTranslate): FieldErrors {
   const errors: FieldErrors = {};
-  if (!draft.name.trim()) {
-    errors.name = '请填写名称。';
-  } else if (draft.name.length > NAME_MAX) {
-    errors.name = `名称不能超过 ${NAME_MAX} 个字符（当前 ${draft.name.length}）。`;
-  }
-  if (!draft.description.trim()) {
-    errors.description = '请填写职责说明。';
-  } else if (draft.description.length > DESCRIPTION_MAX) {
-    errors.description = `职责说明不能超过 ${DESCRIPTION_MAX} 个字符（当前 ${draft.description.length}）。`;
-  }
-  if (!draft.instructions.trim()) {
-    errors.instructions = '请填写工作指令。';
-  } else if (draft.instructions.length > INSTRUCTIONS_MAX) {
-    errors.instructions = `工作指令不能超过 ${INSTRUCTIONS_MAX} 个字符（当前 ${draft.instructions.length}）。`;
-  }
+  if (!draft.name.trim()) errors.name = t('common.nameRequired');
+  if (!draft.description.trim()) errors.description = t('role.descriptionRequired');
+  if (!draft.instructions.trim()) errors.instructions = t('role.instructionsRequired');
   if (draft.enabled && draft.model && !findModel(models, draft.model)) {
-    errors.model = '所选模型当前不可用，请清除模型绑定后启用。';
+    errors.model = t('role.modelUnavailable');
   }
   const effort = draft.reasoningEffort ?? draft.model?.reasoningEffort;
   if (draft.enabled && effort) {
     const chosen = draft.model ? findModel(models, draft.model) : undefined;
     const options = draft.model ? chosen?.efforts ?? [] : models.flatMap(model => model.efforts);
     if (!options.some(option => option.id === effort)) {
-      errors.effort = '绑定的思考强度当前不可用，请清除模型绑定后启用。';
+      errors.effort = t('role.effortUnavailable');
     }
   }
   return errors;
@@ -101,27 +93,62 @@ function createDraft(): ClassmateDefinition {
   };
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function modelLabel(role: ClassmateDefinition, models: ModelChoice[]): string {
-  return formatRoleModelSummary(role, models);
+function modelLabel(role: ClassmateDefinition, models: ModelChoice[], t: PageTranslate): string {
+  return formatRoleModelSummary(role, models, {
+    follow: t('role.followChat'),
+    summary: (model, effort) => t('role.modelSummary', { model, effort }),
+  });
 }
 
 const presets = createPresets();
 
-const CLASSMATES_TABS = [
-  { value: 'roles', label: '模板', id: 'classmates-tab-roles', panelId: 'classmates-panel-roles' },
-  { value: 'models', label: '模型', id: 'classmates-tab-models', panelId: 'classmates-panel-models' },
-] as const;
-
-function StatusBadge({ health }: { health: RoleHealth }) {
-  const state = { enabled: 'done', disabled: 'idle', unconfigured: 'warning', invalid: 'error' } as const;
-  return <span className="classmates-badge"><StateDot state={state[health]} size={6} />{HEALTH_LABEL[health]}</span>;
+function classmatesTabs(t: PageTranslate) {
+  return [
+    { value: 'roles', label: t('tab.roles'), id: 'classmates-tab-roles', panelId: 'classmates-panel-roles' },
+    { value: 'models', label: t('tab.models'), id: 'classmates-tab-models', panelId: 'classmates-panel-models' },
+  ] as const;
 }
 
-export function ClassmatesPage({ client }: ClassmatesPageProps) {
+/** Live character count shown beside a field label; the control's maxLength enforces it. */
+function CharCount({ id, count, max }: { id: string; count: number; max: number }) {
+  return <span id={id} className="dsh-ui-hint" aria-live="off">{count}/{max}</span>;
+}
+
+/** Health reads as one tag plus its state dot; the tone says the same thing twice. */
+const HEALTH_TONE = {
+  enabled: 'quiet',
+  disabled: 'quiet',
+  unconfigured: 'warning',
+  invalid: 'danger',
+} as const;
+
+function StatusBadge({ health, t }: { health: RoleHealth; t: PageTranslate }) {
+  const state = { enabled: 'done', disabled: 'idle', unconfigured: 'warning', invalid: 'error' } as const;
+  return (
+    <Tag tone={HEALTH_TONE[health]} className="classmates-status">
+      <StateDot state={state[health]} size={6} />{t(`health.${health}`)}
+    </Tag>
+  );
+}
+
+/**
+ * The `Input` primitive renders a wrapper span around the native control and
+ * does not forward a ref, so the name field's ref sits on its `dsh-ui-field`
+ * wrapper; focus still has to land on the control inside, which is what
+ * saving with a validation error relies on.
+ */
+function focusField(host: HTMLElement | null): void {
+  if (host === null) return;
+  const selector = 'input, textarea, select';
+  const control = host.matches(selector) ? host : host.querySelector<HTMLElement>(selector);
+  control?.focus();
+}
+
+export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
+  const localeId = useLocaleId(locale);
+  const t = useMemo(() => createPageTranslator(localeId), [localeId]);
+  const [confirmDialog, confirm] = useConfirmDialog(t);
+  const startTaskAvailable = useStartTaskAvailable(client);
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [state, setState] = useState<ClassmatesState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -137,7 +164,7 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
   const [requestError, setRequestError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [remoteVersion, setRemoteVersion] = useState<ClassmateDefinition | null>(null);
   const [handoffBusy, setHandoffBusy] = useState(false);
   const [assistantError, setAssistantError] = useState<string | null>(null);
@@ -149,7 +176,7 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftGenRef = useRef(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const nameRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLDivElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const instructionsRef = useRef<HTMLTextAreaElement>(null);
 
@@ -192,10 +219,14 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
     if (draft) headingRef.current?.focus();
   }, [selectedId, isNew]);
 
-  const confirmDiscard = useCallback((): boolean => {
+  const confirmDiscard = useCallback(async (): Promise<boolean> => {
     if (!dirty) return true;
-    return window.confirm('当前角色的修改尚未保存，离开将丢弃这些修改。确定继续吗？');
-  }, [dirty]);
+    return confirm({
+      title: t('confirm.discardTitle'),
+      message: t('role.confirmDiscard'),
+      confirmLabel: t('common.discard'),
+    });
+  }, [dirty, confirm, t]);
 
   const openRole = useCallback((role: ClassmateDefinition) => {
     draftGenRef.current += 1;
@@ -220,13 +251,13 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
     setRemoteVersion(null);
   }, []);
 
-  const requestOpenRole = useCallback((role: ClassmateDefinition) => {
-    if (!confirmDiscard()) return;
+  const requestOpenRole = useCallback(async (role: ClassmateDefinition) => {
+    if (!(await confirmDiscard()) || !mountedRef.current) return;
     openRole(role);
   }, [confirmDiscard, openRole]);
 
-  const requestNewRole = useCallback(() => {
-    if (!confirmDiscard()) return;
+  const requestNewRole = useCallback(async () => {
+    if (!(await confirmDiscard()) || !mountedRef.current) return;
     draftGenRef.current += 1;
     const next = createDraft();
     setDraft(next);
@@ -239,8 +270,9 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
     setRemoteVersion(null);
   }, [confirmDiscard]);
 
-  const requestPresetRole = useCallback(() => {
-    if (!state || !selectedPresetId || !confirmDiscard()) return;
+  const requestPresetRole = useCallback(async () => {
+    if (!state || !selectedPresetId) return;
+    if (!(await confirmDiscard()) || !mountedRef.current) return;
     const preset = presets.find(item => item.id === selectedPresetId);
     if (!preset) return;
     let id = preset.id;
@@ -261,8 +293,8 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
     setRemoteVersion(null);
   }, [state, selectedPresetId, confirmDiscard]);
 
-  const requestBack = useCallback(() => {
-    if (!confirmDiscard()) return;
+  const requestBack = useCallback(async () => {
+    if (!(await confirmDiscard()) || !mountedRef.current) return;
     closeEditor();
   }, [confirmDiscard, closeEditor]);
 
@@ -298,32 +330,29 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
           ? { ...current, revision: latest.revision, schemaVersion: latest.schemaVersion, enabled: latest.enabled }
           : current));
         setRemoteVersion(latest);
-        setNotice(
-          '已加载最新版本，可在下方对照。'
-          + '你的输入已保留，尚未合并。请检查差异后保存，或放弃自己的修改。',
-        );
+        setNotice(t('reload.kept'));
       } else if (!latest && !isNew) {
         setDraft(current => (current && current.id === targetId ? { ...current, revision: 0 } : current));
         setIsNew(true);
         setRemoteVersion(null);
-        setNotice('该角色已在最新版本中被删除。你的输入仍保留，保存将创建一个同内容的新角色。');
+        setNotice(t('role.deletedRemote'));
       } else {
         setRemoteVersion(null);
-        setNotice('已加载最新版本，你的输入保留在表单中。');
+        setNotice(t('reload.plain'));
       }
     } catch (error) {
       if (!mountedRef.current || draftGenRef.current !== generation) return;
-      setRequestError(`加载最新版本失败：${errorMessage(error)}。你的输入仍保留，可稍后重试。`);
+      setRequestError(t('reload.failed', { message: errorMessage(error) }));
     } finally {
       if (mountedRef.current && draftGenRef.current === generation) setBusy(null);
     }
-  }, [client, state, draft, busy, isNew]);
+  }, [client, state, draft, busy, isNew, t]);
 
   const onSave = useCallback(async () => {
     if (!state || !draft || busy) return;
     // Enabled is saved immediately from the list, not owned by the text form.
     const input = { ...cloneRole(draft), enabled: isNew ? false : state.roles.find(role => role.id === draft.id)?.enabled ?? draft.enabled };
-    const errors = validateDraft(input, state.models);
+    const errors = validateDraft(input, state.models, t);
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
       const focusMap = {
@@ -333,7 +362,7 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
       } as const;
       const first = (Object.keys(errors) as FieldKey[])[0];
       if (first === 'name' || first === 'description' || first === 'instructions') {
-        focusMap[first].current?.focus();
+        focusField(focusMap[first].current);
       }
       return;
     }
@@ -353,17 +382,14 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
       } else {
         closeEditor();
       }
-      setNotice('已保存。');
+      setNotice(t('common.saved'));
     } catch (error) {
       if (!mountedRef.current || draftGenRef.current !== generation) return;
-      setRequestError(
-        `保存失败：${errorMessage(error)}。你的输入已保留在表单中，可以直接重试；`
-        + '如果配置被其他窗口修改过，请加载最新版本，审阅后再保存（不会自动覆盖他人的更改）。',
-      );
+      setRequestError(t('role.saveFailed', { message: errorMessage(error) }));
     } finally {
       if (mountedRef.current && draftGenRef.current === generation) setBusy(null);
     }
-  }, [client, state, draft, busy, isNew, openRole, closeEditor]);
+  }, [client, state, draft, busy, isNew, openRole, closeEditor, t]);
 
   const toggleRole = useCallback(async (role: ClassmateDefinition, enabled: boolean) => {
     if (!state?.writable || busy) return;
@@ -386,18 +412,18 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
         } else {
           // A separately edited role must still take the normal conflict path.
           setRemoteVersion(saved);
-          setRequestError('角色内容已有更新。你的输入仍保留，请对照最新版本后再保存。');
+          setRequestError(t('role.conflict'));
         }
       }
       setAssistantError(null);
     } catch (error) {
       if (mountedRef.current) setToggleError(
-        '未能确认「' + role.name + '」的启停结果：' + errorMessage(error) + '。请刷新列表后重试。',
+        t('toggle.failed', { name: role.name.trim() || role.id, message: errorMessage(error) }),
       );
     } finally {
       if (mountedRef.current) setBusy(null);
     }
-  }, [client, state, busy, draft, baseline]);
+  }, [client, state, busy, draft, baseline, t]);
 
   const refreshRoleList = useCallback(async () => {
     if (busy) return;
@@ -415,23 +441,32 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
         else closeEditor();
       }
     } catch (error) {
-      if (mountedRef.current) setToggleError('刷新失败：' + errorMessage(error) + '。你的输入仍保留。');
+      if (mountedRef.current) setToggleError(t('refresh.failed', { message: errorMessage(error) }));
     } finally {
       if (mountedRef.current) setBusy(null);
     }
-  }, [client, busy, dirty, draft, isNew, openRole, closeEditor]);
+  }, [client, busy, dirty, draft, isNew, openRole, closeEditor, t]);
 
   const onRemove = useCallback(async () => {
     if (!state || !draft || busy) return;
+    // The confirmation is asynchronous; a different draft opened meanwhile
+    // (generation bump) cancels this removal.
+    const asked = draftGenRef.current;
     if (isNew) {
-      if (window.confirm('放弃这个尚未保存的新角色草稿？')) closeEditor();
+      const discard = await confirm({
+        title: t('confirm.draftTitle'),
+        message: t('role.confirmDraft'),
+        confirmLabel: t('common.discardDraft'),
+      });
+      if (discard && mountedRef.current && draftGenRef.current === asked) closeEditor();
       return;
     }
-    const confirmed = window.confirm(
-      `确定删除角色“${draft.name.trim() || draft.id}”？\n`
-      + '删除后无法再使用此角色创建子智能体或队友。已有成员不受影响。',
-    );
-    if (!confirmed) return;
+    const confirmed = await confirm({
+      title: t('role.confirmDeleteTitle'),
+      message: t('role.confirmDelete', { name: draft.name.trim() || draft.id }),
+      confirmLabel: t('common.delete'),
+    });
+    if (!confirmed || !mountedRef.current || draftGenRef.current !== asked) return;
     const generation = draftGenRef.current;
     setBusy('remove');
     setRequestError(null);
@@ -442,16 +477,14 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
       setState(next);
       closeEditor();
       setBusy(null);
-      setNotice('已删除。已有子智能体和队友不受影响。');
+      setNotice(t('role.deleted'));
     } catch (error) {
       if (!mountedRef.current || draftGenRef.current !== generation) return;
-      setRequestError(
-        `删除失败：${errorMessage(error)}。可以直接重试；如果配置被其他窗口修改过，请加载最新版本后再操作。`,
-      );
+      setRequestError(t('delete.failed', { message: errorMessage(error) }));
     } finally {
       if (mountedRef.current && draftGenRef.current === generation) setBusy(null);
     }
-  }, [client, state, draft, busy, isNew, closeEditor]);
+  }, [client, state, draft, busy, isNew, closeEditor, confirm, t]);
 
   const patchDraft = useCallback((patch: Partial<ClassmateDefinition>) => {
     setDraft(current => (current ? { ...current, ...patch } : current));
@@ -463,6 +496,7 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
   }, []);
 
   const copyDemoRequest = useCallback(async (text: string) => {
+    let ok = true;
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -472,15 +506,24 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
       area.style.opacity = '0';
       document.body.appendChild(area);
       area.select();
-      document.execCommand('copy');
-      area.remove();
+      try {
+        // execCommand reports failure by returning false, not by throwing.
+        ok = document.execCommand('copy');
+      } catch {
+        ok = false;
+      } finally {
+        area.remove();
+      }
     }
     if (!mountedRef.current) return;
-    setCopied(true);
     if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => {
-      if (mountedRef.current) setCopied(false);
-    }, 2000);
+    setCopyState(ok ? 'copied' : 'failed');
+    // A failure stays visible until the next attempt; success fades.
+    if (ok) {
+      copyTimerRef.current = setTimeout(() => {
+        if (mountedRef.current) setCopyState('idle');
+      }, 2000);
+    }
   }, []);
 
   const runHandoff = useCallback(async (action: () => void | Promise<void>) => {
@@ -499,7 +542,7 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
   }, [handoffBusy]);
 
   const editing = tab === 'models' ? modelsEditing : draft !== null;
-  const rootClass = `classmates${editing ? ' classmates--editing' : ''}`;
+  const rootClass = `classmates dsh-ui-panel${editing ? ' classmates--editing' : ''}`;
   const readOnly = state !== null && !state.writable;
   const demoRole = useMemo(() => {
     if (!state) return null;
@@ -507,52 +550,55 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
     return state.roles.find(r => roleHealth(r, state.models) === 'enabled') ?? null;
   }, [state, draft]);
   const demoText = demoRole
-    ? `请使用 Classmates 的「${demoRole.name.trim()}」角色派发子智能体，协助完成：<在这里描述你的任务>。`
-    : '请使用 Classmates 已启用的角色派发子智能体，协助完成：<在这里描述你的任务>。需要先在上方启用一个角色。';
+    ? t('demo.withRole', { name: demoRole.name.trim() })
+    : t('demo.noRole');
+  const tabs = useMemo(() => classmatesTabs(t), [t]);
+
+  const changeTab = useCallback((next: 'roles' | 'models') => {
+    // Notices describe the tab they were raised on; they do not follow a switch.
+    setNotice(null);
+    setTab(next);
+  }, []);
 
   return (
     <div className={rootClass}>
       <style>{classmatesCss}</style>
 
-      <div className="classmates-toolbar">
-        <header className="classmates-header">
-          <h2>模板与模型</h2>
-          <p className="classmates-lead">
-            配置模板职责和模型用途，派发时由主智能体选择。
-          </p>
-        </header>
+      {confirmDialog}
 
-        {client.startTask && (
-          <section className="classmates-assistant" aria-label="开始任务">
-            {client.startTask && (
-              <Button variant="outline"
-                type="button"
-                className="classmates-button"
-                data-classmates-start-task="true"
-                onClick={() => void runHandoff(() => client.startTask?.())}
-                disabled={handoffBusy || busy !== null}
-              >
-                开始任务
-              </Button>
-            )}
+      {/* The host plugin page owns the page title; this row only carries the
+       * lead sentence and the page-level action. */}
+      <div className="dsh-ui-row-wrap classmates-toolbar">
+        <p className="dsh-ui-help classmates-lead">{t('page.lead')}</p>
+
+        {startTaskAvailable && (
+          <div className="dsh-ui-row-wrap classmates-assistant">
+            <Button variant="outline"
+              type="button"
+              className="classmates-button"
+              data-classmates-start-task="true"
+              onClick={() => void runHandoff(() => client.startTask?.())}
+              disabled={handoffBusy || busy !== null}
+            >
+              {t('startTask')}
+            </Button>
             {assistantError && (
-              <p className="classmates-field-error" role="alert">{assistantError}</p>
+              <p className="dsh-ui-error dsh-ui-wrap" role="alert">{assistantError}</p>
             )}
-          </section>
+          </div>
         )}
-
       </div>
 
       {status === 'loading' && (
-        <p className="classmates-loading" role="status">正在加载角色配置…</p>
+        <p className="dsh-ui-loading" role="status">{t('loading')}</p>
       )}
 
       {status === 'load-error' && (
-        <div className="classmates-alert" role="alert" style={{ marginTop: 14 }}>
-          <p>加载角色配置失败：{loadError}</p>
-          <div className="classmates-alert-actions">
+        <div className="dsh-ui-banner dsh-ui-banner--danger" role="alert">
+          <p>{t('loadError', { message: loadError ?? '' })}</p>
+          <div className="dsh-ui-actions">
             <Button variant="outline" type="button" className="classmates-button" onClick={() => void retryLoad()}>
-              重试
+              {t('retry')}
             </Button>
           </div>
         </div>
@@ -561,25 +607,25 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
       {status === 'ready' && state && (
         <>
           {state.catalogErrors?.length ? (
-            <div className="classmates-banner" role="status">
-              {state.catalogErrors.join('；')}。其他可用角色仍可编辑。
+            // Base banner tone is the warning rail; a partial read is a warning, not a failure.
+            <div className="dsh-ui-banner" role="status">
+              <p className="dsh-ui-banner-title">{t('catalogError.title')}</p>
+              <p className="dsh-ui-wrap">{state.catalogErrors.join('；')}</p>
+              <p>{t('catalogError.rest')}</p>
             </div>
           ) : null}
           {readOnly && (
-            <p className="classmates-banner" role="status">
-              当前配置只读。
+            <p className="dsh-ui-banner dsh-ui-banner--info" role="status">
+              {t('readOnly')}
             </p>
-          )}
-          {notice && (
-            <p className="classmates-notice" style={{ marginTop: 14 }} aria-live="polite">{notice}</p>
           )}
 
           <SegmentedTabs
             className="classmates-tabs"
-            label="配置类别"
-            items={CLASSMATES_TABS}
+            label={t('tabs.label')}
+            items={tabs}
             value={tab}
-            onChange={setTab}
+            onChange={changeTab}
           />
 
           <div
@@ -588,75 +634,82 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
             aria-labelledby="classmates-tab-roles"
             hidden={tab !== 'roles'}
           >
+          {notice && (
+            <p className="dsh-ui-notice" aria-live="polite">{notice}</p>
+          )}
           <div className="classmates-body">
-            <section className="classmates-list-pane" aria-label="角色列表">
-              <div className="classmates-list-head">
-                <h2>角色（{state.roles.length}）</h2>
+            <section className="dsh-ui-stack classmates-list-pane" aria-labelledby="classmates-roles-heading">
+              <div className="dsh-ui-row classmates-list-head">
+                <h2 id="classmates-roles-heading" className="dsh-ui-heading">
+                  {t('role.heading', { count: state.roles.length })}
+                </h2>
                 <Button variant="outline" size="sm"
                   type="button"
-                  onClick={requestNewRole}
+                  onClick={() => void requestNewRole()}
                   disabled={readOnly || busy !== null}
                 >
-                  新建角色
+                  {t('role.new')}
                 </Button>
               </div>
-              <details className="classmates-presets">
-                <summary>从预设添加</summary>
-                <div className="classmates-field">
-                  <label className="classmates-label" htmlFor="classmates-preset">预设角色</label>
+              <details className="classmates-disclosure">
+                <summary className="dsh-ui-heading">{t('role.fromPreset')}</summary>
+                <div className="dsh-ui-field">
+                  <label className="dsh-ui-label" htmlFor="classmates-preset">{t('role.presetLabel')}</label>
                   <select
                     id="classmates-preset"
-                    className="classmates-select"
+                    className="dsh-ui-select"
                     value={selectedPresetId}
                     onChange={event => setSelectedPresetId(event.target.value)}
                     disabled={readOnly || busy !== null}
                   >
-                    <option value="">选择预设角色</option>
+                    <option value="">{t('role.presetPlaceholder')}</option>
                     {presets.map(preset => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
                   </select>
-                  <Button variant="outline"
-                    type="button"
-                    className="classmates-button"
-                    onClick={requestPresetRole}
-                    disabled={readOnly || busy !== null || !selectedPresetId}
-                  >
-                    添加为新角色
-                  </Button>
+                  <div className="dsh-ui-actions">
+                    <Button variant="outline"
+                      type="button"
+                      className="classmates-button"
+                      onClick={() => void requestPresetRole()}
+                      disabled={readOnly || busy !== null || !selectedPresetId}
+                    >
+                      {t('role.addPreset')}
+                    </Button>
+                  </div>
                 </div>
               </details>
               {toggleError && (
-                <div className="classmates-list-error" role="alert">
-                  <p>{toggleError}</p>
-                  <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void refreshRoleList()}>刷新角色列表</Button>
+                <div className="dsh-ui-stack" role="alert">
+                  <p className="dsh-ui-error dsh-ui-wrap">{toggleError}</p>
+                  <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void refreshRoleList()}>{t('common.refresh')}</Button>
                 </div>
               )}
               {state.roles.length === 0 ? (
-                <p className="classmates-empty">暂无角色，可新建或从预设添加。</p>
+                <p className="dsh-ui-empty">{t('role.empty')}</p>
               ) : (
-                <ul className="classmates-list">
+                <ul className="dsh-ui-list dsh-ui-list-scroll classmates-list">
                   {state.roles.map(role => {
                     const health = roleHealth(role, state.models);
                     return (
-                      <li key={role.id} className="classmates-row" data-selected={selectedId === role.id && !isNew || undefined}>
+                      <li key={role.id} className="dsh-ui-list-row" data-selected={selectedId === role.id && !isNew || undefined}>
                         <button
                           type="button"
-                          className="classmates-item"
+                          className="dsh-ui-list-item"
                           aria-current={selectedId === role.id && !isNew ? 'true' : undefined}
-                          onClick={() => requestOpenRole(role)}
+                          onClick={() => void requestOpenRole(role)}
                           disabled={busy !== null}
                         >
-                          <span className="classmates-item-name">{role.name.trim() || '未命名角色'}</span>
-                          <span className="classmates-item-desc" title={role.description}>
-                            {role.description.trim() || '暂无职责说明'}
+                          <span className="dsh-ui-list-name">{role.name.trim() || t('role.unnamed')}</span>
+                          <span className="dsh-ui-list-desc" title={role.description}>
+                            {role.description.trim() || t('role.noDescription')}
                           </span>
-                          {(health === 'invalid' || health === 'unconfigured') && <StatusBadge health={health} />}
+                          {(health === 'invalid' || health === 'unconfigured') && <StatusBadge health={health} t={t} />}
                         </button>
                         <Switch
-                          label={'启用角色 ' + (role.name.trim() || role.id)}
+                          label={t('role.enable', { name: role.name.trim() || role.id })}
                           checked={role.enabled}
                           onChange={enabled => void toggleRole(role, enabled)}
                           disabled={readOnly || busy !== null}
-                          title="立即保存启用状态；停用不影响已有成员。"
+                          title={t('role.enableTitle')}
                         />
                       </li>
                     );
@@ -665,74 +718,79 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
               )}
             </section>
 
-            <section className="classmates-editor" aria-label="角色编辑">
+            <section className="dsh-ui-stack classmates-editor" aria-label={t('role.editor')}>
               {draft ? (
                 <>
-                  <Button variant="outline" type="button" className="classmates-back" onClick={requestBack} disabled={busy !== null}>
-                    ← 返回列表
+                  <Button variant="outline" type="button" className="classmates-back" onClick={() => void requestBack()} disabled={busy !== null}>
+                    {t('common.back')}
                   </Button>
-                  <div className="classmates-editor-head">
-                    <h2 ref={headingRef} tabIndex={-1}>
-                      {isNew ? '新建角色' : (draft.name.trim() || '未命名角色')}
-                    </h2>
+                  <div className="dsh-ui-row-wrap classmates-editor-head">
+                    <h3 className="dsh-ui-title" ref={headingRef} tabIndex={-1}>
+                      {isNew ? t('role.newTitle') : (draft.name.trim() || t('role.unnamed'))}
+                    </h3>
                     {isNew
-                      ? <span className="classmates-badge classmates-badge--unconfigured">未保存</span>
-                      : <StatusBadge health={roleHealth(draft, state.models)} />}
-                    {dirty && <span className="classmates-dirty">有未保存的修改</span>}
+                      ? <Tag tone="warning" className="classmates-status">{t('common.unsaved')}</Tag>
+                      : <StatusBadge health={roleHealth(draft, state.models)} t={t} />}
+                    {dirty && <span className="dsh-ui-meta dsh-ui-warn">{t('common.dirty')}</span>}
                   </div>
 
                   <form
-                    className="classmates-form"
-                    aria-label={isNew ? '新建角色表单' : `编辑角色 ${draft.name.trim() || draft.id}`}
+                    className="dsh-ui-stack"
+                    aria-label={isNew ? t('role.formNew') : t('role.formEdit', { name: draft.name.trim() || draft.id })}
                     onSubmit={event => {
                       event.preventDefault();
                       void onSave();
                     }}
                   >
-                    <fieldset disabled={readOnly || busy !== null} className="classmates-fields">
+                    <fieldset disabled={readOnly || busy !== null} className="dsh-ui-stack classmates-fields">
                       {requestError && (
-                        <div className="classmates-alert" role="alert">
+                        <div className="dsh-ui-banner dsh-ui-banner--danger" role="alert">
                           <p>{requestError}</p>
-                          <div className="classmates-alert-actions">
+                          <div className="dsh-ui-actions">
                             <Button variant="outline"
                               type="button"
                               className="classmates-button"
                               onClick={() => void onSave()}
                             >
-                              重试保存
+                              {t('common.retrySave')}
                             </Button>
                             <Button variant="outline"
                               type="button"
                               className="classmates-button"
                               onClick={() => void reloadKeepingDraft()}
                             >
-                              加载最新版本（保留我的输入）
+                              {t('common.reloadKeep')}
                             </Button>
                           </div>
                         </div>
                       )}
-                      <div className="classmates-field">
-                        <label className="classmates-label" htmlFor="classmates-name">名称</label>
-                        <input
+                      <div className="dsh-ui-field" ref={nameRef}>
+                        <div className="dsh-ui-label-row">
+                          <label className="dsh-ui-label" htmlFor="classmates-name">{t('common.name')}</label>
+                          <CharCount id="classmates-name-count" count={draft.name.length} max={NAME_MAX} />
+                        </div>
+                        <Input
+                          className={`dsh-ui-control classmates-input${fieldErrors.name ? ' classmates-invalid' : ''}`}
                           id="classmates-name"
-                          ref={nameRef}
-                          className="classmates-input"
                           type="text"
                           value={draft.name}
                           onChange={event => patchDraft({ name: event.target.value })}
                           maxLength={NAME_MAX}
                           required
                           aria-invalid={fieldErrors.name ? 'true' : undefined}
-                          aria-describedby={fieldErrors.name ? 'classmates-name-error' : undefined}
+                          aria-describedby={fieldErrors.name ? 'classmates-name-error classmates-name-count' : 'classmates-name-count'}
                           autoComplete="off"
                         />
                         {fieldErrors.name && (
-                          <p id="classmates-name-error" className="classmates-field-error">{fieldErrors.name}</p>
+                          <p id="classmates-name-error" className="dsh-ui-error">{fieldErrors.name}</p>
                         )}
                       </div>
 
-                      <div className="classmates-field">
-                        <label className="classmates-label" htmlFor="classmates-description">职责说明</label>
+                      <div className="dsh-ui-field">
+                        <div className="dsh-ui-label-row">
+                          <label className="dsh-ui-label" htmlFor="classmates-description">{t('role.description')}</label>
+                          <CharCount id="classmates-description-count" count={draft.description.length} max={DESCRIPTION_MAX} />
+                        </div>
                         <textarea
                           id="classmates-description"
                           ref={descriptionRef}
@@ -745,42 +803,45 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
                           aria-invalid={fieldErrors.description ? 'true' : undefined}
                           aria-describedby={
                             fieldErrors.description
-                              ? 'classmates-description-error classmates-description-help'
-                              : 'classmates-description-help'
+                              ? 'classmates-description-error classmates-description-help classmates-description-count'
+                              : 'classmates-description-help classmates-description-count'
                           }
                         />
-                        <p id="classmates-description-help" className="classmates-help">
-                          何时调用、负责什么。
+                        <p id="classmates-description-help" className="dsh-ui-help">
+                          {t('role.descriptionHelp')}
                         </p>
                         {fieldErrors.description && (
-                          <p id="classmates-description-error" className="classmates-field-error">{fieldErrors.description}</p>
+                          <p id="classmates-description-error" className="dsh-ui-error">{fieldErrors.description}</p>
                         )}
                       </div>
 
                       {(draft.model !== null || draft.reasoningEffort !== undefined) && (
-                        <div className="classmates-legacy" role="group" aria-label="旧版模型绑定">
-                          <p className="classmates-legacy-title">旧版模型绑定</p>
-                          <p className="classmates-legacy-summary">{modelLabel(draft, state.models)}</p>
-                          <p className="classmates-help">
-                            角色模板只包含职责与指令。保留此绑定可维持旧行为；清除并保存后，由主智能体参考模型预设选择模型。
-                          </p>
+                        <div className="dsh-ui-banner" role="group" aria-label={t('role.legacyTitle')}>
+                          <p className="dsh-ui-banner-title">{t('role.legacyTitle')}</p>
+                          <p className="dsh-ui-wrap">{modelLabel(draft, state.models, t)}</p>
+                          <p className="dsh-ui-help">{t('role.legacyHelp')}</p>
                           {fieldErrors.model && (
-                            <p className="classmates-field-error">{fieldErrors.model}</p>
+                            <p className="dsh-ui-error">{fieldErrors.model}</p>
                           )}
                           {fieldErrors.effort && (
-                            <p className="classmates-field-error">{fieldErrors.effort}</p>
+                            <p className="dsh-ui-error">{fieldErrors.effort}</p>
                           )}
-                          <Button variant="outline"
-                            type="button"
-                            className="classmates-button"
-                            onClick={clearLegacyModel}
-                          >
-                            清除模型绑定
-                          </Button>
+                          <div className="dsh-ui-actions">
+                            <Button variant="outline"
+                              type="button"
+                              className="classmates-button"
+                              onClick={clearLegacyModel}
+                            >
+                              {t('role.legacyClear')}
+                            </Button>
+                          </div>
                         </div>
                       )}
-                      <div className="classmates-field">
-                        <label className="classmates-label" htmlFor="classmates-instructions">工作指令</label>
+                      <div className="dsh-ui-field">
+                        <div className="dsh-ui-label-row">
+                          <label className="dsh-ui-label" htmlFor="classmates-instructions">{t('role.instructions')}</label>
+                          <CharCount id="classmates-instructions-count" count={draft.instructions.length} max={INSTRUCTIONS_MAX} />
+                        </div>
                         <textarea
                           id="classmates-instructions"
                           ref={instructionsRef}
@@ -793,65 +854,65 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
                           aria-invalid={fieldErrors.instructions ? 'true' : undefined}
                           aria-describedby={
                             fieldErrors.instructions
-                              ? 'classmates-instructions-error'
-                              : undefined
+                              ? 'classmates-instructions-error classmates-instructions-count'
+                              : 'classmates-instructions-count'
                           }
                         />
                         {fieldErrors.instructions && (
-                          <p id="classmates-instructions-error" className="classmates-field-error">{fieldErrors.instructions}</p>
+                          <p id="classmates-instructions-error" className="dsh-ui-error">{fieldErrors.instructions}</p>
                         )}
                       </div>
 
                     </fieldset>
 
                     {remoteVersion && (
-                      <div className="classmates-remote" role="group" aria-label="最新版本对照">
-                        <p className="classmates-remote-title">
-                          最新版本对照（版本 {remoteVersion.revision}）
+                      <div className="dsh-ui-banner" role="group" aria-label={t('remote.label')}>
+                        <p className="dsh-ui-banner-title">
+                          {t('remote.title', { revision: remoteVersion.revision })}
                         </p>
-                        <p className="classmates-help">
-                          以下是其他页面保存的内容。你的输入保留在上方，尚未合并。请检查差异后保存，或放弃自己的修改。
-                        </p>
+                        <p className="dsh-ui-help">{t('remote.help')}</p>
                         <dl className="classmates-remote-fields">
                           <div>
-                            <dt>名称</dt>
-                            <dd>{remoteVersion.name}</dd>
+                            <dt className="dsh-ui-meta">{t('common.name')}</dt>
+                            <dd className="dsh-ui-compact">{remoteVersion.name}</dd>
                           </div>
                           <div>
-                            <dt>职责说明</dt>
-                            <dd>{remoteVersion.description}</dd>
+                            <dt className="dsh-ui-meta">{t('role.description')}</dt>
+                            <dd className="dsh-ui-compact">{remoteVersion.description}</dd>
                           </div>
                           <div>
-                            <dt>模型 / 思考强度</dt>
-                            <dd>{modelLabel(remoteVersion, state.models)}</dd>
+                            <dt className="dsh-ui-meta">{t('remote.model')}</dt>
+                            <dd className="dsh-ui-compact">{modelLabel(remoteVersion, state.models, t)}</dd>
                           </div>
                           <div>
-                            <dt>启用</dt>
-                            <dd>{remoteVersion.enabled ? '已启用' : '已停用'}</dd>
+                            <dt className="dsh-ui-meta">{t('remote.enabled')}</dt>
+                            <dd className="dsh-ui-compact">{t(remoteVersion.enabled ? 'health.enabled' : 'health.disabled')}</dd>
                           </div>
                           <div>
-                            <dt>工作指令</dt>
-                            <dd className="classmates-remote-instructions">{remoteVersion.instructions}</dd>
+                            <dt className="dsh-ui-meta">{t('role.instructions')}</dt>
+                            <dd className="dsh-ui-compact dsh-ui-scroll classmates-remote-instructions">{remoteVersion.instructions}</dd>
                           </div>
                         </dl>
-                        <Button variant="outline"
-                          type="button"
-                          className="classmates-button"
-                          onClick={() => openRole(remoteVersion)}
-                          disabled={busy !== null}
-                        >
-                          放弃我的修改，加载最新版本
-                        </Button>
+                        <div className="dsh-ui-actions">
+                          <Button variant="outline"
+                            type="button"
+                            className="classmates-button"
+                            onClick={() => openRole(remoteVersion)}
+                            disabled={busy !== null}
+                          >
+                            {t('remote.discard')}
+                          </Button>
+                        </div>
                       </div>
                     )}
 
-                    <div className="classmates-actions">
+                    <div className="dsh-ui-actions">
                       <Button variant="primary"
                         type="submit"
-                        className="classmates-button classmates-button--primary"
+                        className="classmates-button"
                         disabled={readOnly || busy !== null}
                       >
-                        {busy === 'save' ? '正在保存…' : '保存'}
+                        {busy === 'save' ? t('common.saving') : t('common.save')}
                       </Button>
                       <Button variant="outline"
                         type="button"
@@ -859,48 +920,45 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
                         onClick={() => void onRemove()}
                         disabled={readOnly || busy !== null}
                       >
-                        {busy === 'remove' ? '正在删除…' : (isNew ? '放弃草稿' : '删除角色')}
+                        {busy === 'remove' ? t('common.deleting') : (isNew ? t('common.discardDraft') : t('role.delete'))}
                       </Button>
                     </div>
                   </form>
                 </>
               ) : (
-                <div className="classmates-editor-placeholder">
-                  <p>选择或新建角色。</p>
+                <div className="dsh-ui-empty">
+                  <p>{t('role.emptyEditor')}</p>
                 </div>
               )}
             </section>
           </div>
 
-          <details className="classmates-details">
-            <summary>工具与权限说明</summary>
-            <p>
-              工具和权限由宿主提供；「只读」等角色指令不构成权限限制。
-            </p>
+          <details className="classmates-details classmates-disclosure">
+            <summary className="dsh-ui-heading">{t('role.toolsTitle')}</summary>
+            <p className="dsh-ui-help classmates-prose">{t('role.toolsBody')}</p>
           </details>
 
-          <details className="classmates-details">
-            <summary>停用、删除与卸载的影响</summary>
-            <p>
-              删除角色不影响已有子智能体和队友。卸载前先结束相关成员；恢复角色指令需要保留插件，团队队友还需要原绑定数据。
-            </p>
+          <details className="classmates-details classmates-disclosure">
+            <summary className="dsh-ui-heading">{t('role.impactTitle')}</summary>
+            <p className="dsh-ui-help classmates-prose">{t('role.impactBody')}</p>
           </details>
 
-          <section className="classmates-demo" aria-label="示例请求">
-            <h2 style={{ fontSize: 15 }}>示例请求</h2>
-            <p className="classmates-help">
-              复制到普通对话中使用。
-            </p>
-            <p className="classmates-demo-text">{demoText}</p>
-            <div className="classmates-demo-row">
+          <section className="dsh-ui-section" aria-labelledby="classmates-demo-heading">
+            <h2 id="classmates-demo-heading" className="dsh-ui-heading">{t('demo.title')}</h2>
+            <p className="dsh-ui-help">{t('demo.help')}</p>
+            <p className="dsh-ui-code">{demoText}</p>
+            <div className="dsh-ui-row-wrap">
               <Button variant="outline"
                 type="button"
                 className="classmates-button"
                 onClick={() => void copyDemoRequest(demoText)}
               >
-                复制示例请求
+                {t('demo.copy')}
               </Button>
-              {copied && <span className="classmates-demo-copied" role="status">已复制</span>}
+              {copyState === 'copied' && <span className="dsh-ui-notice" role="status">{t('demo.copied')}</span>}
+              {copyState === 'failed' && (
+                <span className="dsh-ui-notice dsh-ui-notice--error" role="alert">{t('demo.copyFailed')}</span>
+              )}
             </div>
           </section>
           </div>
@@ -918,6 +976,8 @@ export function ClassmatesPage({ client }: ClassmatesPageProps) {
               onState={setState}
               onDirtyChange={setModelsDirty}
               onEditingChange={setModelsEditing}
+              t={t}
+              confirm={confirm}
             />
           </div>
         </>

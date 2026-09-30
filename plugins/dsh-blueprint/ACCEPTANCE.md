@@ -1,76 +1,87 @@
 # Acceptance record
 
-Verified on 2026-09-28 with Windows, Node.js 24.16.0 and official DSH 0.1.7-rc.2.
-This record describes the current plugin-only implementation.
+## Current redesign — 2026-09-30
 
-## Scope
+This record separates offline checks from real-host acceptance. The implementation now
+uses environment-independent protocol/Profile Core, Creator guidance and tools, native
+`plugin_manager` for package operations, a guarded permutation-only order adapter, and
+an optional read-only plugin page. The old additive preview/apply engine is removed.
+DSHBP2 fields, encoding, limits and checked-in vectors remain compatible.
 
-Blueprint shares exact package identities and ordered bundles. It has one Import /
-Export menu. There is no settings document, settings RPC mode, field selection,
-sharing-policy schema, Settings/Loader service dependency or settings mutation.
-The validator accepts only the current blueprint schema; no migration or legacy
-compatibility path is maintained. Reusable defaults belong in native composition
-plugins and remain subject to the host's configuration-layer rules.
+### Completed checks
 
-Import is additive: the entire existing active sequence remains unchanged, and
-only requested inactive bundles are appended in blueprint preference order.
-Different incoming order alone is not a conflict. Import never disables bundles.
+- 86/86 Blueprint tests passed on Windows using bundled Node and
+  `node --test --test-isolation=none plugins/dsh-blueprint/tests/*.test.mjs`.
+  Coverage includes strict JSON/code validation, malformed whitespace bounds,
+  portable vectors, installed-identity export, optional Core loading, authenticated
+  HTTP RPC, retired mutation endpoint rejection, Creator prompt lifecycle,
+  protocol tool registration/disposal, native approval argument/denial/cancellation,
+  page registration/parsing/copy-request behavior and late-reply invalidation.
+- Order adapter tests use isolated temporary profiles and injected official helpers:
+  exact permutation, no omission/addition/disablement, stale state checked under lock,
+  protected positions and segment boundaries, metadata preservation, no-op,
+  HMR-before-file-lock sequencing, root reconciliation, startup restart requirements,
+  cancellation before/after commit, missing helper contracts, partial application failure,
+  private-safe failure reports, and no rollback/retry.
+- Package build passed through `pnpm --filter @klarkxy/dsh-blueprint run build`.
+  The script checks all shipped JavaScript modules; no transpilation is required.
+- Plugin settings registration regression: 1/1 passed.
+- Editor plugin integration/build regressions: 16/16 passed across four test files.
+- `git diff --check` passed (Git emits existing LF/CRLF conversion notices).
+- `npm pack --dry-run --ignore-scripts` passed: Core, tools, order adapter, skill,
+  optional Client, protocol and vectors are included; retired engine and tests/cache
+  are not packaged. This check does not publish or install anything.
+- Independent read-only review found no confirmed actionable defect in the redesigned
+  implementation and verified the native approval/locking/reconciliation call paths.
 
-Codes use only `DSHBP2:<payload>` with raw DEFLATE and Base64url. There is no
-encoding selector or JSON import/download. Export returns only the code. Blueprint
-metadata contains a name and optional description, without its own revision number.
+### Official evidence and execution constraints
 
-## Completed checks
+Public exports and native reference implementations were read from installed official
+CLI **0.1.7-rc.2**: sandbox `approveEscalation`; plugin-manager `saveManifest` exported
+through `./operations`; atomic `withFileLock`; app-boot `readProfilePatches` and
+`reconcileProfilePatches`. Runtime Inspect confirmed tools, pluginManager, sandboxPolicy,
+agentPresets, HMR and keyed `plugins.bundle.config` contracts.
 
-- All 97 package tests pass. Coverage includes strict code/JSON parsing, exact
-  package identity, ordered export, additive prefix preservation, repeated-import
-  idempotence, activation without reinstall, protocol vectors, package conflicts, bounded one-use plans,
-  stale-state rejection, cancellation, partial failure, native installation calls,
-  authenticated RPC, Creator guidance, discovery tools and client registration.
-- Regression tests cover 1 MiB malformed interior whitespace and preserve outer
-  ASCII whitespace / raw byte limits. A 64 KB case that previously took about 2.9 s
-  now rejects in 0.19 ms; a 1 MiB case rejects in 0.52 ms in isolated Node 24.
-- Request abort and engine disposal are checked at the initial snapshot, native
-  inspection and final snapshot boundaries. Late replies cannot save plans/results.
-  Actual HTTP disconnect and plugin unload tests abort the native inspect signal.
-- Adapter tests run with Settings, Loader, pluginPackages, credential and storage
-  accessors that throw if read. Catalog, export and preview still work. Settings
-  operation requests, disable operations and non-blueprint input fail without mutation.
-- The package syntax build passes. A real npm tarball was extracted and loaded by
-  an isolated official host. PROTOCOL.md, the JSON example and its single code vector are packed;
-  the retired settings-scope document is not packaged.
-- Browser interaction with that packed plugin verified export/copy and import of
-  a different preference order without any mutation, then a blueprint requesting
-  an already installed inactive bundle. Exactly one enable operation appended it;
-  existing order, dependencies and the user patch were preserved on readback.
-- The packed page exports only a share code with no blueprint revision or JSON
-  download. A malformed 64 KB code is rejected through the actual isolated host.
-- Reimport, an install-only request for active bundles, and the shipped single-format
-  empty-document code produced no-op previews. Desktop and 390px screenshots
-  were inspected; mobile content did not overflow, Escape restored menu focus,
-  and there were no browser exceptions.
-- Independent read-only review found the engine/native adapter and protocol
-  consistent with the accepted additive rule before the single-format simplification.
-  A fresh independent review of the current fixes found no surviving bypass or
-  regression, reran all 97 tests, and checked non-ASCII whitespace rejection.
-  The parent also verified the packed browser flow.
+Official documentation consulted:
 
-Local evidence: `.scratch/blueprint-fix/`
-(tarball, browser report and screenshots). These are not shipped assets.
+- [Tools](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/tools.md)
+- [Dynamic Cordis](https://deepseek-harness.github.io/deepseek-harness/en/develop/practice/dynamic-cordis.md)
+- [Client modules](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/client-modules.md)
+- [Slots](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/slots.md)
+- [Cordis lifecycle](https://deepseek-harness.github.io/deepseek-harness/en/develop/framework/index.md)
 
-## Host and verification boundaries
+Website docs are current/unpinned. Matching-tag remote retrieval failed with a network
+provider error, so version-specific helper evidence came from installed rc.2 types and
+source instead. Desktop asar reads failed tool-side; its exact runtime version remains
+unverified. Some Client Inspect requests timed out; no Agent-send API was assumed.
 
-Stock rc.2 has no `plugins.list.actions` slot. The browser run used an isolated
-copy of its official client with the equivalent four-file host integration patch;
-the plugin's own configuration page remains available without that slot. This is
-not an upstream host release or an update of the user's installed application.
+Normal isolated Node tests/esbuild encountered the sandbox's child-process `EPERM`
+boundary. Package tests were run without subprocess isolation; editor regressions and
+pnpm build completed after exact-command one-shot native approval. Session permissions
+were not changed. pnpm warned that the repository's root `pnpm` settings are ignored
+by the supplied pnpm version; no unrelated package-manager settings were altered.
 
-The installed package fixtures exercise native activation/order handling; a fresh
-public npm network installation and a packaged desktop titlebar were not tested.
-No production profile, credential store, publication or deployment was touched.
+### Remaining acceptance
 
-The prior full workspace check passed release checks, site tests, editor-build
-checks and typechecking, then failed in the unrelated dsh-safe-auto suite on
-Windows path expectations and file-symlink permissions. This removal was verified
-with the current package suite/build and packaging; it does not claim a green full
-workspace check.
+- Actual loading of this redesigned source/tarball in a real DSH host, complete Creator
+  import with native package operations and permission denial, and post-merge runtime
+  diagnostics have **not** been tested.
+- Real desktop browser layout/copy interaction and ACP/SDK/headless startup/restart
+  scenarios have **not** been tested. Offline VM UI tests are not browser certification.
+- Protected positions/segments are conservative structural guards, not a proof of all
+  reordered patch semantics. The stamp covers manifest and bundle catalog, not every
+  overlay or patch content revision. HMR reconciliation rereads current complete layers.
+- Native install/enable may already have succeeded before a later ordering failure.
+  `saved` and `application` are reported separately; no whole-import transaction exists.
+- No production profile, installation, credentials, publication, deployment or current
+  GUI artifacts were changed. The full workspace check was not claimed green; existing
+  unrelated edits were preserved.
+
+## Historical evidence — previous page-only additive implementation
+
+On 2026-09-28, the former implementation had 97 passing tests and isolated packed-host
+browser checks with a host list-toolbar patch. Those checks exercised fixed append-only
+imports, previews, one-use plans and page confirmation. They do **not** certify the new
+Creator execution policy or the removed engine. Historical local evidence under
+`.scratch/blueprint-fix/` is not a shipped asset. The optional bundle page now needs no
+list-toolbar host patch.

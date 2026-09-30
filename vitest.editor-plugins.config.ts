@@ -11,12 +11,19 @@ export default defineConfig({
     return 'export default ' + JSON.stringify(readFileSync(file, 'utf8'));
   } }],
   resolve: { alias: {
+      // The published primitives entry is a Vite build input: it statically
+      // imports its own devDependencies (shiki, katex, clsx, …) and every
+      // *.module.css, none of which a consumer installs. Node cannot load it,
+      // so specs that reach a plugin's client half are pointed at a double that
+      // renders the same elements, props and accessible names. See the module.
+      "@deepseek-ai/dsh-client-ui-primitives": root + "scripts/editor-plugins/ui-primitives-stub.tsx",
       "@klarkxy/dsh-self-improvement/contracts": root + "plugins/dsh-self-improvement/src/contracts.ts",
       "@klarkxy/dsh-plugin-kit/contracts": root + "plugins/dsh-plugin-kit/src/contracts.ts",
       "@klarkxy/dsh-plugin-kit/host-rpc": root + "plugins/dsh-plugin-kit/src/host-rpc.ts",
       "@klarkxy/dsh-plugin-kit/client-utils": root + "plugins/dsh-plugin-kit/src/client-utils.ts",
       "@klarkxy/dsh-plugin-kit/model-menu": root + "plugins/dsh-plugin-kit/src/model-menu.ts",
       "@klarkxy/dsh-plugin-kit/llm-call": root + "plugins/dsh-plugin-kit/src/llm-call.ts",
+      "@klarkxy/dsh-plugin-kit/official-ui": root + "plugins/dsh-plugin-kit/src/official-ui.ts",
       "@klarkxy/dsh-plugin-kit": root + "plugins/dsh-plugin-kit/src/index.ts",
       "@klarkxy/dsh-current-title/contracts": root + "plugins/dsh-current-title/src/contracts.ts",
       "@klarkxy/dsh-fusion/host-contracts": root + "plugins/dsh-fusion/src/host-contracts.ts",

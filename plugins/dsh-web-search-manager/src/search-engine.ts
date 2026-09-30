@@ -1,4 +1,5 @@
 import { WebError, type WebSearchProvider, type WebSearchRequest, type WebSearchResult, type WebSearchSource } from '@deepseek-ai/dsh-web'
+import { HttpStatusError, providerError } from './provider-error.ts'
 
 /** Keyless `ctx.web` search backend. The model still calls official `web_search`. */
 export const SEARCH_ENGINE_ID = 'ddg'
@@ -100,14 +101,13 @@ export class SearchEngineProvider implements WebSearchProvider {
       })
       if (!response.ok) {
         await response.body?.cancel().catch(() => {})
-        throw new WebError(`搜索页请求失败（HTTP ${response.status}）。`, 'WEB_PROVIDER_ERROR')
+        throw new HttpStatusError(response.status)
       }
       const sources = parseSearchEngineHtml(await readText(response, signal), response.url || SEARCH_ENGINE_PAGE)
       return { sources: sources.slice(0, count), truncated: sources.length > count }
     } catch (error) {
       if (signal?.aborted) throw new WebError('搜索已取消。', 'WEB_ABORTED')
-      if (error instanceof WebError) throw error
-      throw new WebError('无法读取公开搜索页。', 'WEB_PROVIDER_ERROR')
+      throw providerError(error)
     }
   }
 }

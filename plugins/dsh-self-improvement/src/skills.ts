@@ -231,11 +231,11 @@ export function downloadMarkdown(
 export function exportRevocationCopy(locale: 'zh' | 'en'): string {
   return locale === 'en'
     ? 'Export record revoked. Already downloaded files are not recalled.'
-    : '已撤回导出记录。不会收回或删除已下载的文件。'
+    : '已撤销下载记录。已下载的文件不会被收回或删除。'
 }
 
 export function skillExportStateLabel(record: Pick<SkillRecord, 'exportState'>, locale: 'zh' | 'en'): string {
   if (record.exportState === 'recorded') return locale === 'en' ? 'Download recorded' : '已记录下载'
-  if (record.exportState === 'revoked') return locale === 'en' ? 'Download record revoked' : '已撤回下载记录'
+  if (record.exportState === 'revoked') return locale === 'en' ? 'Download record revoked' : '已撤销下载记录'
   return locale === 'en' ? 'Not downloaded' : '未下载'
 }

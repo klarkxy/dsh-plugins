@@ -1,4 +1,5 @@
 import { WebError, type WebFetchProvider, type WebSearchProvider } from '@deepseek-ai/dsh-web'
+import { providerError } from './provider-error.ts'
 import {
   defaultSettings, migrateSearchOrder, pickActiveSearch, providerKey, resolveSearchOrder, validateBaseURL,
   type FetchProviderFactory, type ProviderDescriptor, type ProviderKind, type ProviderOptions,
@@ -200,9 +201,10 @@ export class WebSearchManager {
     const epoch = this.epoch
     entry.active.add(controller)
     let started = false
+    let apiKey: string | undefined
     try {
       const ref = entry.descriptor.credentialRef
-      const apiKey = ref ? await abortable(() => this.options.resolveCredential(ref), combined) : undefined
+      apiKey = ref ? await abortable(() => this.options.resolveCredential(ref), combined) : undefined
       if (ref && !apiKey?.trim()) {
         entry.configured = false
         this.abort(entry)
@@ -221,12 +223,13 @@ export class WebSearchManager {
       return result
     } catch (error) {
       if (started) entry.failures += 1
-      const code = error instanceof WebError ? error.code : undefined
-      if (code === 'WEB_CREDENTIAL_MISSING') throw new WebError('搜索凭据不可用，请重新配置。', 'WEB_CREDENTIAL_MISSING')
-      if (code === 'WEB_DISABLED') throw new WebError('网络搜索未启用或设置已改变。', 'WEB_DISABLED')
-      if (combined.aborted || code === 'WEB_ABORTED') throw new WebError('网络请求已取消或超时。', 'WEB_ABORTED')
-      // Do not forward raw provider responses, token-bearing errors, or causes.
-      throw new WebError('网络供应商请求失败，请检查凭据、额度和连接。未切换到其他供应商。', 'WEB_PROVIDER_ERROR')
+      // Missing credentials abort active calls too; keep that original failure for this call.
+      if (combined.aborted && !(error instanceof WebError && error.code === 'WEB_CREDENTIAL_MISSING')) {
+        throw new WebError('网络请求已取消或超时。', 'WEB_ABORTED')
+      }
+      // Preserve upstream diagnostics, stripping only known credentials and authentication fields.
+      const safe = providerError(error, apiKey ? [apiKey] : [])
+      throw new WebError(`[${entry.kind}:${entry.descriptor.id}] ${safe.message}`, safe.code)
     } finally {
       clearTimeout(timeout)
       entry.active.delete(controller)

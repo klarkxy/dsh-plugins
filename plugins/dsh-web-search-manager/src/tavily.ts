@@ -1,4 +1,5 @@
 import { WebError, type WebSearchProvider, type WebSearchRequest, type WebSearchResult, type WebSearchSource } from '@deepseek-ai/dsh-web'
+import { HttpStatusError, providerError } from './provider-error.ts'
 export interface TavilyOptions { apiKey: string; baseURL?: string; fetch?: typeof fetch }
 const MAX_RESPONSE_BYTES = 2_000_000
 function endpoint(base: string): string {
@@ -54,7 +55,7 @@ export class TavilySearchProvider implements WebSearchProvider {
       })
       if (!response.ok) {
         await response.body?.cancel().catch(() => {})
-        throw new WebError(`Tavily 请求失败（HTTP ${response.status}）。`, 'WEB_PROVIDER_ERROR')
+        throw new HttpStatusError(response.status)
       }
       const payload = record(await readJSON(response, signal))
       if (!Array.isArray(payload?.results)) throw new Error('Invalid response shape')
@@ -76,8 +77,7 @@ export class TavilySearchProvider implements WebSearchProvider {
       return { sources: sources.slice(0, count), truncated: sources.length > count }
     } catch (error) {
       if (signal?.aborted) throw new WebError('Tavily 搜索已取消。', 'WEB_ABORTED')
-      if (error instanceof WebError) throw error
-      throw new WebError('Tavily 返回无效响应或网络连接失败。', 'WEB_PROVIDER_ERROR')
+      throw providerError(error, [this.options.apiKey])
     }
   }
 }

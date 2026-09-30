@@ -56,7 +56,8 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-connection",
-        "@deepseek-ai/dsh-api-remotes"
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-primitives"
       ]
     }
   },
@@ -92,7 +93,8 @@
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-zhihu/src"
   },
   "dependencies": {
-    "zod": "^4.1.5"
+    "zod": "^4.1.5",
+    "@klarkxy/dsh-plugin-kit": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
@@ -108,7 +110,8 @@
     "react": "^18.2.0",
     "@types/react": "18.3.31",
     "react-dom": "^18.2.0",
-    "@types/react-dom": "^18.3.1"
+    "@types/react-dom": "^18.3.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.2"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-credentials": {

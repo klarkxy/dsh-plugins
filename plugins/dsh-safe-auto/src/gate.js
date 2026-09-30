@@ -1,5 +1,6 @@
 import { assess } from './policy.js';
 import { assessEscalation } from './escalation.js';
+import { assessApproval } from './approval-review.js';
 import { review } from './reviewer.js';
 import { resolveReviewRoutes, sameRoutes } from './model-route.js';
 
@@ -25,7 +26,8 @@ export function createGate(config, { fetcher = globalThis.fetch, audit = () => {
       // One ledger survives reviewer preference changes; settings edits do not refill budgets.
       const config = currentConfig;
       const start = Date.now();
-      let result = phase === 'escalation' ? assessEscalation(call, config) : assess(call, config);
+      let result = phase === 'approval' ? assessApproval(call, config)
+        : phase === 'escalation' ? assessEscalation(call, config) : assess(call, config);
       let s;
       if (result.kind === 'review') {
         if (!call.session || call.subagent) result = { kind: 'ask', code: 'NO_DIRECT_USER_AUTHORITY' };
@@ -39,12 +41,16 @@ export function createGate(config, { fetcher = globalThis.fetch, audit = () => {
               const signal = AbortSignal.any([call.signal, abort.signal]);
               const routes = resolveReviewRoutes(config, call);
               const llm = routes.fast.transport === 'dsh' ? getLlm() : undefined;
-              const kind = await review(config, result.action, call.intent, s, signal, fetcher, { routes, llm });
+              const verdict = await review(config, result.action, call.intent, s, signal, fetcher, { routes, llm, structured: phase === 'approval' });
+              const kind = typeof verdict === 'string' ? verdict : verdict.decision;
+              const details = typeof verdict === 'string' ? {} : {
+                risk: verdict.risk, authorization: verdict.authorization, bounded: verdict.bounded, reason: verdict.reason,
+              };
               if (signal.aborted || s.task !== oldTask) result = { kind: 'deny', code: 'STALE_REVIEW' };
-              else if (kind === 'deny') result = { kind: 'deny', code: 'MODEL_NOT_ALLOWED' };
+              else if (kind === 'deny') result = { kind: 'deny', code: 'MODEL_NOT_ALLOWED', ...details };
               else if (!sameRoutes(routes, resolveReviewRoutes(config, call)) || (llm && llm !== getLlm())) {
                 result = { kind: 'ask', code: 'REVIEW_MODEL_CHANGED' };
-              } else result = { kind, code: kind === 'allow' ? 'MODEL_ALLOWED' : 'MODEL_NOT_ALLOWED',
+              } else result = { kind, code: kind === 'allow' ? 'MODEL_ALLOWED' : 'MODEL_NOT_ALLOWED', ...details,
                 ...(kind === 'allow' ? { reviewRoutes: routes, reviewLlm: llm } : {}),
               };
             } catch { result = { kind: 'ask', code: 'REVIEW_UNAVAILABLE' }; }
@@ -58,6 +64,9 @@ export function createGate(config, { fetcher = globalThis.fetch, audit = () => {
       // Audit failures cannot accidentally grant permission. Do not include arguments, intent, endpoint or errors.
       try { audit({ phase: 'assessment', gate: phase, tool: call.tool, callId: call.callId, decision: result.kind, code: result.code,
         mode: config.mode, durationMs: Date.now() - start,
+        // Rationale is kept in the result, not logs: a model can echo raw commands or secrets.
+        ...(result.risk ? { risk: result.risk, authorization: result.authorization, bounded: result.bounded,
+          reason: '[reviewer rationale withheld from audit]' } : {}),
         ...(s ? { reservedUnits: s.units, reportedTokens: s.reportedTokens, fastCalls: s.fastCalls, deepCalls: s.deepCalls } : {}),
       }); } catch { result = { kind: 'deny', code: 'AUDIT_UNAVAILABLE' }; }
       return result;

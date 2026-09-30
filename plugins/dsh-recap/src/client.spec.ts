@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { CHAT_EVENTS_SLOT } from '@klarkxy/dsh-plugin-kit/contracts'
 import { modelMenuOverride } from '@klarkxy/dsh-plugin-kit/model-menu'
 import {
-  apply, createRecapClientWork, inject, recapCardKey, recapHasRunningGeneration, recapSeatProps,
+  apply, createRecapClientWork, inject, parseIdleMinutes, recapCardKey, recapCardVisible, recapGenerationDot,
+  recapGenerationLabel, recapHasRunningGeneration, recapSeatProps, recapTitle,
   runRecapAct, runRecapIdleReturn, runRecapStatusLoad,
 } from './client.tsx'
 import { isCurrentRecapRequest, shouldRequestIdleReturn, shouldSkipRecapAutoRefresh } from './idle.ts'
@@ -47,7 +48,7 @@ function statusFor(sessionId: string, title = '回顾'): RecapStatus {
 
 describe('recap client seats', () => {
   it('registers its own plugin page settings row plus a quiet background chat controller', () => {
-    expect([...inject]).toEqual(['slots', 'connection', 'remote', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
+    expect([...inject]).toEqual(['slots', 'connection', 'remote', 'remote.session', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
     const injected: string[] = []
     const names: Array<{ name: string; id?: string; label?: string; key?: string }> = []
     apply({
@@ -69,9 +70,35 @@ describe('recap client seats', () => {
     expect(CHAT_EVENTS_SLOT).toBe('dsh-editor.chat.events')
     expect(names).toEqual([
       { name: 'plugins.bundle.config', key: RECAP_PLUGIN },
-      { name: CHAT_EVENTS_SLOT, id: 'recap', order: 40, label: '会话纪要' },
+      { name: CHAT_EVENTS_SLOT, id: 'recap', order: 40, label: '回顾' },
     ])
     expect(readFileSync(fileURLToPath(new URL('./client.tsx', import.meta.url)), 'utf8')).toContain('hidden={seat.hidden} quiet')
+  })
+
+  it('keeps the quiet seat empty until there is a card, then shows it', () => {
+    const card = statusFor('s1').cards[0]!
+    expect(recapCardVisible({ cards: [] })).toBe(false)
+    expect(recapCardVisible({ cards: [card] })).toBe(true)
+    expect(recapCardVisible({ cards: [card], hidden: true })).toBe(false)
+    const src = readFileSync(fileURLToPath(new URL('./client.tsx', import.meta.url)), 'utf8')
+    expect(src).toContain('if (quiet ? !recapCardVisible({ hidden, cards }) : hidden) return null')
+    expect(src).not.toContain('if (hidden || quiet) return null')
+  })
+
+  it('maps every generation state instead of treating non-running as done', () => {
+    expect(recapGenerationDot('running')).toBe('ongoing')
+    expect(recapGenerationDot('failed')).toBe('error')
+    expect(recapGenerationDot('cancelled')).toBe('warning')
+    expect(recapGenerationDot('idle')).toBe('done')
+    expect(recapGenerationLabel('failed', 'en')).toBe('Failed')
+    expect(recapTitle('en')).toBe('Recap')
+  })
+
+  it('validates the idle interval against the server bounds', () => {
+    expect(parseIdleMinutes('15')).toBe(15 * 60_000)
+    expect(parseIdleMinutes('0')).toBeUndefined()
+    expect(parseIdleMinutes('181')).toBeUndefined()
+    expect(parseIdleMinutes('1.5')).toBeUndefined()
   })
 
   it('reads sessionId, locale, and hidden from the chat events seat, including owner props', () => {
@@ -238,8 +265,12 @@ describe('recap client seats', () => {
     expect(src).toContain("from '@klarkxy/dsh-plugin-kit/model-menu'")
     expect(src).toContain('data-testid="recap-settings"')
     expect(src).toContain('parseModelMenuChoices(catalog, result.value.settings.displayModel)')
-    expect(src).toContain('displayModel: patch.displayModel ?? draft.displayModel')
-    expect(src).toContain('checkpointModel: patch.checkpointModel ?? draft.checkpointModel')
+    // save() merges the patch over current settings, so every field (switches, interval, models) round-trips.
+    expect(src).toContain('const draft = { ...defaultSettings(), ...status.settings, ...patch }')
+    expect(src).toContain('displayModel: draft.displayModel')
+    expect(src).toContain('checkpointModel: draft.checkpointModel')
+    expect(src).toContain('save({ cardsEnabled: next })')
+    expect(src).toContain('save({ idleReturnMs: ms })')
     expect(src).toContain('modelMenuChoiceKey(props.route.provider, props.route.model)')
   })
 
