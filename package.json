@@ -16,7 +16,7 @@
     "release:check": "node scripts/release-target.mjs && node --test scripts/*.test.mjs",
     "site:build": "node site/build.mjs",
     "site:test": "node --test site/*.test.mjs",
-    "check": "pnpm release:check && pnpm site:test && pnpm test:editor-build && pnpm typecheck && pnpm test && pnpm build && pnpm pack:check",
+    "check": "pnpm release:check && pnpm site:test && pnpm build && pnpm test:editor-build && pnpm typecheck && pnpm test && pnpm pack:check",
     "test:editor-build": "vitest run --config vitest.editor-plugins.config.ts scripts/editor-plugins",
     "test:e2e:web-search": "node e2e/web-search-settings.mjs"
   },

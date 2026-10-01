@@ -35,6 +35,9 @@
       "@klarkxy/dsh-plugin-kit/llm-call": [
         "plugins/dsh-plugin-kit/src/llm-call.ts"
       ],
+      "@klarkxy/dsh-plugin-kit/official-ui": [
+        "plugins/dsh-plugin-kit/src/official-ui.ts"
+      ],
       "@klarkxy/dsh-current-title": [
         "plugins/dsh-current-title/src/index.ts"
       ],
