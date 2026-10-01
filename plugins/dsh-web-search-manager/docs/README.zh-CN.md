@@ -8,17 +8,13 @@
 
 ## 安装
 
-```sh
-npm install @klarkxy/dsh-web-search-manager
-```
-
-然后加载：
+把已发布包装进目标 profile：
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-重启 DSH Web，打开「插件 → 网页搜索」。
+把 `web` 换成你的 profile 名。重启 DSH Web，打开「插件 → 网页搜索」。卸载用 `dsh plugin --profile web remove @klarkxy/dsh-web-search-manager`。
 
 ## 配置搜索
 

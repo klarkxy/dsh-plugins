@@ -10,11 +10,13 @@ The bundle insert is enabled after installation. It does not permanently turn of
 
 ## Install
 
-Requires Node.js ≥22 and DSH `0.1.7-rc.2`. The **Auto Title** entry starts enabled and can be disabled in plugin settings. Native title storage and scheduling come from the host `sessionTitle`; generation uses the host `llm` service.
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. The **Auto Title** entry starts enabled and can be disabled in plugin settings. Native title storage and scheduling come from the host `sessionTitle`; generation uses the host `llm` service. Install the published package into the target profile:
 
 ```sh
-npm install @klarkxy/dsh-current-title
+dsh plugin --profile web add @klarkxy/dsh-current-title
 ```
+
+Replace `web` with your profile name. To uninstall, run `dsh plugin --profile web remove @klarkxy/dsh-current-title`.
 
 Hosts that bundle this feature usually enable it by default; where the host supports live plugin switching, the switch under Settings → Plugins takes effect without a restart. Installation or removal may require a restart when the host asks for one.
 

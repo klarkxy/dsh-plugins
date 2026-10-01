@@ -7,9 +7,10 @@
 需要 Node.js ≥22、DSH `0.1.7-rc.2`。辅助生成直接调用宿主 `llm` 服务，并要求 `@deepseek-ai/dsh-llm` 与 `@deepseek-ai/dsh-session` 对等依赖。
 
 ```sh
-npm install @klarkxy/dsh-recap
 dsh plugin --profile web add @klarkxy/dsh-recap
 ```
+
+把 `web` 换成你的 profile 名；卸载用 `dsh plugin --profile web remove @klarkxy/dsh-recap`。
 
 ## 回顾
 

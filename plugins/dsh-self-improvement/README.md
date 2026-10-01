@@ -6,18 +6,14 @@ DeepSeek Harness learns how you want work done: what to do, under which conditio
 
 ## Standalone DSH Web
 
-Requires Node.js ≥22 and DSH `0.1.7-rc.2`, and no application-specific runtime packages are needed. On a standalone DSH Web host, install:
-
-```sh
-npm install @klarkxy/dsh-self-improvement
-```
-
-Install the public packages and explicitly enable Memory storage:
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`, and no application-specific runtime packages are needed. On a standalone DSH Web host, install Memory first, then this package:
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-memory
 dsh plugin --profile web add @klarkxy/dsh-self-improvement
 ```
+
+To uninstall, run `dsh plugin --profile web remove @klarkxy/dsh-self-improvement`.
 
 This plugin never enables Memory or Dream on your behalf, and Dream can stay off. It adds no extra chat panel and no separate settings page. The bundle starts enabled and can be switched off independently. Review methods and Skill drafts under Settings → Long-term Memory → Experience Learning.
 

@@ -8,17 +8,13 @@ Requires Node.js ≥22 and DSH `0.1.7-rc.2`. No repository build is needed.
 
 ## Install
 
-```sh
-npm install @klarkxy/dsh-zhihu
-```
-
-Then load it:
+Install the published package into the target profile:
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-zhihu
 ```
 
-Restart DSH Web, open **Plugins → @klarkxy/dsh-zhihu**, and enter your Access Secret (DSH credential `ZHIHU_ACCESS_TOKEN`). Use the full scoped name; the unscoped `dsh-zhihu` package belongs to another maintainer.
+Replace `web` with your profile name. Restart DSH Web, open **Plugins → @klarkxy/dsh-zhihu**, and enter your Access Secret (DSH credential `ZHIHU_ACCESS_TOKEN`). Use the full scoped name; the unscoped `dsh-zhihu` package belongs to another maintainer. To uninstall, run `dsh plugin --profile web remove @klarkxy/dsh-zhihu`.
 
 ## Use
 

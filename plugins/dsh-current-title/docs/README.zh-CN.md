@@ -10,11 +10,13 @@
 
 ## 安装
 
-需要 Node.js ≥22 与 DSH `0.1.7-rc.2`。「自动标题」默认启用，可在插件设置中关闭。标题写入宿主 `sessionTitle`，由宿主调度；生成使用宿主 `llm` 服务。
+需要 Node.js ≥22 与 DSH `0.1.7-rc.2`。「自动标题」默认启用，可在插件设置中关闭。标题写入宿主 `sessionTitle`，由宿主调度；生成使用宿主 `llm` 服务。把已发布包装进目标 profile：
 
 ```sh
-npm install @klarkxy/dsh-current-title
+dsh plugin --profile web add @klarkxy/dsh-current-title
 ```
+
+把 `web` 换成你的 profile 名。卸载用 `dsh plugin --profile web remove @klarkxy/dsh-current-title`。
 
 部分宿主会预装并默认启用本功能；宿主支持热切换时，通过「设置 → 插件」开关无需重启。宿主提示需要重启时，安装或移除后重启。
 

@@ -11,7 +11,6 @@
 环境要求 Node ≥22、DSH 0.1.7-rc.2，不用构建本仓库：
 
 ```sh
-npm install @klarkxy/dsh-zhihu
 dsh plugin --profile web add @klarkxy/dsh-zhihu
 ```
 

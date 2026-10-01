@@ -8,11 +8,13 @@
 
 ## 安装
 
-需要 Node.js ≥22 与兼容的 DSH `0.1.7-rc.2+` 宿主（peerDependencies 使用 `>=0.1.7-alpha.1` 这类开放下界）。若所用 DSH 发行版未内置本插件，可先安装，再通过宿主插件配置启用 `fusion` 入口：
+需要 Node.js ≥22 与兼容的 DSH `0.1.7-rc.2+` 宿主（peerDependencies 使用 `>=0.1.7-alpha.1` 这类开放下界）。把已发布包装进目标 profile，再通过宿主插件配置启用 `fusion` 入口：
 
 ```sh
-npm install @klarkxy/dsh-fusion
+dsh plugin --profile web add @klarkxy/dsh-fusion
 ```
+
+把 `web` 换成你的 profile 名。卸载用 `dsh plugin --profile web remove @klarkxy/dsh-fusion`。
 
 ## 工作方式
 

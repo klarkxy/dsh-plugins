@@ -10,7 +10,7 @@ Node.js 24+ and DSH 0.1.7-rc.2. The steps below use the `web` profile as the exa
 
 ## Install
 
-Once published to npm, install it directly into the target profile:
+Install the published package into the target profile:
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-pruner

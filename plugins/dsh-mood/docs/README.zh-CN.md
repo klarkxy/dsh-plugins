@@ -7,9 +7,10 @@ Mood 为当前主代理提供一个工具，用来记录、读取和更新它对
 需要 Node.js ≥22、DSH ≥0.1.7-rc.2。通过宿主插件管理器独立启停。不依赖 Web 服务，TUI 等宿主也可使用。没有设置页、需求卡片或模型选择菜单。
 
 ```sh
-npm install @klarkxy/dsh-mood
 dsh plugin --profile web add @klarkxy/dsh-mood
 ```
+
+把 `web` 换成你的 profile 名；卸载用 `dsh plugin --profile web remove @klarkxy/dsh-mood`。
 
 ## 代理使用流程
 

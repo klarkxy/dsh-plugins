@@ -7,9 +7,10 @@ Writes session recaps in the background and gives the agent bounded progress che
 Requires Node.js ≥22 and DSH `0.1.7-rc.2`. Auxiliary generation calls the host `llm` service directly. `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-session` are required peers.
 
 ```sh
-npm install @klarkxy/dsh-recap
 dsh plugin --profile web add @klarkxy/dsh-recap
 ```
+
+Replace `web` with your profile name; to uninstall, run `dsh plugin --profile web remove @klarkxy/dsh-recap`.
 
 ## Recaps
 

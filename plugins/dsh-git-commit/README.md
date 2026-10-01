@@ -10,12 +10,29 @@ directory.
 
 ## Install
 
-Requires Node.js ≥22. If your DSH distribution does not bundle this plugin,
-install it and enable its `git-commit` entry through the host plugin
-configuration.
+Requires Node.js ≥22. Install the published package into the target profile
+with the DSH plugin manager; the install also enables the `git-commit` entry:
 
 ```sh
-npm install @klarkxy/dsh-git-commit
+dsh plugin --profile web add @klarkxy/dsh-git-commit
+```
+
+Replace `web` with your profile name. Installation or removal may require a
+restart when the host asks for one.
+
+To install a source checkout of this repository instead, pack it first and add
+the archive:
+
+```sh
+cd plugins/dsh-git-commit
+npm pack --ignore-scripts
+dsh plugin --profile web add "<absolute path to the .tgz>"
+```
+
+To uninstall:
+
+```sh
+dsh plugin --profile web remove @klarkxy/dsh-git-commit
 ```
 
 ## How it works

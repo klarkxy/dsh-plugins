@@ -8,17 +8,13 @@ Requires Node.js ≥22 and DSH `0.1.7-rc.2`. No repository build is needed.
 
 ## Install
 
-```sh
-npm install @klarkxy/dsh-web-search-manager
-```
-
-Then load it:
+Install the published package into the target profile:
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-Restart DSH Web and open **Plugins → Web search**.
+Replace `web` with your profile name. Restart DSH Web and open **Plugins → Web search**. To uninstall, run `dsh plugin --profile web remove @klarkxy/dsh-web-search-manager`.
 
 ## Configure search
 

@@ -6,18 +6,14 @@ Self Improve 负责“怎样做事”：目标、适用条件、推荐步骤、�
 
 ## 独立 DSH Web 安装
 
-需要 Node.js ≥22 和 DSH `0.1.7-rc.2`，不依赖应用私有包。独立 DSH Web 宿主手动安装：
-
-```sh
-npm install @klarkxy/dsh-self-improvement
-```
-
-再安装公开包并明确启用 Memory 存储：
+需要 Node.js ≥22 和 DSH `0.1.7-rc.2`，不依赖应用私有包。独立 DSH Web 宿主先装 Memory，再装本包：
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-memory
 dsh plugin --profile web add @klarkxy/dsh-self-improvement
 ```
+
+卸载用 `dsh plugin --profile web remove @klarkxy/dsh-self-improvement`。
 
 Memory 必须明确启用为存储，Dream 可以关闭；本插件不会替用户打开其他插件。安装后默认启用，可单独停用，也不增加聊天管理面板或单独设置页。经验与技能草稿在「设置 → 长期记忆 → 经验学习」里审计。
 

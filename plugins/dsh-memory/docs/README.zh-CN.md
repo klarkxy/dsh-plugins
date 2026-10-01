@@ -6,17 +6,13 @@ Dream 负责“怎样理解用户和当前项目”：作者用语、偏好、�
 
 ## 独立 DSH Web 安装
 
-需要 Node.js ≥22 和 DSH `0.1.7-rc.2`。不依赖任何应用私有包，也不要求安装 Self Improve。独立 DSH Web 宿主手动安装：
-
-```sh
-npm install @klarkxy/dsh-memory
-```
-
-宿主需明确加载记忆插件：
+需要 Node.js ≥22 和 DSH `0.1.7-rc.2`。不依赖任何应用私有包，也不要求安装 Self Improve。把已发布包装进目标 profile：
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-memory
 ```
+
+卸载用 `dsh plugin --profile web remove @klarkxy/dsh-memory`。
 
 插件安装后默认启用，单纯打开界面不发起推理。条目管理、提示注入与 Dream 观察和整理开关都在「插件 → 记忆」里。
 

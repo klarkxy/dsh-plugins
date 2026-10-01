@@ -8,17 +8,13 @@
 
 ## 安装
 
-```sh
-npm install @klarkxy/dsh-zhihu
-```
-
-然后加载：
+把已发布包装进目标 profile：
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-zhihu
 ```
 
-重启 DSH Web，从「插件」打开「知乎（@klarkxy/dsh-zhihu）」填写 Access Secret（DSH 凭据 `ZHIHU_ACCESS_TOKEN`）。请使用完整 scoped 包名；无 scope 的 `dsh-zhihu` 属于其他维护者。
+把 `web` 换成你的 profile 名。重启 DSH Web，从「插件」打开「知乎（@klarkxy/dsh-zhihu）」填写 Access Secret（DSH 凭据 `ZHIHU_ACCESS_TOKEN`）。请使用完整 scoped 包名；无 scope 的 `dsh-zhihu` 属于其他维护者。卸载用 `dsh plugin --profile web remove @klarkxy/dsh-zhihu`。
 
 ## 使用
 

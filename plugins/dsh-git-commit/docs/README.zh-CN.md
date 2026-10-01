@@ -8,11 +8,27 @@
 
 ## 安装
 
-需要 Node.js ≥22。若所用 DSH 发行版未内置本插件，可先安装，再通过宿主插件配置启用
+需要 Node.js ≥22。用 DSH 插件管理器把已发布包装进目标 profile，安装即启用
 `git-commit` 入口：
 
 ```sh
-npm install @klarkxy/dsh-git-commit
+dsh plugin --profile web add @klarkxy/dsh-git-commit
+```
+
+把 `web` 换成你的 profile 名。安装或卸载后宿主可能要求重启。
+
+要装本仓库的源码，先打包再添加归档：
+
+```sh
+cd plugins/dsh-git-commit
+npm pack --ignore-scripts
+dsh plugin --profile web add "<归档绝对路径>"
+```
+
+卸载：
+
+```sh
+dsh plugin --profile web remove @klarkxy/dsh-git-commit
 ```
 
 ## 工作方式

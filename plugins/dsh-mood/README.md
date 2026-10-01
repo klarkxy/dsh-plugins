@@ -7,9 +7,10 @@ Mood gives the current Agent one tool to record, read and update its understandi
 Requires Node.js ≥22 and DSH ≥0.1.7-rc.2. Enable or disable the bundle using the native plugin manager. It works without Web services in TUI and other hosts. There is no settings panel, requirements card or model selector.
 
 ```sh
-npm install @klarkxy/dsh-mood
 dsh plugin --profile web add @klarkxy/dsh-mood
 ```
+
+Replace `web` with your profile name; to uninstall, run `dsh plugin --profile web remove @klarkxy/dsh-mood`.
 
 ## Agent workflow
 

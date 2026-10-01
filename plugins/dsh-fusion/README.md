@@ -8,11 +8,13 @@ The plugin is **disabled by default**. Turn it on with the **副驾协作** entr
 
 ## Install
 
-Requires Node.js ≥22 and a compatible DSH `0.1.7-rc.2+` host; the peer dependencies use open lower bounds such as `>=0.1.7-alpha.1`. If your DSH distribution does not bundle this plugin, install it and enable its `fusion` entry from the host plugin configuration.
+Requires Node.js ≥22 and a compatible DSH `0.1.7-rc.2+` host; the peer dependencies use open lower bounds such as `>=0.1.7-alpha.1`. Install the published package into the target profile, then enable its `fusion` entry from the host plugin configuration:
 
 ```sh
-npm install @klarkxy/dsh-fusion
+dsh plugin --profile web add @klarkxy/dsh-fusion
 ```
+
+Replace `web` with your profile name. To uninstall, run `dsh plugin --profile web remove @klarkxy/dsh-fusion`.
 
 ## How it works
 

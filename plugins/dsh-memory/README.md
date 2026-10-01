@@ -6,17 +6,13 @@ DeepSeek Harness keeps hold of how you talk and what you are working on: the voc
 
 ## Standalone DSH Web
 
-Requires Node.js ≥22 and DSH `0.1.7-rc.2`. On a standalone DSH Web host, install:
-
-```sh
-npm install @klarkxy/dsh-memory
-```
-
-Load it explicitly:
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. Install the published package into the target profile:
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-memory
 ```
+
+To uninstall, run `dsh plugin --profile web remove @klarkxy/dsh-memory`.
 
 No application-private packages and no Self Improve are required — Memory stands on its own. The bundle starts enabled, and merely opening its UI does not call a model. Use Plugins → Memory to manage records, prompt injection and the Dream observation/consolidation switch.
 
