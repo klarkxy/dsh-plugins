@@ -33,11 +33,24 @@ export interface CommitModelRoute {
 export interface GitCommitSettings {
   readonly revision: number
   readonly model: CommitModelRoute
+  /**
+   * Opt-in single commit when the model produced no usable plan. Off by
+   * default: an unplanned commit is one the user never reviewed, so a failed
+   * or unusable model call rejects the run instead of writing to the index.
+   */
+  readonly allowFallback: boolean
 }
 
 export const defaultModelRoute = (): CommitModelRoute => ({ provider: '', model: '' })
 
-export const defaultSettings = (): GitCommitSettings => ({ revision: 0, model: defaultModelRoute() })
+export const defaultSettings = (): GitCommitSettings => ({
+  revision: 0, model: defaultModelRoute(), allowFallback: false,
+})
+
+/** Untrusted stored flags stay opt-in: anything but a literal true is false. */
+export function normalizeFallback(value: unknown): boolean {
+  return value === true
+}
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined

@@ -3,7 +3,7 @@ import type { RpcResult } from '@klarkxy/dsh-plugin-kit/contracts'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import {
-  PLUGIN_NAME, RPC_CHANNEL, SETTINGS_KEY, normalizeModelRoute,
+  PLUGIN_NAME, RPC_CHANNEL, SETTINGS_KEY, normalizeFallback, normalizeModelRoute,
   type CommitRunResult, type GitCommitSettings, type GitCommitStatus,
 } from './contracts.ts'
 import { CommitRunError, GitCommitService, type AgentStoreLike, type SessionStoreLike } from './service.ts'
@@ -14,7 +14,7 @@ export const inject = ['llm', 'sessions', 'agents', 'storageDomain', 'connection
 export { GitCommitService } from './service.ts'
 export { parsePorcelain } from './git.ts'
 export { parsePlan, buildPlanInput } from './plan.ts'
-export { defaultSettings, normalizeModelRoute } from './contracts.ts'
+export { defaultSettings, normalizeFallback, normalizeModelRoute } from './contracts.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context { gitCommit: GitCommitService }
@@ -70,7 +70,10 @@ export async function handleRpc(
         const parsed = updateSettingsSchema.safeParse(payload)
         if (!parsed.success) return { ok: false, error: { code: 'bad-request', message: 'settings patch is invalid' } }
         const value: GitCommitSettings = await service.updateSettings(
-          { model: normalizeModelRoute(parsed.data.settings.model) },
+          {
+            model: normalizeModelRoute(parsed.data.settings.model),
+            allowFallback: normalizeFallback(parsed.data.settings.allowFallback),
+          },
           parsed.data.expectedRevision,
         )
         return { ok: true, value }

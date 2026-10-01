@@ -6,7 +6,7 @@ import {
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Button, IconRefreshOutlineRegular, Tag, Tooltip, useAnchoredPosition, useDismissOnOutsidePointer,
+  Button, IconRefreshOutlineRegular, Switch, Tag, Tooltip, useAnchoredPosition, useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import {
@@ -44,6 +44,7 @@ const zh = {
   sessionRunning: '会话正在运行，提交已暂停',
   refresh: '刷新',
   failed: '操作失败',
+  planUnavailable: '模型没有给出可用的提交方案，已取消本次提交，工作区没有被改动。换一个模型重试，或在插件设置里开启兜底提交。',
   close: '关闭',
 }
 
@@ -72,6 +73,7 @@ const en: Record<keyof typeof zh, string> = {
   sessionRunning: 'Session is running; commits paused',
   refresh: 'Refresh',
   failed: 'Operation failed',
+  planUnavailable: 'The model returned no usable commit plan, so the run was cancelled and your workspace is untouched. Try another model, or turn on the fallback in plugin settings.',
   close: 'Close',
 }
 
@@ -90,6 +92,16 @@ interface UseSessionLike {
   <T>(selector: (snapshot: SessionSnapshotLike) => T): T
 }
 
+/** A failed RPC keeps its code so the panel can explain a rejection in its own words. */
+class RpcError extends Error {
+  readonly code: string
+  constructor(code: string, message: string) {
+    super(message)
+    this.name = 'RpcError'
+    this.code = code
+  }
+}
+
 export interface GitCommitActionProps {
   sessionId: string
   useSession: UseSessionLike
@@ -102,7 +114,8 @@ async function rpc<T>(
 ): Promise<T> {
   const result = await call(endpoint, payload) as RpcResult<T> | undefined
   if (!result || result.ok !== true) {
-    throw new Error(result && 'error' in result && result.error?.message ? result.error.message : fallback)
+    const failed = result && 'error' in result ? result.error : undefined
+    throw new RpcError(failed?.code ?? 'unknown', failed?.message ? failed.message : fallback)
   }
   return result.value
 }
@@ -115,6 +128,17 @@ function reasonText(t: Translate, status: GitCommitStatus): string {
     case 'no-session': return t('reasonNoSession')
     default: return t('unavailable')
   }
+}
+
+/** A refusal the plugin can name gets its own sentence; the rest stay verbatim. */
+function errorText(t: Translate, error: { code: string; message: string }): string {
+  return error.code === 'plan-unavailable' ? t('planUnavailable') : error.message
+}
+
+function panelError(reason: unknown): { code: string; message: string } {
+  return reason instanceof RpcError
+    ? { code: reason.code, message: reason.message }
+    : { code: 'unknown', message: reason instanceof Error ? reason.message : String(reason) }
 }
 
 function GitBranchIcon() {
@@ -135,7 +159,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
   const [loading, setLoading] = useState(false)
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<CommitRunResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<{ code: string; message: string } | null>(null)
   const [confirming, setConfirming] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -181,7 +205,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
     } catch (reason) {
       if (generationRef.current !== generation) return
       setStatus(undefined)
-      setError(reason instanceof Error ? reason.message : String(reason))
+      setError(panelError(reason))
     } finally {
       if (generationRef.current === generation) setLoading(false)
     }
@@ -219,7 +243,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
       if (next) setStatus(next)
     } catch (reason) {
       if (generationRef.current !== generation) return
-      setError(reason instanceof Error ? reason.message : String(reason))
+      setError(panelError(reason))
     } finally {
       if (generationRef.current === generation) setRunning(false)
     }
@@ -265,7 +289,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
               </Tooltip>
             </div>
             {loading && !status && <p className="dsh-ui-hint" role="status">{t('loading')}</p>}
-            {error !== null && <p className="dsh-ui-error" role="alert">{error}</p>}
+            {error !== null && <p className="dsh-ui-error" role="alert">{errorText(t, error)}</p>}
             {status && !available && <p className="dsh-ui-meta" role="status">{reasonText(t, status)}</p>}
             {available && (
               <>
@@ -319,10 +343,19 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
   )
 }
 
-const css = `${officialUiCss('gcm-root')}
+export const clientCss = `${officialUiCss('gcm-root')}
 /* Only the floating panel's geometry is this plugin's own: the material, the
- * rounded edge and the scrollbar tokens all come from the shared contract. */
-.gcm-panel { position: fixed; width: min(360px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 32px)); overflow: auto; }
+ * rounded edge and the scrollbar tokens all come from the shared contract.
+ *
+ * The root class is spelled out because the panel is portaled and *is* the
+ * root: the dsh-ui-surface recipe therefore reaches it as a compound
+ * .gcm-root.dsh-ui-surface selector and declares position:relative at the
+ * weight a bare .gcm-panel rule also carries. Left unqualified that recipe
+ * wins, and the anchored left/top degrade into offsets from the panel's static
+ * spot at the end of body — the popover then renders under the page instead
+ * of at the trigger. Naming both classes puts this rule at the same weight,
+ * later in the sheet, so it wins. */
+.gcm-root.gcm-panel { position: fixed; width: min(360px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 32px)); overflow: auto; }
 .gcm-model { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-primary); }
 .gcm-commits { margin: 0; padding-inline-start: 18px; display: grid; gap: 2px; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
 .gcm-commits code { font-size: 12px; background: var(--dsw-alias-bg-layer-2); padding: 0 4px; border-radius: var(--dsw-radius-sm); }
@@ -364,6 +397,8 @@ const settingsZh = {
   modelDefault: '默认模型',
   modelEffort: '思考强度',
   modelHint: '留空则使用当前会话模型，再回落到宿主默认对话模型。',
+  fallback: '模型不可用时仍然提交',
+  fallbackHint: '默认关闭：模型规划失败会取消本次提交，工作区不变。开启后全部改动会合并成一个提交，由插件代写提交信息。',
   loading: '正在读取设置…',
   saved: '已保存。',
   stale: '设置已更新，请刷新后重试。',
@@ -377,6 +412,8 @@ const settingsEn: Record<keyof typeof settingsZh, string> = {
   modelDefault: 'Default model',
   modelEffort: 'Reasoning effort',
   modelHint: 'Leave empty to use the current session model, then the host default chat model.',
+  fallback: 'Commit even without a model plan',
+  fallbackHint: 'Off by default: a failed plan cancels the run and leaves the workspace untouched. When on, every change lands in one commit with a plugin-written message.',
   loading: 'Loading settings…',
   saved: 'Saved.',
   stale: 'Settings changed; refresh and retry.',
@@ -424,11 +461,16 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
     return () => { live = false }
   }, [props.client, boundProvider, boundModel])
 
-  const save = useCallback((model: CommitModelRoute) => {
+  // One patch shape for both rows: the service replaces the whole row, so an
+  // update to the toggle must carry the model it is not changing.
+  const save = useCallback((patch: { model?: CommitModelRoute; allowFallback?: boolean }) => {
     if (!settings) return
     setBusy(true); setNote(''); setError('')
     void rpc<GitCommitSettings>(call, 'settings.update', {
-      settings: { model },
+      settings: {
+        model: patch.model ?? settings.model,
+        allowFallback: patch.allowFallback ?? settings.allowFallback,
+      },
       expectedRevision: settings.revision,
     }, text.stale).then(next => {
       setSettings(next); setNote(text.saved); setBusy(false)
@@ -465,9 +507,9 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
           disabled={busy}
           onChange={event => {
             const key = event.target.value
-            if (!key) { save({ provider: '', model: '' }); return }
+            if (!key) { save({ model: { provider: '', model: '' } }); return }
             const parsed = parseModelMenuChoiceKey(key)
-            if (parsed) save(parsed)
+            if (parsed) save({ model: parsed })
           }}
         >
           <option value="">{text.modelDefault}</option>
@@ -485,7 +527,7 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
             className="dsh-ui-select"
             value={current.reasoningEffort ?? ''}
             disabled={busy}
-            onChange={event => save({ ...current, reasoningEffort: event.target.value || undefined })}
+            onChange={event => save({ model: { ...current, reasoningEffort: event.target.value || undefined } })}
           >
             <option value="">{text.modelDefault}</option>
             {efforts.map(effort => <option key={effort.id} value={effort.id}>{effort.name}</option>)}
@@ -493,6 +535,20 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
         </label>
       )}
       <p className="dsh-ui-meta">{text.modelHint}</p>
+      <article className="gcm-root dsh-ui-card">
+        <header className="dsh-ui-toggle-row">
+          <div className="dsh-ui-toggle-text">
+            <h3 className="dsh-ui-toggle-label">{text.fallback}</h3>
+            <p className="dsh-ui-hint">{text.fallbackHint}</p>
+          </div>
+          <Switch
+            checked={settings.allowFallback}
+            label={text.fallback}
+            disabled={busy}
+            onChange={next => save({ allowFallback: next })}
+          />
+        </header>
+      </article>
     </section>
   )
 }
@@ -507,7 +563,7 @@ export function apply(ctx: Context): void {
     if (typeof document === 'undefined') return () => {}
     const style = document.createElement('style')
     style.setAttribute('data-plugin', name)
-    style.textContent = css
+    style.textContent = clientCss
     document.head.appendChild(style)
     return () => style.remove()
   }, 'git-commit.styles')

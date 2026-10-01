@@ -124,37 +124,37 @@ function ConfirmButton(props: { label: string; confirmLabel: string; disabled?: 
 const copy = {
   zh: {
     tabsLabel: '网络搜索设置', tabProviders: '搜索服务', tabLimits: '请求限制',
-    loading: '正在读取设置…', loadFailed: '无法读取网络搜索设置：', reconnect: '重新连接',
-    failed: '操作失败。', readOnly: '当前凭据为只读，无法写入。',
+    loading: '正在读取设置…', loadFailed: '读取设置失败：', reconnect: '重新连接',
+    failed: '操作失败。', readOnly: '凭据只读，无法保存。',
     keyDeleted: '已删除 Key。', keySaved: '已保存 Key。', saved: '已保存。',
-    storageFailed: '配置保存异常，当前运行已暂停网络访问。请重新保存。',
-    empty: '还没有可用的搜索后端。', toolTitle: '联网搜索', needBackend: '请选择搜索服务并配置 Key。',
-    backends: '搜索后端', dragPrefix: '拖动排序 ', dragHint: '拖动排序，或用上下方向键调整',
+    storageFailed: '保存失败，重新保存前网络访问已暂停。',
+    empty: '暂无可用搜索后端，请启用一个供应商。', toolTitle: '联网搜索', needBackend: '需选择搜索服务并配置 Key。',
+    backends: '搜索后端', dragPrefix: '拖动排序 ', dragHint: '拖动排序，或用上下方向键',
     inUse: '当前使用', signup: '去注册', pricing: '费用说明', website: '官网',
     needsKey: '待配置 Key', unavailable: '暂不可用', sharedKey: '与其他设置共用凭据',
-    keyConfigured: '已配置，留空不替换', keyPlaceholder: '请输入 API Key',
+    keyConfigured: '已配置，留空不替换', keyPlaceholder: '输入 API Key',
     saveKey: '保存 Key', deleteKey: '删除 Key', confirmDelete: '确认删除 Key？',
     test: '测试连接（可能计费）', unsaved: '有未保存的修改', save: '保存',
-    saveHint: '开关和排序会立即生效；Key 与请求限制需要保存。',
-    maxResults: '每条查询的结果上限', maxQueries: '每次工具调用的查询上限',
-    timeoutMs: '请求超时（毫秒）', maxFetchChars: '网页正文字符上限',
+    saveHint: '开关与排序立即生效；Key 与限制需保存。',
+    maxResults: '每条查询结果上限', maxQueries: '每次调用查询上限',
+    timeoutMs: '请求超时（毫秒）', maxFetchChars: '正文字符上限',
   },
   en: {
     tabsLabel: 'Web search settings', tabProviders: 'Search services', tabLimits: 'Request limits',
-    loading: 'Loading settings…', loadFailed: 'Could not load web search settings: ', reconnect: 'Reconnect',
-    failed: 'Operation failed.', readOnly: 'This credential is read-only.',
+    loading: 'Loading settings…', loadFailed: 'Could not load settings: ', reconnect: 'Reconnect',
+    failed: 'Operation failed.', readOnly: 'Read-only credential; cannot save.',
     keyDeleted: 'Key deleted.', keySaved: 'Key saved.', saved: 'Saved.',
-    storageFailed: 'Settings could not be stored, so network access is paused. Save again.',
-    empty: 'No search backends are available yet.', toolTitle: 'Web search', needBackend: 'Choose a search service and configure its key.',
-    backends: 'Search backends', dragPrefix: 'Reorder ', dragHint: 'Drag to reorder, or use the Up and Down arrow keys',
+    storageFailed: 'Save failed; network access is paused until you save again.',
+    empty: 'No search backends yet; enable a provider.', toolTitle: 'Web search', needBackend: 'Needs a search service with a key.',
+    backends: 'Search backends', dragPrefix: 'Reorder ', dragHint: 'Drag to reorder, or use arrow keys',
     inUse: 'In use', signup: 'Sign up', pricing: 'Pricing', website: 'Website',
     needsKey: 'Key required', unavailable: 'Unavailable', sharedKey: 'Shares a credential with other settings',
-    keyConfigured: 'Configured; leave empty to keep it', keyPlaceholder: 'Enter API key',
+    keyConfigured: 'Configured; empty keeps it', keyPlaceholder: 'Enter API key',
     saveKey: 'Save key', deleteKey: 'Delete key', confirmDelete: 'Delete this key?',
     test: 'Test connection (may be billed)', unsaved: 'Unsaved changes', save: 'Save',
-    saveHint: 'Switches and order apply immediately; keys and limits need saving.',
-    maxResults: 'Max results per query', maxQueries: 'Max queries per tool call',
-    timeoutMs: 'Request timeout (ms)', maxFetchChars: 'Max page text characters',
+    saveHint: 'Switches and order apply now; keys and limits need saving.',
+    maxResults: 'Max results/query', maxQueries: 'Max queries/call',
+    timeoutMs: 'Request timeout (ms)', maxFetchChars: 'Max text chars',
   },
 } as const
 
@@ -164,7 +164,7 @@ function movedText(locale: 'zh' | 'en', label: string, position: number): string
   return locale === 'zh' ? `${label} 已移至第 ${position} 位` : `${label} moved to position ${position}`
 }
 function pricingCheckedText(locale: 'zh' | 'en', date: string): string {
-  return locale === 'zh' ? `价格核对于 ${date}，实际额度与费用以供应商账户为准。` : `Prices checked on ${date}; your provider account is authoritative.`
+  return locale === 'zh' ? `价格核对于 ${date}，额度与费用以供应商账户为准。` : `Prices checked on ${date}; your provider account is authoritative.`
 }
 function testOkText(locale: 'zh' | 'en', sources: number): string {
   return locale === 'zh' ? `连接正常，返回 ${sources} 条来源。` : `Connection OK: ${sources} sources returned.`

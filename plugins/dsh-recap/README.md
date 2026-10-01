@@ -1,8 +1,8 @@
 # @klarkxy/dsh-recap
 
-[简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-recap/docs/README.zh-CN.md)
+Writes session recaps in the background and gives the agent bounded progress checkpoints: after a long turn, or when you come back later, the session gets a short recap to read, and the model gets a length-capped progress note at key points. The plugin starts enabled and can be switched off under Settings → Plugins; recaps, agent checkpoints, and semantic checkpoints use fixed automatic defaults.
 
-Background recap generation and separate agent checkpoints. The plugin starts enabled and can be switched off under Settings → Plugins. Recaps, agent checkpoints, and semantic checkpoints use fixed automatic defaults. Recaps are display-only and are not model context.
+[简体中文](docs/README.zh-CN.md)
 
 Requires Node.js ≥22 and DSH `0.1.7-rc.2`. Auxiliary generation calls the host `llm` service directly. `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-session` are required peers.
 
@@ -11,15 +11,31 @@ npm install @klarkxy/dsh-recap
 dsh plugin --profile web add @klarkxy/dsh-recap
 ```
 
-Long turns and returning after the idle interval (default 15 minutes of focused document/user activity, not assistant streaming, and not while the chat panel is `hidden`) can generate recaps in the background. The chat events seat is a quiet lifecycle controller: it renders nothing until the session has a stored recap, then shows the recap cards with Generate, Cancel, and Regenerate (regenerating a finished recap asks for a second click). Status reads do not call the model; each watermark gets at most one generation unless you retry the card or request a manual `refresh`. Checkpoints are injected only at host `agent/pre-step` on meaningful boundaries, using native `createUserMessage`.
+## Recaps
+
+Recaps appear on the chat events seat — a quiet lifecycle controller that renders nothing until the session has a stored recap, then shows the recap cards with Generate, Cancel, and Regenerate (regenerating a finished recap asks for a second click).
+
+A recap is written in the background after a long turn ends, or when you come back after the idle interval. The interval defaults to 15 minutes of focused document and user activity: assistant streaming does not count, and neither does time spent while the chat panel is `hidden`.
+
+Reading status never calls the model. Each watermark gets at most one generation, unless you retry that card or request a manual `refresh`.
+
+## Checkpoints
+
+Checkpoints are injected only at host `agent/pre-step`, and only on meaningful boundaries, using native `createUserMessage`. The injected snapshot is bounded — it lists at most 12 items and is truncated to 2000 characters — so a long turn cannot flood the model with context.
+
+Checkpoint items are collected from the session log. With semantic checkpoints on, a model only refines the checkpoint's next step. When Mood is active in the same profile, Recap reads its task contract through `ctx.aiMood.getContract(sessionId)` for checkpoint context.
 
 ## Plugin page settings
 
-`Settings → Plugins → Task Recap` has switches for recap cards, task checkpoints, and semantic checkpoints, the away interval in minutes (1–180), and one model row per feature: **Recap card model** for recap cards and **Semantic checkpoint model** for semantic checkpoints. Both are optional. A saved route is used for that feature's own call as an explicit model; an empty selection follows the live session model and then the host default chat model. Only these two features are affected; a saved route selects a model but is not evidence of connectivity.
+`Settings → Plugins → Task Recap` has switches for recap cards, task checkpoints, and semantic checkpoints, the away interval in minutes (1–180), and one model row per feature: **Recap card model** for recap cards and **Semantic checkpoint model** for semantic checkpoints. Both are optional. A saved route is used for that feature's own call as an explicit model; an empty selection follows the live session model and then the host default chat model.
 
-When Mood is active in the same profile, Recap reads its task contract through `ctx.aiMood.getContract(sessionId)` for checkpoint context.
+The same switches can also be changed through the `update` RPC. Turning an ability off cancels in-flight generation and stops auto injection; stored recaps remain. Unloading the plugin waits for pending writes and ignores later session events.
 
-The same switches can also be changed through the `update` RPC. Turning an ability off cancels in-flight generation and stops auto injection. Stored recaps remain. Unloading the plugin waits for pending writes and ignores later session events.
+## Boundaries
+
+- Recaps are display-only and are not model context; checkpoints are the only thing injected into the model.
+- Semantic checkpoints only run while task checkpoints are on.
+- A saved route affects only these two features, and it selects a model — it is not evidence of connectivity.
 
 ## Host RPC
 
@@ -31,6 +47,8 @@ Channel `/dsh-recap` requires the host authorization policy.
 - `cancel` / `retry` — cancel a card's in-flight generation, or regenerate that card (`{ cardId, sessionId }`).
 - `idle.return` — run the idle-return check for a session immediately.
 - `refresh` — generate a recap for a session on demand (`manual` trigger), independent of the one-generation-per-watermark rule.
+
+## Development
 
 From the repository root:
 

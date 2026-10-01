@@ -194,7 +194,7 @@ export class WebSearchManager {
   }
   private async execute<T>(entry: Entry, signal: AbortSignal | undefined,
     run: (options: ProviderOptions, signal: AbortSignal) => Promise<T>): Promise<T> {
-    if (!this.selected(entry)) fail('WEB_DISABLED', '请在设置 → 网络搜索中配置凭据并主动启用。')
+    if (!this.selected(entry)) fail('WEB_DISABLED', '请在设置 → 网络搜索中配置凭据并启用。')
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), this.settings.timeoutMs)
     const combined = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
@@ -254,7 +254,7 @@ export class WebSearchManager {
       proposed.searchOrder = this.searchOrder(proposed)
       proposed.searchProvider = this.activeSearchId(proposed)
       if (proposed.searchEnabled && !proposed.searchProvider) {
-        fail('WEB_CREDENTIAL_MISSING', '请先选择已安装的供应商并填写有效凭据。')
+        fail('WEB_CREDENTIAL_MISSING', '需选择已安装的供应商并填写有效凭据。')
       }
       if (proposed.searchEnabled && this.entries.get(providerKey('fetch', 'http'))) {
         proposed.fetchEnabled = true
@@ -264,7 +264,7 @@ export class WebSearchManager {
       if (proposed.fetchEnabled) {
         const entry = this.entries.get(providerKey('fetch', proposed.fetchProvider))
         if (!entry) proposed.fetchEnabled = false
-        else if (!entry.configured) fail('WEB_CREDENTIAL_MISSING', '请先选择已安装的供应商并填写有效凭据。')
+        else if (!entry.configured) fail('WEB_CREDENTIAL_MISSING', '需选择已安装的供应商并填写有效凭据。')
       }
       this.suspended = true
       this.epoch += 1
@@ -274,7 +274,7 @@ export class WebSearchManager {
       catch {
         this.storageFailed = true
         this.notify()
-        fail('WEB_CONFIG_SAVE_FAILED', '设置保存失败。为避免意外联网，本次运行已暂停网络访问。')
+        fail('WEB_CONFIG_SAVE_FAILED', '保存失败，本次运行已暂停网络访问以防意外联网。')
       }
       this.settings = proposed
       this.storageFailed = false

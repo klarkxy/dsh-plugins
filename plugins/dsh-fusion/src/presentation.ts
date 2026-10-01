@@ -14,7 +14,7 @@ export interface FusionTaskView {
   executionAddress: string
 }
 const labels = {
-  zh: { dispatching: '正在交接', working: '执行中', decision: '等待主代理决策', review: '主代理审查中', accepted: '审查通过', cancelled: '已停止', failed: '执行失败', interrupted: '执行已中断' },
+  zh: { dispatching: '正在交接', working: '执行中', decision: '等待主助手决策', review: '主助手审查中', accepted: '审查通过', cancelled: '已停止', failed: '执行失败', interrupted: '执行已中断' },
   en: { dispatching: 'Handing off', working: 'Executing', decision: 'Waiting for Lead decision', review: 'Lead review', accepted: 'Review passed', cancelled: 'Stopped', failed: 'Failed', interrupted: 'Interrupted' },
 } as const
 
@@ -23,8 +23,8 @@ export function taskView(pair: FusionPair, task: FusionTask, locale: FusionLocal
   const zh = locale === 'zh', writing = pair.profile === 'writing'
   let status: string = labels[locale][task.state]
   if (zh && writing && task.state === 'working') status = '执笔中'
-  if (zh && writing && task.state === 'decision') status = '等待统筹决策'
-  if (zh && writing && task.state === 'review') status = '统筹审阅中'
+  if (zh && writing && task.state === 'decision') status = '等待主助手决策'
+  if (zh && writing && task.state === 'review') status = '主助手审阅中'
   let detail = task.error ?? ''
   if (task.state === 'accepted') {
     if (writing && task.target) {

@@ -21,7 +21,7 @@ export function registerBuiltins(manager: WebSearchManager): () => void {
   }, () => new SearchEngineProvider())
   const offDeepSeek = manager.registerSearchProvider({
     id: 'deepseek-official', label: 'DeepSeek 搜索',
-    description: '使用已配置的 DeepSeek API Key。可能产生额外搜索费用。',
+    description: '使用已配置的 DeepSeek API Key，可能产生额外搜索费用。',
     defaultBaseURL: DEEPSEEK_DEFAULT_BASE_URL, credentialRef: 'DEEPSEEK_API_KEY',
     credentialShared: true, credentialHint: '与模型设置共用 Key', billing: 'model-and-tools',
     signupUrl: 'https://platform.deepseek.com/api_keys',
@@ -66,7 +66,7 @@ export function registerBuiltins(manager: WebSearchManager): () => void {
   }, options => new TavilySearchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL }))
   const offHttp = manager.registerFetchProvider({
     id: 'http', label: '网页读取', billing: 'none',
-    description: '优先通过匿名 Jina Reader 读取，失败后本机 HTTP 直连；无需 Key。',
+    description: '优先匿名 Jina Reader 读取，失败后本机 HTTP 直连；无需 Key。',
   }, options => {
     const limits = {
       maxResponseBytes: 5_000_000, maxBodyChars: options.maxFetchChars,

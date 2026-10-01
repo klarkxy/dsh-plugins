@@ -28,7 +28,7 @@ export function createZhihuSearchTool(options: CreateZhihuSearchToolOptions = {}
   const { onExecuted, ...client } = options
   return defineTool({
     name: ZHIHU_SEARCH_TOOL_NAME,
-    description: '调用知乎开放平台站内搜索（GET /api/v1/content/zhihu_search）拉取社区证据；结果仅作社区/读者反馈参考，不构成 canon，也不直接写入项目文件。',
+    description: '知乎站内搜索（GET /api/v1/content/zhihu_search），取社区证据；仅作社区/读者反馈参考，不构成 canon，不写入项目文件。',
     parameters: {
       query: { type: 'string', required: true, description: '搜索词，2-100 字符。' },
       count: { type: 'integer', description: `返回条数，1-${ZHIHU_SEARCH_MAX_COUNT}，默认 ${ZHIHU_SEARCH_DEFAULT_COUNT}。` },
@@ -103,7 +103,7 @@ export function createZhihuGlobalSearchTool(options: ZhihuToolOptions = {}) {
   const { onExecuted, ...client } = options
   return defineTool({
     name: ZHIHU_GLOBAL_SEARCH_TOOL_NAME,
-    description: '调用知乎开放平台全网搜索（GET /api/v1/content/global_search）检索站外公开网页资料；结果仅作参考，不构成 canon，也不直接写入项目文件。',
+    description: '知乎开放平台全网搜索（GET /api/v1/content/global_search），检索站外公开网页资料；仅作参考，不构成 canon，不写入项目文件。',
     parameters: {
       query: { type: 'string', required: true, description: '搜索词，2-100 字符。' },
       count: { type: 'integer', description: `返回条数，1-${ZHIHU_GLOBAL_SEARCH_MAX_COUNT}，默认 ${ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT}。` },
@@ -144,7 +144,7 @@ export function createZhihuHotListTool(options: ZhihuToolOptions = {}) {
   const { onExecuted, ...client } = options
   return defineTool({
     name: ZHIHU_HOT_LIST_TOOL_NAME,
-    description: '拉取知乎热榜（GET /api/v1/content/hot_list）了解当前社区热点；结果仅作题材与热点参考，不构成 canon，也不直接写入项目文件。',
+    description: '知乎热榜（GET /api/v1/content/hot_list），了解当前社区热点；仅作题材参考，不构成 canon，不写入项目文件。',
     parameters: {
       limit: { type: 'integer', description: `返回条数，1-${ZHIHU_HOT_LIST_MAX_LIMIT}，默认 ${ZHIHU_HOT_LIST_DEFAULT_LIMIT}。` },
     },
@@ -189,7 +189,7 @@ export function createZhihuAskTool(options: ZhihuToolOptions = {}) {
   const { onExecuted, ...client } = options
   return defineTool({
     name: ZHIHU_ASK_TOOL_NAME,
-    description: '调用知乎直答（POST /v1/chat/completions，OpenAI 兼容）基于知乎社区内容生成综合回答；适合考据与背景调研。结果仅作参考，不构成 canon，也不直接写入项目文件。',
+    description: '知乎直答（POST /v1/chat/completions，OpenAI 兼容），基于社区内容生成综合回答，适合考据与背景调研；仅作参考，不构成 canon，不写入项目文件。',
     parameters: {
       query: { type: 'string', required: true, description: '要问的问题。' },
       model: { type: 'string', description: 'zhida-thinking-1p5（默认，带思考过程）、zhida-fast-1p5（快，仅适合简单事实查询）或 zhida-agent（最慢最强，仅在明确要求时使用）。' },
@@ -229,7 +229,7 @@ export function createZhihuKnowledgeSearchTool(options: ZhihuToolOptions = {}) {
   const { onExecuted, ...client } = options
   return defineTool({
     name: ZHIHU_KNOWLEDGE_SEARCH_TOOL_NAME,
-    description: '检索知乎知识库（POST /api/v1/knowledge/search，RAG 片段），默认只查公开库；用户在知乎网页端上传过个人资料后可加 personal/subscription 召回。结果仅作背景参考，不构成 canon，也不直接写入项目文件。',
+    description: '知乎知识库检索（POST /api/v1/knowledge/search，RAG 片段），默认只查公开库；网页端上传过资料后可加 personal/subscription 召回；仅作背景参考，不构成 canon，不写入项目文件。',
     parameters: {
       query: { type: 'string', required: true, description: '检索词。' },
       limit: { type: 'integer', description: `返回条数，1-${ZHIHU_KNOWLEDGE_SEARCH_MAX_LIMIT}，默认 ${ZHIHU_KNOWLEDGE_SEARCH_DEFAULT_LIMIT}。` },

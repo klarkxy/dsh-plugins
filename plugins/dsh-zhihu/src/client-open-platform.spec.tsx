@@ -132,7 +132,7 @@ describe('open platform initial SSR', () => {
     expect(html).toContain('非全文')
     // The fine print (OAuth, own-content scope) is folded behind one disclosure row.
     expect(html).toContain('说明')
-    expect(html).toContain('不会自动翻页或重试')
+    expect(html).toContain('不自动翻页或重试')
     expect(html).not.toContain('下一页</button>')
   })
   it.each([

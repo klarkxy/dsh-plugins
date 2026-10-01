@@ -1,4 +1,5 @@
 import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import {
   EXTRACT_PURPOSE, MEMORY_UNAVAILABLE_MESSAGE, SELF_IMPROVEMENT_ACTIVATE_ID, SETTINGS_KEY, defaultSettings,
   fail, normalizeModelRoute, projectIdFromCwd, sessionCwd, type LessonTrigger,
@@ -23,7 +24,7 @@ export interface KvTableLike<V> {
 
 export interface SessionLike {
   id?: unknown
-  header?: { cwd?: string }
+  header?: { cwd?: string; parentSession?: unknown; origin?: unknown; delegationDepth?: unknown }
   meta?: { cwd?: string }
   snapshotEvents(): readonly SessionEventLike[]
 }
@@ -41,8 +42,8 @@ export interface EngineOptions {
 }
 
 const STALE_MESSAGE = '结果已过期，未写入。'
-const WRONG_SCOPE_MESSAGE = '教训不属于当前项目，未接受。'
-const STALE_SKILL_MESSAGE = '来源教训已变更或失效，不能使用这份草稿。'
+const WRONG_SCOPE_MESSAGE = '经验不属于当前项目，未接受。'
+const STALE_SKILL_MESSAGE = '来源经验已变更或失效，不能使用这份草稿。'
 
 function asObject(payload: unknown): Record<string, unknown> {
   return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
@@ -111,7 +112,7 @@ export class SelfImprovementEngine {
 
   private requireActive(): RpcResult<never> | undefined {
     if (this.active) return undefined
-    return fail('DISABLED', '经验学习已关闭，摘录和教训注入已停止。')
+    return fail('DISABLED', '经验学习已关闭，摘录和经验注入已停止。')
   }
 
   private async persist<T>(work: () => Promise<T>): Promise<T> {
@@ -343,6 +344,12 @@ export class SelfImprovementEngine {
   private async runExtractFromSession(session: SessionLike, signal: AbortSignal, mode: 'auto' | 'manual'): Promise<RpcResult<{ created: MemoryRecord[]; skipped: number }>> {
     const disabled = this.requireActive()
     if (disabled) return disabled
+    // A lead agent's dispatch prompt reaches the child as its own user message, so
+    // `isHumanUserMessage` would read delegated text as the person correcting the agent.
+    // Only an explicit manual request may extract from a child thread.
+    if (mode === 'auto' && isSubagentSession(session)) {
+      return { ok: true, value: { created: [], skipped: 0 } }
+    }
     const memory = this.memoryOrError()
     if (!this.asMemory(memory)) return memory
     const sessionId = sessionIdOf(session)
@@ -406,7 +413,7 @@ export class SelfImprovementEngine {
     const stale = this.revalidate(generation, memory)
     if (stale) return stale
     const record = rows.find(item => item.id === id)
-    if (!record || record.kind !== 'lesson') return fail('NOT_FOUND', '找不到该教训。')
+    if (!record || record.kind !== 'lesson') return fail('NOT_FOUND', '找不到该经验。')
     return record
   }
 
@@ -419,8 +426,8 @@ export class SelfImprovementEngine {
     const stale = this.revalidate(generation, memory)
     if (stale) return stale
     if (record.revision !== expectedRevision) return fail('STALE', '记录已更新，请刷新后重试。')
-    if (isExpired(record, this.now())) return fail('STALE', '教训已过期。')
-    if (record.status !== 'candidate' && record.status !== 'active') return fail('INVALID', '只能接受候选或已生效的教训。')
+    if (isExpired(record, this.now())) return fail('STALE', '经验已过期。')
+    if (record.status !== 'candidate' && record.status !== 'active') return fail('INVALID', '只能接受候选或已生效的经验。')
     if (scope === 'project') {
       if (record.scope.kind === 'project' && currentProjectId && record.scope.projectId !== currentProjectId) {
         return fail('WRONG_SCOPE', WRONG_SCOPE_MESSAGE)
@@ -466,7 +473,7 @@ export class SelfImprovementEngine {
     const stale = this.revalidate(generation, memory)
     if (stale) return stale
     const lessons = lessonIds.map(id => records.find(item => item.id === id))
-    if (lessons.some(item => !item || item.kind !== 'lesson')) return fail('INVALID', '找不到所选教训。')
+    if (lessons.some(item => !item || item.kind !== 'lesson')) return fail('INVALID', '找不到所选经验。')
     return lessons as MemoryRecord[]
   }
 
@@ -474,14 +481,14 @@ export class SelfImprovementEngine {
     const work = this.beginWork()
     if (!this.isWork(work)) return work
     const { generation, memory } = work
-    if (lessonIds.length === 0) return fail('INVALID', '请选择已生效的教训。')
+    if (lessonIds.length === 0) return fail('INVALID', '请选择已生效的经验。')
     const lessons = await this.liveSkillLessons(lessonIds, memory, generation)
     if (!Array.isArray(lessons)) return lessons
     const stale = this.revalidate(generation, memory)
     if (stale) return stale
     const now = this.now()
     if (lessons.some(item => item.status !== 'active' || isExpired(item, now))) {
-      return fail('INVALID', '只能从未过期且已生效的教训生成技能草稿。')
+      return fail('INVALID', '只能从未过期且已生效的经验生成技能草稿。')
     }
     const record: SkillRecord = {
       id: crypto.randomUUID(),

@@ -12,7 +12,7 @@ export function registryTools(client: PluginRegistry) {
   return [
     defineTool({
       name: "dsh_plugins_search",
-      description: "Search candidate DSH plugins by purpose keywords or an exact package name. Default source catalog searches the curated klarkxy Chinese/English plugin catalog; source npm searches npm's dsh-plugin keyword for broader discovery. Results are candidates only, not verified compatibility; verify the package and pick an exact version with dsh_plugins_fetch. Try English keywords or an exact package name if Chinese search has no matches. This tool never installs anything; installs go through the official plugin manager.",
+      description: "Search candidate DSH plugins by purpose keywords or an exact package name. Candidates are unverified; installs go through the official plugin manager.",
       parameters: {
         query: { type: "string", required: true, description: "Purpose keywords or package name, 1–200 characters." },
         source: { type: "string", enum: ["catalog", "npm"], description: "Default catalog; use npm for broader discovery. Neither source is exhaustive." },
@@ -40,7 +40,7 @@ export function registryTools(client: PluginRegistry) {
     }),
     defineTool({
       name: "dsh_plugins_fetch",
-      description: "Fetch public npm registry metadata for an exact package name: dist-tags, published versions in publication-time order, and the selected version's manifest — bundle declaration, DSH/Node engine ranges, dependencies, peer dependencies and deprecation. version accepts an exact release or a dist-tag such as latest or next; ranges are rejected. Read-only metadata: nothing is downloaded, installed or executed, and declared compatibility is not runtime proof. GitHub-installed plugins have no registry metadata; install those directly with the official plugin manager as github:owner/repo#commit.",
+      description: "Read public npm metadata for an exact package: dist-tags, versions, engines, dependencies, deprecation. Read-only; engines are not runtime proof. GitHub-installed plugins have no metadata: install them with the official plugin manager as github:owner/repo#commit.",
       parameters: {
         package: { type: "string", required: true, description: "Exact npm package name, including scope if any." },
         version: { type: "string", description: "Exact version or dist-tag (default latest); ranges are not accepted." },

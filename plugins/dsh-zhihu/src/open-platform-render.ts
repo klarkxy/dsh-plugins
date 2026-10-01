@@ -29,7 +29,7 @@ export function renderZhihuOpenPlatform(result: ZhihuOpenPlatformResult): string
       notes.push('省略主题按当前账号画像推荐；条目可能少于请求数量，不支持翻页。')
       break
     case 'question.answers':
-      notes.push('Summary 是上游摘要或截取文本，不是回答全文，也不是额外生成的 AI 摘要。',
+      notes.push('Summary 是上游摘要或截取文本，非回答全文，非额外生成的 AI 摘要。',
         '单页条数可能少于 Limit；Totals 可能包含被过滤的回答。只按 paging 翻页，不按条数计算偏移。')
       break
     case 'content.detail':

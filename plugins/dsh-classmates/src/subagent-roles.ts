@@ -198,7 +198,7 @@ const ROLE_TOOL_PARAMETERS = {
   },
   model_profile: {
     type: 'string',
-    description: 'Optional enabled model profile id from the role guidance. Choose it from the task. Omit to use this role\'s configured model and effort. The profile model replaces the role model for this call, including when the role\'s saved model is unusable. A profile that omits effort uses that model\'s default effort.',
+    description: 'Optional enabled model profile id from the role guidance. Omit to use this role\'s configured model and effort. Replaces the role model for this call, including when the saved model is unusable. A profile that omits effort uses that model\'s default effort.',
   },
 } as const;
 
@@ -298,7 +298,7 @@ export class SubagentRoles {
         let visible: ToolDefinition | undefined;
         visible = defineTool({
           name: toolName,
-          description: 'Delegate a self-contained task to this configured role, a native DSH subagent with its own context. It runs in the background by default and returns a subagent id you can continue with send_message; you are notified when the run settles. Set run_in_background to false to wait for a one-shot result. Optional model_profile selects an enabled model profile for this call.',
+          description: 'Delegate a self-contained task to this role, a native DSH subagent with its own context. Runs in the background by default and returns a subagent id you can continue with send_message; set run_in_background to false to wait for a one-shot result. Optional model_profile selects an enabled model profile for this call.',
           parameters: ROLE_TOOL_PARAMETERS,
           output: {
             schema: { type: 'json' },

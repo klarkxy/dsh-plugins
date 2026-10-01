@@ -20,7 +20,7 @@ export function docsTools(client: DocsClient) {
   return [
     defineTool({
       name: "dsh_docs_search",
-      description: "Search the current official DSH documentation directory (titles, categories, paths; not full text). Use short Chinese or English topic keywords, then dsh_docs_fetch with a returned id. No shell required.",
+      description: "Search official DSH docs by title, category or path (not full text); fetch a returned id with dsh_docs_fetch.",
       parameters: {
         query: { type: "string", required: true, description: "1–200 characters; short topic keywords." },
         language: { type: "string", enum: ["zh", "en", "all"], description: "Default all." },
@@ -44,7 +44,7 @@ export function docsTools(client: DocsClient) {
     }),
     defineTool({
       name: "dsh_docs_fetch",
-      description: "Read current official DSH Markdown using an id returned by dsh_docs_search. Returns source, fetch time, content revision and nextOffset. Continue with nextOffset and the same revision. No shell or arbitrary URL access.",
+      description: "Read official DSH Markdown by an id from dsh_docs_search; no arbitrary URLs. Continue with nextOffset and the same revision.",
       parameters: {
         id: { type: "string", required: true, description: "Exact document id returned by dsh_docs_search." },
         offset: { type: "integer", description: "Character offset, default 0." },

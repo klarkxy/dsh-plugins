@@ -44,7 +44,7 @@ export type TeamTranslate = (key: ClassmatesTeamKey, params?: Record<string, unk
 export const classmatesTeamZh: Record<ClassmatesTeamKey, string> = {
   trigger: '智能体团队',
   loading: '正在加载团队…',
-  unavailable: 'Team 暂不可用',
+  unavailable: 'Team 不可用',
   failure: '团队持久记录无效：{message}',
   empty: '暂无共享任务，可以通过对话创建',
   roster: '成员',
@@ -72,20 +72,20 @@ export const classmatesTeamZh: Record<ClassmatesTeamKey, string> = {
   lastUsed: '上次使用',
   modelUnknown: '模型未知',
   memberTasks: '任务',
-  metadataError: '角色详情加载失败，正在显示团队成员列表',
+  metadataError: '角色详情加载失败，正在显示成员列表',
 };
 
 export const classmatesTeamEn: Record<ClassmatesTeamKey, string> = {
   trigger: 'Agent Team',
   loading: 'Loading Team…',
-  unavailable: 'Team is unavailable',
+  unavailable: 'Team unavailable',
   failure: 'Invalid persisted Team record: {message}',
   empty: 'No shared tasks yet. Create them through the conversation.',
   roster: 'Members',
   tasks: 'Shared tasks',
   model: 'Model',
   open: 'Open member conversation',
-  current: 'Current chat',
+  current: 'Current session',
   lead: 'Lead',
   owner: 'Owner',
   unowned: 'Unowned',
@@ -106,5 +106,5 @@ export const classmatesTeamEn: Record<ClassmatesTeamKey, string> = {
   lastUsed: 'Last used',
   modelUnknown: 'Model unknown',
   memberTasks: 'Tasks',
-  metadataError: 'Could not load role details. Showing the team member list.',
+  metadataError: 'Could not load role details. Showing the member list.',
 };

@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import {
   MEMORY_PLUGIN, MEMORY_RPC_CHANNEL, projectIdFromCwd, sessionCwd,
@@ -76,6 +77,9 @@ export async function apply(ctx: Context): Promise<void> {
     const offStatus = listen(ctx, 'agent/status', (payload: { agent: { id?: unknown; session?: unknown }; status: string }) => {
       const sessionId = String((payload.agent as { id?: unknown }).id ?? '')
       if (!sessionId) return
+      // Delegated child threads are not user conversations: their idle windows must not
+      // each start a Dream run, or the model-call count scales with fan-out.
+      const delegated = isSubagentSession(payload.agent.session ?? readSession(ctx, sessionId))
       const now = Date.now()
       if (payload.status === 'running') {
         idle.agentIdle.set(sessionId, false)
@@ -89,6 +93,7 @@ export async function apply(ctx: Context): Promise<void> {
       idle.lastActivity.set(sessionId, idle.lastActivity.get(sessionId) ?? now)
       const timer = idle.timers.get(sessionId)
       if (timer) clearTimeout(timer)
+      if (delegated) return
       const wait = runtime.status().settings.idleMs
       idle.timers.set(sessionId, setTimeout(() => {
         idle.timers.delete(sessionId)

@@ -1,50 +1,56 @@
 # Blueprint
 
-[中文](README.zh-CN.md)
+[简体中文](README.zh-CN.md)
 
-Share plugin identities, exact versions and preferred order. Paste a blueprint code and import intent in **Creator mode**: the Agent merges it into the current profile's bundle collection. Core does not depend on Web; the Plugins page is an optional export and read-only parsing adapter. No Spaces, separate application or background Agent orchestrator.
+Share a plugin set as exact versions plus a preferred order. Paste a blueprint code into **Creator mode** together with your import intent, and the Agent merges it into the current profile's bundle collection. The Core part does not need Web — the Plugins page is an optional export and read-only parsing view. Blueprint does not provide Spaces, a separate application or a background Agent orchestrator.
 
-**Source preview; the redesigned implementation has not completed real-host end-to-end acceptance.** See [ACCEPTANCE.md](ACCEPTANCE.md).
+**Source preview: the redesigned implementation has not completed real-host end-to-end acceptance.** The checks already run and the items still outstanding are listed in [ACCEPTANCE.md](ACCEPTANCE.md).
 
 ## Use
 
-- In Creator (`cordis`), send the code with an intent such as “Merge this blueprint into my current plugin composition, preserve local bundles, and resolve versions and order yourself.” Routine merge-plan approval is not required; native safety approvals still apply.
-- Open **Plugins → Blueprint** to export selected installed identities and preferred order. The import view only parses and displays the artifact and prepares a copyable merge request. Paste/send that request in Creator; copying does not start a model or mutate the profile.
-- Local bundles absent from the artifact are preserved by default. A package omitted from `bundles` requests installation only; it does not request disabling the receiving profile's same-name bundle.
+- **Merge in Creator.** In Creator (`cordis`), send the code with an intent such as “Merge this blueprint into my current plugin composition, preserve local bundles, and resolve versions and order yourself.” The Agent does not ask you to review a routine merge plan; native safety approvals still apply.
+- **Plugin page.** Open **Plugins → Blueprint** to export the installed identities you select, in the order you prefer. The import view only parses the artifact, shows the package identities and preferred order, and prepares a copyable merge request. Paste and send that request in Creator: copying neither starts a model nor changes the profile.
+- Local bundles the blueprint does not mention are preserved by default. A package listed in `packages` but absent from `bundles` only asks to be installed; it never asks to disable the same-name bundle in the receiving profile.
 
 ## Environment-independent Core
 
-One package contains the Host Core and an optional Web Client. ACP, SDK and headless capabilities follow their plugin compositions; environment independence does not mean every deployment exposes the same services or supports immediate activation.
+One package ships the Host Core plus an optional Web Client, so there is no separate UI package to install. What ACP, SDK and headless can do depends on their own plugin compositions. Environment independence does not mean that every deployment exposes the same services or can activate plugins immediately.
 
 | Tool | Capability |
 | --- | --- |
-| `blueprint_parse` | Decode and validate a code without accessing a profile |
-| `blueprint_encode` | Validate v2 JSON and encode, without installing or publishing |
-| `blueprint_catalog` | Read profile identities, complete selected order and stale-state stamp |
-| `blueprint_generate` | Export installed exact identities and preferred selection order |
-| `blueprint_apply_order` | Creator-only permutation of the complete currently selected bundle sequence |
+| `blueprint_parse` | Decode and validate a blueprint code, without reading a profile |
+| `blueprint_encode` | Validate v2 JSON and encode a code, without installing or publishing |
+| `blueprint_catalog` | Read the current profile's bundle identities, complete selected order and stale-state stamp |
+| `blueprint_generate` | Export the selected installed identities with exact versions, in the preferred order |
+| `blueprint_apply_order` | Creator only: permute the complete currently selected bundle order; it does not install, add or disable |
 
-Protocol tools need `tools`; profile tools also need native `pluginManager` and `profileContext`. Applying order also needs `sandboxPolicy` and `agentPresets`, and uses native sandbox escalation. Creator prompt guidance is optional and follows prompt-service lifetimes. The read-only Web adapter attaches only when Connection/WebServer/profile services are available. UI is keyed by the npm package name at `plugins.bundle.config`; no toolbar host patch is needed.
+A tool appears once the services it needs exist:
+
+- `blueprint_parse` and `blueprint_encode` need `tools` alone.
+- `blueprint_catalog` and `blueprint_generate` also need the native `pluginManager` and `profileContext`.
+- `blueprint_apply_order` also needs `sandboxPolicy` and `agentPresets`, and escalates through the native sandbox gate.
+
+Creator prompt guidance is optional: it registers when `systemPrompt` and `agentPresets` are available, and injects only in Creator. The read-only Web page attaches only when the connection, Web server and profile services are available. Its UI is keyed by the npm package name at `plugins.bundle.config`, so no host toolbar patch is needed.
 
 ## Native execution and permissions
 
-Install, update, enable, disable and remove through native `plugin_manager`. Blueprint does not duplicate package management. The Agent chooses compatible versions and ordering using verified metadata and user intent. Deviations from shared exact versions must be reported without rewriting the original artifact.
+Install, update, enable, disable and remove all go through the native `plugin_manager`; Blueprint never duplicates the installer. The Agent picks compatible versions and ordering from verified metadata and your intent. If it settles on a version other than the exact one the blueprint records, it reports that deviation and leaves the original artifact unchanged.
 
-The order tool accepts only a permutation of already-selected bundles and rejects omissions, duplicates, unknown names, stale state and protected-order changes. It uses the same danger-full-access/per-call escalation gate as native management, then official file locking, atomic manifest saving and the optional HMR exclusive queue. Install/enable first, read a fresh catalog stamp, then apply order.
+The order tool only permutes bundles that are already selected. It rejects omissions, duplicates, unknown names, a stale state and changes to protected positions. It then passes the same danger-full-access, per-call escalation gate as native management, and afterwards uses the official file lock, the atomic manifest save and the optional HMR exclusive queue. The order is always: install and enable first, read a fresh catalog stamp, then apply the new order.
 
-Saved configuration and successful runtime activation are different outcomes. Live environments reread complete patch layers and reconcile activation; startup-only environments report restart required. A failed application can leave saved configuration or partial runtime changes. No cross-plugin transaction, automatic rollback or mutation retry exists. Check state before recovering a lost response. The stamp covers manifest and bundle catalog, not every patch file's content.
+Saving configuration and activating at runtime are two different outcomes. Live environments reread the complete patch layers and reconcile activation; startup-only environments report that a restart is required. A failed application can leave saved configuration or partial runtime changes behind. There is no cross-plugin transaction, no automatic rollback and no retry of a mutation. Check the current state before you recover a lost response. The stamp covers the manifest and the bundle catalog, not the content of every patch file.
 
-Agent autonomy never grants package scripts, version-risk exemptions or permissions from blueprint metadata. Codes provide no signatures, encryption or author authentication; descriptions are untrusted data, not instructions.
+Agent autonomy never grants package scripts, version-risk exemptions or any permission that blueprint metadata asks for. Codes carry no signatures, encryption or author authentication, and descriptions are untrusted data, not instructions.
 
 ## Discovery and reusable defaults
 
-Use metadata tools such as [`@klarkxy/dsh-dev-index`](https://www.npmjs.com/package/@klarkxy/dsh-dev-index)'s `dsh_plugins_search` / `dsh_plugins_fetch` to discover candidates and verify exact versions and bundle declarations. Search results and declared compatibility are not runtime proof. Do not guess versions or silently rewrite sources. Portable sources are `npm` and `builtin`, not local links or git/tarballs.
+To discover candidates, use metadata tools such as `dsh_plugins_search` / `dsh_plugins_fetch` from [`@klarkxy/dsh-dev-index`](https://www.npmjs.com/package/@klarkxy/dsh-dev-index), and verify the exact version and bundle declaration of each one. Search results and declared compatibility are not runtime proof. Never guess a version or silently swap a source. Portable sources are `npm` and `builtin`, not local links or git/tarballs.
 
-Reusable settings belong in native composition/preset packages with explicit component rows. Dependencies alone do not recursively activate every dependency bundle. Later layers take precedence; row patches replace whole `config`, not deep merge. Profile/home overrides remain effective. Never package credentials or machine-private data as defaults.
+Reusable settings belong in native composition/preset packages, with explicit component rows. Dependencies alone do not recursively activate every dependency bundle. Later layers take precedence, and a row patch replaces its whole `config` rather than deep-merging it. Profile and home overrides stay effective. Never ship credentials or machine-private data as defaults.
 
 ## Format and compatibility
 
-The [protocol](PROTOCOL.md) defines fields, encoding, limits and vectors. DSHBP2 / `formatVersion: 2` are unchanged, so existing codes remain readable. Creator autonomous merge is a new execution policy; old page `preview` / `apply` / `result` endpoints are retired rather than silently repurposed for reordering.
+The [protocol](PROTOCOL.md) defines the fields, the encoding, the limits and the test vectors. DSHBP2 / `formatVersion: 2` are unchanged, so existing codes stay readable. Autonomous merge in Creator is a new execution policy: the old page `preview` / `apply` / `result` endpoints are retired, not quietly repurposed for reordering.
 
 ```json
 {
@@ -56,7 +62,7 @@ The [protocol](PROTOCOL.md) defines fields, encoding, limits and vectors. DSHBP2
 }
 ```
 
-The package name above is illustrative. Settings, credentials, row states and nested blueprints are not transported. Codes contain raw-DEFLATE UTF-8 JSON as unpadded canonical Base64url after `DSHBP2:`. Limits: 2 MiB input, 1 MiB decoded JSON, 64 container levels. Strict parsing rejects duplicate members, unsafe numbers, prototype keys, malformed Unicode, noncanonical Base64url and trailing compressed data.
+The package name above is illustrative. Settings, credentials, row states and nested blueprints are not transported. A code is the literal prefix `DSHBP2:` followed by raw-DEFLATE UTF-8 JSON in unpadded canonical Base64url. Limits: 2 MiB input, 1 MiB decoded JSON, 64 container levels. Strict parsing rejects duplicate members, unsafe numbers, prototype keys, malformed Unicode, noncanonical Base64url and trailing compressed data.
 
 `./core` retains `validate` and adds `parseBlueprint`, `encodeBlueprint` and `BlueprintCore`. `./codec` retains `encode` / `decode`.
 
@@ -71,6 +77,6 @@ npm pack
 dsh plugin --profile <target-profile> add <absolute-archive-path>
 ```
 
-Official libraries are runtime-provided optional peers with open lower bounds, never bundled dependencies. Public helpers were checked against installed official CLI `0.1.7-rc.2` docs/types/implementation and live Inspect contracts. Exact desktop version and multi-environment integration remain unverified. Tests use isolated temporary directories, not production profiles. Syntax/offline contract checks are not real-host certification.
+Official packages are provided by the runtime: this plugin declares them as optional peers with open lower bounds and never bundles its own copy. Public helpers were checked against the docs, types and implementation of the installed official CLI `0.1.7-rc.2`, and against live Inspect contracts. The exact desktop version and multi-environment integration remain unverified. Tests run in isolated temporary directories, never against a production profile, and syntax or offline contract checks are not real-host certification.
 
-MIT. See [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE) for retained codec attribution.
+MIT licensed. The retained codec attribution is in [NOTICE.md](NOTICE.md); the licence text is in [LICENSE](LICENSE).

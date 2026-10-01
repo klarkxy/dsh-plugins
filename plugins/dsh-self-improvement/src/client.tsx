@@ -165,7 +165,7 @@ function LessonList(props: {
         <LessonEvidence record={record} locale={locale} />
         <div className="dsh-ui-actions">
           {candidate && !foreignProject ? <Button variant="outline" size="sm" disabled={busy} onClick={() => onAccept(record)}>
-            {locale === 'en' ? 'Accept in this scope' : '按当前范围采纳'}
+            {locale === 'en' ? 'Accept in scope' : '在本范围采纳'}
           </Button> : null}
           {active && record.scope.kind === 'project' && !foreignProject ? <Button variant="outline" size="sm" disabled={busy} onClick={() => onPromote(record)}>
             {locale === 'en' ? 'Promote to global' : '提升为全局'}
@@ -349,7 +349,7 @@ export function ReviewPanel({ client, sessionId, locale }: {
         },
         {
           value: 'skills',
-          label: locale === 'en' ? 'Skills' : '技能草稿',
+          label: locale === 'en' ? 'Skill drafts' : '技能草稿',
           id: `${tabsId}-skills-tab`,
           panelId: `${tabsId}-skills-panel`,
         },
@@ -358,8 +358,8 @@ export function ReviewPanel({ client, sessionId, locale }: {
     <div role="tabpanel" id={`${tabsId}-lessons-panel`}
       aria-labelledby={`${tabsId}-lessons-tab`} hidden={tab !== 'lessons'} tabIndex={0}>
       <p className="dsh-ui-help">{locale === 'en'
-        ? 'Methods you ask for directly take effect right away. Methods learned from outcomes stay as candidates until you accept them. Vocabulary and recent activity are kept by Long-term Memory.'
-        : '你明确要求的做法会直接生效；从结果中观察到的做法先作为候选，采纳后才会使用。用语和近期状态由长期记忆管理。'}</p>
+        ? 'Requested methods apply at once; observed ones need acceptance. Vocabulary and recent activity belong to Long-term Memory.'
+        : '明确要求的做法直接生效，观察到的须先采纳；用语与近期状态由长期记忆管理。'}</p>
       {sessionId ? <div className="dsh-ui-actions"><Button variant="primary" size="md" disabled={busy || !data.memoryAvailable} onClick={() => void action(async ctx => {
         if (!reviewRequestStillCurrent({
           token: ctx.token, gate: gate.current, signal: ctx.signal, sessionId: ctx.sessionId, viewSessionId: sessionRef.current,
@@ -370,8 +370,8 @@ export function ReviewPanel({ client, sessionId, locale }: {
         })
         if (!next) return
         setSnapshot(next)
-        setNote(locale === 'en' ? 'Extracted from this session when evidence was sufficient.' : '已按明确依据尝试摘录。')
-      })}>{locale === 'en' ? 'Extract from this session' : '从本会话摘录'}</Button></div> : null}
+        setNote(locale === 'en' ? 'Attempted extraction from explicit evidence.' : '已按明确依据尝试摘录。')
+      })}>{locale === 'en' ? 'Extract from session' : '从本会话摘录'}</Button></div> : null}
       <LessonList
         lessons={visibleLessons}
         locale={locale}
@@ -415,7 +415,7 @@ export function ReviewPanel({ client, sessionId, locale }: {
   function skillManagement() {
     return <>
       <fieldset className="si-lessons" disabled={busy || !data.memoryAvailable}>
-        <legend className="dsh-ui-label">{locale === 'en' ? 'Build a skill draft from active methods' : '从已生效的经验生成技能草稿'}</legend>
+        <legend className="dsh-ui-label">{locale === 'en' ? 'From active methods' : '选取已生效的经验'}</legend>
         {data.lessons.filter(record => record.status === 'active').map(record => (
           <Checkbox key={record.id} className="si-lesson-option"
             checked={selected.includes(record.id)}
@@ -491,7 +491,7 @@ export function ReviewPanel({ client, sessionId, locale }: {
   return <section className="si-settings dsh-ui-panel" data-testid="self-improvement-settings" data-session={sessionId || undefined}>
     {sessionId ? body : <p className="dsh-ui-empty">{locale === 'en'
       ? 'Open a session to review methods for its project.'
-      : '打开一个会话后，可审阅该项目的经验。'}</p>}
+      : '打开会话后可审阅其项目经验。'}</p>}
   </section>
 }
 
@@ -633,7 +633,7 @@ export function SelfImprovementModelMenu({ client, locale }: { client: Client; l
     )}
     <p className="dsh-ui-hint">{locale === 'en'
       ? 'Leave empty to use the current session model, then the host default chat model.'
-      : '留空则使用当前会话模型，再回落到宿主默认对话模型。'}</p>
+      : '留空则用当前会话模型，再回落到宿主默认对话模型。'}</p>
   </section>
 }
 

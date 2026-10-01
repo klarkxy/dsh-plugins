@@ -1,3 +1,4 @@
+import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts';
 import { parseConfig } from './config.js';
 
 export const CHANNEL = '/dsh-safe-auto';
@@ -19,7 +20,7 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
     const changed = events.slice(selected.fromSeq).some(e => ['permission/preset', 'sandbox/mode', 'approval/policy'].includes(e.type));
     let native;
     try { native = presets.resolve(presets.current(session)); } catch { native = {}; }
-    if (changed || sessions.get(session.id) !== session || session.header?.parentSession || session.header?.origin === 'subagent' ||
+    if (changed || sessions.get(session.id) !== session || isSubagentSession(session) ||
         sandboxPolicy.resolve({ session }).mode !== 'workspace-write' || native.sandbox !== 'workspace-write' || native.approval !== 'ask') {
       selections.set(session, { enabled: false, generation: ++generation }); return false;
     }
@@ -66,7 +67,7 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
     if (typeof id !== 'string' || !id || id.length > 200) throw new Error('Invalid session');
     const session = sessions.get(id);
     if (!session) throw new Error('Session is not active; open it and retry');
-    if (session.header?.parentSession || session.header?.origin === 'subagent') throw new Error('Child sessions cannot select Safe Auto');
+    if (isSubagentSession(session)) throw new Error('Child sessions cannot select Safe Auto');
     return session;
   }
   async function dispatch(endpoint, payload, signal) {
@@ -85,13 +86,13 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
       return settingsView();
     }
     if (endpoint === 'session.list') return { sessions: sessions.list()
-      .filter(s => !s.header?.parentSession && s.header?.origin !== 'subagent' && sessions.get(s.id) === s)
+      .filter(s => !isSubagentSession(s) && sessions.get(s.id) === s)
       .map(s => ({ sessionId: s.id, header: Object.fromEntries(['id', 'createdAt', 'cwd', 'isSeeded', 'agentPreset']
         .filter(k => s.header?.[k] !== undefined).map(k => [k, s.header[k]])), ...sessionView(s) })) };
     if (!['session.get', 'session.select', 'session.disable'].includes(endpoint)) throw new Error('Unknown endpoint');
     const session = getSession(payload.sessionId);
     if (endpoint === 'session.get') return sessionView(session);
-    if (payload.expectedRevision !== sessionView(session).revision) throw new Error('Session changed; refresh the menu and retry');
+    if (payload.expectedRevision !== sessionView(session).revision) throw new Error('Session changed; refresh the list and retry');
     if (endpoint === 'session.disable') {
       selections.set(session, { enabled: false, generation: ++generation });
       return sessionView(session);

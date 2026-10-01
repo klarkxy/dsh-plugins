@@ -2,7 +2,7 @@ import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/d
 import { modelMenuOverride } from '@klarkxy/dsh-plugin-kit/model-menu'
 import {
   DEFAULT_MAX_OUTPUT_TOKENS, RECENT_LOG_COUNT,
-  defaultSettings, type CommitGroupResult, type CommitModelInfo, type CommitRunResult,
+  defaultSettings, normalizeFallback, type CommitGroupResult, type CommitModelInfo, type CommitRunResult,
   type GitCommitSettings, type GitCommitStatus,
 } from './contracts.ts'
 import {
@@ -102,7 +102,11 @@ export class GitCommitService {
     if (expectedRevision !== this.settings.revision) {
       throw new CommitRunError('stale', 'dsh-git-commit: settings changed; reload and retry')
     }
-    const next: GitCommitSettings = { revision: expectedRevision + 1, model: structuredClone(patch.model) }
+    const next: GitCommitSettings = {
+      revision: expectedRevision + 1,
+      model: structuredClone(patch.model),
+      allowFallback: normalizeFallback(patch.allowFallback),
+    }
     await this.deps.settings?.save(next)
     this.settings = next
     return this.getSettings()
@@ -195,6 +199,7 @@ export class GitCommitService {
     }
 
     let groups: PlanGroup[] | undefined
+    let planFailure = 'no model route was available'
     let model: CommitModelInfo | undefined
     const planned = this.selectedModel()
     if (planned.route) {
@@ -210,10 +215,18 @@ export class GitCommitService {
         })
         model = modelInfo(result, planned.source)
         groups = parsePlan(result.text, selected)
+        if (!groups) planFailure = 'the model returned a plan that does not cover the change set'
       } catch (error) {
         if (error instanceof CommitRunError) throw error
-        groups = undefined
+        planFailure = error instanceof Error ? error.message : String(error)
       }
+    }
+
+    // Without a plan the run would write commits nobody asked for, so it stops
+    // here — before the index or the worktree is touched. A single fallback
+    // commit stays available, but only when the settings row asked for it.
+    if (!groups && !this.settings.allowFallback) {
+      throw new CommitRunError('plan-unavailable', `dsh-git-commit: no commit plan (${planFailure})`)
     }
 
     assertReady()

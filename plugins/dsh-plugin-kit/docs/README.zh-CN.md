@@ -1,15 +1,21 @@
 # @klarkxy/dsh-plugin-kit
 
-功能插件共用的支撑包：共享记录类型、插件页模型菜单、宿主 RPC 注册、官方 UI 样式契约，以及一次原生 `llm` 文本调用。
+本仓库功能插件共用的支撑包：共享记录类型、插件页模型菜单、宿主 RPC 注册、官方 UI 样式契约，以及一次原生 `llm` 文本调用。它是一个库，不是 DSH bundle——把它作为依赖装上，得到的是功能插件需要的零件，而不是一个新的用户可见功能。
 
-它不做模型档位路由、重试、超时、排队或用量记录。每个功能在自己的插件页选择模型，并直接调用宿主 `llm`；未选择时使用当前会话模型，再回落到宿主默认对话模型。本包自身从不发起推理。
+[English](../README.md)
+
+## 本包不做什么
+
+- 它是功能插件的依赖，不是 DSH bundle：不声明 `dsh.bundle`，也不注册插件页，单独安装它不会让用户看到任何变化。
+- 它自身从不发起推理：没有功能要求时，它不会发起任何模型调用。
+- 它不做模型档位路由、重试、超时、排队或用量记录。每个功能在自己的插件页选择模型，并直接调用宿主 `llm`；未选择时使用当前会话模型，再回落到宿主默认对话模型。
 
 ## 入口
 
-- `.` — Cordis 插件入口（`name`、`inject`、`apply`）、`registerHostRpc`、`callLlmText`、`resolveFeatureModel` 与共享契约类型。
+- `.` — 共享契约类型，以及 `registerHostRpc`、`callLlmText`、`resolveFeatureModel`。
 - `./contracts` — 浏览器安全的类型与常量：共享记忆/知识记录、`TaskContract` / `TaskCheckpoint`、`ModelRoute`、`RpcResult`、`CHAT_EVENTS_SLOT`、`projectIdFromCwd`。
 - `./host-rpc` — 宿主 RPC 注册辅助及其上下文类型。
-- `./client-utils` — 浏览器安全的 React 可选辅助，用于原生插件页座位。
+- `./client-utils` — 浏览器安全的原生插件页座位辅助：`selectedSessionId`、`useNativeSeat`、`useFeatureRefresh`。`react` 是可选对等依赖。
 - `./model-menu` — 插件页模型菜单：目录解析、空路由处理、思考强度选项。
 - `./llm-call` — 单独导出 `callLlmText` 与 `resolveFeatureModel`。
 - `./official-ui` — 浏览器端共享样式契约：`officialUiCss(roots)`、`--dsw-*` token 白名单，以及焦点环与层级辅助。
@@ -24,9 +30,9 @@
 
 `OFFICIAL_THEME_TOKEN_NAMES` 就是这份白名单。往里加 token 是一个需要确认的动作：先对照宿主主题核实名字。
 
-`AiPolicy`、`PurposeSpec`、`ModelTarget`、`AiServices`、`AiFeatureScope`、`AuxiliaryRequest`、`AuxiliaryResult`、`UsageReceipt` 仍保留在 `./contracts` 并标注 `@deprecated`。它们描述已停用的共享模型路由服务，新调用不得使用。
+## 已停用的类型
 
-本包是功能插件的依赖，不是 DSH bundle：不声明 `dsh.bundle`，也不注册插件页。
+`AiPolicy`、`PurposeSpec`、`ModelTarget`、`AiServices`、`AiFeatureScope`、`AuxiliaryRequest`、`AuxiliaryResult`、`UsageReceipt` 仍保留在 `./contracts` 并标注 `@deprecated`。它们描述已停用的共享模型路由服务，新调用不得使用。
 
 ## 开发
 

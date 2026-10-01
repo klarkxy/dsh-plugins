@@ -59,7 +59,7 @@ export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsag
         if (endpoint === 'usage.summary') { await pendingUsage; return { ok: true, value: { days: await usage.read(resolveDays(body.days)) } } }
         const query = typeof body.query === 'string' ? body.query : ''
         if (['search', 'global.search', 'ask', 'knowledge.search'].includes(endpoint) && (!query.trim() || query.length > 4000)) {
-          return fail('bad-request', '请输入不超过 4000 字符的查询')
+          return fail('bad-request', '查询不超过 4000 字符')
         }
         let value: unknown
         let results = 0

@@ -226,7 +226,7 @@ function MemorySettingsPanel({ client, sessionId, locale }: { client: Client; se
       if (savedNote) setNote(t(locale, '已保存。', 'Saved.'))
     } catch (cause) {
       if (!still()) return
-      setError(cause instanceof Error ? cause.message : t(locale, '操作失败。', 'Failed.'))
+      setError(cause instanceof Error ? cause.message : t(locale, '操作失败。', 'Operation failed.'))
       const next = await loadMemoryStatus({
         rpc, sessionId: request.sessionId, token: request.token, gate: gate.current, signal: request.signal,
         viewSessionId: () => sessionRef.current,
@@ -256,7 +256,7 @@ function MemorySettingsPanel({ client, sessionId, locale }: { client: Client; se
     {error && <p role="alert" className="dsh-ui-error">{error}</p>}
     {note && <p role="status" className="dsh-ui-notice">{note}</p>}
     {status.storageFailed && <p role="alert" className="dsh-ui-banner dsh-ui-banner--danger">{t(locale, '保存失败，已保留原内容。', 'Save failed; previous content was kept.')}</p>}
-    {!status.aiAvailable && <p className="dsh-ui-banner">{t(locale, '整理需要可用的模型。请在下方选择模型，或设置默认对话模型。', 'Organizing needs a model. Pick one below, or set a default chat model.')}</p>}
+    {!status.aiAvailable && <p className="dsh-ui-banner">{t(locale, '整理需要模型，可在下方选择或设默认对话模型。', 'Organizing needs a model. Pick one below or set a default chat model.')}</p>}
     <article className="dsh-memory-card dsh-ui-card">
       <header className="dsh-ui-toggle-row">
         <div className="dsh-ui-toggle-text">
@@ -280,7 +280,7 @@ function MemorySettingsPanel({ client, sessionId, locale }: { client: Client; se
       <header className="dsh-ui-toggle-row">
         <div className="dsh-ui-toggle-text">
           <h3 className="dsh-ui-toggle-label">{t(locale, '自动观察与整理', 'Observe and organize automatically')}</h3>
-          <p className="dsh-ui-hint">{t(locale, '从你的消息中记下用语和近期状态，并在空闲时整理。做事方法由“经验学习”插件负责。', 'Notes your vocabulary and recent activity from your messages and tidies them while idle. The Experience Learning plugin handles methods.')}</p>
+          <p className="dsh-ui-hint">{t(locale, '从你的消息中记下用语和近期状态；做法在经验学习。', 'Notes vocabulary and recent activity from your messages. Methods go to Experience Learning.')}</p>
         </div>
         <Switch
           checked={draft.dreamIdleEnabled}
@@ -321,7 +321,7 @@ function MemorySettingsPanel({ client, sessionId, locale }: { client: Client; se
           })
         }) }}
       />
-      <p className="dsh-ui-hint">{t(locale, '留空则使用当前会话模型，再回落到宿主默认对话模型。', 'Leave empty to use the current session model, then the host default chat model.')}</p>
+      <p className="dsh-ui-hint">{t(locale, '留空则用当前会话模型，再回落到宿主默认对话模型。', 'Leave empty to use the current session model, then the host default chat model.')}</p>
     </article>
   </section>
 }
@@ -456,7 +456,7 @@ function MemoryChatPanel({ client, sessionId, locale }: { client: Client; sessio
       await run(request.sessionId)
     } catch (cause) {
       if (!still()) return false
-      setError(cause instanceof Error ? cause.message : t(locale, '操作失败。', 'Something went wrong.'))
+      setError(cause instanceof Error ? cause.message : t(locale, '操作失败。', 'Operation failed.'))
       const next = await loadMemoryStatus({
         rpc, sessionId: request.sessionId, token: request.token, gate: gate.current, signal: request.signal,
         viewSessionId: () => sessionRef.current,
@@ -511,7 +511,7 @@ function MemoryChatPanel({ client, sessionId, locale }: { client: Client; sessio
       ]}
     />
     <ul className="dsh-memory-list" id={`${formId}-records`} role="tabpanel">
-      {records.length === 0 ? <li className="dsh-ui-empty">{query.trim() ? t(locale, '没有匹配的条目。', 'No matching records.') : t(locale, '暂无条目。', 'No records yet.')}</li> : records.map(record => (
+      {records.length === 0 ? <li className="dsh-ui-empty">{query.trim() ? t(locale, '没有匹配条目，试试其他关键词。', 'No matching records. Try other keywords.') : t(locale, '暂无条目，可在下方添加。', 'No records yet. Add one below.')}</li> : records.map(record => (
         <MemoryRow key={record.id} record={record} locale={locale} busy={busy}
           onEditingChange={setEditing}
           onAccept={() => void action(captured => rpc('records.accept', { sessionId: captured, id: record.id, expectedRevision: record.revision }).then(() => { if (sessionRef.current === captured) setNote(t(locale, '已采纳。', 'Accepted.')) }))}
@@ -533,7 +533,7 @@ function MemoryChatPanel({ client, sessionId, locale }: { client: Client; sessio
         setTitle(''); setContent(''); setEvidence(''); setNote(t(locale, '已添加。', 'Added.'))
       })
     }}>
-      <h4 className="dsh-ui-title">{t(locale, '手动添加', 'Add')}</h4>
+      <h4 className="dsh-ui-title">{t(locale, '手动添加', 'Add manually')}</h4>
       <label className="dsh-ui-field" htmlFor={formId + '-title'}>
         <span className="dsh-ui-label">{t(locale, '标题', 'Title')}</span>
         <Input className="dsh-ui-control" id={formId + '-title'} value={title} required maxLength={160} disabled={busy}
@@ -620,7 +620,7 @@ function MemoryRow(props: {
       {canAccept(record) && <Button variant="primary" size="sm" disabled={props.busy} onClick={props.onAccept}>{t(locale, '采纳', 'Accept')}</Button>}
       {canReject(record) && <Button variant="outline" size="sm" disabled={props.busy} onClick={props.onReject}>{t(locale, '拒绝', 'Reject')}</Button>}
       {canRevoke(record) && <Button variant="outline" size="sm" disabled={props.busy} onClick={props.onRevoke}>{t(locale, '撤销', 'Revoke')}</Button>}
-      {canDelete(record) && <ConfirmButton disabled={props.busy} label={t(locale, '删除', 'Delete')} confirmLabel={t(locale, '再点一次确认删除', 'Click again to delete')} onConfirm={props.onDelete} />}
+      {canDelete(record) && <ConfirmButton disabled={props.busy} label={t(locale, '删除', 'Delete')} confirmLabel={t(locale, '确认删除？', 'Confirm delete?')} onConfirm={props.onDelete} />}
     </div>
   </li>
 }
@@ -676,7 +676,7 @@ function DreamPanel(props: {
   const organizeBlocked = organizeBlockedReason({ aiAvailable: props.aiAvailable, running: props.running }, locale)
   return <article className="dsh-memory-dream dsh-ui-card">
     <h4 className="dsh-ui-title">{t(locale, '整理记忆', 'Organize memory')}</h4>
-    <p className="dsh-ui-hint">{t(locale, '空闲时每天最多整理一次。整理不会采纳候选，也不会延长近期状态的有效期。', 'Runs at most once a day while idle. It never accepts candidates or extends how long recent activity stays valid.')}</p>
+    <p className="dsh-ui-hint">{t(locale, '每天最多一次；不采纳候选，不延长近期状态有效期。', 'At most once a day. Never accepts candidates or extends recent activity validity.')}</p>
     <div className="dsh-ui-actions">
       <Button variant="outline" size="sm" disabled={props.busy || props.running || !props.aiAvailable}
         aria-describedby={organizeBlocked ? hintId : undefined}
@@ -712,11 +712,11 @@ export function MemorySettings({ client, host, props }: { client: Client; host?:
   return <div className="dsh-memory-settings-root dsh-ui-panel" data-testid="memory-settings-root">
     <MemorySettingsPanel key={`settings:${memoryPanelKey(seat.sessionId, seat.locale)}`} client={client} sessionId={seat.sessionId} locale={seat.locale} />
     {hasSelfImprovement(host) && <p className="dsh-ui-hint" data-testid="self-improvement-entry">
-      {t(seat.locale, '做事方法和技能在“经验学习”插件页中审阅。', 'Review methods and skills on the Experience Learning plugin page.')}
+      {t(seat.locale, '做事方法和技能在“经验学习”插件页审阅。', 'Review methods and skills on the Experience Learning page.')}
     </p>}
     {seat.sessionId && !seat.hidden
       ? <MemoryChatPanel key={`manage:${memoryPanelKey(seat.sessionId, seat.locale)}`} client={client} sessionId={seat.sessionId} locale={seat.locale} />
-      : <p className="dsh-ui-hint">{t(seat.locale, '选择一个会话后可以管理该会话的记忆。', 'Select a session to manage its memory.')}</p>}
+      : <p className="dsh-ui-hint">{t(seat.locale, '选择会话后可管理其记忆。', 'Select a session to manage its memory.')}</p>}
   </div>
 }
 

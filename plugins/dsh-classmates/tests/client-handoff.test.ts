@@ -258,7 +258,7 @@ describe('task draft', () => {
     expect(draft).toContain('负责检索');
     expect(draft).toContain('演示供应商');
     expect(draft).toContain('Specialist A');
-    expect(draft).toMatch(/具体任务/);
+    expect(draft).toMatch(/描述要派发的任务/);
     expect(draft).toContain('连接尚未验证');
     expect(draft).not.toContain('SECRET_INSTRUCTIONS');
     expect(draft).not.toContain('researcher');

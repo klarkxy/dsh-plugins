@@ -89,10 +89,10 @@ try {
   await second.getByRole('button', { name: '保存', exact: true }).click();
   await expect(second.locator('.classmates-alert')).toContainText('保存失败');
   await expect(second.getByLabel('职责说明', { exact: true })).toHaveValue('Unsaved local change');
-  await second.getByRole('button', { name: '加载最新版本（保留我的输入）', exact: true }).click();
+  await second.getByRole('button', { name: '加载最新版本', exact: true }).click();
   await expect(second.locator('.classmates-remote')).toContainText(`${roleName} updated`);
   await expect(second.getByLabel('职责说明', { exact: true })).toHaveValue('Unsaved local change');
-  await second.getByRole('button', { name: '放弃我的修改，加载最新版本', exact: true }).click();
+  await second.getByRole('button', { name: '改用最新版本', exact: true }).click();
   await expect(second.getByLabel('名称', { exact: true })).toHaveValue(`${roleName} updated`);
   checks.push('conflict preserves draft and shows remote changes');
 

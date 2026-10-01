@@ -1,12 +1,12 @@
 # @klarkxy/dsh-web-search-manager
 
-Configure DSH web search providers and page fetching from one settings page.
+Choose which service answers the agent's web searches, set the limits every request runs under, and let the agent read public pages — all from one settings page.
 
-[简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/docs/README.zh-CN.md)
+[简体中文](docs/README.zh-CN.md)
+
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. No repository build is needed.
 
 ## Install
-
-Requires Node.js ≥22 and DSH `0.1.7-rc.2`. No repository build is needed. Install:
 
 ```sh
 npm install @klarkxy/dsh-web-search-manager
@@ -18,15 +18,11 @@ Then load it:
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-Restart DSH Web and open **Plugins → Web search**. For agent access, add this entry to the plugin list in its `agent.cordis.yml`:
-
-```yaml
-- name: '@klarkxy/dsh-web-search-manager/tools'
-```
+Restart DSH Web and open **Plugins → Web search**.
 
 ## Configure search
 
-The settings page has two tabs: **搜索服务** manages providers, and **请求限制** sets request limits. DuckDuckGo is enabled by default and requires no key. Enable another provider and configure credentials in settings if needed; one ready provider is enough. Drag providers to reorder them; the first ready provider by priority handles each request. Missing credentials are skipped; failed requests do not automatically switch providers.
+The settings page has two tabs: **搜索服务** manages the providers, **请求限制** sets the request limits. DuckDuckGo is enabled by default and needs no key. To add another backend, enable it and fill in its credentials in settings; one ready backend is enough. Drag the list to change the order, and each request is served by the first ready backend in that order. A backend whose key is missing is skipped, and a failed request does not silently move on to another one.
 
 Built-in search backends:
 
@@ -39,19 +35,25 @@ Built-in search backends:
 - **Firecrawl**: a web search and extraction API; requires `DSH_EDITOR_WEB_FIRECRAWL_API_KEY`.
 - **Tavily**: a Search API fixed to basic search depth, never auto-upgraded; requires `DSH_EDITOR_WEB_TAVILY_API_KEY`. The adapter is built into this plugin; the former standalone `dsh-web-search-tavily` package is retired.
 
-Enabling search also enables public-page fetching. The built-in `http` route first requests `https://r.jina.ai/<target URL>` anonymously and returns Reader's text/Markdown. HTTP errors (including 429), Reader timeouts, network failures, and empty or invalid responses fall back once to the existing direct HTTP fetcher. This fallback is only for page fetching; search backend selection is unchanged. No Jina registration, API key, billing configuration, or new dependency is required.
+## Read public pages
 
-Target URLs are sent to Jina, a third-party service; do not submit URLs containing private tokens or other sensitive data. No cookies or authorization headers are added. IP literals, obvious local hostnames, credentialed URLs, and already-prefixed Reader URLs skip Jina and remain subject to the original HTTP fetcher's policy. Both stages use the existing HTTP transport; the Reader stage uses at most half of `timeoutMs`, capped at 15 seconds, leaving time for direct fallback. Caller cancellation, disabling network access, or the overall deadline stops the request without starting a fallback. Results retain the requested URL rather than the Reader proxy URL.
+Turning search on also enables public-page fetching. The built-in `http` route first requests `https://r.jina.ai/<target URL>` anonymously and returns Reader's text/Markdown. HTTP errors (including 429), Reader timeouts, network failures, and empty or invalid responses fall back once to the existing direct HTTP fetcher. This fallback covers page fetching only; it does not change how a search backend is picked. No Jina registration, API key, billing configuration, or new dependency is required.
 
-Request limits cap each query's results (`maxResults`), queries per tool call (`maxQueries`), the total request timeout (`timeoutMs`), and fetched page characters (`maxFetchChars`). Each HTTP response retains the 5 MB byte cap. A connection test sends a fixed query, not manuscript content, and may incur a provider charge.
+The request carries no cookies or authorization headers. IP literals, obvious local hostnames, credentialed URLs, and URLs that already carry the Reader prefix skip Jina and stay subject to the original HTTP fetcher's policy. Both stages use the existing HTTP transport, and the Reader stage takes at most half of `timeoutMs`, capped at 15 seconds, so a direct fallback still has time to run. Caller cancellation, disabled network access, or an overall deadline stops the request without starting a fallback. Results keep the requested URL rather than the Reader proxy URL.
 
-With the tools entry enabled, the agent receives the official `web_search` and `web_fetch` tools from `@deepseek-ai/dsh-tool-web`, mounted only while search and fetching are enabled.
+## Request limits
 
-Only configure trusted HTTPS endpoints: API keys are sent to them. Credentials use DSH storage; protection at rest depends on its configured backend. Usage counters are call attempts, not billing statements or a spending cap.
+The limits cap each query's results (`maxResults`), queries per tool call (`maxQueries`), the total request timeout (`timeoutMs`), and fetched page characters (`maxFetchChars`). Each HTTP response retains the 5 MB byte cap. A connection test sends a fixed query, not manuscript content, and may incur a provider charge.
 
-Disabling a managed provider cancels its requests, but does not sandbox HTTP calls made directly by other plugins. Search results are external material and cannot authorize changes to manuscripts.
+## Agent tools
 
-If deployment environment overrides conflict with the settings selection, remove the conflicting overrides. If saving configuration fails, managed network access pauses until settings are successfully saved.
+For agent access, add this entry to the plugin list in the `agent.cordis.yml` you use:
+
+```yaml
+- name: '@klarkxy/dsh-web-search-manager/tools'
+```
+
+Once that entry is enabled, the agent receives the official `web_search` and `web_fetch` tools from `@deepseek-ai/dsh-tool-web`, mounted only while search and fetching are enabled.
 
 ## Extend or develop
 
@@ -61,10 +63,21 @@ From the repository root:
 
 ```sh
 pnpm --filter @klarkxy/dsh-web-search-manager typecheck
-pnpm exec vitest run packages/dsh-web-search-manager/src
+pnpm --filter @klarkxy/dsh-web-search-manager test
 pnpm --filter @klarkxy/dsh-web-search-manager build
 ```
 
 Tests use mock credentials and responses and incur no search charges.
 
-[Publishing](https://github.com/klarkxy/dsh-editor/blob/main/packages/PUBLISHING.md) · [License](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/LICENSE)
+## Boundaries and limits
+
+- Only configure trusted HTTPS endpoints: API keys are sent to them.
+- Credentials are kept in DSH storage, and protection at rest depends on its configured backend.
+- Usage counters are call attempts, not billing statements or a spending cap.
+- Target URLs are sent to Jina, a third-party service; do not submit URLs containing private tokens or other sensitive data.
+- Disabling a managed provider cancels its requests, but it does not sandbox HTTP calls made directly by other plugins.
+- Search results are external material and cannot authorize changes to manuscripts.
+- If deployment environment overrides conflict with the settings selection, remove the conflicting overrides.
+- If saving the configuration fails, managed network access pauses until the settings are saved successfully.
+
+[Publishing](../PUBLISHING.md) · [License](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/LICENSE)

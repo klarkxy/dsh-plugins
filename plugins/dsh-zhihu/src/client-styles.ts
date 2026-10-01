@@ -4,7 +4,7 @@ import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
  * The shared contract paints this page: the type tiers, the card, the field,
  * the banners, the empty state, the focus ring and every control's own recipe.
  * What is left here is only the geometry the contract does not cover — the
- * reading width of the plugin page, two inline SVG charts, the quota bars and
+ * reading width of the plugin page, two inline SVG charts, the quota matrix and
  * the day table.
  *
  * Nothing below declares a colour of its own beyond naming a host token for a
@@ -92,18 +92,33 @@ export const zhihuClientStyles = `${officialUiCss('zhihu-panel')}
 .zhihu-chart-tick,
 .zhihu-chart-value { fill: var(--dsw-alias-label-secondary); font-size: var(--dsh-content-font-size-secondary); font-family: var(--ds-font-family-code); }
 
-/* --- Quota bars. Every field is scaled against its own returned maximum, so a
- * bar only ever states "this share of this field's maximum" and never implies a
- * share of the whole quota. --- */
-.zhihu-quota-row { display: grid; grid-template-columns: minmax(7rem, 1fr) minmax(5rem, 2fr) minmax(4rem, auto); align-items: center; gap: 8px; min-width: 0; }
-.zhihu-quota-bar { width: 100%; height: 16px; display: block; }
-.zhihu-quota-track { fill: var(--dsw-alias-bg-layer-3); }
-.zhihu-quota-fill { fill: var(--dsw-alias-state-business-primary); }
-.zhihu-quota-value { grid-column: 3; text-align: end; font-variant-numeric: tabular-nums; }
+/* --- Quota matrix. One row per API, one column per field: the header carries
+ * that field's own maximum, so a bar only ever states "this share of this
+ * column's maximum". The rule is a 3px underline under the figure, right-anchored
+ * to the digits it belongs to, so scanning one column is easy and the number
+ * stays the primary read. --- */
+.zhihu-quota-scroll { overflow-x: auto; }
+.zhihu-quota-table { width: 100%; border-collapse: collapse; }
+.zhihu-quota-table th,
+.zhihu-quota-table td { padding: 5px 8px; vertical-align: middle; }
+.zhihu-quota-name { text-align: start; font-weight: 400; color: var(--dsw-alias-label-primary); }
+.zhihu-quota-corner { text-align: start; font-weight: 500; color: var(--dsw-alias-label-secondary); }
+.zhihu-quota-head { text-align: end; }
+.zhihu-quota-head-label { display: block; font-weight: 500; color: var(--dsw-alias-label-secondary); }
+.zhihu-quota-head-scale { display: block; font-weight: 400; color: var(--dsw-alias-label-tertiary); }
+.zhihu-quota-cell { text-align: end; }
+.zhihu-quota-value { display: block; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary); }
+/* The ceiling is already in the fraction, so it steps back: same figures, less
+ * weight on the part that only supplies the denominator. */
+.zhihu-quota-of { color: var(--dsw-alias-label-tertiary); }
+.zhihu-quota-track { display: block; height: 3px; margin-top: 3px; border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-layer-3); overflow: hidden; }
+.zhihu-quota-fill { display: block; height: 100%; margin-inline-start: auto; border-radius: inherit; background: var(--dsw-alias-state-business-primary); }
 @media (max-width: 480px) {
-  .zhihu-quota-row { grid-template-columns: minmax(0, 1fr) minmax(4rem, auto); }
-  .zhihu-quota-bar { grid-row: 2; grid-column: 1 / -1; }
-  .zhihu-quota-value { grid-column: 2; grid-row: 1; }
+  /* The columns keep their room and the wrapper scrolls; crushing three scales
+   * into a phone width is what made the bars meaningless in the first place. */
+  .zhihu-quota-table { min-width: 24rem; }
+  .zhihu-quota-table th,
+  .zhihu-quota-table td { padding: 5px 6px; }
 }
 
 /* --- File field. The input is visually hidden but stays focusable and in the

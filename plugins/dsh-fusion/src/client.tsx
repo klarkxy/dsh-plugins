@@ -100,7 +100,7 @@ function PreviewDialog(props: {
     <div className="dsh-fusion-root">
       <div className="dsh-ui-stack">
         <ExactPreview preview={props.preview} locale={props.locale} />
-        <p className="dsh-ui-hint">{label(props.locale, '确认后将按当前文件版本写入；原文变化会阻止应用。', 'Confirming writes against this file version; changes to the source will block application.')}</p>
+        <p className="dsh-ui-hint">{label(props.locale, '确认后按当前文件版本写入，原文变化将阻止应用。', 'Writes use this file version; source changes block the write.')}</p>
       </div>
     </div>
   </Modal>
@@ -188,8 +188,8 @@ function FusionTaskCard(props: {
       const confirmed = notifyAppliedReceipt({ value, task: task!, candidate, preview: exactPreview, isCurrent,
         notify: receipt => { if (props.onApplied) store.announceApplied(sessionId, receipt.id, receipt.path, props.onApplied) },
       })
-      if (!confirmed) throw new Error(label(locale, '宿主未确认当前预览已应用，请刷新状态核对。',
-        'The Host did not confirm this exact preview. Refresh status to inspect the result.'))
+      if (!confirmed) throw new Error(label(locale, '宿主未确认预览已应用，请刷新状态核对。',
+        'The Host did not confirm the preview. Refresh status to check.'))
       setPreview(undefined)
     })
   }
@@ -219,11 +219,11 @@ function FusionTaskCard(props: {
     </div>
     {view.detail ? <p className="dsh-ui-compact dsh-ui-wrap">{view.detail}</p> : null}
     {status.activity ? <p className="dsh-ui-meta dsh-ui-wrap">
-      {label(locale, '统筹', 'Lead')}: {activityLabel(status.activity.lead, locale)} · {label(locale, '副驾', 'Sidekick')}: {activityLabel(status.activity.sidekick, locale)}
+      {label(locale, '主助手', 'Lead')}: {activityLabel(status.activity.lead, locale)} · {label(locale, '副驾', 'Sidekick')}: {activityLabel(status.activity.sidekick, locale)}
     </p> : null}
     {status.usage && (status.usage.leadTokens !== null || status.usage.sidekickTokens !== null) ?
       <p className="dsh-ui-meta dsh-ui-wrap">{label(locale, '原生会话累计 token', 'Native session tokens')} ·
-        {status.usage.leadTokens !== null ? ` ${label(locale, '统筹', 'Lead')} ${status.usage.leadTokens.toLocaleString()}` : ''}
+        {status.usage.leadTokens !== null ? ` ${label(locale, '主助手', 'Lead')} ${status.usage.leadTokens.toLocaleString()}` : ''}
         {status.usage.sidekickTokens !== null ? ` ${label(locale, '副驾', 'Sidekick')} ${status.usage.sidekickTokens.toLocaleString()}` : ''}
       </p> : null}
     {error || props.loadError ? <p className="dsh-ui-error dsh-ui-wrap" role="alert">{error || props.loadError}</p> : null}
@@ -255,15 +255,15 @@ function FusionTaskCard(props: {
         <pre className="dsh-ui-code dsh-fusion-candidate">{candidate.text}</pre>
       </div></DisclosureRow> : task.decision ? <p className="dsh-ui-compact dsh-ui-wrap">{task.decision}</p> : null}
       {latestReview ? <p className="dsh-ui-meta dsh-ui-wrap">
-        {label(locale, '统筹审查', 'Lead review')}: {latestReview.verdict === 'accept' ? label(locale, '通过', 'Accepted')
+        {label(locale, '主助手审查', 'Lead review')}: {latestReview.verdict === 'accept' ? label(locale, '通过', 'Accepted')
           : latestReview.verdict === 'revise' ? label(locale, '要求修改', 'Revision requested') : label(locale, '未通过', 'Rejected')}
         {latestReview.feedback ? ` · ${latestReview.feedback}` : ''}
       </p> : null}
       {task.delivery === 'uncertain' ? <p className="dsh-ui-banner" role="status">{task.reportIds.length
-        ? label(locale, '报告通知结果不确定。请核对原生记录，再明确重送已保存的报告。',
-          'Report notification is uncertain. Inspect native history, then explicitly re-notify the Lead of the saved report.')
-        : label(locale, '初次交接结果不确定。请核对副驾会话，勿直接重发同一任务。',
-          'Initial admission is uncertain. Inspect the Sidekick session before starting another task.')}</p> : null}
+        ? label(locale, '报告通知结果不确定，核对原生记录后再明确重送报告。',
+          'Report notice uncertain. Check native history, then explicitly re-notify the saved report to the Lead.')
+        : label(locale, '初次交接结果不确定，请核对副驾会话，勿重发同一任务。',
+          'Initial admission uncertain. Check the Sidekick session before starting another task.')}</p> : null}
       {task.application?.state === 'pending' ? <p className="dsh-ui-banner">{label(locale,
         '写入结果待宿主核对，请刷新状态后再操作。', 'The Host is reconciling the write. Refresh status before acting.')}</p> : null}
       {native ? <div className="dsh-ui-actions">
@@ -297,12 +297,12 @@ function FusionTaskCard(props: {
         </div>
       </div> : null}
       {recoverable ? <Button variant="outline" disabled={Boolean(busy)}
-        onClick={() => void act('recover', identity)}>{label(locale, '重送已保存报告', 'Re-notify saved report')}</Button> : null}
+        onClick={() => void act('recover', identity)}>{label(locale, '重送已存报告', 'Re-notify saved report')}</Button> : null}
       {task.cleanup === 'failed' || task.adoption === 'conflict' ? <Button variant="outline" disabled={Boolean(busy)}
         onClick={() => void store.refresh(sessionId)}>{label(locale, '刷新状态', 'Refresh status')}</Button> : null}
     </div>
     {resumable ? <div className="dsh-ui-stack">
-      <label className="dsh-ui-label" htmlFor={`dsh-fusion-feedback-${task.id}`}>{label(locale, '给统筹的后续要求', 'Feedback to Lead')}</label>
+      <label className="dsh-ui-label" htmlFor={`dsh-fusion-feedback-${task.id}`}>{label(locale, '给主助手的后续要求', 'Feedback to Lead')}</label>
       <textarea className="dsh-fusion-input" id={`dsh-fusion-feedback-${task.id}`} value={feedback} onChange={event => setFeedback(event.target.value)}
         onKeyDown={onFeedbackKey} rows={2} maxLength={4000} />
       <div className="dsh-ui-actions">
@@ -376,8 +376,8 @@ function FusionSeat(props: { client: FusionClient; store: FusionClientStore; nat
     <section className="dsh-ui-card dsh-fusion-card" aria-label={label(seat.locale, '协作', 'Collaboration')}>
       <strong className="dsh-ui-heading">{label(seat.locale, '协作', 'Collaboration')}</strong>
       <p className="dsh-ui-compact dsh-ui-wrap">{snapshot.status.error ?? (snapshot.status.configured
-        ? label(seat.locale, '与统筹继续对话；需要时由统筹交给副驾。', 'Continue with the Lead; the Lead hands work to the Sidekick when needed.')
-        : label(seat.locale, '副驾模型尚未配置，请在插件页的「协作」设置中选择。', 'Choose the Sidekick model in this plugin’s settings on the Plugins page.'))}</p>
+        ? label(seat.locale, '与主助手继续对话；需要时由主助手交给副驾。', 'Continue with the Lead; the Lead hands work to the Sidekick when needed.')
+        : label(seat.locale, '副驾模型未配置，请在插件页「协作」设置中选择。', 'Choose the Sidekick model in this plugin’s settings on the Plugins page.'))}</p>
       {snapshot.status.error ? <div className="dsh-ui-actions">
         <Button variant="ghost" onClick={() => void store.refresh(seat.sessionId)}>{label(seat.locale, '刷新状态', 'Refresh status')}</Button>
       </div> : null}

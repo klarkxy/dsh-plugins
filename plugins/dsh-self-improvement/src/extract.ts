@@ -80,7 +80,7 @@ export function draftFromTrigger(trigger: LessonTrigger): ParsedLessonDraft | un
     origin: 'instruction', goal: '遵守用户明确的方法要求', when: ['仅用于原文要求适用的同类任务'],
     steps: [methodText], avoid: [], verify: ['逐项核对原始要求；工具无报错不等于任务已验收'],
   }
-  return { title: clip(methodText, TITLE_MAX) || '行动经验', content: formatProcedure(procedure), exceptions: [], procedure,
+  return { title: clip(methodText, TITLE_MAX) || '经验', content: formatProcedure(procedure), exceptions: [], procedure,
     evidenceQuotes: trigger.evidence.filter(ref => ref.kind === 'user' && ref.excerpt).map(ref => ref.excerpt!) }
 }
 
@@ -104,7 +104,7 @@ export function candidateRecord(
     scope: { kind: 'project', projectId },
     kind: 'lesson',
     status: 'candidate',
-    title: clip(draft.title, TITLE_MAX) || '教训',
+    title: clip(draft.title, TITLE_MAX) || '经验',
     content: clip(draft.content, CONTENT_MAX),
     tags: schemaTags(),
     evidence: schemaEvidence(trigger.evidence),

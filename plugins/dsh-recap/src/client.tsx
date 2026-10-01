@@ -105,7 +105,7 @@ export function recapGenerationLabel(generation: RecapCard['generation'], locale
     case 'running': return copy(locale, '生成中', 'Generating')
     case 'failed': return copy(locale, '生成失败', 'Failed')
     case 'cancelled': return copy(locale, '已取消', 'Cancelled')
-    case 'superseded': return copy(locale, '已被新回顾替代', 'Replaced by a newer recap')
+    case 'superseded': return copy(locale, '已被新回顾替代', 'Superseded')
     default: return copy(locale, '已完成', 'Done')
   }
 }
@@ -199,7 +199,7 @@ function RetryButton(props: { locale?: string; disabled?: boolean; confirm: bool
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(timer.current), [])
   const disarm = () => { clearTimeout(timer.current); setArmed(false) }
-  const confirmLabel = copy(props.locale, '再点一次以覆盖当前回顾', 'Click again to replace this recap')
+  const confirmLabel = copy(props.locale, '确认覆盖？', 'Confirm replace?')
   return <>
     <Button variant="outline" size="sm" disabled={props.disabled} onBlur={disarm}
       onClick={() => {
@@ -584,7 +584,7 @@ export function RecapSettingsPanel({ client, ...props }: { client: RecapClient }
       busy={busy}
       onChange={route => void save({ checkpointModel: route })}
     />
-    <p className="dsh-ui-help">{copy(locale, '留空则使用当前会话模型，再回落到宿主默认对话模型。', 'Leave empty to use the current session model, then the host default chat model.')}</p>
+    <p className="dsh-ui-help">{copy(locale, '留空则用当前会话模型，再回落到宿主默认对话模型。', 'Leave empty to use the current session model, then the host default chat model.')}</p>
   </section>
 }
 

@@ -116,7 +116,7 @@ export function renderSkillMarkdown(lessons: readonly MemoryRecord[], generatedA
 
 export function skillTitleFromLessons(lessons: readonly MemoryRecord[]): string {
   if (lessons.length === 1) return lessons[0]!.title.slice(0, 160)
-  return `技能草稿（${lessons.length} 条教训）`
+  return `技能草稿（${lessons.length} 条经验）`
 }
 
 export interface SkillFrontmatter {

@@ -98,7 +98,7 @@ try {
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: '保存失败' })).toBeVisible();
   await expect(page.locator('#classmates-profile-description')).toHaveValue('本窗口尚未保存的用途');
-  await page.getByRole('button', { name: '加载最新版本（保留我的输入）', exact: true }).click();
+  await page.getByRole('button', { name: '加载最新版本', exact: true }).click();
   await expect(page.getByRole('group', { name: '最新版本对照' })).toContainText('另一个窗口保存的用途');
   await expect(page.locator('#classmates-profile-description')).toHaveValue('本窗口尚未保存的用途');
   await page.getByRole('button', { name: '保存', exact: true }).click();

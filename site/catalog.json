@@ -119,12 +119,12 @@
       "category": "workflow",
       "kind": "plugin",
       "title": {
-        "zh": "需求澄清",
+        "zh": "需求记录",
         "en": "Mood"
       },
       "summary": {
-        "zh": "默认自主推进，仅在真正阻塞时询问，并支持按需梳理需求。",
-        "en": "Proceed autonomously, ask only for genuine blockers, and summarize requirements on demand."
+        "zh": "由当前代理记录、读取和更新本次任务需求。",
+        "en": "Record, read and update the current task requirements with the current Agent."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",

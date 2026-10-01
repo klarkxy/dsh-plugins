@@ -70,6 +70,6 @@ export function buildTaskDraft(roles: ClassmateDefinition[], models: ModelChoice
   }
   lines.push('');
   lines.push('以上模型来自当前模型列表，连接尚未验证。');
-  lines.push('请填写具体任务。发送后由主智能体按职责派发子智能体；需要共享团队任务时使用团队协作。');
+  lines.push('描述要派发的任务。');
   return lines.join('\n');
 }

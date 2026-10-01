@@ -1,12 +1,12 @@
-> Maintained here after extraction from dsh-editor 66d03814ecdac679947e9198c2e9be931462703a.
-
 # Dream 与 Self Improve：可独立部署的学习边界
+
+> Maintained here after extraction from dsh-editor 66d03814ecdac679947e9198c2e9be931462703a.
 
 ## 所有权
 
 Dream 是公开包 `@klarkxy/dsh-memory` 的语境观察与整理能力，不另建一套存储。Self Improve 是公开包 `@klarkxy/dsh-self-improvement` 的行动经验能力。两者只使用 DSH 的会话、生命周期、存储域、RPC、原生 Web 扩展位、宿主 `llm` 服务以及共享的 `@klarkxy/dsh-plugin-kit`。不得导入 `dsh-editor-*`，不得把 Editor 私有服务作为必需依赖。
 
-Memory 可以不安装 Self Improve；Self Improve 需要明确启用 Memory 作为存储，但不要求开启 Dream。设置页合用原生「记忆」入口，不依赖 Editor shell。关闭 Dream 停止语境观察和闲时整理，不关闭 Self Improve；关闭 Memory 不允许 Self Improve 绕过存储或创建第二套记忆。
+Memory 可以不安装 Self Improve；Self Improve 需要明确启用 Memory 作为存储，但不要求开启 Dream。设置页合用原生「记忆」入口，不依赖 Editor shell。关闭 Dream 只停止语境观察和闲时整理，不关闭 Self Improve；关闭 Memory 则不允许 Self Improve 绕过存储或创建第二套记忆。
 
 ## 数据与证据
 

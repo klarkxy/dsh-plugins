@@ -1,12 +1,16 @@
 # Code Prune / 代码精简
 
-[中文](README.zh-CN.md)
+Code Prune reviews and simplifies your code while preserving its current behavior: it cuts redundancy and needless abstraction, and reports what it removed and what it deliberately kept. It reuses the file, search, terminal, skill, plan-mode, and context-compaction tools DSH already ships with. The package name is `@klarkxy/dsh-pruner`.
 
-Code Prune reviews and simplifies code while preserving existing behavior. It uses DSH's coding tools, skills, plan mode, and context compaction. The package name is `@klarkxy/dsh-pruner`.
+[简体中文](README.zh-CN.md)
+
+## Runtime requirements
+
+Node.js 24+ and DSH 0.1.7-rc.2. The steps below use the `web` profile as the example.
 
 ## Install
 
-The Web bundle requires Node.js 24+ and DSH 0.1.7-rc.2. Once published to npm, install it directly:
+Once published to npm, install it directly into the target profile:
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-pruner
@@ -17,25 +21,32 @@ Alternatively, pack the source and install the resulting `.tgz` into the target 
 ```sh
 cd plugins/dsh-pruner
 npm pack --ignore-scripts
-dsh plugin --profile web add "D:/path/to/klarkxy-dsh-pruner-0.2.0.tgz"
+dsh plugin --profile web add "D:/path/to/klarkxy-dsh-pruner-<version>.tgz"
 ```
 
-Replace `web` for a custom profile. Restart the profile and select **代码精简** in a new session, then choose a strong reasoning model with a large context window and a supported high reasoning setting. Preset metadata cannot bind a model or effort. Pruner leaves model selection to the session and does not modify global settings. DSH 0.1.7 no longer reads `$DSH_HOME/.agent-presets`; `install.mjs` is retained only for legacy 0.1.5-rc.2 deployments.
+Replace `web` with the name of a custom profile. Restart that profile, then pick **代码精简** in the preset selector of a new session. In the model picker, choose a currently available strong-reasoning model with a large context window and enable the higher reasoning effort that model supports.
 
-This bundle declares a native Preset without a runtime service. It preserves other presets, permissions, and model settings. Existing sessions with messages cannot switch presets. Uninstall the `@klarkxy/dsh-pruner` bundle from the target profile's native plugin manager. A legacy `.agent-presets/pruner` directory is inert in 0.1.7 and can be removed after confirming the new bundle.
+## Two ways to ask
 
-## Use
+- **Audit** — “Audit this subsystem, find what could be deleted or merged, and change nothing yet.” The reply carries the evidence and the candidates; no report file, task file, or build cache is written.
+- **Execute** — “Simplify this module while keeping currently supported behavior, and finish the verification.” Read-only MAP first, then bounded ABLATE and COLLAPSE batches, verification, and the fixes that verification calls for. Under an existing authorization it does not ask again for each reversible candidate.
 
-- **Audit:** “Find deletion and collapse candidates in this subsystem; do not modify anything.” Read-only analysis, with evidence and unresolved questions in the reply.
-- **Execute:** “Simplify this module while preserving supported behavior, and verify the result.” Read-only MAP, then bounded ABLATE and COLLAPSE batches, verification and necessary fixes.
+## What makes something a deletion candidate
 
-Audit is a prompt-level rule, not a separate tool-permission sandbox. Use the host's read-only permissions or plan mode when enforcement is required. Execute respects host permissions and plan mode.
+Missing evidence makes something a candidate — not something proven safe to delete. Before removing anything, it traces dynamic consumers, public contracts, supported platforms, stored data, and recovery paths. Tests that guard a now-obsolete implementation can go with it; user-visible behavior and safety guarantees stay protected. Having coverage does not by itself prove a design is necessary, and a failing test is not a reason to delete assertions. Similar names do not prove identical ownership or identical temporal state semantics: overlapping responsibilities can be merged, while a desired/observed pair with different temporal meaning, or a resource with its own lifetime, cannot be merged just because the names look alike.
 
-Missing evidence makes something a candidate, not safe to delete. Trace dynamic consumers, public contracts, supported platforms, stored data and recovery before removal. Tests protecting obsolete implementation may go with it; user behavior and safety guarantees remain protected. Similar names do not prove identical ownership or temporal state semantics.
+## What the report covers
 
-The report explains what disappeared, the consistent before/after counting scope, actual verification and remaining uncertainty. Zero removals can be correct. LOC and test counts are supporting evidence, not quotas.
+The report centers on what disappeared and compares concepts, states, and maintenance scope before and after under one consistent counting basis. It lists what was actually verified and what remains unverified. Zero removals can be the correct result; LOC and test counts are supporting evidence, not quotas.
 
-The Web declaration is [cordis.patch.yml](cordis.patch.yml), migrated from [agent.cordis.yml](presets/pruner/agent.cordis.yml) and [preset.yml](presets/pruner/preset.yml). Its static tool composition is adapted from DSH 0.1.5-rc.2 and checked on Web 0.1.7-rc.2; revalidate it when upgrading the host.
+## Boundaries and limits
+
+- This bundle declares a native Preset and adds no runtime service. It leaves the global default preset, other presets, permissions, and model settings untouched.
+- Audit is a model behavior rule, not a separate tool-permission sandbox. When you need enforcement, use the host's read-only permissions or plan mode as well. Host permissions and plan mode still bind: Execute does not lift them.
+- A session that already has messages cannot switch presets — restart the profile and start a new session.
+- The Web declaration is [cordis.patch.yml](cordis.patch.yml), migrated from [agent.cordis.yml](presets/pruner/agent.cordis.yml) and [preset.yml](presets/pruner/preset.yml). Its static tool composition is adapted from the standard Preset of DSH 0.1.5-rc.2 and was checked on Web 0.1.7-rc.2; revalidate that composition when you upgrade the host.
+- DSH 0.1.7 no longer reads `$DSH_HOME/.agent-presets`, so `install.mjs` is kept only for legacy 0.1.5-rc.2 deployments and cannot install into the current Web. A `.agent-presets/pruner` directory left behind by the legacy installer is inert in 0.1.7; move it aside once you have confirmed the new bundle.
+- To uninstall, remove the `@klarkxy/dsh-pruner` bundle from the target profile's native plugin manager.
 
 ## Verify
 
@@ -44,4 +55,4 @@ pnpm --filter @klarkxy/dsh-pruner test
 pnpm check
 ```
 
-Installer tests check real copies, collision refusal, existing settings and home selection. [Acceptance cases](ACCEPTANCE.md) assess model decisions separately; keyword tests cannot establish behavioral compliance. See `tasks/pruner.md` at the repository root for runtime evidence and outstanding checks.
+The installer tests cover real copies, collision refusal, untouched existing settings, and home selection. [Acceptance cases](ACCEPTANCE.md) assess model decisions separately — static keyword assertions cannot stand in for behavioral acceptance. Runtime evidence and outstanding checks are recorded in `tasks/pruner.md` at the repository root.

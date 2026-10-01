@@ -26,6 +26,13 @@ export interface RecapServiceOptions {
   id?: () => string
   readEvents: (sessionId: string) => RecapLogEvent[] | undefined
   readContract?: (sessionId: string) => TaskContract | undefined
+  /**
+   * Whether a session is a delegated child thread. Recaps and checkpoints describe a
+   * human-driven conversation, and a lead agent's dispatch prompt reaches the child as
+   * its own user message, so message-level source checks cannot exclude it. Absent keeps
+   * every session in scope.
+   */
+  isSubagentSession?: (sessionId: string) => boolean
   llm?: LlmTextCaller
   host?: unknown
   createInjectMessage?: (payload: ReturnType<typeof checkpointInjectPayload>) => unknown
@@ -141,13 +148,13 @@ export class RecapService {
       }
       if (endpoint === 'retry') {
         const action = cardActionOf(payload)
-        return ok(await this.retryCard(action.cardId, action.sessionId))
+        return ok(await this.retryCard(action.cardId, action.sessionId, signal))
       }
       if (endpoint === 'idle.return' || endpoint === 'refresh') {
         const sessionId = parseSessionId(payload)
         if (!sessionId) return fail('RECAP_INVALID', '缺少会话。')
         if (signal.aborted) return fail('RECAP_CANCELLED', '请求已取消')
-        const card = endpoint === 'refresh' ? await this.refresh(sessionId) : await this.idleReturn(sessionId)
+        const card = endpoint === 'refresh' ? await this.refresh(sessionId, signal) : await this.idleReturn(sessionId, signal)
         return ok(card ?? null)
       }
       return fail('RECAP_INVALID', '未知操作。')
@@ -157,8 +164,13 @@ export class RecapService {
     }
   }
 
+  private isSubagent(sessionId: string): boolean {
+    return this.options.isSubagentSession?.(sessionId) === true
+  }
+
   async onSessionEvent(sessionId: string, event: RecapLogEvent): Promise<RecapCard | undefined> {
     if (this.disposed || !this.settings.cardsEnabled || event.type !== 'turn/end') return undefined
+    if (this.isSubagent(sessionId)) return undefined
     try {
       const card = await this.capture(sessionId, 'turn-end')
       return this.disposed ? undefined : card
@@ -168,10 +180,10 @@ export class RecapService {
     }
   }
 
-  async idleReturn(sessionId: string): Promise<RecapCard | undefined> {
+  async idleReturn(sessionId: string, signal?: AbortSignal): Promise<RecapCard | undefined> {
     if (this.disposed || !this.settings.cardsEnabled) return undefined
     try {
-      const card = await this.capture(sessionId, 'idle-return')
+      const card = await this.capture(sessionId, 'idle-return', signal)
       return this.disposed ? undefined : card
     } catch (error) {
       if (this.disposed) return undefined
@@ -179,10 +191,10 @@ export class RecapService {
     }
   }
 
-  async refresh(sessionId: string): Promise<RecapCard | undefined> {
+  async refresh(sessionId: string, signal?: AbortSignal): Promise<RecapCard | undefined> {
     if (this.disposed || !this.settings.cardsEnabled) return undefined
     try {
-      const card = await this.capture(sessionId, 'manual')
+      const card = await this.capture(sessionId, 'manual', signal)
       return this.disposed ? undefined : card
     } catch (error) {
       if (this.disposed) return undefined
@@ -210,7 +222,7 @@ export class RecapService {
     })
   }
 
-  async retryCard(cardId: string, sessionId?: string): Promise<RecapCard> {
+  async retryCard(cardId: string, sessionId?: string, hostSignal?: AbortSignal): Promise<RecapCard> {
     const prepared = await this.serialize(async () => {
       this.assertLive()
       if (!this.settings.cardsEnabled) coded('RECAP_DISABLED', '回顾已关闭。')
@@ -227,7 +239,7 @@ export class RecapService {
       this.commit(proposed)
       return { running, facts, epoch: this.cardEpoch }
     })
-    await this.generateCard(prepared.running, prepared.facts, prepared.epoch)
+    await this.generateCard(prepared.running, prepared.facts, prepared.epoch, hostSignal)
     this.assertLive()
     return this.requireCard(cardId, sessionId)
   }
@@ -241,6 +253,7 @@ export class RecapService {
   }): Promise<{ kind: string; messages?: Array<T | unknown>; [flag: string]: unknown }> {
     const decision = await input.next()
     if (this.disposed || !this.settings.checkpointsEnabled || decision.kind !== 'enter') return decision
+    if (this.isSubagent(input.sessionId)) return decision
     input.signal.throwIfAborted()
     const events = this.options.readEvents(input.sessionId)
     if (!events) return decision
@@ -280,7 +293,7 @@ export class RecapService {
         contract,
       })
       if (shouldRunSemanticCheckpoint(this.settings.semanticCheckpointsEnabled, prepared.facts, contract)) {
-        checkpoint = await this.enrichCheckpoint(checkpoint, prepared.facts) ?? checkpoint
+        checkpoint = await this.enrichCheckpoint(checkpoint, prepared.facts, input.signal) ?? checkpoint
       }
       if (this.disposed || !this.settings.checkpointsEnabled) return decision
       input.signal.throwIfAborted()
@@ -312,7 +325,7 @@ export class RecapService {
     }
   }
 
-  private async capture(sessionId: string, trigger: RecapTrigger): Promise<RecapCard | undefined> {
+  private async capture(sessionId: string, trigger: RecapTrigger, hostSignal?: AbortSignal): Promise<RecapCard | undefined> {
     const prepared = await this.serialize(async () => {
       this.assertLive()
       if (!this.settings.cardsEnabled) return undefined
@@ -351,13 +364,13 @@ export class RecapService {
     })
     if (!prepared) return undefined
     if (prepared.action === 'reuse') return prepared.card
-    if (prepared.action === 'retry') return this.retryCard(prepared.card.id, sessionId)
-    if (prepared.card.generation === 'running') await this.generateCard(prepared.card, prepared.facts, prepared.epoch)
+    if (prepared.action === 'retry') return this.retryCard(prepared.card.id, sessionId, hostSignal)
+    if (prepared.card.generation === 'running') await this.generateCard(prepared.card, prepared.facts, prepared.epoch, hostSignal)
     if (this.disposed) return undefined
     return this.cards.find(row => row.id === prepared.card.id)
   }
 
-  private async generateCard(card: RecapCard, facts: ReturnType<typeof collectFacts>, epoch: number): Promise<void> {
+  private async generateCard(card: RecapCard, facts: ReturnType<typeof collectFacts>, epoch: number, hostSignal?: AbortSignal): Promise<void> {
     const started = await this.serialize(async () => {
       if (!this.isCardCurrent(card, epoch, false)) return undefined
       if (!this.options.llm || !this.settings.cardsEnabled) {
@@ -374,6 +387,7 @@ export class RecapService {
       return { abort }
     })
     if (!started) return
+    const signal = hostSignal ? AbortSignal.any([hostSignal, started.abort.signal]) : started.abort.signal
     try {
       const request = recapDisplayRequest(facts, card.id)
       const route = this.route(this.settings.displayModel, card.sessionId)
@@ -384,7 +398,7 @@ export class RecapService {
             system: request.system,
             text: request.input,
             maxTokens: DISPLAY_MAX_TOKENS,
-            signal: started.abort.signal,
+            signal,
             sessionId: card.sessionId,
             isCurrent: () => this.isCardCurrent(card, epoch),
           })
@@ -432,10 +446,13 @@ export class RecapService {
     }
   }
 
-  private async enrichCheckpoint(checkpoint: TaskCheckpoint, facts: ReturnType<typeof collectFacts>): Promise<TaskCheckpoint | undefined> {
+  private async enrichCheckpoint(checkpoint: TaskCheckpoint, facts: ReturnType<typeof collectFacts>, hostSignal?: AbortSignal): Promise<TaskCheckpoint | undefined> {
     const epoch = this.checkpointEpoch
     if (this.disposed || !this.options.llm || !this.settings.semanticCheckpointsEnabled || !this.settings.checkpointsEnabled) return checkpoint
     const abort = new AbortController()
+    // The step's own cancellation governs work that runs alongside it: stopping the turn
+    // must not leave a checkpoint call in flight behind it.
+    const signal = hostSignal ? AbortSignal.any([hostSignal, abort.signal]) : abort.signal
     const jobId = checkpoint.id
     this.jobs.set(jobId, { abort, epoch, sessionId: checkpoint.sessionId, sourceVersion: checkpoint.sourceVersion, kind: 'checkpoint' })
     const request = checkpointSemanticRequest(checkpoint, facts)
@@ -448,7 +465,7 @@ export class RecapService {
         system: request.system,
         text: request.input,
         maxTokens: CHECKPOINT_MAX_TOKENS,
-        signal: abort.signal,
+        signal,
         sessionId: checkpoint.sessionId,
         isCurrent: () => !this.disposed
           && this.checkpointEpoch === epoch

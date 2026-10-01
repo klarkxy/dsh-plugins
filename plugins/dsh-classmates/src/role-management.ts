@@ -8,7 +8,7 @@ import { CREATOR_PRESET_ID, type ModelBinding } from './contracts.js';
 import { createPresets, SOFTWARE_COLLABORATION_RULES } from './presets.js';
 import { isModelProtected, requestModelApproval, validateModelRoute } from './model-protection.js';
 
-export const MODEL_AVAILABILITY_NOTICE = '目录列出的是宿主已注册项，不是连通或可完成请求的证据。Local OCG 只表示公开供应商名称或当前路由，不代表模型在本机推理。';
+export const MODEL_AVAILABILITY_NOTICE = '目录列出的是宿主已注册项，不代表连通或可完成请求。Local OCG 只表示公开供应商名称或当前路由，不代表模型在本机推理。';
 
 const POLICY = `In Creator mode, the top-level agent may configure reusable Classmates role templates and independent model-use presets when the user requests that configuration. This capability supplements the normal Creator workflow; it does not replace your task, tool, permission, or collaboration instructions. Do not change the shared libraries merely to suit an unrelated task. Role templates apply to future native DSH subagents and Team teammates, not your own current session or existing members. Templates describe duties and instructions; they do not require a user model selection.
 
@@ -41,7 +41,7 @@ const ROLE_SCHEMA = {
   type: 'object' as const,
   additionalProperties: false,
   required: true,
-  description: '完整角色对象。空库创建第一条时也使用此形状，不要省略字段。',
+  description: '完整角色对象；空库创建第一条也用此形状，不要省略字段。',
   properties: {
     schemaVersion: {
       type: 'integer' as const,
@@ -52,12 +52,12 @@ const ROLE_SCHEMA = {
     id: {
       type: 'string' as const,
       required: true,
-      description: '角色标识。须匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ ，最长 80 字符，例如 researcher。',
+      description: '角色标识；须匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ ，最长 80 字符，例如 researcher。',
     },
     revision: {
       type: 'integer' as const,
       required: true,
-      description: '角色版本。新建为 0；修改已有角色时必须等于 classmates_read 返回的当前 revision。',
+      description: '角色版本；新建为 0，修改已有角色时须等于 classmates_read 返回的当前 revision。',
     },
     name: {
       type: 'string' as const,
@@ -81,7 +81,7 @@ const ROLE_SCHEMA = {
     },
     model: {
       required: true,
-      description: 'null 表示创建成员时继承当前聊天模型；显式路由必须来自宿主目录。',
+      description: 'null 表示创建成员时继承当前聊天模型；显式路由须来自宿主目录。',
       oneOf: [
         {
           type: 'null' as const,
@@ -104,7 +104,7 @@ const ROLE_SCHEMA = {
             },
             reasoningEffort: {
               type: 'string' as const,
-              description: '旧格式兼容字段。新配置请使用角色顶层 reasoningEffort。',
+              description: '旧格式兼容字段；新配置使用角色顶层 reasoningEffort。',
             },
           },
         },
@@ -112,7 +112,7 @@ const ROLE_SCHEMA = {
     },
     reasoningEffort: {
       type: 'string' as const,
-      description: '独立的思考强度覆盖；省略则继承创建成员时当前聊天的强度。显式模型须支持此 effort id；跟随模型时在创建时验证。',
+      description: '独立的思考强度覆盖；省略则继承创建成员时当前聊天的强度。显式模型须支持此 effort id，跟随模型时在创建时验证。',
     },
   },
 } as const;
@@ -121,17 +121,17 @@ const MODEL_PROFILE_SCHEMA = {
   type: 'object' as const,
   additionalProperties: false,
   required: true,
-  description: '完整模型用途预设。空库创建第一条时也使用此形状，不要省略字段。',
+  description: '完整模型用途预设；空库创建第一条也用此形状，不要省略字段。',
   properties: {
     id: {
       type: 'string' as const,
       required: true,
-      description: '预设标识。须匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ ，最长 80 字符，例如 coding-high。',
+      description: '预设标识；须匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ ，最长 80 字符，例如 coding-high。',
     },
     revision: {
       type: 'integer' as const,
       required: true,
-      description: '预设版本。新建为 0；修改已有预设时必须等于 classmates_read 返回的当前 revision。',
+      description: '预设版本；新建为 0，修改已有预设时须等于 classmates_read 返回的当前 revision。',
     },
     name: {
       type: 'string' as const,
@@ -234,7 +234,7 @@ export function installRoleManagement(ctx: Context, owner: Agent): () => void {
   const output = jsonOutput();
   disposers.push(scope.tools.register(defineTool({
     name: 'classmates_read',
-    description: '读取当前可复用角色模板、独立的模型用途预设、宿主已注册的模型目录（含公开说明）、调用方自有最近 request/header 路由（currentModel）以及目录连通说明。只读；目录项不是连通证据，也不编造未出现在目录中的模型。',
+    description: '读取角色模板、模型用途预设、宿主模型目录、调用方最近自有请求路由（currentModel）与目录连通说明。只读：目录项不代表连通，也不补造目录外的模型。',
     parameters: {},
     output,
     execute: async (_args, exec) => {
@@ -252,7 +252,7 @@ export function installRoleManagement(ctx: Context, owner: Agent): () => void {
   })));
   disposers.push(scope.tools.register(defineTool({
     name: 'classmates_batch',
-    description: '一次性提交一组角色增改删。全部校验通过后才会写入；重复针对同一角色、过期版本或无效模型都会整批拒绝。不要分多次部分保存。',
+    description: '一次性提交一组角色增改删。全部校验通过才写入；重复 id、过期版本或无效模型整批拒绝，不分多次部分保存。',
     parameters: {
       changes: {
         type: 'array',
@@ -290,7 +290,7 @@ export function installRoleManagement(ctx: Context, owner: Agent): () => void {
   })));
   disposers.push(scope.tools.register(defineTool({
     name: 'classmates_models_batch',
-    description: '一次性提交一组模型用途预设增改删。全部校验通过后才会写入；重复针对同一预设、过期版本或无效模型都会整批拒绝。不改写角色模板。不要分多次部分保存。',
+    description: '一次性提交一组模型用途预设增改删。全部校验通过才写入；重复 id、过期版本或无效模型整批拒绝。不改写角色模板，不分多次部分保存。',
     parameters: {
       changes: {
         type: 'array',
@@ -328,7 +328,7 @@ export function installRoleManagement(ctx: Context, owner: Agent): () => void {
   })));
   disposers.push(scope.tools.register(defineTool({
     name: 'classmates_model_protection',
-    description: '设置某个供应商和模型的使用前审批，影响同一路由的所有用途与思考强度。仅在用户要求修改此设置时使用。关闭已有保护需要原生审批，不能为了完成任务自行解锁。',
+    description: '设置某供应商和模型的使用前审批，影响同一路由的所有用途与思考强度。仅在用户要求时使用。关闭已有保护需原生审批，不能为完成任务自行解锁。',
     parameters: {
       model: { type: 'object', additionalProperties: false, required: true, properties: {
         provider: { type: 'string', required: true, description: '供应商标识。' },

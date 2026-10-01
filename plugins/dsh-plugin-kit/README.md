@@ -1,15 +1,21 @@
 # @klarkxy/dsh-plugin-kit
 
-Shared support package for klarkxy DSH feature plugins: shared record types, the plugin-page model menu, host RPC registration, the official-UI style contract, and one native `llm` text call.
+The shared support package for the feature plugins in this repository: shared record types, the plugin-page model menu, host RPC registration, the official-UI style contract, and one native `llm` text call. It is a library, not a DSH bundle — adding it as a dependency gives a feature plugin the pieces it needs, not a new user-visible feature of its own.
 
-It does not route models by tier, retry, time out, queue, or record usage. Each feature chooses its model on its own plugin-page row and calls the host `llm` service directly. An empty selection uses the current session model, then the host default chat model. This package never starts inference by itself.
+[简体中文](docs/README.zh-CN.md)
+
+## What this package is not
+
+- It is a dependency of feature plugins, not a DSH bundle: it declares no `dsh.bundle` and registers no plugin page, so installing it on its own changes nothing the user can see.
+- It never starts inference by itself, and makes no model call unless a feature asks for one.
+- It does not route models by tier, retry, time out, queue, or record usage. Each feature chooses its model on its own plugin-page row and calls the host `llm` service directly; an empty selection uses the current session model, then the host default chat model.
 
 ## Entry points
 
-- `.` — the Cordis plugin entry (`name`, `inject`, `apply`), `registerHostRpc`, `callLlmText`, `resolveFeatureModel`, and the shared contract types.
+- `.` — the shared contract types, plus `registerHostRpc`, `callLlmText` and `resolveFeatureModel`.
 - `./contracts` — browser-safe types and constants: shared memory/knowledge records, `TaskContract` / `TaskCheckpoint`, `ModelRoute`, `RpcResult`, `CHAT_EVENTS_SLOT`, `projectIdFromCwd`.
 - `./host-rpc` — host RPC registration helper and its context type.
-- `./client-utils` — browser-safe React-optional helpers for native plugin-page seats.
+- `./client-utils` — browser-safe helpers for native plugin-page seats: `selectedSessionId`, `useNativeSeat`, `useFeatureRefresh`. `react` is an optional peer.
 - `./model-menu` — plugin-page model select: catalog parsing, empty-route handling, reasoning-effort options.
 - `./llm-call` — `callLlmText` and `resolveFeatureModel` as separate exports.
 - `./official-ui` — the shared browser-side style contract: `officialUiCss(roots)`, the `--dsw-*` token allowlist, and the focus/elevation helpers.
@@ -40,10 +46,9 @@ restyling controls of its own. Concretely:
 `OFFICIAL_THEME_TOKEN_NAMES` is that allowlist. Adding a token to it is a
 deliberate act: confirm the name against the host theme first.
 
+## Deprecated types
 
 `AiPolicy`, `PurposeSpec`, `ModelTarget`, `AiServices`, `AiFeatureScope`, `AuxiliaryRequest`, `AuxiliaryResult` and `UsageReceipt` are retained under `./contracts` marked `@deprecated`. They described the retired shared model-routing service; features must not use them for new calls.
-
-This package is a dependency of feature plugins, not a DSH bundle; it declares no `dsh.bundle` and registers no plugin page.
 
 ## Development
 

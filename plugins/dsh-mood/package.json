@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-mood",
   "version": "0.1.5",
-  "description": "An Agent tool for recording and reusing the current session requirements without auxiliary model calls.",
+  "description": "Requirements: the current agent records, reads, and updates this task's requirements, with no extra model calls.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",

@@ -12,8 +12,21 @@ function fieldLabel(field: string, t: Translate): string {
     case 'RemainingQuota': return t('剩余额度（RemainingQuota）', 'Remaining (RemainingQuota)')
     case 'TotalQuota': return t('总额度（TotalQuota）', 'Total (TotalQuota)')
     case 'UsedQuota': return t('已用额度（UsedQuota）', 'Used (UsedQuota)')
+    case 'TotalUsed': return t('已用额度（TotalUsed）', 'Used (TotalUsed)')
     default: return field
   }
+}
+/**
+ * A total is a ceiling, not an amount spent, and the used figure is the gap
+ * between the two. The roles are what let the view drop the redundant third
+ * number and hang the one meaningful bar on the remaining column.
+ */
+export type QuotaFieldRole = 'total' | 'remaining' | 'used' | 'other'
+export function quotaFieldRole(field: string): QuotaFieldRole {
+  if (field === 'RemainingQuota') return 'remaining'
+  if (field === 'TotalQuota') return 'total'
+  if (field === 'UsedQuota' || field === 'TotalUsed') return 'used'
+  return 'other'
 }
 export type QuotaMetric = { field: string; label: string; text: string; value: number | null }
 export type QuotaCategory = { id: string; label: string; metrics: QuotaMetric[] }
@@ -45,6 +58,71 @@ export function quotaMetric(field: string, raw: unknown, t: Translate = translat
   return { field, label: fieldLabel(field, t), text, value }
 }
 
+const chartableRole = (category: QuotaCategory, role: QuotaFieldRole) => {
+  const metric = category.metrics.find(value => quotaFieldRole(value.field) === role)
+  return metric !== undefined && metric.value !== null
+}
+
+/**
+ * The total is the fraction's denominator, not a figure in its own right, so it
+ * gets no column: `4998 / 5000` says everything a total column and a remaining
+ * column said separately, in less space. Only fields the fraction cannot carry
+ * — a cumulative counter, or a used figure its row has no ceiling to subtract
+ * from — survive as columns of their own.
+ */
+export type QuotaColumn = { kind: 'meter' | 'field'; field: string; label: string; role: QuotaFieldRole | 'meter' }
+
+/** The one meter worth drawing: what is left of this API's own ceiling. Both
+ *  figures are the server's, for this row; without both the cell stays a number
+ *  and never borrows a scale from a neighbouring row or field. */
+export function quotaMeter(metrics: QuotaMetric[]): { remaining: QuotaMetric; total: QuotaMetric; share: number } | null {
+  const remaining = metrics.find(value => quotaFieldRole(value.field) === 'remaining' && value.value !== null)
+  const total = metrics.find(value => quotaFieldRole(value.field) === 'total' && value.value !== null)
+  if (!remaining || !total || !total.value) return null
+  return { remaining, total, share: remaining.value! / total.value! }
+}
+
+export function quotaColumns(categories: QuotaCategory[], fields: string[], t: Translate = translator()): QuotaColumn[] {
+  const holders = categories.filter(category => category.metrics.some(value => quotaFieldRole(value.field) === 'used'))
+  const derivable = holders.length > 0 && holders.every(category => chartableRole(category, 'total') && chartableRole(category, 'remaining'))
+  const rest: QuotaColumn[] = fields
+    .filter(field => {
+      const role = quotaFieldRole(field)
+      if (role === 'total' || role === 'remaining') return false // the fraction carries both
+      if (role === 'used') return !derivable
+      return true
+    })
+    .map(field => ({ kind: 'field' as const, field, label: fieldLabel(field, t), role: quotaFieldRole(field) }))
+  const hasFraction = fields.some(field => { const role = quotaFieldRole(field); return role === 'total' || role === 'remaining' })
+  return hasFraction
+    ? [{ kind: 'meter', field: '', label: t('剩余 / 上限', 'Remaining / ceiling'), role: 'meter' }, ...rest]
+    : rest
+}
+
+/** The one cell every row is read through: the fraction when the row has both
+ *  halves, otherwise whichever single figure the server sent, named so a lone
+ *  number is never read as the other half. */
+function quotaFractionCell(category: QuotaCategory, t: Translate) {
+  const total = category.metrics.find(value => quotaFieldRole(value.field) === 'total')
+  const remaining = category.metrics.find(value => quotaFieldRole(value.field) === 'remaining')
+  const lone = (metric: QuotaMetric, role: 'total' | 'remaining') => <span className="zhihu-quota-value">
+    {metric.text}<span className="zhihu-quota-of">{role === 'total' ? t(' 上限', ' ceiling') : t(' 剩余', ' remaining')}</span>
+  </span>
+  const meter = quotaMeter(category.metrics)
+  if (meter) return <span className="zhihu-quota-value">
+    {meter.remaining.text}<span className="zhihu-quota-of"> / {meter.total.text}</span>
+    <span className="zhihu-quota-track" aria-hidden="true">
+      <span className="zhihu-quota-fill" style={{ width: `${Number((meter.share * 100).toFixed(2))}%` }} />
+    </span>
+  </span>
+  // A half Zhihu marked opaque (`-1`, `unlimited`) is still its answer, so it is
+  // shown as it came: the other half never stands in for it and it never becomes
+  // a fraction, because its value is unknown rather than zero.
+  if (remaining) return lone(remaining, 'remaining')
+  if (total) return lone(total, 'total')
+  return <span className="zhihu-quota-value">{t('不可用', 'Unavailable')}</span>
+}
+
 /** Supports direct per-API rows only. No recursive guessing, aggregation, or balance derivation. */
 export function projectQuota(data: unknown, t: Translate = translator()): QuotaProjection {
   if (!record(data)) return { categories: [], fields: [] }
@@ -70,37 +148,54 @@ export function projectQuota(data: unknown, t: Translate = translator()): QuotaP
   return { categories, fields: [...fields] }
 }
 
+/**
+ * One row per API, read as `remaining / ceiling` with the bar under it. The
+ * total earns no column of its own — it is the denominator the fraction already
+ * prints — and the consumed figure is the gap between the two numbers, so it
+ * earns none either. An earlier version gave all three their own panel, which
+ * repeated the API list three times and let a full bar mean "exhausted" in one
+ * place and "untouched" in another, in the same colour and the same length.
+ */
 export function QuotaCharts({ data }: { data: unknown }) {
   const t = useT()
   const { categories, fields } = projectQuota(data, t)
   if (!categories.length || !fields.length) return <p className="dsh-ui-empty">{t('官方额度数据不可用：响应中没有可识别的额度字段。', 'Official quota data is unavailable: the response has no recognisable quota fields.')}</p>
+  const columns = quotaColumns(categories, fields, t)
+  const metered = columns[0]?.kind === 'meter'
+  const api = t('接口', 'API')
   return <div className="dsh-ui-stack">
-    <p className="dsh-ui-help">{t('每个字段独立缩放，条长不表示额度占比。', 'Each field is scaled on its own; bar length is not a share of quota.')}</p>
+    {metered && <p className="dsh-ui-help">{t('蓝条＝该接口还剩自己上限的多少。各接口上限不同，条长不跨行比较。', 'A bar is what an API has left of its own ceiling. Limits differ per API, so lengths are not comparable across rows.')}</p>}
     <ZhihuDetails title={t('如何阅读', 'How to read this')}>
-      <li>{t('条长以该字段当前返回的最大非负数值为基准，不同字段不可按条长比较。', 'Bars are relative to the largest non-negative value of that field; do not compare bars across fields.')}</li>
+      <li>{t('「剩余 / 上限」中的上限是知乎给该接口的总额度，蓝条是其中未消耗的部分。', 'The ceiling in “remaining / ceiling” is the total Zhihu reports for that API, and the bar is the unconsumed part of it.')}</li>
+      <li>{t('已消耗是上限减剩余，因此不单列；官方未返回上限时只显示剩余数字，不画条。', 'Consumed is the ceiling minus the remaining, so it gets no column. With no total returned, only the remaining shows and no bar is drawn.')}</li>
       <li>{t('不合计不同 API，不推算已用、总额或余额。', 'Different APIs are not summed; used, total and balance are never inferred.')}</li>
       <li>{t('统计周期以官方定义为准，不把累计数据当作今日用量。', 'Periods follow the official definition; cumulative figures are not treated as today’s usage.')}</li>
     </ZhihuDetails>
-    {fields.map(field => {
-      const maximum = categories.reduce((max, category) => Math.max(max, category.metrics.find(metric => metric.field === field)?.value ?? 0), 0)
-      const heading = fieldLabel(field, t)
-      return <section className="dsh-ui-card dsh-ui-card--flat" key={field} aria-label={heading}>
-        <h4 className="dsh-ui-heading">{heading}</h4>
-        <p className="dsh-ui-hint">{t(`此字段刻度：0–${maximum}`, `Scale for this field: 0–${maximum}`)}</p>
-        {categories.map((category, index) => {
-          const metric = category.metrics.find(value => value.field === field) ?? quotaMetric(field, undefined, t)
-          return <div className="zhihu-quota-row" key={`${category.id}-${index}`}>
-            <span className="dsh-ui-meta dsh-ui-wrap">{category.label}</span>
-            {metric.value !== null && <svg className="zhihu-quota-bar" viewBox="0 0 240 16" width="240" height="16" role="img" aria-label={`${category.label} · ${metric.label}：${metric.text}`} style={{ maxWidth: '100%' }}>
-              <title>{`${category.label} · ${metric.label}：${metric.text}`}</title>
-              <rect className="zhihu-quota-track" width="240" height="16" rx="3" />
-              <rect className="zhihu-quota-fill" width={maximum > 0 ? metric.value / maximum * 240 : 0} height="16" rx="3" />
-            </svg>}
-            <span className="zhihu-quota-value dsh-ui-compact">{metric.text}</span>
-          </div>
-        })}
-      </section>
-    })}
+    <div className="zhihu-quota-scroll">
+      <table className="zhihu-quota-table">
+        <thead>
+          <tr>
+            <th scope="col" className="zhihu-quota-corner">{api}</th>
+            {columns.map(column => <th scope="col" className="zhihu-quota-head" key={column.field || 'meter'}>
+              <span className="zhihu-quota-head-label">{column.label}</span>
+              {column.kind === 'meter' && <span className="zhihu-quota-head-scale">RemainingQuota / TotalQuota</span>}
+            </th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {categories.map((category, index) => <tr key={`${category.id}-${index}`}>
+            <th scope="row" className="zhihu-quota-name">{category.label}</th>
+            {columns.map(column => <td className="zhihu-quota-cell" key={column.field || 'meter'}>
+              {column.kind === 'meter'
+                ? quotaFractionCell(category, t)
+                : <span className="zhihu-quota-value">
+                    {(category.metrics.find(value => value.field === column.field) ?? quotaMetric(column.field, undefined, t)).text}
+                  </span>}
+            </td>)}
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
     {categories.filter(category => !category.metrics.length).map((category, index) => <p className="dsh-ui-hint" key={`${category.id}-${index}`}>{t(`${category.label}：额度字段不可用。`, `${category.label}: quota fields unavailable.`)}</p>)}
   </div>
 }

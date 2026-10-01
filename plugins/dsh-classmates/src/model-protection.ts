@@ -49,8 +49,8 @@ export async function requestModelApproval(ctx: Context, agent: Agent, input: Mo
   const task = input.task.length > 1200 ? input.task.slice(0, 1200) + '…' : input.task;
   const unlock = input.action === 'unlock';
   const displayReason = unlock ? {
-    zh: `关闭模型 ${route} 的使用前确认。之后新建使用此模型的 Classmates 子智能体不再因模型保护请求审批。`,
-    en: `Remove approval-before-use for ${route}. Future Classmates children using this route will no longer require model-protection approval.`,
+    zh: `关闭模型 ${route} 的使用前确认；之后新建使用此模型的 Classmates 子智能体不再请求审批。`,
+    en: `Remove approval-before-use for ${route}; new Classmates children on this route no longer request approval.`,
   } : {
     zh: `创建 1 个子智能体。模板：${input.roleName}；模型：${route}；思考强度：${effort}。任务：${task}`,
     en: `Create 1 child. Template: ${input.roleName}; model: ${route}; reasoning effort: ${effort}. Task: ${task}`,

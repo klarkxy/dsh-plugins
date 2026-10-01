@@ -329,7 +329,7 @@ it('attaches the calling agent own request route and ignores inherited or option
       currentModel: null,
       modelAvailabilityNotice: Management.MODEL_AVAILABILITY_NOTICE,
     });
-    expect(JSON.stringify(unseen.value)).toMatch(/不是连通或可完成请求的证据/);
+    expect(JSON.stringify(unseen.value)).toMatch(/不代表连通或可完成请求/);
     expect(JSON.stringify(unseen.value)).toMatch(/不代表模型在本机推理/);
   }
 

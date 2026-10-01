@@ -139,7 +139,7 @@ const css = `
       status === 'loading' && h('p', { role: 'status', className: 'dsh-ui-hint' },
         chinese ? '正在加载文档…' : 'Loading documentation…'),
       status === 'slow' && h('div', { role: 'status', className: 'dsh-ui-banner' },
-        h('p', null, chinese ? '文档可能无法在此加载。' : 'The documentation may not load here.'),
+        h('p', null, chinese ? '文档未加载。' : 'The documentation did not load.'),
         h('div', { className: 'dsh-ui-row-wrap' },
           h('a', {
             className: 'dsh-di-open',

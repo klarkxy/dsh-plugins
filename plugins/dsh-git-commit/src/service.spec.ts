@@ -111,7 +111,30 @@ describe('GitCommitService.commit', () => {
     expect(added).toEqual([['src/a.ts', 'src/b.ts'], ['docs/c.md']])
   })
 
-  it('falls back to one commit when the plan is invalid', async () => {
+  it('refuses to commit when the plan is invalid', async () => {
+    const run = makeRunner({
+      'rev-parse --show-toplevel': 'D:/repo\n',
+      'symbolic-ref': 'main\n',
+      'status --porcelain': porcelain,
+    })
+    const service = makeService('not json', run)
+    // Nobody reviewed a commit the model never planned, so the run stops here.
+    await expect(service.commit('s1')).rejects.toMatchObject({ code: 'plan-unavailable' })
+    expect(run.calls.some(args => args[0] === 'add' || args[0] === 'commit')).toBe(false)
+  })
+
+  it('refuses to commit when the model call itself fails', async () => {
+    const run = makeRunner({
+      'rev-parse --show-toplevel': 'D:/repo\n',
+      'symbolic-ref': 'main\n',
+      'status --porcelain': porcelain,
+    })
+    const service = makeService(new Error('provider refused the request'), run)
+    await expect(service.commit('s1')).rejects.toMatchObject({ code: 'plan-unavailable' })
+    expect(run.calls.some(args => args[0] === 'add' || args[0] === 'commit')).toBe(false)
+  })
+
+  it('commits one fallback group when the settings row opted in', async () => {
     const run = makeRunner({
       'rev-parse --show-toplevel': 'D:/repo\n',
       'symbolic-ref': 'main\n',
@@ -119,6 +142,7 @@ describe('GitCommitService.commit', () => {
       'rev-parse --short': 'def5678\n',
     })
     const service = makeService('not json', run)
+    await service.updateSettings({ model: { provider: '', model: '' }, allowFallback: true }, 0)
     const result = await service.commit('s1')
     expect(result.fallback).toBe(true)
     expect(result.commits).toHaveLength(1)

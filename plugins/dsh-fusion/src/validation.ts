@@ -156,7 +156,7 @@ export function validateState(value: unknown): FusionState {
   }
   requireFusion([...children].every(id => !leads.has(id)), 'INVALID_STATE', 'Recursive Fusion identity.')
   const stored = JSON.stringify(row).length
-  requireFusion(stored <= 16_000_000, 'CAPACITY', 'Fusion history capacity reached. Existing records were preserved.')
+  requireFusion(stored <= 16_000_000, 'CAPACITY', 'Fusion history capacity reached; existing records were preserved.')
   const pairs = (row.pairs as unknown[]).map(item => structuredClone(item)) as FusionPair[]
   return { version: 1, revision: Number(row.revision), pairs, settings: fusionSettings(row.settings) }
 }

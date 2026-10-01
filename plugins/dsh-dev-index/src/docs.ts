@@ -164,7 +164,7 @@ export class DocsClient {
       source: DOCS_INDEX, fetchedAt: page.fetchedAt, cached: page.cached, revision: page.revision,
       searchScope: "directory", version: "Current official website; not pinned to your installed DSH version.",
       totalMatches: ranked.length, results: ranked.slice(0, limit).map(r => r.entry),
-      note: "Searches titles, categories and paths, not full text. No matches does not mean a topic is absent from document bodies. Try broader Chinese or English keywords.",
+      note: "Searches titles, categories and paths, not full text. No matches does not mean a topic is absent from document bodies.",
     };
   }
 

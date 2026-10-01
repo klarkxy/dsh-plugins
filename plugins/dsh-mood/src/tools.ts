@@ -7,7 +7,7 @@ export function createRequirementsTool(service: MoodService): ToolDefinition {
     .map(key => [key, { type: 'array' as const, items: { type: 'string' as const } }]))
   return {
     name: 'mood_requirements',
-    description: 'Read or record your understanding of the CURRENT session request. For a new substantive task, first read; then use your own current instructions, conversation and latest user request to record one concise summary before working. Reuse it during tool continuations; update it when the user corrects or changes requirements. Read returns revision and sourceVersion; record must echo both as expectedRevision and sourceVersion. requirements contains goal, deliverables, inScope, outOfScope, constraints, acceptance, assumptions and questions; omit empty lists. Distinguish explicit requirements from your assumptions. This records your interpretation, not human confirmation or permission. No model is called or selected. Do not store private reasoning, invented requirements, or credentials. Necessary clarification remains with the main Agent.',
+    description: 'Read or record the current session request. For a new substantive task, read first, then record one concise summary of your current instructions, conversation and latest user request before working. Reuse it across tool continuations; update it when the user corrects or changes requirements. read returns revision and sourceVersion; record echoes both as expectedRevision and sourceVersion. requirements holds goal, deliverables, inScope, outOfScope, constraints, acceptance, assumptions and questions; omit empty lists and keep assumptions apart from explicit requirements. This is your interpretation, not human confirmation or permission. No model is called or selected. Store no private reasoning, invented requirements or credentials. Necessary clarification stays with the main Agent.',
     parameters: {
       type: 'object', additionalProperties: false, required: ['action'],
       properties: {
@@ -23,9 +23,9 @@ export function createRequirementsTool(service: MoodService): ToolDefinition {
     async execute(args, exec) {
       exec.signal.throwIfAborted()
       const sessionId = exec.agent?.session?.id
-      if (!sessionId) coded('MOOD_SESSION_NOT_FOUND', 'mood_requirements requires the current Agent session.')
+      if (!sessionId) coded('MOOD_SESSION_NOT_FOUND', 'mood_requirements needs the current Agent session.')
       const parsed = toolRequestSchema.safeParse(args)
-      if (!parsed.success) coded('MOOD_INVALID', 'Use action read, or record with expectedRevision, sourceVersion and requirements. No session or model override is accepted.')
+      if (!parsed.success) coded('MOOD_INVALID', 'Use action read, or record with expectedRevision, sourceVersion and requirements; no session or model override.')
       return parsed.data.action === 'read'
         ? service.read(String(sessionId))
         : service.record(String(sessionId), parsed.data, exec.signal)

@@ -51,7 +51,7 @@ function integer(value: string, maximum: number, field: string, param: string, t
 }
 function contentUrl(value: string, question: boolean, t: Translate): string {
   const clean = value.trim()
-  const invalid = t('请填写有效的 HTTPS 知乎链接。', 'Enter a valid HTTPS Zhihu link.')
+  const invalid = t('须为有效的 HTTPS 知乎链接。', 'Must be a valid HTTPS Zhihu link.')
   if (!clean || /[\u0000-\u0020\u007f\\]/.test(clean)) throw new Error(invalid)
   let url: URL
   try { url = new URL(clean) } catch { throw new Error(invalid) }
@@ -62,7 +62,7 @@ function contentUrl(value: string, question: boolean, t: Translate): string {
   if (url.protocol !== 'https:' || url.username || url.password || url.port || !pathOk) {
     throw new Error(question
       ? t('问题链接须为 https://www.zhihu.com/question/{id}。', 'The question link must be https://www.zhihu.com/question/{id}.')
-      : t('内容链接须为知乎回答、文章、想法或视频链接。', 'The content link must be a Zhihu answer, article, pin or video.'))
+      : t('内容链接须为知乎回答、文章、想法或视频。', 'The content link must be a Zhihu answer, article, pin or video.'))
   }
   return clean
 }
@@ -89,23 +89,23 @@ export function buildOpenPlatformParams(operation: ZhihuOpenPlatformOperation, f
     params.limit = integer(form.limit, 50, t('每页数量', 'Page size'), 'limit', t)
   }
   if (operation === 'content.comments') {
-    if (!['score', 'reverse', 'ascending'].includes(form.order)) throw new Error(t('请选择有效的评论排序。', 'Choose a valid comment order.'))
+    if (!['score', 'reverse', 'ascending'].includes(form.order)) throw new Error(t('评论排序无效。', 'Invalid comment order.'))
     params.order = form.order
   }
   if (operation === 'creator.account.stats') {
-    if (!['all', 'answer', 'article', 'pin', 'zvideo'].includes(form.contentType)) throw new Error(t('请选择有效的内容类型。', 'Choose a valid content type.'))
+    if (!['all', 'answer', 'article', 'pin', 'zvideo'].includes(form.contentType)) throw new Error(t('内容类型无效。', 'Invalid content type.'))
     params.contentType = form.contentType
   }
   if (operation === 'creator.account.stats' || operation === 'creator.content.stats') {
     const start = form.startDate.trim(), end = form.endDate.trim()
     if (start || end) {
-      if (!validDate(start) || !validDate(end)) throw new Error(t('开始和结束日期须同时填写有效的 YYYY-MM-DD 日期，或同时留空。', 'Fill both start and end dates as YYYY-MM-DD, or leave both empty.'))
+      if (!validDate(start) || !validDate(end)) throw new Error(t('开始与结束日期须同时填写有效的 YYYY-MM-DD，或同时留空。', 'Fill both start and end dates as YYYY-MM-DD, or leave both empty.'))
       if (end < start) throw new Error(t('结束日期不得早于开始日期。', 'The end date cannot be before the start date.'))
       params.startDate = start; params.endDate = end
     }
   }
   if (operation === 'quota') {
-    if (!Array.isArray(form.apiIds) || form.apiIds.some(id => !(ZHIHU_QUOTA_IDS as readonly string[]).includes(id))) throw new Error(t('包含未知官方额度项。', 'Contains an unknown quota item.'))
+    if (!Array.isArray(form.apiIds) || form.apiIds.some(id => !(ZHIHU_QUOTA_IDS as readonly string[]).includes(id))) throw new Error(t('包含未知的额度项。', 'Contains an unknown quota item.'))
     if (form.apiIds.length) params.apiIds = [...new Set(form.apiIds)]
   }
   return params
@@ -207,14 +207,14 @@ export function ZhihuOpenPlatformSection({ rpc, Button, Input, Select, quotaOnly
     {selectedOperation === undefined && <h3 className="dsh-ui-heading">{title}</h3>}
     <p className="dsh-ui-help">{quotaOnly
       ? t('查询知乎返回的官方额度，不推算余额。', 'Shows the quota Zhihu reports; no balance is inferred.')
-      : t('点击后才请求，不会自动翻页或重试。', 'Runs only when you click; never pages or retries automatically.')}</p>
+      : t('手动触发，不自动翻页或重试。', 'Manual trigger only; no automatic paging or retry.')}</p>
     {!quotaOnly && selectedOperation === undefined && renderSelect(Select, { value: activeOperation, options, 'aria-label': t('开放平台操作', 'Open Platform operation'), onChange: value => {
       if (options.some(option => option.value === value)) { reset(); setOperation(value as ZhihuOpenPlatformOperation) }
     } }, 'dsh-ui-select')}
     <OpenPlatformDetails quotaOnly={quotaOnly} />
     <div className="dsh-ui-stack">
       {activeOperation === 'question.recommendations' && <>
-        {field('query', t('主题关键词', 'Topic keywords'), t('query · 留空则按账号画像推荐', 'query · leave empty to recommend from your profile'))}
+        {field('query', t('主题关键词', 'Topic keywords'), t('query · 留空按账号画像推荐', 'query · leave empty to recommend from your profile'))}
         {field('count', t('推荐数量', 'Number of questions'), t('count · 1–20', 'count · 1–20'))}
       </>}
       {activeOperation === 'question.answers' && field('questionUrl', t('知乎问题链接', 'Zhihu question link'), 'questionUrl', 'https://www.zhihu.com/question/123')}
@@ -252,7 +252,7 @@ export function ZhihuOpenPlatformSection({ rpc, Button, Input, Select, quotaOnly
     <p className={loading ? 'dsh-ui-loading' : 'dsh-ui-hint'} role="status">{loading ? t('等待响应…', 'Waiting for response…') : ''}</p>
     {error && <p className="dsh-ui-error" role="alert">{error}</p>}
     {result && <div className="dsh-ui-stack">
-      {stale && <p className="dsh-ui-banner">{t('参数已变化，以下结果对应旧参数，请重新请求。', 'Parameters changed; these results are for the previous request. Run it again.')}</p>}
+      {stale && <p className="dsh-ui-banner">{t('参数已变化，结果对应旧参数，请重新请求。', 'Parameters changed; results are from the previous request. Run it again.')}</p>}
       <h4 className="dsh-ui-heading">{activeOperation === 'quota' ? t('官方原始额度字段', 'Raw quota fields') : t('返回数据', 'Response data')}</h4>
       {result.paging?.warning && <p className="dsh-ui-banner">{result.paging.warning}</p>}
       {!stale && paged && result.paging?.canContinue && nextOffset === null && <p className="dsh-ui-banner">{t('下一页位置缺失或未前进，已停止翻页。', 'The next page position is missing or did not advance; paging stopped.')}</p>}

@@ -1,10 +1,8 @@
 # Safe Auto (release candidate)
 
-[中文](README.zh-CN.md) · [Preflight](docs/ADR-0001.md) · [One-shot escalation](docs/ADR-0002.md) · [Reviewer routing](docs/ADR-0003.md)
+Budgeted preflight plus opt-in automatic approval of one native sandbox escalation at a time. **The reviewer follows the current conversation model by default, and can be configured independently.** The plugin reuses DSH's model adapters, tool loop and approval service. It never switches the standing session to Full Access, and never lets a model enlarge the envelope you configured.
 
-Budgeted preflight and opt-in automatic approval of one native sandbox escalation at a time. **The reviewer follows the current conversation model by default, and can be configured independently.** The plugin reuses DSH's model adapters, tool loop and approval service. It never switches the standing session to Full Access and never lets a model enlarge the operator's configured envelope.
-
-The exact-rule path is a local POSIX/native-tool candidate; independent approval mode also handles Windows native escalation. Neither is an independently audited security boundary. Start with `shadow`; retain native sandbox providers, isolation and backups. Human approval remains available in legacy rule mode or when independent approval is inactive, not as an independent-review fallback. DSH `workspace-write` governs file effects, not network egress or all secret reads. An approved `danger-full-access` call genuinely bypasses the DSH file sandbox; exact rules are not a finer OS sandbox.
+[简体中文](README.zh-CN.md) · [Preflight](docs/ADR-0001.md) · [One-shot escalation](docs/ADR-0002.md) · [Reviewer routing](docs/ADR-0003.md)
 
 ## Install and configure
 
@@ -34,13 +32,13 @@ The enrolled canonical root must exactly match session cwd and the resolved sand
 
 ## Plugin-page activation and independent approval review
 
-Select a live root session on the plugin page and click **Enable**. **Disable** only revokes automatic review; it does not change native permissions. Enable keeps **Workspace Write + ask**, never the official Full Access Auto preset. Opening, refreshing or saving the page never activates a session. Children, restarts and UI Host disposal do not inherit activation.
+**What you do.** Select a live root session on the plugin page and click **Enable**. **Disable** only revokes automatic review; it does not change native permissions. Enable keeps **Workspace Write + ask**, never the official Full Access Auto preset. Opening, refreshing or saving the page never activates a session. Children, restarts and UI Host disposal do not inherit activation.
 
-Set `approvalReview: true` (default `false`), or save **Independent approval reviewer** in the plugin-page mode selector. Inspired by `dsh-approval-review@0.5.1`, this mode reviews real native single-call sandbox escalation requests for `pwsh/bash/write/edit`, including Windows, without POSIX candidate commands. It binds to the current tool execution, not free-text claims, a reused callId or old logs. Unknown tools, remote execution, nested calls, children, incomplete inputs and requests that cannot be bound to a live execution are rejected while independent approval is active. The tool-free reviewer receives the complete bounded action, direct human intent and additional restrictions only.
+**What the plugin does.** Set `approvalReview: true` (default `false`), or save **Independent approval reviewer** in the plugin-page mode selector. Inspired by `dsh-approval-review@0.5.1`, this mode reviews real native single-call sandbox escalation requests for `pwsh/bash/write/edit`, including Windows, without POSIX candidate commands. It binds to the current tool execution, not free-text claims, a reused callId or old logs. Unknown tools, remote execution, nested calls, children, incomplete inputs and requests that cannot be bound to a live execution are rejected while independent approval is active. The tool-free reviewer receives the complete bounded action, direct human intent and additional restrictions only.
 
-Structured verdicts separate risk, authorization, scope and rationale. Automatic allowance requires low/medium risk, medium/high direct authorization and bounded scope. High/critical risk, uncertainty, unknown scripts lacking decisive evidence, malformed verdicts, errors, timeouts, insufficient budgets and invalidated grants are rejected. Explicit denials never fall back to another answerer. There is no fail-open option, read-only investigation tool or claim of full Codex parity. The default 64-token fast output budget may be too small for structured output; adjust profile budgets as needed. Truncated output never grants approval.
+Structured verdicts separate risk, authorization, scope and rationale. Automatic allowance requires low/medium risk, medium/high direct authorization and bounded scope. High/critical risk, uncertainty, unknown scripts lacking decisive evidence, malformed verdicts, errors, timeouts, insufficient budgets and invalidated grants are rejected. Explicit denials never fall back to another answerer. The default 64-token fast output budget may be too small for structured output; adjust profile budgets as needed. Truncated output never grants approval.
 
-This is an explicit delegation of native approval, not authority for arbitrary operations. Native `approval: never` rejects before the chain. The plugin page displays a fixed **Reject (default)** policy for inability to judge. The human approval option is disabled and not persisted because no human-only DSH channel has been verified; calling waterfall `next()` could reach another automatic answerer and is not a human fallback. Independent approval does not delegate non-allowing decisions downstream. Legacy exact-rule behavior is unchanged. Source changes do not uninstall installed plugins or publish a release.
+This is an explicit delegation of native approval, not authority for arbitrary operations. Native `approval: never` rejects before the chain. The plugin page displays a fixed **Reject (default)** policy for inability to judge. The human approval option is disabled and not persisted, because no human-only DSH channel has been verified; calling waterfall `next()` could reach another automatic answerer and is not a human fallback. Independent approval does not delegate non-allowing decisions downstream. Legacy exact-rule behavior is unchanged. Source changes do not uninstall installed plugins or publish a release.
 
 ## Reviewer settings
 
@@ -48,17 +46,15 @@ The updated bundle loads a separate UI Host row. Settings and session controls l
 
 The Safe Auto plugin page selects fast/deep reviewer models, their advertised reasoning efforts, and an additional review prompt (up to 4096 characters). Empty fast route follows the current conversation; empty deep route disables deep review. Selecting a new model clears its previous effort; saved unlisted values are retained rather than silently replaced. Unsupported explicit efforts fail closed. The additional prompt can only add restrictions, never replace the fixed safety instructions or enlarge an envelope. Saving settings performs no inference, changes no session permission, keeps the budget ledger and invalidates pending old grants. Reasoning-heavy models may need larger `fastOutputTokens/deepOutputTokens` in the profile. HTTP mode is read-only in this panel and rejects native effort overrides.
 
-The `dsh-safe-auto-ui` Host row persists reviewer preferences through `storageDomain`, overriding corresponding profile model fields, but never persists session authorization. Activation belongs to the exact live session object; native selection, external permission changes, restart or UI Host disposal disables it. Forks and children do not inherit activation. While UI control is attached, legacy smart/unattended profiles do not automatically activate untouched sessions; loading only the original core Host row retains legacy operation. Removing the Client restores the original permission control.
-
-**Exact rule mode does not enlarge the operator envelope.** With `approvalReview: false`, empty candidate lists authorize no model grants; Windows file auto-passes and exact-rule PowerShell escalation remain unsupported. Independent approval mode requires an explicit saved choice and session activation, as described above.
+The `dsh-safe-auto-ui` Host row persists reviewer preferences through `storageDomain`, overriding corresponding profile model fields, but never persists session authorization. Activation belongs to the exact live session object: native selection, an external permission change, restart or UI Host disposal disables it, and forks and children do not inherit it. While UI control is attached, legacy smart/unattended profiles do not automatically activate untouched sessions; loading only the original core Host row retains legacy operation. Removing the Client restores the original permission control.
 
 ## Choose the approval model
 
 ### Default: follow the conversation
 
-Leave `endpoint`, `fastProvider` and `fastModel` unset or empty. Each eligible review resolves the provider/model from the requesting session's accepted `requestHeader().config`. If no accepted header exists, it uses that same agent's `options`. A malformed header never falls back to another route. A new conversation request using a different model changes subsequent reviews; concurrent sessions do not share a global model selection.
+Leave `endpoint`, `fastProvider` and `fastModel` unset or empty. Each eligible review resolves the provider/model from the requesting session's accepted `requestHeader().config`; if no accepted header exists, it uses that same agent's `options`. A malformed header never falls back to another route. A new conversation request using a different model changes subsequent reviews; concurrent sessions do not share a global model selection.
 
-This reuses DSH's configured provider and credentials. No additional API key or endpoint is required. **Only the model route is inherited**, not the conversation history, main-agent prompt, tools, replay state, reasoning setting or output budget. The reviewer is a separate tool-free one-shot with its own prompt and caps. A model requiring more reasoning tokens may need a larger reviewer cap; unsupported options fail closed rather than dropping limits.
+This reuses DSH's configured provider and credentials, so no additional API key or endpoint is required. **Only the model route is inherited**, not the conversation history, main-agent prompt, tools, replay state, reasoning setting or output budget. The reviewer is a separate tool-free one-shot with its own prompt and caps. A model requiring more reasoning tokens may need a larger reviewer cap; unsupported options fail closed rather than dropping limits.
 
 ### Independent DSH model
 
@@ -91,7 +87,7 @@ apiKeyEnv: DSH_SAFE_AUTO_API_KEY
 
 `endpoint` is the complete OpenAI-compatible Chat Completions URL. This explicit endpoint uses the existing HTTP transport, including compatible lapp gateways; omit `fastProvider` and `deepProvider`. Combining native providers with an HTTP endpoint is rejected rather than guessed. Only this mode reads the named API key environment variable. HTTPS is required except loopback HTTP; redirects, URL credentials, query and fragment are rejected. To restore following, clear the endpoint and its fast model, not just the endpoint.
 
-Both ordinary preflight and one-shot escalation use the selected reviewer. Routes are snapshotted for each review. A change during an outstanding native review invalidates automatic allowance; final guards recheck the route. Removing the model service leaves the policy guards installed. Switching models does not reset budgets. Explicit denials remain denials even if the route or user authority changes. Ordinary reviewed grants are bound before review to the action, workspace, sandbox policy and direct-user authority; the final guard rejects a stale grant after downstream policy completes.
+Both ordinary preflight and one-shot escalation use the selected reviewer. Routes are snapshotted for each review, and a change during an outstanding native review invalidates automatic allowance; the final guards recheck the route. Removing the model service leaves the policy guards installed, and switching models does not reset budgets. Explicit denials remain denials even if the route or user authority changes. Ordinary reviewed grants are bound before review to the action, workspace, sandbox policy and direct-user authority; the final guard rejects a stale grant after downstream policy completes.
 
 ## Policy and one-shot escalation
 
@@ -141,7 +137,7 @@ The following legacy mode behavior is retained with `approvalReview: false`. Act
 
 Native `approval: never` rejects before any answerer. For automatic escalation, keep native approval at `ask` even with plugin `unattended`; `ask` dispatches to an answerer, not necessarily a human. Missing native approval services fail closed. Ordinary passes call `next()`, preserving other policy denials and prompts. Never stack this with official experimental Auto, Autogate or another auto-answerer. Legacy rule-mode human fallback assumes the downstream native human channel; active independent approval never uses that fallback.
 
-## Budgets, privacy and limitations
+## Budgets and privacy
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -158,13 +154,21 @@ Only the action and latest direct human text are supplied. No main transcript, a
 
 Preflight and escalation share a session ledger, reserved before I/O with no error refunds. Usage counts include DSH's disjoint cache counters when reported. Reservations are not exact billable tokens, currency limits or a cap on the main agent. Providers must honor limits. New direct user messages reset task counters but not session totals; model changes reset neither; plugin reload/restart resets in-memory counters. The fuse stops more reviews, not the whole agent loop.
 
-Tests, builds, installation and Git hooks can run repository-controlled code and are not inherently safe. Enrollment does not pin executable contents. `grep/glob`, PTC, MCP, remote execution and subagent model grants remain outside the automatic envelope. Exact-rule mode also excludes PowerShell and complex shell; independent native approval mode can review them, but missing decisive script evidence is rejected. Trusted same-process plugins and execution providers remain trusted; unloading a policy removes its guards. Path rechecks cannot eliminate OS TOCTOU. Use external isolation with restricted credentials and egress.
-
 ## Verification
 
 Run `npm test`, `npm run build` (JavaScript syntax checks plus the browser bundle, not TypeScript checking), and `npm pack --dry-run` in this package, plus repository `pnpm check`. Tests cover routing, concurrent sessions, native streams, caps, stale decisions, model service removal, preflight/escalation binding, real loopback HTTP, and real Cordis/ToolRuntime/ApprovalService/LlmRuntime contracts. CI requires installed DSH dependencies; offline source-only tests may explicitly skip native contracts. POSIX-only file and escalation grant cases are explicitly skipped on Windows, while Windows tests assert fail-closed behavior; native model routing still runs. If the Windows sandbox blocks the test runner's subprocess pipes, run each test file separately with `node --test --test-isolation=none test/<file>.test.js`.
 
-The native test uses a controlled adapter and fixture session/tool/policy. It proves runtime integration, not live model accuracy, OS isolation or authenticated Web/Headless acceptance. These remain in [ADR-0002's checklist](docs/ADR-0002.md). Logs separate assessment, escalation outcome and final result without raw commands/prompts/keys; host retention is operator-managed. No durable budget/audit database, cross-call grant cache, or PI probe is bundled. No absolute safety or savings percentage is claimed.
+The native test uses a controlled adapter and fixture session/tool/policy. It proves runtime integration, not live model accuracy, OS isolation or authenticated Web/Headless acceptance. These remain in [ADR-0002's checklist](docs/ADR-0002.md). Logs separate assessment, escalation outcome and final result without raw commands/prompts/keys; host retention is operator-managed.
+
+## Boundaries and limits
+
+- **Not an audited boundary.** The exact-rule path (local POSIX/native-tool candidates) and independent approval mode (Windows native escalation included) are candidates, not an independently audited security boundary. Start with `shadow`, and keep the native sandbox providers, isolation and backups you already rely on.
+- **Human approval is not a fallback for independent review.** It remains available only in legacy rule mode or when independent approval is inactive.
+- **Exact rules are not a finer OS sandbox.** DSH `workspace-write` governs file effects, not network egress or all secret reads, and an approved `danger-full-access` call genuinely bypasses the DSH file sandbox.
+- **Exact rule mode does not enlarge the operator envelope.** With `approvalReview: false`, empty candidate lists authorize no model grants; Windows file auto-passes and exact-rule PowerShell escalation remain unsupported. Independent approval mode requires an explicit saved choice and session activation, as described above.
+- **Coverage stops at native single-call escalation.** `grep/glob`, PTC, MCP, remote execution and subagent model grants stay outside the automatic envelope, as does widening from read-only to workspace-write. Exact-rule mode also excludes PowerShell and complex shell; independent native approval mode can review them, but missing decisive script evidence is rejected.
+- **Enrolled content is not pinned and other plugins stay trusted.** Tests, builds, installation and Git hooks can run repository-controlled code and are not inherently safe; enrollment does not pin executable contents. Trusted same-process plugins and execution providers remain trusted, and unloading a policy removes its guards. Path rechecks cannot eliminate OS TOCTOU, so use external isolation with restricted credentials and egress.
+- **No guarantee is claimed.** There is no fail-open option, no read-only investigation tool and no claim of full Codex parity. No durable budget/audit database, cross-call grant cache or PI probe is bundled, and no absolute safety or savings percentage is claimed.
 
 ## License
 

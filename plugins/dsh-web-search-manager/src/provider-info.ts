@@ -27,12 +27,12 @@ const providerInfo: Record<string, ProviderInfo> = {
   },
   'deepseek-official': {
     description: '由 DeepSeek 模型调用内置搜索，复用模型 API Key。',
-    pricing: '默认 Flash 按 tokens 计费：每百万输入 ¥1–2（缓存命中 ¥0.02–0.04）、输出 ¥4–8，随峰谷时段变化；赠送余额和搜索工具费用以平台为准。',
+    pricing: '默认 Flash 按 tokens 计费：每百万输入 ¥1–2（缓存命中 ¥0.02–0.04）、输出 ¥4–8，随峰谷时段变化；赠送余额与工具费用以平台为准。',
     pricingUrl: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/',
   },
   exa: {
     description: '面向 AI 的网页搜索，提供相关网页与内容片段。',
-    pricing: '注册赠 $20，此后每月赠 $10；$7/千次（每次最多 10 条），超过 10 条每多一条加 $1/千次。',
+    pricing: '注册赠 $20，之后每月赠 $10；$7/千次（每次最多 10 条），超出 10 条每条加 $1/千次。',
     pricingUrl: 'https://exa.ai/pricing',
   },
   firecrawl: {
@@ -56,9 +56,9 @@ export function searchProviderInfo(provider: ProviderView): ProviderInfo {
   const known = Object.hasOwn(providerInfo, provider.id) ? providerInfo[provider.id] : undefined
   return {
     description: known?.description ?? provider.description,
-    pricing: provider.pricing ?? known?.pricing ?? (provider.billing === 'none' ? '此后端不收取搜索费用。'
-      : provider.billing === 'model-and-tools' ? '按模型用量和工具调用计费；免费额度及单价请查看供应商说明。'
-        : '按 API 调用计费；免费额度及单价请查看供应商说明。'),
+    pricing: provider.pricing ?? known?.pricing ?? (provider.billing === 'none' ? '该后端不收取搜索费用。'
+      : provider.billing === 'model-and-tools' ? '按模型用量与工具调用计费；额度与单价见供应商说明。'
+        : '按 API 调用计费；额度与单价见供应商说明。'),
     pricingUrl: provider.pricingUrl ?? known?.pricingUrl ?? provider.signupUrl,
   }
 }

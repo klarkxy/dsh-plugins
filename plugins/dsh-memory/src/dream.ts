@@ -167,7 +167,7 @@ export function assertDreamApply(
       if (consumed.has(id) || !plan.snapshot.some(entry => entry.id === id)) fail(MEMORY_INVALID, '来源重复或不在快照中。')
       consumed.add(id)
       const source = assertLiveUnexpired(current.get(id), tombstoned, id, now, '合并来源已不存在。')
-      if (!isDreamSource(source, now) || !scopesEqual(source.scope, proposal.scope)) fail(MEMORY_INVALID, '不能跨范围或处理行动经验。')
+      if (!isDreamSource(source, now) || !scopesEqual(source.scope, proposal.scope)) fail(MEMORY_INVALID, '不能跨范围或处理经验记录。')
       return source
     })
     if (!compatibleSources(snapshotRecords(sources), proposal.kind)

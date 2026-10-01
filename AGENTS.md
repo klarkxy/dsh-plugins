@@ -64,6 +64,20 @@ pnpm check                                         # 全仓检查
 - `engines.dsh` 也只写开放下界。
 - 例外：确实需要独立副本的无状态工具包可以进 `dependencies`（官方文档允许的口径），但先确认它不在宿主安装目录里。
 
+## 自动触发的作用域
+
+插件挂在 `agent/pre-step`、`agent/turn-stopping`、`agent/status`、`session/event` 这类**全局**事件上时，一次派发会按线程数放大：主控分出 N 个子代理，辅助调用就多出 N 份。因此：
+
+- **写入与派生默认只覆盖真人直接驱动的顶层会话。** 纪要、检查点、观察记录、经验摘录、标题这类会落盘或调模型的自动行为，先用 plugin-kit 的 `isSubagentSession(session)` 排除子线程，再做其余判断。用户手动触发的同名操作（RPC、插件页按钮）不受此限。
+- **只读注入可以保留。** 记忆、经验注入不写盘也不调模型，子线程读到的是真人会话产生的知识，按需保留即可。
+- **要跨子线程必须显式 opt-in**，在代码注释里写明理由，不要靠沉默默认。
+
+判据只能用 `session.header`：`isSubagentSession` 认 `parentSession` / `origin === 'subagent'` / `delegationDepth > 0`，这三项是宿主在创建子线程时快照的持久会话数据（`@deepseek-ai/dsh-agent` 的 `CreateAgentOptions.meta`）。**不要用 `message.source.kind === 'user'` 判断是不是真人**——官方 `SubagentStartRequest.prompt` 的定义就是「作为子线程的 user 消息投递」，主控派的任务在子线程里和真人输入无法区分。
+
+调用生命周期跟着工作走：自建 `AbortController` 时用 `AbortSignal.any([宿主 signal, 自己的])` 合并，不要另起一个与工作步骤无关的后台调用。
+
+判据在 plugin-kit 里，不要每个插件各抄一份。`dsh-safe-auto` 是最早的落地样例。
+
 ## 客户端 UI：@deepseek-ai/dsh-client-ui-primitives
 
 宿主提供的纯 React 原子组件包（控件、图标、Markdown、JSON 检视器，不依赖 cordis）。功能插件的浏览器端界面用它拼装，不重画宿主已有的控件：`Button`、`Input`、`Checkbox`、`Switch`、`Tag`、`Pill`、`SegmentedTabs`、`Menu`、`Modal`、`Tooltip`、`Toast`、`DisclosureRow`、`StateDot`、`PathLabel`、设置表单套件，以及 `useAnchoredPosition`、`useDismissOnOutsidePointer`、`useModalLayer` 等 hook。几何、焦点环、状态和本地化都由宿主掌握，抄一份就会在下次换肤时掉队。原生 `<select>` 是唯一例外：官方组件里没有它，保留平台控件并套用 plugin-kit 契约的 `dsh-ui-select` 即可。

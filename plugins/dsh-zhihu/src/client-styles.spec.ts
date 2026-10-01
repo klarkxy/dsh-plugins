@@ -73,14 +73,28 @@ describe('zhihu layout uses the contract, not a private palette', () => {
   })
 })
 
-describe('official quota chart layout', () => {
-  it('uses responsive charts and host theme colors', () => {
-    expect(OWN_CSS).toMatch(/\.zhihu-quota-bar \{[^}]*width: 100%/)
+describe('official quota matrix layout', () => {
+  it('lays quota out as a scrolling table of host theme colors', () => {
+    expect(OWN_CSS).toMatch(/\.zhihu-quota-scroll \{[^}]*overflow-x: auto/)
+    expect(OWN_CSS).toMatch(/\.zhihu-quota-table \{[^}]*border-collapse: collapse/)
+    expect(OWN_CSS).toMatch(/\.zhihu-quota-value \{[^}]*font-variant-numeric: tabular-nums/)
     expect(zhihuClientStyles).toMatch(/& \.dsh-ui-card \{[^}]*min-width: 0/)
     expect(OWN_CSS).toMatch(/\.zhihu-quota-fill \{[^}]*var\(--dsw-alias-state-business-primary\)/)
     expect(OWN_CSS).toMatch(/\.zhihu-quota-track \{[^}]*var\(--dsw-alias-bg-layer-3\)/)
     expect(OWN_CSS).toMatch(/\.zhihu-chart-bar-fail \{[^}]*var\(--dsw-alias-state-error-primary\)/)
     expect(OWN_CSS).toContain('@media (max-width: 480px)')
+  })
+
+  it('keeps the rule subordinate to the figure and out of the reading flow', () => {
+    // The number is the read; the 3px rule only helps scan the fraction. A tall
+    // bar is what made the panel shout a scale the reader had to decode.
+    expect(OWN_CSS).toMatch(/\.zhihu-quota-track \{[^}]*height: 3px/)
+    expect(OWN_CSS).toMatch(/\.zhihu-quota-fill \{[^}]*margin-inline-start: auto/)
+    // Right-anchored columns put both the digits and the rule's end on the same edge.
+    expect(OWN_CSS).toMatch(/\.zhihu-quota-cell \{[^}]*text-align: end/)
+    expect(OWN_CSS).toMatch(/\.zhihu-quota-head \{[^}]*text-align: end/)
+    // The ceiling already appears in the fraction; it steps back a tone.
+    expect(OWN_CSS).toMatch(/\.zhihu-quota-of \{[^}]*var\(--dsw-alias-label-tertiary\)/)
   })
 })
 

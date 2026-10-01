@@ -36,13 +36,13 @@ export function installBlueprintTools(ctx) {
       async execute(args, exec) { closed(args, ['document'], 'encode request'); exec.signal.throwIfAborted(); return encodeBlueprint(args.document); } });
     scope.inject(['pluginManager', 'profileContext'], profile => {
       const core = new BlueprintCore(officialPort(profile));
-      register(profile, { name: 'blueprint_catalog', description: 'Read the current profile bundle identities, complete selected order and stale-state stamp. No installation or configuration mutation.',
+      register(profile, { name: 'blueprint_catalog', description: 'Read profile bundle identities, the full selected order and the stale-state stamp. No installation or configuration change.',
         parameters: parameters({}), async execute(args, exec) { closed(args, [], 'catalog request'); return core.catalog(exec.signal); } });
-      register(profile, { name: 'blueprint_generate', description: 'Export selected installed bundle identities as a blueprint code. Selection order is the preferred exported order; never guesses versions.',
+      register(profile, { name: 'blueprint_generate', description: 'Export selected installed bundles as a blueprint code; selection order is preferred and versions are never guessed.',
         parameters: parameters({ name: { type: 'string' }, packages: { type: 'array', items: { type: 'string' } } }),
         async execute(args, exec) { return core.generate(args, exec.signal); } });
       profile.inject(['sandboxPolicy', 'agentPresets'], guarded => {
-        register(guarded, { name: 'blueprint_apply_order', description: 'Creator only: apply an Agent-chosen permutation of the complete currently selected bundle order. Use native plugin_manager to install/enable first, then read blueprint_catalog for a fresh stamp. Preserves all selected names and protected positions. Requires native danger-full-access permission or approval; affects every session in this profile. Reports saved configuration separately from live application or restart requirement. No automatic rollback or retry.',
+        register(guarded, { name: 'blueprint_apply_order', description: 'Creator only: apply an Agent-chosen permutation of the complete selected bundle order. Install or enable with native plugin_manager first, then read blueprint_catalog for a fresh stamp. Selected names and protected positions are preserved. Requires danger-full-access permission or approval and affects every session in this profile. Reports saved configuration separately from live application or restart requirement; no automatic rollback or retry.',
           parameters: parameters({ order: { type: 'array', items: { type: 'string' } }, stamp: { type: 'string' } }),
           async execute(args, exec) {
             closed(args, ['order', 'stamp'], 'order request'); text(args.stamp, 'profile stamp');

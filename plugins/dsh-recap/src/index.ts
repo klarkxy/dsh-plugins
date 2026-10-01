@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { checkpointInjectPayload } from './checkpoints.ts'
 import {
@@ -46,16 +47,15 @@ export async function apply(ctx: Context): Promise<void> {
     throw new Error('dsh-recap requires Host storageDomain, sessions, and llm')
   }
   const domain = await host.storageDomain.open(recapDomain)
+  const sessionOf = (sessionId: string) => host.sessions.get(SessionId(sessionId)) ?? host.sessions.get(sessionId)
   const service = new RecapService({
     store: domainStore(domain),
-    readEvents: sessionId => {
-      const session = host.sessions.get(SessionId(sessionId)) ?? host.sessions.get(sessionId)
-      return session?.snapshotEvents().map(toLogEvent)
-    },
+    readEvents: sessionId => sessionOf(sessionId)?.snapshotEvents().map(toLogEvent),
     readContract: sessionId => {
       const mood = ctx.get('aiMood') as MoodContractApi | undefined
       return mood?.getContract?.(sessionId)
     },
+    isSubagentSession: sessionId => isSubagentSession(sessionOf(sessionId)),
     llm: host.llm,
     host,
     createInjectMessage: payload => createPluginUserMessage(payload),

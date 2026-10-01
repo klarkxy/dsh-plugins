@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { isAbsolute } from 'node:path';
+import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts';
 import { parseConfig } from './config.js';
 import { assess, hardRisk } from './policy.js';
 import { assessApproval } from './approval-review.js';
@@ -62,7 +63,7 @@ export function apply(ctx, raw = {}) {
     const info = includeAuthority ? authority(session) : {};
     const call = { tool: exec.name, args: exec.arguments, callId: String(exec.callId), session, agent: exec.agent,
       cwd: session?.header?.cwd, sandbox, signal: exec.signal,
-      subagent: Boolean(session?.header?.parentSession) || session?.header?.origin === 'subagent',
+      subagent: isSubagentSession(session),
       nested: exec.parent !== undefined, ...info };
     if (isNativeEscalation(call) || (configFor(exec).approvalReview && ['write', 'edit', 'pwsh', 'bash'].includes(call.tool) &&
         ['workspace-write', 'danger-full-access'].includes(call.args?.sandbox_permissions))) {

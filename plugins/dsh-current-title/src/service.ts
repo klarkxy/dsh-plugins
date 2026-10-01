@@ -1,4 +1,5 @@
 import type { RpcResult } from '@klarkxy/dsh-plugin-kit/contracts'
+import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import type { GenerateConfig, TitleSettings, TitleSnapshot, TitleStatus, TitleSupport } from './contracts.ts'
 import { PROVIDER_ID, defaultGenerateConfig } from './contracts.ts'
@@ -193,6 +194,14 @@ export class CurrentTitleService {
     try {
       const combined = AbortSignal.any([request.signal, controller.signal])
       const session = this.options.sessions?.get(request.session.id)
+      // The host writes a free deterministic fallback title before it consults a
+      // provider, and this provider contract has no "decline" result. Declining is
+      // therefore the only way to keep delegated child threads off the model: their
+      // dispatch prompt arrives as the child's own user message, so `source.kind`
+      // cannot exclude them. The host logs the rejection and keeps the fallback.
+      if (isSubagentSession(session)) {
+        throw Object.assign(new Error('dsh-current-title: delegated child thread keeps the host fallback title'), { code: 'subagent-session' })
+      }
       const messages = collectHumanMessages(
         request.messages.map(message => ({
           type: 'user/message',

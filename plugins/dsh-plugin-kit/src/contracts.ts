@@ -196,6 +196,36 @@ export interface MemoryService {
   recall(query: MemoryQuery): Promise<MemoryRecord[]>
 }
 
+/**
+ * The session creation metadata the host snapshots when it creates a delegated child
+ * thread. Mirrors `CreateAgentOptions.meta` in `@deepseek-ai/dsh-agent`; it is durable
+ * session data, so it survives a restart and needs no ancestry walk.
+ */
+export interface SubagentSessionLike {
+  readonly header?: {
+    readonly parentSession?: unknown
+    readonly origin?: unknown
+    readonly delegationDepth?: unknown
+  }
+}
+
+/**
+ * True when `session` is a delegated child thread rather than a human-driven top-level
+ * conversation.
+ *
+ * A message's `source.kind === 'user'` cannot answer this: a lead agent's dispatch prompt
+ * is delivered as the child's own user message, so delegated work is indistinguishable
+ * from a person typing once you only look at the message. Plugins use this to keep
+ * automatic writes and derived model calls on top-level sessions.
+ */
+export function isSubagentSession(session: unknown): boolean {
+  const header = (session as SubagentSessionLike | null | undefined)?.header
+  if (!header || typeof header !== 'object') return false
+  return Boolean(header.parentSession)
+    || header.origin === 'subagent'
+    || Number(header.delegationDepth ?? 0) > 0
+}
+
 /** Project keys come only from the host-validated session directory, never client input. */
 export function projectIdFromCwd(cwd: string | undefined): string | undefined {
   if (typeof cwd !== 'string') return undefined

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "DSH Docs",
-    "description": "Read the official DSH docs in the Plugins page; Creator mode searches docs and checks plugin npm metadata with native tools."
+    "description": "Read official DSH docs in the Plugins page; Creator mode searches docs and plugin npm metadata with native tools."
   }
 }

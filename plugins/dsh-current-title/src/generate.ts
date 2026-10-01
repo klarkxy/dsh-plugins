@@ -58,7 +58,7 @@ export async function generateCurrentTitle(options: {
   )
   if (selected.length === 0) throw new Error('dsh-current-title: at least one source message is required')
   const route = resolveFeatureModel(options.host, titleModelRoute(options.model), options.sessionId)
-  if (!route) throw new Error('dsh-current-title: 请先在插件页选择模型，或设置宿主默认对话模型。')
+  if (!route) throw new Error('dsh-current-title: 请在插件页选择模型，或设置宿主默认对话模型。')
   // Titles never think: reasoning effort is never forwarded (matching the
   // bundled dsh-session-title-llm policy), so a thinking model cannot burn the
   // small token cap on hidden reasoning and leave an empty reply.

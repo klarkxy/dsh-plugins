@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import { modelMenuOverride } from '@klarkxy/dsh-plugin-kit/model-menu'
 import type {
   DreamPlan, InjectedMemoryMessage, KnowledgeScope, MemoryMutationOptions, MemoryPersistedState,
@@ -278,6 +279,10 @@ export class MemoryRuntime implements MemoryService {
   /** Bounded human-only observation, independent of editor services and idle consolidation. */
   async observeSession(sessionId: string, session: unknown, signal: AbortSignal): Promise<void> {
     if (this.disposed || !this.live.settings.dreamIdleEnabled || signal.aborted || !sessionId || sessionId.length > 200) return
+    // A lead agent's dispatch prompt reaches the child as its own user message, so
+    // `humanObservations` cannot tell the two apart. Delegated work must not be recorded
+    // as something the person said.
+    if (isSubagentSession(session)) return
     const previous = this.observationJobs.get(sessionId)
     if (previous) {
       await previous.promise.catch(() => {})

@@ -16,11 +16,13 @@ const modelRouteSchema = z.object({
 export const settingsSchema = z.object({
   revision: z.number().int().nonnegative(),
   model: modelRouteSchema,
+  // Rows written before the flag existed read as the default: reject, do not commit.
+  allowFallback: z.boolean().default(false),
 }).strict()
 
 export const updateSettingsSchema = z.object({
   expectedRevision: z.number().int().nonnegative(),
-  settings: z.object({ model: z.unknown() }).strict(),
+  settings: z.object({ model: z.unknown(), allowFallback: z.unknown().optional() }).strict(),
 }).strict()
 
 export const gitCommitDomain = defineDomain({
@@ -34,7 +36,11 @@ export const gitCommitDomain = defineDomain({
 export function parseSettings(value: unknown): GitCommitSettings {
   const parsed = settingsSchema.safeParse(value)
   if (!parsed.success) return defaultSettings()
-  return { revision: parsed.data.revision, model: normalizeModelRoute(parsed.data.model) }
+  return {
+    revision: parsed.data.revision,
+    model: normalizeModelRoute(parsed.data.model),
+    allowFallback: parsed.data.allowFallback,
+  }
 }
 
 export type { GitCommitSettings }

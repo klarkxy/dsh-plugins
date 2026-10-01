@@ -108,7 +108,7 @@ type Failure = { kind: 'credential' | 'network' | 'request'; text: string }
 /** Credential absence and transport failure read differently from a plain bad request. */
 function failureOf(code: string, message: string, t: Translate = translator()): Failure {
   if (code === 'token-missing') {
-    return { kind: 'credential', text: t('未配置知乎 Access Secret 或凭证不可用，请到「设置」页完成配置。', 'Zhihu Access Secret is missing or unavailable. Set it on the Settings tab.') }
+    return { kind: 'credential', text: t('未配置知乎 Access Secret 或凭证不可用，请到「设置」页配置。', 'Zhihu Access Secret is missing or unavailable. Set it on the Settings tab.') }
   }
   return { kind: 'request', text: t(`请求失败：${message}`, `Request failed: ${message}`) }
 }
@@ -292,7 +292,7 @@ function OutcomeView(props: { outcome: SearchOutcome; stale: boolean }): ReactNo
   const { outcome, stale } = props
   const t = useT()
   const staleBanner = stale ? <div className="dsh-ui-banner" role="status">
-    {t('查询已变化，以下内容对应旧查询，请重新搜索。', 'The query changed; these results are for the previous query. Search again.')}
+    {t('查询已变化，结果对应旧查询，请重新搜索。', 'The query changed; results are from the previous query. Search again.')}
   </div> : null
   let body: ReactNode = null
   let summary = ''
@@ -426,15 +426,15 @@ function useAlive() {
 export function CapabilitiesNote(props: { defaultOpen?: boolean }): ReactNode {
   const t = useT()
   return (
-    <ZhihuDetails title={t('可用能力', 'What this plugin does')} defaultOpen={props.defaultOpen} testId="zhihu-capabilities">
-      <li>{t('测试：站内搜索、全网搜索、热榜、直答、知识库检索，以及问题与创作查询。', 'Test: Zhihu search, web search, trending, direct answers, knowledge base search, and question/creator queries.')}</li>
+    <ZhihuDetails title={t('可用能力', 'Capabilities')} defaultOpen={props.defaultOpen} testId="zhihu-capabilities">
+      <li>{t('测试：站内搜索、全网搜索、热榜、直答、知识库检索与问题创作查询。', 'Test: Zhihu search, web search, trending, direct answers, knowledge base search, question and creator queries.')}</li>
       <li>{t('问题与创作：问题推荐、回答摘要、本人已发布内容及评论、账号与单篇创作数据。', 'Questions and creator: question recommendations, answer summaries, your published content and comments, account and per-post stats.')}</li>
-      <li>{t('统计：本地记录的每日调用次数、失败次数与结果条数。', 'Stats: daily calls, failures and result counts recorded locally.')}</li>
+      <li>{t('统计：本地记录的每日调用、失败与结果条数。', 'Stats: daily calls, failures and result counts recorded locally.')}</li>
       <li>{t('官方用量：知乎返回的官方剩余额度。', 'Official quota: the remaining quota Zhihu reports.')}</li>
-      <li>{t('知识库：读取列表和上传参考资料，文件进入知乎云端。', 'Knowledge base: list bases and upload references; files go to Zhihu cloud.')}</li>
+      <li>{t('知识库：读取列表与上传参考资料，文件进入知乎云端。', 'Knowledge base: list bases and upload references; files go to Zhihu cloud.')}</li>
       <li>{t('全部能力共用此 Access Secret，不支持 OAuth 身份切换。', 'Every feature shares this Access Secret; OAuth identity switching is not supported.')}</li>
       <li>{t('模型工具需在 Agent 中加载 ', 'For model tools, load ')}<code>@klarkxy/dsh-zhihu/tools</code>{t('，仅配置密钥不会启用工具。', ' in the Agent; a key alone does not enable them.')}</li>
-      <li>{t('请求均需手动触发（官方用量在打开页签时加载），不会自动重试。', 'Requests run only when you trigger them (official quota loads when its tab opens) and are never retried automatically.')}</li>
+      <li>{t('请求手动触发（官方用量在打开页签时加载），不会自动重试。', 'Requests run only when you trigger them (official quota loads when its tab opens) and are never retried automatically.')}</li>
     </ZhihuDetails>
   )
 }
@@ -600,7 +600,7 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
           : <p className="dsh-ui-error" role="alert">
           {draftFailure === 'blank'
             ? t('密钥不能只包含空白字符。', 'The key cannot be only whitespace.')
-            : t('密钥含有非法字符（应为可打印 ASCII，且不是 ENV 赋值行）。', 'The key has invalid characters (use printable ASCII, not an ENV assignment line).')}
+            : t('密钥含非法字符（应为可打印 ASCII，且不是 ENV 赋值行）。', 'The key has invalid characters (use printable ASCII, not an ENV assignment line).')}
         </p>}
       </div>
       {failure !== undefined ? <p className="dsh-ui-error" role="alert">
@@ -954,7 +954,7 @@ function UsageSection(props: { rpc: RpcCaller; Button?: HostButton }): ReactNode
   return (
     <section className="dsh-ui-stack" data-testid="zhihu-usage" aria-label={sectionLabel}>
       <p className="dsh-ui-help">
-        {t('本地记录的调用次数，不是知乎官方额度或费用。', 'Calls recorded locally; not Zhihu official quota or billing.')}
+        {t('本地调用计数，非知乎官方额度或费用。', 'Calls recorded locally; not Zhihu official quota or billing.')}
       </p>
       <div className="dsh-ui-actions">
         <ZhihuButton host={props.Button} onClick={() => void load()}>{t('刷新统计', 'Refresh')}</ZhihuButton>
@@ -1149,7 +1149,7 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
   return (
     <section className="dsh-ui-stack" data-testid="zhihu-knowledge" aria-label={t('知乎知识库', 'Zhihu knowledge base')}>
       <p className="dsh-ui-help">
-        {t('上传参考资料供搭档检索；文件会进入知乎云端，请勿上传未发表手稿。', 'Upload references for retrieval. Files go to Zhihu cloud, so avoid unpublished drafts.')}
+        {t('上传参考资料供检索；文件进入知乎云端，勿上传未发表手稿。', 'Upload references for retrieval. Files go to Zhihu cloud, so avoid unpublished drafts.')}
         {' '}
         <ExternalLink url={KB_MANAGE_URL}>{t('管理知识库', 'Manage knowledge bases')}</ExternalLink>
       </p>
@@ -1227,8 +1227,8 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
       </div> : null}
       {list.status === 'ready' && file ? <div className="dsh-ui-banner">
         {t(
-          `确认将「${file.name}」上传到${baseId ? '所选知识库' : '默认知识库'}？文件会进入知乎云端。`,
-          `Upload "${file.name}" to the ${baseId ? 'selected' : 'default'} knowledge base? The file goes to Zhihu cloud.`,
+          `将「${file.name}」上传到${baseId ? '所选知识库' : '默认知识库'}？文件进入知乎云端。`,
+          `Upload "${file.name}" to the ${baseId ? 'selected' : 'default'} knowledge base? It goes to Zhihu cloud.`,
         )}
       </div> : null}
       {list.status === 'ready' ? <div className="dsh-ui-actions">
@@ -1410,7 +1410,7 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
   const tablist = <SegmentedTabs
     value={tab}
     onChange={onTabChange}
-    label={t('知乎资料分区', 'Zhihu sections')}
+    label={t('知乎分区', 'Zhihu sections')}
     className="zhihu-tabs"
     items={[firstTab, ...restTabs]} />
   const panel = (key: Tab, content: ReactNode) => visited.includes(key) || key === tab
