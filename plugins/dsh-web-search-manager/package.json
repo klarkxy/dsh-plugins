@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-web-search-manager",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Web Search: manage web search providers and public-page fetching from one settings page.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -148,6 +148,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "b7f8dbf516ec9c16ffe95c43858689ad9e4925cd040c97a876400edd0ceb8209"
+    "contentHash": "cc577c670c8fe0eb96591fb72fc2cbbbb9c19642214aaf547917bb038a72552c"
   }
 }

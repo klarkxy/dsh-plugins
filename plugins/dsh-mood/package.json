@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-mood",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Requirements: the current agent records, reads, and updates this task's requirements, with no extra model calls.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -102,6 +102,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "8c60e371b6430509d20b1abe70668cba24afa3e9926ba123cbe661b526b201fa"
+    "contentHash": "e484b2ae31e7a180efc1ec853ba9e6bdc6aaf4702b71aad659557595007cdde9"
   }
 }
