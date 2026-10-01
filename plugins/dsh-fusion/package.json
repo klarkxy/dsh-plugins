@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-fusion",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Sidekick: persistent Lead–Sidekick collaboration. Delegate bounded tasks, then accept or send back exact results.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -163,6 +163,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "cfa5067b0a10332ab59bf158bb16c95cb676aa33a1d23f38d37f24a4de105e94"
+    "contentHash": "69066baff4c309b5a0f34984e1c91c660c65f1307754b51c9efda95127241e75"
   }
 }

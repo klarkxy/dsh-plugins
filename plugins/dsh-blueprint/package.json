@@ -43,10 +43,18 @@
     "@deepseek-ai/dsh-sandbox": ">=0.1.7-rc.2"
   },
   "peerDependenciesMeta": {
-    "@deepseek-ai/dsh-app-boot": { "optional": true },
-    "@deepseek-ai/dsh-atomic-write": { "optional": true },
-    "@deepseek-ai/dsh-plugin-manager": { "optional": true },
-    "@deepseek-ai/dsh-sandbox": { "optional": true }
+    "@deepseek-ai/dsh-app-boot": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-atomic-write": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-plugin-manager": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-sandbox": {
+      "optional": true
+    }
   },
   "license": "MIT",
   "author": "klarkxy",
@@ -77,6 +85,6 @@
     "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.2"
   },
   "dshRelease": {
-    "contentHash": "381890dc51041dea7023633c58f0a0f66abd636d2191acea32cdd7e354ed8263"
+    "contentHash": "4e6805288a2c3a317d838d2e1d5247219fd3395990c24adc03be7748d0c87b56"
   }
 }

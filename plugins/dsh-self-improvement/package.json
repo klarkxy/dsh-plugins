@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-self-improvement",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Experience Learning: learn conditional methods from outcome evidence, with optional export as skills.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -120,6 +120,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "16866bb4c2cb4ca1458ff707644944a85d203007449705fe29d069b5ddc63e29"
+    "contentHash": "921203504d97df7de6224a24d82a793d8404aa663f0cb91391344e1ad34ce529"
   }
 }
