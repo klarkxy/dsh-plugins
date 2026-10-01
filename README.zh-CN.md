@@ -47,14 +47,14 @@ dsh plugin --profile web add @klarkxy/dsh-pruner
 
 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) 用中英文列出全部插件，每个插件都有独立详情页：按依赖顺序排好的安装命令、包内 README、运行要求和版本记录。站点同时提供 `plugins.json` 与 `llms.txt`，方便工具和智能体读取。
 
-唯一需要手工维护的数据是 `site/catalog.json`：slug、包名、分类、中英文标题与简介、README 路径和源码仓库。版本、日期、依赖、README 和图标在构建时从 npm 与 jsDelivr 读取，所以在其他仓库发布的版本不用在这里提交就会出现。
+唯一需要手工维护的数据是 `site/catalog.json`：slug、包名、分类、中英文标题与简介、README 路径和源码仓库。版本、日期、依赖、README 和图标在构建时从 npm registry 与经过完整性校验的 npm 发布包读取，所以在其他仓库发布的版本不用在这里提交就会出现。
 
 ```bash
 pnpm site:build   # 读取线上数据，生成 _site/
 pnpm site:test    # 离线渲染测试，也包含在 pnpm check 中
 ```
 
-`.github/workflows/pages.yml` 在 `main` 每次推送、每次 npm 发布流程结束后以及每天一次构建并部署 `_site/`。npm 或 jsDelivr 不可用时构建失败，线上保留上一次部署。仓库的 Pages 来源需设为 GitHub Actions；旧开发索引地址（如 `/areas/*.html`）会跳转到 DSH 官方文档。
+`.github/workflows/pages.yml` 在 `main` 每次推送、每次 npm 发布流程结束后以及每天一次构建并部署 `_site/`。npm 不可用或发布包校验失败时构建失败，线上保留上一次部署。仓库的 Pages 来源需设为 GitHub Actions；旧开发索引地址（如 `/areas/*.html`）会跳转到 DSH 官方文档。
 
 ## 开发
 

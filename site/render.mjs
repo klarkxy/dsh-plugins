@@ -184,7 +184,7 @@ const isSafeUrl = (url) => /^(https?:|mailto:|#)/i.test(url) || !/^[^/?#]*:/.tes
 /**
  * ctx: {
  *   repository: "https://github.com/o/r", directory: "packages/x", readmePath: "docs/README.zh-CN.md",
- *   cdnBase: "https://cdn.jsdelivr.net/npm/pkg@1.0.0/",
+ *   assetPages: { [packagePath]: href },
  *   readmePages: { [repoPath]: href }, packagePages: { [npmName]: href }
  * }
  * Returns { html, toc: [{ id, text }] }.
@@ -200,6 +200,7 @@ export function renderReadme(markdown, ctx) {
     return { path: decodeURIComponent(url.pathname.slice(1)), hash: url.hash };
   };
   const readmePage = (path) => ctx.readmePages?.[path];
+  const assetPage = (path) => (!dir || path.startsWith(dir)) ? ctx.assetPages?.[path.slice(dir.length)] : undefined;
 
   const mapLink = (href) => {
     if (!href) return null;
@@ -218,6 +219,8 @@ export function renderReadme(markdown, ctx) {
     const { path, hash } = toRepoPath(href);
     const page = readmePage(path);
     if (page) return page + hash;
+    const asset = assetPage(path);
+    if (asset) return asset + hash;
     return `${ctx.repository}/blob/HEAD/${path}${hash}`;
   };
 
@@ -226,7 +229,8 @@ export function renderReadme(markdown, ctx) {
     if (/^https:/i.test(src)) return src;
     if (/^[^/?#]*:/.test(src)) return null;
     const { path } = toRepoPath(src);
-    if (!dir || path.startsWith(dir)) return ctx.cdnBase + path.slice(dir.length);
+    const asset = assetPage(path);
+    if (asset) return asset;
     return `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${path}`;
   };
 
@@ -333,7 +337,6 @@ export function derive(catalog, data) {
       commands: install.map((n) => `dsh plugin --profile web add ${n}`),
       requires: { dsh: d.manifest.engines?.dsh ?? peerDsh(d.manifest), node: d.manifest.engines?.node },
       webUi: Boolean(d.manifest.dsh?.client),
-      cdnBase: `https://cdn.jsdelivr.net/npm/${p.package}@${d.version}/`,
     };
   });
 }
@@ -351,6 +354,14 @@ function monogram(plugin) {
 const MARK = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="2" y="2" width="28" height="28" rx="8" fill="#1d3fbf"/><path d="M11 9v5M21 9v5M8 14h16v3a8 8 0 0 1-16 0zM16 25v4" stroke="#fff" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>\n`;
 
 const langPrefix = (lang) => (lang === "en" ? "en/" : "");
+
+function assetFile(slug, path) {
+  if (/[\\\u0000-\u001f]/.test(path) || path.split("/").some(part => !part || part === "." || part === "..")) {
+    throw new Error(`Unsafe package asset path: ${path}`);
+  }
+  return `assets/packages/${slug}/${path}`;
+}
+const assetUrl = (slug, path) => assetFile(slug, path).split("/").map(encodeURIComponent).join("/");
 
 function head({ lang, title, description, root, path, altPath, catalog, assetVersion }) {
   const t = T[lang];
@@ -518,12 +529,13 @@ function detailPage(ctx, plugin, lang) {
   const readmePages = {};
   for (const l of LANGS) readmePages[`${dir}${plugin.readme[l]}`] = pageFor(plugin, l);
   const packagePages = Object.fromEntries(plugins.map((p) => [p.package, pageFor(p)]));
+  const assetPages = Object.fromEntries(Object.keys(npm.assets ?? {}).map(file => [file, root + assetUrl(plugin.slug, file)]));
   const rendered = readme
     ? renderReadme(readme.text, {
         repository: plugin.repository,
         directory: plugin.directory,
         readmePath: readme.path,
-        cdnBase: plugin.cdnBase,
+        assetPages,
         readmePages,
         packagePages,
       })
@@ -533,7 +545,7 @@ function detailPage(ctx, plugin, lang) {
   const list = (items) => items.map((p) => `<a href="${pageFor(p)}">${esc(p.title[lang])}</a>`).join("、");
   const license =
     npm.manifest.license === "SEE LICENSE IN LICENSE" && npm.files.includes("/LICENSE")
-      ? `<a href="${plugin.cdnBase}LICENSE">${t.licenseFile}</a>`
+      ? `<a href="${assetPages.LICENSE ?? `${plugin.repository}/blob/HEAD/${dir}LICENSE`}">${t.licenseFile}</a>`
       : esc(npm.manifest.license ?? "—");
   const facts = [
     [t.version, `<span class="ver">${esc(npm.version)}</span>`],
@@ -710,7 +722,10 @@ export function renderSite(catalog, data, { generatedAt, assetVersion = "0" }) {
     out.set(`${langPrefix(lang)}index.html`, homePage(ctx, lang));
     for (const p of plugins) out.set(`${langPrefix(lang)}plugins/${p.slug}/index.html`, detailPage(ctx, p, lang));
   }
-  for (const p of plugins) out.set(`assets/icons/${p.slug}.svg`, p.npm.icon ?? monogram(p));
+  for (const p of plugins) {
+    out.set(`assets/icons/${p.slug}.svg`, p.npm.icon ?? monogram(p));
+    for (const [path, base64] of Object.entries(p.npm.assets ?? {})) out.set(assetFile(p.slug, path), Buffer.from(base64, "base64"));
+  }
   out.set("assets/mark.svg", MARK);
   out.set("404.html", notFoundPage(ctx));
   out.set("plugins.json", pluginsJson(ctx));

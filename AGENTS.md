@@ -10,7 +10,8 @@
 | --- | --- |
 | `site/catalog.json` | 唯一手工维护的数据 |
 | `site/render.mjs` | 纯渲染：catalog + npm 数据 → 文件内容，不做 I/O |
-| `site/build.mjs` | 从 npm registry 和 jsDelivr 拉数据，写入 `_site/` |
+| `site/build.mjs` | 从 npm registry 拉数据，校验发布包并写入 `_site/` |
+| `site/npm.mjs` | 校验并在内存中读取 npm 发布包，不落盘解包 |
 | `site/assets/` | 样式与脚本；脚本只做渐进增强，页面无 JS 也要可用 |
 | `site/site.test.mjs` | 离线测试，包含在 `pnpm check` |
 

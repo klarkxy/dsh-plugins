@@ -11,7 +11,7 @@ const ctx = {
   repository: "https://github.com/klarkxy/dsh-editor",
   directory: "packages/dsh-memory",
   readmePath: "README.md",
-  cdnBase: "https://cdn.jsdelivr.net/npm/@klarkxy/dsh-memory@1.0.0/",
+  assetPages: { "docs/shot.png": "../../assets/packages/memory/docs/shot.png", "docs/logo.png": "../../assets/packages/memory/docs/logo.png" },
   readmePages: { "packages/dsh-memory/docs/README.zh-CN.md": "../../plugins/memory/", "packages/dsh-memory/README.md": "./" },
   packagePages: { "@klarkxy/dsh-self-improvement": "../self-improvement/" },
 };
@@ -40,7 +40,7 @@ test("README rendering drops the title and language switch, and rewrites links",
   assert.doesNotMatch(html, /<h1|简体中文/);
   assert.match(html, /href="\.\.\/self-improvement\/"/);
   assert.match(html, /href="https:\/\/github\.com\/klarkxy\/dsh-editor\/blob\/HEAD\/docs\/design\.md#limits"/);
-  assert.match(html, /src="https:\/\/cdn\.jsdelivr\.net\/npm\/@klarkxy\/dsh-memory@1\.0\.0\/docs\/shot\.png"/);
+  assert.match(html, /src="\.\.\/\.\.\/assets\/packages\/memory\/docs\/shot\.png"/);
   assert.match(html, /src="https:\/\/raw\.githubusercontent\.com\/klarkxy\/dsh-editor\/HEAD\/assets\/x\.png"/);
   assert.match(html, /<div class="table-wrap"><table>/);
   assert.deepEqual(toc.map((h) => h.id), ["install", "install-1", "use-it"]);
@@ -62,7 +62,7 @@ test("README rendering never passes raw HTML or unsafe URLs through", () => {
     ctx,
   );
   assert.doesNotMatch(html, /<script|onerror|onclick|javascript:|data:image/);
-  assert.match(html, /<img src="https:\/\/cdn\.jsdelivr\.net\/npm\/@klarkxy\/dsh-memory@1\.0\.0\/docs\/logo\.png" alt="Logo"/);
+  assert.match(html, /<img src="\.\.\/\.\.\/assets\/packages\/memory\/docs\/logo\.png" alt="Logo"/);
   assert.match(html, /&lt;script&gt;ok&lt;\/script&gt;/);
 });
 
@@ -124,4 +124,25 @@ test("site has every page, install order follows dependencies, and internal link
     }
   }
   assert.deepEqual(missing, []);
+});
+
+test("both languages serve package images and licenses from relative local assets", () => {
+  const data = fixture();
+  const item = catalog.plugins.find(plugin => plugin.slug === "memory");
+  const pkg = data[item.package];
+  pkg.assets = { "docs/a b.png": Buffer.from([0, 255, 127]).toString("base64"), LICENSE: Buffer.from("Published license").toString("base64") };
+  pkg.readme.en = { path: "README.md", text: "# Memory\n\n## Usage\n\n![Example](docs/a%20b.png)\n\n[License](LICENSE#terms)" };
+  const options = { generatedAt: "2026-10-01T00:00:00.000Z" };
+  const files = renderSite(catalog, data, options);
+  for (const [lang, root] of [["", "../../"], ["en/", "../../../"]]) {
+    const html = files.get(`${lang}plugins/memory/index.html`);
+    assert.ok(html.includes(`src="${root}assets/packages/memory/docs/a%20b.png"`));
+    assert.ok(html.includes(`href="${root}assets/packages/memory/LICENSE#terms"`));
+    assert.ok(html.includes(`href="${root}assets/packages/memory/LICENSE"`));
+    assert.doesNotMatch(html, /jsdelivr/);
+  }
+  assert.deepEqual(files.get("assets/packages/memory/docs/a b.png"), Buffer.from([0, 255, 127]));
+  assert.equal(files.get("assets/packages/memory/LICENSE").toString(), "Published license");
+  pkg.assets["../escape.png"] = "AA==";
+  assert.throws(() => renderSite(catalog, data, options), /Unsafe package asset path/);
 });

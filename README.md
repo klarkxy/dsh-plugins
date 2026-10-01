@@ -47,14 +47,14 @@ Creator mode uses `dsh_docs_search`/`dsh_docs_fetch` from `dsh-dev-index` to rea
 
 [https://klarkxy.github.io/dsh-plugins/](https://klarkxy.github.io/dsh-plugins/) lists every plugin in Chinese and English. Each plugin gets a detail page with install commands in dependency order, the package README, requirements, and version history; the site also publishes `plugins.json` and `llms.txt` for tools and agents.
 
-`site/catalog.json` is the only hand-maintained data: slug, package, category, titles and summaries, README paths, and source repository. Versions, dates, dependencies, READMEs, and icons come from npm and jsDelivr at build time, so a release from another repository shows up without a commit here.
+`site/catalog.json` is the only hand-maintained data: slug, package, category, titles and summaries, README paths, and source repository. Versions, dates, dependencies, READMEs, and icons come from the npm registry and integrity-checked npm package archives at build time, so a release from another repository shows up without a commit here.
 
 ```bash
 pnpm site:build   # fetch live data and write _site/
 pnpm site:test    # offline rendering tests, also part of pnpm check
 ```
 
-`.github/workflows/pages.yml` builds and deploys `_site/` on every `main` push, after each npm publish run, and once a day. When npm or jsDelivr cannot be reached the build fails and the previous deployment stays online. Pages → Source must be GitHub Actions, and old development-index URLs such as `/areas/*.html` redirect to the official DSH documentation.
+`.github/workflows/pages.yml` builds and deploys `_site/` on every `main` push, after each npm publish run, and once a day. When npm cannot be reached or a package archive fails verification the build fails and the previous deployment stays online. Pages → Source must be GitHub Actions, and old development-index URLs such as `/areas/*.html` redirect to the official DSH documentation.
 
 ## Development
 
