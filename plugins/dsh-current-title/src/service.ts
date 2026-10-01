@@ -27,6 +27,8 @@ export class CurrentTitleService {
   private claim?: OwnershipClaim
   private nativeSlot?: ReturnType<typeof createNativeTitleSlot>
   private generation = 0
+  private settingsPending: Promise<void> = Promise.resolve()
+  private disposed = false
   private readonly inFlight = new Map<string, AbortController>()
   readonly support: TitleSupport
 
@@ -74,9 +76,11 @@ export class CurrentTitleService {
   }
 
   async dispose(): Promise<void> {
+    this.disposed = true
     this.generation += 1
     for (const controller of this.inFlight.values()) controller.abort(new Error('current-title disabled'))
     this.inFlight.clear()
+    await this.settingsPending
     const snapshot = this.nativeSlot?.displacement
     const outcome = await releaseTitleSlot(this.nativeSlot ?? { owner: () => undefined, occupy: async () => () => {} }, this.claim)
     if (outcome === 'released') await restoreOwnDisplacement(this.options.loader, snapshot)
@@ -112,25 +116,31 @@ export class CurrentTitleService {
     cadence?: unknown
     expectedRevision: number
   }): Promise<TitleSettings> {
-    if (this.settings.revision !== patch.expectedRevision) {
-      throw Object.assign(new Error('current-title settings changed'), { code: 'revision' })
-    }
-    const previous = this.settings
-    const next: TitleSettings = {
-      revision: this.settings.revision + 1,
-      ...settingsPatch(this.settings, patch),
-    }
-    if (this.options.store) await this.options.store.save(next)
-    this.settings = next
-    this.config = { ...this.config, locale: 'auto' }
-    if (next.cadence !== previous.cadence) await this.reclaimWithCadence()
-    return {
-      revision: next.revision,
-      locale: next.locale,
-      prompt: next.prompt,
-      model: { ...next.model },
-      cadence: next.cadence,
-    }
+    patch = structuredClone(patch)
+    const result = this.settingsPending.then(async () => {
+      if (this.disposed) throw Object.assign(new Error('current-title disabled'), { code: 'unavailable' })
+      if (this.settings.revision !== patch.expectedRevision) {
+        throw Object.assign(new Error('current-title settings changed'), { code: 'revision' })
+      }
+      const previous = this.settings
+      const next: TitleSettings = {
+        revision: this.settings.revision + 1,
+        ...settingsPatch(this.settings, patch),
+      }
+      if (this.options.store) await this.options.store.save(next)
+      this.settings = next
+      this.config = { ...this.config, locale: 'auto' }
+      if (!this.disposed && next.cadence !== previous.cadence) await this.reclaimWithCadence()
+      return {
+        revision: next.revision,
+        locale: next.locale,
+        prompt: next.prompt,
+        model: { ...next.model },
+        cadence: next.cadence,
+      }
+    })
+    this.settingsPending = result.then(() => {}, () => {})
+    return result
   }
 
   /** Re-register the provider so a cadence change takes effect without a restart. */

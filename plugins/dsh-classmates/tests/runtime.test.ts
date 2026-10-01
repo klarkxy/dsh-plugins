@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm';
+import { createUserMessage, ReasoningEffortId, type LlmAdapter } from '@deepseek-ai/dsh-llm';
 import { SessionId } from '@deepseek-ai/dsh-session';
 import { PROVIDER } from '../src/contracts.js';
 import { BindingStore } from '../src/bindings.js';
@@ -88,6 +88,12 @@ async function waitRequest(runtime: Runtime, model: string): Promise<void> {
   }, { timeout: 15_000 });
 }
 
+function barrier() {
+  let release!: () => void;
+  const promise = new Promise<void>(resolve => { release = resolve; });
+  return { promise, release };
+}
+
 describe('BindingStore', () => {
   it('atomically persists, rejects inconsistent overwrite, and claims one child id', async () => {
     const store = new BindingStore(tmp('dsh-classmates-store-'), PROFILE_ID);
@@ -134,6 +140,162 @@ describe('BindingStore', () => {
 });
 
 describe('official runtime P0', () => {
+  it.each(['unload', 'creation'] as const)('cancels a signal-aware model lookup on %s without a claim or new hooks', async cancellation => {
+    const runtime = await boot({ bindingsRoot: tmp('classmates-model-cancel-'), install: false });
+    const { ctx, lead, store, adapter } = runtime;
+    await store.prepare(lead.id, 'alpha', researcher('cancel'), 'task');
+    const dispose = installNative(ctx, store);
+    const creation = new AbortController();
+    const reached = barrier();
+    let lookupSignal: AbortSignal | undefined;
+    const delayed = vi.spyOn(adapter as LlmAdapter, 'resolveModel').mockImplementation((_provider, _model, signal) => {
+      lookupSignal = signal;
+      reached.release();
+      if (signal === undefined) return Promise.reject(new Error('model lookup received no signal'));
+      return new Promise<never>((_resolve, reject) => {
+        if (signal.aborted) reject(signal.reason);
+        else signal.addEventListener('abort', () => { reject(signal.reason); }, { once: true });
+      });
+    });
+    const claim = vi.spyOn(store, 'claim');
+    const rejected = expect(ctx.agentTeams.spawnTeammate(lead, {
+      name: 'alpha', description: 'alpha classmate', prompt: text('task'),
+      context: 'fresh', provider: PROVIDER, signal: creation.signal,
+    })).rejects.toThrow(cancellation === 'unload' ? /native installation was disposed/ : /creation cancelled/);
+    await reached.promise;
+    const registration = vi.spyOn(ctx.events, 'register');
+    try {
+      expect(lookupSignal).toBeDefined();
+      expect(lookupSignal?.aborted).toBe(false);
+      if (cancellation === 'unload') await dispose();
+      else creation.abort(new Error('creation cancelled'));
+      await rejected;
+      expect(lookupSignal?.aborted).toBe(true);
+      expect(claim).not.toHaveBeenCalled();
+      expect(registration).not.toHaveBeenCalled();
+      expect((await store.read(lead.id, 'alpha'))?.childId).toBeUndefined();
+      expect(adapter.requests).toEqual([]);
+    } finally {
+      creation.abort();
+      await dispose();
+      registration.mockRestore();
+      delayed.mockRestore();
+      claim.mockRestore();
+    }
+  });
+
+  it.each(['read', 'model'] as const)('rejects a pending %s after native unload without claiming or installing hooks', async stage => {
+    const runtime = await boot({ bindingsRoot: tmp('classmates-unload-'), install: false });
+    const { ctx, lead, store } = runtime;
+    await store.prepare(lead.id, 'alpha', researcher('unload'), 'task');
+    const dispose = installNative(ctx, store);
+    const gate = barrier();
+    const reached = barrier();
+    const read = store.read.bind(store);
+    const resolveModel = ctx.llm.resolveModelInfo.bind(ctx.llm);
+    const delayed = stage === 'read'
+      ? vi.spyOn(store, 'read').mockImplementation(async (...args) => {
+        reached.release();
+        await gate.promise;
+        return read(...args);
+      })
+      : vi.spyOn(ctx.llm, 'resolveModelInfo').mockImplementation(async (...args) => {
+        reached.release();
+        await gate.promise;
+        return resolveModel(...args);
+      });
+    const claim = vi.spyOn(store, 'claim');
+    const rejected = expect(spawnClassmate(ctx, lead, 'alpha', 'task')).rejects.toThrow(/disposed/);
+    await reached.promise;
+    const registration = vi.spyOn(ctx.events, 'register');
+    try {
+      let disposed = false;
+      const disposal = dispose().then(() => { disposed = true; });
+      await Promise.resolve();
+      expect(disposed).toBe(false);
+      gate.release();
+      await rejected;
+      await disposal;
+      await dispose();
+      expect(claim).not.toHaveBeenCalled();
+      expect(registration).not.toHaveBeenCalled();
+      expect((await read(lead.id, 'alpha'))?.childId).toBeUndefined();
+      expect(runtime.adapter.requests).toEqual([]);
+    } finally {
+      gate.release();
+      registration.mockRestore();
+      delayed.mockRestore();
+      claim.mockRestore();
+      await dispose();
+    }
+  });
+
+  it('drains an admitted claim on unload without installing hooks or running the child', async () => {
+    const runtime = await boot({ bindingsRoot: tmp('classmates-claim-unload-'), install: false });
+    const { ctx, lead, store } = runtime;
+    await store.prepare(lead.id, 'alpha', researcher('unload'), 'task');
+    const dispose = installNative(ctx, store);
+    const gate = barrier();
+    const reached = barrier();
+    const originalClaim = store.claim.bind(store);
+    const claim = vi.spyOn(store, 'claim').mockImplementation(async (...args) => {
+      reached.release();
+      await gate.promise;
+      return originalClaim(...args);
+    });
+    const rejected = expect(spawnClassmate(ctx, lead, 'alpha', 'task')).rejects.toThrow(/disposed/);
+    await reached.promise;
+    const registration = vi.spyOn(ctx.events, 'register');
+    try {
+      let disposed = false;
+      const disposal = dispose().then(() => { disposed = true; });
+      await Promise.resolve();
+      expect(disposed).toBe(false);
+      gate.release();
+      await rejected;
+      await disposal;
+      expect(claim).toHaveBeenCalledTimes(1);
+      expect((await store.read(lead.id, 'alpha'))?.childId).toBe(claim.mock.calls[0]?.[2]);
+      expect(registration).not.toHaveBeenCalled();
+      expect(runtime.adapter.requests).toEqual([]);
+    } finally {
+      gate.release();
+      registration.mockRestore();
+      claim.mockRestore();
+      await dispose();
+    }
+  });
+
+  it('rechecks Team identity after delayed model lookup before claiming', async () => {
+    const runtime = await boot();
+    const { ctx, lead, store } = runtime;
+    await store.prepare(lead.id, 'alpha', researcher('identity'), 'task');
+    const gate = barrier();
+    const reached = barrier();
+    const resolveModel = ctx.llm.resolveModelInfo.bind(ctx.llm);
+    const delayed = vi.spyOn(ctx.llm, 'resolveModelInfo').mockImplementation(async (...args) => {
+      reached.release();
+      await gate.promise;
+      return resolveModel(...args);
+    });
+    const claim = vi.spyOn(store, 'claim');
+    const rejected = expect(spawnClassmate(ctx, lead, 'alpha', 'task')).rejects.toThrow(/not a Team teammate/);
+    await reached.promise;
+    const membership = vi.spyOn(ctx.agentTeams, 'tryMembership').mockReturnValue(undefined);
+    try {
+      gate.release();
+      await rejected;
+      expect(claim).not.toHaveBeenCalled();
+      expect((await store.read(lead.id, 'alpha'))?.childId).toBeUndefined();
+      expect(runtime.adapter.requests).toEqual([]);
+    } finally {
+      gate.release();
+      membership.mockRestore();
+      delayed.mockRestore();
+      claim.mockRestore();
+    }
+  });
+
   it('captures two concurrent first final requests, clears inherited effort, and keeps the lead unchanged', async () => {
     const runtime = await boot();
     const { ctx, lead, adapter, store } = runtime;

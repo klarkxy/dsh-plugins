@@ -268,7 +268,9 @@ export class FusionRuntime {
     }
     if (endpoint === 'settings') return this.service.settings()
     if (endpoint === 'settings.update') {
-      const expectedRevision = integer(row.expectedRevision, 'expected revision')
+      requireFusion(Number.isSafeInteger(row.expectedRevision) && Number(row.expectedRevision) >= 0,
+        'INVALID_INPUT', 'expected revision must be a nonnegative integer.')
+      const expectedRevision = Number(row.expectedRevision)
       return this.service.updateSettings(object(row.model), expectedRevision)
     }
     const taskId = text(row.taskId, 'task id', 200), taskRevision = integer(row.taskRevision, 'task revision')

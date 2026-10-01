@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import type {} from '@deepseek-ai/dsh-agent-preset-registry';
 import type {} from '@deepseek-ai/dsh-experimental-agent-team';
 import { defineTool } from '@deepseek-ai/dsh-tools';
+import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts';
 import { ClassmatesError, currentModelFromOwnRequestHeaders } from './config.js';
 import { CREATOR_PRESET_ID, type ModelBinding } from './contracts.js';
 import { createPresets, SOFTWARE_COLLABORATION_RULES } from './presets.js';
@@ -207,8 +208,7 @@ function currentModelFromCallingAgent(agent: Agent): ModelBinding | null {
 /** The actual composed preset is authoritative; session labels are not. */
 export function isCreatorRoot(ctx: Context, agent: Agent): boolean {
   if (ctx.get('agentPresets')?.composedPreset(agent.ctx) !== CREATOR_PRESET_ID) return false;
-  const header = agent.session.header;
-  if (header.origin === 'subagent' || (header.delegationDepth ?? 0) > 0) return false;
+  if (isSubagentSession(agent.session)) return false;
   return ctx.get('agentTeams')?.tryMembership(agent)?.role !== 'teammate';
 }
 

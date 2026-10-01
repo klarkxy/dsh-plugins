@@ -370,9 +370,11 @@ export class MemoryRuntime implements MemoryService {
     })
   }
 
-  async previewDream(sessionId: string, projectId: string | undefined, trigger: 'manual' | 'idle' = 'manual'): Promise<DreamPlan> {
+  async previewDream(sessionId: string, projectId: string | undefined, trigger: 'manual' | 'idle' = 'manual', hostSignal?: AbortSignal): Promise<DreamPlan> {
+    hostSignal?.throwIfAborted()
     this.requireLlm()
     const prepared = await this.serialize(async () => {
+      hostSignal?.throwIfAborted()
       this.assertOpen()
       if (trigger === 'idle' && !this.live.settings.dreamIdleEnabled) fail(MEMORY_DISABLED, '闲时整理未开启。')
       const generation = this.generation
@@ -403,6 +405,7 @@ export class MemoryRuntime implements MemoryService {
       return { plan, records, snapshot, scope, generation, abort }
     })
     this.requireLlm()
+    const signal = hostSignal ? AbortSignal.any([hostSignal, prepared.abort.signal]) : prepared.abort.signal
     try {
       const result = await this.callModel({
         plugin: MEMORY_PLUGIN,
@@ -418,10 +421,11 @@ export class MemoryRuntime implements MemoryService {
           })),
         }),
         maxTokens: DREAM_MAX_TOKENS,
-        signal: prepared.abort.signal,
+        signal,
         isCurrent: () => this.isDreamCurrent(prepared.plan.id, prepared.generation),
       })
       return this.serialize(async () => {
+        if (signal.aborted) return this.markDream(prepared.plan.id, { status: 'cancelled', error: '已取消。' })
         if (!this.isDreamCurrent(prepared.plan.id, prepared.generation)) {
           return this.markDream(prepared.plan.id, { status: 'stale', error: '已取消或设置已关闭。' })
         }
@@ -433,7 +437,7 @@ export class MemoryRuntime implements MemoryService {
       })
     } catch (error) {
       return this.serialize(async () => {
-        if (isAbortError(error) || !this.isDreamCurrent(prepared.plan.id, prepared.generation)) {
+        if (signal.aborted || isAbortError(error) || !this.isDreamCurrent(prepared.plan.id, prepared.generation)) {
           return this.markDream(prepared.plan.id, { status: 'cancelled', error: '已取消。' })
         }
         return this.markDream(prepared.plan.id, { status: 'failed', error: '整理失败。' })
@@ -443,20 +447,26 @@ export class MemoryRuntime implements MemoryService {
     }
   }
 
-  async runIdleDream(sessionId: string, projectId: string | undefined, trigger: 'manual' | 'idle' = 'idle'): Promise<DreamPlan> {
+  async runIdleDream(sessionId: string, projectId: string | undefined, trigger: 'manual' | 'idle' = 'idle', signal?: AbortSignal): Promise<DreamPlan> {
     try {
-      const plan = await this.previewDream(sessionId, projectId, trigger)
+      const plan = await this.previewDream(sessionId, projectId, trigger, signal)
+      if (signal?.aborted) {
+        await this.markDreamQuietly(plan.id, { status: 'cancelled', error: '已取消。' })
+        return this.currentDream(plan.id) ?? plan
+      }
       if (plan.status !== 'preview' || plan.proposals.length === 0) {
         if (plan.status === 'preview') await this.markDreamQuietly(plan.id, { status: 'noop' })
         await this.stampDreamAttempt()
         return this.currentDream(plan.id) ?? plan
       }
       try {
-        const applied = await this.applyDream(plan.id, plan.revision)
+        const applied = await this.applyDream(plan.id, plan.revision, { signal })
         await this.stampDreamAttempt()
         return applied
       } catch {
-        await this.markDreamQuietly(plan.id, { status: 'failed', error: '自动整理应用失败。' })
+        await this.markDreamQuietly(plan.id, signal?.aborted
+          ? { status: 'cancelled', error: '已取消。' }
+          : { status: 'failed', error: '自动整理应用失败。' })
         await this.stampDreamAttempt()
         return this.currentDream(plan.id) ?? plan
       }
@@ -474,8 +484,9 @@ export class MemoryRuntime implements MemoryService {
     return countDreamMaterial(this.live, this.live.lastAttemptAt)
   }
 
-  async applyDream(planId: string, expectedRevision: number): Promise<DreamPlan> {
+  async applyDream(planId: string, expectedRevision: number, options?: MemoryMutationOptions): Promise<DreamPlan> {
     return this.serialize(async () => {
+      this.assertMutationCurrent(options)
       this.assertOpen()
       if (this.jobs.has(planId)) fail(MEMORY_INVALID, '整理尚未完成，请稍候。')
       const proposed = this.snapshot()

@@ -67,6 +67,7 @@ export class SelfImprovementEngine {
   private readonly extractJobs = new Map<string, number>()
   private seenProjects = new Set<string>()
   private settings: SelfImprovementSettings
+  private settingsPending: Promise<void> = Promise.resolve()
   private readonly now: () => number
 
   constructor(private readonly options: EngineOptions) {
@@ -84,12 +85,19 @@ export class SelfImprovementEngine {
   }
 
   async updateSettings(model: SelfImprovementSettings['model'], expectedRevision: number): Promise<SelfImprovementSettings> {
-    if (!this.options.settings) return this.getSettings()
-    if (expectedRevision !== this.settings.revision) throw new Error('SELF_IMPROVEMENT_STALE')
-    const next: SelfImprovementSettings = { revision: expectedRevision + 1, model: structuredClone(model) }
-    await this.options.settings.put(SETTINGS_KEY, next)
-    this.settings = next
-    return this.getSettings()
+    const detached = structuredClone(model)
+    const result = this.settingsPending.then(async () => {
+      if (!this.active) throw new Error('SELF_IMPROVEMENT_DISABLED')
+      if (!this.options.settings) return this.getSettings()
+      if (expectedRevision !== this.settings.revision) throw new Error('SELF_IMPROVEMENT_STALE')
+      const next: SelfImprovementSettings = { revision: expectedRevision + 1, model: detached }
+      await this.options.settings.put(SETTINGS_KEY, next)
+      this.settings = next
+      if (!this.active) throw new Error('SELF_IMPROVEMENT_DISABLED')
+      return this.getSettings()
+    })
+    this.settingsPending = result.then(() => {}, () => {})
+    return result
   }
 
   getGeneration(): number { return this.generation }
@@ -528,31 +536,39 @@ export class SelfImprovementEngine {
   }
 
   async patchSkill(id: string, expectedRevision: number, patch: (current: SkillRecord) => SkillRecord): Promise<RpcResult<SkillRecord>> {
+    return this.changeSkill(id, expectedRevision, patch)
+  }
+
+  private async changeSkill(
+    id: string,
+    expectedRevision: number,
+    patch: (current: SkillRecord) => SkillRecord,
+    validateSources = false,
+  ): Promise<RpcResult<SkillRecord>> {
     const work = this.beginWork()
     if (!this.isWork(work)) return work
     const { generation, memory } = work
-    const current = this.skillOrError(id)
-    if (!('id' in current)) return current
-    if (current.revision !== expectedRevision) return fail('STALE', '记录已更新，请刷新后重试。')
-    const next = { ...patch(current), revision: current.revision + 1, updatedAt: this.now() }
-    const stored = await this.mutateWhileCurrent(generation, memory, () => this.persist(() => this.options.skills.put(id, next)))
-    if (this.failed(stored)) return stored
-    return { ok: true, value: next }
+    return this.enqueue(async () => {
+      const stale = this.revalidate(generation, memory)
+      if (stale) return stale
+      const current = this.skillOrError(id)
+      if (!('id' in current)) return current
+      if (current.revision !== expectedRevision) return fail('STALE', '记录已更新，请刷新后重试。')
+      if (validateSources) {
+        const staleSources = await this.requireCurrentSkillSources(current, memory, generation)
+        if (staleSources) return staleSources
+      }
+      const next = { ...patch(current), revision: current.revision + 1, updatedAt: this.now() }
+      const stored = await this.mutateWhileCurrent(generation, memory, () => this.persist(() => this.options.skills.put(id, next)))
+      if (this.failed(stored)) return stored
+      return { ok: true, value: next }
+    })
   }
 
   async acceptSkill(id: string, expectedRevision: number): Promise<RpcResult<SkillRecord>> {
-    const work = this.beginWork()
-    if (!this.isWork(work)) return work
-    const { generation, memory } = work
-    const current = this.skillOrError(id)
-    if (!('id' in current)) return current
-    const stale = await this.requireCurrentSkillSources(current, memory, generation)
-    if (stale) return stale
-    const after = this.revalidate(generation, memory)
-    if (after) return after
-    return this.patchSkill(id, expectedRevision, record => ({
+    return this.changeSkill(id, expectedRevision, record => ({
       ...record, status: 'accepted', audit: [...record.audit, { at: this.now(), action: 'accepted' }],
-    }))
+    }), true)
   }
 
   async prepareSkillExport(id: string, expectedRevision: number): Promise<RpcResult<{ filename: string; markdown: string; skill: SkillRecord }>> {

@@ -57,7 +57,8 @@ export class FusionService {
   async updateSettings(model: Record<string, unknown>, expectedRevision: number): Promise<FusionSettings> {
     return this.change(next => {
       requireFusion(next.settings.revision === expectedRevision, 'STALE', 'Fusion settings changed; reload and retry.')
-      const parsed = parseRoute(model)
+      const parsed = model.provider === '' && model.model === '' && model.reasoningEffort === undefined
+        ? defaultModelRoute() : parseRoute(model)
       next.settings = {
         revision: next.settings.revision + 1,
         model: parsed.provider && parsed.model
@@ -66,7 +67,8 @@ export class FusionService {
       }
       return next.settings
     })
-  }  private async persist(next: FusionState): Promise<void> {
+  }
+  private async persist(next: FusionState): Promise<void> {
     next.revision++
     validateState(next)
     try { await this.store.save(clone(next)) }

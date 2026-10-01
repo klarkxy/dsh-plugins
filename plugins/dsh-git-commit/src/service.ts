@@ -70,6 +70,8 @@ export class GitCommitService {
   private readonly preview: (root: string, path: string) => Promise<UntrackedPreview>
   private running: Promise<unknown> | undefined
   private settings: GitCommitSettings
+  private settingsPending: Promise<void> = Promise.resolve()
+  private readonly settingsReady: Promise<void>
   private disposed = false
 
   constructor(deps: GitCommitServiceDeps) {
@@ -78,10 +80,10 @@ export class GitCommitService {
     this.preview = deps.preview ?? untrackedPreview
     this.settings = defaultSettings()
     // The stored row is adopted once it resolves; a failed read keeps the default.
-    void deps.settings?.load().then(
+    this.settingsReady = deps.settings?.load().then(
       loaded => { if (loaded) this.settings = structuredClone(loaded) },
       () => { this.settings = defaultSettings() },
-    )
+    ) ?? Promise.resolve()
   }
 
   /** Apply a freshly loaded settings row; the default stays until a row is read. */
@@ -99,23 +101,31 @@ export class GitCommitService {
   }
 
   async updateSettings(patch: Omit<GitCommitSettings, 'revision'>, expectedRevision: number): Promise<GitCommitSettings> {
-    if (expectedRevision !== this.settings.revision) {
-      throw new CommitRunError('stale', 'dsh-git-commit: settings changed; reload and retry')
-    }
-    const next: GitCommitSettings = {
-      revision: expectedRevision + 1,
-      model: structuredClone(patch.model),
-      allowFallback: normalizeFallback(patch.allowFallback),
-    }
-    await this.deps.settings?.save(next)
-    this.settings = next
-    return this.getSettings()
+    const detached = structuredClone(patch)
+    const result = this.settingsPending.then(async () => {
+      await this.settingsReady
+      if (this.disposed) throw new CommitRunError('disposed', 'dsh-git-commit: plugin disabled')
+      if (expectedRevision !== this.settings.revision) {
+        throw new CommitRunError('stale', 'dsh-git-commit: settings changed; reload and retry')
+      }
+      const next: GitCommitSettings = {
+        revision: expectedRevision + 1,
+        model: detached.model,
+        allowFallback: normalizeFallback(detached.allowFallback),
+      }
+      await this.deps.settings?.save(next)
+      this.settings = next
+      return this.getSettings()
+    })
+    this.settingsPending = result.then(() => {}, () => {})
+    return result
   }
 
   start(): void {}
 
   async dispose(): Promise<void> {
     this.disposed = true
+    await this.settingsPending
     await this.running?.catch(() => {})
   }
 

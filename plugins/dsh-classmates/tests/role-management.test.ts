@@ -216,6 +216,21 @@ it('preserves Creator execution tools and team policy while adding configuration
   expect(denied.isError).toBe(false);
 });
 
+it('denies parentSession-only children at installation and captured tool dispatch', async () => {
+  const { ctx, creator, getBatched, getProfileBatched, dispose } = await boot();
+  const read = creator.ctx.tools.get('classmates_read', creator)!;
+  (creator.session.header as { parentSession?: string }).parentSession = 'parent-creator';
+  expect(Management.isCreatorRoot(ctx, creator)).toBe(false);
+  await expect(read.execute({}, { agent: creator } as never)).rejects.toThrow(/创造模式的主智能体/);
+  expect((await ctx.tools.execute(call('classmates_batch', creator, { changes: [], expected: 3 }))).isError).toBe(true);
+  expect((await ctx.tools.execute(call('classmates_models_batch', creator, { changes: [], expected: 3 }))).isError).toBe(true);
+  dispose();
+  Management.installRoleManagement(ctx, creator);
+  expect(creator.ctx.tools.get('classmates_read', creator)).toBeUndefined();
+  expect(getBatched()).toBeUndefined();
+  expect(getProfileBatched()).toBeUndefined();
+});
+
 it('does not install global configuration tools or an execution guard without a Creator binding', async () => {
   const ctx = new Context();
   contexts.push(ctx);
@@ -313,7 +328,6 @@ it('attaches the calling agent own request route and ignores inherited or option
     model: 'deepseek-chat',
   };
   session.inheritedEventCount = 2;
-  session.header.parentSession = 'parent-creator';
   session.requestHeader = () => ({ config: { provider: 'deepseek-official', model: 'deepseek-chat' } });
   const inherited = [
     requestHeader(0, 'deepseek-official', 'deepseek-chat'),

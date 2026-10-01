@@ -241,14 +241,23 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
   async function call<T>(endpoint: string, payload: unknown = {}): Promise<T> {
     return unwrap(await client.connection.rpc.call(WEB_SEARCH_RPC_CHANNEL, endpoint, payload) as RpcResult<T>)
   }
-  function adopt(next: WebStatus) {
+  function adopt(next: WebStatus, resetDraft = false) {
+    const previous = statusRef.current
+    statusRef.current = next
     setStatus(next)
-    setLimitDraft(limitTexts(next.settings))
-    setInvalid({})
+    setLimitDraft(current => {
+      const incoming = limitTexts(next.settings)
+      if (!current || !previous || resetDraft) return incoming
+      const baseline = limitTexts(previous.settings)
+      return Object.fromEntries(LIMITS.map(([key]) =>
+        [key, current[key] === baseline[key] ? incoming[key] : current[key]],
+      )) as Record<LimitKey, string>
+    })
+    if (resetDraft) setInvalid({})
   }
-  async function load() {
+  async function load(resetDraft = false) {
     const next = await call<WebStatus>('status')
-    adopt(next)
+    adopt(next, resetDraft)
     setLoadError('')
     const refs = next.providers.flatMap(provider => provider.credentialRef ? [provider.credentialRef] : [])
     if (refs.length) {
@@ -393,7 +402,7 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
         settings: { ...editable(current.settings), ...parsed, fetchProvider: 'http', fetchEnabled: current.settings.searchEnabled },
         expectedRevision: current.settings.revision,
       })
-      setStatus(next)
+      adopt(next, true)
       await load()
       setNote(text.saved)
     })

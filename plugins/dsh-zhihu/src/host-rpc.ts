@@ -47,7 +47,12 @@ async function dispatchHostRpc(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const rejection = ctx.connection.requestRejection?.(req)
+  if (typeof ctx.connection.requestRejection !== 'function') {
+    res.writeHead(503)
+    res.end('host authorization policy is unavailable')
+    return
+  }
+  const rejection = ctx.connection.requestRejection(req)
   if (rejection !== undefined) {
     res.writeHead(rejection)
     res.end(rejection === 401 ? 'unauthorized' : 'forbidden')

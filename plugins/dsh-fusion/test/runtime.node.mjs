@@ -39,6 +39,15 @@ function harness({ writing = false, domain = true, scopedAlias = false } = {}) {
 }
 const brief = { title: 'Task', goal: 'Do task', target: { kind: 'create', path: 'scene.md' } }
 describe('Fusion runtime boundaries', () => {
+  it('saves the first model selection and returns to the host default through RPC', async () => {
+    const h = harness(); await h.runtime.start()
+    const first = await h.runtime.rpc('settings.update', { sessionId: 'lead', expectedRevision: 0, model: { provider: 'p', model: 'm' } }, signal())
+    assert.equal(first.revision, 1)
+    const reset = await h.runtime.rpc('settings.update', { sessionId: 'lead', expectedRevision: 1, model: { provider: '', model: '' } }, signal())
+    assert.deepEqual(reset, { revision: 2, model: { provider: '', model: '' } })
+    await assert.rejects(h.runtime.rpc('settings.update', { sessionId: 'lead', expectedRevision: -1, model: { provider: '', model: '' } }, signal()), { code: 'INVALID_INPUT' })
+    await h.runtime.dispose()
+  })
   it('automatically installs existing/new root Leads, but no controls or report on arbitrary children', async () => {
     const h = harness(); await h.runtime.start()
     assert.equal(h.lead.tools.has('fusion_delegate'), true); assert.equal(h.lead.tools.has('fusion_report'), false)

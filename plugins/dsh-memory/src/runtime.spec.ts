@@ -6,6 +6,7 @@ import { dreamSourceVersion } from './dream.ts'
 import { MemoryError } from './errors.ts'
 import { MemoryRuntime } from './service.ts'
 import { createMemoryStore } from './store.ts'
+import { handleMemoryRpc } from './rpc.ts'
 import { MAX_MEMORY_DREAMS, MAX_MEMORY_RECORDS, MAX_MEMORY_TOMBSTONES, memoryStateSchema } from './storage.ts'
 
 function draft(patch: Partial<NewMemoryRecord> = {}): NewMemoryRecord {
@@ -59,6 +60,28 @@ function humanEnter(text: string) {
 }
 
 describe('storage CAS and lifecycle', () => {
+  it('cancels a manual dream RPC and discards a late model result', async () => {
+    const { memory } = runtime({ ai: true })
+    const source = await memory.create(draft())
+    let request: Parameters<typeof kit.callLlmText>[1] | undefined
+    let finish!: (value: Awaited<ReturnType<typeof kit.callLlmText>>) => void
+    vi.spyOn(kit, 'callLlmText').mockImplementation(async (_llm, pending) => {
+      request = pending
+      return new Promise(resolve => { finish = resolve })
+    })
+    const controller = new AbortController()
+    const work = handleMemoryRpc('dream.run', { sessionId: 's1' }, controller.signal, memory,
+      () => ({ header: { cwd: '/work/novel' } }))
+    await vi.waitFor(() => expect(request).toBeDefined())
+    controller.abort()
+    expect(request!.signal.aborted).toBe(true)
+    finish({ text: JSON.stringify({ proposals: [{ title: 'late', content: 'discard', kind: 'preference', sourceIds: [source.id] }] }), provider: 'host', model: 'chat' })
+    await work
+    expect(memory.status().dreams[0]?.status).toBe('cancelled')
+    expect(memory.status().records).toHaveLength(1)
+    expect(memory.status().records[0]?.status).toBe('active')
+    await memory.dispose()
+  })
   it('makes a record visible only after a successful persist', async () => {
     const { memory, store } = runtime({ failAfter: 1 })
     await expect(memory.create(draft())).rejects.toMatchObject({ code: 'MEMORY_SAVE_FAILED' })

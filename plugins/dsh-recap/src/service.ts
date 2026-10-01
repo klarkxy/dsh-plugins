@@ -387,6 +387,7 @@ export class RecapService {
       return { abort }
     })
     if (!started) return
+    const isCurrent = () => this.jobs.get(card.id)?.abort === started.abort && this.isCardCurrent(card, epoch)
     const signal = hostSignal ? AbortSignal.any([hostSignal, started.abort.signal]) : started.abort.signal
     try {
       const request = recapDisplayRequest(facts, card.id)
@@ -400,11 +401,11 @@ export class RecapService {
             maxTokens: DISPLAY_MAX_TOKENS,
             signal,
             sessionId: card.sessionId,
-            isCurrent: () => this.isCardCurrent(card, epoch),
+            isCurrent,
           })
         : undefined
       await this.serialize(async () => {
-        if (!this.isCardCurrent(card, epoch)) return
+        if (!isCurrent()) return
         const current = this.cards.find(row => row.id === card.id)
         if (!current || current.generation !== 'running') return
         const next = result
@@ -424,7 +425,7 @@ export class RecapService {
     } catch {
       try {
         await this.serialize(async () => {
-          if (!this.isCardCurrent(card, epoch)) return
+          if (!isCurrent()) return
           const current = this.cards.find(row => row.id === card.id)
           if (current?.generation !== 'running') return
           const proposed = this.snapshot()
@@ -442,7 +443,7 @@ export class RecapService {
         })
       } catch { /* storageFailed already set; do not mutate past a failed persist */ }
     } finally {
-      this.jobs.delete(card.id)
+      if (this.jobs.get(card.id)?.abort === started.abort) this.jobs.delete(card.id)
     }
   }
 

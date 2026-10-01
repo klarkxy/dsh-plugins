@@ -444,7 +444,7 @@ function MemoryChatPanel({ client, sessionId, locale }: { client: Client; sessio
   }, Boolean(status?.runningDreams?.length), Boolean(sessionId))
 
   /** Resolves true only once the write itself succeeded, so callers can keep drafts on failure. */
-  async function action(run: (sessionId: string) => Promise<void>): Promise<boolean> {
+  async function action(run: (sessionId: string, signal: AbortSignal) => Promise<void>): Promise<boolean> {
     const request = beginMemoryRequest(gate.current, sessionId, workRef.current)
     workRef.current = request.controller
     setBusy(true); setNote(''); setError('')
@@ -453,7 +453,7 @@ function MemoryChatPanel({ client, sessionId, locale }: { client: Client; sessio
       sessionId: request.sessionId, viewSessionId: sessionRef.current,
     })
     try {
-      await run(request.sessionId)
+      await run(request.sessionId, request.signal)
     } catch (cause) {
       if (!still()) return false
       setError(cause instanceof Error ? cause.message : t(locale, '操作失败。', 'Operation failed.'))
@@ -668,7 +668,7 @@ export function organizeBlockedReason(state: { aiAvailable: boolean; running: bo
 function DreamPanel(props: {
   running: boolean
   locale: Locale; busy: boolean; dreams: DreamPlan[]; aiAvailable: boolean
-  action(run: (sessionId: string) => Promise<void>): Promise<boolean>
+  action(run: (sessionId: string, signal: AbortSignal) => Promise<void>): Promise<boolean>
   rpc(endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown>
 }) {
   const locale = props.locale
@@ -680,8 +680,8 @@ function DreamPanel(props: {
     <div className="dsh-ui-actions">
       <Button variant="outline" size="sm" disabled={props.busy || props.running || !props.aiAvailable}
         aria-describedby={organizeBlocked ? hintId : undefined}
-        onClick={() => void props.action(async captured => {
-          await props.rpc('dream.run', { sessionId: captured })
+        onClick={() => void props.action(async (captured, signal) => {
+          await props.rpc('dream.run', { sessionId: captured }, signal)
         })}>{t(locale, '立即整理', 'Organize now')}</Button>
       <span role="status" className="dsh-ui-hint">{props.running ? t(locale, '整理中…', 'Organizing…') : ''}</span>
     </div>

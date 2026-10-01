@@ -76,7 +76,7 @@ export async function handleMemoryRpc(
     if (endpoint === 'dream.run') {
       const sessionId = parseSessionId(payload)
       if (!sessionId) return fail('MEMORY_INVALID', '缺少会话。')
-      return ok(await runtime.runIdleDream(sessionId, projectOf(sessions, sessionId), 'manual'))
+      return ok(await runtime.runIdleDream(sessionId, projectOf(sessions, sessionId), 'manual', signal))
     }
     return fail('MEMORY_INVALID', '未知操作。')
   } catch (error) {

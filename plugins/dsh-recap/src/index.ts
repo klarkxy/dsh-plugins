@@ -65,7 +65,9 @@ export async function apply(ctx: Context): Promise<void> {
   ctx.effect(() => registerHostRpc(host, RECAP_RPC_CHANNEL, (endpoint, payload, signal): Promise<RpcResult> => service.call(endpoint, payload, signal)), 'dsh-recap.rpc')
   ctx.effect(() => {
     const offEvent = listen(ctx, 'session/event', (session: { id: unknown }, event: { seq: number; type: string; time: number; data: unknown }) => {
-      void service.onSessionEvent(String(session.id), toLogEvent(event))
+      // Storage failure is surfaced in status; detached event work must not
+      // produce an unhandled rejection or fail the host's session append.
+      void service.onSessionEvent(String(session.id), toLogEvent(event)).catch(() => {})
     })
     const offStep = listen(ctx, 'agent/pre-step', async (
       payload: { agent: { id: unknown }; messages: Array<{ source?: { kind?: string; plugin?: string } }>; step: number; signal: AbortSignal },

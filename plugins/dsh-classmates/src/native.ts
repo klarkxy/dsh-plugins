@@ -79,8 +79,8 @@ function modelSelection(model: ModelBinding): ModelSelection {
   };
 }
 
-async function validateModel(ctx: Context, model: ModelBinding): Promise<void> {
-  const info = await llmOf(ctx).resolveModelInfo(model.provider, model.id);
+async function validateModel(ctx: Context, model: ModelBinding, signal: AbortSignal): Promise<void> {
+  const info = await llmOf(ctx).resolveModelInfo(model.provider, model.id, signal);
   if (model.reasoningEffort === undefined) return;
   const efforts = info.reasoning?.efforts ?? [];
   if (!efforts.some(effort => effort.id === model.reasoningEffort)) {
@@ -166,18 +166,36 @@ async function attach(
   store: BindingStore,
   agent: Agent,
   assemblies: Map<Agent, () => void>,
+  isActive: () => boolean,
+  signal: AbortSignal,
 ): Promise<void> {
+  if (!isActive()) throw new Error('classmates: native installation was disposed');
   const identity = identifyClassmate(ctx, agent);
   if (identity === undefined) return;
+  const assertLive = (): void => {
+    signal.throwIfAborted();
+    if (!isActive()) throw new Error('classmates: native installation was disposed');
+    if (ctx.agents.get(agent.id) !== agent) {
+      throw new Error(`classmates: agent ${agent.id} is no longer live`);
+    }
+    const current = identifyClassmate(ctx, agent);
+    if (current?.leadId !== identity.leadId || current.name !== identity.name) {
+      throw new Error(`classmates: identity changed for ${agent.id}`);
+    }
+  };
+  assertLive();
   const binding = await store.read(identity.leadId, identity.name);
+  assertLive();
   if (binding === undefined) {
     throw new Error(`classmates: missing binding for ${identity.name}`);
   }
   if (binding.role.model === null) {
     throw new Error(`classmates: binding for ${identity.name} has no model`);
   }
-  await validateModel(ctx, binding.role.model);
+  await validateModel(ctx, binding.role.model, signal);
+  assertLive();
   const claimed = await store.claim(identity.leadId, identity.name, agent.id);
+  assertLive();
   assemble(agent, claimed, assemblies);
 }
 
@@ -222,23 +240,38 @@ function refuseHotInstall(ctx: Context): void {
 }
 
 /** Register the classmates-spawn provider and awaited created assembly. */
-export function installNative(ctx: Context, store: BindingStore): () => void {
+export function installNative(ctx: Context, store: BindingStore): () => Promise<void> {
   teamsOf(ctx);
   refuseHotInstall(ctx);
   const dispose = ctx.effect(() => {
+    let active = true;
+    const lifetime = new AbortController();
+    const pending = new Set<Promise<void>>();
     const assemblies = new Map<Agent, () => void>();
     const disposeProvider = ctx.subagents.registerProvider(new ClassmatesSpawnProvider());
-    const disposeCreated = ctx.on('agent/created', async ({ agent }) => {
-      await attach(ctx, store, agent, assemblies);
+    const disposeCreated = ctx.on('agent/created', async ({ agent, signal }) => {
+      const creationSignal = signal === undefined
+        ? lifetime.signal
+        : AbortSignal.any([signal, lifetime.signal]);
+      const task = attach(ctx, store, agent, assemblies, () => active, creationSignal);
+      pending.add(task);
+      try {
+        await task;
+      } finally {
+        pending.delete(task);
+      }
     });
-    return () => {
+    return async () => {
+      active = false;
+      lifetime.abort(new Error('classmates: native installation was disposed'));
       disposeCreated();
       disposeProvider();
       for (const release of [...assemblies.values()]) release();
       assemblies.clear();
+      // A claim already admitted to the store cannot be cancelled. Drain it
+      // before teardown completes; assertLive prevents any later assembly.
+      await Promise.allSettled([...pending]);
     };
   }, 'classmates.installNative()');
-  return () => {
-    void dispose();
-  };
+  return dispose;
 }

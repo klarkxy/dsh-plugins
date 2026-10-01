@@ -163,6 +163,30 @@ describe('recap service', () => {
     expect(card?.body).not.toContain('不该出现')
   })
 
+  it('keeps a replacement retry current when the cancelled model attempt completes late', async () => {
+    const calls: Array<{ request: LlmTextRequest; resolve: (value: { text: string }) => void }> = []
+    stubModel(request => new Promise(resolve => { calls.push({ request, resolve }) }))
+    const log = longCompleted()
+    const service = new RecapService({ store: memoryStore(), readEvents: () => log,
+      id: () => 'retry-card', llm: unusedLlm, host: hostModel })
+    await settingsOn(service)
+    const first = service.onSessionEvent('s1', log[6]!)
+    await vi.waitFor(() => expect(calls).toHaveLength(1))
+    await service.cancelCard('retry-card', 's1')
+    const retry = service.retryCard('retry-card', 's1')
+    await vi.waitFor(() => expect(calls).toHaveLength(2))
+    calls[0]!.resolve({ text: 'old completion' })
+    await first
+    expect(service.status().cards[0]?.generation).toBe('running')
+    expect(calls[1]!.request.isCurrent?.()).toBe(true)
+    calls[1]!.resolve({ text: 'replacement completion' })
+    await retry
+    expect(service.status().cards[0]?.generation).toBe('idle')
+    expect(service.status().cards[0]?.kind).toBe('generated')
+    expect(service.status().cards[0]?.body).toContain('replacement completion')
+    await service.dispose()
+  })
+
   it('does not inject recap display into agent prompt messages', async () => {
     const log = longCompleted()
     let ids = 0
