@@ -134,6 +134,26 @@
       "directory": "plugins/dsh-mood"
     },
     {
+      "slug": "git-commit",
+      "package": "@klarkxy/dsh-git-commit",
+      "category": "workflow",
+      "kind": "plugin",
+      "title": {
+        "zh": "Git 提交",
+        "en": "Git Commit"
+      },
+      "summary": {
+        "zh": "在对话标题栏提交工作区改动，由模型规划分组并生成提交信息。",
+        "en": "Commit workspace changes from the conversation header, with the model planning the commit groups."
+      },
+      "readme": {
+        "zh": "docs/README.zh-CN.md",
+        "en": "README.md"
+      },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-git-commit"
+    },
+    {
       "slug": "current-title",
       "package": "@klarkxy/dsh-current-title",
       "category": "sessions",
