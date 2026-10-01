@@ -22,6 +22,7 @@ Package names link to npm for plugins maintained in other repositories and to th
 | [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | Experience Learning: learn conditional methods from outcome evidence, with optional skill export. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
 | [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | Web Search: manage web search providers and public-page fetching from one settings page. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
 | [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | Zhihu: Zhihu search, agent tools, knowledge bases, and usage tracking. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
+| [`@klarkxy/dsh-git-commit`](https://www.npmjs.com/package/@klarkxy/dsh-git-commit) | Git Commit: commit workspace changes from the conversation header, with model-planned commit groups. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-git-commit#readme) |
 | [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | Discover, review, and install reusable capabilities. | [Docs](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
 
 ## Unpublished development packages
@@ -29,17 +30,21 @@ Package names link to npm for plugins maintained in other repositories and to th
 | Package | Purpose | Status |
 | --- | --- | --- |
 | [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.md) | Teammate Roles: reusable teammate roles and native Team UI enhancements. | Local alpha; excluded from automatic npm publication and the plugin site. |
+| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: budgeted preflight plus one-shot approval escalation. | npm release candidate; the plugin site catalog lists stable releases only. |
+| [`@klarkxy/dsh-blueprint`](plugins/dsh-blueprint/README.md) | Blueprint: share a plugin set as an exact-version blueprint code. | npm preview release; the plugin site catalog lists stable releases only. |
 
 Migrated from the local `dsh-teammates` directory. See the [migration record](docs/classmates-migration.md).
 
 ## Install
 
-Published plugins install from npm:
+Published plugins install with the DSH plugin manager, which pulls the package from the npm registry:
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-dev-index
 dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
+
+Replace `web` with your profile name, and restart the profile after installing. Each plugin's page on the [plugin site](https://klarkxy.github.io/dsh-plugins/) lists its own install commands in dependency order.
 
 Creator mode uses `dsh_docs_search`/`dsh_docs_fetch` from `dsh-dev-index` to read live [official DSH documentation](https://deepseek-harness.github.io/deepseek-harness/) and verify runtime contracts, and `dsh_plugins_search`/`dsh_plugins_fetch` to check plugin npm metadata before installing anything.
 

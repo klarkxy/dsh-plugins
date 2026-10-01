@@ -22,6 +22,7 @@
 | [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | 经验学习：从结果证据总结带适用条件的做法，可选导出为技能。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
 | [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | 网页搜索：在一个设置页管理搜索服务商和公开页面抓取。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
 | [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | 知乎：知乎搜索、智能体工具、知识库和用量跟踪。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
+| [`@klarkxy/dsh-git-commit`](https://www.npmjs.com/package/@klarkxy/dsh-git-commit) | Git 提交：在对话标题栏提交工作区改动，由模型规划分组并生成提交信息。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-git-commit#readme) |
 | [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | 发现、审查和安装可复用能力。 | [文档](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
 
 ## 未发布的开发包
@@ -29,17 +30,21 @@
 | 包 | 作用 | 状态 |
 | --- | --- | --- |
 | [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.zh-CN.md) | 队友角色：配置可复用的队友角色，增强原生 Team 界面。 | 本地 alpha；不参与自动 npm 发布，不收录到插件站。 |
+| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.zh-CN.md) | Safe Auto：有预算的预检加单次审批升级。 | npm 发布候选版；插件站 catalog 只收录稳定版。 |
+| [`@klarkxy/dsh-blueprint`](plugins/dsh-blueprint/README.zh-CN.md) | Blueprint：把一套插件组合分享成带确切版本的蓝图码。 | npm 预览版；插件站 catalog 只收录稳定版。 |
 
 从本地 `dsh-teammates` 目录迁入，详见[迁移记录](docs/classmates-migration.md)。
 
 ## 安装
 
-已发布的插件从 npm 安装：
+已发布的插件用 DSH 插件管理器安装，包从 npm registry 拉取：
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-dev-index
 dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
+
+把 `web` 换成你的 profile 名，安装后重启该 profile。每个插件在[插件站点](https://klarkxy.github.io/dsh-plugins/)的详情页都有一份按依赖顺序排好的安装命令。
 
 创造模式通过 `dsh-dev-index` 的 `dsh_docs_search`/`dsh_docs_fetch` 在线读取[官方 DSH 文档](https://deepseek-harness.github.io/deepseek-harness/)并核对运行时接口，用 `dsh_plugins_search`/`dsh_plugins_fetch` 在安装前查核插件的 npm 元数据。
 
