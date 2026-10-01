@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultSettings } from './contracts.ts'
+import { draft, human } from './testing.ts'
 import { MoodService, type MoodPersistedState } from './service.ts'
 import { domainStore, moodDomain, type MoodDomainHandle } from './storage.ts'
 
@@ -91,25 +92,23 @@ describe('aggregate mood domain adapter', () => {
     const disk = createMoodDomain({ initial: previous, failPuts: 1 })
     const service = new MoodService({
       store: domainStore(disk.open()),
-      readEvents: () => [],
+      readEvents: () => [human()],
     })
-    expect(service.status().settings).toMatchObject({ revision: 1, mode: 'auto' })
+    expect(service.read('sess-1').requirements?.goal).toBe('保留原约定')
     expect(service.getContract('sess-1')?.goal).toBe('保留原约定')
-    const result = await service.call('mode', { expectedRevision: 1, mode: 'strict' }, new AbortController().signal)
-    expect(result).toEqual({ ok: false, error: { code: 'MOOD_STORAGE', message: '需求摘要保存失败，已保留原内容。' } })
-    expect(service.status().settings).toMatchObject({ revision: 1, mode: 'auto' })
+    await expect(service.record('sess-1', draft('未保存', 1), new AbortController().signal))
+      .rejects.toMatchObject({ code: 'MOOD_STORAGE' })
     expect(service.getContract('sess-1')?.goal).toBe('保留原约定')
-    expect(service.status('sess-1').session?.clarification[0]?.answer).toBe('对白')
     expect(disk.snapshot()).toEqual(previous)
     await service.dispose()
 
     const reopened = new MoodService({
       store: domainStore(disk.open()),
-      readEvents: () => [],
+      readEvents: () => [human()],
     })
-    expect(reopened.status().settings).toMatchObject({ revision: 1, mode: 'auto' })
+    expect(disk.snapshot()?.settings).toEqual(previous.settings)
     expect(reopened.getContract('sess-1')).toMatchObject({ id: 'keep-contract', goal: '保留原约定', readiness: 'user-confirmed' })
-    expect(reopened.status('sess-1').session?.projectId).toBe('/work/novel')
+    expect(disk.snapshot()?.sessions['sess-1']?.projectId).toBe('/work/novel')
     expect(disk.puts()).toBe(1)
     await reopened.dispose()
   })

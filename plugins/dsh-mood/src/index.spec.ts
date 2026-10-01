@@ -1,83 +1,42 @@
 import { describe, expect, it } from 'vitest'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { CHAT_EVENTS_SLOT, MOOD_AI_PLUGIN, MOOD_PLUGIN, projectIdFromCwd } from './contracts.ts'
-import { projectIdFromCwd as sharedProjectIdFromCwd } from '@klarkxy/dsh-plugin-kit/contracts'
-import { inject, resumeHeldOnHost, type AgentsRegistry, type LiveAgent } from './index.ts'
-import { ASK_DETAIL_OPTION, toAskItems, pendingClarifications } from './questions.ts'
+import type { Context } from '@deepseek-ai/cordis'
+import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { apply, inject } from './index.ts'
+import { createRequirementsTool } from './tools.ts'
+import { draft, fixture, signal } from './testing.ts'
 
-describe('host wiring and shared SDK helpers', () => {
-  it('requires Host llm, storageDomain, sessions, userQuestions, and agents', () => {
-    expect([...inject]).toEqual(['llm', 'storageDomain', 'sessions', 'userQuestions', 'agents', 'connection', 'webServer'])
+describe('native tool and host wiring', () => {
+  it('binds to the actual invoking session and refuses model/session overrides', async () => {
+    const f = fixture(), tool = createRequirementsTool(f.service)
+    const exec = { agent: { session: { id: 's1' } }, signal: signal() } as ToolRunContext
+    expect(await tool.execute({ action: 'read' }, exec)).toMatchObject({ sourceVersion: 'u1', revision: 0 })
+    expect(await tool.execute(draft(), exec)).toMatchObject({ revision: 1 })
+    expect(f.service.getContract('s2')).toBeUndefined()
+    await expect(tool.execute({ action: 'read', sessionId: 's2' }, exec)).rejects.toMatchObject({ code: 'MOOD_INVALID' })
+    await expect(tool.execute({ ...draft('other', 1), model: 'other' }, exec)).rejects.toMatchObject({ code: 'MOOD_INVALID' })
+    await expect(tool.execute({ action: 'read' }, { signal: signal() } as ToolRunContext)).rejects.toMatchObject({ code: 'MOOD_SESSION_NOT_FOUND' })
+    const controller = new AbortController(); controller.abort()
+    await expect(tool.execute(draft('cancelled', 1), { ...exec, signal: controller.signal })).rejects.toThrow()
+    expect(f.writes()).toBe(1)
   })
 
-  it('activates the scoped package name after the SDK pluginName fix', () => {
-    expect(MOOD_AI_PLUGIN).toBe(MOOD_PLUGIN)
-    expect(MOOD_AI_PLUGIN).toBe('@klarkxy/dsh-mood')
-  })
-
-  it('reexports SDK projectIdFromCwd without 256-char truncation', () => {
-    expect(projectIdFromCwd).toBe(sharedProjectIdFromCwd)
-    expect(projectIdFromCwd('D:\\work\\Novel\\')).toBe('D:/work/Novel')
-    const left = `/${'a'.repeat(200)}/one`
-    const right = `/${'a'.repeat(200)}/two`
-    expect(left.length).toBeGreaterThan(200)
-    expect(projectIdFromCwd(left)).toBe(left)
-    expect(projectIdFromCwd(right)).toBe(right)
-    expect(projectIdFromCwd(left)).not.toBe(projectIdFromCwd(right))
-  })
-
-  it('matches the native AskUserQuestionItem option shape from the pinned runtime', () => {
-    const item = toAskItems(pendingClarifications(['范围？']))[0]
-    expect(item?.options?.[0]).toEqual({
-      label: ASK_DETAIL_OPTION,
-      description: '在自定义输入中写明范围、约束或验收标准',
-    })
-  })
-
-  it('keeps the frozen chat-events seat', () => {
-    expect(CHAT_EVENTS_SLOT).toBe('dsh-editor.chat.events')
-  })
-})
-
-/** Native agent-loop shape: steer/followup call this.send (index.js 789-794). */
-class NativeShapedAgent implements LiveAgent {
-  readonly inbox: Array<{ message: unknown; target: string; wakeup: boolean }> = []
-  constructor(readonly id: string) {}
-  send(message: unknown, target: string, wakeup: boolean): void {
-    this.inbox.push({ message, target, wakeup })
-  }
-  followup(input: unknown): void {
-    this.send(input, 'next-turn', true)
-  }
-  steer(input: unknown): void {
-    this.send(input, 'next-step', true)
-  }
-}
-
-class NativeShapedAgents implements AgentsRegistry {
-  constructor(private readonly agent: NativeShapedAgent) {}
-  get(id: unknown): LiveAgent | undefined {
-    return id === this.agent.id ? this.agent : undefined
-  }
-}
-
-describe('native-shaped retry adapter', () => {
-  it('invokes bound steer on the Agents.get instance so this.send receives the original human', () => {
-    const agent = new NativeShapedAgent('sess-1')
-    const agents = new NativeShapedAgents(agent)
-    const human = createUserMessage({
-      source: { kind: 'user' },
-      content: [{ type: 'text', text: '帮我改一下' }],
-    })
-    const extracted = agent.steer
-    expect(() => extracted(human)).toThrow()
-    resumeHeldOnHost(agents, 'sess-1', [human])
-    expect(agent.inbox).toEqual([{ message: human, target: 'next-step', wakeup: true }])
-    expect(human.source).toMatchObject({ kind: 'user' })
-  })
-
-  it('does not invent a human prompt when the live agent is missing', () => {
-    const agents = new NativeShapedAgents(new NativeShapedAgent('other'))
-    expect(() => resumeHeldOnHost(agents, 'sess-1', [{ source: { kind: 'user' }, content: [] }])).toThrow(/没有可恢复的会话/)
+  it('loads in a host without LLM, UI, questions or Web and unregisters on disposal', async () => {
+    expect([...inject]).toEqual(['storageDomain', 'sessions', 'tools'])
+    const f = fixture(), cleanups: Array<() => unknown> = [], registered: ToolDefinition[] = []
+    let provided: unknown, closed = false
+    const ctx = {
+      storageDomain: { open: async () => ({ table: () => ({ get: () => f.disk(), put: async () => {}, delete: async () => false, entries: function* () {} }), close: async () => { closed = true } }) },
+      sessions: { get: (id: string) => f.events[id] ? { snapshotEvents: () => f.events[id] } : undefined },
+      tools: { register: (tool: ToolDefinition) => { registered.push(tool); return () => { registered.splice(registered.indexOf(tool), 1) } } },
+      provide: (_name: string, service: unknown) => { provided = service },
+      effect: (run: () => (() => unknown)) => { cleanups.push(run()) },
+      inject: () => {},
+    }
+    await apply(ctx as unknown as Context)
+    expect(registered.map(t => t.name)).toEqual(['mood_requirements'])
+    expect(provided).toBeTruthy()
+    for (const cleanup of cleanups.reverse()) await cleanup()
+    expect(registered).toEqual([])
+    expect(closed).toBe(true)
   })
 })

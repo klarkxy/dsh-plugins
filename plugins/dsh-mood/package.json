@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-mood",
   "version": "0.1.5",
-  "description": "Autonomy-first task guidance with clarification only for genuine blockers in DeepSeek Harness.",
+  "description": "An Agent tool for recording and reusing the current session requirements without auxiliary model calls.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -21,9 +21,6 @@
       "import": "./lib/contracts.js",
       "default": "./lib/contracts.js"
     },
-    "./client": {
-      "default": "./lib/client.js"
-    },
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
@@ -39,35 +36,24 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "platform": "web",
-      "inject": [
-        "@deepseek-ai/dsh-client-connection",
-        "@deepseek-ai/dsh-api-remotes",
-        "@deepseek-ai/dsh-api-session-controller",
-        "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-session",
-        "@deepseek-ai/dsh-client-ui-primitives"
-      ]
     }
   },
   "dshEditor": {
     "role": "feature",
     "visibility": "public",
-    "wrapClient": true,
+    "wrapClient": false,
     "entries": [
       {
         "id": "mood",
-        "title": "需求澄清",
-        "description": "默认自主推进，仅在真正阻塞时询问，支持按需梳理需求",
+        "title": "需求记录",
+        "description": "由当前代理记录、读取和更新本次任务需求",
         "feature": "mood",
         "service": "aiMood"
       }
     ]
   },
   "scripts": {
-    "build": "tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-mood",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-mood/src"
   },
@@ -77,24 +63,21 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
-    "@deepseek-ai/dsh-llm": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-storage-domain": ">=0.1.7-rc.2"
+    "@deepseek-ai/dsh-storage-domain": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-tools": ">=0.1.7-rc.2"
   },
   "peerDependenciesMeta": {
-    "@deepseek-ai/dsh-llm": {
+    "@deepseek-ai/dsh-storage-domain": {
       "optional": true
     },
-    "@deepseek-ai/dsh-storage-domain": {
+    "@deepseek-ai/dsh-tools": {
       "optional": true
     }
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
-    "@deepseek-ai/dsh-llm": "0.1.7-rc.2",
     "@deepseek-ai/dsh-storage-domain": "0.1.7-rc.2",
-    "react": "^18.2.0",
-    "@types/react": "18.3.31",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.2"
+    "@deepseek-ai/dsh-tools": "0.1.7-rc.2"
   },
   "keywords": [
     "dsh",

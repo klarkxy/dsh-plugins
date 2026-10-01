@@ -406,21 +406,12 @@ importers:
       '@deepseek-ai/cordis':
         specifier: ^4.0.4
         version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)
-      '@deepseek-ai/dsh-client-ui-primitives':
-        specifier: 0.1.7-rc.2
-        version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)
-      '@deepseek-ai/dsh-llm':
-        specifier: 0.1.7-rc.2
-        version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)
       '@deepseek-ai/dsh-storage-domain':
         specifier: 0.1.7-rc.2
         version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-storage@0.1.7-rc.2(@deepseek-ai/cordis@4.0.4))
-      '@types/react':
-        specifier: 18.3.31
-        version: 18.3.31
-      react:
-        specifier: ^18.2.0
-        version: 18.3.1
+      '@deepseek-ai/dsh-tools':
+        specifier: 0.1.7-rc.2
+        version: 0.1.7-rc.2(d2e08270f2205e73d65e98cfcd910cae)
 
   plugins/dsh-plugin-kit:
     devDependencies:
