@@ -1,23 +1,14 @@
-import { isAbsolute } from 'node:path';
-import { parseEscalationCandidates } from './escalation.js';
 import { validateModelConfig } from './model-route.js';
 
 const defaults = Object.freeze({
-  mode: 'shadow', approvalReview: false, workspaceRoots: [], shellCandidates: [], escalationCandidates: [],
-  escalationApprovalTtlMs: 30000, escalationMaxTimeoutMs: 30000,
-  endpoint: '', fastProvider: '', fastModel: '', deepProvider: '', deepModel: '', apiKeyEnv: 'DSH_SAFE_AUTO_API_KEY',
-  fastReasoningEffort: '', deepReasoningEffort: '', reviewerPrompt: '',
-  tokenField: 'max_tokens', timeoutMs: 8000, maxInputBytes: 8192,
-  fastOutputTokens: 64, deepOutputTokens: 256,
-  fastCallsPerTask: 20, deepCallsPerTask: 3, sessionBudgetUnits: 100000,
-  consecutiveDenials: 3, totalDenials: 20,
+  enabled: true,
+  provider: '', model: '', reasoningEffort: '', reviewerPrompt: '',
+  timeoutMs: 30000, maxInputBytes: 8192, outputTokens: 256,
+  maxReviewsPerTask: 20, consecutiveDenials: 3,
 });
 const limits = {
-  escalationApprovalTtlMs: [100, 120000], escalationMaxTimeoutMs: [100, 60000],
-  timeoutMs: [100, 60000], maxInputBytes: [512, 32768],
-  fastOutputTokens: [32, 512], deepOutputTokens: [64, 2048],
-  fastCallsPerTask: [1, 100], deepCallsPerTask: [0, 20],
-  sessionBudgetUnits: [1024, 10000000], consecutiveDenials: [1, 20], totalDenials: [1, 100],
+  timeoutMs: [100, 120000], maxInputBytes: [512, 32768], outputTokens: [64, 2048],
+  maxReviewsPerTask: [1, 100], consecutiveDenials: [1, 20],
 };
 
 /** Immutable, load-time policy. Unknown keys fail rather than silently disabling a control. */
@@ -25,32 +16,14 @@ export function parseConfig(raw = {}) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('config must be an object');
   for (const key of Object.keys(raw)) if (!Object.hasOwn(defaults, key)) throw new Error(`unknown config field: ${key}`);
   const c = { ...defaults, ...raw };
-  if (!['off', 'shadow', 'smart', 'unattended'].includes(c.mode)) throw new Error('invalid mode');
-  if (typeof c.approvalReview !== 'boolean') throw new Error('approvalReview must be a boolean');
-  for (const key of ['endpoint', 'fastProvider', 'fastModel', 'deepProvider', 'deepModel', 'apiKeyEnv', 'tokenField', 'fastReasoningEffort', 'deepReasoningEffort', 'reviewerPrompt']) {
+  if (typeof c.enabled !== 'boolean') throw new Error('enabled must be a boolean');
+  for (const key of ['provider', 'model', 'reasoningEffort', 'reviewerPrompt']) {
     if (typeof c[key] !== 'string' || c[key].length > 4096) throw new Error(`${key} must be a string`);
   }
-  for (const key of ['workspaceRoots', 'shellCandidates']) {
-    if (!Array.isArray(c[key]) || c[key].length > 100 || c[key].some(x => typeof x !== 'string' || !x || x.length > 4096)) {
-      throw new Error(`${key} must contain at most 100 nonempty strings`);
-    }
-    c[key] = Object.freeze([...new Set(c[key])]);
-  }
-  if (c.workspaceRoots.some(p => !isAbsolute(p))) throw new Error('workspaceRoots must be absolute local paths');
   for (const [key, [min, max]] of Object.entries(limits)) {
     if (!Number.isSafeInteger(c[key]) || c[key] < min || c[key] > max) throw new Error(`invalid ${key}`);
   }
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(c.apiKeyEnv)) throw new Error('invalid apiKeyEnv');
-  if (!['max_tokens', 'max_completion_tokens'].includes(c.tokenField)) throw new Error('invalid tokenField');
   validateModelConfig(c);
-  if (c.endpoint) {
-    const u = new URL(c.endpoint);
-    if (u.username || u.password || u.hash || u.search) throw new Error('endpoint must not contain credentials, query or fragment');
-    const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname);
-    if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback)) throw new Error('endpoint requires HTTPS or loopback HTTP');
-    c.endpoint = u.href;
-  }
-  c.escalationCandidates = parseEscalationCandidates(c.escalationCandidates, c.workspaceRoots);
   return Object.freeze(c);
 }
 

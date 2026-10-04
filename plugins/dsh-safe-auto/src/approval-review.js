@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { containsSecret, hardRisk } from './policy.js';
 
 const verdict = (kind, code, extra = {}) => ({ kind, code, ...extra });
@@ -11,7 +12,7 @@ export function assessApproval(call, config) {
   if (!call || !call.args || typeof call.args !== 'object' || Array.isArray(call.args)) return verdict('ask', 'INVALID_ARGUMENTS');
   const hard = hardRisk(call);
   if (hard) return hard;
-  if (config.approvalReview !== true) return verdict('ask', 'APPROVAL_REVIEW_DISABLED');
+  if (config.enabled !== true) return verdict('ask', 'SAFE_AUTO_DISABLED');
   if (call.sandbox?.mode !== 'workspace-write') return verdict('deny', 'WORKSPACE_SANDBOX_REQUIRED');
   if (!call.session || typeof call.session !== 'object' || call.subagent !== false || call.nested !== false) return verdict('ask', 'NO_DIRECT_USER_AUTHORITY');
   if (call.localExecution !== true || call.remote === true) return verdict('ask', 'LOCAL_EXECUTION_UNVERIFIED');
@@ -55,4 +56,19 @@ export function assessApproval(call, config) {
     tool: call.tool, arguments: JSON.parse(serialized), cwd: call.cwd,
     permission: { from: call.sandbox.mode, to: args.sandbox_permissions, scope: 'this-call-only' },
   } });
+}
+
+/** Both grant and request use the native helper's exact audited reason, not a prefix match. */
+export function escalationReason(call) {
+  return `escalate sandbox to ${call.args.sandbox_permissions}: ${call.args.justification}`;
+}
+
+/** Include execution identity in the pending decision; authorization is never cached across calls. */
+export function bindingOf(call, assessment) {
+  return createHash('sha256').update(JSON.stringify({
+    tool: call.tool, args: call.args, cwd: call.cwd, sandbox: call.sandbox,
+    task: call.task, intent: call.intent, subagent: call.subagent, nested: call.nested,
+    localExecution: call.localExecution, jobsAvailable: call.jobsAvailable, shellConfined: call.shellConfined,
+    code: assessment.code,
+  })).digest('hex');
 }

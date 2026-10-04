@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Safe Auto",
-    "description": "Budgeted preflight and one-shot escalation; the reviewer follows the conversation or works independently."
+    "description": "An independent reviewer vets each sandbox escalation; only a pass auto-approves that one call."
   }
 }

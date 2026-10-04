@@ -3,23 +3,12 @@ const id = value => typeof value === 'string' && value.length > 0 && value.lengt
   value === value.trim() && !/[\x00-\x1f\x7f]/.test(value);
 
 export function validateModelConfig(config) {
-  const { endpoint, fastProvider = '', fastModel, deepProvider = '', deepModel } = config;
-  for (const value of [fastProvider, fastModel, deepProvider, deepModel]) {
+  const { provider = '', model = '', reasoningEffort = '' } = config;
+  for (const value of [provider, model, reasoningEffort]) {
     if (value !== '' && !id(value)) throw new Error('invalid reviewer provider/model identifier');
   }
-  for (const key of ['fastReasoningEffort', 'deepReasoningEffort']) {
-    const value = config[key] === undefined ? '' : config[key];
-    if (value !== '' && !id(value)) throw new Error(`invalid ${key} identifier`);
-  }
-  if (config.deepReasoningEffort && !deepModel) throw new Error('deepReasoningEffort requires a deep reviewer model');
-  if (endpoint) {
-    if (config.fastReasoningEffort || config.deepReasoningEffort) throw new Error('HTTP reviewer does not support reasoning effort; use a native DSH route');
-    if (fastProvider || deepProvider) throw new Error('HTTP endpoint cannot be combined with native reviewer providers');
-    if (!fastModel) throw new Error('endpoint requires fastModel');
-  } else {
-    if (Boolean(fastProvider) !== Boolean(fastModel)) throw new Error('fastProvider and fastModel must be configured together');
-    if (Boolean(deepProvider) !== Boolean(deepModel)) throw new Error('deepProvider and deepModel must be configured together');
-  }
+  if (Boolean(provider) !== Boolean(model)) throw new Error('provider and model must be configured together');
+  if (reasoningEffort && !model) throw new Error('reasoningEffort requires a reviewer model');
 }
 
 /** Use the accepted request's route, not a deployment default or another session's model. */
@@ -33,23 +22,15 @@ export function conversationRoute(owner = {}) {
   return Object.freeze({ provider: selected.provider, model: selected.model });
 }
 
-/** Snapshot both stages once. No implicit fallback between providers or transports. */
-export function resolveReviewRoutes(config, owner) {
+/** Snapshot the route once per review. No implicit fallback to another provider. */
+export function resolveReviewRoute(config, owner) {
   validateModelConfig(config);
-  if (config.endpoint) return Object.freeze({
-    fast: Object.freeze({ transport: 'http', endpoint: config.endpoint, model: config.fastModel }),
-    deep: config.deepModel ? Object.freeze({ transport: 'http', endpoint: config.endpoint, model: config.deepModel }) : null,
-  });
-  const selected = config.fastProvider ? { provider: config.fastProvider, model: config.fastModel } : conversationRoute(owner);
-  return Object.freeze({
-    fast: Object.freeze({ transport: 'dsh', ...selected,
-      ...(config.fastReasoningEffort ? { reasoningEffort: config.fastReasoningEffort } : {}) }),
-    deep: config.deepModel ? Object.freeze({ transport: 'dsh', provider: config.deepProvider, model: config.deepModel,
-      ...(config.deepReasoningEffort ? { reasoningEffort: config.deepReasoningEffort } : {}) }) : null,
-  });
+  const selected = config.provider ? { provider: config.provider, model: config.model } : conversationRoute(owner);
+  return Object.freeze({ ...selected,
+    ...(config.reasoningEffort ? { reasoningEffort: config.reasoningEffort } : {}) });
 }
 
-export const sameRoutes = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+export const sameRoute = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 function usageTotal(usage) {
   if (!usage || typeof usage !== 'object') return undefined;

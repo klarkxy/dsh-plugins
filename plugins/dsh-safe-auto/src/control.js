@@ -2,11 +2,11 @@ import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts';
 import { parseConfig } from './config.js';
 
 export const CHANNEL = '/dsh-safe-auto';
-export const REVIEW_FIELDS = ['fastProvider', 'fastModel', 'deepProvider', 'deepModel', 'fastReasoningEffort', 'deepReasoningEffort', 'reviewerPrompt'];
-export const SETTINGS_FIELDS = ['approvalReview', ...REVIEW_FIELDS];
+export const REVIEW_FIELDS = ['provider', 'model', 'reasoningEffort', 'reviewerPrompt'];
+export const SETTINGS_FIELDS = REVIEW_FIELDS;
 const modes = new Set(['read-only', 'workspace-write', 'danger-full-access']);
 
-/** UI writes only reviewer preferences. Permission envelopes remain operator-owned profile config. */
+/** UI writes only reviewer preferences. The enable switch and budgets remain operator-owned profile config. */
 export function createControl(base, { table, presets, sandboxPolicy, sessions, platform = process.platform }) {
   let settings = table.get('reviewer') ?? { revision: 0, values: {} };
   let tail = Promise.resolve();
@@ -32,8 +32,8 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
     return { active: enabled, revision: `${settings.revision}:${selected?.generation ?? 0}` };
   }
   function config(session) {
-    if (!active(session)) return parseConfig({ ...effective(), mode: 'off' });
-    return parseConfig({ ...effective(), mode: 'smart' });
+    if (!active(session)) return parseConfig({ ...effective(), enabled: false });
+    return effective();
   }
   function workspaceOption() {
     return presets.catalog().options.find(o => {
@@ -43,16 +43,14 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
   }
   function policyView() {
     const c = effective();
-    return { available: base.mode !== 'off' && Boolean(workspaceOption()), platform,
-      candidateCounts: { workspaceRoots: c.workspaceRoots.length, shellCandidates: c.shellCandidates.length, escalationCandidates: c.escalationCandidates.length },
+    return { available: base.enabled && Boolean(workspaceOption()), platform,
       policyLimits: { readonly: true, sandbox: 'workspace-write', approval: 'ask', rootSessionsOnly: true,
-        escalationScope: 'this-call-only', escalationApprovalTtlMs: c.escalationApprovalTtlMs, escalationMaxTimeoutMs: c.escalationMaxTimeoutMs,
-        timeoutMs: c.timeoutMs, maxInputBytes: c.maxInputBytes, fastCallsPerTask: c.fastCallsPerTask, deepCallsPerTask: c.deepCallsPerTask,
-        sessionBudgetUnits: c.sessionBudgetUnits, consecutiveDenials: c.consecutiveDenials, totalDenials: c.totalDenials } };
+        escalationScope: 'this-call-only', timeoutMs: c.timeoutMs, maxInputBytes: c.maxInputBytes,
+        outputTokens: c.outputTokens, maxReviewsPerTask: c.maxReviewsPerTask, consecutiveDenials: c.consecutiveDenials } };
   }
   function settingsView() {
     const c = effective();
-    return { revision: settings.revision, values: { approvalReview: c.approvalReview ?? false, ...Object.fromEntries(REVIEW_FIELDS.map(k => [k, c[k] ?? ''])) }, http: Boolean(c.endpoint), ...policyView() };
+    return { revision: settings.revision, values: Object.fromEntries(REVIEW_FIELDS.map(k => [k, c[k] ?? ''])), ...policyView() };
   }
   function sessionView(session) {
     const catalog = presets.catalog();
@@ -76,11 +74,10 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
     if (endpoint === 'settings.get') return settingsView();
     if (endpoint === 'settings.save') {
       if (payload.expectedRevision !== settings.revision) throw new Error('Settings changed; reload and retry');
-      if (base.endpoint) throw new Error('HTTP reviewer settings remain in the profile');
       const values = payload.values;
       if (!values || typeof values !== 'object' || Array.isArray(values) || Object.keys(values).some(k => !SETTINGS_FIELDS.includes(k))) throw new Error('Only reviewer settings may be edited here');
       const nextConfig = parseConfig({ ...base, ...settings.values, ...values });
-      const next = { revision: settings.revision + 1, values: { approvalReview: nextConfig.approvalReview ?? false, ...Object.fromEntries(REVIEW_FIELDS.map(k => [k, nextConfig[k] ?? ''])) } };
+      const next = { revision: settings.revision + 1, values: Object.fromEntries(REVIEW_FIELDS.map(k => [k, nextConfig[k] ?? ''])) };
       await table.put('reviewer', next);
       settings = next;
       return settingsView();
@@ -98,7 +95,7 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
       return sessionView(session);
     }
     if (payload.value === 'safe-auto') {
-      if (base.mode === 'off') throw new Error('Safe Auto is disabled in the profile');
+      if (!base.enabled) throw new Error('Safe Auto is disabled in the profile');
       const option = workspaceOption();
       if (!option) throw new Error('Workspace Write with native approval is unavailable');
       presets.set(session, option.value);

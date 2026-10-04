@@ -52,9 +52,11 @@ export function registerControlRoute(ctx, call) {
 export async function apply(ctx) {
   // Loaded only by the separate UI row; the safety guard keeps its original minimal dependencies.
   const [{ defineDomain, domainTable }, { z }] = await Promise.all([import('@deepseek-ai/dsh-storage-domain'), import('zod')]);
+  // No strict(): rows saved by 0.1.x carry retired keys (fastProvider, approvalReview, …),
+  // which strip on load instead of breaking the panel; the reviewer simply falls back to defaults.
   const domain = await ctx.storageDomain.open(defineDomain({ name: 'dsh_safe_auto', version: 1, tables: {
     settings: domainTable(z.object({ revision: z.number().int().nonnegative(),
-      values: z.object({ ...Object.fromEntries(REVIEW_FIELDS.map(k => [k, z.string().max(4096).optional()])), approvalReview: z.boolean().optional() }).strict(),
+      values: z.object(Object.fromEntries(REVIEW_FIELDS.map(k => [k, z.string().max(4096).optional()]))),
     }).strict()),
   } }));
   ctx.effect(() => () => domain.close());
