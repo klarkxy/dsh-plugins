@@ -1,20 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { realpathSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { join } from 'node:path';
 import { parseConfig } from '../src/config.js';
-import { conversationRoute, resolveReviewRoutes, nativeCompletion } from '../src/model-route.js';
+import { conversationRoute, resolveReviewRoute, nativeCompletion } from '../src/model-route.js';
 import { review } from '../src/reviewer.js';
 import { createGate } from '../src/gate.js';
-import { apply } from '../src/index.js';
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'safe-auto-model-')));
 test.after(() => rmSync(root, { recursive: true, force: true }));
 const command = 'git status --short';
-const config = extra => parseConfig({ mode: 'smart', workspaceRoots: [root], shellCandidates: [command], ...extra });
+const config = extra => parseConfig({ ...extra });
 const signal = () => new AbortController().signal;
-const ledger = () => ({ fastCalls: 0, deepCalls: 0, units: 0, reportedTokens: 0 });
+const ledger = () => ({ reviews: 0, consecutive: 0, reportedTokens: 0 });
 const selected = (provider = 'chat-provider', model = 'chat-model') => ({ provider, model });
 function owner(route = selected()) {
   const state = { config: route };
@@ -23,10 +22,14 @@ function owner(route = selected()) {
   };
   return { state, session, agent: { session, options: selected('old-provider', 'old-model') } };
 }
-const call = own => ({ ...own, tool: 'bash', args: { command }, cwd: root, sandbox: { mode: 'workspace-write', workspaceRoot: root },
+const call = own => ({ ...own, tool: 'bash', args: { command, description: 'Inspect repository status',
+  sandbox_permissions: 'danger-full-access', justification: 'Inspect repository status' },
+  cwd: root, sandbox: { mode: 'workspace-write', workspaceRoot: root },
+  subagent: false, nested: false, localExecution: true,
   signal: signal(), task: 1, intent: 'Inspect repository status', callId: 'one' });
+const verdict = decision => JSON.stringify({ decision, risk: 'low', authorization: 'high', bounded: true, reason: 'Bounded and user-requested.' });
 function* chunks(decision = 'allow') {
-  const text = JSON.stringify({ decision });
+  const text = verdict(decision);
   yield { type: 'block-start', index: 0, blockType: 'text' };
   yield { type: 'text-delta', index: 0, text };
   yield { type: 'block-end', index: 0, block: { type: 'text', text } };
@@ -34,25 +37,23 @@ function* chunks(decision = 'allow') {
   yield { type: 'finish', reason: { kind: 'stop' } };
 }
 const runtime = inspect => ({ async *stream(options) { const d = await inspect?.(options); yield* chunks(d ?? 'allow'); } });
-const noHttp = () => { throw new Error('must not use direct HTTP'); };
-const nativeReview = (llm, extra = {}) => review(config(extra), { tool: 'bash', command }, 'Inspect repository status', ledger(), signal(), noHttp,
+const action = { tool: 'bash', arguments: { command }, cwd: root,
+  permission: { from: 'workspace-write', to: 'danger-full-access', scope: 'this-call-only' } };
+const nativeReview = (llm, extra = {}) => review(config(extra), action, 'Inspect repository status', ledger(), signal(),
   { llm, owner: owner() });
 
 test('default follows accepted conversation route without copying main-agent settings', () => {
   const o = owner({ ...selected(), maxTokens: 90000, tools: ['shell'], reasoningEffort: 'high' });
-  assert.deepEqual(resolveReviewRoutes(config(), o), { fast: { transport: 'dsh', ...selected() }, deep: null });
+  assert.deepEqual(resolveReviewRoute(config(), o), selected());
   assert.deepEqual(conversationRoute(o), selected());
   o.state.config = selected('other', 'next');
-  assert.equal(resolveReviewRoutes(config(), o).fast.model, 'next');
+  assert.equal(resolveReviewRoute(config(), o).model, 'next');
 });
-test('fixed model is independent; deep can use a different native provider', () => {
-  const c = config({ fastProvider: 'reviewer', fastModel: 'small', deepProvider: 'judge', deepModel: 'large' });
-  assert.deepEqual(resolveReviewRoutes(c, owner()), { fast: { transport: 'dsh', provider: 'reviewer', model: 'small' },
-    deep: { transport: 'dsh', provider: 'judge', model: 'large' } });
-  assert.equal(resolveReviewRoutes(c).fast.model, 'small');
-});
-test('deep can be independently set while the primary reviewer follows the conversation', () => {
-  assert.equal(resolveReviewRoutes(config({ deepProvider: 'judge', deepModel: 'large' }), owner()).fast.model, 'chat-model');
+test('fixed model is independent of the conversation and carries effort only when set', () => {
+  assert.deepEqual(resolveReviewRoute(config({ provider: 'reviewer', model: 'small' }), owner()), { provider: 'reviewer', model: 'small' });
+  assert.equal(resolveReviewRoute(config({ provider: 'reviewer', model: 'small' })).model, 'small');
+  assert.deepEqual(resolveReviewRoute(config({ provider: 'reviewer', model: 'small', reasoningEffort: 'low' })),
+    { provider: 'reviewer', model: 'small', reasoningEffort: 'low' });
 });
 test('options are a fallback only when the accepted request header is absent', () => {
   assert.deepEqual(conversationRoute({ agent: { options: selected() } }), selected());
@@ -60,45 +61,28 @@ test('options are a fallback only when the accepted request header is absent', (
   assert.throws(() => conversationRoute({}), /UNAVAILABLE/);
 });
 for (const extra of [
-  { fastProvider: 'p' }, { fastModel: 'm' }, { deepProvider: 'p' }, { deepModel: 'm' },
-  { fastProvider: 'p', fastModel: ' ' }, { fastProvider: 'p\n', fastModel: 'm' },
-  { endpoint: 'https://review.example/v1', fastModel: 'm', fastProvider: 'p' },
-  { endpoint: 'https://review.example/v1', fastModel: 'm', deepProvider: 'p', deepModel: 'd' },
+  { provider: 'p' }, { model: 'm' }, { provider: 'p', model: ' ' }, { provider: 'p\n', model: 'm' },
+  { reasoningEffort: 'low' },
 ]) test(`invalid or ambiguous routing rejected: ${JSON.stringify(extra)}`, () => assert.throws(() => config(extra)));
-test('existing HTTP config is preserved and never needs conversation credentials', () => {
-  const c = config({ endpoint: 'https://review.example/v1', fastModel: 'http-fast', deepModel: 'http-deep' });
-  assert.deepEqual(resolveReviewRoutes(c).fast, { transport: 'http', endpoint: c.endpoint, model: 'http-fast' });
-});
 test('native request is fresh, tool-free, capped and has no parent session/replay metadata', async () => {
   let received;
-  assert.equal(await nativeReview(runtime(opts => { received = opts; })), 'allow');
+  assert.equal((await nativeReview(runtime(opts => { received = opts; }))).decision, 'allow');
   assert.deepEqual(Object.keys(received).sort(), ['maxTokens', 'messages', 'model', 'provider', 'signal', 'system', 'tools']);
-  assert.equal(received.maxTokens, 64);
+  assert.equal(received.maxTokens, 256);
   assert.deepEqual(received.tools, []);
   assert.equal(received.messages.length, 1);
   assert.equal(received.messages[0].role, 'user');
   assert.equal(received.messages[0].id, undefined);
   assert.equal(received.messages[0].source, undefined);
 });
-test('native fast/deep routing and budgets stay independent of the chat model budget', async () => {
-  const seen = [];
-  assert.equal(await nativeReview(runtime(opts => { seen.push([opts.provider, opts.model, opts.maxTokens]); return opts.model === 'chat-model' ? 'review' : 'allow'; }),
-    { deepProvider: 'judge', deepModel: 'large' }), 'allow');
-  assert.deepEqual(seen, [['chat-provider', 'chat-model', 64], ['judge', 'large', 256]]);
-});
-test('unconfigured deep does not silently start a second call on the chat model', async () => {
+test('native explicit denial is not retried or softened', async () => {
   let calls = 0;
-  assert.equal(await nativeReview(runtime(() => { calls++; return 'review'; })), 'ask');
-  assert.equal(calls, 1);
-});
-test('native explicit denial is not retried or sent to a deep or HTTP fallback', async () => {
-  let calls = 0;
-  assert.equal(await nativeReview(runtime(() => { calls++; return 'deny'; }), { deepProvider: 'judge', deepModel: 'large' }), 'deny');
+  assert.equal((await nativeReview(runtime(() => { calls++; return 'deny'; }))).decision, 'deny');
   assert.equal(calls, 1);
 });
 test('native cache usage counters are disjoint and counted once', async () => {
   const l = ledger();
-  assert.equal(await review(config(), { command }, 'Inspect status', l, signal(), noHttp, { llm: runtime(), owner: owner() }), 'allow');
+  assert.equal((await review(config(), action, 'Inspect status', l, signal(), { llm: runtime(), owner: owner() })).decision, 'allow');
   assert.equal(l.reportedTokens, 35);
 });
 test('native stream supports completed blocks without deltas, including preceding reasoning', async () => {
@@ -106,10 +90,10 @@ test('native stream supports completed blocks without deltas, including precedin
     yield { type: 'block-start', index: 0, blockType: 'reasoning' };
     yield { type: 'block-end', index: 0, block: { type: 'reasoning', text: 'not returned' } };
     yield { type: 'block-start', index: 1, blockType: 'text' };
-    yield { type: 'block-end', index: 1, block: { type: 'text', text: '{"decision":"allow"}' } };
+    yield { type: 'block-end', index: 1, block: { type: 'text', text: verdict('allow') } };
     yield { type: 'finish', reason: { kind: 'stop' } };
   } };
-  assert.equal(await nativeReview(llm), 'allow');
+  assert.equal((await nativeReview(llm)).decision, 'allow');
 });
 for (const kind of ['max-tokens', 'tool-calls', 'error', 'aborted', 'unknown']) {
   test(`native finish ${kind} cannot grant`, async () => {
@@ -142,14 +126,14 @@ test('native signal-ignoring transport still has an outer deadline', async () =>
 test('native cancel and missing runtime cannot grant', async () => {
   await assert.rejects(nativeReview(undefined), /UNAVAILABLE/);
   const abort = new AbortController();
-  const pending = review(config(), { command }, 'Inspect status', ledger(), abort.signal, noHttp,
+  const pending = review(config(), action, 'Inspect status', ledger(), abort.signal,
     { llm: { async *stream() { await new Promise(() => {}); } }, owner: owner() });
   abort.abort(); await assert.rejects(pending, /CANCELLED/);
 });
 test('gate follows different concurrent sessions without sharing model selection', async () => {
   const seen = [];
   const llm = runtime(opts => { seen.push(opts.model); });
-  const g = createGate(config(), { getLlm: () => llm, fetcher: noHttp });
+  const g = createGate(config(), { getLlm: () => llm });
   const results = await Promise.all(['a', 'b'].map(m => g.decide(call(owner(selected('p', m))))));
   assert.ok(results.every(r => r.kind === 'allow')); assert.deepEqual(seen.sort(), ['a', 'b']);
 });
@@ -157,58 +141,27 @@ test('model change during review invalidates allow, but a fixed reviewer is unaf
   for (const fixed of [false, true]) {
     const o = owner();
     const llm = runtime(() => { o.state.config = selected('p', 'next'); });
-    const c = fixed ? config({ fastProvider: 'reviewer', fastModel: 'small' }) : config();
+    const c = fixed ? config({ provider: 'reviewer', model: 'small' }) : config();
     const result = await createGate(c, { getLlm: () => llm }).decide(call(o));
     assert.equal(result.kind, fixed ? 'allow' : 'ask');
   }
 });
+test('a semantic denial stays final even if the conversation model changes mid-review', async () => {
+  const o = owner();
+  const llm = runtime(() => { o.state.config = selected('p', 'next'); return 'deny'; });
+  const result = await createGate(config(), { getLlm: () => llm }).decide(call(o));
+  assert.equal(result.kind, 'deny'); assert.equal(result.code, 'MODEL_NOT_ALLOWED');
+});
 test('model changes do not reset per-task reviewer call limits', async () => {
   const o = owner(); const llm = runtime();
-  const g = createGate(config({ fastCallsPerTask: 1 }), { getLlm: () => llm });
+  const g = createGate(config({ maxReviewsPerTask: 1 }), { getLlm: () => llm });
   assert.equal((await g.decide(call(o))).kind, 'allow');
   o.state.config = selected('p', 'new');
   assert.equal((await g.decide(call(o))).kind, 'ask');
 });
-test('native service removal and missing route fail closed without HTTP fallback', async () => {
+test('native service removal and missing route fail closed', async () => {
   let llm = runtime(() => { llm = undefined; });
-  const g = createGate(config(), { getLlm: () => llm, fetcher: noHttp });
+  const g = createGate(config(), { getLlm: () => llm });
   assert.equal((await g.decide(call(owner()))).kind, 'ask');
   assert.equal((await g.decide(call(owner({})))).kind, 'ask');
-});
-
-function mockHost(extra = {}) {
-  const listeners = {}, disposers = [];
-  let guard;
-  const llm = runtime();
-  const ctx = {
-    tools: { guard(fn) { guard = fn; } },
-    sandboxPolicy: { resolve: () => ({ mode: 'workspace-write', workspaceRoot: root }) },
-    logger: { info() {} }, effect(fn) { disposers.push(fn()); }, on(event, fn) { listeners[event] = fn; },
-    inject(deps, fn) { assert.deepEqual(deps, ['llm']); fn({ llm, effect: ctx.effect }); },
-    get(key) { if (key === 'fs') return { processPathFromHostPath: p => p }; },
-  };
-  apply(ctx, { ...config(), ...extra });
-  return { listeners, guard: exec => guard(exec), dispose() { disposers.reverse().forEach(fn => fn()); } };
-}
-test('final guard catches a model change after the preflight result', async () => {
-  const h = mockHost(); const o = owner();
-  const exec = { agent: o.agent, token: Symbol(), name: 'bash', arguments: { command }, callId: 'x', signal: signal() };
-  await h.listeners['tools/pre-execute'](exec, async () => ({ kind: 'allow' }));
-  assert.equal(h.guard(exec), undefined);
-  o.state.config = selected('p', 'changed');
-  assert.match(h.guard(exec), /REVIEW_MODEL_CHANGED/); h.dispose();
-});
-test('one-shot escalation uses the same conversation-following native reviewer',
-  { skip: sep !== '/' && 'Native escalation requires POSIX' }, async () => {
-  const target = join(root, 'grant.txt'); writeFileSync(target, 'old');
-  const h = mockHost({ escalationCandidates: [{ tool: 'write', cwd: root, mode: 'danger-full-access', filePath: target }] });
-  const o = owner();
-  const exec = { agent: o.agent, token: Symbol(), name: 'write', callId: 'x', signal: signal(),
-    arguments: { file_path: target, content: 'new', sandbox_permissions: 'danger-full-access', justification: 'update file' } };
-  assert.equal((await h.listeners['tools/pre-execute'](exec, async () => ({ kind: 'allow' }))).kind, 'allow');
-  assert.equal(h.guard(exec), undefined);
-  const result = await h.listeners['tools/execute'](exec, () => h.listeners['approval/request']({ agent: o.agent,
-    callId: exec.callId, toolName: exec.name, signal: exec.signal, reason: 'escalate sandbox to danger-full-access: update file' },
-  async () => { throw new Error('should not need human fallback'); }));
-  assert.equal(result, 'allowed-once'); h.dispose();
 });

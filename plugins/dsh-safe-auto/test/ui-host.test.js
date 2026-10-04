@@ -34,7 +34,12 @@ test('UI host mounts an authenticated route and disposes control without model c
     safeAutoRuntime: { base: parseConfig(), attach(control) { attached = true; assert.equal(control.settingsView().revision, 0); return () => { attached = false; }; } },
     storageDomain: { async open(spec) {
       assert.equal(spec.name, 'dsh_safe_auto');
-      assert.equal(spec.tables.settings.valueSchema.safeParse({ revision: 0, values: { mode: 'unattended' } }).success, false);
+      // Rows saved by 0.1.x carry retired keys; they strip on load instead of breaking the panel.
+      const legacy = spec.tables.settings.valueSchema.safeParse({ revision: 0, values: { mode: 'unattended', fastModel: 'm' } });
+      assert.equal(legacy.success, true);
+      assert.deepEqual(legacy.data.values, {});
+      assert.equal(spec.tables.settings.valueSchema.safeParse({ revision: 0, values: { provider: 'p', model: 'm' } }).success, true);
+      assert.equal(spec.tables.settings.valueSchema.safeParse({ revision: 0, values: { provider: 1 } }).success, false);
       return { table: () => ({ get: k => rows.get(k), put: async (k, v) => rows.set(k, v) }), close: async () => { closed = true; } };
     } },
     connection: { requestRejection() { rejections++; return undefined; } },

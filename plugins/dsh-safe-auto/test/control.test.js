@@ -17,7 +17,7 @@ function fixture(extra = {}) {
     resolve: value => specs[value], current: () => current,
     set(_session, value) { if (current === value) return; current = value; events.push({ type: 'permission/preset', data: { preset: value } }); } };
   const sandboxPolicy = { resolve: () => ({ mode: specs[current].sandbox, workspaceRoot: root }) };
-  const base = parseConfig({ workspaceRoots: [root], shellCandidates: ['git status'], fastProvider: 'p', fastModel: 'm', ...extra });
+  const base = parseConfig({ provider: 'p', model: 'm', ...extra });
   const live = new Map([['s', session]]);
   const options = { table, presets, sandboxPolicy, sessions: { get: id => live.get(id), list: () => [...live.values()] } };
   const control = createControl(base, options);
@@ -29,16 +29,17 @@ test('reads never enable Auto or persist; selection keeps workspace-write and as
   const f = fixture();
   const before = await f.control.call('session.get', { sessionId: 's' });
   assert.equal(before.safeAuto, false); assert.equal(f.events.length, 0);
+  assert.equal(f.control.config(f.session).enabled, false);
   const after = await f.select('safe-auto');
   assert.equal(after.current, 'safe-auto'); assert.equal(f.options.presets.current(), 'workspace-write');
   assert.equal(f.options.presets.resolve('workspace-write').approval, 'ask');
-  assert.equal(f.control.config(f.session).mode, 'smart');
+  assert.equal(f.control.config(f.session).enabled, true);
 });
-test('native exit disables review even with legacy smart profile', async () => {
-  const f = fixture({ mode: 'smart' });
+test('native exit disables review', async () => {
+  const f = fixture();
   await f.select('safe-auto'); await f.select('read-only');
   assert.equal(f.control.state(f.session).active, false);
-  assert.equal(f.control.config(f.session).mode, 'off');
+  assert.equal(f.control.config(f.session).enabled, false);
 });
 test('external permission changes revoke selection; reselect has a new generation', async () => {
   const f = fixture(); await f.select('safe-auto'); const old = f.control.state(f.session);
@@ -57,18 +58,19 @@ test('stale selections and children reject without changing native mode', async 
   f.session.header.origin = 'subagent'; await assert.rejects(f.select('safe-auto'), /Child/);
   assert.equal(f.events.length, 1);
 });
-test('settings save is revision checked, persisted, and cannot expand envelope', async () => {
+test('settings save is revision checked, persisted, and limited to reviewer fields', async () => {
   const f = fixture();
-  await assert.rejects(f.control.call('settings.save', { expectedRevision: 0, values: { mode: 'unattended' } }), /Only reviewer/);
-  const saved = await f.control.call('settings.save', { expectedRevision: 0, values: { fastProvider: 'new', fastModel: 'small', fastReasoningEffort: 'low', reviewerPrompt: 'Require reversible effects.' } });
+  await assert.rejects(f.control.call('settings.save', { expectedRevision: 0, values: { enabled: false } }), /Only reviewer/);
+  await assert.rejects(f.control.call('settings.save', { expectedRevision: 0, values: { maxReviewsPerTask: 1 } }), /Only reviewer/);
+  const saved = await f.control.call('settings.save', { expectedRevision: 0, values: { provider: 'new', model: 'small', reasoningEffort: 'low', reviewerPrompt: 'Require reversible effects.' } });
   assert.equal(saved.revision, 1);
-  assert.equal(f.control.config(f.session).fastReasoningEffort, 'low');
-  assert.deepEqual(f.control.config(f.session).workspaceRoots, [f.root]);
+  assert.equal(f.control.config(f.session).reasoningEffort, 'low');
+  assert.equal(f.control.config(f.session).provider, 'new');
   assert.deepEqual(createControl(f.base, f.options).settingsView(), saved);
   await assert.rejects(f.control.call('settings.save', { expectedRevision: 0, values: {} }), /changed/);
 });
-test('explicit off profile cannot be enabled from menu', async () => {
-  const f = fixture({ mode: 'off' }); await assert.rejects(f.select('safe-auto'), /disabled/);
+test('explicit disabled profile cannot be enabled from the panel', async () => {
+  const f = fixture({ enabled: false }); await assert.rejects(f.select('safe-auto'), /disabled/);
 });
 test('native no-op switches still reject stale concurrent activation', async () => {
   const f = fixture(); const enabled = await f.select('safe-auto');
@@ -76,11 +78,6 @@ test('native no-op switches still reject stale concurrent activation', async () 
   assert.equal(results[0].status, 'fulfilled'); assert.equal(results[1].status, 'rejected');
   assert.equal(f.control.state(f.session).active, false);
   assert.equal(f.session.seq, 0);
-});
-test('legacy global modes stay inactive until explicit UI selection', () => {
-  for (const mode of ['smart', 'unattended']) {
-    const f = fixture({ mode }); assert.equal(f.control.config(f.session).mode, 'off');
-  }
 });
 test('session list is read-only and includes only live roots without inherited activation', async () => {
   const f = fixture(); await f.select('safe-auto');
@@ -106,14 +103,14 @@ test('independent disable changes only activation and rejects stale revisions', 
   assert.equal(f.session.seq, before); assert.equal(f.options.presets.resolve(disabled.current).approval, 'ask');
   await assert.rejects(f.control.call('session.disable', { sessionId: 's', expectedRevision: enabled.revision }), /changed/);
 });
-test('availability and policy counts are explicit read-only metadata', async () => {
+test('availability and policy limits are explicit read-only metadata', async () => {
   const f = fixture(); const view = f.control.settingsView();
   assert.equal(view.available, true); assert.equal(view.platform, process.platform);
-  assert.deepEqual(view.candidateCounts, { workspaceRoots: 1, shellCandidates: 1, escalationCandidates: 0 });
+  assert.deepEqual(view.values, { provider: 'p', model: 'm', reasoningEffort: '', reviewerPrompt: '' });
   assert.equal(view.policyLimits.readonly, true); assert.equal(view.policyLimits.sandbox, 'workspace-write');
-  assert.equal(view.policyLimits.approval, 'ask');
-  await assert.rejects(f.control.call('settings.save', { expectedRevision: 0, values: { shellCandidates: ['anything'] } }), /Only reviewer/);
-  assert.equal(fixture({ mode: 'off' }).control.settingsView().available, false);
+  assert.equal(view.policyLimits.approval, 'ask'); assert.equal(view.policyLimits.escalationScope, 'this-call-only');
+  assert.equal(view.policyLimits.timeoutMs, 30000); assert.equal(view.policyLimits.maxReviewsPerTask, 20);
+  assert.equal(fixture({ enabled: false }).control.settingsView().available, false);
 });
 test('activation excludes official Auto even when it appears first in catalog', async () => {
   const f = fixture(); f.specs.auto = { sandbox: 'danger-full-access', approval: 'ask' };
@@ -123,7 +120,7 @@ test('activation excludes official Auto even when it appears first in catalog', 
   await f.select('safe-auto'); assert.equal(f.options.presets.current(), 'workspace-write');
 });
 function approvalFixture(t, reviewer, extra = {}) {
-  const f = fixture({ approvalReview: true, ...extra });
+  const f = fixture(extra);
   f.events.push({ type: 'user/message', seq: 1, data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Run git status to inspect the repository.' }] } });
   const handlers = {}, disposers = []; let runtime, guard, calls = 0;
   const ctx = { provide(_key, value) { runtime = value; }, tools: { guard(fn) { guard = fn; } },
@@ -138,15 +135,10 @@ function approvalFixture(t, reviewer, extra = {}) {
     sandbox_permissions: 'danger-full-access', justification: 'Inspect repository status', timeoutMs: 1000 }, agent: { session: f.session }, callId: 'approval-one', signal: new AbortController().signal };
   const req = () => ({ agent: exec.agent, toolName: exec.name, callId: exec.callId, signal: exec.signal,
     reason: `escalate sandbox to ${exec.arguments.sandbox_permissions}: ${exec.arguments.justification}` });
-  return { ...f, handlers, exec, req, guard: () => guard(exec), calls: () => calls };
+  return { ...f, handlers, exec, req, guard: () => guard(exec), calls: () => calls, detach };
 }
-test('approval opt-in is persisted as a boolean and cannot edit policy', async () => {
-  const f = fixture(); assert.equal(f.control.settingsView().values.approvalReview, false);
-  const saved = await f.control.call('settings.save', { expectedRevision: 0, values: { approvalReview: true } });
-  assert.equal(saved.values.approvalReview, true); assert.equal(createControl(f.base, f.options).settingsView().values.approvalReview, true);
-  await assert.rejects(f.control.call('settings.save', { expectedRevision: 1, values: { approvalReview: 'true' } }), /approvalReview/);
-});
-test('approval opt-in preserves native preflight but rejects unbound and mismatched asks without downstream', async t => {
+const approvalVerdict = decision => JSON.stringify({ decision, risk: 'low', authorization: 'high', bounded: true, reason: 'User requested bounded repository inspection.' });
+test('unbound and mismatched asks reject without downstream or a review call', async t => {
   const f = approvalFixture(t, async () => { assert.fail('unbound requests must not review'); });
   await f.select('safe-auto');
   assert.equal((await f.handlers['tools/pre-execute'](f.exec, async () => ({ kind: 'allow' }))).kind, 'allow');
@@ -162,8 +154,7 @@ test('approval opt-in preserves native preflight but rejects unbound and mismatc
   });
   assert.equal(downstream, 0); assert.equal(f.calls(), 0);
 });
-const approvalVerdict = decision => JSON.stringify({ decision, risk: 'low', authorization: 'high', bounded: true, reason: 'User requested bounded repository inspection.' });
-test('Windows approval review grants once only inside the exact native execution', async t => {
+test('approval review grants once only inside the exact native execution', async t => {
   const f = approvalFixture(t, async () => approvalVerdict('allow')); await f.select('safe-auto');
   assert.equal((await f.handlers['tools/pre-execute'](f.exec, async () => ({ kind: 'allow' }))).kind, 'allow');
   await f.handlers['tools/execute'](f.exec, async () => {
@@ -173,7 +164,7 @@ test('Windows approval review grants once only inside the exact native execution
   assert.equal(f.calls(), 1); assert.equal(f.options.presets.current(), 'workspace-write');
   assert.equal(await f.handlers['approval/request'](f.req(), async () => { assert.fail('ended execution must not delegate'); }), 'rejected');
 });
-test('approval mutation or disabling during review rejects a late grant', async t => {
+test('mutation or disabling during review rejects a late grant', async t => {
   for (const change of ['arguments', 'disable']) {
     const f = approvalFixture(t, async f => {
       if (change === 'arguments') fixtureExec.arguments.command = 'git diff';
@@ -195,12 +186,11 @@ test('review uncertainty, explicit deny and malformed output reject without down
     assert.equal(downstream, 0); assert.equal(f.calls(), 1);
   }
 });
-test('review errors, timeout and lease expiry reject without downstream', async t => {
+test('review errors and timeout reject without downstream', async t => {
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   for (const scenario of [
     { reviewer: async () => { throw new Error('adapter failure'); }, config: {} },
     { reviewer: async () => { await delay(150); return approvalVerdict('allow'); }, config: { timeoutMs: 100 } },
-    { reviewer: async () => { await delay(150); return approvalVerdict('allow'); }, config: { escalationApprovalTtlMs: 100 } },
   ]) {
     const f = approvalFixture(t, scenario.reviewer, scenario.config); await f.select('safe-auto');
     let downstream = 0;
@@ -210,8 +200,8 @@ test('review errors, timeout and lease expiry reject without downstream', async 
     assert.equal(downstream, 0); assert.equal(f.calls(), 1);
   }
 });
-test('exhausted approval budget rejects rather than using downstream approvals', async t => {
-  const f = approvalFixture(t, async () => approvalVerdict('allow'), { fastCallsPerTask: 1 }); await f.select('safe-auto');
+test('exhausted review budget rejects rather than using downstream approvals', async t => {
+  const f = approvalFixture(t, async () => approvalVerdict('allow'), { maxReviewsPerTask: 1 }); await f.select('safe-auto');
   const malicious = async () => { assert.fail('exhausted budget must not delegate'); };
   await f.handlers['tools/execute'](f.exec, async () => {
     assert.equal(await f.handlers['approval/request'](f.req(), malicious), 'allowed-once');
@@ -232,14 +222,11 @@ test('cancelled active approval requests stay cancelled without downstream', asy
     assert.equal(await f.handlers['approval/request'](f.req(), malicious), 'cancelled');
   });
 });
-test('inactive opt-in and shadow mode preserve downstream behavior', async t => {
-  for (const mode of ['off', 'shadow']) {
-    const f = approvalFixture(t, async () => { assert.fail('inactive or shadow must not review'); });
-    if (mode === 'shadow') f.control.config = () => parseConfig({ ...f.base, mode });
-    let downstream = 0;
-    assert.equal(await f.handlers['approval/request'](f.req(), async () => { downstream++; return 'allowed-once'; }), 'allowed-once');
-    assert.equal(downstream, 1); assert.equal(f.calls(), 0);
-  }
+test('an inactive session delegates to the downstream chain unchanged', async t => {
+  const f = approvalFixture(t, async () => { assert.fail('inactive sessions must not review'); });
+  let downstream = 0;
+  assert.equal(await f.handlers['approval/request'](f.req(), async () => { downstream++; return 'allowed-once'; }), 'allowed-once');
+  assert.equal(downstream, 1); assert.equal(f.calls(), 0);
 });
 test('child and nested native requests never receive automatic grants', async t => {
   for (const kind of ['child', 'nested']) {
@@ -259,7 +246,7 @@ test('relative workdir cannot obtain automatic native approval', async t => {
   });
   assert.equal(f.calls(), 0);
 });
-test('disabling after native preflight prevents review during execute', async t => {
+test('disabling before execute prevents review during the request', async t => {
   const f = approvalFixture(t, async () => { assert.fail('inactive controls cannot review'); }); const enabled = await f.select('safe-auto');
   assert.equal((await f.handlers['tools/pre-execute'](f.exec, async () => ({ kind: 'allow' }))).kind, 'allow');
   await f.control.call('session.disable', { sessionId: 's', expectedRevision: enabled.revision });
@@ -268,26 +255,22 @@ test('disabling after native preflight prevents review during execute', async t 
   });
   assert.equal(f.calls(), 0);
 });
-test('settings changes invalidate pending grants without refilling reviewer budget', async t => {
-  const f = fixture({ fastCallsPerTask: 1 });
-  f.events.push({ type: 'user/message', seq: 1, data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Inspect status' }] } });
-  const handlers = {}, disposers = []; let runtime, guard, calls = 0;
-  const ctx = { provide(_key, value) { runtime = value; }, tools: { guard(fn) { guard = fn; } },
-    get(key) { return key === 'permissionPresets' ? { ...f.options.presets, names: Object.keys(f.specs), registerAuto() { assert.fail('must not publish official FullAccess Auto'); } } : undefined; },
-    sandboxPolicy: f.options.sandboxPolicy, logger: { info() {} }, on(event, fn) { handlers[event] = fn; }, effect(fn) { disposers.push(fn()); },
-    inject(_deps, fn) { fn({ effect: ctx.effect, llm: { async *stream() { calls++; yield { type: 'block-end', index: 0, block: { type: 'text', text: '{"decision":"allow"}' } }; yield { type: 'finish', reason: { kind: 'stop' } }; } } }); } };
-  apply(ctx, f.base); const detach = runtime.attach(f.control);
-  t.after(() => { detach(); disposers.reverse().forEach(fn => fn()); });
-  await f.select('safe-auto');
-  const exec = () => ({ token: Symbol(), name: 'bash', arguments: { command: 'git status' }, agent: { session: f.session }, callId: 'one', signal: new AbortController().signal });
-  const first = exec(); assert.equal((await handlers['tools/pre-execute'](first, async () => ({ kind: 'allow' }))).kind, 'allow');
-  await f.control.call('settings.save', { expectedRevision: 0, values: { reviewerPrompt: 'Be cautious.' } });
-  assert.match(guard(first), /SETTINGS_CHANGED/);
-  assert.equal((await handlers['tools/pre-execute'](exec(), async () => ({ kind: 'allow' }))).kind, 'ask');
-  assert.equal(calls, 1);
-  detach();
-  const afterDetach = exec();
-  assert.equal((await handlers['tools/pre-execute'](afterDetach, async () => ({ kind: 'allow' }))).kind, 'allow');
-  assert.equal(guard(afterDetach), undefined);
-  assert.equal(calls, 1, 'detaching controls never restores legacy automatic review');
+test('settings changes invalidate pending grants; detaching never restores review', async t => {
+  const f = approvalFixture(t, async () => approvalVerdict('allow')); await f.select('safe-auto');
+  const first = f.exec;
+  assert.equal((await f.handlers['tools/pre-execute'](first, async () => ({ kind: 'allow' }))).kind, 'allow');
+  await f.handlers['tools/execute'](first, async () => {
+    await f.control.call('settings.save', { expectedRevision: 0, values: { reviewerPrompt: 'Be cautious.' } });
+    assert.match(f.guard(), /SETTINGS_CHANGED/);
+    assert.equal(await f.handlers['approval/request'](f.req(), async () => { assert.fail('stale grant must not delegate'); }), 'rejected');
+  });
+  assert.equal(f.calls(), 0, 'a settings change rejects before invoking the reviewer');
+  f.handlers['tools/result'](first, {});
+  f.detach();
+  const second = { ...first, token: Symbol(), callId: 'two', signal: new AbortController().signal };
+  assert.equal((await f.handlers['tools/pre-execute'](second, async () => ({ kind: 'allow' }))).kind, 'allow');
+  assert.equal(f.guard(), undefined, 'guard no longer gates once controls are detached');
+  let downstream = 0;
+  assert.equal(await f.handlers['approval/request'](f.req(), async () => { downstream++; return 'allowed-once'; }), 'allowed-once');
+  assert.equal(downstream, 1); assert.equal(f.calls(), 0);
 });

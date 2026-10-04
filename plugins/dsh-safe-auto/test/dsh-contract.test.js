@@ -2,9 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { mkdtempSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
 import * as safeAuto from '../src/index.js';
 
 // Reuse the workspace's pinned real DSH packages, not a second drifting set of versions.
@@ -22,49 +19,44 @@ try {
   if (process.env.CI || error.code !== 'MODULE_NOT_FOUND') throw error;
 }
 
-test('real Cordis + DSH ToolRuntime: schema, preflight, final guard, policy composition and disposal',
-  { skip: sep !== '/' ? 'File-grant contract requires POSIX' : !host && 'DSH workspace dependencies are not installed (mandatory in CI)' }, async t => {
+test('real Cordis + DSH ToolRuntime: schema, hard-risk guard, policy composition and disposal',
+  { skip: !host && 'DSH workspace dependencies are not installed (mandatory in CI)' }, async t => {
     const { Context, Service } = host.cordis;
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'safe-auto-contract-')));
-    writeFileSync(join(root, 'hello.txt'), 'hello');
     class TestSandboxPolicy extends Service {
       constructor(ctx) { super(ctx, 'sandboxPolicy'); }
-      resolve() { return { mode: 'workspace-write', workspaceRoot: root }; }
+      resolve() { return { mode: 'workspace-write', workspaceRoot: 'D:\\contract' }; }
     }
     const ctx = new Context();
     const fixtures = [];
-    t.after(async () => {
-      try { for (const fiber of fixtures.reverse()) await fiber.dispose(); }
-      finally { rmSync(root, { recursive: true, force: true }); }
-    });
+    t.after(async () => { for (const fiber of fixtures.reverse()) await fiber.dispose(); });
     fixtures.push(await ctx.plugin(host.prompt.default, {}));
     fixtures.push(await ctx.plugin(host.tools.default));
     fixtures.push(await ctx.plugin(TestSandboxPolicy));
     let executions = 0;
-    ctx.tools.register({
-      name: 'read', description: 'test read body (no actual filesystem side effects)',
+    for (const name of ['read', 'write']) ctx.tools.register({
+      name, description: 'test fixture (no actual filesystem side effects)',
       parameters: { type: 'object', properties: {} },
       output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
       execute: async () => { executions++; return 'executed'; },
     });
-    const agent = { id: 'contract-agent', session: { id: 'contract-session', header: { cwd: root }, snapshotEvents: () => [] } };
-    const run = path => ctx.tools.execute({ callId: 'same-call-id', name: 'read', arguments: { file_path: path }, agent, signal: new AbortController().signal });
-    const fiber = await ctx.plugin(safeAuto, { mode: 'smart', workspaceRoots: [root] });
+    const agent = { id: 'contract-agent', session: { id: 'contract-session', header: { cwd: 'D:\\contract' }, snapshotEvents: () => [] } };
+    const run = (name, args) => ctx.tools.execute({ callId: 'same-call-id', name, arguments: args, agent, signal: new AbortController().signal });
+    const fiber = await ctx.plugin(safeAuto, {});
     fixtures.push(fiber);
-    assert.equal((await run('hello.txt')).isError, false, 'real pre-execute runs before monotonic guards');
-    assert.equal((await run('hello.txt')).isError, false, 'final-result cleanup permits another call with the same visible ID');
-    assert.equal((await run('.env')).isError, true);
+    assert.equal((await run('read', { file_path: 'a.txt' })).isError, false, 'ordinary calls pass through untouched');
+    assert.equal((await run('read', { file_path: 'a.txt' })).isError, false, 'result cleanup permits another call with the same visible ID');
+    assert.equal((await run('write', { file_path: '.env', content: 'x' })).isError, true, 'hard risk denies before review');
     assert.equal(executions, 2);
 
     const stopDeny = ctx.on('tools/pre-execute', async () => ({ kind: 'deny', reason: 'downstream-policy' }));
-    assert.equal((await run('hello.txt')).isError, true, 'Safe Auto must retain downstream denial');
+    assert.equal((await run('read', { file_path: 'a.txt' })).isError, true, 'Safe Auto must retain downstream denial');
     stopDeny();
     const stopBypass = ctx.on('tools/pre-execute', async () => ({ kind: 'allow' }), { prepend: true });
-    const bypassed = await run('hello.txt');
-    assert.equal(bypassed.isError, true);
-    assert.match(JSON.stringify(bypassed.content), /PREFLIGHT_NOT_RUN/);
+    const bypassed = await run('write', { file_path: '.env', content: 'x' });
+    assert.equal(bypassed.isError, true, 'a pre-execute bypass cannot skip the hard-risk guard');
+    assert.match(JSON.stringify(bypassed.content), /PROTECTED_PATH/);
     stopBypass();
     await fiber.dispose();
     fixtures.pop();
-    assert.equal((await run('.env')).isError, false, 'plugin unload removes its listeners and guard');
+    assert.equal((await run('write', { file_path: '.env', content: 'x' })).isError, false, 'plugin unload removes its listeners and guard');
   });
