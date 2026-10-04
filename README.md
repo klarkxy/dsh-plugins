@@ -30,7 +30,7 @@ Package names link to npm for plugins maintained in other repositories and to th
 | Package | Purpose | Status |
 | --- | --- | --- |
 | [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.md) | Teammate Roles: reusable teammate roles and native Team UI enhancements. | Local alpha; excluded from automatic npm publication and the plugin site. |
-| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: budgeted preflight plus one-shot approval escalation. | npm release candidate; the plugin site catalog lists stable releases only. |
+| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: an independent reviewer vets each sandbox escalation; only a pass auto-approves. | npm release candidate; the plugin site catalog lists stable releases only. |
 | [`@klarkxy/dsh-blueprint`](plugins/dsh-blueprint/README.md) | Blueprint: share a plugin set as an exact-version blueprint code. | npm preview release; the plugin site catalog lists stable releases only. |
 
 Migrated from the local `dsh-teammates` directory. See the [migration record](docs/classmates-migration.md).

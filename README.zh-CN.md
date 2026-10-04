@@ -30,7 +30,7 @@
 | 包 | 作用 | 状态 |
 | --- | --- | --- |
 | [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.zh-CN.md) | 队友角色：配置可复用的队友角色，增强原生 Team 界面。 | 本地 alpha；不参与自动 npm 发布，不收录到插件站。 |
-| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.zh-CN.md) | Safe Auto：有预算的预检加单次审批升级。 | npm 发布候选版；插件站 catalog 只收录稳定版。 |
+| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.zh-CN.md) | Safe Auto：沙箱提权由独立审核模型把关，通过才自动放行。 | npm 发布候选版；插件站 catalog 只收录稳定版。 |
 | [`@klarkxy/dsh-blueprint`](plugins/dsh-blueprint/README.zh-CN.md) | Blueprint：把一套插件组合分享成带确切版本的蓝图码。 | npm 预览版；插件站 catalog 只收录稳定版。 |
 
 从本地 `dsh-teammates` 目录迁入，详见[迁移记录](docs/classmates-migration.md)。
