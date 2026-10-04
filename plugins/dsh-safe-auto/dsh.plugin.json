@@ -1,8 +1,8 @@
 {
   "id": "@klarkxy/dsh-safe-auto",
-  "version": "0.1.0-rc.6",
+  "version": "0.2.0-rc.0",
   "main": "src/index.js",
-  "description": "Safe Auto: budgeted preflight and one-shot escalation with conversation-following or independent reviewers.",
+  "description": "Safe Auto: an independent reviewer vets each native sandbox escalation; only a pass auto-approves that one call.",
   "engines": { "dsh": ">=0.1.7-rc.2" },
   "contributes": { "tools": [], "skills": [] }
 }

@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-safe-auto",
-  "version": "0.1.0-rc.6",
-  "description": "Safe Auto: budgeted preflight and one-shot escalation with conversation-following or independent reviewers.",
+  "version": "0.2.0-rc.0",
+  "description": "Safe Auto: an independent reviewer vets each native sandbox escalation; only a pass auto-approves that one call.",
   "icon": "./icon.svg",
   "type": "module",
   "main": "src/index.js",
@@ -24,7 +24,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node --check src/config.js && node --check src/approval-review.js && node --check src/policy.js && node --check src/escalation.js && node --check src/model-route.js && node --check src/reviewer.js && node --check src/gate.js && node --check src/index.js && node --check src/control.js && node --check src/ui-host.js && tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-safe-auto",
+    "build": "node --check src/config.js && node --check src/approval-review.js && node --check src/policy.js && node --check src/model-route.js && node --check src/reviewer.js && node --check src/gate.js && node --check src/index.js && node --check src/control.js && node --check src/ui-host.js && tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-safe-auto",
     "test": "node --test test/*.test.js"
   },
   "engines": {
