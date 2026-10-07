@@ -1,10 +1,17 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, DisclosureRow, IconShieldOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Button, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconShieldOutlineRegular, Menu, Modal,
+  PermissionIconFullAccessRegular, PermissionIconReadOnlyRegular, PermissionIconWorkspaceWriteRegular, SegmentedTabs } from '@deepseek-ai/dsh-client-ui-primitives';
+import { modelMenuEffortOptions, parseModelMenuChoices } from '@klarkxy/dsh-model-route';
+import { ModelMenu, modelMenuCss } from '@klarkxy/dsh-model-route/ui';
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui';
+import { createPluginReadGate } from '@klarkxy/dsh-plugin-kit/client-utils';
 
 const h = React.createElement;
 export const name = 'dsh-safe-auto-client';
-export const inject = ['slots', 'connection', 'remote', 'locale'];
+/* `remote.session` is a nested service of the injected `remote` face: cordis
+ * checks the dotted path against this list, so the parent `remote` entry alone
+ * is not enough — omitting it throws "cannot get property without inject". */
+export const inject = ['slots', 'connection', 'remote', 'remote.session', 'locale'];
 export const CHANNEL = '/dsh-safe-auto';
 export const BUNDLE = '@klarkxy/dsh-safe-auto';
 
@@ -13,7 +20,9 @@ const TEXT = {
   zh: {
     requestFailed: '请求失败',
     follow: '跟随当前对话',
-    savedUnavailable: value => `已保存，目录中不可用：${value}`,
+    searchModels: '搜索模型…',
+    noModels: '没有匹配的模型',
+    clearSearch: '清除搜索',
     reviewer: '审核模型',
     model: '模型',
     effort: '思考强度',
@@ -23,32 +32,39 @@ const TEXT = {
     modelAbsent: '当前模型不在目录中，保留已保存配置。',
     effortAbsent: '已保存的思考强度不在目录中，不会自动替换。',
     effortClears: '更换模型会清空思考强度。',
-    approveForMe: '替我审批',
-    sessionHelp: '为指定的活跃会话启用。保留 Workspace Write + ask，不授予 Full Access；重启、切换权限或卸载后需重新启用。',
-    targetSession: '目标会话',
-    chooseSession: '选择活跃会话',
-    enabledMark: '已启用',
-    sessionEnabled: '本会话已启用',
-    sessionDisabled: current => `未启用 · 当前权限：${current}`,
-    unsaved: '有未保存修改，启用前先保存。',
-    enable: '启用',
-    disable: '停用（不改权限）',
-    refreshSessions: '刷新会话',
-    noSessions: '没有可操作的活跃主会话，请打开一个。',
-    refreshRetry: message => `${message}。刷新后重试。`,
+    permission: '权限',
+    readOnly: '仅可查看',
+    workspaceWrite: '工作区内修改',
+    fullAccess: '完全权限',
+    safeAuto: '安全自动',
+    unavailableShort: '当前不可用',
+    refreshRetry: message => `${message}。重新打开菜单后重试。`,
     panelLabel: '安全自动设置',
-    intro: '保存设置不调用模型；只有显式启用的会话自动审批。',
+    intro: '在输入框的权限菜单里为本会话启用「安全自动」；这里只保存审核配置，不调用模型。',
     loading: '正在读取配置…',
+    tabsLabel: '设置分区',
+    tabReviewer: '审核配置',
     details: '安全说明',
-    safetyDetail: '只处理真实原生 write/edit/bash/pwsh 的单次沙箱提权：审查通过才放行这一次调用。高风险、不确定、证据不足、未知或未绑定请求、错误、超时、预算耗尽及授权失效一律直接拒绝，不交回下游审批链。不执行取证命令，也不放开整个会话。',
+    tabLimits: '预算边界',
+    safetyDetail: '只处理原生 write/edit/bash/pwsh 的单次沙箱提权。审核会保留真人任务授权及后续限制，并按需读取工作区内的包配置和脚本；模型通过时自动放行。其余有效请求请你在 60 秒内确认，超时拒绝。确认只适用于这一次调用。',
     unableLabel: '无法自动判断时',
-    unableValue: '直接拒绝',
+    unableValue: '请你在 60 秒内确认；超时拒绝',
+    approvalTitle: '确认这一次调用',
+    approvalPending: count => `${count} 个请求待确认`,
+    approvalCountdown: seconds => `剩余 ${seconds} 秒 · 超时拒绝`,
+    approvalExpired: '确认已超时，已拒绝。',
+    approvalAllow: '仅允许这一次',
+    approvalDeny: '拒绝',
+    approvalPermission: '请求权限',
+    approvalScope: '仅此调用',
+    approvalReview: '模型审核意见',
+    approvalRefresh: message => `${message}。正在刷新请求；不会自动重试决定。`,
+    approvalEffect: '完整调用内容',
     prompt: '额外审核提示词',
     promptHint: count => `${count}/4096 · 只可补充审核约束，不可扩大授权或覆盖安全规则。`,
-    limits: '预算与安全边界（只读）',
     limitsLine: l => `单次审查超时 ${l.timeoutMs} ms · 输入上限 ${l.maxInputBytes} bytes · 输出上限 ${l.outputTokens} tokens`,
     limitsFuses: l => `每个任务最多审查 ${l.maxReviewsPerTask} 次 · 连续拒绝 ${l.consecutiveDenials} 次后熔断`,
-    limitsHelp: '预算在 profile 中配置，保存设置或重新启用不会补充；完整动作可能发送给所选审核模型。',
+    limitsHelp: '预算在 profile 中配置，保存设置或重新启用不会补充；动作、真人指令和有界的本地脚本证据会发送给审核模型。',
     save: '保存',
     refreshDiscard: '刷新（丢弃草稿）',
     saveFailed: message => `${message}。草稿已保留，刷新后重新编辑，不会自动重试。`,
@@ -59,7 +75,9 @@ const TEXT = {
   en: {
     requestFailed: 'Request failed',
     follow: 'Follow conversation',
-    savedUnavailable: value => `Saved, unavailable: ${value}`,
+    searchModels: 'Search models…',
+    noModels: 'No matching models',
+    clearSearch: 'Clear search',
     reviewer: 'Reviewer model',
     model: 'Model',
     effort: 'Reasoning effort',
@@ -69,32 +87,39 @@ const TEXT = {
     modelAbsent: 'This model is not in the catalog; the saved configuration is kept.',
     effortAbsent: 'The saved effort is not advertised; it will not be replaced automatically.',
     effortClears: 'Changing the model clears the reasoning effort.',
-    approveForMe: 'Approve for me',
-    sessionHelp: 'Enable for one live session. Keeps Workspace Write + ask; no standing permission grant. Re-enable after restart, a permission change or uninstall.',
-    targetSession: 'Target session',
-    chooseSession: 'Choose a live session',
-    enabledMark: 'enabled',
-    sessionEnabled: 'Enabled for this session',
-    sessionDisabled: current => `Disabled · Permissions: ${current}`,
-    unsaved: 'You have unsaved changes. Save before enabling.',
-    enable: 'Enable',
-    disable: 'Disable (keeps permissions)',
-    refreshSessions: 'Refresh sessions',
-    noSessions: 'No live root conversation. Open a conversation first.',
-    refreshRetry: message => `${message}. Refresh before retrying.`,
+    permission: 'Permissions',
+    readOnly: 'Read Only',
+    workspaceWrite: 'Workspace Write',
+    fullAccess: 'Full Access',
+    safeAuto: 'Safe Auto',
+    unavailableShort: 'unavailable',
+    refreshRetry: message => `${message}. Reopen the menu and retry.`,
     panelLabel: 'Safe Auto settings',
-    intro: 'Saving does not call a model; only explicitly enabled sessions use automatic review.',
+    intro: 'Enable Safe Auto per session from the permission menu in the composer; this page only saves reviewer configuration and never calls a model.',
     loading: 'Loading settings…',
+    tabsLabel: 'Settings sections',
+    tabReviewer: 'Reviewer',
     details: 'Safety notes',
-    safetyDetail: 'Only single sandbox escalations of real native write/edit/bash/pwsh calls: one reviewed pass approves that one call. High risk, uncertainty, missing evidence, unknown or unbound requests, errors, timeouts, exhausted budgets and invalidated grants are all rejected outright, never handed back to the downstream approval chain. No probing commands; the whole session is never opened.',
+    tabLimits: 'Limits',
+    safetyDetail: 'Reviews one native write/edit/bash/pwsh sandbox escalation at a time. Earlier human task authorization and later restrictions remain visible; workspace package definitions and scripts may supply evidence. A model pass auto-approves. Other valid requests ask you to confirm within 60 seconds and are denied on timeout. Confirmation grants this call only.',
     unableLabel: 'When it cannot judge automatically',
-    unableValue: 'Reject',
+    unableValue: 'Ask you to confirm within 60 seconds; deny on timeout',
+    approvalTitle: 'Confirm this call',
+    approvalPending: count => `${count} pending confirmation${count === 1 ? '' : 's'}`,
+    approvalCountdown: seconds => `${seconds} seconds left · Deny on timeout`,
+    approvalExpired: 'Confirmation expired and was denied.',
+    approvalAllow: 'Allow this call only',
+    approvalDeny: 'Reject',
+    approvalPermission: 'Requested permission',
+    approvalScope: 'This call only',
+    approvalReview: 'Model review opinion',
+    approvalRefresh: message => `${message}. Refreshing requests; your decision will not be retried automatically.`,
+    approvalEffect: 'Complete call content',
     prompt: 'Additional reviewer prompt',
     promptHint: count => `${count}/4096 · May add review constraints, never expand authorization or override safety rules.`,
-    limits: 'Budget and safety limits (read-only)',
     limitsLine: l => `Review timeout ${l.timeoutMs} ms · Input cap ${l.maxInputBytes} bytes · Output cap ${l.outputTokens} tokens`,
     limitsFuses: l => `At most ${l.maxReviewsPerTask} reviews per task · Breaker opens after ${l.consecutiveDenials} consecutive denials`,
-    limitsHelp: 'Budgets live in the profile and are not refilled by saving or re-enabling. Complete actions may be sent to the selected reviewer model.',
+    limitsHelp: 'Budgets live in the profile and are not refilled by saving or re-enabling. Actions, human instructions and bounded local script evidence are sent to the reviewer model.',
     save: 'Save',
     refreshDiscard: 'Refresh (discard draft)',
     saveFailed: message => `${message}. Draft retained; refresh before editing again. No automatic retry.`,
@@ -132,16 +157,19 @@ export async function unwrapRpc(call, endpoint, payload, fallback = TEXT.en.requ
 // Responses belong to a view lifetime and generation; writes are never retried.
 export function createRequestScope() {
   let generation = 0, active = true, writing = false;
+  const readGate = createPluginReadGate();
   return {
-    invalidate() { generation++; },
-    dispose() { active = false; generation++; },
+    invalidate() { generation++; readGate.reset(); },
+    dispose() { active = false; generation++; readGate.reset(); },
     get writing() { return writing; },
-    async run(operation, handlers = {}, write = false) {
+    async run(operation, handlers = {}, write = false, automatic = false) {
       if (!active || writing) return false;
+      if (!write && automatic && !readGate.canRead()) return false;
+      readGate.reset();
       if (write) writing = true;
       const ticket = ++generation;
       try {
-        const value = await operation();
+        const value = write ? await operation() : await readGate.run(operation);
         if (active && generation === ticket) handlers.value?.(value);
       } catch (error) {
         if (active && generation === ticket) handlers.error?.(error);
@@ -154,31 +182,102 @@ export function createRequestScope() {
   };
 }
 
-export function modelKey(provider, model) { return JSON.stringify([provider || '', model || '']); }
-export function modelChoices(catalog, provider = '', model = '', t = translator('en')) {
-  const choices = [{ value: modelKey('', ''), name: t('follow'), provider: '', model: '', efforts: [] }];
-  for (const group of catalog?.groups || []) for (const entry of group.models || []) {
-    choices.push({ value: modelKey(group.id, entry.id), name: `${group.name || group.id} / ${entry.name || entry.id}`, provider: group.id, model: entry.id, efforts: entry.reasoning?.efforts || [] });
+const monotonicNow = () => globalThis.performance?.now?.() ?? Date.now();
+export function approvalRemaining(request, now = monotonicNow()) {
+  return Math.max(0, request.deadline - now);
+}
+
+/** Per-session serial reads and one-shot writes. A response's server remainder
+ * is anchored before the round trip so network delay cannot extend the prompt. */
+export function createApprovalController({ api, sessionId, onState, now = monotonicNow,
+  schedule = setTimeout, cancel = clearTimeout, intervalMs = 1000, readGate = createPluginReadGate() }) {
+  let active = true, reading = false, writing = false, generation = 0, readSequence = 0, timer;
+  let state = { requests: [], busy: false, error: '' };
+  const publish = next => { state = { ...state, ...next }; if (active) onState(state); };
+  const arm = () => { if (active) { cancel(timer); timer = schedule(() => { void refresh(); }, intervalMs); } };
+  async function refresh(manual = false) {
+    if (!active || reading || writing) return false;
+    if (manual) { generation++; readGate.reset(); }
+    if (!readGate.canRead()) { arm(); return false; }
+    cancel(timer); reading = true;
+    const ticket = generation, readId = ++readSequence, started = now();
+    try {
+      const value = await readGate.run(() => api.getApprovals(sessionId));
+      if (active && ticket === generation) {
+        const previous = new Map(state.requests.map(request => [request.id, request.deadline]));
+        const requests = (value?.requests || []).map(request => ({ ...request,
+          deadline: Math.min(previous.get(request.id) ?? Infinity,
+            started + Math.max(0, Number(request.remainingMs) || 0)),
+        })).filter(request => approvalRemaining(request, now()) > 0);
+        publish({ requests, error: '' });
+      }
+    } catch (error) {
+      if (active && ticket === generation) publish({ error: error.message });
+    } finally { if (readId === readSequence) { reading = false; arm(); } }
+    return true;
   }
-  const current = modelKey(provider, model);
-  if (!choices.some(choice => choice.value === current)) choices.push({ value: current, name: t('savedUnavailable', `${provider || '—'} / ${model || '—'}`), provider, model, efforts: [], unknown: true });
-  return choices;
+  return {
+    refresh,
+    reconnect() { generation++; readSequence++; readGate.reset(); reading = false; if (!writing) void refresh(); },
+    dispose() { active = false; generation++; readGate.reset(); cancel(timer); },
+    async answer(requestId, outcome) {
+      const request = state.requests.find(item => item.id === requestId);
+      if (!active || writing || !request || approvalRemaining(request, now()) <= 0) return false;
+      writing = true; generation++; cancel(timer); publish({ busy: true, error: '' });
+      readGate.reset();
+      try {
+        const value = await api.answerApproval({ sessionId, requestId, outcome });
+        if (value?.accepted !== true) throw new Error('Confirmation is no longer available');
+        if (active) publish({ requests: state.requests.filter(item => item.id !== requestId) });
+      } catch (error) {
+        // A competing tab, timeout or lost response needs a fresh read, never a
+        // repeated write. Remove the stale prompt until that read completes.
+        if (active) publish({ requests: state.requests.filter(item => item.id !== requestId), error: error.message });
+      } finally {
+        writing = false;
+        if (active) { publish({ busy: false }); if (!reading) void refresh(); else arm(); }
+      }
+      return true;
+    },
+  };
 }
-export function selectModel(values, choice) {
-  return { ...values, provider: choice.provider, model: choice.model, reasoningEffort: '' };
+
+/* The standard editor's state for the reviewer route: catalog choices with a
+ * saved-but-unlisted route retained, the follow-mode flag and the effort rows.
+ * Catalog parsing — remote envelope included — lives in dsh-model-route. */
+export function reviewerMenuState(values, catalog) {
+  const provider = values.provider || '', model = values.model || '';
+  const follow = !provider && !model;
+  const listed = parseModelMenuChoices(catalog);
+  const known = follow || listed.some(choice => choice.provider === provider && choice.model === model);
+  const choices = follow || known ? listed : parseModelMenuChoices(catalog, { provider, model });
+  const selected = choices.find(choice => choice.provider === provider && choice.model === model);
+  const efforts = follow ? [] : modelMenuEffortOptions(selected, values.reasoningEffort || '');
+  return { provider, model, follow, known, choices, selected, efforts };
 }
-/** A short, recognizable session name: its title or folder, plus the id head. */
-export function sessionLabel(item, t = translator('en')) {
-  const cwd = item.header?.cwd || '';
-  const base = item.header?.title || cwd.split(/[\\/]/).filter(Boolean).pop() || '—';
-  const id = String(item.sessionId).slice(0, 8);
-  return `${base} · ${id}${item.safeAuto ? ` · ${t('enabledMark')}` : ''}`;
+
+/** Picking a model clears the effort; picking "follow" clears the whole route. */
+export function pickReviewerModel(values, route) {
+  return { ...values, provider: route.provider, model: route.model, reasoningEffort: '' };
 }
+
+const PERMISSION_ICONS = {
+  'read-only': PermissionIconReadOnlyRegular,
+  'workspace-write': PermissionIconWorkspaceWriteRegular,
+  'danger-full-access': PermissionIconFullAccessRegular,
+  'safe-auto': IconShieldOutlineRegular,
+};
+/** Known preset values get localized names matching the host menu; anything else keeps its catalog name. */
+export function permissionLabel(value, name, t = translator('en')) {
+  const known = { 'read-only': t('readOnly'), 'workspace-write': t('workspaceWrite'), 'danger-full-access': t('fullAccess'), 'safe-auto': t('safeAuto') };
+  return known[value] || name || value;
+}
+
 // The shared contract is scoped under the plugin root, so its rules only match
 // descendants: every `dsh-ui-*` class below sits inside `.dsh-safe-auto`.
 // Only this plugin's own geometry, and the platform element the primitives do
 // not ship, are styled here.
-const css = `${officialUiCss('dsh-safe-auto')}
+const css = `${officialUiCss('dsh-safe-auto')}${modelMenuCss}
 /* A fieldset is the settings group and takes the contract's card surface; its
  * legend keeps the UA inline padding from indenting the group title. */
 .dsh-safe-auto legend { padding: 0; }
@@ -199,73 +298,192 @@ const css = `${officialUiCss('dsh-safe-auto')}
   resize: vertical;
 }
 .dsh-safe-auto-input:disabled { opacity: 0.4; cursor: not-allowed; }
+.dsh-safe-auto-approval-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  max-width: 100%;
+}
+.dsh-safe-auto-approval-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+.dsh-safe-auto-approval-pre {
+  max-height: 35vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-3);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
 `;
 function Style() { return h('style', null, css); }
 function ErrorText({ error }) { return error ? h('p', { role: 'alert', className: 'dsh-ui-error dsh-ui-wrap' }, error) : null; }
 
-export function ReviewerFields({ values, catalog, disabled, onChange, locale }) {
+/** Values are rendered as plain text, with no Markdown or HTML interpretation. */
+export function ApprovalDialog({ request, pendingCount = 1, remainingMs, busy = false, error = '', onAnswer, locale }) {
   const t = useText(locale);
-  const provider = values.provider || '', model = values.model || '';
-  const effort = values.reasoningEffort || '';
-  const follow = !provider && !model;
-  const choices = modelChoices(catalog, provider, model, t);
-  const selected = choices.find(choice => choice.value === modelKey(provider, model));
-  const unknownEffort = effort && !selected.efforts.some(item => item.id === effort);
-  const retained = effort && h('span', null, ' ', t('savedEffortRetained', effort));
-  return h('fieldset', { disabled, className: 'dsh-ui-card' }, h('legend', { className: 'dsh-ui-heading' }, t('reviewer')),
-    h('label', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('model')), h('select', { className: 'dsh-ui-select', value: selected.value, onChange: e => {
-      const choice = choices.find(item => item.value === e.target.value);
-      if (choice) onChange(selectModel(values, choice));
-    } }, choices.map(choice => h('option', { key: choice.value, value: choice.value }, choice.name)))),
-    follow && h('p', { className: 'dsh-ui-help' }, t('followHelp'), retained),
-    !follow && h('label', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('effort')), h('select', { className: 'dsh-ui-select', value: effort, onChange: e => onChange({ ...values, reasoningEffort: e.target.value }) },
-      h('option', { value: '' }, t('effortDefault')), selected.efforts.map(item => h('option', { key: item.id, value: item.id }, item.name || item.id)),
-      unknownEffort && h('option', { value: effort }, t('savedUnavailable', effort)))),
-    selected.unknown && h('p', { className: 'dsh-ui-help' }, t('modelAbsent')),
-    !follow && unknownEffort && h('p', { className: 'dsh-ui-help' }, t('effortAbsent')),
-    !follow && h('p', { className: 'dsh-ui-help' }, t('effortClears')));
+  if (!request) return null;
+  const expired = remainingMs <= 0;
+  const action = request.action || {};
+  const fields = Object.entries({ tool: action.tool, cwd: action.cwd, ...action.arguments });
+  return h(Modal, { open: true, title: t('approvalTitle'), closeLabel: t('approvalDeny'),
+    onClose: () => { if (!busy && !expired) onAnswer(request.id, 'deny'); },
+    className: 'dsh-safe-auto dsh-safe-auto-approval-dialog', contentClassName: 'dsh-safe-auto-approval-content',
+    footer: h('div', { className: 'dsh-safe-auto dsh-ui-actions' }, h(Style),
+      h(Button, { variant: 'ghost', disabled: busy || expired, 'data-modal-autofocus': true,
+        onClick: () => onAnswer(request.id, 'deny') }, t('approvalDeny')),
+      h(Button, { variant: 'primary', disabled: busy || expired,
+        onClick: () => onAnswer(request.id, 'allow') }, t('approvalAllow'))) },
+    h('div', { className: 'dsh-safe-auto dsh-ui-stack' }, h(Style),
+      h('p', { className: 'dsh-ui-meta', role: 'status' }, t('approvalPending', pendingCount), ' · ',
+        expired ? t('approvalExpired') : t('approvalCountdown', Math.ceil(remainingMs / 1000))),
+      h('div', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('approvalPermission')),
+        h('pre', { className: 'dsh-safe-auto-approval-pre' }, JSON.stringify({ ...action.permission, scope: action.permission?.scope }, null, 2)),
+        h('span', { className: 'dsh-ui-help' }, t('approvalScope'))),
+      h('div', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('approvalEffect')),
+        fields.map(([field, value]) => h('div', { key: field, className: 'dsh-ui-field' },
+          h('span', { className: 'dsh-ui-meta' }, field), h('pre', { className: 'dsh-safe-auto-approval-pre' },
+            typeof value === 'string' ? value : JSON.stringify(value, null, 2))))),
+      h('div', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('approvalReview')),
+        h('pre', { className: 'dsh-safe-auto-approval-pre' }, JSON.stringify(request.review || {}, null, 2))),
+      h(ErrorText, { error })));
 }
 
-export function SessionControls({ api, initialSessions = [], dirty = false, locale }) {
+/** Composer permission control via the replacement slot: native presets plus Safe Auto. */
+export function PermissionMenu({ sessionId, locked, api, locale, initialSnapshot = null }) {
   const t = useText(locale);
-  const [rows, setRows] = useState(initialSessions);
-  const [selected, setSelected] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [snapshot, setSnapshot] = useState(initialSnapshot);
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
-  const scope = useRef(null);
-  const load = () => scope.current?.run(() => api.listSessions(), {
-    value: value => { setRows(value.sessions); setError(''); }, error: e => setError(e.message),
-  });
+  const [busy, setBusy] = useState(false);
+  const scopeRef = useRef(null);
+  const refreshRef = useRef(null);
+  const approvalsRef = useRef(null);
+  const [approvals, setApprovals] = useState({ sessionId, requests: [], busy: false, error: '' });
+  const [approvalNow, setApprovalNow] = useState(monotonicNow);
+  const refresh = (automatic = false) => scopeRef.current?.run(() => api.getSession(sessionId), {
+    value: value => { setSnapshot(value); setError(''); }, error: e => setError(e.message),
+  }, false, automatic);
+  refreshRef.current = refresh;
   useEffect(() => {
-    const current = createRequestScope(); scope.current = current; load();
-    return () => current.dispose();
-  }, [api]);
-  const row = rows.find(item => item.sessionId === selected);
-  const change = enabled => {
-    if (!row || scope.current?.writing || (enabled && dirty)) return;
+    const scope = createRequestScope(); scopeRef.current = scope;
+    setSnapshot(null); setError('');
+    refreshRef.current(true);
+    const focus = () => refreshRef.current(true);
+    const stopConnection = api.subscribeGeneration?.(() => { scope.invalidate(); refreshRef.current(true); });
+    globalThis.addEventListener?.('focus', focus);
+    return () => { scope.dispose(); stopConnection?.(); globalThis.removeEventListener?.('focus', focus); };
+  }, [api, sessionId]);
+  const approvalsEnabled = Boolean(snapshot?.safeAuto);
+  useEffect(() => {
+    setApprovals({ sessionId, requests: [], busy: false, error: '' });
+    if (!approvalsEnabled) return undefined;
+    const controller = createApprovalController({ api, sessionId, onState: value => {
+      setApprovalNow(monotonicNow()); setApprovals({ ...value, sessionId });
+    } });
+    approvalsRef.current = controller;
+    void controller.refresh();
+    const stopConnection = api.subscribeGeneration?.(() => controller.reconnect());
+    const focus = () => { void controller.refresh(); };
+    globalThis.addEventListener?.('focus', focus);
+    return () => { controller.dispose(); stopConnection?.(); approvalsRef.current = null; globalThis.removeEventListener?.('focus', focus); };
+  }, [api, sessionId, approvalsEnabled]);
+  const pending = approvalsEnabled && approvals.sessionId === sessionId
+    ? approvals.requests.filter(request => approvalRemaining(request, approvalNow) > 0) : [];
+  useEffect(() => {
+    if (!pending.length) return undefined;
+    const timer = setInterval(() => setApprovalNow(monotonicNow()), 250);
+    return () => clearInterval(timer);
+  }, [pending.length]);
+  const choose = value => {
+    const scope = scopeRef.current;
+    if (!snapshot || scope?.writing) return;
+    if (value === snapshot.current) { setOpen(false); return; }
+    if (value === 'safe-auto' && !snapshot.available) return;
     setBusy(true); setError('');
-    const payload = { sessionId: row.sessionId, expectedRevision: row.revision };
-    scope.current?.run(() => enabled ? api.enableSession({ ...payload, value: 'safe-auto' }) : api.disableSession(payload), {
-      value: next => setRows(old => old.map(item => item.sessionId === row.sessionId ? { ...item, ...next } : item)),
-      error: e => setError(t('refreshRetry', e.message)), settled: () => setBusy(false),
+    scope?.run(() => api.selectSession({ sessionId, expectedRevision: snapshot.revision, value }), {
+      value: next => { setSnapshot(next); setOpen(false); },
+      error: e => { setError(t('refreshRetry', e.message)); refreshRef.current(); },
+      settled: () => setBusy(false),
     }, true);
   };
-  return h('fieldset', { disabled: busy, className: 'dsh-ui-card' }, h('legend', { className: 'dsh-ui-heading' }, t('approveForMe')),
-    h('p', { className: 'dsh-ui-help' }, t('sessionHelp')),
-    h('label', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('targetSession')), h('select', { className: 'dsh-ui-select', value: selected, onChange: e => setSelected(e.target.value) },
-      h('option', { value: '' }, t('chooseSession')),
-      rows.map(item => h('option', { key: item.sessionId, value: item.sessionId, title: [item.header?.cwd, item.sessionId].filter(Boolean).join(' · ') }, sessionLabel(item, t))))),
-    row && h('p', { role: 'status', className: 'dsh-ui-compact dsh-ui-wrap' }, row.safeAuto ? t('sessionEnabled') : t('sessionDisabled', row.current)),
-    dirty && h('p', { role: 'status', className: 'dsh-ui-help' }, t('unsaved')),
-    h('div', { className: 'dsh-ui-actions' },
-      h(Button, { variant: 'primary', disabled: !row || !row.available || row.safeAuto || dirty, onClick: () => change(true) }, t('enable')),
-      h(Button, { variant: 'outline', disabled: !row?.safeAuto, onClick: () => change(false) }, t('disable')),
-      h(Button, { variant: 'ghost', onClick: load }, t('refreshSessions'))),
-    !rows.length && h('p', { className: 'dsh-ui-empty' }, t('noSessions')),
-    h(ErrorText, { error }));
+  const options = snapshot?.options || [];
+  const items = options.map(option => ({
+    id: option.value,
+    label: permissionLabel(option.value, option.name, t),
+    icon: h(PERMISSION_ICONS[option.value] || PermissionIconWorkspaceWriteRegular),
+    disabled: Boolean(locked || (option.value === 'safe-auto' && !snapshot.available)),
+  }));
+  // An unavailable Safe Auto stays visible but disabled, so the menu never silently differs.
+  if (snapshot && !snapshot.available && !options.some(o => o.value === 'safe-auto')) {
+    items.push({ id: 'safe-auto', label: `${t('safeAuto')} · ${t('unavailableShort')}`, icon: h(IconShieldOutlineRegular), disabled: true });
+  }
+  const current = options.find(option => option.value === snapshot?.current);
+  const CurrentIcon = current && PERMISSION_ICONS[current.value];
+  return h('span', { className: 'dsh-safe-auto dsh-safe-auto-permission', 'aria-busy': busy }, h(Style),
+    h(Menu, {
+      open, side: 'top', align: 'start', portal: true, listClassName: 'dsh-safe-auto',
+      selectedId: snapshot?.current, items, onSelect: choose, onClose: () => setOpen(false),
+      anchor: h(Button, { variant: 'ghost', disabled: Boolean(locked), 'aria-haspopup': 'menu', 'aria-expanded': open,
+        'aria-label': t('permission'),
+        onClick: () => { const next = !open; setOpen(next); if (next) refreshRef.current(); } },
+        CurrentIcon && h(CurrentIcon), current ? permissionLabel(current.value, current.name, t) : (snapshot?.current || t('permission')),
+        h(IconChevronUpOutlineRegular)),
+    }),
+    h(ErrorText, { error }),
+    h(ErrorText, { error: approvals.error && t('approvalRefresh', approvals.error) }),
+    pending.length ? h(ApprovalDialog, { key: pending[0].id, request: pending[0], pendingCount: pending.length,
+      remainingMs: approvalRemaining(pending[0], approvalNow), busy: approvals.busy,
+      onAnswer: (id, outcome) => { void approvalsRef.current?.answer(id, outcome); }, locale }) : null);
 }
 
-export function SettingsPanel({ view, api, locale, initialSettings = null, initialCatalog = null }) {
+export function ReviewerFields({ values, catalog, disabled, onChange, locale }) {
+  const t = useText(locale);
+  const [open, setOpen] = useState(false);
+  const state = reviewerMenuState(values, catalog);
+  const effort = values.reasoningEffort || '';
+  const currentLabel = state.follow ? t('follow') : state.selected?.label || `${state.provider} / ${state.model}`;
+  const effortName = state.efforts.find(item => item.id === effort)?.name;
+  const unknownEffort = Boolean(effort && !state.follow && state.selected && !state.selected.efforts.some(item => item.id === effort));
+  const retained = effort && h('span', null, ' ', t('savedEffortRetained', effort));
+  /* The reviewer route uses the contract's standard editor (dsh-model-route's
+   * ModelMenu): follow mode is the leading row, effort lives in its own pane. */
+  return h('fieldset', { disabled, className: 'dsh-ui-card' }, h('legend', { className: 'dsh-ui-heading' }, t('reviewer')),
+    h('div', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('model')),
+      h(ModelMenu, {
+        open, onOpenChange: setOpen, listClassName: 'dsh-safe-auto',
+        anchor: h('button', { type: 'button', className: 'dsh-model-menu-trigger', disabled: Boolean(disabled),
+          'aria-haspopup': 'menu', 'aria-expanded': open },
+          h('span', { className: 'dsh-model-menu-triggerLabel' }, currentLabel),
+          !state.follow && state.efforts.length ? h('span', { className: 'dsh-model-menu-triggerEffort' }, effortName || t('effortDefault')) : null,
+          h(IconChevronDownOutlineRegular, { className: `dsh-model-menu-chevron${open ? ' dsh-model-menu-chevronOpen' : ''}` })),
+        choices: state.choices,
+        selected: state.follow ? undefined : { provider: state.provider, model: state.model },
+        onPick: route => onChange(pickReviewerModel(values, route)),
+        leading: [{ id: 'follow', label: t('follow'), selected: state.follow }],
+        onPickLeading: () => onChange(pickReviewerModel(values, { provider: '', model: '' })),
+        efforts: state.efforts,
+        selectedEffort: effort,
+        onPickEffort: next => onChange({ ...values, reasoningEffort: next || '' }),
+        modelLabel: t('model'), modelValue: currentLabel,
+        effortLabel: t('effort'), defaultEffortLabel: t('effortDefault'),
+        searchPlaceholder: t('searchModels'), emptyLabel: t('noModels'), clearSearchLabel: t('clearSearch'),
+      })),
+    state.follow && h('p', { className: 'dsh-ui-help' }, t('followHelp'), retained),
+    !state.follow && !state.known && h('p', { className: 'dsh-ui-help' }, t('modelAbsent')),
+    !state.follow && unknownEffort && h('p', { className: 'dsh-ui-help' }, t('effortAbsent')),
+    !state.follow && h('p', { className: 'dsh-ui-help' }, t('effortClears')));
+}
+
+export function SettingsPanel({ view, api, locale, initialSettings = null, initialCatalog = null, initialTab = 'reviewer' }) {
   const t = useText(locale);
   const [settings, setSettings] = useState(initialSettings);
   const [values, setValues] = useState(initialSettings?.values || null);
@@ -274,8 +492,8 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
   const [catalogError, setCatalogError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [limitsOpen, setLimitsOpen] = useState(false);
+  const [tab, setTab] = useState(initialTab);
+  const tabsId = useId();
   const dirty = useRef(false);
   const scopeRef = useRef(null);
   const refreshRef = useRef(null);
@@ -288,7 +506,7 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
       if (!automatic) setSaved(false);
     },
     error: e => setError(e.message),
-  });
+  }, false, automatic);
   refreshRef.current = refresh;
   useEffect(() => {
     const scope = createRequestScope(); scopeRef.current = scope;
@@ -296,8 +514,12 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
     let alive = true;
     Promise.resolve().then(() => api.modelCatalog()).then(value => { if (alive) setCatalog(value); }, e => { if (alive) setCatalogError(e.message); });
     const focus = () => { if (!dirty.current) refreshRef.current(false, true); };
+    const stopConnection = api.subscribeGeneration?.(() => {
+      scope.invalidate();
+      if (!dirty.current) refreshRef.current(false, true);
+    });
     globalThis.addEventListener?.('focus', focus);
-    return () => { alive = false; scope.dispose(); globalThis.removeEventListener?.('focus', focus); };
+    return () => { alive = false; scope.dispose(); stopConnection?.(); globalThis.removeEventListener?.('focus', focus); };
   }, [api]);
   const change = next => { dirty.current = true; setSaved(false); setValues(next); };
   const save = () => {
@@ -309,45 +531,62 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
       settled: () => setBusy(false),
     }, true);
   };
+  /* The limits tab exists only while the host reports policy limits; a stale
+   * selection falls back to the reviewer tab rather than showing nothing. */
+  const activeTab = tab === 'limits' && !settings?.policyLimits ? 'reviewer' : tab;
+  const tabItem = (value, label) => ({ value, label, id: `${tabsId}-${value}-tab`, panelId: `${tabsId}-${value}-panel` });
+  const tabPanel = (value, className, children) => h('div', {
+    role: 'tabpanel', id: `${tabsId}-${value}-panel`, 'aria-labelledby': `${tabsId}-${value}-tab`,
+    hidden: activeTab !== value, tabIndex: 0, className,
+  }, children);
   if (view === 'summary') return h('div', { className: 'dsh-safe-auto' }, h(Style),
     h('p', { className: 'dsh-ui-compact dsh-ui-wrap' }, t('summary')), h(ErrorText, { error }));
   return h('section', { className: 'dsh-safe-auto dsh-ui-stack', 'aria-label': t('panelLabel'), 'aria-busy': busy }, h(Style),
     h('p', { className: 'dsh-ui-compact dsh-ui-wrap' }, t('intro')),
     !values && h('p', { className: 'dsh-ui-loading' }, t('loading')),
     values && h(React.Fragment, null,
-      h(ReviewerFields, { values, catalog, disabled: busy, onChange: change, locale }),
-      h('label', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('prompt')), h('textarea', { className: 'dsh-safe-auto-input', rows: 6, maxLength: 4096, disabled: busy, 'aria-describedby': 'sa-prompt-hint', value: values.reviewerPrompt || '', onChange: e => change({ ...values, reviewerPrompt: e.target.value }) })),
-      h('p', { id: 'sa-prompt-hint', className: 'dsh-ui-help' }, t('promptHint', (values.reviewerPrompt || '').length)),
-      h(DisclosureRow, { icon: h(IconShieldOutlineRegular), title: t('details'), open: detailsOpen, expandable: true, expandOnRowClick: true,
-        onToggle: () => setDetailsOpen(value => !value) }, h('div', { className: 'dsh-ui-help' },
-        h('p', null, t('safetyDetail')),
-        h('p', null, h('span', { className: 'dsh-ui-label' }, t('unableLabel'), '：'), t('unableValue')))),
-      settings.policyLimits && h(DisclosureRow, { icon: h(IconShieldOutlineRegular),
-        title: t('limits'), open: limitsOpen, expandable: true, expandOnRowClick: true,
-        onToggle: () => setLimitsOpen(value => !value) }, h('div', { className: 'dsh-ui-stack' },
-        h('p', { className: 'dsh-ui-meta dsh-ui-wrap' }, t('limitsLine', settings.policyLimits)),
-        h('p', { className: 'dsh-ui-meta dsh-ui-wrap' }, t('limitsFuses', settings.policyLimits)),
-        h('p', { className: 'dsh-ui-help' }, t('limitsHelp')))),
+      h(SegmentedTabs, { value: activeTab, onChange: setTab, label: t('tabsLabel'), items: [
+        tabItem('reviewer', t('tabReviewer')),
+        tabItem('details', t('details')),
+        ...(settings?.policyLimits ? [tabItem('limits', t('tabLimits'))] : []),
+      ] }),
+      tabPanel('reviewer', 'dsh-ui-stack', [
+        h(ReviewerFields, { key: 'fields', values, catalog, disabled: busy, onChange: change, locale }),
+        h('label', { key: 'prompt', className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('prompt')), h('textarea', { className: 'dsh-safe-auto-input', rows: 6, maxLength: 4096, disabled: busy, 'aria-describedby': 'sa-prompt-hint', value: values.reviewerPrompt || '', onChange: e => change({ ...values, reviewerPrompt: e.target.value }) })),
+        h('p', { key: 'hint', id: 'sa-prompt-hint', className: 'dsh-ui-help' }, t('promptHint', (values.reviewerPrompt || '').length))]),
+      tabPanel('details', 'dsh-ui-stack',
+        h('div', { className: 'dsh-ui-help' },
+          h('p', null, t('safetyDetail')),
+          h('p', null, h('span', { className: 'dsh-ui-label' }, t('unableLabel'), '：'), t('unableValue')))),
+      settings?.policyLimits && tabPanel('limits', 'dsh-ui-stack', [
+        h('p', { key: 'line', className: 'dsh-ui-meta dsh-ui-wrap' }, t('limitsLine', settings.policyLimits)),
+        h('p', { key: 'fuses', className: 'dsh-ui-meta dsh-ui-wrap' }, t('limitsFuses', settings.policyLimits)),
+        h('p', { key: 'help', className: 'dsh-ui-help' }, t('limitsHelp'))]),
       h('div', { className: 'dsh-ui-actions' },
         h(Button, { variant: 'primary', disabled: busy || !dirty.current || (values.reviewerPrompt || '').length > 4096, onClick: save }, t('save')),
         h(Button, { variant: 'ghost', disabled: busy, onClick: () => refresh(true) }, t('refreshDiscard')))),
     h(ErrorText, { error }), h(ErrorText, { error: catalogError && t('catalogFailed', catalogError) }),
-    saved && h('p', { role: 'status', className: 'dsh-ui-notice' }, t('saved')),
-    /* Enabling uses the saved settings, so it comes after the save action. */
-    h(SessionControls, { api, dirty: dirty.current, locale }));
+    saved && h('p', { role: 'status', className: 'dsh-ui-notice' }, t('saved')));
 }
 
 export function apply(ctx) {
   const call = (endpoint, payload) => unwrapRpc((...args) => ctx.connection.rpc.call(...args), endpoint, payload,
     translator(localeLanguage(ctx.locale))('requestFailed'));
   const api = Object.freeze({
+    subscribeGeneration: listener => ctx.connection.generation?.subscribe(listener) ?? (() => {}),
     getSettings: () => call('settings.get', {}),
     saveSettings: payload => call('settings.save', payload),
     modelCatalog: () => ctx.remote.session.modelCatalog(),
-    listSessions: () => call('session.list', {}),
-    enableSession: payload => call('session.select', payload),
-    disableSession: payload => call('session.disable', payload),
+    getSession: sessionId => call('session.get', { sessionId }),
+    selectSession: payload => call('session.select', payload),
+    getApprovals: sessionId => call('approval.list', { sessionId }),
+    answerApproval: payload => call('approval.answer', payload),
   });
+  // Replacement slot: this renders the whole composer permission control,
+  // native presets included, so Safe Auto appears next to them.
+  ctx.slots.inject('conversation.input.permission', () => ctx.slots.register({
+    name: 'conversation.input.permission', priority: -10, inject: () => ({ api, locale: ctx.locale }),
+  }, PermissionMenu));
   ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
     name: 'plugins.bundle.config', key: BUNDLE, inject: () => ({ api, locale: ctx.locale }),
   }, SettingsPanel));

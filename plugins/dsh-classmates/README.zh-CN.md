@@ -2,18 +2,18 @@
 
 [English](README.md)
 
-队友角色把原生子智能体和团队成员共用的角色配置集中到一处：职责、工作指令、模型和思考强度都写进同一份角色库，普通子智能体和团队面板都从它取值。你也可以在 DSH 自带的创造模式里用对话完成这套配置。当前版本 `0.2.0-alpha.1`，是本地可安装的实验版。
+队友角色把原生子智能体和团队成员共用的角色配置集中到一处：职责、工作指令、模型和思考强度都写进同一份角色库，普通子智能体和团队面板都从它取值。你也可以在 DSH 自带的创造模式里用对话完成这套配置。版本 `0.2.0-rc.1` 使用 npm `next` 预发布通道。
 
-**运行环境**：Node ≥ 24、DSH ≥ 0.1.7-rc.2；只验证过 **DSH Web 0.1.7-rc.2 / Windows**。团队协作另需官方 Team 插件 `@deepseek-ai/dsh-experimental-agent-team-profile`，普通子智能体不需要它。派发、消息、任务和会话仍由 DSH 负责，本插件不替换官方消息、任务板、成员和会话管理。
+**运行环境**：Node ≥ 24、DSH ≥ 0.2.0-rc.2；本工作区按 **DSH Web 0.2.0-rc.2 / Windows** 施工。团队协作另需官方 Team 插件 `@deepseek-ai/dsh-experimental-agent-team-profile`，普通子智能体不需要它。派发、消息、任务和会话仍由 DSH 负责，本插件不替换官方消息、任务板、成员和会话管理。
 
 ## 安装
 
-1. 确认 `dsh --version` 为 `0.1.7-rc.2`。
+1. 确认 `dsh --version` 为 `0.2.0-rc.2`。
 2. 如需团队协作，在目标 Web profile 的原生插件管理页面启用官方智能体团队插件包：`@deepseek-ai/dsh-experimental-agent-team-profile`。
-3. 安装本地文件 `klarkxy-dsh-classmates-0.2.0-alpha.1.tgz`。可在原生插件管理页面输入文件的绝对路径，或执行：
+3. 安装预发布通道：
 
    ```powershell
-   dsh plugin --profile web add "D:/path/to/klarkxy-dsh-classmates-0.2.0-alpha.1.tgz"
+   dsh plugin --profile web add @klarkxy/dsh-classmates@next
    ```
 
 4. 重启目标 profile，进入 **插件 → 队友角色**。若使用自定义 profile，将命令中的 `web` 替换为它的名称。
@@ -34,19 +34,21 @@
 
 配置完成后，点击“开始任务”进入新的标准会话。输入框会带入可编辑的队友摘要，填写任务并发送即可；原会话和草稿保留。模型列表会显示供应商名称，目录项本身不代表连接已验证。
 
-角色列表提供 11 个预设：Explorer、Researcher、Planner、Ideator、Griller、Implementer、Reviewer、User Tester、Overdesign Guard、Writer、Verifier，初始均停用。已有安装可通过“从预设添加”选择模板，保存后按需启用；不会覆盖已有角色。
+角色列表提供 12 个预设：Researcher、Writer、Verifier、Advisor、Explorer、Planner、Ideator、Griller、Implementer、Reviewer、User Tester、Overdesign Guard，初始均停用。Advisor 是只读咨询：不实施、不验收、不改文件。已有安装可通过“从预设添加”选择模板，保存后按需启用；不会覆盖已有角色。
+
+角色模板可选择跟随会话、绑定模型预设或指定模型，选择会立即保存，与未保存的职责文本分开。模型预设是强绑定：预设被删除或停用后，后续派发会报错，直到改选来源或显式传入本次调用的 `model_profile`。旧 `recommendedModelProfileId` 在没有固定模型时迁移为预设绑定；已有固定模型优先，旧建议只保留为迁移提示。不会静默换预设、回退或重建预设。
 
 **请求团队协作**时，在普通会话中明确说明，例如：
 
 > 请使用 Classmates 的 Researcher 角色，调查这个问题并把证据发给你；你汇总最终答案。使用官方 Team 消息和共享任务。
 
-主控获得 `classmates_list` 和 `classmates_spawn` 两个工具。没有可用启用角色时不挂载这两个工具。目录查询不创建成员，插件也不会自动发起对话。后续协作使用原生 Team 工具。
+主控获得 `classmates_list` 和 `classmates_spawn` 两个工具，列表返回角色简介和模型来源信息。省略 `model_profile` 时使用角色保存的来源，显式传入时只覆盖本次创建。没有可用启用角色时不挂载这两个工具。目录查询不创建成员，插件也不会自动发起对话。后续协作使用原生 Team 工具。
 
 ## 模型用途配置与使用前确认
 
 主代理根据任务和用途说明，通过派发工具的 `model_profile` 选择模型用途配置。同一模型可以保存不同思考强度的多条配置；未指定强度时使用所选模型的默认行为。插件不自动轮询、随机选模或切换备用模型，原生结果和错误交给主代理判断下一步。配置只供选择参考，不代表连通性或质量已经验证。
 
-未选择模型用途配置时，保留原有模板绑定或继承当前聊天的行为。旧模板的模型和思考强度不会被自动删除；新配置覆盖本次创建的模型和强度。解析后的配置在创建时保存，模板和用途配置的后续编辑、停用或删除不会改写已有实例。
+未显式传入本次调用的模型预设时，使用角色保存的来源。指定模型未填思考强度时继承派发会话的强度，不兼容时拒绝创建；绑定或本次选用的模型预设则同时提供模型与强度，未填强度时使用模型默认值。解析后的配置在创建时保存，模板和预设的后续编辑、停用或删除不会改写已有实例。
 
 在模型页为某个模型打开“使用前确认”，Classmates 每次用它创建新子智能体或团队成员前都会请求 DSH 原生审批。
 
@@ -106,8 +108,21 @@ pnpm --filter @klarkxy/dsh-classmates pack
 
 `scripts/acceptance-host.mjs` 是使用隔离 DSH_HOME 的本地验收宿主，需要预先配置该 profile 的模型列表，凭据只从环境继承。`scripts/browser-acceptance.mjs` 使用 `DSH_ACCEPTANCE_URL` 连接验收宿主，会创建并删除一个测试角色；需要本机 Edge。真实模型测试会消耗模型额度，日常单测不会。
 
+模型来源界面回归：在本包目录运行 `node scripts/recommendation-browser.mjs`，也可从任意目录传入该脚本路径。脚本打包实际 React 页面，在空闲本地端口启动隔离的内存 CAS 存储并打开无头 Edge，检查跟随/预设/固定模型、即时保存、双窗口冲突、停用/缺失绑定、键盘切页及手机宽度。无需构建、安装 DSH、凭据或模型调用。夹具使用宿主原子控件测试替身，只证明源码界面行为；原生包测试和隔离宿主验收分别覆盖派发与运行时加载。
+
+离线 Fusion 归档（不扫描 `.dsh`、不改配置）：
+
+```powershell
+npm run build
+node dist/migrate-fusion.js --fusion fusion-store.json --output classmates-merged.json [--classmates classmates-export.json] [--archive archive-dir-or.html]
+# 源码目录：node scripts/migrate-fusion.mjs …
+# 安装后：node node_modules/@klarkxy/dsh-classmates/dist/migrate-fusion.js …
+```
+
+说明见 [docs/fusion-migration.md](docs/fusion-migration.md)。真正写入用户配置由 primary 执行。
+
 反馈请使用 `.github/ISSUE_TEMPLATE/bug_report.md`，包含精确版本、脱敏路由、复现步骤及是否涉及恢复。不要上传 API Key、完整私有会话或项目文件。上游测试辅助代码的出处见 `THIRD_PARTY_NOTICES.md`。
 
-本包尚未发布到 npm，也未创建 Release，未收录进插件站点；`private: true` 使其不参与自动发布。公开许可证尚未指定（`UNLICENSED`）。
+本包采用 SATA 2.1，见 `LICENSE`；第三方署名保留在 `THIRD_PARTY_NOTICES.md`。预发布使用 `next`，有 `latest` 版本后再收录到稳定插件目录。
 
 源码现在维护于 `dsh-plugins/plugins/dsh-classmates`。历史演示脚本需要旧 `dsh-teammates` 目录保留的录屏与本地模型配置；构建和单测不依赖这些文件。历史验收记录保留原路径，不代表迁移后的本轮验收。

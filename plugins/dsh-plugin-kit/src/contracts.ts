@@ -1,4 +1,11 @@
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+import type { ModelRoute } from '@klarkxy/dsh-model-route'
+
+/**
+ * The canonical home is @klarkxy/dsh-model-route; re-exported here so existing
+ * plugin-kit consumers keep compiling.
+ */
+export type { ModelRoute }
 
 /** Public, browser-safe contracts. Host implementations stay in their owning packages. */
 export type ProducerSourceKind = `plugin:${string}`
@@ -17,9 +24,6 @@ declare module '@deepseek-ai/dsh-llm' {
 export function producerMessageSource(plugin: string): ProducerMessageSource {
   return { kind: `plugin:${plugin}`, plugin }
 }
-
-/** A concrete provider model. Features store this on their own settings page. */
-export interface ModelRoute { provider: string; model: string; reasoningEffort?: string }
 
 /** @deprecated Legacy call shape. Features should call host `llm` directly. */
 export type ModelRole = 'normal' | 'weak' | 'strong' | 'fantasy'

@@ -4,6 +4,10 @@ await mkdir('dist', { recursive: true });
 await Promise.all(['dist/manager.js', 'dist/manager.js.map'].map(path => rm(path, { force: true })));
 await build({ entryPoints: ['src/index.ts'], outfile: 'dist/index.js', bundle: true, platform: 'node', format: 'esm', target: 'node24', packages: 'external', sourcemap: true });
 await build({
+  entryPoints: ['src/migrate-fusion-cli.ts'], outfile: 'dist/migrate-fusion.js', bundle: true,
+  platform: 'node', format: 'esm', target: 'node24', packages: 'external', sourcemap: true,
+});
+await build({
   entryPoints: ['src/client.tsx'], outfile: 'dist/client.js', bundle: true,
   platform: 'browser', format: 'cjs', target: 'es2022',
   external: ['react', 'react-dom', 'react/jsx-runtime', '@deepseek-ai/*'], sourcemap: true,

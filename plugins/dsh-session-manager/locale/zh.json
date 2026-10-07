@@ -1,0 +1,8 @@
+{
+  "meta": {
+    "title": "会话",
+    "description": "查看自由聊天，复制线程 ID，并在宿主支持时重试或删除会话。"
+  },
+  "copyThreadId": "复制线程 ID",
+  "copyThreadFailed": "无法复制线程 ID"
+}

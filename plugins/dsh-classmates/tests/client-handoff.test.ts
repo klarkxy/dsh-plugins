@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ClassmateDefinition, ClassmatesState, ModelChoice } from '../src/contracts.js';
+import type { ClassmatesState, ModelChoice, NormalizedRole } from '../src/contracts.js';
 import {
   createHandoffGate,
   HandoffBusyError,
@@ -31,15 +31,14 @@ interface Harness extends HandoffHost {
   setOpenState(sessionId: string, open: SessionOpenSnapshot): void;
 }
 
-function role(patch: Partial<ClassmateDefinition> & Pick<ClassmateDefinition, 'id' | 'name'>): ClassmateDefinition {
+function role(patch: Partial<NormalizedRole> & Pick<NormalizedRole, 'id' | 'name'>): NormalizedRole {
   return {
     schemaVersion: 1,
     revision: 1,
     description: '负责检索',
     instructions: 'SECRET_INSTRUCTIONS do not copy',
     enabled: true,
-    model: { provider: 'mock', id: 'specialist-a' },
-    reasoningEffort: 'high',
+    model: { kind: 'fixed', provider: 'mock', id: 'specialist-a', effort: 'high' },
     ...patch,
   };
 }
@@ -55,7 +54,7 @@ function models(): ModelChoice[] {
   }];
 }
 
-function state(roles: ClassmateDefinition[]): ClassmatesState {
+function state(roles: NormalizedRole[]): ClassmatesState {
   return { roles, models: models(), settingsRevision: 1, writable: true };
 }
 
@@ -224,33 +223,45 @@ function createHost(options?: {
 describe('task draft', () => {
   it('allows model and effort inheritance independently', () => {
     const catalog = models();
-    const inheritBoth = role({ id: 'inherit-both', name: '继承全部', model: null, reasoningEffort: undefined });
+    const inheritBoth = role({ id: 'inherit-both', name: '继承全部', model: { kind: 'inherit' } });
     expect(roleHealth(inheritBoth, [])).toBe('enabled');
     expect(formatRoleModelSummary(inheritBoth, catalog)).toBe('模型：跟随当前聊天 · 思考强度：跟随当前聊天');
 
-    const inheritModel = role({ id: 'inherit-model', name: '继承模型', model: null });
+    const inheritModel = role({ id: 'inherit-model', name: '继承模型', model: { kind: 'inherit' }, reasoningEffort: 'high' });
     expect(roleHealth(inheritModel, catalog)).toBe('enabled');
     expect(formatRoleModelSummary(inheritModel, catalog)).toBe('模型：跟随当前聊天 · 思考强度：High');
     expect(roleHealth(inheritModel, [])).toBe('invalid');
 
-    const inheritEffort = role({ id: 'inherit-effort', name: '继承强度', reasoningEffort: undefined });
+    const inheritEffort = role({ id: 'inherit-effort', name: '继承强度', model: { kind: 'fixed', provider: 'mock', id: 'specialist-a' } });
     expect(roleHealth(inheritEffort, catalog)).toBe('enabled');
     expect(formatRoleModelSummary(inheritEffort, catalog)).toBe('模型：演示供应商 · Specialist A · 思考强度：跟随当前聊天');
   });
 
-  it('reads legacy nested effort and rejects unsupported explicit bindings', () => {
-    const legacy = role({ id: 'legacy', name: '旧角色', reasoningEffort: undefined, model: { provider: 'mock', id: 'specialist-a', reasoningEffort: 'high' } });
-    expect(roleHealth(legacy, models())).toBe('enabled');
-    expect(formatRoleModelSummary(legacy, models())).toContain('思考强度：High');
-    expect(roleHealth(role({ id: 'invalid', name: '无效', reasoningEffort: 'low' }), models())).toBe('invalid');
-    expect(roleHealth(role({ id: 'disabled-inherit', name: '停用', enabled: false, model: null }), models())).toBe('disabled');
+  it('reads the fixed effort and rejects unsupported explicit bindings', () => {
+    const fixed = role({ id: 'fixed', name: '固定', model: { kind: 'fixed', provider: 'mock', id: 'specialist-a', effort: 'high' } });
+    expect(roleHealth(fixed, models())).toBe('enabled');
+    expect(formatRoleModelSummary(fixed, models())).toContain('思考强度：High');
+    expect(roleHealth(role({ id: 'invalid', name: '无效', model: { kind: 'inherit' }, reasoningEffort: 'low' }), models())).toBe('invalid');
+    expect(roleHealth(role({ id: 'disabled-inherit', name: '停用', enabled: false, model: { kind: 'inherit' } }), models())).toBe('disabled');
+  });
+
+  it('reads strong preset references against the preset list', () => {
+    const profiles = [
+      { id: 'coding-high', name: 'Deep coding', enabled: true },
+      { id: 'coding-parked', name: 'Parked', enabled: false },
+    ];
+    const strong = role({ id: 'strong', name: '强引用', model: { kind: 'profile', profileId: 'coding-high' } });
+    expect(roleHealth(strong, models(), profiles)).toBe('enabled');
+    expect(formatRoleModelSummary(strong, models(), undefined, profiles)).toBe('模型预设：Deep coding（coding-high）');
+    expect(roleHealth(role({ id: 'missing', name: '缺失', model: { kind: 'profile', profileId: 'gone' } }), models(), profiles)).toBe('invalid');
+    expect(roleHealth(role({ id: 'parked', name: '停用', model: { kind: 'profile', profileId: 'coding-parked' } }), models(), profiles)).toBe('invalid');
   });
 
   it('summarizes enabled valid roles in ordinary language without internal fields', () => {
     const roles = enabledValidRoles([
       role({ id: 'researcher', name: '研究员' }),
       role({ id: 'writer', name: '写作者', enabled: false, description: '成稿' }),
-      role({ id: 'broken', name: '坏的', model: { provider: 'missing', id: 'nope' } }),
+      role({ id: 'broken', name: '坏的', model: { kind: 'fixed', provider: 'missing', id: 'nope' } }),
     ], models());
     expect(roles.map(item => item.name)).toEqual(['研究员']);
     const draft = buildTaskDraft(roles, models());
@@ -259,6 +270,8 @@ describe('task draft', () => {
     expect(draft).toContain('演示供应商');
     expect(draft).toContain('Specialist A');
     expect(draft).toMatch(/描述要派发的任务/);
+    expect(draft).toContain('不必每件事都派发');
+    expect(draft).toContain('主控可以独自完成');
     expect(draft).toContain('连接尚未验证');
     expect(draft).not.toContain('SECRET_INSTRUCTIONS');
     expect(draft).not.toContain('researcher');

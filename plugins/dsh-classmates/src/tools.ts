@@ -6,10 +6,11 @@ import type {} from '@deepseek-ai/dsh-tools';
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools';
 import type {} from '@deepseek-ai/dsh-agent-preset-registry';
 import { ClassmatesError, currentModelFromOwnRequestHeaders, RoleConfig, validateModel, validateRole } from './config.js';
-import type { ClassmateDefinition, ModelBinding, ModelProfile } from './contracts.js';
+import type { ClassmateDefinition, ModelBinding, ModelProfile, NormalizedRole } from './contracts.js';
 import { MEMBER_NAME, PROVIDER } from './contracts.js';
 import type { BindingStore } from './bindings.js';
 import { lookupModelProfile } from './model-profiles.js';
+import { COLLABORATION_GUIDANCE } from './presets.js';
 import { enabledModelProfiles, resolveProfileSelection } from './subagent-roles.js';
 import { isModelProtected, requestModelApproval } from './model-protection.js';
 
@@ -28,8 +29,8 @@ function publishedProfile(profile: ModelProfile) {
 }
 
 /** Resolve once before persistence. Stored instances always contain a concrete route. */
-export async function resolveRoleForSpawn(ctx: Context, agent: Agent, role: ClassmateDefinition, profileModel?: ModelBinding): Promise<ClassmateDefinition> {
-  const { reasoningEffort: roleEffort, ...definition } = role;
+export async function resolveRoleForSpawn(ctx: Context, agent: Agent, role: NormalizedRole, profileModel?: ModelBinding): Promise<ClassmateDefinition> {
+  const { reasoningEffort: roleEffort, migratedRecommendation: _notice, model: _selection, ...definition } = role;
   if (profileModel) {
     const model: ModelBinding = profileModel.reasoningEffort === undefined
       ? { provider: profileModel.provider, id: profileModel.id }
@@ -46,9 +47,20 @@ export async function resolveRoleForSpawn(ctx: Context, agent: Agent, role: Clas
   }
   const current = currentModelFromOwnRequestHeaders(agent.session.snapshotEvents(), agent.session.inheritedEventCount)
     ?? { provider: agent.options.provider, id: agent.options.model, reasoningEffort: agent.options.reasoningEffort };
-  const route = role.model ?? current;
+  let route: { provider?: string; id?: string };
+  let reasoningEffort: string | undefined;
+  if (role.model.kind === 'fixed') {
+    route = { provider: role.model.provider, id: role.model.id };
+    reasoningEffort = role.model.effort ?? current.reasoningEffort;
+  } else if (role.model.kind === 'inherit') {
+    route = current;
+    reasoningEffort = roleEffort ?? current.reasoningEffort;
+  } else {
+    // A profile selection always arrives through profileModel; reaching this
+    // branch means the dispatch chain was bypassed.
+    throw new ClassmatesError('PROFILE_UNAVAILABLE', `角色 ${role.name} 的模型预设未解析，请重新派发`);
+  }
   if (!route.provider || !route.id) throw new ClassmatesError('MODEL_REQUIRED', '当前聊天没有可继承的模型，请先选择聊天模型');
-  const reasoningEffort = roleEffort ?? role.model?.reasoningEffort ?? current.reasoningEffort;
   const model: ModelBinding = { provider: route.provider, id: route.id, ...(reasoningEffort === undefined ? {} : { reasoningEffort }) };
   const resolved = { ...definition, model };
   try { await validateModel(ctx, resolved); }
@@ -59,6 +71,20 @@ export async function resolveRoleForSpawn(ctx: Context, agent: Agent, role: Clas
     throw error;
   }
   return resolved;
+}
+
+/** Shared dispatch chain step: a role's strong profile reference must resolve enabled. */
+export async function resolveStrongProfile(
+  ctx: Context,
+  profiles: readonly ModelProfile[],
+  roleName: string,
+  profileId: string,
+  signal: AbortSignal,
+): Promise<ModelBinding> {
+  const profile = lookupModelProfile(profiles, profileId);
+  if (!profile) throw new ClassmatesError('PROFILE_UNAVAILABLE', `预设 ${profileId} 不存在，请在角色 ${roleName} 的模型设置中改选或改为跟随主控`);
+  if (!profile.enabled) throw new ClassmatesError('PROFILE_UNAVAILABLE', `预设 ${profileId} 已停用，请在角色 ${roleName} 的模型设置中改选或改为跟随主控`);
+  return resolveProfileSelection(ctx, profile, signal);
 }
 
 export class ClassmateTools {
@@ -82,7 +108,15 @@ export class ClassmateTools {
       try { await validateModel(this.ctx, role); }
       catch { fixedModelUsable = false; }
       if (!fixedModelUsable && modelProfiles.length === 0) continue;
-      result.push({ id: role.id, revision: role.revision, name: role.name, description: role.description, model: role.model, reasoningEffort: role.reasoningEffort ?? role.model?.reasoningEffort });
+      result.push({
+        id: role.id,
+        revision: role.revision,
+        name: role.name,
+        description: role.description,
+        model: role.model,
+        ...role.reasoningEffort === undefined ? {} : { reasoningEffort: role.reasoningEffort },
+        ...role.migratedRecommendation === undefined ? {} : { migratedRecommendation: role.migratedRecommendation },
+      });
     }
     return { roles: result, modelProfiles: modelProfiles.map(publishedProfile), protectedModels: state.protectedModels ?? [] };
   }
@@ -122,9 +156,13 @@ export class ClassmateTools {
       }
       let selected: ModelBinding | undefined;
       if (!prepared && typeof input.model_profile === 'string') {
+        // Highest priority: the one-call dispatch override.
         const profile = lookupModelProfile(this.roles.read().modelProfiles ?? [], input.model_profile);
         if (!profile?.enabled) throw new ClassmatesError('INVALID_PROFILE', '模型用途预设不存在或未启用，请重新调用 classmates_list');
         selected = await resolveProfileSelection(this.ctx, profile, signal);
+      } else if (!prepared && role.model.kind === 'profile') {
+        // Strong reference: missing or disabled presets are hard errors, never a fallback.
+        selected = await resolveStrongProfile(this.ctx, this.roles.read().modelProfiles ?? [], role.name, role.model.profileId, signal);
       }
       const resolved = prepared?.role ?? await resolveRoleForSpawn(this.ctx, agent, role, selected);
       await validateModel(this.ctx, resolved);
@@ -152,8 +190,8 @@ export class ClassmateTools {
     const output = { schema: { type: 'object' as const, additionalProperties: true }, render: (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }] };
     const disposers = [
       agent.ctx.tools.register({ name: 'classmates_list', description: 'List enabled specialist roles and enabled model profiles when the user asks for team collaboration. Creates no members.', parameters: { type: 'object', properties: {}, additionalProperties: false }, output, execute: async (_args, exec) => this.list(caller(exec.agent)) }),
-      agent.ctx.tools.register({ name: 'classmates_spawn', description: 'Create a fresh Team teammate from an approved role and its listed revision. model_profile selects an enabled model profile and replaces the role model for this teammate. Requires user authorization; continue with official Team message and task tools.', parameters: { type: 'object', properties: { classmate_id: { type: 'string', description: 'Exact role id returned by classmates_list.' }, revision: { type: 'integer', minimum: 1, description: 'Required: current role revision returned by classmates_list.' }, name: { type: 'string', pattern: MEMBER_NAME.source, maxLength: 64, description: 'Unique lowercase letters/digits/hyphens teammate name, for example research-proof. Cannot be lead.' }, task: { type: 'string', minLength: 1, maxLength: 64000, description: 'Initial task for this teammate.' }, model_profile: { type: 'string', description: 'Optional enabled model profile id from classmates_list. Omit to keep the role\'s existing model and effort. Replaces the role model for this teammate.' } }, required: ['classmate_id', 'revision', 'name', 'task'], additionalProperties: false }, output, execute: async (args, exec) => this.spawn(caller(exec.agent), args as SpawnInput, exec.signal, exec.callId) }),
-      agent.ctx.systemPrompt.section({ name: 'classmates:discovery', order: 610, text: 'classmates_list discovers configured specialist roles and enabled model profiles. For ordinary delegation, use the matching role-specific subagent tool. When shared Team messages or tasks are needed, use classmates_spawn and then official Team tools. Pass model_profile when the task should use one listed profile; omit it to keep the role\'s existing model behavior. Follow existing collaboration permissions. You may work alone when no role fits.', interpolate: false }),
+      agent.ctx.tools.register({ name: 'classmates_spawn', description: 'Create a fresh Team teammate from an approved role and its listed revision. The role model is one of: inherit the spawning chat, a strong model profile reference, or a fixed route. Passing model_profile overrides the role model for this one teammate. A role bound to a missing or disabled preset fails with guidance instead of falling back. Requires user authorization; continue with official Team message and task tools.', parameters: { type: 'object', properties: { classmate_id: { type: 'string', description: 'Exact role id returned by classmates_list.' }, revision: { type: 'integer', minimum: 1, description: 'Required: current role revision returned by classmates_list.' }, name: { type: 'string', pattern: MEMBER_NAME.source, maxLength: 64, description: 'Unique lowercase letters/digits/hyphens teammate name, for example research-proof. Cannot be lead.' }, task: { type: 'string', minLength: 1, maxLength: 64000, description: 'Initial task for this teammate.' }, model_profile: { type: 'string', description: 'Optional enabled model profile id from classmates_list. Highest-priority one-call override: replaces the role model for this teammate. Omit to use the role\'s own model setting (profile reference, fixed route, or chat inheritance).' } }, required: ['classmate_id', 'revision', 'name', 'task'], additionalProperties: false }, output, execute: async (args, exec) => this.spawn(caller(exec.agent), args as SpawnInput, exec.signal, exec.callId) }),
+      agent.ctx.systemPrompt.section({ name: 'classmates:discovery', order: 610, text: 'classmates_list discovers configured specialist roles and enabled model profiles. For ordinary delegation, use the matching role-specific subagent tool. When shared Team messages or tasks are needed, use classmates_spawn and then official Team tools. Each role carries a normalized model setting: inherit follows the spawning chat, profile is a strong preset reference that fails with guidance when that preset is missing or disabled, and fixed binds an exact route. Pass model_profile when the task should override the role model with one listed enabled profile for that call. Follow existing collaboration permissions. ' + COLLABORATION_GUIDANCE + ' You may work alone when no role fits.', interpolate: false }),
     ];
     return () => disposers.forEach(dispose => dispose());
   }

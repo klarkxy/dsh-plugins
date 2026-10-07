@@ -2,18 +2,18 @@
 
 [简体中文](README.zh-CN.md)
 
-Teammate Roles keeps one shared role library for native DSH subagents and Team teammates: responsibilities, working instructions, models and reasoning efforts live in the same place, and a session uses them by name. You can also drive the same configuration through a chat in DSH's built-in Creator mode. The current version `0.2.0-alpha.1` is a locally installable experimental build.
+Teammate Roles keeps one shared role library for native DSH subagents and Team teammates: responsibilities, working instructions, models and reasoning efforts live in the same place, and a session uses them by name. You can also drive the same configuration through a chat in DSH's built-in Creator mode. Version `0.2.0-rc.1` uses the npm `next` preview channel.
 
-**Runtime**: Node ≥ 24, DSH ≥ 0.1.7-rc.2; only **DSH Web 0.1.7-rc.2 / Windows** has been verified. Team collaboration additionally needs the official `@deepseek-ai/dsh-experimental-agent-team-profile` bundle; ordinary subagents do not. DSH still owns delegation, messages, tasks and sessions: this plugin does not replace the official messages, task board, members or session management.
+**Runtime**: Node ≥ 24, DSH ≥ 0.2.0-rc.2; only **DSH Web 0.2.0-rc.2 / Windows** is in scope for this worktree. Team collaboration additionally needs the official `@deepseek-ai/dsh-experimental-agent-team-profile` bundle; ordinary subagents do not. DSH still owns delegation, messages, tasks and sessions: this plugin does not replace the official messages, task board, members or session management.
 
 ## Install
 
-1. Check that `dsh --version` reports `0.1.7-rc.2`.
+1. Check that `dsh --version` reports `0.2.0-rc.2`.
 2. For Team collaboration, enable the official Agent Teams bundle `@deepseek-ai/dsh-experimental-agent-team-profile` on the target Web profile's native Plugins page.
-3. Install the local file `klarkxy-dsh-classmates-0.2.0-alpha.1.tgz`. Enter its absolute path on the native Plugins page, or run:
+3. Install the preview channel:
 
    ```powershell
-   dsh plugin --profile web add "D:/path/to/klarkxy-dsh-classmates-0.2.0-alpha.1.tgz"
+   dsh plugin --profile web add @klarkxy/dsh-classmates@next
    ```
 
 4. Restart the target profile, then open **Plugins → Classmates**. For a custom profile, replace `web` in the command with its name.
@@ -38,15 +38,17 @@ The separate role configuration assistant preset has been removed. Existing role
 
 > Use the Researcher role from Classmates to investigate this and send you the evidence; you summarize the final answer. Use official Team messages and shared tasks.
 
-The lead then receives `classmates_list` and `classmates_spawn`: the first returns short role descriptions, the second takes a role ID, its listed revision, a lowercase hyphenated teammate name and a task. Long instructions are scoped to that teammate. An empty usable catalog removes both discovery tools. Directory queries create no members, and the plugin never sends requests by itself; later collaboration uses the official Team tools.
+The lead then receives `classmates_list` and `classmates_spawn`: the first returns short role descriptions and model-source metadata. Omitting `model_profile` uses the role's saved source: inherit the calling chat, use a bound model preset, or use a specific model. Pass `model_profile` to override that source for one creation. Long instructions are scoped to that teammate. An empty usable catalog removes both discovery tools. Directory queries create no members, and the plugin never sends requests by itself; later collaboration uses the official Team tools.
 
-**Role list**: 11 disabled presets ship with the plugin — Explorer, Researcher, Planner, Ideator, Griller, Implementer, Reviewer, User Tester, Overdesign Guard, Writer and Verifier. Existing installations can add a preset as a new role and enable it when needed; it never overwrites the existing library.
+**Role list**: 12 disabled presets ship with the plugin — Researcher, Writer, Verifier, Advisor, Explorer, Planner, Ideator, Griller, Implementer, Reviewer, User Tester and Overdesign Guard. Advisor is read-only consultation: it does not implement, verify or accept. Existing installations can add a preset as a new role and enable it when needed; it never overwrites the existing library.
+
+The role editor saves model-source changes immediately, separately from unsaved role text. A model preset is a strong binding: deleting or disabling it makes future dispatch fail until you change the source or pass an explicit per-call override. Legacy `recommendedModelProfileId` values become bindings when there is no fixed model; a legacy fixed model takes precedence and the old recommendation remains only as a migration note. Classmates does not silently rebind, fall back or recreate a preset.
 
 ## Model profiles and approval
 
 The delegating agent sees enabled model profiles and chooses one through the existing tool's `model_profile` parameter. Multiple profiles can use the same model with different efforts and purposes. An omitted profile effort uses the selected model's default. Selection, retries and recovery decisions belong to the delegating agent; Classmates adds no automatic model rotation or fallback. Profiles are user guidance, not evidence of connectivity or model quality.
 
-Without a profile selection, existing template bindings or inheritance from the calling chat remain compatible. Legacy template model and effort values are not deleted automatically; a new profile replaces the model and effort for that creation only. The resolved configuration is saved at creation time, so later template or profile edits, disabling and deletion do not rewrite existing instances.
+Without a per-call profile selection, the role's saved source applies. A specific model with unset effort inherits the dispatching conversation's effort; an incompatible effort rejects creation. A bound or per-call profile instead supplies model and effort together, using the model default when effort is unset. The resolved configuration is saved at creation time, so later template or profile edits, disabling and deletion do not rewrite existing instances.
 
 Enable **使用前确认** (approval before use) on the Models page to require native DSH approval whenever Classmates creates a new child using that provider/model route.
 
@@ -98,6 +100,19 @@ pnpm --filter @klarkxy/dsh-classmates pack
 
 The default test suite uses the installed official runtime with deterministic local model capture. `scripts/acceptance-host.mjs` is a local acceptance host that runs against an isolated `DSH_HOME`; it needs the profile's model list configured in advance and inherits credentials only from the environment. `scripts/browser-acceptance.mjs` uses local Edge and `DSH_ACCEPTANCE_URL`, and it creates then deletes one test role. Never point it at an important profile without accounting for those writes. Live-model tests consume model quota; the routine unit tests do not.
 
-No npm publication or release has been performed, and the plugin is not listed in the plugin site catalog; `private: true` keeps it out of automatic publication. A public license has not been chosen (`UNLICENSED`). Report problems with the `.github/ISSUE_TEMPLATE/bug_report.md` template: include exact versions, sanitized routes, reproduction steps and whether recovery is involved, and never include credentials or complete private sessions. See `THIRD_PARTY_NOTICES.md` for the upstream test helper attribution.
+Model-source UI regression: run `node scripts/recommendation-browser.mjs` from this package, or use its path from any working directory. It bundles the actual React pages, starts isolated in-memory CAS storage on a free localhost port, and opens headless Edge. It checks inherit/profile/fixed controls, immediate saves, two-editor conflicts, disabled/missing bindings, keyboard tabs and mobile width. No build, DSH installation, credentials or model calls are required. The fixture uses host primitive test doubles; it proves source UI behavior, while native package tests and isolated host acceptance cover dispatch and runtime loading separately.
+
+Offline Fusion archive (does not scan `.dsh` or edit settings):
+
+```sh
+npm run build
+node dist/migrate-fusion.js --fusion fusion-store.json --output classmates-merged.json [--classmates classmates-export.json] [--archive archive-dir-or.html]
+# source checkout: node scripts/migrate-fusion.mjs …
+# after install: node node_modules/@klarkxy/dsh-classmates/dist/migrate-fusion.js …
+```
+
+See [docs/fusion-migration.md](docs/fusion-migration.md). Local apply/cutover belongs to primary.
+
+The plugin uses SATA 2.1; see `LICENSE` and `THIRD_PARTY_NOTICES.md` for third-party attribution. Preview releases use `next` and stay outside the stable plugin-site catalog until a `latest` release. Report problems with the `.github/ISSUE_TEMPLATE/bug_report.md` template: include exact versions, sanitized routes, reproduction steps and whether recovery is involved, and never include credentials or complete private sessions.
 
 This source is maintained in `dsh-plugins/plugins/dsh-classmates`. Historical demo scripts require recordings and local model configuration retained in the original `dsh-teammates` directory; these are not needed for build or tests. Historical acceptance records retain their original paths and do not certify this migration.

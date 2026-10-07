@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives';
 import type { ConfirmRequest } from './ConfirmDialog.js';
 import { errorMessage } from './errors.js';
@@ -11,6 +11,7 @@ import type {
   ModelProfile,
   ModelRoute,
 } from '../contracts.js';
+import { collectProfileReferences } from './role-model.js';
 import {
   catalogConnectivityUnknown,
   findModel,
@@ -184,6 +185,13 @@ export function ModelsPage({
   const profiles = state.modelProfiles ?? [];
   // Older hosts omit the field; render as empty without writing it back.
   const protectedRoutes = state.protectedModels ?? [];
+  // Role templates holding a strong reference to each preset, in library order.
+  const references = useMemo(() => collectProfileReferences(state.roles), [state.roles]);
+  const referenceLine = useCallback((profileId: string): string => {
+    const names = references.get(profileId);
+    if (!names || names.length === 0) return t('profile.referencedNone');
+    return t('profile.referencedBy', { names: names.join(t('common.listJoin')) });
+  }, [references, t]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ProfileDraft | null>(null);
@@ -366,6 +374,22 @@ export function ModelsPage({
 
   const toggleProfile = useCallback(async (profile: ModelProfile, enabled: boolean) => {
     if (!saveModelProfile || readOnly || busy) return;
+    if (!enabled) {
+      // Disabling a referenced preset breaks dispatch of those roles by design;
+      // say so with the role names before writing anything.
+      const names = references.get(profile.id);
+      if (names && names.length > 0) {
+        const approved = await confirm({
+          title: t('profile.confirmDisableTitle'),
+          message: t('profile.confirmDisableReferenced', {
+            name: profile.name.trim() || profile.id,
+            roles: names.join(t('common.listJoin')),
+          }),
+          confirmLabel: t('profile.confirmDisable'),
+        });
+        if (!approved || !mountedRef.current) return;
+      }
+    }
     setBusy('toggle');
     setToggleError(null);
     setNotice(null);
@@ -397,7 +421,7 @@ export function ModelsPage({
     } finally {
       if (mountedRef.current) setBusy(null);
     }
-  }, [saveModelProfile, readOnly, busy, state.settingsRevision, draft, baseline, onState, t]);
+  }, [saveModelProfile, readOnly, busy, state.settingsRevision, draft, baseline, onState, references, confirm, t]);
 
   const toggleProtection = useCallback(async (route: ModelRoute, required: boolean) => {
     if (!setModelProtection || readOnly || busy) return;
@@ -458,11 +482,25 @@ export function ModelsPage({
       if (discard && mountedRef.current && draftGenRef.current === asked) closeEditor();
       return;
     }
-    const confirmed = await confirm({
-      title: t('profile.confirmDeleteTitle'),
-      message: t('profile.confirmDelete', { name: draft.name.trim() || draft.id }),
-      confirmLabel: t('common.delete'),
-    });
+    // A referenced preset names its roles in the confirmation: deleting turns
+    // their dispatch into a hard error, never a silent model switch.
+    const referenced = references.get(draft.id);
+    const confirmed = await confirm(
+      referenced && referenced.length > 0
+        ? {
+          title: t('profile.confirmDeleteTitle'),
+          message: t('profile.confirmDeleteReferenced', {
+            name: draft.name.trim() || draft.id,
+            roles: referenced.join(t('common.listJoin')),
+          }),
+          confirmLabel: t('common.delete'),
+        }
+        : {
+          title: t('profile.confirmDeleteTitle'),
+          message: t('profile.confirmDelete', { name: draft.name.trim() || draft.id }),
+          confirmLabel: t('common.delete'),
+        },
+    );
     if (!confirmed || !mountedRef.current || draftGenRef.current !== asked) return;
     const generation = draftGenRef.current;
     setBusy('remove');
@@ -481,7 +519,7 @@ export function ModelsPage({
     } finally {
       if (mountedRef.current && draftGenRef.current === generation) setBusy(null);
     }
-  }, [removeModelProfile, draft, busy, isNew, state.settingsRevision, onState, closeEditor, confirm, t]);
+  }, [removeModelProfile, draft, busy, isNew, state.settingsRevision, onState, closeEditor, confirm, references, t]);
 
   const patchDraft = useCallback((patch: Partial<ProfileDraft>) => {
     setDraft(current => (current ? { ...current, ...patch } : current));
@@ -672,6 +710,7 @@ export function ModelsPage({
                         {profile.description.trim() || t('profile.noDescription')}
                       </span>
                       <span className="dsh-ui-list-desc">{formatProfileModelSummary(profile, state.models, t)}</span>
+                      <span className="dsh-ui-list-desc">{referenceLine(profile.id)}</span>
                       {health === 'invalid' && <StatusBadge health={health} t={t} />}
                       {protectedRoutes.some(route => sameRoute(route, profile.model)) && (
                         <Tag tone="info" className="classmates-status">{t('protection.tag')}</Tag>
@@ -706,6 +745,9 @@ export function ModelsPage({
                   : <StatusBadge health={profileHealth(draft, state.models)} t={t} />}
                 {dirty && <span className="dsh-ui-meta dsh-ui-warn">{t('common.dirty')}</span>}
               </div>
+              {!isNew && (
+                <p className="dsh-ui-help">{referenceLine(draft.id)}</p>
+              )}
 
               <form
                 className="dsh-ui-stack"
@@ -779,6 +821,7 @@ export function ModelsPage({
                           ? 'classmates-profile-description-error classmates-profile-description-help classmates-profile-description-count'
                           : 'classmates-profile-description-help classmates-profile-description-count'
                       }
+                      placeholder={t('profile.descriptionPlaceholder')}
                     />
                     <p id="classmates-profile-description-help" className="dsh-ui-help">{t('profile.descriptionHelp')}</p>
                     {fieldErrors.description && (
@@ -855,6 +898,36 @@ export function ModelsPage({
                       )}
                     </div>
                   </div>
+
+                  {selectedModel && (
+                    // Read-only catalog facts of the chosen route; hidden whole
+                    // when the route is no longer in the catalog.
+                    <div className="dsh-ui-section dsh-ui-stack" aria-labelledby="classmates-catalog-ref-title">
+                      <h4 id="classmates-catalog-ref-title" className="dsh-ui-heading">{t('profile.catalogTitle')}</h4>
+                      <dl className="classmates-remote-fields">
+                        {selectedModel.description && (
+                          <div>
+                            <dt className="dsh-ui-meta">{t('profile.catalogDescription')}</dt>
+                            <dd className="dsh-ui-compact">{selectedModel.description}</dd>
+                          </div>
+                        )}
+                        <div>
+                          <dt className="dsh-ui-meta">{t('profile.catalogEfforts')}</dt>
+                          <dd className="dsh-ui-compact">
+                            {selectedModel.efforts.length > 0
+                              ? selectedModel.efforts.map(effort => effort.name).join(t('common.listJoin'))
+                              : t('profile.catalogNoEfforts')}
+                          </dd>
+                        </div>
+                        {selectedModel.contextWindow !== undefined && (
+                          <div>
+                            <dt className="dsh-ui-meta">{t('profile.catalogContext')}</dt>
+                            <dd className="dsh-ui-compact">{selectedModel.contextWindow.toLocaleString()}</dd>
+                          </div>
+                        )}
+                      </dl>
+                    </div>
+                  )}
                 </fieldset>
 
                 {remoteVersion && (

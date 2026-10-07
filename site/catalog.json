@@ -103,8 +103,8 @@
         "en": "Sidekick"
       },
       "summary": {
-        "zh": "给助手配一个常驻副驾：分派有边界的任务，核对结果后采纳或退回修改。",
-        "en": "Pair the assistant with a persistent sidekick: delegate bounded tasks, then accept or send back the exact result."
+        "zh": "查看旧版副驾协作说明；新任务使用原生委派与 Classmates 角色。",
+        "en": "Read the legacy Sidekick documentation; use native delegation and Classmates roles for new work."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
@@ -119,12 +119,12 @@
       "category": "workflow",
       "kind": "plugin",
       "title": {
-        "zh": "需求记录",
+        "zh": "需求澄清",
         "en": "Mood"
       },
       "summary": {
-        "zh": "由当前代理记录、读取和更新本次任务需求。",
-        "en": "Record, read and update the current task requirements with the current Agent."
+        "zh": "由当前代理先分析不明确的需求，再开始执行。",
+        "en": "Clarify ambiguous requests before acting, using the current Agent."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
@@ -179,12 +179,12 @@
       "category": "sessions",
       "kind": "plugin",
       "title": {
-        "zh": "会话纪要",
+        "zh": "会话回顾",
         "en": "Session Recap"
       },
       "summary": {
-        "zh": "在后台生成会话纪要，并给智能体注入有长度上限的进度检查点。",
-        "en": "Write session recaps in the background and give the agent bounded progress checkpoints."
+        "zh": "离开一段时间后返回会话时，展示简短的进展提示。",
+        "en": "Show a brief reminder when you return to a conversation after time away."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
@@ -192,46 +192,6 @@
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-recap"
-    },
-    {
-      "slug": "memory",
-      "package": "@klarkxy/dsh-memory",
-      "category": "sessions",
-      "kind": "plugin",
-      "title": {
-        "zh": "长期记忆",
-        "en": "Long-term Memory"
-      },
-      "summary": {
-        "zh": "按作用域记住术语、偏好和近期动态，由 Dream 定期整理。",
-        "en": "Remember vocabulary, preferences, and recent activity per scope, consolidated by Dream."
-      },
-      "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugins",
-      "directory": "plugins/dsh-memory"
-    },
-    {
-      "slug": "self-improvement",
-      "package": "@klarkxy/dsh-self-improvement",
-      "category": "sessions",
-      "kind": "plugin",
-      "title": {
-        "zh": "经验学习",
-        "en": "Experience Learning"
-      },
-      "summary": {
-        "zh": "从结果证据里总结带适用条件的做法，可以导出为技能。",
-        "en": "Learn conditional methods from outcome evidence, with optional export as skills."
-      },
-      "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugins",
-      "directory": "plugins/dsh-self-improvement"
     },
     {
       "slug": "web-search-manager",

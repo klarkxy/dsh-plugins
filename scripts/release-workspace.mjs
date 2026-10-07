@@ -71,13 +71,29 @@ export function packRelease(root, pkg, packages, npm, fingerprint) {
 
 /** Imported packages stay unpublished until the old publisher has relinquished ownership. */
 export function releaseCandidates(root, packages) {
+  // Review holds apply to both planning and publishing, including saved plans.
+  const holdsFile = join(root, 'scripts/npm-release-holds.json');
+  let candidates = packages;
+  if (existsSync(holdsFile)) {
+    const holds = JSON.parse(readFileSync(holdsFile, 'utf8'));
+    if (!Array.isArray(holds.packages)) throw new Error('Invalid npm release holds');
+    const names = new Set();
+    for (const entry of holds.packages) {
+      if (typeof entry?.name !== 'string' || !packages.some(pkg => pkg.name === entry.name) ||
+          typeof entry.reason !== 'string' || !entry.reason.trim() || names.has(entry.name)) {
+        throw new Error('Invalid npm release hold: expected a unique public package and reason');
+      }
+      names.add(entry.name);
+    }
+    candidates = packages.filter(pkg => !names.has(pkg.name));
+  }
   const file = join(root, 'scripts/editor-plugin-migration.json');
-  if (!existsSync(file)) return packages;
+  if (!existsSync(file)) return candidates;
   const migration = JSON.parse(readFileSync(file, 'utf8'));
   if (typeof migration.holdPublish !== 'boolean' || !Array.isArray(migration.packages)) throw new Error('Invalid editor migration release gate');
-  if (!migration.holdPublish) return packages;
+  if (!migration.holdPublish) return candidates;
   const held = new Set(migration.packages.map(pkg => pkg.name));
-  return packages.filter(pkg => !held.has(pkg.name));
+  return candidates.filter(pkg => !held.has(pkg.name));
 }
 
 /** Held packages remain version inputs without becoming publication targets. */

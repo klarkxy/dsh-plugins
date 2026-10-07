@@ -2,36 +2,37 @@
 
 简体中文 / [English](README.md)
 
-这是一个用于收纳轻量 DeepSeek Harness 插件的 pnpm monorepo。`plugins/` 下的每个包都是可以独立安装、测试和发布的 DSH bundle 或原生 Preset。
+这是一个用于收纳轻量 DeepSeek Harness 插件与共享库的 pnpm monorepo。`plugins/` 下的每个包独立测试和发布；DSH bundle 与原生 Preset 通过宿主安装。
 
-本 README 同时汇总 klarkxy 已在 npm 公开发布的 DSH 插件，包括在其他仓库维护的包；可浏览的版本见[插件站点](https://klarkxy.github.io/dsh-plugins/)。每次发布新插件时，都应在 `site/catalog.json` 和中英文 README 中补上条目。
+本 README 同时汇总 klarkxy 已在 npm 公开发布的 DSH 插件，包括在其他仓库维护的包；可浏览的版本见[插件站点](https://klarkxy.github.io/dsh-plugins/)。预发布包列在中英文 README 中；DSH 插件有 npm `latest` 版本后再加入 `site/catalog.json`。
 
 ## 已发布插件
 
-在别处维护的插件，包名指向 npm；本仓库发布的两个插件，包名指向包内 README，最后一列给出另一个入口。安装方式、宿主兼容性和配置要求见各插件文档。
+包名指向 npm 或包内 README，最后一列给出另一个入口。安装方式、宿主兼容性和配置要求见各插件文档。已退役的包仍在 npm 保留历史版本。
 
 | 包 | 作用 | 文档 / npm |
 | --- | --- | --- |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | DSH 文档：在插件页阅读官方文档；创造模式用原生工具搜索文档、查核插件 npm 元数据。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
-| [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.zh-CN.md) | 代码精简：审查并精简代码，保留现有行为，削减冗余和多余抽象。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
+| [`@klarkxy/dsh-pruner`](https://www.npmjs.com/package/@klarkxy/dsh-pruner) | 本地已退役，npm 保留历史版本。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
 | [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | 自动标题：会话标题跟随最新任务更新，手动命名不被覆盖。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title#readme) |
-| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | 副驾协作：常驻副驾与主助手搭配，结果由你确认后采纳。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion#readme) |
-| [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | 长期记忆：按作用域记住术语、偏好和近期动态，由 Dream 定期整理。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory#readme) |
-| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 需求记录：由当前代理记录、读取和更新本次任务需求。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
-| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | 会话纪要：后台生成纪要，并注入有长度限制的智能体检查点。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
-| [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | 经验学习：从结果证据总结带适用条件的做法，可选导出为技能。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
+| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | 本地已退役，保留历史记录；新任务使用 Classmates 角色与原生委派。 | [迁移](plugins/dsh-classmates/docs/fusion-migration.md) |
+| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 本地已退役，npm 保留历史版本。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/078b69632ddf054a404fcb81c2543dc8887e2acc/plugins/dsh-mood#readme) |
+| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | 本地已退役，npm 保留历史版本。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/078b69632ddf054a404fcb81c2543dc8887e2acc/plugins/dsh-recap#readme) |
 | [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | 网页搜索：在一个设置页管理搜索服务商和公开页面抓取。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
 | [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | 知乎：知乎搜索、智能体工具、知识库和用量跟踪。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
 | [`@klarkxy/dsh-git-commit`](https://www.npmjs.com/package/@klarkxy/dsh-git-commit) | Git 提交：在对话标题栏提交工作区改动，由模型规划分组并生成提交信息。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-git-commit#readme) |
 | [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | 发现、审查和安装可复用能力。 | [文档](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
 
-## 未发布的开发包
+## 预发布包（`next`）
 
 | 包 | 作用 | 状态 |
 | --- | --- | --- |
-| [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.zh-CN.md) | 队友角色：配置可复用的队友角色，增强原生 Team 界面。 | 本地 alpha；不参与自动 npm 发布，不收录到插件站。 |
+| [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.zh-CN.md) | 队友角色：为原生委派维护角色和模型用途配置。 | `next` 候选版；不收录到稳定插件目录。 |
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.zh-CN.md) | Safe Auto：沙箱提权由独立审核模型把关，通过才自动放行。 | npm 发布候选版；插件站 catalog 只收录稳定版。 |
 | [`@klarkxy/dsh-blueprint`](plugins/dsh-blueprint/README.zh-CN.md) | Blueprint：把一套插件组合分享成带确切版本的蓝图码。 | npm 预览版；插件站 catalog 只收录稳定版。 |
+| [`@klarkxy/dsh-font`](plugins/dsh-font/docs/README.zh-CN.md) | 字体：自定义 Web GUI 的界面字体、代码字体与会话字号。 | `next` 候选版；不收录到稳定插件目录。 |
+| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/docs/README.zh-CN.md) | 模型枢纽：编辑已安装插件暴露的模型字段。 | `next` 候选版。 |
+| [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.zh-CN.md) | 会话管理：跨工作目录查找会话并读取对话。 | `next` 候选版；高级线程操作需要附带的宿主补丁。 |
 
 从本地 `dsh-teammates` 目录迁入，详见[迁移记录](docs/classmates-migration.md)。
 
@@ -73,6 +74,8 @@ pnpm check
 每个包自行维护资源、测试和版本号。原生 Preset 不需要额外运行时插件或构建，仓库根目录本身不是 DSH bundle。
 
 ## npm 自动发布
+
+`scripts/npm-release-holds.json` 记录尚待验收的包。暂缓名单同时用于生成发布计划和执行发布，旧计划也不能绕过。解除某个包前，须检查最终打包内容、通过相关测试，并在目标 DSH 宿主验收新行为（包括打包进去的工作区依赖）。私有开发包继续参与构建与测试。
 
 `plugins/dsh-xxx` 包统一命名为 `@klarkxy/dsh-xxx`，公开包设置公开 npm registry；标记 `private: true` 的开发包参与检查，但不参与自动发布。`.github/workflows/npm-publish.yml` 在 `main` 更新时检查各包，也可以在 Actions 页面手动运行来重试，不需要推送版本标签。
 

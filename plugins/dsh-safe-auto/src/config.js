@@ -3,12 +3,15 @@ import { validateModelConfig } from './model-route.js';
 const defaults = Object.freeze({
   enabled: true,
   provider: '', model: '', reasoningEffort: '', reviewerPrompt: '',
-  timeoutMs: 30000, maxInputBytes: 8192, outputTokens: 256,
+  timeoutMs: 30000, maxInputBytes: 32768, outputTokens: 256,
+  humanApprovalTimeoutMs: 60000,
   maxReviewsPerTask: 20, consecutiveDenials: 3,
+  staticReadonly: true,
 });
 const limits = {
   timeoutMs: [100, 120000], maxInputBytes: [512, 32768], outputTokens: [64, 2048],
   maxReviewsPerTask: [1, 100], consecutiveDenials: [1, 20],
+  humanApprovalTimeoutMs: [0, 300000],
 };
 
 /** Immutable, load-time policy. Unknown keys fail rather than silently disabling a control. */
@@ -17,6 +20,7 @@ export function parseConfig(raw = {}) {
   for (const key of Object.keys(raw)) if (!Object.hasOwn(defaults, key)) throw new Error(`unknown config field: ${key}`);
   const c = { ...defaults, ...raw };
   if (typeof c.enabled !== 'boolean') throw new Error('enabled must be a boolean');
+  if (typeof c.staticReadonly !== 'boolean') throw new Error('staticReadonly must be a boolean');
   for (const key of ['provider', 'model', 'reasoningEffort', 'reviewerPrompt']) {
     if (typeof c[key] !== 'string' || c[key].length > 4096) throw new Error(`${key} must be a string`);
   }

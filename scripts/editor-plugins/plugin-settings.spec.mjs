@@ -2,13 +2,13 @@ import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { apply as memory } from '../../plugins/dsh-memory/src/client.tsx'
+import { apply as currentTitle } from '../../plugins/dsh-current-title/src/client.tsx'
 import { apply as webSearch } from '../../plugins/dsh-web-search-manager/src/client.tsx'
 import { apply as zhihu } from '../../plugins/dsh-zhihu/src/client.tsx'
 
 const slot = 'plugins.bundle.config'
 const forbidden = ['settings.section', 'settings.plugins.tab', 'dsh-editor.settings.models', 'dsh-editor.settings.zhihu']
-const statusChannels = ['/dsh-memory', '/dsh-web-search', '/zhihu']
+const statusChannels = ['/dsh-current-title', '/dsh-web-search', '/zhihu']
 
 function host(initial = []) {
   const declared = new Set(initial)
@@ -20,6 +20,7 @@ function host(initial = []) {
   const credentials = { describe: async () => ({ ok: true, value: {} }), set: async () => { throw new Error('Unexpected credential write') }, unset: async () => { throw new Error('Unexpected credential delete') } }
   const ctx = {
     effect(run) { const dispose = run(); if (typeof dispose === 'function') effects.push(dispose) },
+    provide(name, value) { ctx[name] = value },
     connection: { rpc: { call: async (channel, endpoint) => { calls.push([channel, endpoint]); return { ok: true, value: { enabled: true } } } } },
     remote: { credentials, llm: {}, settings: {}, session: {} },
     sessions: {}, uiWorkspace: {},
@@ -58,7 +59,7 @@ function host(initial = []) {
 }
 
 const plugins = [
-  ['@klarkxy/dsh-memory', memory],
+  ['@klarkxy/dsh-current-title', currentTitle],
   ['@klarkxy/dsh-web-search-manager', webSearch], ['@klarkxy/dsh-zhihu', zhihu],
 ]
 const settle = () => new Promise(resolve => setImmediate(resolve))

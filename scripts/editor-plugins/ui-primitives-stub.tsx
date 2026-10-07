@@ -272,6 +272,68 @@ export function StateDot({ state, size, className, appearance }: {
   })
 }
 
+export type MenuEntry =
+  | { id: string; label: React.ReactNode; disabled?: boolean; danger?: boolean; submenu?: readonly MenuEntry[] }
+  | { type: 'separator'; id: string }
+  | { type: 'label'; id: string; text: string }
+
+/** MenuSurface double: a plain div carrying the class and children (no macOS backing). */
+export const MenuSurface = React.forwardRef<HTMLDivElement, {
+  compact?: boolean
+  children?: React.ReactNode
+} & React.ComponentPropsWithoutRef<'div'>>(function MenuSurface({ compact: _compact, children, ...rest }, ref) {
+  return h('div', { ...rest, ref }, children)
+})
+
+/** MenuGroup double: a section with its visible heading, no sticky observation. */
+export function MenuGroup({ label, children }: { label: string; children?: React.ReactNode }) {
+  return h('section', { className: 'dsh-stub-menu-group' },
+    h('div', { className: 'dsh-stub-menu-heading' }, label), children)
+}
+
+export function observeStickyMenuGroups(_viewport: HTMLElement): () => void { return () => {} }
+
+/** rankByName double: empty query returns the input; otherwise a substring match
+ * on name or label. The real subsequence ranking is verified by the host suite. */
+export function rankByName<T extends { readonly name: string; readonly label?: string }>(
+  items: readonly T[], rawQuery: string,
+): readonly T[] {
+  const needle = rawQuery.trim().toLowerCase()
+  if (!needle) return items
+  return items.filter(item => item.name.toLowerCase().includes(needle) || item.label?.toLowerCase().includes(needle))
+}
+
+function menuEntries(entries: readonly MenuEntry[], onSelect?: (id: string) => void): React.ReactNode {
+  return entries.map(entry => {
+    if ('type' in entry && entry.type === 'separator') return h('hr', { key: entry.id, 'aria-hidden': 'true' })
+    if ('type' in entry && entry.type === 'label') return h('div', { key: entry.id, className: 'dsh-stub-menu-label' }, entry.text)
+    const item = entry as Extract<MenuEntry, { id: string; label: React.ReactNode }>
+    return h('button', {
+      key: item.id, role: 'menuitem', disabled: item.disabled,
+      onClick: () => onSelect?.(item.id),
+    }, item.label, item.submenu ? h('div', { className: 'dsh-stub-submenu' }, menuEntries(item.submenu, onSelect)) : null)
+  })
+}
+
+/** Anchored menu double: the trigger renders in place; rows render while open. */
+export function Menu({ open, anchor, items = [], children, onSelect, listClassName }: {
+  open: boolean
+  anchor: React.ReactNode
+  items?: readonly MenuEntry[]
+  children?: React.ReactNode
+  selectedId?: string
+  selectedIds?: readonly string[]
+  onSelect?: (id: string) => void
+  onClose?: () => void
+  side?: 'bottom' | 'top' | 'right'
+  align?: 'start' | 'end'
+  portal?: boolean
+  listClassName?: string
+}) {
+  return h('span', { className: 'dsh-stub-menu' }, anchor,
+    open ? h('div', { role: 'menu', className: listClassName }, menuEntries(items, onSelect), children) : null)
+}
+
 function icon(name: string) {
   return function Icon({ size, className }: { size?: number; className?: string }) {
     return h('svg', {
@@ -282,7 +344,12 @@ function icon(name: string) {
 }
 
 export const IconChecklistOutlineRegular = icon('checklist')
+export const IconCheckOutlineRegular = icon('check')
+export const IconChevronDownOutlineMedium = icon('chevron-down-medium')
+export const IconChevronRightOutlineMedium = icon('chevron-right-medium')
 export const IconChevronDownOutlineRegular = icon('chevron-down')
+export const IconChevronRightOutlineRegular = icon('chevron-right')
+export const IconCloseFillRegular = icon('close-fill')
 export const IconEditOutlineRegular = icon('edit')
 export const IconShieldOutlineRegular = icon('shield')
 export const IconUserOutlineRegular = icon('user')
@@ -329,10 +396,12 @@ export function isBehindModal(_anchor: HTMLElement | null): boolean { return fal
 // that is not here would otherwise get `undefined` and fail far from the cause.
 const known = new Set([
   'Button', 'Tag', 'Checkbox', 'Switch', 'Input', 'Pill', 'SegmentedTabs', 'DisclosureRow',
-  'Modal', 'PathLabel', 'Tooltip', 'StateDot', 'IconChecklistOutlineRegular',
-  'IconChevronDownOutlineRegular', 'IconEditOutlineRegular', 'IconShieldOutlineRegular',
+  'Modal', 'Menu', 'MenuSurface', 'MenuGroup', 'PathLabel', 'Tooltip', 'StateDot', 'IconChecklistOutlineRegular',
+  'IconCheckOutlineRegular', 'IconChevronDownOutlineMedium', 'IconChevronRightOutlineMedium', 'IconChevronDownOutlineRegular',
+  'IconChevronRightOutlineRegular', 'IconCloseFillRegular', 'IconEditOutlineRegular', 'IconShieldOutlineRegular',
   'IconUserOutlineRegular', 'IconUsersOutlineRegular', 'useAnchoredPosition',
   'useDismissOnOutsidePointer', 'useModalLayer', 'modalSelector', 'closeTopModal', 'isBehindModal',
+  'observeStickyMenuGroups', 'rankByName',
 ])
 
 export function assertKnownPrimitive(name: string): void {

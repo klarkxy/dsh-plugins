@@ -45,13 +45,13 @@ describe("bundle contract", () => {
       id: packageJson.name,
       version: packageJson.version,
       main: packageJson.main,
-      engines: { dsh: ">=0.1.7-rc.2" },
+      engines: { dsh: ">=0.2.0-rc.2" },
       contributes: { tools: ["dsh_docs_search", "dsh_docs_fetch"], skills: [] },
     });
     expect(packageJson.peerDependencies).toMatchObject({
-      "@deepseek-ai/dsh-agent-preset-registry": ">=0.1.7-rc.2",
-      "@deepseek-ai/dsh-system-prompt": ">=0.1.7-rc.2",
-      "@deepseek-ai/dsh-tools": ">=0.1.7-rc.2",
+      "@deepseek-ai/dsh-agent-preset-registry": ">=0.2.0-rc.2",
+      "@deepseek-ai/dsh-system-prompt": ">=0.2.0-rc.2",
+      "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2",
     });
     expect(packageJson.peerDependencies).not.toHaveProperty("@deepseek-ai/dsh-skill");
   });

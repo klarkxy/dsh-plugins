@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { orderedPackages, packRelease, publishManifest, releaseCandidates, releaseWorkspace } from './release-workspace.mjs';
 import { validateHeldDependencies } from './publish-npm.mjs';
+import { discoverPackages } from './release-target.mjs';
+import { fileURLToPath } from 'node:url';
 function fixture(t) { const root = mkdtempSync(join(tmpdir(), 'dsh-workspace-release-')); t.after(() => rmSync(root, { recursive: true, force: true })); return root; }
 function writePackage(root, name, dependencies = {}) {
   const directory = `plugins/${name.split('/').pop()}`;
@@ -16,9 +18,9 @@ function writePackage(root, name, dependencies = {}) {
 }
 const npm = (args, cwd) => execFileSync(process.platform === 'win32' ? 'cmd.exe' : 'npm', process.platform === 'win32' ? ['/d', '/s', '/c', 'npm', ...args] : args, { cwd, encoding: 'utf8', env: { ...process.env, npm_config_audit: 'false', npm_config_fund: 'false' } });
 test('orders workspace dependencies before dependants regardless of directory order', t => {
-  const root = fixture(t), memory = writePackage(root, '@klarkxy/dsh-memory');
-  const feature = writePackage(root, '@klarkxy/dsh-feature', { [memory.name]: 'workspace:*' });
-  assert.deepEqual(orderedPackages(root, [feature, memory]).map(p => p.name), [memory.name, feature.name]);
+  const root = fixture(t), base = writePackage(root, '@klarkxy/dsh-base');
+  const feature = writePackage(root, '@klarkxy/dsh-feature', { [base.name]: 'workspace:*' });
+  assert.deepEqual(orderedPackages(root, [feature, base]).map(p => p.name), [base.name, feature.name]);
 });
 test('rejects missing release targets and cycles', t => {
   const root = fixture(t), a = writePackage(root, '@klarkxy/dsh-a', { '@klarkxy/dsh-b': 'workspace:*' });
@@ -92,4 +94,39 @@ test('held dependency versions must already exist on npm', async () => {
   assert.deepEqual(calls, [[dependency.name, dependency.version]]);
   await assert.rejects(validateHeldDependencies([dependency], async () => ({ versions: {} })), /not published/);
   await assert.rejects(validateHeldDependencies([dependency], async () => { throw new Error('registry unavailable'); }), /registry unavailable/);
+});
+
+test('review holds compose with the migration gate and can hold every public package', t => {
+  const root = fixture(t), a = writePackage(root, '@klarkxy/dsh-a'), b = writePackage(root, '@klarkxy/dsh-b');
+  mkdirSync(join(root, 'scripts'));
+  const file = join(root, 'scripts/npm-release-holds.json');
+  writeFileSync(file, JSON.stringify({ packages: [{ name: a.name, reason: 'Pending host acceptance' }] }));
+  assert.deepEqual(releaseCandidates(root, [a, b]), [b]);
+  writeFileSync(join(root, 'scripts/editor-plugin-migration.json'), JSON.stringify({ holdPublish: true, packages: [b] }));
+  assert.deepEqual(releaseCandidates(root, [a, b]), []);
+  assert.deepEqual(releaseWorkspace(root, [a, b]).heldDependencies, []);
+});
+
+test('review holds reject malformed, duplicate and unknown package entries', t => {
+  const root = fixture(t), a = writePackage(root, '@klarkxy/dsh-a');
+  mkdirSync(join(root, 'scripts'));
+  for (const holds of [{}, { packages: null }, { packages: [null] },
+    { packages: [{ name: a.name, reason: '' }] },
+    { packages: [{ name: '@klarkxy/dsh-typo', reason: 'Pending' }] },
+    { packages: [{ name: a.name, reason: 'Pending' }, { name: a.name, reason: 'Pending' }] }]) {
+    writeFileSync(join(root, 'scripts/npm-release-holds.json'), JSON.stringify(holds));
+    assert.throws(() => releaseCandidates(root, [a]), /Invalid npm release hold/);
+  }
+});
+
+test('this repository excludes review holds and private development packages', () => {
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const holds = JSON.parse(readFileSync(join(root, 'scripts/npm-release-holds.json'), 'utf8'));
+  const candidates = new Set(releaseWorkspace(root, discoverPackages(root)).candidates.map(pkg => pkg.name));
+  for (const entry of holds.packages) assert.equal(candidates.has(entry.name), false, entry.name);
+  for (const entry of readdirSync(join(root, 'plugins'), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const manifest = JSON.parse(readFileSync(join(root, 'plugins', entry.name, 'package.json'), 'utf8'));
+    if (manifest.private === true) assert.equal(candidates.has(manifest.name), false, manifest.name);
+  }
 });

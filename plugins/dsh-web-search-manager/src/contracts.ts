@@ -16,14 +16,24 @@ export interface ProviderDescriptor {
   readonly credentialShared?: boolean
   /** Optional notice naming the settings surface that owns a shared credential. */
   readonly credentialHint?: string
-  readonly billing: 'request' | 'model-and-tools' | 'none'
+  readonly billing: 'request' | 'model-and-tools' | 'none' | 'unknown'
   /** Optional provider-supplied billing summary. */
   readonly pricing?: string
   /** Public HTTPS page explaining provider charges. */
   readonly pricingUrl?: string
   /** Public HTTPS page where the user can create an API key. */
   readonly signupUrl?: string
+  /** Plugin that owns configuration. Native providers keep their settings there. */
+  readonly configurationOwner?: string
+  /** Explicit settings link supplied by the provider, never inferred from its id. */
+  readonly configurationUrl?: string
+  /** Fixed legacy route migrated by a bundle-owned adapter; not used by native plugins. */
+  readonly legacyId?: string
 }
+export const WEB_MANAGER_OWNER = '@klarkxy/dsh-web-search-manager'
+/** Optional display metadata on a provider registered directly with ctx.web. */
+export type DiscoverableSearchProvider = WebSearchProvider & { readonly dshWebManagement?: ProviderDescriptor }
+export type DiscoverableFetchProvider = WebFetchProvider & { readonly dshWebManagement?: ProviderDescriptor }
 export interface ProviderOptions {
   readonly apiKey?: string
   readonly baseURL?: string
@@ -78,6 +88,8 @@ export function pickActiveSearch(order: readonly string[], configured: (id: stri
 export interface ProviderView extends ProviderDescriptor {
   kind: ProviderKind
   configured: boolean
+  /** True only for configuration explicitly owned by this manager bundle. */
+  configurationOwned?: boolean
   baseURL?: string
   calls: number
   failures: number
@@ -90,6 +102,17 @@ export interface WebStatus {
   storageFailed: boolean
 }
 export function providerKey(kind: ProviderKind, id: string): string { return `${kind}:${id}` }
+export function safeConfigurationUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value || /[\u0000-\u0020\\]/.test(value)) return
+  try {
+    const url = new URL(value, 'https://dsh.invalid')
+    if (url.username || url.password) return
+    if ((value.startsWith('/') && !value.startsWith('//')) || value.startsWith('#')) {
+      return url.origin === 'https://dsh.invalid' ? value : undefined
+    }
+    return /^https:\/\//i.test(value) && url.protocol === 'https:' ? value : undefined
+  } catch { return }
+}
 export function validateBaseURL(value: string): string {
   const url = new URL(value)
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {

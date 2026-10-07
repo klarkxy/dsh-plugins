@@ -23,22 +23,22 @@ describe('builtin web providers', () => {
       resolveCredential: async ref => keys.get(ref),
     })
     fixtures.push(manager)
-    const off = registerBuiltins(manager)
+    const off = registerBuiltins(web, { settings: () => manager.status().settings, resolveCredential: async ref => keys.get(ref) })
     await manager.refresh()
     const providers = manager.status().providers
     expect(providers.map(row => `${row.kind}:${row.id}`).sort()).toEqual([
-      'fetch:http',
-      'search:bocha', 'search:brave', 'search:ddg', 'search:deepseek-official',
+      'fetch:http-managed',
+      'search:bocha', 'search:brave', 'search:ddg', 'search:deepseek-managed',
       'search:exa', 'search:firecrawl', 'search:serper', 'search:tavily',
     ])
     expect(providers.find(row => row.id === 'ddg')).toMatchObject({
       kind: 'search', billing: 'none', configured: true, label: 'DuckDuckGo',
     })
-    expect(providers.find(row => row.id === 'deepseek-official')).toMatchObject({
+    expect(providers.find(row => row.id === 'deepseek-managed')).toMatchObject({
       credentialRef: 'DEEPSEEK_API_KEY', credentialShared: true, credentialHint: '与模型设置共用 Key',
       billing: 'model-and-tools', configured: true,
     })
-    expect(providers.find(row => row.id === 'http')).toMatchObject({
+    expect(providers.find(row => row.id === 'http-managed')).toMatchObject({
       kind: 'fetch', configured: true, billing: 'none',
     })
     off()
@@ -61,13 +61,13 @@ describe('integrated Tavily configuration compatibility', () => {
     const web = new WebRuntime(new Context(), {})
     const manager = new WebSearchManager({ web, initial, save, resolveCredential })
     fixtures.push(manager)
-    const off = registerBuiltins(manager)
+    const off = registerBuiltins(web, { settings: () => manager.status().settings, resolveCredential })
     await manager.refresh()
     expect(manager.status().providers.filter(row => row.id === 'tavily')).toHaveLength(1)
     expect(manager.status().providers.find(row => row.id === 'tavily')).toMatchObject({
       configured: true, credentialRef: 'DSH_EDITOR_WEB_TAVILY_API_KEY', baseURL: initial.endpoints['search:tavily'],
     })
-    expect(manager.status().settings).toEqual(original)
+    expect(manager.status().settings).toEqual({ ...original, fetchProvider: 'http-managed' })
     expect(initial).toEqual(original)
     expect(save).not.toHaveBeenCalled()
     if (searchEnabled) {

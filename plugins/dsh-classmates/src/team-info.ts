@@ -4,9 +4,15 @@ import { SessionId } from '@deepseek-ai/dsh-session';
 import type { SessionObservation } from '@deepseek-ai/dsh-session-query';
 import { SessionQueryError } from '@deepseek-ai/dsh-session-query';
 import type { BindingStore } from './bindings.js';
-import { ClassmatesError } from './config.js';
-import type { ModelBinding, TeamDetails, TeamIdentity } from './contracts.js';
+import { ClassmatesError, type RoleConfig } from './config.js';
+import type { ModelBinding, ModelProfile, NormalizedRole, TeamDetails, TeamIdentity } from './contracts.js';
+import { templateStatusOf } from './contracts.js';
 
+// The roster row deliberately carries no model: the host roster reports
+// `live?.options.model ?? root.options.model` for offline members (see
+// dsh-experimental-agent-team/lib/types/roster.js:117 and :413), which would
+// display the Lead's model as a member's. Member models come only from the
+// frozen binding (configuredModel) and sessionQuery last-used evidence.
 interface RosterRow {
   id: string;
   name: string;
@@ -127,11 +133,28 @@ async function observe(ctx: Context, sessionId: SessionIdType): Promise<SessionO
   }
 }
 
+interface RoleLibrary {
+  roles: readonly NormalizedRole[];
+  profiles: readonly ModelProfile[];
+}
+
+/** Live template/profile data for status enrichment; absent when settings are unreadable. */
+function readLibrary(config: RoleConfig | undefined): RoleLibrary | undefined {
+  if (!config) return undefined;
+  try {
+    const state = config.read();
+    return { roles: state.roles, profiles: state.modelProfiles ?? [] };
+  } catch {
+    return undefined;
+  }
+}
+
 async function identityFor(
   ctx: Context,
   leadId: string,
   row: RosterRow,
   store: BindingStore | undefined,
+  library: RoleLibrary | undefined,
 ): Promise<TeamIdentity> {
   const identity: TeamIdentity = {
     memberId: row.id,
@@ -147,6 +170,16 @@ async function identityFor(
         identity.roleName = binding.role.name;
         identity.description = binding.role.description;
         identity.configuredModel = binding.role.model;
+        if (binding.modelProfileId !== undefined) {
+          identity.modelProfileId = binding.modelProfileId;
+          const profileName = library?.profiles.find(profile => profile.id === binding.modelProfileId)?.name;
+          if (profileName) identity.modelProfileName = profileName;
+        }
+        if (library) {
+          const status = templateStatusOf({ id: binding.role.id, name: binding.role.name }, library.roles);
+          identity.templateStatus = status.templateStatus;
+          if (status.currentRoleName !== undefined) identity.currentRoleName = status.currentRoleName;
+        }
       }
     } catch (error) {
       identity.issue = error instanceof Error ? error.message : String(error);
@@ -169,13 +202,15 @@ export async function readTeamDetails(
   ctx: Context,
   leadId: string,
   store?: BindingStore,
+  config?: RoleConfig,
 ): Promise<TeamDetails> {
   if (typeof leadId !== 'string' || !leadId.trim()) throw new ClassmatesError('INVALID_LEAD', 'Team 主控标识无效');
   const id = SessionId(leadId);
+  const library = readLibrary(config);
   const lead = await observe(ctx, id);
   try {
     const roster = rosterFromObservation(lead, leadId);
-    const members = await Promise.all(roster.rows.map(row => identityFor(ctx, leadId, row, store)));
+    const members = await Promise.all(roster.rows.map(row => identityFor(ctx, leadId, row, store, library)));
     if (roster.issue) {
       const leadRow = members.find(member => member.memberId === leadId) ?? members[0];
       if (leadRow && !leadRow.issue) leadRow.issue = roster.issue;

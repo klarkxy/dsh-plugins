@@ -13,17 +13,17 @@ const ctx = {
   readmePath: "README.md",
   assetPages: { "docs/shot.png": "../../assets/packages/memory/docs/shot.png", "docs/logo.png": "../../assets/packages/memory/docs/logo.png" },
   readmePages: { "packages/dsh-memory/docs/README.zh-CN.md": "../../plugins/memory/", "packages/dsh-memory/README.md": "./" },
-  packagePages: { "@klarkxy/dsh-self-improvement": "../self-improvement/" },
+  packagePages: { "@klarkxy/dsh-recap": "../recap/" },
 };
 
 test("README rendering drops the title and language switch, and rewrites links", () => {
   const { html, toc } = renderReadme(
     [
-      "# @klarkxy/dsh-memory",
+      "# @klarkxy/dsh-sample",
       "",
       "[简体中文](docs/README.zh-CN.md)",
       "",
-      "Needs [Experience Learning](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) and [design](../../docs/design.md#limits).",
+      "Needs [Session Recap](https://www.npmjs.com/package/@klarkxy/dsh-recap) and [design](../../docs/design.md#limits).",
       "",
       "![shot](docs/shot.png) ![outside](../../assets/x.png)",
       "",
@@ -38,7 +38,7 @@ test("README rendering drops the title and language switch, and rewrites links",
     ctx,
   );
   assert.doesNotMatch(html, /<h1|简体中文/);
-  assert.match(html, /href="\.\.\/self-improvement\/"/);
+  assert.match(html, /href="\.\.\/recap\/"/);
   assert.match(html, /href="https:\/\/github\.com\/klarkxy\/dsh-editor\/blob\/HEAD\/docs\/design\.md#limits"/);
   assert.match(html, /src="\.\.\/\.\.\/assets\/packages\/memory\/docs\/shot\.png"/);
   assert.match(html, /src="https:\/\/raw\.githubusercontent\.com\/klarkxy\/dsh-editor\/HEAD\/assets\/x\.png"/);
@@ -77,7 +77,7 @@ test("catalog validation rejects duplicates and missing translations", () => {
 function fixture() {
   const data = {};
   for (const [i, p] of catalog.plugins.entries()) {
-    const deps = p.package === "@klarkxy/dsh-memory" ? { "@klarkxy/dsh-self-improvement": "^0.1.0" } : {};
+    const deps = p.package === "@klarkxy/dsh-recap" ? { "@klarkxy/dsh-mood": "^0.1.0" } : {};
     data[p.package] = {
       name: p.package,
       version: `0.1.${i}`,
@@ -100,15 +100,15 @@ test("site has every page, install order follows dependencies, and internal link
     assert.ok(files.has(`en/plugins/${p.slug}/index.html`), p.slug);
     assert.ok(files.has(`assets/icons/${p.slug}.svg`), p.slug);
   }
-  const memory = files.get("plugins/memory/index.html");
-  const dep = memory.indexOf("add @klarkxy/dsh-self-improvement");
-  assert.ok(dep > 0 && dep < memory.indexOf("add @klarkxy/dsh-memory"));
-  assert.match(memory, /这个包没有中文 README/);
-  assert.match(files.get("plugins/self-improvement/index.html"), /被依赖/);
+  const recap = files.get("plugins/recap/index.html");
+  const dep = recap.indexOf("add @klarkxy/dsh-mood");
+  assert.ok(dep > 0 && dep < recap.indexOf("add @klarkxy/dsh-recap"));
+  assert.match(recap, /这个包没有中文 README/);
+  assert.match(files.get("plugins/mood/index.html"), /被依赖/);
 
   const json = JSON.parse(files.get("plugins.json"));
   assert.equal(json.plugins.length, catalog.plugins.length);
-  assert.deepEqual(json.plugins.find((p) => p.slug === "memory").dependsOn, ["@klarkxy/dsh-self-improvement"]);
+  assert.deepEqual(json.plugins.find((p) => p.slug === "recap").dependsOn, ["@klarkxy/dsh-mood"]);
   assert.match(files.get("404.html"), /areas/);
 
   // Assets written by build.mjs, not render.mjs.
@@ -128,21 +128,21 @@ test("site has every page, install order follows dependencies, and internal link
 
 test("both languages serve package images and licenses from relative local assets", () => {
   const data = fixture();
-  const item = catalog.plugins.find(plugin => plugin.slug === "memory");
+  const item = catalog.plugins.find(plugin => plugin.slug === "recap");
   const pkg = data[item.package];
   pkg.assets = { "docs/a b.png": Buffer.from([0, 255, 127]).toString("base64"), LICENSE: Buffer.from("Published license").toString("base64") };
-  pkg.readme.en = { path: "README.md", text: "# Memory\n\n## Usage\n\n![Example](docs/a%20b.png)\n\n[License](LICENSE#terms)" };
+  pkg.readme.en = { path: "README.md", text: "# Recap\n\n## Usage\n\n![Example](docs/a%20b.png)\n\n[License](LICENSE#terms)" };
   const options = { generatedAt: "2026-10-01T00:00:00.000Z" };
   const files = renderSite(catalog, data, options);
   for (const [lang, root] of [["", "../../"], ["en/", "../../../"]]) {
-    const html = files.get(`${lang}plugins/memory/index.html`);
-    assert.ok(html.includes(`src="${root}assets/packages/memory/docs/a%20b.png"`));
-    assert.ok(html.includes(`href="${root}assets/packages/memory/LICENSE#terms"`));
-    assert.ok(html.includes(`href="${root}assets/packages/memory/LICENSE"`));
+    const html = files.get(`${lang}plugins/recap/index.html`);
+    assert.ok(html.includes(`src="${root}assets/packages/recap/docs/a%20b.png"`));
+    assert.ok(html.includes(`href="${root}assets/packages/recap/LICENSE#terms"`));
+    assert.ok(html.includes(`href="${root}assets/packages/recap/LICENSE"`));
     assert.doesNotMatch(html, /jsdelivr/);
   }
-  assert.deepEqual(files.get("assets/packages/memory/docs/a b.png"), Buffer.from([0, 255, 127]));
-  assert.equal(files.get("assets/packages/memory/LICENSE").toString(), "Published license");
+  assert.deepEqual(files.get("assets/packages/recap/docs/a b.png"), Buffer.from([0, 255, 127]));
+  assert.equal(files.get("assets/packages/recap/LICENSE").toString(), "Published license");
   pkg.assets["../escape.png"] = "AA==";
   assert.throws(() => renderSite(catalog, data, options), /Unsafe package asset path/);
 });

@@ -49,6 +49,7 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
     keys.clear()
     await manager.refresh()
     expect(manager.status().searchActive).toBe(false)
+    await update(manager, { searchEnabled: false })
     await expect(update(manager, { searchEnabled: true, searchProvider: 'exa', searchOrder: ['exa'] })).rejects.toMatchObject({ code: 'WEB_CREDENTIAL_MISSING' })
   })
   it('skips an unconfigured higher-priority backend', async () => {
@@ -162,7 +163,7 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
     const { manager, web, search } = setup()
     const fetch = vi.fn(async () => ({ url: 'https://example.com', statusCode: 200, body: { kind: 'text' as const, content: 'hello' }, truncated: false }))
     manager.registerFetchProvider({ id: 'http', label: 'HTTP', description: 'test', billing: 'none' }, () => ({ id: 'http', available: () => true, fetch }))
-    await update(manager, { searchEnabled: true, searchOrder: ['exa'] })
+    await update(manager, { searchEnabled: true, searchOrder: ['exa'], fetchEnabled: true })
     expect(manager.status()).toMatchObject({ fetchActive: true, searchActive: true })
     await web.fetch({ url: 'https://example.com' })
     expect(fetch).toHaveBeenCalledOnce()

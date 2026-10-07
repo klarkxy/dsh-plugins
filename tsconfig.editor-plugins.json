@@ -17,6 +17,18 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
+      "@klarkxy/dsh-model-route": [
+        "plugins/dsh-model-route/src/index.ts"
+      ],
+      "@klarkxy/dsh-model-route/zod": [
+        "plugins/dsh-model-route/src/zod.ts"
+      ],
+      "@klarkxy/dsh-model-route/schemastery": [
+        "plugins/dsh-model-route/src/schemastery.ts"
+      ],
+      "@klarkxy/dsh-model-route/ui": [
+        "plugins/dsh-model-route/src/ui.tsx"
+      ],
       "@klarkxy/dsh-plugin-kit": [
         "plugins/dsh-plugin-kit/src/index.ts"
       ],
@@ -31,6 +43,9 @@
       ],
       "@klarkxy/dsh-plugin-kit/model-menu": [
         "plugins/dsh-plugin-kit/src/model-menu.ts"
+      ],
+      "@klarkxy/dsh-plugin-kit/model-menu-ui": [
+        "plugins/dsh-plugin-kit/src/model-menu-ui.tsx"
       ],
       "@klarkxy/dsh-plugin-kit/llm-call": [
         "plugins/dsh-plugin-kit/src/llm-call.ts"
@@ -55,18 +70,6 @@
       ],
       "@klarkxy/dsh-recap/contracts": [
         "plugins/dsh-recap/src/contracts.ts"
-      ],
-      "@klarkxy/dsh-memory": [
-        "plugins/dsh-memory/src/index.ts"
-      ],
-      "@klarkxy/dsh-memory/contracts": [
-        "plugins/dsh-memory/src/contracts.ts"
-      ],
-      "@klarkxy/dsh-self-improvement": [
-        "plugins/dsh-self-improvement/src/index.ts"
-      ],
-      "@klarkxy/dsh-self-improvement/contracts": [
-        "plugins/dsh-self-improvement/src/contracts.ts"
       ],
       "@klarkxy/dsh-fusion": [
         "plugins/dsh-fusion/src/index.ts"

@@ -1,13 +1,16 @@
 {
   "id": "@klarkxy/dsh-dev-index",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "main": "lib/index.js",
   "description": "DSH Docs: read the official DSH documentation in the Plugins page; Creator mode searches and fetches it with native tools.",
   "engines": {
-    "dsh": ">=0.1.7-rc.2"
+    "dsh": ">=0.2.0-rc.2"
   },
   "contributes": {
-    "tools": ["dsh_docs_search", "dsh_docs_fetch"],
+    "tools": [
+      "dsh_docs_search",
+      "dsh_docs_fetch"
+    ],
     "skills": []
   }
 }

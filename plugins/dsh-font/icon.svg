@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" fill="none">
+  <defs>
+    <linearGradient id="glyph" x1="8" y1="8" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4D75F5"/>
+      <stop offset="1" stop-color="#8EB6FF"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(3.6 3.6) scale(.8)">
+  <path d="M9 8H27V12.5H24.5V11H19.5V26H22V28.5H14V26H16.5V11H11.5V12.5H9V8Z" fill="url(#glyph)"/>
+  <path d="M6 30H30" stroke="#39ABA9" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>

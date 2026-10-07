@@ -66,6 +66,7 @@ async function boot() {
   });
   let batched: unknown;
   let profileBatched: unknown;
+  let profileBatchRoles: unknown[] = [];
   let protectedModels: ModelRoute[] = [];
   ctx.provide('classmatesController', {
     load: async () => ({
@@ -87,7 +88,7 @@ async function boot() {
     },
     batchModelProfiles: async (changes: unknown, expected: number) => {
       profileBatched = { changes, expected };
-      return { roles: [], modelProfiles: [], models: [], settingsRevision: expected + 1, writable: true };
+      return { roles: profileBatchRoles, modelProfiles: [], models: [], settingsRevision: expected + 1, writable: true };
     },
     setModelProtection: async (model: ModelRoute, required: boolean, expected: number) => {
       if (expected !== 3) throw new Error('revision conflict');
@@ -104,7 +105,7 @@ async function boot() {
       scope.effect(() => dispose);
     },
   });
-  return { ctx, preset, agentScope, creator, outsider, dispose, setMode: (value: string) => { mode = value; }, setTeammate: (value: boolean) => { teammate = value; }, getBatched: () => batched, getProfileBatched: () => profileBatched, getProtected: () => protectedModels };
+  return { ctx, preset, agentScope, creator, outsider, dispose, setMode: (value: string) => { mode = value; }, setTeammate: (value: boolean) => { teammate = value; }, getBatched: () => batched, getProfileBatched: () => profileBatched, setProfileBatchRoles: (roles: unknown[]) => { profileBatchRoles = roles; }, getProtected: () => protectedModels };
 }
 
 it('permits Creator locking but requires native approval for unlocking and rechecks caller after approval', async () => {
@@ -210,6 +211,10 @@ it('preserves Creator execution tools and team policy while adding configuration
   expect(assembly.sections.find(section => section.name === 'classmates:configuration')?.text).toMatch(/classmates_models_batch/);
   expect(assembly.sections.find(section => section.name === 'classmates:configuration')?.text).toMatch(/silently migrate/);
   expect(assembly.sections.find(section => section.name === 'classmates:configuration')?.text).toMatch(/compatibility only/);
+  expect(assembly.sections.find(section => section.name === 'classmates:configuration')?.text).toMatch(/recommendedModelProfileId/);
+  expect(assembly.sections.find(section => section.name === 'classmates:configuration')?.text).toMatch(/pairing hint/);
+  expect(assembly.sections.find(section => section.name === 'classmates:configuration')?.text).toMatch(/disabled Advisor preset/);
+  expect(assembly.sections.find(section => section.name === 'classmates:configuration')?.text).toMatch(/Lead may work alone/);
   expect(assembly.sections.find(section => section.name === 'classmates:configuration')?.text).not.toMatch(/\p{Script=Han}/u);
   expect(JSON.stringify(assembly.tools)).not.toMatch(/最强|推荐排名|定价/);
   const denied = await ctx.tools.execute(call('spawn_teammate', creator, { name: 'reviewer' }));
@@ -262,7 +267,11 @@ it('exposes a concrete first-role schema so the model need not guess field shape
   expect(schema).toMatch(/"enabled"/);
   expect(schema).toMatch(/"instructions"/);
   expect(schema).toMatch(/"provider"/);
-  expect(schema).toMatch(/跟随当前聊天模型，可启用/);
+  expect(schema).toMatch(/跟随当前聊天模型/);
+  expect(schema).toMatch(/"kind"/);
+  expect(schema).toMatch(/强引用/);
+  expect(schema).toMatch(/recommendedModelProfileId/);
+  expect(schema).toMatch(/migratedRecommendation/);
   const first = {
     schemaVersion: 1,
     id: 'reviewer',
@@ -271,7 +280,7 @@ it('exposes a concrete first-role schema so the model need not guess field shape
     description: 'reviews drafts',
     instructions: 'Review the draft.',
     enabled: false,
-    model: null,
+    model: { kind: 'inherit' },
   };
   const applied = await ctx.tools.execute(call('classmates_batch', creator, {
     changes: [{ op: 'upsert', role: first }],
@@ -279,6 +288,51 @@ it('exposes a concrete first-role schema so the model need not guess field shape
   }));
   expect(applied.isError).toBe(false);
   expect(getBatched()).toEqual({ changes: [{ op: 'upsert', role: first }], expected: 3 });
+
+  // The legacy recommendation input stays accepted and is forwarded for migration.
+  const hinted = { ...first, model: null, recommendedModelProfileId: 'coding-high' };
+  const migrated = await ctx.tools.execute(call('classmates_batch', creator, {
+    changes: [{ op: 'upsert', role: hinted }],
+    expected: 3,
+  }));
+  expect(migrated.isError).toBe(false);
+  expect(getBatched()).toEqual({ changes: [{ op: 'upsert', role: hinted }], expected: 3 });
+});
+
+it('lists roles referencing a removed or disabled preset without blocking the operation', async () => {
+  const { ctx, creator, setProfileBatchRoles } = await boot();
+  const referencing = {
+    schemaVersion: 1,
+    id: 'reviewer',
+    revision: 1,
+    name: 'Reviewer',
+    description: 'reviews drafts',
+    instructions: 'Review the draft.',
+    enabled: true,
+    model: { kind: 'profile', profileId: 'coding-high' },
+  };
+  setProfileBatchRoles([referencing]);
+  const removed = await ctx.tools.execute(call('classmates_models_batch', creator, {
+    changes: [{ op: 'remove', id: 'coding-high', revision: 1 }],
+    expected: 3,
+  }));
+  expect(removed.isError).toBe(false);
+  if (!removed.isError) expect((removed.value as { referencingRoles?: string[] }).referencingRoles).toEqual(['Reviewer']);
+
+  const disabled = await ctx.tools.execute(call('classmates_models_batch', creator, {
+    changes: [{ op: 'upsert', profile: { id: 'coding-high', revision: 1, name: 'Deep', description: 'careful', enabled: false, model: { provider: 'test', id: 'one' } } }],
+    expected: 3,
+  }));
+  expect(disabled.isError).toBe(false);
+  if (!disabled.isError) expect((disabled.value as { referencingRoles?: string[] }).referencingRoles).toEqual(['Reviewer']);
+
+  // Unrelated edits attach no referencingRoles field at all.
+  const plain = await ctx.tools.execute(call('classmates_models_batch', creator, {
+    changes: [{ op: 'upsert', profile: { id: 'coding-low', revision: 1, name: 'Fast', description: 'cheap', enabled: true, model: { provider: 'test', id: 'one' } } }],
+    expected: 3,
+  }));
+  expect(plain.isError).toBe(false);
+  if (!plain.isError) expect(plain.value).not.toHaveProperty('referencingRoles');
 });
 
 it('exposes a strict model-use preset schema and reuses the profile batch RPC', async () => {

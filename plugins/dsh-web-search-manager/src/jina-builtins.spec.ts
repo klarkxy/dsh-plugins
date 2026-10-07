@@ -20,7 +20,7 @@ async function setup() {
   const save = vi.fn(async () => {})
   const manager = new WebSearchManager({ web, initial, save, resolveCredential: async () => undefined })
   fixtures.push(manager)
-  registerBuiltins(manager)
+  registerBuiltins(web, { settings: () => manager.status().settings, resolveCredential: async () => undefined })
   await manager.refresh()
   return { web, manager, save, initial }
 }
@@ -35,9 +35,9 @@ describe('Jina-first builtin wiring through the DSH runtime', () => {
     const transport = vi.spyOn(HttpFetchProvider.prototype, 'fetch').mockImplementation(async request =>
       response(request.url, JSON.stringify({ code: 200, data: { content: 'x'.repeat(1200) } })))
     const { web, manager, save, initial } = await setup()
-    expect(manager.status().settings).toEqual(initial)
+    expect(manager.status().settings).toEqual({ ...initial, fetchProvider: 'http-managed' })
     expect(manager.status().providers.find(row => row.kind === 'fetch')).toMatchObject({
-      id: 'http', configured: true, billing: 'none',
+      id: 'http-managed', configured: true, billing: 'none',
     })
     expect(save).not.toHaveBeenCalled()
     expect(transport).not.toHaveBeenCalled()

@@ -135,3 +135,22 @@ export function profileModelBinding(profile: ModelProfile): ModelBinding {
 export function lookupModelProfile(profiles: readonly ModelProfile[], id: string): ModelProfile | undefined {
   return profiles.find(profile => profile.id === id);
 }
+
+/** Compact pairing hint for discovery. Never a second catalog and never an execution default. */
+export type RecommendedProfileGuidance = {
+  id: string;
+  name?: string;
+  available: boolean;
+  reason?: 'disabled' | 'missing';
+};
+
+export function compactRecommendedProfile(
+  id: string | undefined,
+  profiles: readonly ModelProfile[],
+): RecommendedProfileGuidance | undefined {
+  if (typeof id !== 'string' || !id) return undefined;
+  const profile = lookupModelProfile(profiles, id);
+  if (!profile) return { id, available: false, reason: 'missing' };
+  if (!profile.enabled) return { id, name: profile.name, available: false, reason: 'disabled' };
+  return { id, name: profile.name, available: true };
+}

@@ -4,12 +4,15 @@ import type { Agent, AgentOptions } from '@deepseek-ai/dsh-agent';
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm';
 import { createScope } from '@deepseek-ai/dsh-scope';
 import { parentAgentOptionsForDelegation } from '@deepseek-ai/dsh-subagent';
+import { SessionId } from '@deepseek-ai/dsh-session';
 import * as SubagentTool from '@deepseek-ai/dsh-tool-subagent';
 import { defineTool, type ToolDefinition, type ToolRunContext } from '@deepseek-ai/dsh-tools';
 import { ClassmatesError, type RoleConfig, validateRole } from './config.js';
-import type { ClassmateDefinition, ModelBinding, ModelProfile, ModelRoute } from './contracts.js';
-import { lookupModelProfile, profileModelBinding } from './model-profiles.js';
+import type { ClassmateDefinition, FrozenModelRoute, ModelBinding, ModelProfile, ModelRoute, NormalizedRole, RoleModelSource } from './contracts.js';
+import { lookupModelProfile, profileModelBinding, compactRecommendedProfile } from './model-profiles.js';
 import { isModelProtected, requestModelApproval } from './model-protection.js';
+import { COLLABORATION_GUIDANCE } from './presets.js';
+import type { BindingStore } from './bindings.js';
 
 /** Native tool names are limited to 64 characters; saved role ids may be longer. */
 export function roleToolName(id: string): string {
@@ -66,17 +69,18 @@ interface RoleCall {
   model_profile?: string;
 }
 
-function rolePersona(role: ClassmateDefinition): string {
+function rolePersona(role: NormalizedRole): string {
   return `Classmates role [${role.id}@${role.revision}]\n\n${role.instructions}
 
 Delegation context: you are an ordinary DSH subagent. The Lead in role instructions means your delegating parent. Use native subagent communication and return your result to that parent; do not assume Team membership.`;
 }
 
-function fallbackChildOptions(agent: Agent, role: ClassmateDefinition): AgentOptions {
+function fallbackChildOptions(agent: Agent, role: NormalizedRole): AgentOptions {
   const parent = parentAgentOptionsForDelegation(agent);
-  const provider = role.model?.provider ?? parent.provider;
-  const model = role.model?.id ?? parent.model;
-  const effort = role.reasoningEffort ?? role.model?.reasoningEffort ?? parent.reasoningEffort;
+  const fixed = role.model.kind === 'fixed' ? role.model : undefined;
+  const provider = fixed?.provider ?? parent.provider;
+  const model = fixed?.id ?? parent.model;
+  const effort = fixed?.effort ?? role.reasoningEffort ?? parent.reasoningEffort;
   return {
     ...(provider === undefined ? {} : { provider }),
     ...(model === undefined ? {} : { model }),
@@ -114,13 +118,23 @@ function nativeResultText(value: unknown): string {
   )).map(block => block.text).join('');
 }
 
+function compactProfileBindingLine(role: NormalizedRole, profiles: readonly ModelProfile[]): string {
+  if (role.model.kind !== 'profile') return '';
+  const hint = compactRecommendedProfile(role.model.profileId, profiles);
+  if (!hint) return ` bound model_profile ${role.model.profileId}; unavailable (missing)`;
+  if (hint.available) return ` bound model_profile ${hint.id} (${hint.name ?? hint.id}; available)`;
+  return ` bound model_profile ${hint.id}${hint.name ? ` (${hint.name})` : ''}; unavailable (${hint.reason ?? 'missing'})`;
+}
+
 function profileGuidance(profiles: readonly ModelProfile[]): string {
-  if (profiles.length === 0) return '';
+  if (profiles.length === 0) {
+    return '\n\nEnabled model profiles are independent of role templates. Each role model is one of three states: inherit follows the spawning chat\'s model and effort, fixed binds an exact route, and profile is a strong reference to a model-use preset — dispatch fails with guidance when that preset is missing or disabled, never a silent fallback. Omit model_profile to use the role\'s own model setting.\n';
+  }
   const lines = profiles.map(profile => {
     const effort = profile.model.reasoningEffort ?? 'model default';
     return `- ${profile.id}: ${profile.name} — ${profile.description} (${profile.model.provider}/${profile.model.id}, ${effort})`;
   });
-  return '\n\nEnabled model profiles are independent of role templates. Choose model_profile from the task when one fits. Omit model_profile to keep the role\'s fixed model and effort, or the spawning chat\'s model and effort when the role leaves them unset. A profile that omits effort uses that model\'s default effort. The profile model replaces the role model for this call. The call returns an ordinary native subagent result, and you decide the next step.\n'
+  return '\n\nEnabled model profiles are independent of role templates. Choose model_profile from the task when one fits; it is the highest-priority one-call override and replaces the role model for this call. Omit model_profile to use the role\'s own model setting: inherit follows the spawning chat, fixed binds an exact route, and profile is a strong preset reference that fails with guidance when missing or disabled — it never falls back to another route. A profile that omits effort uses that model\'s default effort. The call returns an ordinary native subagent result, and you decide the next step.\n'
     + lines.join('\n');
 }
 
@@ -133,6 +147,7 @@ async function executeNativeRole(
   agentOptions: AgentOptions,
   persona: string,
   beforeSpawn: <T>(spawn: () => Promise<T>) => Promise<T>,
+  recordBinding: ((childId: SessionId) => Promise<void>) | undefined,
 ): Promise<unknown> {
   const key = {};
   const scope = createScope(agent.ctx, key, { parent: agent });
@@ -156,8 +171,20 @@ async function executeNativeRole(
         get(_target, property) {
           if (property === 'start') return ((...args: Parameters<typeof subagents.start>) =>
             beforeSpawn(() => { assertProvider(); return subagents.start(...args); }));
-          if (property === 'startContinuable') return ((...args: Parameters<typeof subagents.startContinuable>) =>
-            beforeSpawn(() => { assertProvider(); return subagents.startContinuable(...args); }));
+          if (property === 'startContinuable') return (async (...args: Parameters<typeof subagents.startContinuable>) => {
+            const started = await beforeSpawn(() => { assertProvider(); return subagents.startContinuable(...args); });
+            // The child already exists at this point; a binding write failure must
+            // not turn a successful creation into a tool error (a retry would
+            // duplicate the child), so it degrades to a warning.
+            if (recordBinding) {
+              try {
+                await recordBinding(started.childId);
+              } catch (error) {
+                agent.ctx.logger.warn('classmates: subagent binding write failed: %s', error instanceof Error ? error.message : String(error));
+              }
+            }
+            return started;
+          });
           const value = Reflect.get(subagents, property, subagents);
           return typeof value === 'function' ? value.bind(subagents) : value;
         },
@@ -198,7 +225,7 @@ const ROLE_TOOL_PARAMETERS = {
   },
   model_profile: {
     type: 'string',
-    description: 'Optional enabled model profile id from the role guidance. Omit to use this role\'s configured model and effort. Replaces the role model for this call, including when the saved model is unusable. A profile that omits effort uses that model\'s default effort.',
+    description: 'Optional enabled model profile id from the role guidance. Highest-priority one-call override: replaces the role model for this call, including when the saved model is unusable. Omit to use this role\'s own model setting (chat inheritance, fixed route, or its bound profile). A profile that omits effort uses that model\'s default effort.',
   },
 } as const;
 
@@ -207,13 +234,21 @@ interface Installation {
   dispose(): Promise<void>;
 }
 
+/** Creation-time facts persisted into a subagent binding after admission. */
+interface SubagentBindingPlan {
+  role: { id: string; revision: number; name: string; description: string };
+  modelSource: RoleModelSource;
+  modelProfileId?: string;
+  model?: FrozenModelRoute;
+}
+
 /** Compose official tools; DSH owns every child and its execution lifecycle. */
 export class SubagentRoles {
   private readonly installed = new Map<Agent, Installation>();
   private readonly pending = new Map<Agent, Promise<void>>();
   private stopped = false;
 
-  constructor(private readonly ctx: Context, private readonly roles: RoleConfig) {}
+  constructor(private readonly ctx: Context, private readonly roles: RoleConfig, private readonly store?: BindingStore) {}
 
   refresh(agent: Agent): Promise<void> {
     const operation = (this.pending.get(agent) ?? Promise.resolve()).catch(() => {}).then(() => this.reconcile(agent));
@@ -230,7 +265,7 @@ export class SubagentRoles {
 
   private async dispatch(
     agent: Agent,
-    role: ClassmateDefinition,
+    role: NormalizedRole,
     active: () => boolean,
     visible: () => ToolDefinition | undefined,
     toolName: string,
@@ -245,14 +280,30 @@ export class SubagentRoles {
     assertCurrent();
     const persona = rolePersona(role);
     let options: AgentOptions;
+    let modelSource: RoleModelSource;
+    let modelProfileId: string | undefined;
     if (args.model_profile !== undefined) {
+      // Highest priority: the one-call dispatch override.
       if (typeof args.model_profile !== 'string' || !args.model_profile.trim()) throw new ClassmatesError('INVALID_PROFILE', 'model_profile 必须是已启用模型用途预设的标识');
       const profile = lookupModelProfile(this.roles.read().modelProfiles ?? [], args.model_profile);
       if (!profile?.enabled) throw new ClassmatesError('INVALID_PROFILE', '模型用途预设不存在或未启用，请重新查看可用工具');
       const selected = await resolveProfileSelection(this.ctx, profile, exec.signal);
       assertCurrent();
+      modelSource = 'override';
+      modelProfileId = args.model_profile;
+      options = explicitChildOptions(selected);
+    } else if (role.model.kind === 'profile') {
+      // Strong reference: missing or disabled presets are hard errors, never a fallback.
+      modelProfileId = role.model.profileId;
+      const profile = lookupModelProfile(this.roles.read().modelProfiles ?? [], modelProfileId);
+      if (!profile) throw new ClassmatesError('PROFILE_UNAVAILABLE', `预设 ${modelProfileId} 不存在，请在角色 ${role.name} 的模型设置中改选或改为跟随主控`);
+      if (!profile.enabled) throw new ClassmatesError('PROFILE_UNAVAILABLE', `预设 ${modelProfileId} 已停用，请在角色 ${role.name} 的模型设置中改选或改为跟随主控`);
+      const selected = await resolveProfileSelection(this.ctx, profile, exec.signal);
+      assertCurrent();
+      modelSource = 'profile';
       options = explicitChildOptions(selected);
     } else {
+      modelSource = role.model.kind;
       options = fallbackChildOptions(agent, role);
     }
     exec.signal.throwIfAborted();
@@ -262,9 +313,30 @@ export class SubagentRoles {
     if (!options.provider || !options.model) throw new ClassmatesError('MODEL_REQUIRED', '无法确定子智能体的模型，请先选择当前聊天模型');
     const model: ModelBinding = { provider: options.provider, id: options.model,
       ...(options.reasoningEffort === undefined ? {} : { reasoningEffort: options.reasoningEffort }) };
+    const plan: SubagentBindingPlan = {
+      role: { id: role.id, revision: role.revision, name: role.name, description: role.description },
+      modelSource,
+      ...modelProfileId === undefined ? {} : { modelProfileId },
+      model: {
+        provider: model.provider,
+        id: model.id,
+        ...model.reasoningEffort === undefined ? {} : { effort: model.reasoningEffort },
+      },
+    };
     // Freeze omitted effort too: a parent model change during approval must not
     // silently change the child parameters that were shown in that approval.
     options = { ...options, reasoningEffort: options.reasoningEffort };
+    const store = this.store;
+    const recordBinding = store === undefined ? undefined : async (childId: SessionId) => {
+      await store.recordSubagent({
+        childId,
+        parentSessionId: agent.id,
+        role: plan.role,
+        modelSource: plan.modelSource,
+        ...plan.modelProfileId === undefined ? {} : { modelProfileId: plan.modelProfileId },
+        ...plan.model === undefined ? {} : { model: plan.model },
+      });
+    };
     return executeNativeRole(agent, registered, toolName, args, exec, options, persona, async spawn => {
       exec.signal.throwIfAborted();
       assertCurrent();
@@ -276,18 +348,21 @@ export class SubagentRoles {
       assertCurrent();
       // Do not await another callback between this check and native admission.
       return spawn();
-    });
+    }, recordBinding);
   }
 
   private async reconcile(agent: Agent): Promise<void> {
-    let definitions: ClassmateDefinition[];
+    let definitions: NormalizedRole[];
     try { definitions = this.eligible(agent) ? this.roles.read().roles.filter(role => role.enabled).map(validateRole) : []; }
     catch (error) {
       // Settings excludes initializing fibers; activation will reconcile again.
       if (error instanceof ClassmatesError && error.code === 'SETTINGS_UNAVAILABLE') return;
       throw error;
     }
-    const signature = JSON.stringify(definitions);
+    // The migration note is display-only and not tool identity: its appearance
+    // must not dispose native role tools. The prompt reads live roles so
+    // refresh still shows the latest profile binding availability.
+    const signature = JSON.stringify(definitions.map(({ migratedRecommendation: _notice, ...rest }) => rest));
     if (this.installed.get(agent)?.signature === signature) return;
     await this.remove(agent);
     if (!definitions.length || !this.eligible(agent)) return;
@@ -298,7 +373,7 @@ export class SubagentRoles {
         let visible: ToolDefinition | undefined;
         visible = defineTool({
           name: toolName,
-          description: 'Delegate a self-contained task to this role, a native DSH subagent with its own context. Runs in the background by default and returns a subagent id you can continue with send_message; set run_in_background to false to wait for a one-shot result. Optional model_profile selects an enabled model profile for this call.',
+          description: 'Delegate a self-contained task to this role, a native DSH subagent with its own context. Runs in the background by default and returns a subagent id you can continue with send_message; set run_in_background to false to wait for a one-shot result. Optional model_profile selects an enabled model profile as a one-call override. Without it, the role\'s own model setting applies: chat inheritance, a fixed route, or its bound model profile (missing or disabled presets fail with guidance).',
           parameters: ROLE_TOOL_PARAMETERS,
           output: {
             schema: { type: 'json' },
@@ -315,17 +390,24 @@ export class SubagentRoles {
           const visible = definitions.filter(role => scope.tools.get(roleToolName(role.id), context.scope));
           if (!visible.length || !this.eligible(agent)) return '';
           let profiles: ModelProfile[] = [];
+          let library: ModelProfile[] = [];
           let protectedModels: ModelRoute[] = [];
+          let liveRoles = definitions;
           try {
             const state = this.roles.read();
             profiles = enabledModelProfiles(state.modelProfiles ?? []);
             protectedModels = state.protectedModels ?? [];
+            library = state.modelProfiles ?? [];
+            liveRoles = state.roles;
           }
           catch (error) {
             if (!(error instanceof ClassmatesError) || error.code !== 'SETTINGS_UNAVAILABLE') throw error;
           }
-          return 'For ordinary delegation, use the matching configured role tool below. These are native DSH subagents: provide description and prompt; background execution supports native subagent messages and interruption, while run_in_background=false waits for a one-shot result. Follow the existing delegation permissions and depth limits. Use Team collaboration only when shared Team messages or tasks are needed.\n'
-            + visible.map(role => `- ${roleToolName(role.id)}: ${role.name} — ${role.description}`).join('\n')
+          return 'For ordinary delegation, use the matching configured role tool below. These are native DSH subagents: provide description and prompt; background execution supports native subagent messages and interruption, while run_in_background=false waits for a one-shot result. Follow the existing delegation permissions and depth limits. Use Team collaboration only when shared Team messages or tasks are needed. ' + COLLABORATION_GUIDANCE + '\n'
+            + visible.map(role => {
+              const live = liveRoles.find(item => item.id === role.id) ?? role;
+              return `- ${roleToolName(role.id)}: ${role.name} — ${role.description}${compactProfileBindingLine(live, library)}`;
+            }).join('\n')
             + profileGuidance(profiles)
             + '\n\nRoutes requiring native approval for each new Classmates child (all profiles and efforts): '
             + JSON.stringify(protectedModels)

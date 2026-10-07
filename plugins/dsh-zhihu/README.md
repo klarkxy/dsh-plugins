@@ -68,7 +68,7 @@ Business errors retain their upstream message and code, including on HTTP error 
 
 ## Works with the web search manager
 
-When [@klarkxy/dsh-web-search-manager](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) is also installed in the same profile, this plugin registers **Zhihu global search** as a provider in its web search settings. Enable that provider to use Zhihu's global search through the standard web search tool with the Access Secret from Zhihu settings. The dedicated Zhihu tools work independently.
+When this profile provides `ctx.web`, the plugin registers **Zhihu global search** directly with the host, independently of the search manager. If [@klarkxy/dsh-web-search-manager](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) is installed, it discovers the provider for enablement and ordering. Configure the Access Secret in Zhihu settings; the Zhihu plugin resolves it per request and refreshes local availability after credential changes. The dedicated Zhihu tools work independently.
 
 ## Boundaries and limits
 

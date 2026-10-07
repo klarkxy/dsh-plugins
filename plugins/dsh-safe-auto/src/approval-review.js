@@ -15,6 +15,7 @@ export function assessApproval(call, config) {
   if (config.enabled !== true) return verdict('ask', 'SAFE_AUTO_DISABLED');
   if (call.sandbox?.mode !== 'workspace-write') return verdict('deny', 'WORKSPACE_SANDBOX_REQUIRED');
   if (!call.session || typeof call.session !== 'object' || call.subagent !== false || call.nested !== false) return verdict('ask', 'NO_DIRECT_USER_AUTHORITY');
+  if (call.authorityIncomplete) return verdict('ask', 'AUTHORITY_CONTEXT_INCOMPLETE');
   if (call.localExecution !== true || call.remote === true) return verdict('ask', 'LOCAL_EXECUTION_UNVERIFIED');
   if (!nonempty(call.cwd)) return verdict('ask', 'INVALID_CWD');
   if (!TOOLS.has(call.tool)) return verdict('ask', 'UNSUPPORTED_TOOL');
@@ -67,7 +68,8 @@ export function escalationReason(call) {
 export function bindingOf(call, assessment) {
   return createHash('sha256').update(JSON.stringify({
     tool: call.tool, args: call.args, cwd: call.cwd, sandbox: call.sandbox,
-    task: call.task, intent: call.intent, subagent: call.subagent, nested: call.nested,
+    task: call.task, intent: call.intent, authorizationContext: call.authorizationContext,
+    authorityIncomplete: call.authorityIncomplete, subagent: call.subagent, nested: call.nested,
     localExecution: call.localExecution, jobsAvailable: call.jobsAvailable, shellConfined: call.shellConfined,
     code: assessment.code,
   })).digest('hex');

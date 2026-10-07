@@ -8,6 +8,7 @@ import { RoleConfig } from '../src/config.js';
 import { Config } from '../src/index.js';
 import {
   applyModelProfileChanges,
+  compactRecommendedProfile,
   lookupModelProfile,
   profileModelBinding,
   validateModelProfile,
@@ -24,6 +25,21 @@ const profile: ModelProfile = {
   enabled: true,
   model: { provider: 'test', id: 'one', reasoningEffort: 'high' },
 };
+
+it('exposes compact recommendation guidance without duplicating the catalog', () => {
+  const disabled = { ...profile, id: 'parked', enabled: false, name: 'Parked' };
+  expect(compactRecommendedProfile(undefined, [profile])).toBeUndefined();
+  expect(compactRecommendedProfile('', [profile])).toBeUndefined();
+  expect(compactRecommendedProfile('coding-high', [profile])).toEqual({
+    id: 'coding-high', name: 'Deep coding', available: true,
+  });
+  expect(compactRecommendedProfile('parked', [profile, disabled])).toEqual({
+    id: 'parked', name: 'Parked', available: false, reason: 'disabled',
+  });
+  expect(compactRecommendedProfile('missing', [profile])).toEqual({
+    id: 'missing', available: false, reason: 'missing',
+  });
+});
 
 it('validates preset identity like roles and keeps omitted effort omitted', () => {
   expect(validateModelProfile(profile)).toEqual(profile);

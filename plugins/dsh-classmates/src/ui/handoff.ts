@@ -276,12 +276,12 @@ export async function runStartTask(
   throwIfAborted(signal);
   const state = await unwrap(host.remote.classmates.load());
   throwIfAborted(signal);
-  const roles = enabledValidRoles(state.roles, state.models);
+  const roles = enabledValidRoles(state.roles, state.models, state.modelProfiles ?? []);
   if (roles.length === 0) {
     throw new Error('请先在角色列表启用至少一个可用角色。模型可以跟随当前聊天。');
   }
   const sessionId = await openFreshSession(host, STANDARD_PRESET_ID, signal, commit);
-  setSessionDraft(host, sessionId, buildTaskDraft(roles, state.models));
+  setSessionDraft(host, sessionId, buildTaskDraft(roles, state.models, state.modelProfiles ?? []));
 }
 
 export type HandoffPhase = 'idle' | 'task';

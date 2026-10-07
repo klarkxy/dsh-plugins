@@ -3,9 +3,12 @@ import { Button, Input, SegmentedTabs, StateDot, Switch, Tag } from '@deepseek-a
 import type {
   ClassmatesClient,
   ClassmatesState,
-  ClassmateDefinition,
   ModelChoice,
+  ModelProfile,
+  NormalizedRole,
+  RoleModelSelection,
 } from '../contracts.js';
+import { normalizeRole } from '../contracts.js';
 import { createPresets } from '../presets.js';
 import { useConfirmDialog } from './ConfirmDialog.js';
 import { errorMessage } from './errors.js';
@@ -13,7 +16,17 @@ import { isAbortError, isHandoffBusy } from './handoff.js';
 import { useLocaleId, useStartTaskAvailable, type LocaleSource } from './hooks.js';
 import { createPageTranslator, type PageTranslate } from './page-locales.js';
 import {
+  modelSourceFromModel,
+  parseRouteValue,
+  profileReferenceStatus,
+  selectionFromModelSource,
+  toSavePayload,
+  formatRouteValue,
+  type ModelSourceState,
+} from './role-model.js';
+import {
   findModel,
+  formatModelOption,
   formatRoleModelSummary,
   roleHealth,
   type RoleHealth,
@@ -28,9 +41,9 @@ export interface ClassmatesPageProps {
 }
 
 type LoadStatus = 'loading' | 'load-error' | 'ready';
-type BusyAction = 'save' | 'remove' | 'reload' | 'toggle' | null;
+type BusyAction = 'save' | 'remove' | 'reload' | 'toggle' | 'model' | null;
 
-type FieldKey = 'name' | 'description' | 'instructions' | 'model' | 'effort';
+type FieldKey = 'name' | 'description' | 'instructions';
 type FieldErrors = Partial<Record<FieldKey, string>>;
 
 export const NAME_MAX = 100;
@@ -40,47 +53,46 @@ export const INSTRUCTIONS_MAX = 32000;
 /**
  * Length limits are enforced by the controls' maxLength (and again on the
  * host), so the form only reports empty fields; the live counter next to each
- * label is how a user sees the limit.
+ * label is how a user sees the limit. The model source is saved on its own
+ * and never blocks the text form.
  */
-function validateDraft(draft: ClassmateDefinition, models: ModelChoice[], t: PageTranslate): FieldErrors {
+function validateDraft(draft: NormalizedRole, t: PageTranslate): FieldErrors {
   const errors: FieldErrors = {};
   if (!draft.name.trim()) errors.name = t('common.nameRequired');
   if (!draft.description.trim()) errors.description = t('role.descriptionRequired');
   if (!draft.instructions.trim()) errors.instructions = t('role.instructionsRequired');
-  if (draft.enabled && draft.model && !findModel(models, draft.model)) {
-    errors.model = t('role.modelUnavailable');
-  }
-  const effort = draft.reasoningEffort ?? draft.model?.reasoningEffort;
-  if (draft.enabled && effort) {
-    const chosen = draft.model ? findModel(models, draft.model) : undefined;
-    const options = draft.model ? chosen?.efforts ?? [] : models.flatMap(model => model.efforts);
-    if (!options.some(option => option.id === effort)) {
-      errors.effort = t('role.effortUnavailable');
-    }
-  }
   return errors;
 }
 
-function snapshot(role: ClassmateDefinition): string {
+function snapshot(role: NormalizedRole): string {
   return JSON.stringify({
     name: role.name,
     description: role.description,
     instructions: role.instructions,
     enabled: role.enabled,
-    model: role.model ? { provider: role.model.provider, id: role.model.id } : null,
-    reasoningEffort: role.reasoningEffort ?? role.model?.reasoningEffort,
+    model: role.model,
+    reasoningEffort: role.reasoningEffort ?? null,
   });
 }
 
-function cloneRole(role: ClassmateDefinition): ClassmateDefinition {
-  return {
-    ...role,
-    model: role.model ? { provider: role.model.provider, id: role.model.id } : null,
-    reasoningEffort: role.reasoningEffort ?? role.model?.reasoningEffort,
-  };
+function cloneModelSelection(model: RoleModelSelection): RoleModelSelection {
+  if (model.kind === 'fixed') {
+    return {
+      kind: 'fixed',
+      provider: model.provider,
+      id: model.id,
+      ...model.effort === undefined ? {} : { effort: model.effort },
+    };
+  }
+  if (model.kind === 'profile') return { kind: 'profile', profileId: model.profileId };
+  return { kind: 'inherit' };
 }
 
-function createDraft(): ClassmateDefinition {
+function cloneRole(role: NormalizedRole): NormalizedRole {
+  return { ...role, model: cloneModelSelection(role.model) };
+}
+
+function createDraft(): NormalizedRole {
   return {
     schemaVersion: 1,
     id: `role-${crypto.randomUUID()}`,
@@ -89,15 +101,16 @@ function createDraft(): ClassmateDefinition {
     description: '',
     instructions: '',
     enabled: false,
-    model: null,
+    model: { kind: 'inherit' },
   };
 }
 
-function modelLabel(role: ClassmateDefinition, models: ModelChoice[], t: PageTranslate): string {
+function modelLabel(role: NormalizedRole, models: ModelChoice[], profiles: ModelProfile[], t: PageTranslate): string {
   return formatRoleModelSummary(role, models, {
     follow: t('role.followChat'),
+    profile: preset => t('roleModel.profileSummary', { preset }),
     summary: (model, effort) => t('role.modelSummary', { model, effort }),
-  });
+  }, profiles);
 }
 
 const presets = createPresets();
@@ -132,6 +145,181 @@ function StatusBadge({ health, t }: { health: RoleHealth; t: PageTranslate }) {
 }
 
 /**
+ * Three-state model source: follow the dispatching chat, a strong model-preset
+ * reference, or a fixed route. Like the enable Switch, every confirmed change
+ * saves immediately and submits only this field; choosing a kind whose
+ * subfield is still empty waits for that choice instead of saving a draft.
+ */
+function ModelSourceField({
+  role, profiles, models, disabled, saving, error, t, onSave,
+}: {
+  role: NormalizedRole;
+  profiles: ModelProfile[];
+  models: ModelChoice[];
+  disabled: boolean;
+  saving: boolean;
+  error: string | null;
+  t: PageTranslate;
+  onSave(selection: RoleModelSelection): void;
+}) {
+  const [source, setSource] = useState<ModelSourceState>(() => modelSourceFromModel(role.model));
+  const syncRef = useRef(`${role.id}|${JSON.stringify(role.model)}`);
+
+  // Sync from the saved model (adopting a migration, a reload, a role switch):
+  // the active kind takes the saved values, other kinds keep what the user saw.
+  useEffect(() => {
+    const key = `${role.id}|${JSON.stringify(role.model)}`;
+    if (syncRef.current === key) return;
+    const idChanged = !syncRef.current.startsWith(`${role.id}|`);
+    syncRef.current = key;
+    const next = modelSourceFromModel(role.model);
+    setSource(current => (idChanged ? next : {
+      kind: next.kind,
+      profileId: next.kind === 'profile' ? next.profileId : current.profileId,
+      route: next.kind === 'fixed' ? next.route : current.route,
+      effort: next.kind === 'fixed' ? next.effort : current.effort,
+    }));
+  }, [role.id, role.model]);
+
+  const commit = (next: ModelSourceState) => {
+    setSource(next);
+    const selection = selectionFromModelSource(next);
+    if (selection !== null) onSave(selection);
+  };
+
+  const unavailable = disabled || saving;
+  const help = source.kind === 'inherit'
+    ? t('roleModel.inheritHelp')
+    : source.kind === 'profile'
+      ? t('roleModel.profileHelp')
+      : t('roleModel.fixedHelp');
+
+  const profileStatus = source.profileId ? profileReferenceStatus(source.profileId, profiles) : null;
+  const missingProfile = profiles.find(item => item.id === source.profileId);
+
+  const route = parseRouteValue(source.route);
+  const routeInCatalog = route ? findModel(models, route) : undefined;
+  const routeSelectValue = !route ? '' : routeInCatalog ? source.route : 'missing';
+  const effortOptions = routeInCatalog?.efforts ?? [];
+  const effortMissing = source.effort !== '' && !effortOptions.some(option => option.id === source.effort);
+
+  return (
+    <div className="dsh-ui-stack classmates-model-source">
+      <div className="dsh-ui-field">
+        <label className="dsh-ui-label" htmlFor="classmates-model-source">{t('roleModel.label')}</label>
+        <select
+          id="classmates-model-source"
+          className="dsh-ui-select"
+          value={source.kind}
+          onChange={event => commit({ ...source, kind: event.target.value as ModelSourceState['kind'] })}
+          disabled={unavailable}
+          aria-describedby="classmates-model-source-help"
+        >
+          <option value="inherit">{t('roleModel.inherit')}</option>
+          <option value="profile">{t('roleModel.profile')}</option>
+          <option value="fixed">{t('roleModel.fixed')}</option>
+        </select>
+        <p id="classmates-model-source-help" className="dsh-ui-help">{help}</p>
+      </div>
+
+      {source.kind === 'profile' && (
+        <div className="dsh-ui-field">
+          <label className="dsh-ui-label" htmlFor="classmates-model-profile">{t('roleModel.profileLabel')}</label>
+          <select
+            id="classmates-model-profile"
+            className="dsh-ui-select"
+            value={source.profileId}
+            onChange={event => commit({ ...source, profileId: event.target.value })}
+            disabled={unavailable}
+            aria-describedby={profileStatus === 'missing' || profileStatus === 'disabled' ? 'classmates-model-profile-warning' : undefined}
+          >
+            <option value="">{t('roleModel.profilePlaceholder')}</option>
+            {profiles.map(profile => (
+              <option key={profile.id} value={profile.id}>
+                {profile.enabled
+                  ? t('roleModel.profileOption', { name: profile.name, id: profile.id })
+                  : t('roleModel.profileDisabledOption', { name: profile.name, id: profile.id })}
+              </option>
+            ))}
+            {profileStatus === 'missing' && (
+              <option value={source.profileId}>{t('roleModel.profileMissingOption', { id: source.profileId })}</option>
+            )}
+          </select>
+          {profileStatus === 'missing' && (
+            <p id="classmates-model-profile-warning" className="dsh-ui-error">
+              {t('roleModel.profileMissing', { id: source.profileId })}
+            </p>
+          )}
+          {profileStatus === 'disabled' && missingProfile && (
+            <p id="classmates-model-profile-warning" className="dsh-ui-error">
+              {t('roleModel.profileDisabled', { name: missingProfile.name, id: missingProfile.id })}
+            </p>
+          )}
+        </div>
+      )}
+
+      {source.kind === 'fixed' && (
+        <div className="classmates-model-fields">
+          <div className="dsh-ui-field">
+            <label className="dsh-ui-label" htmlFor="classmates-model-fixed">{t('common.model')}</label>
+            <select
+              id="classmates-model-fixed"
+              className="dsh-ui-select"
+              value={routeSelectValue}
+              onChange={event => {
+                if (event.target.value === 'missing') return;
+                // Picking a model clears the effort, inheriting the calling conversation's effort.
+                commit({ ...source, route: event.target.value, effort: '' });
+              }}
+              disabled={unavailable}
+              aria-describedby={routeSelectValue === 'missing' ? 'classmates-model-fixed-warning' : undefined}
+            >
+              <option value="">{t('common.chooseModel')}</option>
+              {models.map(model => {
+                const value = formatRouteValue(model);
+                return <option key={value} value={value}>{formatModelOption(model)}</option>;
+              })}
+              {routeSelectValue === 'missing' && route && (
+                <option value="missing">{t('profile.missingModel', { model: `${route.provider}/${route.id}` })}</option>
+              )}
+            </select>
+            {routeSelectValue === 'missing' && (
+              <p id="classmates-model-fixed-warning" className="dsh-ui-error">{t('roleModel.fixedMissing')}</p>
+            )}
+          </div>
+
+          {routeInCatalog && effortOptions.length > 0 && (
+            <div className="dsh-ui-field">
+              <label className="dsh-ui-label" htmlFor="classmates-model-effort">{t('common.effort')}</label>
+              <select
+                id="classmates-model-effort"
+                className="dsh-ui-select"
+                value={source.effort}
+                onChange={event => commit({ ...source, effort: event.target.value })}
+                disabled={unavailable}
+              >
+                <option value="">{t('roleModel.inheritEffort')}</option>
+                {effortOptions.map(effort => (
+                  <option key={effort.id} value={effort.id} title={effort.description}>{effort.name}</option>
+                ))}
+                {effortMissing && (
+                  <option value={source.effort}>{t('profile.missingEffort', { effort: source.effort })}</option>
+                )}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
+      {saving && <p className="dsh-ui-meta" role="status">{t('common.saving')}</p>}
+      {error && (
+        <p className="dsh-ui-error dsh-ui-wrap" role="alert">{error}</p>
+      )}
+    </div>
+  );
+}
+
+/**
  * The `Input` primitive renders a wrapper span around the native control and
  * does not forward a ref, so the name field's ref sits on its `dsh-ui-field`
  * wrapper; focus still has to land on the control inside, which is what
@@ -154,8 +342,8 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<ClassmateDefinition | null>(null);
-  const [baseline, setBaseline] = useState<ClassmateDefinition | null>(null);
+  const [draft, setDraft] = useState<NormalizedRole | null>(null);
+  const [baseline, setBaseline] = useState<NormalizedRole | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState('');
 
@@ -164,8 +352,9 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
   const [requestError, setRequestError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
+  const [modelError, setModelError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
-  const [remoteVersion, setRemoteVersion] = useState<ClassmateDefinition | null>(null);
+  const [remoteVersion, setRemoteVersion] = useState<NormalizedRole | null>(null);
   const [handoffBusy, setHandoffBusy] = useState(false);
   const [assistantError, setAssistantError] = useState<string | null>(null);
   const [tab, setTab] = useState<'roles' | 'models'>('roles');
@@ -228,7 +417,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
     });
   }, [dirty, confirm, t]);
 
-  const openRole = useCallback((role: ClassmateDefinition) => {
+  const openRole = useCallback((role: NormalizedRole) => {
     draftGenRef.current += 1;
     setDraft(cloneRole(role));
     setBaseline(role);
@@ -237,6 +426,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
     setFieldErrors({});
     setRequestError(null);
     setNotice(null);
+    setModelError(null);
     setRemoteVersion(null);
   }, []);
 
@@ -248,10 +438,11 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
     setIsNew(false);
     setFieldErrors({});
     setRequestError(null);
+    setModelError(null);
     setRemoteVersion(null);
   }, []);
 
-  const requestOpenRole = useCallback(async (role: ClassmateDefinition) => {
+  const requestOpenRole = useCallback(async (role: NormalizedRole) => {
     if (!(await confirmDiscard()) || !mountedRef.current) return;
     openRole(role);
   }, [confirmDiscard, openRole]);
@@ -267,6 +458,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
     setFieldErrors({});
     setRequestError(null);
     setNotice(null);
+    setModelError(null);
     setRemoteVersion(null);
   }, [confirmDiscard]);
 
@@ -280,7 +472,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
       do { id = `role-${crypto.randomUUID()}`; }
       while (state.roles.some(role => role.id === id));
     }
-    const next = cloneRole({ ...preset, id, revision: 0, enabled: false, model: null, reasoningEffort: undefined });
+    const next = cloneRole(normalizeRole({ ...preset, id, revision: 0, enabled: false }));
     draftGenRef.current += 1;
     setDraft(next);
     setBaseline(next);
@@ -290,6 +482,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
     setFieldErrors({});
     setRequestError(null);
     setNotice(null);
+    setModelError(null);
     setRemoteVersion(null);
   }, [state, selectedPresetId, confirmDiscard]);
 
@@ -352,7 +545,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
     if (!state || !draft || busy) return;
     // Enabled is saved immediately from the list, not owned by the text form.
     const input = { ...cloneRole(draft), enabled: isNew ? false : state.roles.find(role => role.id === draft.id)?.enabled ?? draft.enabled };
-    const errors = validateDraft(input, state.models, t);
+    const errors = validateDraft(input, t);
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
       const focusMap = {
@@ -361,9 +554,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
         instructions: instructionsRef,
       } as const;
       const first = (Object.keys(errors) as FieldKey[])[0];
-      if (first === 'name' || first === 'description' || first === 'instructions') {
-        focusField(focusMap[first].current);
-      }
+      focusField(focusMap[first].current);
       return;
     }
     const generation = draftGenRef.current;
@@ -372,7 +563,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
     setRequestError(null);
     setNotice(null);
     try {
-      const next = await client.save(input, state.settingsRevision);
+      const next = await client.save(toSavePayload(input), state.settingsRevision);
       if (!mountedRef.current || draftGenRef.current !== generation) return;
       setState(next);
       const saved = next.roles.find(r => r.id === targetId);
@@ -382,7 +573,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
       } else {
         closeEditor();
       }
-      setNotice(t('common.saved'));
+      setNotice(t('role.savedNotice'));
     } catch (error) {
       if (!mountedRef.current || draftGenRef.current !== generation) return;
       setRequestError(t('role.saveFailed', { message: errorMessage(error) }));
@@ -391,14 +582,14 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
     }
   }, [client, state, draft, busy, isNew, openRole, closeEditor, t]);
 
-  const toggleRole = useCallback(async (role: ClassmateDefinition, enabled: boolean) => {
+  const toggleRole = useCallback(async (role: NormalizedRole, enabled: boolean) => {
     if (!state?.writable || busy) return;
     setBusy('toggle');
     setToggleError(null);
     setNotice(null);
     try {
       // Send the accepted list value, never the unsaved editor draft.
-      const next = await client.save({ ...cloneRole(role), enabled }, state.settingsRevision);
+      const next = await client.save(toSavePayload({ ...cloneRole(role), enabled }), state.settingsRevision);
       if (!mountedRef.current) return;
       setState(next);
       const saved = next.roles.find(item => item.id === role.id);
@@ -424,6 +615,64 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
       if (mountedRef.current) setBusy(null);
     }
   }, [client, state, busy, draft, baseline, t]);
+
+  /**
+   * Immediate save of the model source alone (same semantics as the enable
+   * Switch): the payload carries the last accepted text, never the unsaved
+   * draft, and the dirty text edits stay untouched on success.
+   */
+  const saveModelSelection = useCallback(async (selection: RoleModelSelection) => {
+    if (!state || !draft || busy) return;
+    setModelError(null);
+    if (isNew) {
+      // Nothing persisted yet; the choice is written by the first explicit save.
+      setDraft(current => (current ? { ...current, model: cloneModelSelection(selection) } : current));
+      return;
+    }
+    const saved = state.roles.find(role => role.id === draft.id);
+    if (!saved) return;
+    const generation = draftGenRef.current;
+    const targetId = draft.id;
+    setBusy('model');
+    setNotice(null);
+    try {
+      const next = await client.save(toSavePayload({ ...saved, model: selection }), state.settingsRevision);
+      if (!mountedRef.current || draftGenRef.current !== generation) return;
+      setState(next);
+      const updated = next.roles.find(role => role.id === targetId);
+      if (updated) {
+        const sameBase = baseline && baseline.revision === saved.revision && snapshot(baseline) === snapshot(saved);
+        const onlyModel = updated.revision === saved.revision + 1
+          && snapshot(updated) === snapshot({ ...saved, model: selection });
+        const sync = (current: NormalizedRole | null): NormalizedRole | null => {
+          if (!current || current.id !== updated.id) return current;
+          const merged = {
+            ...current,
+            model: cloneModelSelection(updated.model),
+            // Only our model mutation may advance the text draft's CAS base.
+            revision: sameBase && onlyModel ? updated.revision : current.revision,
+            enabled: updated.enabled,
+          };
+          delete merged.migratedRecommendation;
+          return merged;
+        };
+        setDraft(sync);
+        setBaseline(sync);
+        if (sameBase && onlyModel) {
+          setRemoteVersion(null);
+        } else {
+          setRemoteVersion(updated);
+          setRequestError(t('role.conflict'));
+        }
+      }
+      setNotice(t('roleModel.saved'));
+    } catch (error) {
+      if (!mountedRef.current || draftGenRef.current !== generation) return;
+      setModelError(t('roleModel.saveFailed', { message: errorMessage(error) }));
+    } finally {
+      if (mountedRef.current && draftGenRef.current === generation) setBusy(null);
+    }
+  }, [client, state, draft, baseline, busy, isNew, t]);
 
   const refreshRoleList = useCallback(async () => {
     if (busy) return;
@@ -486,13 +735,8 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
     }
   }, [client, state, draft, busy, isNew, closeEditor, confirm, t]);
 
-  const patchDraft = useCallback((patch: Partial<ClassmateDefinition>) => {
+  const patchDraft = useCallback((patch: Partial<NormalizedRole>) => {
     setDraft(current => (current ? { ...current, ...patch } : current));
-  }, []);
-
-  const clearLegacyModel = useCallback(() => {
-    setDraft(current => (current ? { ...current, model: null, reasoningEffort: undefined } : current));
-    setFieldErrors(current => ({ ...current, model: undefined, effort: undefined }));
   }, []);
 
   const copyDemoRequest = useCallback(async (text: string) => {
@@ -544,15 +788,21 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
   const editing = tab === 'models' ? modelsEditing : draft !== null;
   const rootClass = `classmates dsh-ui-panel${editing ? ' classmates--editing' : ''}`;
   const readOnly = state !== null && !state.writable;
+  const profiles = state?.modelProfiles ?? [];
   const demoRole = useMemo(() => {
     if (!state) return null;
-    if (draft?.enabled && draft.name.trim() && roleHealth(draft, state.models) === 'enabled') return draft;
-    return state.roles.find(r => roleHealth(r, state.models) === 'enabled') ?? null;
-  }, [state, draft]);
+    if (draft?.enabled && draft.name.trim() && roleHealth(draft, state.models, profiles) === 'enabled') return draft;
+    return state.roles.find(r => roleHealth(r, state.models, profiles) === 'enabled') ?? null;
+  }, [state, draft, profiles]);
   const demoText = demoRole
     ? t('demo.withRole', { name: demoRole.name.trim() })
     : t('demo.noRole');
   const tabs = useMemo(() => classmatesTabs(t), [t]);
+
+  // One-time legacy note, read from the persisted role: any save strips it.
+  const migrationNotice = draft && !isNew
+    ? state?.roles.find(role => role.id === draft.id)?.migratedRecommendation
+    : undefined;
 
   const changeTab = useCallback((next: 'roles' | 'models') => {
     // Notices describe the tab they were raised on; they do not follow a switch.
@@ -567,9 +817,13 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
       {confirmDialog}
 
       {/* The host plugin page owns the page title; this row only carries the
-       * lead sentence and the page-level action. */}
+       * lead sentences and the page-level action. */}
       <div className="dsh-ui-row-wrap classmates-toolbar">
-        <p className="dsh-ui-help classmates-lead">{t('page.lead')}</p>
+        <div className="classmates-lead-block">
+          <p className="dsh-ui-help classmates-lead">{t('page.lead')}</p>
+          <p className="dsh-ui-help classmates-lead">{t('page.creatorNote')}</p>
+          <p className="dsh-ui-help classmates-lead">{t('page.priorityNote')}</p>
+        </div>
 
         {startTaskAvailable && (
           <div className="dsh-ui-row-wrap classmates-assistant">
@@ -688,7 +942,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
               ) : (
                 <ul className="dsh-ui-list dsh-ui-list-scroll classmates-list">
                   {state.roles.map(role => {
-                    const health = roleHealth(role, state.models);
+                    const health = roleHealth(role, state.models, profiles);
                     return (
                       <li key={role.id} className="dsh-ui-list-row" data-selected={selectedId === role.id && !isNew || undefined}>
                         <button
@@ -730,7 +984,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
                     </h3>
                     {isNew
                       ? <Tag tone="warning" className="classmates-status">{t('common.unsaved')}</Tag>
-                      : <StatusBadge health={roleHealth(draft, state.models)} t={t} />}
+                      : <StatusBadge health={roleHealth(draft, state.models, profiles)} t={t} />}
                     {dirty && <span className="dsh-ui-meta dsh-ui-warn">{t('common.dirty')}</span>}
                   </div>
 
@@ -806,6 +1060,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
                               ? 'classmates-description-error classmates-description-help classmates-description-count'
                               : 'classmates-description-help classmates-description-count'
                           }
+                          placeholder={t('role.descriptionPlaceholder')}
                         />
                         <p id="classmates-description-help" className="dsh-ui-help">
                           {t('role.descriptionHelp')}
@@ -815,28 +1070,33 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
                         )}
                       </div>
 
-                      {(draft.model !== null || draft.reasoningEffort !== undefined) && (
-                        <div className="dsh-ui-banner" role="group" aria-label={t('role.legacyTitle')}>
-                          <p className="dsh-ui-banner-title">{t('role.legacyTitle')}</p>
-                          <p className="dsh-ui-wrap">{modelLabel(draft, state.models, t)}</p>
-                          <p className="dsh-ui-help">{t('role.legacyHelp')}</p>
-                          {fieldErrors.model && (
-                            <p className="dsh-ui-error">{fieldErrors.model}</p>
-                          )}
-                          {fieldErrors.effort && (
-                            <p className="dsh-ui-error">{fieldErrors.effort}</p>
-                          )}
+                      {migrationNotice && (
+                        <div className="dsh-ui-banner" role="group" aria-label={t('roleModel.migratedTitle')}>
+                          <p className="dsh-ui-banner-title">{t('roleModel.migratedTitle')}</p>
+                          <p className="dsh-ui-wrap">{t('roleModel.migratedBody', { id: migrationNotice })}</p>
                           <div className="dsh-ui-actions">
                             <Button variant="outline"
                               type="button"
                               className="classmates-button"
-                              onClick={clearLegacyModel}
+                              onClick={() => void saveModelSelection({ kind: 'profile', profileId: migrationNotice })}
                             >
-                              {t('role.legacyClear')}
+                              {t('roleModel.migratedAdopt')}
                             </Button>
                           </div>
                         </div>
                       )}
+
+                      <ModelSourceField
+                        role={draft}
+                        profiles={profiles}
+                        models={state.models}
+                        disabled={readOnly || busy !== null}
+                        saving={busy === 'model'}
+                        error={modelError}
+                        t={t}
+                        onSave={selection => void saveModelSelection(selection)}
+                      />
+
                       <div className="dsh-ui-field">
                         <div className="dsh-ui-label-row">
                           <label className="dsh-ui-label" htmlFor="classmates-instructions">{t('role.instructions')}</label>
@@ -882,7 +1142,7 @@ export function ClassmatesPage({ client, locale }: ClassmatesPageProps) {
                           </div>
                           <div>
                             <dt className="dsh-ui-meta">{t('remote.model')}</dt>
-                            <dd className="dsh-ui-compact">{modelLabel(remoteVersion, state.models, t)}</dd>
+                            <dd className="dsh-ui-compact">{modelLabel(remoteVersion, state.models, profiles, t)}</dd>
                           </div>
                           <div>
                             <dt className="dsh-ui-meta">{t('remote.enabled')}</dt>

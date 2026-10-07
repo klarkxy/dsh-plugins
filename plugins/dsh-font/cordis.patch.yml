@@ -1,0 +1,5 @@
+# Enabled when installed. Purely additive; touches no built-in row.
+- insert:
+    - id: font
+      name: '@klarkxy/dsh-font'
+      disabled: false

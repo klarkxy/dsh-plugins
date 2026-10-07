@@ -7,7 +7,7 @@ export const SETTINGS_FIELDS = REVIEW_FIELDS;
 const modes = new Set(['read-only', 'workspace-write', 'danger-full-access']);
 
 /** UI writes only reviewer preferences. The enable switch and budgets remain operator-owned profile config. */
-export function createControl(base, { table, presets, sandboxPolicy, sessions, platform = process.platform }) {
+export function createControl(base, { table, presets, sandboxPolicy, sessions, platform = process.platform, onChange = () => {} }) {
   let settings = table.get('reviewer') ?? { revision: 0, values: {} };
   let tail = Promise.resolve();
   const selections = new WeakMap();
@@ -46,7 +46,8 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
     return { available: base.enabled && Boolean(workspaceOption()), platform,
       policyLimits: { readonly: true, sandbox: 'workspace-write', approval: 'ask', rootSessionsOnly: true,
         escalationScope: 'this-call-only', timeoutMs: c.timeoutMs, maxInputBytes: c.maxInputBytes,
-        outputTokens: c.outputTokens, maxReviewsPerTask: c.maxReviewsPerTask, consecutiveDenials: c.consecutiveDenials } };
+        outputTokens: c.outputTokens, maxReviewsPerTask: c.maxReviewsPerTask, consecutiveDenials: c.consecutiveDenials,
+        humanApprovalTimeoutMs: c.humanApprovalTimeoutMs } };
   }
   function settingsView() {
     const c = effective();
@@ -80,6 +81,7 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
       const next = { revision: settings.revision + 1, values: Object.fromEntries(REVIEW_FIELDS.map(k => [k, nextConfig[k] ?? ''])) };
       await table.put('reviewer', next);
       settings = next;
+      onChange();
       return settingsView();
     }
     if (endpoint === 'session.list') return { sessions: sessions.list()
@@ -92,6 +94,7 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
     if (payload.expectedRevision !== sessionView(session).revision) throw new Error('Session changed; refresh the list and retry');
     if (endpoint === 'session.disable') {
       selections.set(session, { enabled: false, generation: ++generation });
+      onChange();
       return sessionView(session);
     }
     if (payload.value === 'safe-auto') {
@@ -107,9 +110,10 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
       selections.set(session, { enabled: false, generation: ++generation });
       presets.set(session, option.value);
     }
+    onChange();
     return sessionView(session);
   }
-  return { state, config, settingsView,
+  return { state, config, settingsView, getSession,
     call(endpoint, payload, signal) {
       const work = tail.then(() => dispatch(endpoint, payload, signal));
       tail = work.catch(() => {});

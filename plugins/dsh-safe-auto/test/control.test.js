@@ -17,7 +17,7 @@ function fixture(extra = {}) {
     resolve: value => specs[value], current: () => current,
     set(_session, value) { if (current === value) return; current = value; events.push({ type: 'permission/preset', data: { preset: value } }); } };
   const sandboxPolicy = { resolve: () => ({ mode: specs[current].sandbox, workspaceRoot: root }) };
-  const base = parseConfig({ provider: 'p', model: 'm', ...extra });
+  const base = parseConfig({ provider: 'p', model: 'm', humanApprovalTimeoutMs: 0, ...extra });
   const live = new Map([['s', session]]);
   const options = { table, presets, sandboxPolicy, sessions: { get: id => live.get(id), list: () => [...live.values()] } };
   const control = createControl(base, options);
@@ -125,9 +125,9 @@ function approvalFixture(t, reviewer, extra = {}) {
   const handlers = {}, disposers = []; let runtime, guard, calls = 0;
   const ctx = { provide(_key, value) { runtime = value; }, tools: { guard(fn) { guard = fn; } },
     get(key) { if (key === 'permissionPresets') return { ...f.options.presets, names: Object.keys(f.specs), registerAuto() { assert.fail('official Auto forbidden'); } };
-      if (key === 'fs') return { processPathFromHostPath: path => path }; },
+      if (key === 'fs') return f.options.evidenceFs ?? { processPathFromHostPath: path => path }; },
     sandboxPolicy: f.options.sandboxPolicy, logger: { info() {} }, on(event, fn) { handlers[event] = fn; }, effect(fn) { disposers.push(fn()); },
-    inject(_deps, fn) { fn({ effect: ctx.effect, llm: { async *stream() { calls++; const text = await reviewer(f);
+    inject(_deps, fn) { fn({ effect: ctx.effect, llm: { async *stream(options) { calls++; const text = await reviewer(f, options);
       yield { type: 'block-end', index: 0, block: { type: 'text', text } }; yield { type: 'finish', reason: { kind: 'stop' } }; } } }); } };
   apply(ctx, f.base); const detach = runtime.attach(f.control);
   t.after(() => { detach(); disposers.reverse().forEach(fn => fn()); });
@@ -135,9 +135,207 @@ function approvalFixture(t, reviewer, extra = {}) {
     sandbox_permissions: 'danger-full-access', justification: 'Inspect repository status', timeoutMs: 1000 }, agent: { session: f.session }, callId: 'approval-one', signal: new AbortController().signal };
   const req = () => ({ agent: exec.agent, toolName: exec.name, callId: exec.callId, signal: exec.signal,
     reason: `escalate sandbox to ${exec.arguments.sandbox_permissions}: ${exec.arguments.justification}` });
-  return { ...f, handlers, exec, req, guard: () => guard(exec), calls: () => calls, detach };
+  return { ...f, handlers, exec, req, runtime, guard: () => guard(exec), calls: () => calls, detach };
 }
 const approvalVerdict = decision => JSON.stringify({ decision, risk: 'low', authorization: 'high', bounded: true, reason: 'User requested bounded repository inspection.' });
+
+function evidenceFixture(f) {
+  const manifest = resolve(f.root, 'package.json'), script = resolve(f.root, 'scripts/check.mjs');
+  const files = new Map([[manifest, '{"scripts":{"check":"node scripts/check.mjs"}}'], [script, 'console.log("checked")']]);
+  f.options.evidenceFiles = files;
+  f.options.evidenceFs = { processPathFromHostPath: path => path,
+    async resolve(path) { return { path }; }, processPath: target => target.path,
+    contains(parent, child) { return child.path === parent.path || child.path.startsWith(parent.path + (process.platform === 'win32' ? '\\' : '/')); },
+    async stat(target) { return files.has(target.path) ? { type: 'file', version: files.get(target.path) } : undefined; },
+    async readBytes(target, _signal, maxBytes) { const b = Buffer.from(files.get(target.path)); assert.ok(b.length <= maxBytes); return b; },
+  };
+  f.exec.arguments.command = 'pnpm check';
+  f.events[0].data.content[0].text = 'Complete and verify the plugin locally. Do not publish.';
+  return { files, script };
+}
+
+async function pendingRequest(f) {
+  for (let i = 0; i < 100; i++) {
+    const view = f.runtime.listApprovals('s');
+    if (view.requests.length) return view.requests[0];
+    await new Promise(resolve => setTimeout(resolve, 2));
+  }
+  assert.fail('manual confirmation was not published');
+}
+
+test('model denial becomes a single timed human request; approval grants only the bound call', async t => {
+  const f = approvalFixture(t, async () => approvalVerdict('deny'), { humanApprovalTimeoutMs: 500 });
+  await f.select('safe-auto');
+  const execution = f.handlers['tools/execute'](f.exec, async () => {
+    const outcome = await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate'));
+    return { isError: outcome !== 'allowed-once', content: [{ type: 'text', text: outcome }] };
+  });
+  const request = await pendingRequest(f);
+  assert.equal(request.action.arguments.command, 'git status'); assert.equal(request.review.code, 'MODEL_NOT_ALLOWED');
+  assert.equal(f.runtime.answerApproval({ sessionId: 's', requestId: request.id, outcome: 'allow' }).accepted, true);
+  assert.equal((await execution).isError, false);
+  assert.throws(() => f.runtime.answerApproval({ sessionId: 's', requestId: request.id, outcome: 'allow' }));
+});
+
+test('unanswered confirmation expires and explicit rejection both refuse without delegation', async t => {
+  for (const response of ['deny', 'expire']) {
+    const f = approvalFixture(t, async () => approvalVerdict('ask'), { humanApprovalTimeoutMs: 60 }); await f.select('safe-auto');
+    const execution = f.handlers['tools/execute'](f.exec, async () => {
+      const outcome = await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate'));
+      assert.equal(outcome, 'rejected'); return { isError: true, content: [] };
+    });
+    const request = await pendingRequest(f);
+    if (response === 'deny') f.runtime.answerApproval({ sessionId: 's', requestId: request.id, outcome: 'deny' });
+    const result = await execution;
+    assert.match(JSON.stringify(result.content), response === 'deny' ? /HUMAN_REJECTED/ : /HUMAN_APPROVAL_EXPIRED/);
+    assert.equal(f.runtime.listApprovals('s').requests.length, 0);
+  }
+});
+
+test('cancellation, argument changes, settings revisions and detach invalidate pending human permission', async t => {
+  for (const change of ['cancel', 'arguments', 'settings', 'detach']) {
+    const f = approvalFixture(t, async () => approvalVerdict('deny'), { humanApprovalTimeoutMs: 500 }); await f.select('safe-auto');
+    const execution = f.handlers['tools/execute'](f.exec, async () => {
+      const outcome = await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate'));
+      assert.notEqual(outcome, 'allowed-once'); return { isError: true, content: [] };
+    });
+    const request = await pendingRequest(f);
+    if (change === 'cancel') {
+      // Each signal belongs to the live execution; replacement changes binding.
+      f.exec.signal = AbortSignal.abort();
+    }
+    if (change === 'arguments') f.exec.arguments.command = 'git diff';
+    if (change === 'settings') await f.control.call('settings.save', { expectedRevision: 0, values: { model: 'different' } });
+    if (change === 'detach') f.detach();
+    f.runtime.invalidateApprovals();
+    assert.throws(() => f.runtime.answerApproval({ sessionId: 's', requestId: request.id, outcome: 'allow' }));
+    assert.equal((await execution).isError, true);
+  }
+});
+
+test('manual verification uses the original snapshots with a fresh signal after model lease expiry', async t => {
+  const f = approvalFixture(t, async () => approvalVerdict('deny'), { timeoutMs: 100, humanApprovalTimeoutMs: 1000 });
+  evidenceFixture(f); await f.select('safe-auto');
+  const execution = f.handlers['tools/execute'](f.exec, async () => {
+    const outcome = await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate'));
+    return { isError: outcome !== 'allowed-once', content: [] };
+  });
+  const request = await pendingRequest(f); await new Promise(resolve => setTimeout(resolve, 130));
+  f.runtime.answerApproval({ sessionId: 's', requestId: request.id, outcome: 'allow' });
+  assert.equal((await execution).isError, false);
+});
+
+test('script mutation while awaiting user confirmation blocks a previously approved action', async t => {
+  const f = approvalFixture(t, async () => approvalVerdict('deny'), { humanApprovalTimeoutMs: 500 });
+  const { files, script } = evidenceFixture(f); await f.select('safe-auto');
+  const execution = f.handlers['tools/execute'](f.exec, async () => {
+    const outcome = await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate'));
+    assert.equal(outcome, 'rejected'); return { isError: true, content: [] };
+  });
+  const request = await pendingRequest(f); files.set(script, 'changed');
+  f.runtime.answerApproval({ sessionId: 's', requestId: request.id, outcome: 'allow' });
+  assert.match(JSON.stringify((await execution).content), /EVIDENCE_CHANGED/);
+});
+
+test('structural refusals never publish a human request even when takeover is enabled', async t => {
+  const f = approvalFixture(t, async () => assert.fail('structural refusal cannot review'), { humanApprovalTimeoutMs: 500 });
+  await f.select('safe-auto'); f.exec.arguments.workdir = 'relative';
+  await f.handlers['tools/execute'](f.exec, async () => {
+    assert.notEqual(await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate')), 'allowed-once');
+  });
+  assert.equal(f.runtime.listApprovals('s').requests.length, 0);
+});
+
+test('elapsed model lease cannot replace terminal evidence failures with a manual grant', async t => {
+  let clock = 0;
+  t.mock.method(performance, 'now', () => clock);
+  const f = approvalFixture(t, async () => assert.fail('unbounded evidence cannot reach reviewer'), { humanApprovalTimeoutMs: 500 });
+  evidenceFixture(f); await f.select('safe-auto');
+  f.options.evidenceFs.readBytes = async (_target, _signal, limit) => {
+    clock = 31000; return Buffer.alloc(limit + 1, 120);
+  };
+  const result = await f.handlers['tools/execute'](f.exec, async () => {
+    assert.equal(await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate')), 'unavailable');
+    return { isError: true, content: [] };
+  });
+  assert.match(JSON.stringify(result.content), /EVIDENCE_PROVIDER_UNBOUNDED/);
+  assert.equal(f.runtime.listApprovals('s').requests.length, 0);
+});
+
+test('captured requests cannot delegate after controls are disabled or detached before native approval', async t => {
+  for (const change of ['disable', 'detach']) {
+    const f = approvalFixture(t, async () => assert.fail('invalidated execution must not review'), { humanApprovalTimeoutMs: 500 });
+    await f.select('safe-auto'); let downstream = 0;
+    await f.handlers['tools/execute'](f.exec, async () => {
+      if (change === 'disable') await f.control.call('session.disable', { sessionId: 's', expectedRevision: (await f.control.call('session.get', { sessionId: 's' })).revision });
+      else f.detach();
+      assert.equal(await f.handlers['approval/request'](f.req(), async () => { downstream++; return 'allowed-once'; }), 'rejected');
+    });
+    assert.equal(downstream, 0);
+  }
+});
+
+test('private incomplete history can receive fresh exact-call UI authority without reaching the model', async t => {
+  const f = approvalFixture(t, async () => assert.fail('private history must not reach reviewer'), { humanApprovalTimeoutMs: 500 });
+  f.events[0].data.content[0].text = 'token=fictional-private-value';
+  await f.select('safe-auto');
+  const execution = f.handlers['tools/execute'](f.exec, async () => {
+    const outcome = await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate'));
+    return { isError: outcome !== 'allowed-once', content: [] };
+  });
+  const request = await pendingRequest(f);
+  assert.equal(request.review.code, 'AUTHORITY_CONTEXT_INCOMPLETE');
+  assert.equal(request.action.arguments.command, 'git status');
+  assert.ok(!JSON.stringify(request).includes('fictional-private-value'));
+  f.runtime.answerApproval({ sessionId: 's', requestId: request.id, outcome: 'allow' });
+  assert.equal((await execution).isError, false); assert.equal(f.calls(), 0);
+});
+
+test('actual approval path retains task authority after continue, with script evidence and later revocation', async t => {
+  const f = approvalFixture(t, async (_f, options) => {
+    const input = JSON.parse(options.messages[0].content[0].text);
+    assert.match(input.authorizationContext.directUserMessages[0].text, /Complete and verify/);
+    assert.ok(input.executionEvidence.files.some(file => file.content.includes('checked')));
+    const revoked = input.authorizationContext.directUserMessages.some(m => m.text === 'Do not run tests now.');
+    return approvalVerdict(revoked ? 'deny' : 'allow');
+  });
+  evidenceFixture(f); await f.select('safe-auto');
+  f.events.push({ type: 'user/message', seq: 2, data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Continue' }] } });
+  await f.handlers['tools/execute'](f.exec, async () => {
+    assert.equal(await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate')), 'allowed-once');
+  });
+  f.handlers['tools/result'](f.exec, {}); f.exec.token = Symbol();
+  f.events.push({ type: 'user/message', seq: 3, data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Do not run tests now.' }] } });
+  const result = await f.handlers['tools/execute'](f.exec, async () => {
+    assert.equal(await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate')), 'rejected');
+    return { isError: true, content: [{ type: 'text', text: 'native refusal' }] };
+  });
+  assert.match(JSON.stringify(result.content), /MODEL_NOT_ALLOWED/);
+});
+
+test('script mutation during review invalidates allow and exposes evidence feedback', async t => {
+  const f = approvalFixture(t, async inner => {
+    inner.options.evidenceFiles.set(resolve(inner.root, 'scripts/check.mjs'), 'console.log("changed")');
+    return approvalVerdict('allow');
+  });
+  evidenceFixture(f); await f.select('safe-auto');
+  const result = await f.handlers['tools/execute'](f.exec, async () => {
+    assert.equal(await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate')), 'unavailable');
+    return { isError: true, content: [] };
+  });
+  assert.match(JSON.stringify(result.content), /EVIDENCE_CHANGED/);
+});
+
+test('review timeout feedback is distinct from an explicit denial', async t => {
+  const f = approvalFixture(t, async () => { await new Promise(r => setTimeout(r, 150)); return approvalVerdict('allow'); }, { timeoutMs: 100 });
+  await f.select('safe-auto');
+  const result = await f.handlers['tools/execute'](f.exec, async () => {
+    assert.equal(await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate')), 'unavailable');
+    return { isError: true, content: [] };
+  });
+  assert.match(JSON.stringify(result.content), /REVIEW_TIMEOUT/);
+  assert.match(JSON.stringify(result.content), /not proof that the action is unsafe/);
+});
 test('unbound and mismatched asks reject without downstream or a review call', async t => {
   const f = approvalFixture(t, async () => { assert.fail('unbound requests must not review'); });
   await f.select('safe-auto');
@@ -153,6 +351,37 @@ test('unbound and mismatched asks reject without downstream or a review call', a
     }
   });
   assert.equal(downstream, 0); assert.equal(f.calls(), 0);
+});
+
+test('foreign native asks pass through only without an owned execution context', async t => {
+  const f = approvalFixture(t, async () => assert.fail('foreign requests must not review'));
+  await f.select('safe-auto');
+  let downstream = 0;
+  const answer = async () => { downstream++; return 'allowed-once'; };
+  for (const toolName of ['blueprint_apply_order', 'classmates_spawn']) {
+    const foreign = { ...f.req(), toolName };
+    assert.equal(await f.handlers['approval/request'](foreign, answer), 'allowed-once');
+    await f.handlers['tools/execute'](f.exec, async () => {
+      assert.equal(await f.handlers['approval/request'](foreign, answer), 'rejected', 'owned context mismatch cannot delegate');
+    });
+  }
+  for (const toolName of ['bash', 'pwsh', 'write', 'edit']) {
+    assert.equal(await f.handlers['approval/request']({ ...f.req(), toolName }, answer), 'rejected', 'unbound owned identity remains closed');
+  }
+  assert.equal(downstream, 2); assert.equal(f.calls(), 0);
+});
+
+test('quoted sensitive argv and redirects cannot reach reviewer or manual takeover', async t => {
+  for (const command of ["cat '.env'", 'cat .e""nv', "cat < '.env'", "echo 'tok'en=fictional123"]) {
+    const f = approvalFixture(t, async () => assert.fail('sensitive request must not reach reviewer'));
+    await f.select('safe-auto');
+    f.exec.name = 'bash'; f.exec.arguments.command = command;
+    await f.handlers['tools/execute'](f.exec, async () => {
+      assert.equal(await f.handlers['approval/request'](f.req(), async () => assert.fail('cannot delegate hard refusal')), 'rejected', command);
+    });
+    assert.equal(f.calls(), 0);
+    assert.deepEqual(f.runtime.listApprovals(f.session.id).requests, [], 'hard refusal cannot publish a human override');
+  }
 });
 test('approval review grants once only inside the exact native execution', async t => {
   const f = approvalFixture(t, async () => approvalVerdict('allow')); await f.select('safe-auto');
@@ -177,16 +406,17 @@ test('mutation or disabling during review rejects a late grant', async t => {
     });
   }
 });
-test('review uncertainty, explicit deny and malformed output reject without downstream', async t => {
+test('uncertainty and malformed output are unavailable; explicit deny rejects without downstream', async t => {
   for (const output of [approvalVerdict('ask'), approvalVerdict('deny'), '{"decision":"allow"}']) {
     const f = approvalFixture(t, async () => output); await f.select('safe-auto'); let downstream = 0;
     await f.handlers['tools/execute'](f.exec, async () => {
-      assert.equal(await f.handlers['approval/request'](f.req(), async () => { downstream++; return 'allowed-once'; }), 'rejected');
+      assert.equal(await f.handlers['approval/request'](f.req(), async () => { downstream++; return 'allowed-once'; }),
+        output === approvalVerdict('deny') ? 'rejected' : 'unavailable');
     });
     assert.equal(downstream, 0); assert.equal(f.calls(), 1);
   }
 });
-test('review errors and timeout reject without downstream', async t => {
+test('review errors and timeout report unavailable without downstream', async t => {
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   for (const scenario of [
     { reviewer: async () => { throw new Error('adapter failure'); }, config: {} },
@@ -195,7 +425,7 @@ test('review errors and timeout reject without downstream', async t => {
     const f = approvalFixture(t, scenario.reviewer, scenario.config); await f.select('safe-auto');
     let downstream = 0;
     await f.handlers['tools/execute'](f.exec, async () => {
-      assert.equal(await f.handlers['approval/request'](f.req(), async () => { downstream++; return 'allowed-once'; }), 'rejected');
+      assert.equal(await f.handlers['approval/request'](f.req(), async () => { downstream++; return 'allowed-once'; }), 'unavailable');
     });
     assert.equal(downstream, 0); assert.equal(f.calls(), 1);
   }
@@ -209,7 +439,7 @@ test('exhausted review budget rejects rather than using downstream approvals', a
   f.handlers['tools/result'](f.exec, {});
   f.exec.token = Symbol(); f.exec.callId = 'approval-two';
   await f.handlers['tools/execute'](f.exec, async () => {
-    assert.equal(await f.handlers['approval/request'](f.req(), malicious), 'rejected');
+    assert.equal(await f.handlers['approval/request'](f.req(), malicious), 'unavailable');
   });
   assert.equal(f.calls(), 1);
 });
@@ -233,7 +463,7 @@ test('child and nested native requests never receive automatic grants', async t 
     const f = approvalFixture(t, async () => { assert.fail('delegations must not review'); }); await f.select('safe-auto');
     if (kind === 'child') f.session.header.parentSession = 'parent'; else f.exec.parent = Symbol();
     await f.handlers['tools/execute'](f.exec, async () => {
-      assert.equal(await f.handlers['approval/request'](f.req(), async () => 'rejected'), 'rejected');
+      assert.equal(await f.handlers['approval/request'](f.req(), async () => 'rejected'), kind === 'child' ? 'rejected' : 'unavailable');
     });
     assert.equal(f.calls(), 0);
   }
@@ -242,7 +472,7 @@ test('relative workdir cannot obtain automatic native approval', async t => {
   const f = approvalFixture(t, async () => { assert.fail('relative locality is unverified'); }); await f.select('safe-auto');
   f.exec.arguments.workdir = 'relative';
   await f.handlers['tools/execute'](f.exec, async () => {
-    assert.equal(await f.handlers['approval/request'](f.req(), async () => 'rejected'), 'rejected');
+    assert.equal(await f.handlers['approval/request'](f.req(), async () => 'rejected'), 'unavailable');
   });
   assert.equal(f.calls(), 0);
 });

@@ -6,7 +6,7 @@ import { ClassmateTools, type SpawnInput } from '../src/tools.js';
 import { installModelSelection } from '@deepseek-ai/dsh-agent';
 import { createUserMessage, ReasoningEffortId, ToolCallId } from '@deepseek-ai/dsh-llm';
 import { SessionId } from '@deepseek-ai/dsh-session';
-import type { RoleConfig } from '../src/config.js';
+import { validateRole, type RoleConfig } from '../src/config.js';
 import type { ModelProfile } from '../src/contracts.js';
 import { createRuntime, modelProfile, requestText, role, SIGNAL, type Runtime } from './helpers/harness.js';
 import type { CaptureAdapter } from './helpers/capture-adapter.js';
@@ -38,7 +38,8 @@ async function setup(modelProfiles: ModelProfile[] = []) {
   runtimes.push(runtime);
   const definition = role({ id: 'test', revision: 1, name: 'Test', description: 'Short directory description', instructions: 'SECRET_LONG_ROLE_INSTRUCTIONS', model: { provider: 'mock', id: 'specialist-a' } });
   const state = { roles: [definition], modelProfiles, protectedModels: [] as { provider: string; id: string }[] };
-  const config = { read: () => state } as unknown as RoleConfig;
+  // Fixtures stay in the legacy write shape; reads normalize like the real RoleConfig.
+  const config = { read: () => ({ ...state, roles: state.roles.map(item => validateRole(item)) }) } as unknown as RoleConfig;
   const tools = new ClassmateTools(runtime.ctx, config, runtime.store);
   return { ...runtime, tools, state };
 }
@@ -145,6 +146,14 @@ it('uses the current request route after a chat model switch and freezes it thro
   await second.ctx.agentTeams.sendMessage(second.lead, { target: 'frozen', content: [{ type: 'text', text: 'Resume frozen model' }], signal: SIGNAL });
   await vi.waitFor(() => expect(second.adapter.requests.filter(request => requestText(request).includes('SECRET_LONG_ROLE_INSTRUCTIONS'))).toHaveLength(1));
   expect(second.adapter.requests.find(request => requestText(request).includes('SECRET_LONG_ROLE_INSTRUCTIONS'))).toMatchObject({ model: 'specialist-b', reasoningEffort: 'low' });
+});
+
+it('inherits conversation effort for a fixed Team role with the UI empty-effort selection', async () => {
+  const { tools, lead, state, adapter } = await setup();
+  state.roles[0].model = { kind: 'fixed', provider: 'mock', id: 'specialist-a' } as never;
+  const receipt = await tools.spawn(lead, { classmate_id: 'test', revision: 1, name: 'inherited', task: 'Use current effort' }, SIGNAL);
+  expect(receipt.selected).toEqual({ provider: 'mock', id: 'specialist-a', reasoningEffort: 'high' });
+  await vi.waitFor(() => expect(childTaskRequests(adapter)[0]).toMatchObject({ model: 'specialist-a', reasoningEffort: 'high' }));
 });
 
 it('rejects unsupported inherited effort before preparing a binding or creating a member', async () => {
@@ -467,5 +476,115 @@ it('keeps a raw JSON task distinct from a profiled creation request', async () =
   await expect(tools.spawn(lead, { ...input, task: 'Review', model_profile: LOW.id }, SIGNAL)).rejects.toThrow('不同');
   await expect(tools.spawn(lead, { ...input, model_profile: LOW.id }, SIGNAL)).rejects.toThrow('不同');
   expect(childTaskRequests(adapter)).toHaveLength(1);
+});
+
+it('prefers a legacy fixed model over a recommendation and lists the migration note', async () => {
+  const { tools, lead, adapter, state, store } = await setup([LOW, HIGH, PARKED]);
+  state.roles[0].recommendedModelProfileId = 'coding-high';
+  state.roles[0].model = { provider: 'mock', id: 'specialist-a', reasoningEffort: 'low' };
+  const listed = await tools.list(lead);
+  expect(listed.roles[0]).toMatchObject({
+    model: { kind: 'fixed', provider: 'mock', id: 'specialist-a', effort: 'low' },
+    migratedRecommendation: 'coding-high',
+  });
+  expect(listed.roles[0]).not.toHaveProperty('recommendedModelProfile');
+  expect(JSON.stringify(listed.roles[0])).not.toContain('careful review pass');
+  const omitted = await tools.spawn(lead, { classmate_id: 'test', revision: 1, name: 'legacy', task: 'Keep role route' }, SIGNAL);
+  expect(omitted.selected).toEqual({ provider: 'mock', id: 'specialist-a', reasoningEffort: 'low' });
+  expect((await store.read(lead.id, 'legacy'))?.role).not.toHaveProperty('recommendedModelProfileId');
+  await vi.waitFor(() => expect(adapter.requests.find(request => requestText(request).includes('SECRET_LONG_ROLE_INSTRUCTIONS'))).toMatchObject({
+    model: 'specialist-a', reasoningEffort: 'low',
+  }));
+
+  const override = await tools.spawn(lead, {
+    classmate_id: 'test', revision: 1, name: 'override', task: 'Use explicit profile', model_profile: 'coding-low',
+  } as SpawnInput, SIGNAL);
+  expect(override.selected).toEqual(LOW.model);
+
+  const dispose = tools.install(lead);
+  try {
+    const assembly = await lead.ctx.systemPrompt.assemble({ scope: lead });
+    const text = assembly.sections.map(section => section.text).join('\n');
+    expect(text).toMatch(/strong preset reference/);
+    expect(text).toMatch(/Lead may work alone/);
+    expect(JSON.stringify(lead.ctx.tools.get('classmates_spawn', lead)?.parameters ?? '')).toMatch(/Highest-priority one-call override/);
+  } finally {
+    dispose();
+  }
+});
+
+it('migrates a recommendation-only role into a strong profile reference used on omitted dispatch', async () => {
+  const { tools, lead, adapter, state, store } = await setup([LOW, HIGH, PARKED]);
+  state.roles[0].model = null;
+  state.roles[0].recommendedModelProfileId = 'coding-high';
+  const listed = await tools.list(lead);
+  expect(listed.roles[0]).toMatchObject({ model: { kind: 'profile', profileId: 'coding-high' } });
+  expect(listed.roles[0]).not.toHaveProperty('migratedRecommendation');
+
+  const receipt = await tools.spawn(lead, { classmate_id: 'test', revision: 1, name: 'strong', task: 'Use the bound profile' }, SIGNAL);
+  expect(receipt.selected).toEqual({ provider: 'mock', id: 'specialist-a', reasoningEffort: 'high' });
+  expect((await store.read(lead.id, 'strong'))?.role.model).toEqual(receipt.selected);
+  await vi.waitFor(() => expect(adapter.requests.find(request => requestText(request).includes('SECRET_LONG_ROLE_INSTRUCTIONS'))).toMatchObject({
+    model: 'specialist-a', reasoningEffort: 'high',
+  }));
+});
+
+it.each([
+  { profiles: [] as ModelProfile[], message: '预设 coding-low 不存在，请在角色 Test 的模型设置中改选或改为跟随主控' },
+  { profiles: [modelProfile({ id: 'coding-low', enabled: false })], message: '预设 coding-low 已停用，请在角色 Test 的模型设置中改选或改为跟随主控' },
+])('hard-fails a strong profile reference when the preset is missing or disabled', async ({ profiles, message }) => {
+  const { tools, lead, ctx, adapter, state, store } = await setup(profiles);
+  state.roles[0].model = null;
+  state.roles[0].recommendedModelProfileId = 'coding-low';
+  expect((await tools.list(lead)).roles[0]).toMatchObject({ model: { kind: 'profile', profileId: 'coding-low' } });
+  const input = { classmate_id: 'test', revision: 1, name: 'strong', task: 'Must not run' };
+  await expect(tools.spawn(lead, input, SIGNAL)).rejects.toThrow(message);
+  await expect(tools.spawn(lead, input, SIGNAL)).rejects.toThrow(message);
+  expect(ctx.agentTeams.listMembers(lead)).toHaveLength(1);
+  expect(await store.read(lead.id, 'strong')).toBeUndefined();
+  expect(adapter.requests).toHaveLength(0);
+
+  // The one-call override still wins over the broken strong reference.
+  state.modelProfiles = [...state.modelProfiles, HIGH];
+  const override = await tools.spawn(lead, { ...input, name: 'override', model_profile: 'coding-high' } as SpawnInput, SIGNAL);
+  expect(override.selected).toEqual(HIGH.model);
+});
+
+function hasUndefinedOwn(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  return Object.values(value).some(item => item === undefined || hasUndefinedOwn(item));
+}
+
+it('official tools.execute lists a recommendation-only role as a strong profile reference with no undefined own properties', async () => {
+  const { tools, lead, ctx, state } = await setup([HIGH]);
+  state.roles[0].model = null;
+  delete state.roles[0].reasoningEffort;
+  state.roles[0].recommendedModelProfileId = 'coding-high';
+  const dispose = tools.install(lead);
+  try {
+    const result = await ctx.tools.execute({
+      agent: lead,
+      name: 'classmates_list',
+      arguments: {},
+      callId: ToolCallId(crypto.randomUUID()),
+      signal: SIGNAL,
+    });
+    expect(result.isError, JSON.stringify(result)).toBe(false);
+    const listed = result.value as {
+      roles: Array<Record<string, unknown>>;
+    };
+    expect(listed.roles[0]).toMatchObject({
+      id: 'test',
+      model: { kind: 'profile', profileId: 'coding-high' },
+    });
+    expect(listed.roles[0]).not.toHaveProperty('reasoningEffort');
+    expect(listed.roles[0]).not.toHaveProperty('recommendedModelProfile');
+    expect(listed.roles[0]).not.toHaveProperty('recommendedModelProfileId');
+    expect(listed.roles[0]).not.toHaveProperty('migratedRecommendation');
+    expect(JSON.parse(JSON.stringify(listed))).toEqual(listed);
+    expect(hasUndefinedOwn(listed)).toBe(false);
+  } finally {
+    dispose();
+  }
 });
 

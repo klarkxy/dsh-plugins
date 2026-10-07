@@ -1,5 +1,32 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 
+/** Fixed pause for failing background reads; manual work is never replayed. */
+export function createPluginReadGate(now: () => number = Date.now) {
+  let pausedUntil = 0
+  let epoch = 0
+  return {
+    canRead: () => now() >= pausedUntil,
+    reset: () => { epoch++; pausedUntil = 0 },
+    async run<T>(read: () => Promise<T>): Promise<T> {
+      const current = epoch
+      try {
+        const value = await read()
+        if (current === epoch) pausedUntil = 0
+        return value
+      } catch (error) {
+        // The native Connection error is an Error with this exact HTTP text.
+        // Authentication, application failures, and cancellation stay distinct.
+        const message = error instanceof Error ? error.message : ''
+        if (current === epoch && (/(?:^|\s)transport failure for .+: HTTP (?:404|405|503)\b/.test(message)
+          || (error instanceof TypeError && /^(?:Failed to fetch|fetch failed|NetworkError when attempting to fetch resource\.?)$/i.test(message)))) {
+          pausedUntil = now() + 30_000
+        }
+        throw error
+      }
+    },
+  }
+}
+
 export interface NativeSurfaceClient {
   sessions: {
     binding?(sessionId: string): { eventSource: { subscribe(listener: () => void): () => void } } | undefined

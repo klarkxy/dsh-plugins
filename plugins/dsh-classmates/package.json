@@ -1,7 +1,6 @@
 {
   "name": "@klarkxy/dsh-classmates",
-  "version": "0.2.0-alpha.1",
-  "private": true,
+  "version": "0.2.0-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/klarkxy/dsh-plugins.git",
@@ -13,10 +12,10 @@
   "description": "Teammate Roles: reusable roles for native DSH subagents and Team teammates",
   "icon": "./icon.svg",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "node": ">=24.0.0",
-    "dsh": ">=0.1.7-rc.2"
+    "dsh": ">=0.2.0-rc.2"
   },
   "exports": {
     ".": "./dist/index.js",
@@ -44,13 +43,17 @@
     "docs/evidence/plugin-settings-browser.json",
     "docs/evidence/role-list-browser.json",
     "docs/evidence/creator-configuration.json",
-    "docs/evidence/creator-settings-browser.json"
+    "docs/evidence/creator-settings-browser.json",
+    "docs/fusion-migration.md",
+    "scripts/migrate-fusion.mjs",
+    "LICENSE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "node scripts/build.mjs",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run typecheck && npm test && npm run build",
+    "migrate-fusion": "node dist/migrate-fusion.js"
   },
   "dsh": {
     "bundle": {
@@ -77,39 +80,39 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
-    "@deepseek-ai/dsh": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-agent": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-agent-loop": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-agent-loop-testkit": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-agent-preset": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-agent-preset-registry": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-api-gateway": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-api-session-controller": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-app-boot": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-atomic-write": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-locale": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-conversation": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-session": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-workspace": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-experimental-agent-team": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-llm": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-persona": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-sandbox-windows-acl": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-scope": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-session": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-session-persistence-jsonl": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-session-projection": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-session-query": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-settings": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-subagent": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-subagent-spawn-in-process": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-system-prompt": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-tool-subagent": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-tools": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-typert-protocol": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-typert-registry": "0.1.7-rc.2",
+    "@deepseek-ai/dsh": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent-loop": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent-loop-testkit": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent-preset": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-gateway": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-app-boot": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-atomic-write": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-locale": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-session": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-workspace": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-experimental-agent-team": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-persona": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-sandbox-windows-acl": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-scope": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-projection": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-query": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-settings": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-subagent": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-subagent-spawn-in-process": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tool-subagent": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-registry": "0.2.0-rc.2",
     "@deepseek-ai/schemastery": "3.18.4",
     "@playwright/test": "1.62.1",
     "@types/node": "^24.0.0",
@@ -126,14 +129,14 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
-    "@deepseek-ai/dsh-agent": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-atomic-write": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-llm": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-scope": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-session": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-subagent": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-typert-protocol": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-tool-subagent": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-agent": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-atomic-write": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-scope": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-session": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-subagent": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-tool-subagent": ">=0.2.0-rc.2",
     "@deepseek-ai/schemastery": "3.18.4"
   },
   "peerDependenciesMeta": {
@@ -167,5 +170,13 @@
     "@deepseek-ai/dsh-tool-subagent": {
       "optional": true
     }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/classmates/",
+  "dshRelease": {
+    "contentHash": "48d34bf913f39d4da598ed86af0c93e2b8553c76ec9e4c09aa50aa055e849be3"
   }
 }

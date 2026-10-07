@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-plugin-kit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shared types, model-menu helpers, and host RPC registration. Does not call models.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -25,6 +25,11 @@
       "import": "./lib/host-rpc.js",
       "default": "./lib/host-rpc.js"
     },
+    "./domain": {
+      "types": "./lib/domain.d.ts",
+      "import": "./lib/domain.js",
+      "default": "./lib/domain.js"
+    },
     "./client-utils": {
       "types": "./lib/client-utils.d.ts",
       "import": "./lib/client-utils.js",
@@ -34,6 +39,11 @@
       "types": "./lib/model-menu.d.ts",
       "import": "./lib/model-menu.js",
       "default": "./lib/model-menu.js"
+    },
+    "./model-menu-ui": {
+      "types": "./lib/model-menu-ui.d.ts",
+      "import": "./lib/model-menu-ui.js",
+      "default": "./lib/model-menu-ui.js"
     },
     "./llm-call": {
       "types": "./lib/llm-call.d.ts",
@@ -58,9 +68,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-plugin-kit/src"
   },
+  "dependencies": {
+    "@klarkxy/dsh-model-route": "workspace:*"
+  },
   "peerDependencies": {
-    "@deepseek-ai/dsh-llm": ">=0.1.7-rc.2",
-    "react": "^18.2.0"
+    "@deepseek-ai/dsh-llm": ">=0.2.0-rc.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-llm": {
@@ -68,12 +82,21 @@
     },
     "react": {
       "optional": true
+    },
+    "react-dom": {
+      "optional": true
     }
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-llm": "0.1.7-rc.2",
+    "zod": "4.5.4",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-domain": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-json": "0.2.0-rc.2",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "^18.3.0",
     "react": "^18.2.0",
-    "@types/react": "18.3.31"
+    "react-dom": "^18.2.0"
   },
   "keywords": [
     "dsh",
@@ -90,6 +113,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "ab243984edb562899e4f9e0bb6eed29c13e78592d53b360b538cbf40897b658a"
+    "contentHash": "7d10475912b03a821f1318e2a48ff85dfff1a8712fbf0458d3a9e1b8419de299"
   }
 }

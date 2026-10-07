@@ -1,10 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { Button, Input, SegmentedTabs, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
+import { createPluginReadGate } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { PROVIDER_PRICING_CHECKED, searchProviderInfo } from './provider-info.ts'
+import { PROVIDER_PRICING_CHECKED, searchProviderInfo, usesBundledPricing } from './provider-info.ts'
 import {
-  WEB_SEARCH_RPC_CHANNEL, pickActiveSearch, resolveSearchOrder,
+  WEB_SEARCH_RPC_CHANNEL, WEB_MANAGER_OWNER, pickActiveSearch, safeConfigurationUrl,
   type ProviderView, type RpcResult, type WebSettings, type WebStatus,
 } from './contracts.ts'
 
@@ -17,7 +18,7 @@ interface Credentials {
   unset(ref: string): Promise<RpcResult<unknown>>
 }
 interface Client {
-  connection: { rpc: { call(channel: string, endpoint: string, payload: unknown): Promise<unknown> } }
+  connection: { rpc: { call(channel: string, endpoint: string, payload: unknown): Promise<unknown> }; generation?: { subscribe(listener: () => void): () => void } }
   remote: { credentials: Credentials }
   /** Host UI language. Optional so bare test harnesses fall back to zh. */
   locale?: { getSnapshot(): { active: string }; subscribe(listener: () => void): () => void }
@@ -36,37 +37,155 @@ function editable(settings: WebSettings): Omit<WebSettings, 'revision'> {
   return rest
 }
 
-export function isProviderOn(status: WebStatus, provider: ProviderView): boolean {
-  const enabled = provider.kind === 'search' ? status.searchActive : status.fetchActive
-  const selected = status.settings[provider.kind === 'search' ? 'searchProvider' : 'fetchProvider']
-  return enabled && selected === provider.id
+export const STATUS_REFRESH_MS = 3000
+
+export function isPageHidden(hidden?: boolean): boolean {
+  if (hidden) return true
+  return typeof document !== 'undefined' && document.visibilityState === 'hidden'
 }
 
-export function searchBackends(status: WebStatus): ProviderView[] {
-  const all = status.providers.filter(provider => provider.kind === 'search')
-  const order = resolveSearchOrder(
-    all.map(provider => provider.id),
-    status.settings,
-    id => Boolean(all.find(provider => provider.id === id)?.credentialRef),
-  )
-  return order.flatMap(id => all.find(provider => provider.id === id) ?? [])
+export function canStartStatusRead(input: {
+  source: 'user' | 'poll'
+  mounted: boolean
+  hidden: boolean
+  busy: boolean
+  reordering: boolean
+  reading: boolean
+}): boolean {
+  if (!input.mounted) return false
+  if (input.source === 'poll') {
+    return !input.hidden && !input.busy && !input.reordering && !input.reading
+  }
+  return true
+}
+
+export function isExternalConfigurationUrl(url: string): boolean {
+  return /^https:\/\//i.test(url)
+}
+
+export function shouldApplyPolledStatus(input: {
+  requestId: number
+  latestRequestId: number
+  busy: boolean
+  reordering: boolean
+  hidden: boolean
+  currentRevision?: number
+  incomingRevision: number
+}): boolean {
+  if (input.hidden || input.busy || input.reordering) return false
+  if (input.requestId !== input.latestRequestId) return false
+  if (input.currentRevision !== undefined && input.incomingRevision < input.currentRevision) return false
+  return true
+}
+
+export function bindStatusRefresh(options: {
+  intervalMs?: number
+  isHidden: () => boolean
+  tick: () => Promise<void>
+  setIntervalFn?: typeof setInterval
+  clearIntervalFn?: typeof clearInterval
+  addListener?: (type: string, listener: () => void) => void
+  removeListener?: (type: string, listener: () => void) => void
+}): () => void {
+  const intervalMs = options.intervalMs ?? STATUS_REFRESH_MS
+  let inFlight = false
+  let stopped = false
+  const run = async () => {
+    if (stopped || inFlight || options.isHidden()) return
+    inFlight = true
+    try { await options.tick() }
+    finally { inFlight = false }
+  }
+  const timer = (options.setIntervalFn ?? setInterval)(() => { void run() }, intervalMs)
+  const onVisible = () => { if (!options.isHidden()) void run() }
+  const add = options.addListener ?? ((type, listener) => {
+    if (typeof document !== 'undefined') document.addEventListener(type, listener)
+  })
+  const remove = options.removeListener ?? ((type, listener) => {
+    if (typeof document !== 'undefined') document.removeEventListener(type, listener)
+  })
+  add('visibilitychange', onVisible)
+  return () => {
+    stopped = true
+    ;(options.clearIntervalFn ?? clearInterval)(timer)
+    remove('visibilitychange', onVisible)
+  }
+}
+
+export function isProviderOn(status: WebStatus, provider: ProviderView): boolean {
+  if (provider.kind === 'fetch') {
+    return status.fetchActive && status.settings.fetchProvider === provider.id && provider.configured
+  }
+  return status.searchActive && selectedSearchBackend(status)?.id === provider.id
+}
+
+export function dormantSearchPlaceholder(id: string): ProviderView {
+  return {
+    id, label: id, description: '', billing: 'unknown',
+    kind: 'search', configured: false, calls: 0, failures: 0,
+    configurationOwned: false,
+  }
+}
+
+export function isRegisteredSearch(status: WebStatus, id: string): boolean {
+  return status.providers.some(provider => provider.kind === 'search' && provider.id === id)
 }
 
 export function catalogSearchBackends(status: WebStatus): ProviderView[] {
-  const enabled = searchBackends(status)
-  const rest = status.providers.filter(provider => provider.kind === 'search' && !enabled.some(row => row.id === provider.id))
-  return [...enabled, ...rest]
+  const byId = new Map(status.providers.filter(provider => provider.kind === 'search').map(provider => [provider.id, provider]))
+  const rows: ProviderView[] = []
+  const seen = new Set<string>()
+  for (const id of status.settings.searchOrder) {
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    rows.push(byId.get(id) ?? dormantSearchPlaceholder(id))
+  }
+  for (const provider of status.providers) {
+    if (provider.kind !== 'search' || seen.has(provider.id)) continue
+    rows.push(provider)
+  }
+  return rows
+}
+
+export function searchBackends(status: WebStatus): ProviderView[] {
+  const participating = new Set(status.settings.searchOrder)
+  return catalogSearchBackends(status).filter(provider => participating.has(provider.id))
 }
 
 export function selectedSearchBackend(status: WebStatus): ProviderView | undefined {
-  const backends = searchBackends(status)
+  const backends = searchBackends(status).filter(provider => isRegisteredSearch(status, provider.id))
   const id = pickActiveSearch(backends.map(provider => provider.id), id => Boolean(backends.find(provider => provider.id === id)?.configured))
   return backends.find(provider => provider.id === id)
 }
 
-function ExternalLink({ url, label, children }: { url: string; label: string; children: string }) {
-  return <a href={url} target="_blank" rel="noreferrer noopener" aria-label={label}
+export function droppedDormantIds(
+  settings: WebSettings,
+  order: readonly string[],
+  providers: readonly ProviderView[],
+): string[] {
+  const known = new Set(providers.filter(provider => provider.kind === 'search').map(provider => provider.id))
+  return [...new Set(settings.searchOrder.filter(id => id && !known.has(id) && !order.includes(id)))]
+}
+
+export type ConfigurationAccess =
+  | { kind: 'owned' }
+  | { kind: 'link'; url: string }
+  | { kind: 'owner'; name: string }
+  | { kind: 'unknown' }
+
+export function configurationAccess(provider: ProviderView): ConfigurationAccess {
+  if (ownsProviderConfiguration(provider)) return { kind: 'owned' }
+  const url = safeConfigurationUrl(provider.configurationUrl)
+  if (url) return { kind: 'link', url }
+  if (provider.configurationOwner?.trim()) return { kind: 'owner', name: provider.configurationOwner }
+  return { kind: 'unknown' }
+}
+
+function AppLink({ url, label, children }: { url: string; label: string; children: string }) {
+  const external = isExternalConfigurationUrl(url)
+  return <a href={url} {...(external ? { target: '_blank', rel: 'noreferrer noopener' } : {})} aria-label={label}
     onClick={event => {
+      if (!external) return
       const bridge = (globalThis as { dshWindow?: { openExternal?(url: string): void } }).dshWindow
       if (bridge?.openExternal) {
         event.preventDefault()
@@ -86,8 +205,13 @@ export function canEnableSearch(
     if (!provider) return false
     if (provider.configured) return true
     const typed = (keys[provider.id] ?? '').trim()
-    return Boolean(provider.credentialRef && typed && writable[provider.credentialRef] !== false)
+    return Boolean(ownsProviderConfiguration(provider) && provider.credentialRef && typed && writable[provider.credentialRef] !== false)
   })
+}
+
+export function ownsProviderConfiguration(provider: Pick<ProviderView, 'configurationOwned' | 'configurationOwner'>): boolean {
+  if (typeof provider.configurationOwned === 'boolean') return provider.configurationOwned
+  return !provider.configurationOwner || provider.configurationOwner === WEB_MANAGER_OWNER
 }
 
 export function nextSearchEnabled(
@@ -130,14 +254,17 @@ const copy = {
     storageFailed: '保存失败，重新保存前网络访问已暂停。',
     empty: '暂无可用搜索后端，请启用一个供应商。', toolTitle: '联网搜索', needBackend: '需选择搜索服务并配置 Key。',
     backends: '搜索后端', dragPrefix: '拖动排序 ', dragHint: '拖动排序，或用上下方向键',
-    inUse: '当前使用', signup: '去注册', pricing: '费用说明', website: '官网',
-    needsKey: '待配置 Key', unavailable: '暂不可用', sharedKey: '与其他设置共用凭据',
+    inUse: '当前使用', available: '可用', unavailable: '暂不可用', dormant: '未加载，保留选择',
+    signup: '去注册', pricing: '费用说明', website: '官网', openConfig: '打开配置',
+    needsKey: '待配置 Key', sharedKey: '与其他设置共用凭据',
     keyConfigured: '已配置，留空不替换', keyPlaceholder: '输入 API Key',
     saveKey: '保存 Key', deleteKey: '删除 Key', confirmDelete: '确认删除 Key？',
     test: '测试连接（可能计费）', unsaved: '有未保存的修改', save: '保存',
     saveHint: '开关与排序立即生效；Key 与限制需保存。',
     maxResults: '每条查询结果上限', maxQueries: '每次调用查询上限',
     timeoutMs: '请求超时（毫秒）', maxFetchChars: '正文字符上限',
+    fetchTitle: '网页读取', fetchProvider: '读取服务', ownerSettings: '配置入口：',
+    unknownOwner: '请在服务所属插件中配置',
   },
   en: {
     tabsLabel: 'Web search settings', tabProviders: 'Search services', tabLimits: 'Request limits',
@@ -147,14 +274,17 @@ const copy = {
     storageFailed: 'Save failed; network access is paused until you save again.',
     empty: 'No search backends yet; enable a provider.', toolTitle: 'Web search', needBackend: 'Needs a search service with a key.',
     backends: 'Search backends', dragPrefix: 'Reorder ', dragHint: 'Drag to reorder, or use arrow keys',
-    inUse: 'In use', signup: 'Sign up', pricing: 'Pricing', website: 'Website',
-    needsKey: 'Key required', unavailable: 'Unavailable', sharedKey: 'Shares a credential with other settings',
+    inUse: 'In use', available: 'Available', unavailable: 'Unavailable', dormant: 'Not loaded; selection kept',
+    signup: 'Sign up', pricing: 'Pricing', website: 'Website', openConfig: 'Open configuration',
+    needsKey: 'Key required', sharedKey: 'Shares a credential with other settings',
     keyConfigured: 'Configured; empty keeps it', keyPlaceholder: 'Enter API key',
     saveKey: 'Save key', deleteKey: 'Delete key', confirmDelete: 'Delete this key?',
     test: 'Test connection (may be billed)', unsaved: 'Unsaved changes', save: 'Save',
     saveHint: 'Switches and order apply now; keys and limits need saving.',
     maxResults: 'Max results/query', maxQueries: 'Max queries/call',
     timeoutMs: 'Request timeout (ms)', maxFetchChars: 'Max text chars',
+    fetchTitle: 'Read web pages', fetchProvider: 'Fetch service', ownerSettings: 'Configure in: ',
+    unknownOwner: 'Configure this service in its plugin',
   },
 } as const
 
@@ -164,7 +294,9 @@ function movedText(locale: 'zh' | 'en', label: string, position: number): string
   return locale === 'zh' ? `${label} 已移至第 ${position} 位` : `${label} moved to position ${position}`
 }
 function pricingCheckedText(locale: 'zh' | 'en', date: string): string {
-  return locale === 'zh' ? `价格核对于 ${date}，额度与费用以供应商账户为准。` : `Prices checked on ${date}; your provider account is authoritative.`
+  return locale === 'zh'
+    ? `内置适配器价格核对于 ${date}，额度与费用以供应商账户为准。`
+    : `Bundled adapter prices checked on ${date}; your provider account is authoritative.`
 }
 function testOkText(locale: 'zh' | 'en', sources: number): string {
   return locale === 'zh' ? `连接正常，返回 ${sources} 条来源。` : `Connection OK: ${sources} sources returned.`
@@ -193,8 +325,28 @@ export function parseLimit(raw: string, min: number, max: number): number | unde
  * Settings written by an immediate action (a switch or a reorder). It keeps the
  * saved limits and never includes typed-but-unsaved keys or limit drafts.
  */
-export function immediateUpdate(settings: WebSettings, on: boolean, order: string[]): Omit<WebSettings, 'revision'> {
-  return { ...editable(settings), searchOrder: order, searchEnabled: on, fetchProvider: 'http', fetchEnabled: on }
+export function immediateUpdate(
+  settings: WebSettings,
+  on: boolean,
+  order: string[],
+  providers?: readonly ProviderView[],
+  remove: readonly string[] = [],
+): Omit<WebSettings, 'revision'> {
+  let searchOrder = order
+  if (providers) {
+    const known = new Set(providers.filter(provider => provider.kind === 'search').map(provider => provider.id))
+    const removed = new Set(remove)
+    const following = order.filter(id => !removed.has(id))
+    if (following.some(id => !known.has(id))) searchOrder = following
+    else {
+      searchOrder = settings.searchOrder.flatMap(id => {
+        if (removed.has(id)) return []
+        return known.has(id) ? following.splice(0, 1) : [id]
+      })
+      searchOrder.push(...following)
+    }
+  }
+  return { ...editable(settings), searchOrder, searchEnabled: on }
 }
 
 function limitTexts(settings: WebSettings): Record<LimitKey, string> {
@@ -213,7 +365,7 @@ function useHostLocale(client: Client): 'zh' | 'en' {
 /** Keyboard reorders are batched: persist once the arrows stop for this long. */
 const REORDER_DEBOUNCE_MS = 500
 
-export function NetworkSearchSettings({ client }: { client: Client }) {
+export function NetworkSearchSettings({ client, hidden }: { client: Client; hidden?: boolean }) {
   const locale = useHostLocale(client)
   const text: Copy = copy[locale]
   const tabsId = useId()
@@ -237,6 +389,17 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const handleRefs = useRef(new Map<string, HTMLButtonElement>())
   const refocusRef = useRef<string | null>(null)
+  const busyRef = useRef(false)
+  const hiddenRef = useRef(hidden)
+  hiddenRef.current = hidden
+  const requestSeq = useRef(0)
+  const mountedRef = useRef(true)
+  const readingRef = useRef(false)
+  const readingRequest = useRef(0)
+  const statusRead = useRef(Promise.resolve())
+  const readGateRef = useRef<ReturnType<typeof createPluginReadGate>>(undefined)
+  if (!readGateRef.current) readGateRef.current = createPluginReadGate()
+  const readGate = readGateRef.current
 
   async function call<T>(endpoint: string, payload: unknown = {}): Promise<T> {
     return unwrap(await client.connection.rpc.call(WEB_SEARCH_RPC_CHANNEL, endpoint, payload) as RpcResult<T>)
@@ -255,31 +418,100 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
     })
     if (resetDraft) setInvalid({})
   }
-  async function load(resetDraft = false) {
-    const next = await call<WebStatus>('status')
-    adopt(next, resetDraft)
-    setLoadError('')
-    const refs = next.providers.flatMap(provider => provider.credentialRef ? [provider.credentialRef] : [])
-    if (refs.length) {
-      const credentials = unwrap(await client.remote.credentials.describe(refs))
-      setWritable(Object.fromEntries(Object.entries(credentials).map(([ref, value]) => [ref, value.writable])))
+  function pollBlocked(): boolean {
+    return !canStartStatusRead({
+      source: 'poll',
+      mounted: mountedRef.current,
+      hidden: isPageHidden(hiddenRef.current),
+      busy: busyRef.current,
+      reordering: pendingRef.current !== null,
+      reading: readingRef.current,
+    })
+  }
+  async function describeOwned(next: WebStatus, mine: number) {
+    const refs = next.providers.flatMap(provider => ownsProviderConfiguration(provider) && provider.credentialRef ? [provider.credentialRef] : [])
+    if (!refs.length) return
+    const credentials = unwrap(await readGate.run(() => client.remote.credentials.describe(refs)))
+    if (!mountedRef.current || mine !== requestSeq.current) return
+    setWritable(Object.fromEntries(Object.entries(credentials).map(([ref, value]) => [ref, value.writable])))
+  }
+  async function load(resetDraft = false, source: 'user' | 'poll' = 'user') {
+    if (source === 'poll' && !readGate.canRead()) return
+    if (source === 'user') { readGate.reset(); requestSeq.current += 1 }
+    while (readingRef.current) {
+      if (source === 'poll' || !mountedRef.current) return
+      await statusRead.current
     }
-    return next
+    if (!mountedRef.current) return
+    if (source === 'poll' && pollBlocked()) return
+    const mine = ++requestSeq.current
+    readingRef.current = true
+    readingRequest.current = mine
+    let release = () => {}
+    statusRead.current = new Promise<void>(resolve => { release = resolve })
+    try {
+      const next = unwrap(await readGate.run(() => client.connection.rpc.call(WEB_SEARCH_RPC_CHANNEL, 'status', {})) as RpcResult<WebStatus>)
+      if (!mountedRef.current || mine !== requestSeq.current) return next
+      if (source === 'poll' && !shouldApplyPolledStatus({
+        requestId: mine, latestRequestId: requestSeq.current,
+        busy: busyRef.current, reordering: pendingRef.current !== null,
+        hidden: isPageHidden(hiddenRef.current),
+        currentRevision: statusRef.current?.settings.revision,
+        incomingRevision: next.settings.revision,
+      })) return next
+      adopt(next, resetDraft)
+      setLoadError('')
+      await describeOwned(next, mine)
+      return next
+    } catch (cause) {
+      if (!mountedRef.current || mine !== requestSeq.current) return
+      setLoadError(cause instanceof Error && cause.message ? cause.message : text.failed)
+      if (source === 'poll') return
+      throw cause
+    } finally {
+      if (readingRequest.current === mine) readingRef.current = false
+      release()
+    }
   }
   useEffect(() => {
+    mountedRef.current = true
+    readGate.reset()
     void load().catch(cause => setLoadError(cause instanceof Error && cause.message ? cause.message : text.failed))
+    const bind = () => bindStatusRefresh({
+      isHidden: () => isPageHidden(hiddenRef.current),
+      tick: async () => { await load(false, 'poll').catch(() => {}) },
+    })
+    let stop = bind()
+    const stopConnection = client.connection.generation?.subscribe(() => {
+      readGate.reset()
+      requestSeq.current += 1
+      readingRef.current = false
+      statusRead.current = Promise.resolve()
+      stop()
+      stop = bind()
+      void load(false, 'poll')
+    })
+    return () => {
+      mountedRef.current = false
+      readGate.reset()
+      requestSeq.current += 1
+      stop()
+      stopConnection?.()
+      if (timerRef.current === undefined) return
+      clearTimeout(timerRef.current)
+      const current = statusRef.current
+      const next = pendingRef.current
+      if (current && next) {
+        void call('update', { settings: immediateUpdate(current.settings, current.settings.searchEnabled, next, current.providers), expectedRevision: current.settings.revision }).catch(() => {})
+      }
+    }
   }, [client])
 
-  // A reorder still waiting for its debounce is written on unmount, not dropped.
-  useEffect(() => () => {
-    if (timerRef.current === undefined) return
-    clearTimeout(timerRef.current)
-    const current = statusRef.current
-    const next = pendingRef.current
-    if (current && next) {
-      void call('update', { settings: immediateUpdate(current.settings, current.settings.searchEnabled, next), expectedRevision: current.settings.revision }).catch(() => {})
-    }
-  }, [])
+  useEffect(() => {
+    if (hidden) return
+    if (!statusRef.current) return
+    void load(false, 'poll').catch(() => {})
+  }, [hidden])
 
   // Keep keyboard focus on the handle that was just moved.
   useLayoutEffect(() => {
@@ -291,20 +523,26 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
   })
 
   async function action(run: () => Promise<void>) {
+    readGate.reset()
+    requestSeq.current += 1
+    busyRef.current = true
     setBusy(true); setNote(''); setError('')
     try { await run() }
     catch (cause) { setError(cause instanceof Error && cause.message ? cause.message : text.failed); await load().catch(() => {}) }
-    finally { setBusy(false) }
+    finally { busyRef.current = false; setBusy(false) }
   }
 
   /** Switches and reorders: settings only, applied at once. */
-  function runImmediate(on: boolean, order: string[]) {
+  function runImmediate(on: boolean, order: string[], remove: readonly string[] = []) {
     clearTimeout(timerRef.current); timerRef.current = undefined
     pendingRef.current = null
     void action(async () => {
       const current = statusRef.current
       if (!current) return
-      const next = await call<WebStatus>('update', { settings: immediateUpdate(current.settings, on, order), expectedRevision: current.settings.revision })
+      const next = await call<WebStatus>('update', {
+        settings: immediateUpdate(current.settings, on, order, current.providers, remove),
+        expectedRevision: current.settings.revision,
+      })
       setStatus(next)
       await load()
     }).then(() => { if (pendingRef.current === null) setPendingOrder(null) })
@@ -317,7 +555,7 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
       if (provider.kind !== 'search' || (only && provider.id !== only.id)) continue
       const snapshot = keys[provider.id] ?? ''
       const typed = snapshot.trim()
-      if (!provider.credentialRef || !typed) continue
+      if (!ownsProviderConfiguration(provider) || !provider.credentialRef || !typed) continue
       if (writable[provider.credentialRef] === false) throw new Error(text.readOnly)
       unwrap(await client.remote.credentials.set(provider.credentialRef, typed))
       setKeys(current => current[provider.id] === snapshot ? { ...current, [provider.id]: '' } : current)
@@ -325,7 +563,7 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
   }
 
   async function removeKey(provider: ProviderView) {
-    if (!provider.credentialRef || provider.credentialShared || !status) return
+    if (!ownsProviderConfiguration(provider) || !provider.credentialRef || provider.credentialShared || !status) return
     unwrap(await client.remote.credentials.unset(provider.credentialRef))
     setKeys(current => ({ ...current, [provider.id]: '' }))
     await load()
@@ -399,7 +637,7 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
       await saveKeys()
       const current = statusRef.current!
       const next = await call<WebStatus>('update', {
-        settings: { ...editable(current.settings), ...parsed, fetchProvider: 'http', fetchEnabled: current.settings.searchEnabled },
+        settings: { ...editable(current.settings), ...parsed },
         expectedRevision: current.settings.revision,
       })
       adopt(next, true)
@@ -420,6 +658,10 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
     />
     <span className="ws-sr-only" role="status" aria-live="polite">{sortAnnouncement}</span>
     {error && <p role="alert" className="dsh-ui-error">{error}</p>}
+    {loadError ? <div className="dsh-ui-stack">
+      <p role="alert" className="dsh-ui-error">{text.loadFailed}{loadError}</p>
+      <Button variant="outline" size="sm" disabled={busy} onClick={() => void action(async () => { await load() })}>{text.reconnect}</Button>
+    </div> : null}
     {note && <p role="status" className="dsh-ui-notice">{note}</p>}
     {saved.storageFailed && <p role="alert" className="dsh-ui-banner dsh-ui-banner--danger">{text.storageFailed}</p>}
     <div role="tabpanel" id={tabsId + '-providers-panel'} aria-labelledby={tabsId + '-providers-tab'}
@@ -444,15 +686,21 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
           {backends.map(provider => {
             const participating = order.includes(provider.id)
             const rank = order.indexOf(provider.id)
-            const active = saved.searchActive && selected?.id === provider.id
-            const info = searchProviderInfo(provider)
-            const needsKey = Boolean(provider.credentialRef)
+            const dormant = !isRegisteredSearch(saved, provider.id)
+            const active = !dormant && saved.searchActive && selected?.id === provider.id
+            const info = searchProviderInfo(provider, locale)
+            const owned = ownsProviderConfiguration(provider)
+            const access = configurationAccess(provider)
+            const needsKey = owned && Boolean(provider.credentialRef)
             const shared = Boolean(provider.credentialShared)
-            const showKey = needsKey && participating && (!shared || !provider.configured)
+            const showKey = !dormant && needsKey && participating && (!shared || !provider.configured)
             const canSort = participating && order.length > 1
             const readOnly = writable[provider.credentialRef ?? ''] === false
             const typedKey = (keys[provider.id] ?? '').trim()
+            const availability = dormant ? 'dormant' : provider.configured ? 'available' : 'unavailable'
             return <li key={provider.id} className={active ? 'is-active' : undefined} data-testid={`web-search-rank-${provider.id}`}
+              data-availability={availability}
+              data-in-use={active || undefined}
               data-dragging={dragSource === provider.id || undefined}
               data-drop={dropTarget === provider.id && dragSource ? (order.indexOf(dragSource) < rank ? 'after' : 'before') : undefined}
               onDragOver={event => {
@@ -501,20 +749,23 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
               <div className="web-search-provider">
                 <div className="web-search-provider-heading">
                   <strong className="dsh-ui-heading">{provider.label}</strong>
+                  <span className="ws-provider-note">
+                    <StateDot state={dormant ? 'idle' : provider.configured ? 'done' : 'warning'} />
+                    <span>{dormant ? text.dormant : provider.configured ? text.available : text.unavailable}</span>
+                  </span>
                   {active && <Tag tone="success">{text.inUse}</Tag>}
-                  {provider.signupUrl && <ExternalLink url={provider.signupUrl} label={provider.label + ' ' + text.signup}>{text.signup}</ExternalLink>}
+                  {provider.signupUrl && <AppLink url={provider.signupUrl} label={provider.label + ' ' + text.signup}>{text.signup}</AppLink>}
                 </div>
                 <div className="web-search-provider-info">
-                  <p>{info.description}</p>
-                  {/* Pricing stays visible even when a provider is off, so users can compare before enabling. */}
-                  <p>{info.pricing}{info.pricingUrl && <> <ExternalLink url={info.pricingUrl}
-                    label={provider.label + ' ' + text.pricing}>{provider.id === 'ddg' ? text.website : text.pricing}</ExternalLink></>}</p>
+                  {info.description ? <p>{info.description}</p> : null}
+                  <p>{info.pricing}{info.pricingUrl && <> <AppLink url={info.pricingUrl}
+                    label={provider.label + ' ' + text.pricing}>{provider.id === 'ddg' ? text.website : text.pricing}</AppLink></>}</p>
                 </div>
-                {participating && !provider.configured ? <p className="ws-provider-note">
-                  <StateDot state="warning" />
-                  <span>{needsKey ? text.needsKey : text.unavailable}</span>
-                </p> : null}
-                {shared && participating && <small className="dsh-ui-meta">{provider.credentialHint ?? text.sharedKey}</small>}
+                {access.kind === 'link' ? <p className="dsh-ui-hint"><AppLink url={access.url} label={text.openConfig}>{text.openConfig}</AppLink></p>
+                  : access.kind === 'owner' ? <p className="dsh-ui-hint">{text.ownerSettings}{access.name}</p>
+                    : access.kind === 'unknown' ? <p className="dsh-ui-hint">{text.unknownOwner}</p>
+                      : null}
+                {shared && participating && owned ? <small className="dsh-ui-meta">{provider.credentialHint ?? text.sharedKey}</small> : null}
                 {showKey ? <label className="dsh-ui-field">
                   <span className="dsh-ui-label">API Key</span>
                   <Input className="ws-input" type="password" autoComplete="off" spellCheck={false}
@@ -540,13 +791,17 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
                   disabled={busy}
                   onChange={next => {
                     const following = next ? [...order, provider.id] : order.filter(id => id !== provider.id)
-                    runImmediate(nextSearchEnabled(saved.settings.searchEnabled, following, saved.providers, {}, writable), following)
+                    runImmediate(
+                      nextSearchEnabled(saved.settings.searchEnabled, following, saved.providers, {}, writable),
+                      following,
+                      droppedDormantIds(saved.settings, following, saved.providers),
+                    )
                   }} />
               </div>
             </li>
           })}
         </ol>
-        <p className="dsh-ui-hint">{pricingCheckedText(locale, PROVIDER_PRICING_CHECKED)}</p>
+        {backends.some(usesBundledPricing) ? <p className="dsh-ui-hint">{pricingCheckedText(locale, PROVIDER_PRICING_CHECKED)}</p> : null}
         {on ? <div className="dsh-ui-actions">
           <Button variant="outline" size="md" disabled={busy || reordering} onClick={() => void action(async () => {
             // Testing is explicit, so typed keys are saved first and the request uses them.
@@ -557,6 +812,53 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
           })}>{text.test}</Button>
         </div> : null}
       </article>}
+      {(saved.providers.some(provider => provider.kind === 'fetch') || saved.settings.fetchProvider) && (() => {
+        const fetchId = saved.settings.fetchProvider
+        const fetchSelected = saved.providers.find(provider => provider.kind === 'fetch' && provider.id === fetchId)
+        const fetchDormant = Boolean(fetchId) && !fetchSelected
+        const fetchActive = Boolean(fetchSelected && saved.fetchActive && fetchSelected.configured)
+        const fetchAccess = fetchSelected ? configurationAccess(fetchSelected) : fetchDormant ? { kind: 'unknown' as const } : undefined
+        return <article className="dsh-ui-card dsh-ui-card--flat" data-testid="web-search-fetch"
+          data-availability={fetchDormant ? 'dormant' : fetchSelected?.configured ? 'available' : 'unavailable'}
+          data-in-use={fetchActive || undefined}>
+          <header className="ws-card-head">
+            <div>
+              <h3 className="dsh-ui-title">{text.fetchTitle}</h3>
+              <p className="ws-provider-note">
+                <StateDot state={fetchDormant ? 'idle' : fetchSelected?.configured ? 'done' : 'warning'} />
+                <span>{fetchDormant ? text.dormant : fetchSelected?.configured ? text.available : text.unavailable}</span>
+                {fetchActive ? <Tag tone="success">{text.inUse}</Tag> : null}
+              </p>
+            </div>
+            <Switch checked={saved.settings.fetchEnabled} label={text.fetchTitle} disabled={busy || reordering}
+              onChange={next => void action(async () => {
+                const current = statusRef.current!
+                const value = await call<WebStatus>('update', { settings: { ...editable(current.settings), fetchEnabled: next }, expectedRevision: current.settings.revision })
+                adopt(value); await load()
+              })} />
+          </header>
+          <label className="dsh-ui-field">
+            <span className="dsh-ui-label">{text.fetchProvider}</span>
+            <select className="dsh-ui-select" aria-label={text.fetchProvider} value={fetchId} disabled={busy || reordering}
+              onChange={event => {
+                const id = event.target.value
+                void action(async () => {
+                  const current = statusRef.current!
+                  const value = await call<WebStatus>('update', { settings: { ...editable(current.settings), fetchProvider: id }, expectedRevision: current.settings.revision })
+                  adopt(value); await load()
+                })
+              }}>
+              {fetchDormant && <option value={fetchId}>{fetchId} · {text.dormant}</option>}
+              {saved.providers.filter(provider => provider.kind === 'fetch').map(provider =>
+                <option key={provider.id} value={provider.id}>{provider.label}{provider.configured ? '' : ' · ' + text.unavailable}</option>)}
+            </select>
+          </label>
+          {fetchAccess?.kind === 'link' ? <p className="dsh-ui-hint"><AppLink url={fetchAccess.url} label={text.openConfig}>{text.openConfig}</AppLink></p>
+            : fetchAccess?.kind === 'owner' ? <p className="dsh-ui-hint">{text.ownerSettings}{fetchAccess.name}</p>
+              : fetchAccess?.kind === 'unknown' ? <p className="dsh-ui-hint">{text.unknownOwner}</p>
+                : null}
+        </article>
+      })()}
     </div>
     <div role="tabpanel" id={tabsId + '-limits-panel'} aria-labelledby={tabsId + '-limits-tab'}
       hidden={tab !== 'limits'} tabIndex={0}>
@@ -661,5 +963,5 @@ export function apply(ctx: Context): void {
   }, 'web-search-manager.styles')
   ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register({
     name: 'plugins.bundle.config', key: '@klarkxy/dsh-web-search-manager',
-  }, () => <NetworkSearchSettings client={client} />)), 'web-search-manager.settings')
+  }, (props?: { hidden?: boolean }) => <NetworkSearchSettings client={client} hidden={props?.hidden} />)), 'web-search-manager.settings')
 }

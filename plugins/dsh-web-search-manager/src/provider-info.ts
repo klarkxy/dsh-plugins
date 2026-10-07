@@ -1,6 +1,7 @@
-import type { ProviderView } from './contracts.ts'
+import { WEB_MANAGER_OWNER, type ProviderView } from './contracts.ts'
 
 // Public prices checked on 2026-09-21; links remain available for current account terms.
+// This date applies only to bundled adapters that still use these static notes.
 export const PROVIDER_PRICING_CHECKED = '2026-09-21'
 
 interface ProviderInfo {
@@ -52,13 +53,45 @@ const providerInfo: Record<string, ProviderInfo> = {
   },
 }
 
-export function searchProviderInfo(provider: ProviderView): ProviderInfo {
-  const known = Object.hasOwn(providerInfo, provider.id) ? providerInfo[provider.id] : undefined
+function bundledCatalogId(provider: ProviderView): string | undefined {
+  const owned = typeof provider.configurationOwned === 'boolean'
+    ? provider.configurationOwned
+    : !provider.configurationOwner || provider.configurationOwner === WEB_MANAGER_OWNER
+  if (!owned) return
+  return provider.id === 'deepseek-managed' ? 'deepseek-official' : provider.id
+}
+
+function missingPricing(locale: 'zh' | 'en'): string {
+  return locale === 'zh' ? '未提供费用信息' : 'No pricing information provided'
+}
+
+export function usesBundledPricing(provider: ProviderView): boolean {
+  if (provider.pricing?.trim()) return false
+  const catalogId = bundledCatalogId(provider)
+  return Boolean(catalogId && Object.hasOwn(providerInfo, catalogId))
+}
+
+export function searchProviderInfo(provider: ProviderView, locale: 'zh' | 'en' = 'zh'): ProviderInfo {
+  const catalogId = bundledCatalogId(provider)
+  const known = catalogId && Object.hasOwn(providerInfo, catalogId) ? providerInfo[catalogId] : undefined
+  const description = provider.description.trim() ? provider.description : (known?.description ?? provider.description)
+  if (provider.pricing?.trim()) {
+    return {
+      description,
+      pricing: provider.pricing,
+      pricingUrl: provider.pricingUrl ?? known?.pricingUrl ?? provider.signupUrl,
+    }
+  }
+  if (known) {
+    return {
+      description,
+      pricing: known.pricing,
+      pricingUrl: provider.pricingUrl ?? known.pricingUrl ?? provider.signupUrl,
+    }
+  }
   return {
-    description: known?.description ?? provider.description,
-    pricing: provider.pricing ?? known?.pricing ?? (provider.billing === 'none' ? '该后端不收取搜索费用。'
-      : provider.billing === 'model-and-tools' ? '按模型用量与工具调用计费；额度与单价见供应商说明。'
-        : '按 API 调用计费；额度与单价见供应商说明。'),
-    pricingUrl: provider.pricingUrl ?? known?.pricingUrl ?? provider.signupUrl,
+    description,
+    pricing: missingPricing(locale),
+    pricingUrl: provider.pricingUrl ?? provider.signupUrl,
   }
 }

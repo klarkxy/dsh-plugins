@@ -1,0 +1,8 @@
+{
+  "meta": {
+    "title": "Sessions",
+    "description": "Browse free chats, copy a thread ID, and retry or delete a session when the host supports it."
+  },
+  "copyThreadId": "Copy thread ID",
+  "copyThreadFailed": "Could not copy the thread ID"
+}

@@ -68,7 +68,7 @@ RPC 还接受主库风格的下划线别名：`question_recommendations`、`ques
 
 ## 与网络搜索联动
 
-同一 profile 还安装 [@klarkxy/dsh-web-search-manager](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) 时，本插件会向网络搜索注册「知乎全网搜索」后端。在网络搜索设置中启用它，即可让通用网络搜索工具使用知乎的全网搜索能力，并共用「知乎资料」中配置的 Access Secret。专用知乎工具仍可独立使用。
+同一 profile 提供 `ctx.web` 时，本插件直接向宿主注册「知乎全网搜索」，无需安装搜索管理器。安装 [@klarkxy/dsh-web-search-manager](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) 后，管理器会自动发现它，可在那里启用并排序。Access Secret 仍在「知乎资料」中配置，每次请求由知乎插件读取，凭据变更会刷新本地可用状态。专用知乎工具仍可独立使用。
 
 ## 边界与限制
 

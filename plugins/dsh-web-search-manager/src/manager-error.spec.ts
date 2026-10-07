@@ -1,12 +1,13 @@
 import { expect, it } from 'vitest'
-import { WebError, type WebSearchProvider } from '@deepseek-ai/dsh-web'
+import { Context } from '@deepseek-ai/cordis'
+import { WebError, WebRuntime } from '@deepseek-ai/dsh-web'
 import { WebSearchManager } from './manager.ts'
 import { HttpStatusError } from './provider-error.ts'
 
 it('retains HTTP status and provider identity through the manager', async () => {
-  let registered: WebSearchProvider | undefined
+  const web = new WebRuntime(new Context())
   const manager = new WebSearchManager({
-    web: { registerSearchProvider(provider) { registered = provider; return () => {} }, registerFetchProvider() { return () => {} } },
+    web,
     resolveCredential: async () => undefined, save: async () => {},
   })
   try {
@@ -15,7 +16,7 @@ it('retains HTTP status and provider identity through the manager', async () => 
     }))
     const { revision, ...settings } = manager.status().settings
     await manager.update({ ...settings, searchEnabled: true, searchOrder: ['test'] }, revision)
-    const error = await registered!.search({ query: 'fixture' }).catch(error => error)
+    const error = await web.search({ query: 'fixture' }).catch(error => error)
     expect(error.code).toBe('WEB_PROVIDER_ERROR')
     expect(error.message).toContain('[search:test]')
     expect(error.message).toContain('HTTP 429')
@@ -24,12 +25,9 @@ it('retains HTTP status and provider identity through the manager', async () => 
 })
 it.each(['WEB_CREDENTIAL_MISSING', 'WEB_DISABLED', 'WEB_ABORTED', 'WEB_PROVIDER_ERROR', 'WEB_DNS_ERROR', 'WEB_TLS_ERROR', 'WEB_BLOCKED_URL', 'WEB_REDIRECT_BLOCKED', 'WEB_FETCH_TIMEOUT'])(
   'redacts extension errors even when they use the trusted %s code', async code => {
-    let registered: WebSearchProvider | undefined
+    const web = new WebRuntime(new Context())
     const manager = new WebSearchManager({
-      web: {
-        registerSearchProvider(provider) { registered = provider; return () => { registered = undefined } },
-        registerFetchProvider() { return () => {} },
-      },
+      web,
       resolveCredential: async () => 'fixture-private-key', save: async () => {},
     })
     try {
@@ -42,8 +40,8 @@ it.each(['WEB_CREDENTIAL_MISSING', 'WEB_DISABLED', 'WEB_ABORTED', 'WEB_PROVIDER_
       }))
       const { revision, ...settings } = manager.status().settings
       await manager.update({ ...settings, searchEnabled: true, searchProvider: 'test', searchOrder: ['test'] }, revision)
-      expect(registered?.available()).toBe(true)
-      const error = await registered!.search({ query: 'fixed fixture query' }).catch(error => error)
+      expect(manager.status().searchActive).toBe(true)
+      const error = await web.search({ query: 'fixed fixture query' }).catch(error => error)
       expect(error).toBeInstanceOf(WebError)
       expect(error.code).toBe(code)
       expect(error.message).toContain('provider echoed [REDACTED]')

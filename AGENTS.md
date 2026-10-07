@@ -2,6 +2,26 @@
 
 本仓库是 klarkxy 的 DSH 插件 monorepo，同时托管插件发布站 <https://klarkxy.github.io/dsh-plugins/>。
 
+## 核心参考：ZCode 源码
+
+`H:\Refernece\ZCode`（本地镜像，写本节时为 v3.14.3）是 ZCode AI 编程工作台的完整源码，与 DSH 宿主同族。设计或调试插件行为时**先读它的源码再下结论**，不要凭记忆或想象编造宿主 API、事件语义和生命周期。
+
+- **只读**：不修改、不格式化其中的文件，也不在 ZCode 目录里跑构建或写临时文件。
+- 查什么：会话与子代理生命周期、插件与 hook 派发语义、RPC 与存储结构、客户端 UI 与主题 token。入口地图：`apps/zcode-cli/` 是 Agent CLI 与运行时，`packages/{server,services,client,rpc,shared}` 是宿主核心，`packages/ui`、`packages/web` 是界面层。
+- 下结论时给出具体源码路径作为依据（如 `packages/services/...ts`），不写"应该是""大概是"式的断言。
+- 镜像会过时：与 DSH 实际运行时行为冲突时，以 DSH 安装目录的运行时为准，并记录差异。
+- 不要整段搬运代码进本仓库；ZCode 是 Apache-2.0 且带 `NOTICE.md`，确需引用时保留署名与许可证说明。
+
+## 对照参考：Codex 源码
+
+`H:\Refernece\codex`（本地镜像，写本节时为 `c0c230e673`，2026-10-06）是 OpenAI Codex CLI 的完整源码（github.com/openai/codex），与 DSH 不同族但同类的编程 harness。ZCode 是同族宿主、回答"DSH 实际怎么做"；Codex 是异族对照、回答"同类产品怎么设计"，设计插件的 hook、沙箱、子代理、记忆等机制时用它对照取舍，不把它的语义当成 DSH 的语义。
+
+- **只读**：不修改、不格式化其中的文件，也不在 codex 目录里跑构建或写临时文件。
+- 查什么：Windows 沙箱与命令审批、hook 与插件机制、AGENTS.md 加载语义、skills、子代理与多代理协作、会话持久化。入口地图：`codex-rs/core` 是 Agent 主循环，`codex-rs/cli`、`codex-rs/tui` 是命令行与终端 UI，`codex-rs/app-server` + `app-server-protocol` 是客户端/IDE 通信协议，`codex-rs/hooks`、`plugin`、`core-plugins` 是 hook 与插件，`codex-rs/skills` 是 skills，`codex-rs/sandboxing`、`windows-sandbox-rs`、`execpolicy` 是沙箱与审批策略，`codex-rs/protocol`、`rollout`、`thread-store` 是协议与会话存储，`codex-cli/` 是 npm 发布的 Node 包装层，`sdk/{typescript,python}` 是 SDK，`docs/` 有 agents_md、config、sandbox、skills、execpolicy 等设计文档。
+- 下结论时给出具体源码路径作为依据（如 `codex-rs/core/src/...rs`），不写"应该是""大概是"式的断言。
+- 镜像会过时：结论以引用时的 commit 为准，跨版本引用前先 `git log` 确认相关文件没变。
+- 不要整段搬运代码进本仓库；Codex 是 Apache-2.0 且带 `NOTICE`，确需引用时保留署名与许可证说明。
+
 ## 插件站点
 
 站点由 `site/` 生成，输出到 `_site/`（不提交）。`docs/` 旧开发索引已下线，不要恢复。
@@ -51,6 +71,8 @@ pnpm check                                         # 全仓检查
 `.github/workflows/pages.yml` 在推送 `main`、`Publish npm plugins` 工作流结束后，以及每天 01:17 UTC 运行 `site:test` 和 `site:build`，再部署 `_site/`。拉取失败时构建直接失败，线上保留上一版，不要为了让构建通过而吞掉网络错误或改用过期数据。
 
 ## 与 npm 发布的关系
+
+`scripts/npm-release-holds.json` 是本批待验收公开包的发布暂缓名单，生成计划和执行发布均检查它；不要通过旧计划、改私有标记或仅凭构建成功绕过。解除某个包前核对最终打包内容、相关测试和目标宿主中新行为的验收证据，包含被打包的工作区依赖。
 
 标记 `private: true` 的开发包参加构建、测试与打包检查，但 `scripts/release-target.mjs` 会将其排除在自动发布目标之外；未发布包不加入站点 catalog。
 

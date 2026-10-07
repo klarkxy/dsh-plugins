@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { withFileLock as lockFile, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write';
 import { dirname, join } from 'node:path';
 import { SessionId } from '@deepseek-ai/dsh-session';
-import { MEMBER_NAME, type ClassmateDefinition, type ModelBinding } from './contracts.js';
+import { MEMBER_NAME, type ClassmateDefinition, type FrozenModelRoute, type ModelBinding, type RoleModelSource, type SubagentRoleSnapshot } from './contracts.js';
 
 export interface BindingSnapshot {
   schemaVersion: 1;
+  /** Team records predate record kinds and never persist one. */
+  kind?: undefined;
   profileId: string;
   leadId: string;
   name: string;
@@ -18,7 +20,29 @@ export interface BindingSnapshot {
   childId?: SessionId;
 }
 
+/**
+ * Second record kind sharing this directory: one background role-dispatched
+ * ordinary subagent, keyed by childId (Team records stay keyed leadId+name).
+ */
+export interface SubagentBinding {
+  schemaVersion: 1;
+  kind: 'subagent';
+  childId: SessionId;
+  parentSessionId: string;
+  /** ISO creation time of the subagent binding. */
+  createdAt: string;
+  role: SubagentRoleSnapshot;
+  modelSource: RoleModelSource;
+  modelProfileId?: string;
+  /** Route resolved at creation; omitted when it could not be determined. */
+  model?: FrozenModelRoute;
+  checksum: string;
+}
+
+export type AnyBinding = BindingSnapshot | SubagentBinding;
+
 const SCHEMA_VERSION = 1 as const;
+const MODEL_SOURCES: readonly RoleModelSource[] = ['inherit', 'profile', 'fixed', 'override'];
 
 
 function sha256(value: string | Buffer): string {
@@ -72,6 +96,24 @@ function payloadForChecksum(snapshot: Omit<BindingSnapshot, 'checksum'>): unknow
 
 function checksumOf(snapshot: Omit<BindingSnapshot, 'checksum'>): string {
   return sha256(canonicalJson(payloadForChecksum(snapshot)));
+}
+
+function subagentPayloadForChecksum(binding: Omit<SubagentBinding, 'checksum'>): unknown {
+  return {
+    schemaVersion: binding.schemaVersion,
+    kind: binding.kind,
+    childId: binding.childId,
+    parentSessionId: binding.parentSessionId,
+    createdAt: binding.createdAt,
+    role: binding.role,
+    modelSource: binding.modelSource,
+    ...binding.modelProfileId === undefined ? {} : { modelProfileId: binding.modelProfileId },
+    ...binding.model === undefined ? {} : { model: binding.model },
+  };
+}
+
+function subagentChecksumOf(binding: Omit<SubagentBinding, 'checksum'>): string {
+  return sha256(canonicalJson(subagentPayloadForChecksum(binding)));
 }
 
 function samePreparedValue(
@@ -155,7 +197,7 @@ function parseRole(value: Record<string, unknown>, path: string): ClassmateDefin
   });
 }
 
-function parseSnapshot(raw: string, path: string): BindingSnapshot {
+function parseJson(raw: string, path: string): Record<string, unknown> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw) as unknown;
@@ -165,6 +207,78 @@ function parseSnapshot(raw: string, path: string): BindingSnapshot {
   if (!isRecord(parsed)) {
     throw new Error(`classmates: corrupt binding at ${path}`);
   }
+  return parsed;
+}
+
+function parseFrozenRoute(value: unknown, path: string): FrozenModelRoute {
+  if (!isRecord(value) || typeof value.provider !== 'string' || typeof value.id !== 'string') {
+    throw new Error(`classmates: corrupt binding at ${path}`);
+  }
+  if (value.effort !== undefined && typeof value.effort !== 'string') {
+    throw new Error(`classmates: corrupt binding at ${path}`);
+  }
+  return {
+    provider: value.provider,
+    id: value.id,
+    ...typeof value.effort === 'string' ? { effort: value.effort } : {},
+  };
+}
+
+function parseSubagentSnapshot(parsed: Record<string, unknown>, path: string): SubagentBinding {
+  const childId = parsed.childId;
+  const parentSessionId = parsed.parentSessionId;
+  const createdAt = parsed.createdAt;
+  const role = parsed.role;
+  const modelSource = parsed.modelSource;
+  const modelProfileId = parsed.modelProfileId;
+  const checksum = parsed.checksum;
+  if (
+    parsed.schemaVersion !== SCHEMA_VERSION
+    || typeof childId !== 'string'
+    || typeof parentSessionId !== 'string'
+    || typeof createdAt !== 'string'
+    || !isRecord(role)
+    || typeof role.id !== 'string'
+    || typeof role.revision !== 'number'
+    || typeof role.name !== 'string'
+    || typeof role.description !== 'string'
+    || typeof modelSource !== 'string'
+    || !MODEL_SOURCES.includes(modelSource as RoleModelSource)
+    || typeof checksum !== 'string'
+    || (modelProfileId !== undefined && (typeof modelProfileId !== 'string' || !MEMBER_NAME.test(modelProfileId) || modelProfileId.length > 80))
+  ) {
+    throw new Error(`classmates: corrupt binding at ${path}`);
+  }
+  const binding: SubagentBinding = {
+    schemaVersion: SCHEMA_VERSION,
+    kind: 'subagent',
+    childId: SessionId(childId),
+    parentSessionId,
+    createdAt,
+    role: deepFreeze(structuredClone({
+      id: role.id,
+      revision: role.revision,
+      name: role.name,
+      description: role.description,
+    })) as SubagentRoleSnapshot,
+    modelSource: modelSource as RoleModelSource,
+    ...typeof modelProfileId === 'string' ? { modelProfileId } : {},
+    ...parsed.model === undefined ? {} : { model: parseFrozenRoute(parsed.model, path) },
+    checksum,
+  };
+  if (subagentChecksumOf(binding) !== checksum) {
+    throw new Error(`classmates: binding checksum mismatch at ${path}`);
+  }
+  return binding;
+}
+
+function parseBinding(raw: string, path: string): AnyBinding {
+  const parsed = parseJson(raw, path);
+  if (parsed.kind === 'subagent') return parseSubagentSnapshot(parsed, path);
+  return parseSnapshotRecord(parsed, path);
+}
+
+function parseSnapshotRecord(parsed: Record<string, unknown>, path: string): BindingSnapshot {
   const schemaVersion = parsed.schemaVersion;
   const profileId = parsed.profileId;
   const leadId = parsed.leadId;
@@ -303,6 +417,12 @@ export class BindingStore {
     return join(this.root, `${digest}.json`);
   }
 
+  /** Distinct digest namespace so subagent ids can never collide with Team keys. */
+  private subagentPath(childId: string): string {
+    const digest = sha256(`v1-subagent\0${this.profileId}\0${childId}`);
+    return join(this.root, `${digest}.json`);
+  }
+
   private async readFile(path: string): Promise<BindingSnapshot | undefined> {
     let raw: string;
     try {
@@ -311,6 +431,116 @@ export class BindingStore {
       if (errorCode(error) === 'ENOENT') return undefined;
       throw error;
     }
-    return parseSnapshot(raw, path);
+    const record = parseBinding(raw, path);
+    if (record.kind === 'subagent') throw new Error(`classmates: corrupt binding at ${path}`);
+    return record;
+  }
+
+  /** Persist one background role-dispatched subagent binding (idempotent per childId). */
+  async recordSubagent(input: {
+    childId: SessionId;
+    parentSessionId: string;
+    createdAt?: string;
+    role: SubagentRoleSnapshot;
+    modelSource: RoleModelSource;
+    modelProfileId?: string;
+    model?: FrozenModelRoute;
+  }): Promise<SubagentBinding> {
+    if (input.childId.length === 0) throw new Error('classmates: childId is required');
+    if (typeof input.parentSessionId !== 'string' || input.parentSessionId.length === 0) throw new Error('classmates: parentSessionId is required');
+    if (!MODEL_SOURCES.includes(input.modelSource)) throw new Error('classmates: invalid model source');
+    if (input.modelProfileId !== undefined && (!MEMBER_NAME.test(input.modelProfileId) || input.modelProfileId.length > 80)) throw new Error('classmates: invalid model profile id');
+    const role = input.role;
+    if (!role || typeof role.id !== 'string' || !Number.isSafeInteger(role.revision) || typeof role.name !== 'string' || typeof role.description !== 'string') {
+      throw new Error('classmates: invalid subagent role snapshot');
+    }
+    if (input.createdAt !== undefined && (typeof input.createdAt !== 'string' || !input.createdAt)) throw new Error('classmates: invalid createdAt');
+    if (input.model !== undefined && (typeof input.model.provider !== 'string' || typeof input.model.id !== 'string')) throw new Error('classmates: invalid subagent model');
+    const path = this.subagentPath(input.childId);
+    const next = {
+      schemaVersion: SCHEMA_VERSION,
+      kind: 'subagent' as const,
+      childId: input.childId,
+      parentSessionId: input.parentSessionId,
+      createdAt: input.createdAt ?? new Date().toISOString(),
+      role: deepFreeze(structuredClone({
+        id: role.id,
+        revision: role.revision,
+        name: role.name,
+        description: role.description,
+      })) as SubagentRoleSnapshot,
+      modelSource: input.modelSource,
+      ...input.modelProfileId === undefined ? {} : { modelProfileId: input.modelProfileId },
+      ...input.model === undefined ? {} : {
+        model: {
+          provider: input.model.provider,
+          id: input.model.id,
+          ...input.model.effort === undefined ? {} : { effort: input.model.effort },
+        } as FrozenModelRoute,
+      },
+    };
+    return withFileLock(path, async () => {
+      const existing = await this.readSubagentFile(path);
+      if (existing !== undefined) {
+        // The original creation time wins on retries; every other field must match.
+        if (canonicalJson(subagentPayloadForChecksum(existing)) !== canonicalJson(subagentPayloadForChecksum({ ...next, createdAt: existing.createdAt }))) {
+          throw new Error(`classmates: subagent binding conflict for ${input.childId}`);
+        }
+        return existing;
+      }
+      const binding: SubagentBinding = { ...next, checksum: subagentChecksumOf(next) };
+      await atomicWriteFile(path, `${canonicalJson(binding)}\n`);
+      return binding;
+    });
+  }
+
+  /** Enumerate subagent bindings; corrupt files are skipped and counted, never thrown. */
+  async listSubagentBindings(parentSessionId?: string): Promise<{ bindings: SubagentBinding[]; warnings: number }> {
+    let entries: string[];
+    try {
+      entries = await readdir(this.root);
+    } catch (error) {
+      if (errorCode(error) === 'ENOENT') return { bindings: [], warnings: 0 };
+      throw error;
+    }
+    const bindings: SubagentBinding[] = [];
+    let warnings = 0;
+    for (const entry of entries) {
+      if (!entry.endsWith('.json')) continue;
+      const path = join(this.root, entry);
+      let raw: string;
+      try {
+        raw = await readFile(path, 'utf8');
+      } catch {
+        warnings += 1;
+        continue;
+      }
+      let record: AnyBinding;
+      try {
+        record = parseBinding(raw, path);
+      } catch {
+        warnings += 1;
+        continue;
+      }
+      // Team records share the directory and are not warnings.
+      if (record.kind !== 'subagent') continue;
+      if (parentSessionId !== undefined && record.parentSessionId !== parentSessionId) continue;
+      bindings.push(record);
+    }
+    bindings.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.childId.localeCompare(b.childId));
+    return { bindings, warnings };
+  }
+
+  private async readSubagentFile(path: string): Promise<SubagentBinding | undefined> {
+    let raw: string;
+    try {
+      raw = await readFile(path, 'utf8');
+    } catch (error) {
+      if (errorCode(error) === 'ENOENT') return undefined;
+      throw error;
+    }
+    const record = parseBinding(raw, path);
+    if (record.kind !== 'subagent') throw new Error(`classmates: corrupt binding at ${path}`);
+    return record;
   }
 }

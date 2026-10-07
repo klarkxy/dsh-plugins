@@ -1,0 +1,9 @@
+{
+  "baseline": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "appliedToFreshBaseline": true,
+  "sourceHashesMatched": 263,
+  "patchSha256": "a10de75e66795f0de0b6fd0f6f253eef57aa1e7436a619497a7f2246a03d9a22",
+  "windowsBaselineLinkRepresentation": "Git core.symlinks=false text",
+  "upstreamLinks": 14,
+  "checkedAt": "2026-10-07T05:06:49.254Z"
+}

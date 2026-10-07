@@ -1,15 +1,14 @@
 import { WebError, type WebFetchProvider, type WebSearchProvider } from '@deepseek-ai/dsh-web'
 import { providerError } from './provider-error.ts'
+import { observeWebRegistry, type WebRegistry, type NativeProvider } from './web-registry.ts'
+import { registerNativeSearch, registerNativeFetch, type ProviderConfiguration } from './native-providers.ts'
 import {
-  defaultSettings, migrateSearchOrder, pickActiveSearch, providerKey, resolveSearchOrder, validateBaseURL,
+  defaultSettings, migrateSearchOrder, pickActiveSearch, providerKey, resolveSearchOrder, validateBaseURL, safeConfigurationUrl,
   type FetchProviderFactory, type ProviderDescriptor, type ProviderKind, type ProviderOptions,
-  type SearchProviderFactory, type WebSettings, type WebStatus,
+  WEB_MANAGER_OWNER, type SearchProviderFactory, type WebSettings, type WebStatus,
 } from './contracts.ts'
 
-export interface WebRegistry {
-  registerSearchProvider(provider: WebSearchProvider): () => void
-  registerFetchProvider(provider: WebFetchProvider): () => void
-}
+export type { WebRegistry } from './web-registry.ts'
 export interface ManagerOptions {
   web: WebRegistry
   initial?: Omit<WebSettings, 'searchOrder'> & { searchOrder?: string[] }
@@ -18,7 +17,7 @@ export interface ManagerOptions {
 }
 type Entry = {
   descriptor: ProviderDescriptor; kind: ProviderKind; configured: boolean
-  calls: number; failures: number; unregister(): void; active: Set<AbortController>
+  calls: number; failures: number; provider: NativeProvider; active: Set<AbortController>
 }
 function fail(code: string, message: string): never { throw new WebError(message, code) }
 function bounded(value: number, min: number, max: number, label: string): number {
@@ -49,10 +48,21 @@ export class WebSearchManager {
   private suspended = false
   private disposed = false
   private storageFailed = false
+  private refreshRevision = 0
+  private detach: () => void
+  private legacyRegistrations = new Set<() => void>()
 
   constructor(private readonly options: ManagerOptions) {
     const initial = structuredClone(options.initial ?? defaultSettings())
     this.settings = { ...defaultSettings(), ...initial, searchOrder: migrateSearchOrder(initial) }
+    this.detach = observeWebRegistry(options.web, {
+      add: (kind, provider) => this.discover(kind, provider),
+      remove: (kind, id) => {
+        const key = providerKey(kind, id)
+        const entry = this.entries.get(key)
+        if (entry) { this.abort(entry); this.entries.delete(key); this.notify() }
+      },
+    })
   }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener)
@@ -70,7 +80,12 @@ export class WebSearchManager {
     return Boolean(this.entries.get(providerKey('search', id))?.descriptor.credentialRef)
   }
   private configured(id: string): boolean {
-    return Boolean(this.entries.get(providerKey('search', id))?.configured)
+    const entry = this.entries.get(providerKey('search', id))
+    return Boolean(entry && this.ready(entry))
+  }
+  private ready(entry: Entry): boolean {
+    try { return entry.configured && entry.provider.available() }
+    catch { return false }
   }
   private searchOrder(settings: WebSettings = this.settings): string[] {
     return resolveSearchOrder(this.knownSearchIds(), settings, id => this.keyed(id))
@@ -79,7 +94,8 @@ export class WebSearchManager {
     return pickActiveSearch(this.searchOrder(settings), id => this.configured(id))
   }
   private selected(entry: Entry): boolean {
-    if (this.disposed || this.suspended || !entry.configured) return false
+    if (this.disposed || this.suspended || !this.ready(entry)) return false
+    if (this.entries.get(providerKey(entry.kind, entry.descriptor.id)) !== entry) return false
     if (entry.kind === 'fetch') {
       return this.settings.fetchEnabled
         && this.settings.fetchProvider === entry.descriptor.id
@@ -94,25 +110,29 @@ export class WebSearchManager {
       searchActive: entries.some(entry => entry.kind === 'search' && this.selected(entry)),
       fetchActive: entries.some(entry => entry.kind === 'fetch' && this.selected(entry)),
       providers: entries.map(entry => ({
-        ...entry.descriptor, kind: entry.kind, configured: entry.configured,
-        baseURL: this.settings.endpoints[providerKey(entry.kind, entry.descriptor.id)] ?? entry.descriptor.defaultBaseURL,
+        ...entry.descriptor, kind: entry.kind, configured: this.ready(entry),
+        configurationOwned: entry.descriptor.configurationOwner === WEB_MANAGER_OWNER,
+        baseURL: entry.descriptor.configurationOwner === WEB_MANAGER_OWNER
+          ? this.settings.endpoints[providerKey(entry.kind, entry.descriptor.id)] ?? entry.descriptor.defaultBaseURL : undefined,
         calls: entry.calls, failures: entry.failures,
       })).sort((a, b) => providerKey(a.kind, a.id).localeCompare(providerKey(b.kind, b.id))),
     }
   }
   async refresh(): Promise<WebStatus> {
     const epoch = this.epoch
+    const revision = ++this.refreshRevision
     await Promise.all([...this.entries.entries()].map(async ([key, entry]) => {
-      let configured = !entry.descriptor.credentialRef
-      if (entry.descriptor.credentialRef) {
+      let configured = true
+      if (entry.descriptor.configurationOwner === WEB_MANAGER_OWNER && entry.descriptor.credentialRef) {
         try { configured = Boolean((await this.options.resolveCredential(entry.descriptor.credentialRef))?.trim()) }
         catch { configured = false }
       }
-      if (this.disposed || epoch !== this.epoch || this.entries.get(key) !== entry) return
+      if (this.disposed || epoch !== this.epoch || revision !== this.refreshRevision || this.entries.get(key) !== entry) return
       if (entry.configured !== configured) {
         entry.configured = configured
         if (!configured) this.abort(entry)
       }
+      if (!this.ready(entry)) this.abort(entry)
     }))
     this.notify()
     return this.status()
@@ -122,75 +142,89 @@ export class WebSearchManager {
       for (const controller of target.active) controller.abort()
     }
   }
-  private add(kind: ProviderKind, descriptor: ProviderDescriptor): Entry {
-    if (this.disposed) fail('WEB_DISABLED', '网络搜索插件已停止。')
-    const key = providerKey(kind, descriptor.id)
-    if (!/^[a-z][a-z0-9-]{0,63}$/.test(descriptor.id) || !descriptor.label.trim()) fail('WEB_INVALID_PROVIDER', '供应商标识或名称无效。')
-    if (descriptor.credentialRef && !/^[A-Z][A-Z0-9_]{1,127}$/.test(descriptor.credentialRef)) fail('WEB_INVALID_PROVIDER', '供应商凭据引用无效。')
-    if (descriptor.defaultBaseURL) validateBaseURL(descriptor.defaultBaseURL)
-    for (const [value, label] of [[descriptor.signupUrl, '注册地址'], [descriptor.pricingUrl, '费用说明地址']] as const) {
-      if (!value) continue
+  private discover(kind: ProviderKind, provider: NativeProvider): NativeProvider {
+    const key = providerKey(kind, provider.id)
+    const old = this.entries.get(key)
+    if (old) this.abort(old)
+    const metadata = (provider as NativeProvider & { dshWebManagement?: Partial<ProviderDescriptor> }).dshWebManagement
+    // Copy only the documented display fields; never serialize provider options or credentials.
+    const descriptor: { -readonly [K in keyof ProviderDescriptor]: ProviderDescriptor[K] } = {
+      id: provider.id, label: typeof metadata?.label === 'string' && metadata.label ? metadata.label : provider.id,
+      description: typeof metadata?.description === 'string' ? metadata.description : '',
+      billing: ['none', 'request', 'model-and-tools'].includes(metadata?.billing ?? '') ? metadata!.billing! : 'unknown',
+      configurationOwner: typeof metadata?.configurationOwner === 'string' && metadata.configurationOwner ? metadata.configurationOwner : undefined,
+      configurationUrl: safeConfigurationUrl(metadata?.configurationUrl),
+    }
+    for (const field of ['credentialHint', 'pricing', 'defaultBaseURL'] as const) {
+      if (typeof metadata?.[field] === 'string') descriptor[field] = metadata[field]
+    }
+    if (typeof metadata?.credentialRef === 'string' && /^[A-Z][A-Z0-9_]{1,127}$/.test(metadata.credentialRef)) descriptor.credentialRef = metadata.credentialRef
+    if (metadata?.credentialShared === true) descriptor.credentialShared = true
+    for (const field of ['signupUrl', 'pricingUrl'] as const) {
       try {
-        const url = new URL(value)
-        if (url.protocol !== 'https:' || url.username || url.password) fail('WEB_INVALID_PROVIDER', `${label}须为 HTTPS。`)
-      } catch { fail('WEB_INVALID_PROVIDER', `${label}须为 HTTPS。`) }
+        const url = new URL(metadata?.[field] ?? '')
+        if (url.protocol === 'https:' && !url.username && !url.password) descriptor[field] = metadata![field]
+      } catch { /* unsafe optional links do not hide a valid native provider */ }
     }
-    if (this.entries.has(key)) fail('WEB_DUPLICATE_PROVIDER', '供应商标识已注册。')
-    const entry: Entry = {
-      descriptor: Object.freeze({ ...descriptor }), kind, configured: !descriptor.credentialRef,
-      calls: 0, failures: 0, unregister() {}, active: new Set(),
-    }
+    const entry: Entry = { descriptor: Object.freeze(descriptor), kind, provider,
+      configured: descriptor.configurationOwner !== WEB_MANAGER_OWNER || !descriptor.credentialRef,
+      calls: 0, failures: 0, active: new Set() }
     this.entries.set(key, entry)
-    return entry
-  }
-  private registration(entry: Entry, register: () => () => void): () => void {
-    const key = providerKey(entry.kind, entry.descriptor.id)
-    try { entry.unregister = register() }
-    catch (error) { this.entries.delete(key); throw error }
-    void this.refresh()
-    let removed = false
-    return () => {
-      if (removed) return
-      removed = true
-      this.abort(entry)
-      this.entries.delete(key)
-      entry.unregister()
-      this.notify()
+    // The bundle's old adapters used official ids. Migrate only their fixed aliases;
+    // leave values in storage untouched until an explicit user save.
+    const legacy = metadata?.legacyId
+    const expectedLegacy = kind === 'search' && provider.id === 'deepseek-managed' ? 'deepseek-official'
+      : kind === 'fetch' && provider.id === 'http-managed' ? 'http' : undefined
+    if (descriptor.configurationOwner === WEB_MANAGER_OWNER && legacy === expectedLegacy && legacy
+      && !this.entries.has(providerKey(kind, legacy))) {
+      if (kind === 'search') {
+        this.settings.searchOrder = this.settings.searchOrder.map(id => id === legacy ? provider.id : id)
+        if (this.settings.searchProvider === legacy) this.settings.searchProvider = provider.id
+      } else if (this.settings.fetchProvider === legacy) this.settings.fetchProvider = provider.id
+      const legacyKey = providerKey(kind, legacy)
+      if (this.settings.endpoints[legacyKey] && !this.settings.endpoints[key]) this.settings.endpoints[key] = this.settings.endpoints[legacyKey]
     }
-  }
-  registerSearchProvider(descriptor: ProviderDescriptor, factory: SearchProviderFactory): () => void {
-    const entry = this.add('search', descriptor)
-    return this.registration(entry, () => this.options.web.registerSearchProvider({
-      id: descriptor.id, available: () => this.selected(entry),
-      search: (request, signal) => {
+    void this.refresh()
+    if (kind === 'search') {
+      const search = provider as WebSearchProvider
+      return { id: provider.id, available: () => this.selected(entry), search: (request, signal) => {
         if (typeof request.query !== 'string' || !request.query.trim() || request.query.length > 4000) fail('WEB_INVALID_REQUEST', '查询须为 1 至 4000 字符。')
         const count = Math.min(bounded(request.maxResults ?? this.settings.maxResults, 1, 100, '结果数'), this.settings.maxResults)
-        return this.execute(entry, signal, async (options, combined) => {
-          const provider = factory(options)
-          if (!provider.available()) fail('WEB_PROVIDER_ERROR', '供应商配置不可用。')
-          const result = await provider.search({ query: request.query.trim(), maxResults: count }, combined)
+        return this.execute(entry, signal, async (_options, combined) => {
+          const result = await search.search({ ...request, query: request.query.trim(), maxResults: count }, combined)
           const sources = result.sources.slice(0, count).filter(source => {
             try { const url = new URL(source.url); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password } catch { return false }
           }).map(source => ({ ...source, title: source.title?.slice(0, 1000), snippet: source.snippet?.slice(0, 8000) }))
           return { ...result, content: result.content?.slice(0, 40_000), sources,
             truncated: result.truncated || result.sources.length > count }
         })
-      },
-    }))
-  }
-  registerFetchProvider(descriptor: ProviderDescriptor, factory: FetchProviderFactory): () => void {
-    const entry = this.add('fetch', descriptor)
-    return this.registration(entry, () => this.options.web.registerFetchProvider({
-      id: descriptor.id, available: () => this.selected(entry),
-      fetch: (request, signal) => this.execute(entry, signal, async (options, combined) => {
-        const provider = factory(options)
-        if (!provider.available()) fail('WEB_PROVIDER_ERROR', '供应商配置不可用。')
-        const result = await provider.fetch(request, combined)
+      } }
+    }
+    const fetch = provider as WebFetchProvider
+    return { id: provider.id, available: () => this.selected(entry), fetch: (request, signal) =>
+      this.execute(entry, signal, async (options, combined) => {
+        const result = await fetch.fetch(request, combined)
         const content = result.body.content.slice(0, options.maxFetchChars)
-        return { ...result, body: { ...result.body, content },
-          truncated: result.truncated || content.length !== result.body.content.length }
-      }),
-    }))
+        return { ...result, body: { ...result.body, content }, truncated: result.truncated || content.length !== result.body.content.length }
+      }) }
+  }
+  /** @deprecated Provider plugins should register directly with ctx.web. */
+  registerSearchProvider(descriptor: ProviderDescriptor, factory: SearchProviderFactory): () => void {
+    return this.legacyRegistration(() => registerNativeSearch(this.options.web, this.providerConfiguration(), descriptor, factory))
+  }
+  /** @deprecated Provider plugins should register directly with ctx.web. */
+  registerFetchProvider(descriptor: ProviderDescriptor, factory: FetchProviderFactory): () => void {
+    return this.legacyRegistration(() => registerNativeFetch(this.options.web, this.providerConfiguration(), descriptor, factory))
+  }
+  private providerConfiguration(): ProviderConfiguration {
+    return { settings: () => structuredClone(this.settings), resolveCredential: ref => this.options.resolveCredential(ref) }
+  }
+  private legacyRegistration(register: () => () => void): () => void {
+    if (this.disposed) fail('WEB_DISABLED', '网络搜索插件已停止。')
+    const unregister = register()
+    const off = () => { this.legacyRegistrations.delete(off); unregister() }
+    this.legacyRegistrations.add(off)
+    return off
   }
   private async execute<T>(entry: Entry, signal: AbortSignal | undefined,
     run: (options: ProviderOptions, signal: AbortSignal) => Promise<T>): Promise<T> {
@@ -201,19 +235,10 @@ export class WebSearchManager {
     const epoch = this.epoch
     entry.active.add(controller)
     let started = false
-    let apiKey: string | undefined
     try {
-      const ref = entry.descriptor.credentialRef
-      apiKey = ref ? await abortable(() => this.options.resolveCredential(ref), combined) : undefined
-      if (ref && !apiKey?.trim()) {
-        entry.configured = false
-        this.abort(entry)
-        this.notify()
-        fail('WEB_CREDENTIAL_MISSING', '搜索凭据已删除或不可用，请重新配置。')
-      }
       if (epoch !== this.epoch || !this.selected(entry)) fail('WEB_DISABLED', '网络访问设置已改变，请重新发起请求。')
       const options = {
-        apiKey, baseURL: this.settings.endpoints[providerKey(entry.kind, entry.descriptor.id)] ?? entry.descriptor.defaultBaseURL,
+        baseURL: this.settings.endpoints[providerKey(entry.kind, entry.descriptor.id)] ?? entry.descriptor.defaultBaseURL,
         timeoutMs: this.settings.timeoutMs, maxFetchChars: this.settings.maxFetchChars,
       }
       started = true
@@ -223,12 +248,14 @@ export class WebSearchManager {
       return result
     } catch (error) {
       if (started) entry.failures += 1
-      // Missing credentials abort active calls too; keep that original failure for this call.
+      if (error instanceof WebError && error.code === 'WEB_CREDENTIAL_MISSING') {
+        entry.configured = false; this.abort(entry); this.notify()
+      }
       if (combined.aborted && !(error instanceof WebError && error.code === 'WEB_CREDENTIAL_MISSING')) {
         throw new WebError('网络请求已取消或超时。', 'WEB_ABORTED')
       }
       // Preserve upstream diagnostics, stripping only known credentials and authentication fields.
-      const safe = providerError(error, apiKey ? [apiKey] : [])
+      const safe = providerError(error)
       throw new WebError(`[${entry.kind}:${entry.descriptor.id}] ${safe.message}`, safe.code)
     } finally {
       clearTimeout(timeout)
@@ -246,25 +273,23 @@ export class WebSearchManager {
       bounded(proposed.maxFetchChars, 1000, 200_000, '正文长度')
       for (const [key, value] of Object.entries(proposed.endpoints)) {
         const entry = this.entries.get(key)
-        if (entry && !entry.descriptor.defaultBaseURL) fail('WEB_INVALID_CONFIG', '供应商不支持自定义地址。')
+        if (entry && (entry.descriptor.configurationOwner !== WEB_MANAGER_OWNER || !entry.descriptor.defaultBaseURL)
+          && value !== this.settings.endpoints[key]) fail('WEB_INVALID_CONFIG', '供应商不支持自定义地址。')
         try { proposed.endpoints[key] = validateBaseURL(value) }
         catch { fail('WEB_INVALID_CONFIG', '供应商地址须为无凭据、无查询参数的 HTTPS 地址。') }
       }
       await this.refresh()
-      proposed.searchOrder = this.searchOrder(proposed)
+      proposed.searchOrder = [...new Set(proposed.searchOrder)]
       proposed.searchProvider = this.activeSearchId(proposed)
-      if (proposed.searchEnabled && !proposed.searchProvider) {
+      const activatingSearch = !this.settings.searchEnabled
+        || JSON.stringify(proposed.searchOrder) !== JSON.stringify(this.settings.searchOrder)
+      if (proposed.searchEnabled && !proposed.searchProvider && activatingSearch) {
         fail('WEB_CREDENTIAL_MISSING', '需选择已安装的供应商并填写有效凭据。')
       }
-      if (proposed.searchEnabled && this.entries.get(providerKey('fetch', 'http'))) {
-        proposed.fetchEnabled = true
-        proposed.fetchProvider = 'http'
-      }
-      if (!proposed.searchEnabled) proposed.fetchEnabled = false
       if (proposed.fetchEnabled) {
         const entry = this.entries.get(providerKey('fetch', proposed.fetchProvider))
-        if (!entry) proposed.fetchEnabled = false
-        else if (!entry.configured) fail('WEB_CREDENTIAL_MISSING', '需选择已安装的供应商并填写有效凭据。')
+        const activatingFetch = !this.settings.fetchEnabled || proposed.fetchProvider !== this.settings.fetchProvider
+        if (activatingFetch && (!entry || !this.ready(entry))) fail('WEB_CREDENTIAL_MISSING', '需选择已安装的供应商并填写有效凭据。')
       }
       this.suspended = true
       this.epoch += 1
@@ -290,9 +315,10 @@ export class WebSearchManager {
     this.epoch += 1
     this.abort()
     this.notify()
-    for (const entry of this.entries.values()) entry.unregister()
+    for (const off of [...this.legacyRegistrations]) off()
+    await this.pending
+    this.detach()
     this.entries.clear()
     this.listeners.clear()
-    await this.pending
   }
 }

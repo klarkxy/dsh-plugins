@@ -88,3 +88,51 @@ test('control route fails closed and rejects malformed requests before the handl
   assert.equal((await roundTrip(admitted.handler, request('POST', '/dsh-safe-auto/settings.get', envelope('other', {}), { 'content-type': 'application/json' }))).status, 400);
   assert.deepEqual(calls, [['settings.get', {}]]);
 });
+
+test('approval endpoints admit browser and authenticated desktop fetches, rejecting incomplete or hostile metadata', async () => {
+  const calls = []; let route;
+  registerControlRoute({ connection: { requestRejection: () => undefined }, webServer: { register(value) { route = value; } } },
+    async (endpoint, payload, _signal, source) => { calls.push({ endpoint, payload, source }); return { ok: true, value: { accepted: true } }; });
+  const browserHeaders = { 'content-type': 'application/json', 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'empty' };
+  const body = envelope('approval.answer', { sessionId: 's', requestId: 'one', outcome: 'allow' });
+  for (const headers of [{ 'content-type': 'application/json' }, { ...browserHeaders, 'sec-fetch-site': 'cross-site' },
+    { ...browserHeaders, 'sec-fetch-site': 'none' }, { ...browserHeaders, 'sec-fetch-site': '' },
+    { ...browserHeaders, 'sec-fetch-site': undefined, origin: 'http://localhost' },
+    { ...browserHeaders, 'sec-fetch-mode': undefined }, { ...browserHeaders, 'sec-fetch-dest': undefined },
+    { ...browserHeaders, 'sec-fetch-mode': 'navigate' }, { ...browserHeaders, 'sec-fetch-dest': 'document' },
+    { 'content-type': 'application/json', 'sec-fetch-mode': 'navigate' },
+    { 'content-type': 'application/json', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'document' },
+    { 'content-type': 'application/json', 'sec-fetch-mode': 'cors', origin: 'http://localhost' }]) {
+    assert.equal((await roundTrip(route.handler, request('POST', '/dsh-safe-auto/approval.answer', body, headers))).status, 403);
+  }
+  assert.equal(calls.length, 0);
+  assert.equal((await roundTrip(route.handler, request('POST', '/dsh-safe-auto/approval.answer', body, browserHeaders))).status, 200);
+  assert.deepEqual(calls[0].source, { interaction: true });
+  assert.equal(calls[0].payload.outcome, 'allow');
+  const desktopHeaders = { ...browserHeaders };
+  delete desktopHeaders['sec-fetch-site'];
+  // Electron protocol Request omits Fetch Metadata; the desktop Node fetch
+  // adds only mode=cors. Older carriers may also retain dest=empty.
+  for (const headers of [desktopHeaders, { 'content-type': 'application/json', 'sec-fetch-mode': 'cors' }]) {
+    for (const endpoint of ['approval.list', 'approval.answer']) {
+      assert.equal((await roundTrip(route.handler, request('POST', `/dsh-safe-auto/${endpoint}`,
+        envelope(endpoint, { sessionId: 's', requestId: 'one', outcome: 'allow' }), headers))).status, 200);
+    }
+  }
+  assert.deepEqual(calls.slice(1).map(call => [call.endpoint, call.source]),
+    [['approval.list', { interaction: true }], ['approval.answer', { interaction: true }],
+      ['approval.list', { interaction: true }], ['approval.answer', { interaction: true }]]);
+});
+
+test('desktop approval requests cannot bypass Host authentication or origin rejection', async () => {
+  const headers = { 'content-type': 'application/json', 'sec-fetch-mode': 'cors' };
+  for (const rejection of [401, 403]) {
+    let route;
+    registerControlRoute({ connection: { requestRejection: () => rejection }, webServer: { register(value) { route = value; } } },
+      async () => { assert.fail('Host-rejected approvals must never reach the runtime'); });
+    for (const endpoint of ['approval.list', 'approval.answer']) {
+      assert.equal((await roundTrip(route.handler, request('POST', `/dsh-safe-auto/${endpoint}`,
+        envelope(endpoint, { sessionId: 's' }), headers))).status, rejection);
+    }
+  }
+});

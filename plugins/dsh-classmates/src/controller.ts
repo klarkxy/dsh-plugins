@@ -3,6 +3,8 @@ import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typer
 import type { BindingStore } from './bindings.js';
 import { RoleConfig } from './config.js';
 import { readTeamDetails } from './team-info.js';
+import { subagentRow } from './subagent-info.js';
+import type { SubagentBindings } from './contracts.js';
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -66,7 +68,32 @@ export class ClassmatesController extends TypertRemoteService {
 
   @Remote
   async team(leadId: string) {
-    try { return await readTeamDetails(this.ctx, leadId, this.store); }
+    try { return await readTeamDetails(this.ctx, leadId, this.store, this.roles); }
+    catch (cause) { throw new RemoteError('gateway/bad-request', cause instanceof Error ? cause.message : String(cause), {}); }
+  }
+
+  /**
+   * Subagent bindings under one parent session. The host cannot identify the
+   * caller's session, so an omitted parentSessionId yields an empty list
+   * rather than a cross-session enumeration; callers pass their own id.
+   */
+  @Remote
+  async subagents(parentSessionId?: string): Promise<SubagentBindings> {
+    try {
+      if (!this.store || parentSessionId === undefined) return { subagents: [] };
+      const { bindings, warnings } = await this.store.listSubagentBindings(parentSessionId);
+      let library: { roles: ReturnType<RoleConfig['read']>['roles']; profiles: ReturnType<RoleConfig['read']>['modelProfiles'] } | undefined;
+      try {
+        const state = this.roles.read();
+        library = { roles: state.roles, profiles: state.modelProfiles ?? [] };
+      } catch {
+        library = undefined;
+      }
+      return {
+        subagents: bindings.map(binding => subagentRow(binding, library)),
+        ...warnings > 0 ? { warnings } : {},
+      };
+    }
     catch (cause) { throw new RemoteError('gateway/bad-request', cause instanceof Error ? cause.message : String(cause), {}); }
   }
 }

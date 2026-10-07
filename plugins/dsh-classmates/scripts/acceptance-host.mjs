@@ -2,6 +2,9 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { installedAcceptanceVersions } from './acceptance-versions.mjs';
+
+const versions = installedAcceptanceVersions();
 
 const wire = [];
 const realFetch = globalThis.fetch;
@@ -48,7 +51,7 @@ async function tool(agent, name, args) {
   return result;
 }
 async function saveReceipts(extra = {}) {
-  await writeFile(receiptPath, JSON.stringify({ at: new Date().toISOString(), records, wire, ...extra }, null, 2));
+  await writeFile(receiptPath, JSON.stringify({ at: new Date().toISOString(), versions, records, wire, ...extra }, null, 2));
 }
 async function command(input) {
   if (input === 'state') {
@@ -79,7 +82,7 @@ async function command(input) {
     await lead.whenIdle();
     const members = ctx.agentTeams.listMembers(lead);
     await ctx.sessions.flush(lead.session);
-    await writeFile(join(root, 'live-state.json'), JSON.stringify({ leadId, names, roles: state.roles, members }, null, 2));
+    await writeFile(join(root, 'live-state.json'), JSON.stringify({ versions, leadId, names, roles: state.roles, members }, null, 2));
     await saveReceipts({ leadId, members, directory });
     return { leadId, members, requests: records, wire };
   }
@@ -122,7 +125,7 @@ async function command(input) {
     await ctx.sessions.flush(lead.session);
     const members = ctx.agentTeams.listMembers(lead);
     const tasks = await ctx.agentTeams.listTasks(lead, {});
-    await writeFile(join(root, 'team-state.json'), JSON.stringify({ leadId, members, tasks }, null, 2));
+    await writeFile(join(root, 'team-state.json'), JSON.stringify({ versions, leadId, members, tasks }, null, 2));
     await saveReceipts({ phase: 'model-driven-team', leadId, members, tasks });
     return { leadId, members, tasks, requestCount: records.length };
   }

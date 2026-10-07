@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { NativeSurfaceClient } from '@klarkxy/dsh-plugin-kit/client-utils'
-import { useFeatureRefresh, useNativeSeat } from '@klarkxy/dsh-plugin-kit/client-utils'
+import { createPluginReadGate, useFeatureRefresh, useNativeSeat } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -87,18 +87,28 @@ export function TitleSettings(props: {
   const workRef = useRef<TitleClientWork>(undefined)
   if (!workRef.current) workRef.current = createTitleClientWork()
   const work = workRef.current
+  const readGateRef = useRef<ReturnType<typeof createPluginReadGate>>(undefined)
+  if (!readGateRef.current) readGateRef.current = createPluginReadGate()
+  const readGate = readGateRef.current
   const busyRef = useRef(busy)
   busyRef.current = busy
 
   const call: TitleClientCall = (endpoint, payload = {}) => (
     props.client.connection.rpc.call(RPC_CHANNEL, endpoint, payload)
   )
+  const readCall: TitleClientCall = (endpoint, payload) => readGate.run(() => call(endpoint, payload))
 
   function commitMarker(next: TitleStatus | undefined) {
     applyMarkerFromStatus(props.marker, next, true)
   }
 
-  useEffect(() => () => { work.dispose() }, [work])
+  useEffect(() => () => { readGate.reset(); work.dispose() }, [work, readGate])
+  useEffect(() => props.client.connection.generation?.subscribe(() => {
+    readGate.reset()
+    work.beginLoad()
+    busyRef.current = false
+    setBusy(false)
+  }), [props.client, work, readGate])
 
   useEffect(() => {
     const catalog = props.client.remote?.session?.modelCatalog
@@ -112,12 +122,13 @@ export function TitleSettings(props: {
 
   useEffect(() => {
     const generation = work.beginLoad()
+    readGate.reset()
     const isCurrent = () => work.isLoad(generation)
     setBusy(false)
     setError('')
     setNote('')
     void runTitleStatusLoad({
-      call,
+      call: readCall,
       sessionId: sessionId || undefined,
       isCurrent,
       failedMessage: text.failed,
@@ -129,20 +140,22 @@ export function TitleSettings(props: {
   }, [props.client, props.marker, sessionId, text.failed, work])
 
   const refreshStatus = useCallback(() => {
-    if (shouldSkipTitleRefresh({ busy: busyRef.current }) || work.disposed) return
-    const generation = work.captureLoad()
+    if (!readGate.canRead() || shouldSkipTitleRefresh({ busy: busyRef.current }) || work.disposed) return
+    readGate.reset()
+    const token = work.beginRequest()
     void runTitleStatusLoad({
-      call,
+      call: readCall,
       sessionId: sessionId || undefined,
-      isCurrent: () => work.isLoad(generation) && !shouldSkipTitleRefresh({ busy: busyRef.current }),
+      isCurrent: () => work.isRequest(token) && !shouldSkipTitleRefresh({ busy: busyRef.current }),
       failedMessage: text.failed,
       onStatus: next => {
         if (shouldSkipTitleRefresh({ busy: busyRef.current })) return
         setStatus(next)
+        setError('')
       },
-      onError: () => {},
+      onError: setError,
       onMarker: next => {
-        if (shouldSkipTitleRefresh({ busy: busyRef.current })) return
+        if (!next || shouldSkipTitleRefresh({ busy: busyRef.current })) return
         commitMarker(next)
       },
     })
@@ -171,6 +184,7 @@ export function TitleSettings(props: {
 
   function saveSettings(patch: { model?: TitleModelRoute; cadence?: TitleCadence }) {
     if (!status) return
+    readGate.reset()
     const token = work.beginRequest()
     setError('')
     setNote('')
@@ -194,12 +208,18 @@ export function TitleSettings(props: {
     {pinned ? <p className="dsh-ui-meta">{text.pinned}</p> : null}
     {status?.session?.generating ? <p role="status" className="dsh-ui-hint">{text.generating}</p> : null}
     {status && !weOwn ? <p role="status" className="dsh-ui-hint">{text.inactive}{status.support.limitation ? ` ${status.support.limitation}` : ''}</p> : null}
-    {error ? <p role="alert" className="dsh-ui-error dsh-ui-wrap">{error}</p> : null}
+    {error ? <>
+      <p role="alert" className="dsh-ui-error dsh-ui-wrap">{error}</p>
+      <Button variant="outline" size="sm" disabled={busy} onClick={() => { readGate.reset(); refreshStatus() }}>
+        {seat.locale === 'zh' ? '重试' : 'Retry'}
+      </Button>
+    </> : null}
     {note ? <p role="status" className="dsh-ui-notice">{note}</p> : null}
     <div className="dsh-ui-actions">
       {sessionId ? <Button variant="outline" size="md" disabled={!canRegenerate}
         onClick={() => {
           if (!sessionId) return
+          readGate.reset()
           const token = work.beginRequest()
           setError('')
           setNote('')
@@ -228,6 +248,7 @@ export function TitleSettings(props: {
           if (!status) return
           const next = promptToSave(prompt, savedPrompt)
           if (next === undefined) { setPrompt(undefined); return }
+          readGate.reset()
           const token = work.beginRequest()
           setError('')
           void runTitleSettingsSave({

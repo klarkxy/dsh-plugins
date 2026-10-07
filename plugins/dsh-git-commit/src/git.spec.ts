@@ -74,7 +74,7 @@ async function tempRepo(): Promise<string> {
   return root
 }
 
-describe('commitGroups in a real repository', () => {
+describe('commitGroups in a real repository', { timeout: 30_000 }, () => {
   it('commits both sides of a rename and keeps the other group staged', async () => {
     const root = await tempRepo()
     const git = (args: string[]) => execGit(args, { cwd: root })

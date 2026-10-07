@@ -1,4 +1,5 @@
 import { createInterface } from 'node:readline';
+import { createRequire } from 'node:module';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -12,7 +13,7 @@ import {
   workspaceWriteSid,
 } from '@deepseek-ai/dsh-sandbox-windows-acl';
 
-export const DSH_VERSION = '0.1.7-rc.2';
+export const DSH_VERSION = createRequire(import.meta.url)('@deepseek-ai/dsh/package.json').version;
 export const BLOCKED_EXIT = 1;
 export const WORKSPACE_PREFIX = 'dsh-novice-ws-';
 export const ACL_TEMP_PREFIX = 'dsh-novice-acltemp-';

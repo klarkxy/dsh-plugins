@@ -7,8 +7,9 @@ import { SESSION_FORMAT_VERSION, SessionId, SessionLogOffset, SessionSeq, type S
 import type { SessionObservation } from '@deepseek-ai/dsh-session-query';
 import type { ProjectionSnapshot } from '@deepseek-ai/dsh-session-projection';
 import { ClassmatesController } from '../src/controller.js';
+import { validateRole, type RoleConfig } from '../src/config.js';
 import { readTeamDetails } from '../src/team-info.js';
-import { createRuntime, role, SIGNAL, spawnClassmate, type Runtime } from './helpers/harness.js';
+import { createRuntime, modelProfile, role, SIGNAL, spawnClassmate, type Runtime } from './helpers/harness.js';
 
 const runtimes: Runtime[] = [];
 afterEach(async () => {
@@ -111,6 +112,109 @@ it('exposes team over the controller without waking a second store', async () =>
   await spawnClassmate(runtime.ctx, runtime.lead, 'alpha', 'alpha task');
   const details = await controller.team(runtime.lead.id);
   expect(details.members.map(member => member.memberName)).toEqual(expect.arrayContaining(['lead', 'alpha']));
+});
+
+function libraryConfig(roles: unknown[], profiles: unknown[] = []): RoleConfig {
+  return {
+    read: () => ({
+      roles: roles.map(item => validateRole(item)),
+      modelProfiles: profiles,
+      protectedModels: [],
+      settingsRevision: 1,
+      writable: true,
+    }),
+  } as unknown as RoleConfig;
+}
+
+it('enriches members with template status and the original profile choice', async () => {
+  const runtime = await setup();
+  const { ctx, lead, store, adapter } = runtime;
+  await store.prepare(lead.id, 'alpha', researcher(), 'alpha task', 'coding-low');
+  await spawnClassmate(ctx, lead, 'alpha', 'alpha task');
+  await vi.waitFor(() => expect(adapter.requests.some(request => request.model === 'specialist-a')).toBe(true), { timeout: 15_000 });
+
+  const ok = libraryConfig([researcher()], [modelProfile({ id: 'coding-low', name: 'Fast coding' })]);
+  const alpha = (await readTeamDetails(ctx, lead.id, store, ok)).members.find(member => member.memberName === 'alpha');
+  expect(alpha).toMatchObject({ modelProfileId: 'coding-low', modelProfileName: 'Fast coding', templateStatus: 'ok' });
+  expect(alpha).not.toHaveProperty('currentRoleName');
+
+  const renamed = libraryConfig([{ ...researcher(), name: 'Edited later' }]);
+  const afterRename = (await readTeamDetails(ctx, lead.id, store, renamed)).members.find(member => member.memberName === 'alpha');
+  expect(afterRename).toMatchObject({ templateStatus: 'renamed', currentRoleName: 'Edited later', modelProfileId: 'coding-low' });
+  // The preset name degrades silently when the preset is gone; the id stays visible.
+  expect(afterRename).not.toHaveProperty('modelProfileName');
+
+  const parked = libraryConfig([{ ...researcher(), enabled: false }]);
+  const afterDisable = (await readTeamDetails(ctx, lead.id, store, parked)).members.find(member => member.memberName === 'alpha');
+  expect(afterDisable).toMatchObject({ templateStatus: 'disabled' });
+  expect(afterDisable).not.toHaveProperty('currentRoleName');
+
+  const gone = libraryConfig([]);
+  const afterDelete = (await readTeamDetails(ctx, lead.id, store, gone)).members.find(member => member.memberName === 'alpha');
+  expect(afterDelete).toMatchObject({ templateStatus: 'deleted' });
+
+  // Members without a binding never gain a template status.
+  const leadRow = (await readTeamDetails(ctx, lead.id, store, ok)).members.find(member => member.memberName === 'lead');
+  expect(leadRow).not.toHaveProperty('templateStatus');
+});
+
+it('serves subagent bindings over the controller filtered by parent session', async () => {
+  const runtime = await setup();
+  const { ctx, lead, store, bindingsRoot } = runtime;
+  const controller = new ClassmatesController(ctx, libraryConfig([researcher()], [modelProfile({ id: 'coding-low', name: 'Fast coding' })]), store);
+  await store.recordSubagent({
+    childId: SessionId('child-1'),
+    parentSessionId: lead.id,
+    createdAt: '2026-10-06T12:00:00.000Z',
+    role: { id: 'researcher', revision: 1, name: 'Researcher', description: 'research' },
+    modelSource: 'override',
+    modelProfileId: 'coding-low',
+    model: { provider: 'mock', id: 'specialist-a', effort: 'low' },
+  });
+  await store.recordSubagent({
+    childId: SessionId('child-2'),
+    parentSessionId: 'other-parent',
+    createdAt: '2026-10-06T12:01:00.000Z',
+    role: { id: 'researcher', revision: 1, name: 'Researcher', description: 'research' },
+    modelSource: 'inherit',
+  });
+
+  const rows = await controller.subagents(lead.id);
+  expect(rows.warnings).toBeUndefined();
+  expect(rows.subagents).toHaveLength(1);
+  expect(rows.subagents[0]).toMatchObject({
+    childId: 'child-1',
+    roleId: 'researcher',
+    roleName: 'Researcher',
+    roleRevision: 1,
+    roleDescription: 'research',
+    modelSource: 'override',
+    modelProfileId: 'coding-low',
+    modelProfileName: 'Fast coding',
+    configuredModel: { provider: 'mock', id: 'specialist-a', effort: 'low' },
+    templateStatus: 'ok',
+    createdAt: '2026-10-06T12:00:00.000Z',
+  });
+  expect(rows.subagents[0]).not.toHaveProperty('currentRoleName');
+
+  // Omitted parentSessionId never enumerates across sessions.
+  expect((await controller.subagents()).subagents).toHaveLength(0);
+
+  // Corrupt files degrade to a warnings count; valid rows still come back.
+  writeFileSync(join(bindingsRoot, 'zz-broken.json'), '{broken');
+  const degraded = await controller.subagents(lead.id);
+  expect(degraded.warnings).toBe(1);
+  expect(degraded.subagents).toHaveLength(1);
+
+  // Status fields follow the live template: renaming flips the row to renamed.
+  const second = new Context();
+  try {
+    const renamed = new ClassmatesController(second, libraryConfig([{ ...researcher(), name: 'Edited later' }]), store);
+    const afterRename = await renamed.subagents(lead.id);
+    expect(afterRename.subagents[0]).toMatchObject({ templateStatus: 'renamed', currentRoleName: 'Edited later' });
+  } finally {
+    await second.fiber.dispose();
+  }
 });
 
 function memberEvent(seq: number, teamId: string, id: string, name: string): SessionEvent {

@@ -3,10 +3,10 @@ import type { Context } from '@deepseek-ai/cordis';
 import { currentModelFromOwnRequestHeaders, RoleConfig, validateRole, validateRoles } from '../src/config.js';
 import { validateModelProfiles } from '../src/model-profiles.js';
 import { createPresets, SOFTWARE_COLLABORATION_RULES } from '../src/presets.js';
-import type { ModelProfile } from '../src/contracts.js';
+import type { ModelProfile, NormalizedRole } from '../src/contracts.js';
 
 function fixture() {
-  let roles = createPresets().slice(0, 3);
+  let roles: NormalizedRole[] = validateRoles(createPresets().slice(0, 3));
   let profiles: ModelProfile[] | undefined;
   let revision = 2;
   let writable = true;
@@ -56,11 +56,15 @@ function profile(partial: Partial<ModelProfile> & Pick<ModelProfile, 'id'>): Mod
 }
 
 describe('role configuration', () => {
-  it('starts with eleven inheriting disabled presets and detached defaults', () => {
+  it('starts with twelve inheriting disabled presets and a distinct Advisor', () => {
     const roles = createPresets();
-    expect(roles).toHaveLength(11);
+    expect(roles).toHaveLength(12);
+    expect(roles.map(role => role.id)).toContain('advisor');
     expect(roles.every(role => !role.enabled && role.model === null)).toBe(true);
     expect(roles.every(role => !/\p{Script=Han}/u.test(role.instructions))).toBe(true);
+    const advisor = roles.find(role => role.id === 'advisor')!;
+    expect(advisor.instructions).not.toContain(SOFTWARE_COLLABORATION_RULES);
+    expect(advisor.description).toMatch(/只读咨询/);
     roles[0].instructions = 'edited';
     expect(createPresets()[0].instructions).not.toBe('edited');
     const bundled = JSON.stringify(createPresets());
@@ -68,10 +72,64 @@ describe('role configuration', () => {
     expect(bundled).toContain(SOFTWARE_COLLABORATION_RULES);
   });
 
+  it('migrates recommendedModelProfileId into a strong profile reference on save', async () => {
+    const { store, getRoles } = fixture();
+    const state = store.read();
+    const bound = await store.save({
+      ...state.roles[0],
+      model: null,
+      recommendedModelProfileId: 'coding-high',
+    }, state.settingsRevision);
+    expect(bound.roles[0]).toMatchObject({ model: { kind: 'profile', profileId: 'coding-high' } });
+    expect(bound.roles[0]).not.toHaveProperty('recommendedModelProfileId');
+    expect(bound.roles[0]).not.toHaveProperty('migratedRecommendation');
+    expect(getRoles()[0]).toMatchObject({ model: { kind: 'profile', profileId: 'coding-high' } });
+    expect(getRoles()[0]).not.toHaveProperty('recommendedModelProfileId');
+
+    expect(validateRole({ ...bound.roles[0], recommendedModelProfileId: '' })).not.toHaveProperty('recommendedModelProfileId');
+    expect(validateRole({ ...bound.roles[0], recommendedModelProfileId: null as never })).not.toHaveProperty('recommendedModelProfileId');
+    // An already-normalized model always wins over a stray legacy recommendation.
+    expect(validateRole({ ...bound.roles[0], recommendedModelProfileId: 'gone-profile' })).toMatchObject({
+      model: { kind: 'profile', profileId: 'coding-high' },
+    });
+    expect(validateRole({ ...bound.roles[0], model: null, recommendedModelProfileId: 'gone-profile' })).toMatchObject({
+      model: { kind: 'profile', profileId: 'gone-profile' },
+    });
+    const profiles = await store.saveModelProfile(profile({ id: 'coding-high', name: 'Deep coding' }), bound.settingsRevision);
+    expect(profiles.roles[0]).toMatchObject({ model: { kind: 'profile', profileId: 'coding-high' } });
+    const removed = await store.removeModelProfile('coding-high', 1, profiles.settingsRevision);
+    expect(removed.roles[0]).toMatchObject({ model: { kind: 'profile', profileId: 'coding-high' } });
+    const cleared = await store.save({ ...removed.roles[0], model: { kind: 'inherit' } }, removed.settingsRevision);
+    expect(cleared.roles[0]).toMatchObject({ model: { kind: 'inherit' } });
+    expect(cleared.roles[0]).not.toHaveProperty('recommendedModelProfileId');
+    expect(cleared.roles[0]).not.toHaveProperty('migratedRecommendation');
+  });
+
+  it('prefers a legacy fixed model over a stored recommendation and reports migratedRecommendation until saved', async () => {
+    const { store, getRoles } = fixture();
+    // Seed legacy storage directly: old versions could persist both fields.
+    getRoles()[0] = {
+      ...getRoles()[0],
+      model: { provider: 'test', id: 'one', reasoningEffort: 'high' },
+      recommendedModelProfileId: 'coding-high',
+    } as never;
+    const legacy = store.read();
+    expect(legacy.roles[0]).toMatchObject({ model: { kind: 'fixed', provider: 'test', id: 'one', effort: 'high' } });
+    expect(legacy.roles[0].migratedRecommendation).toBe('coding-high');
+    expect(legacy.roles[0]).not.toHaveProperty('recommendedModelProfileId');
+
+    const saved = await store.save(legacy.roles[0], legacy.settingsRevision);
+    expect(saved.roles[0]).toMatchObject({ model: { kind: 'fixed', provider: 'test', id: 'one', effort: 'high' } });
+    expect(saved.roles[0]).not.toHaveProperty('migratedRecommendation');
+    expect(saved.roles[0]).not.toHaveProperty('recommendedModelProfileId');
+    expect(getRoles()[0]).not.toHaveProperty('migratedRecommendation');
+    expect(getRoles()[0]).toMatchObject({ model: { kind: 'fixed', provider: 'test', id: 'one', effort: 'high' } });
+  });
+
   it('rejects unknown schemas, duplicate IDs, incomplete bindings and enabled drafts', () => {
     const role = createPresets()[0];
     expect(() => validateRole({ ...role, schemaVersion: 2 })).toThrow();
-    expect(validateRole({ ...role, enabled: true, reasoningEffort: 'high' })).toMatchObject({ model: null, enabled: true, reasoningEffort: 'high' });
+    expect(validateRole({ ...role, enabled: true, reasoningEffort: 'high' })).toMatchObject({ model: { kind: 'inherit' }, enabled: true, reasoningEffort: 'high' });
     expect(() => validateRole({ ...role, model: { provider: 'test' } })).toThrow();
     expect(() => validateRoles([role, role])).toThrow('重复');
     expect(() => validateRole({ ...role, description: 'a'.repeat(201) })).toThrow('200');
@@ -192,7 +250,7 @@ describe('role configuration', () => {
     expect(disabled.roles[0]).toMatchObject({
       enabled: false,
       name: 'Researcher',
-      model: { provider: 'test', id: 'one', reasoningEffort: 'high' },
+      model: { kind: 'fixed', provider: 'test', id: 'one', effort: 'high' },
     });
 
     const renamed = await store.batch([

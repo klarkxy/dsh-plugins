@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-safe-auto",
-  "version": "0.2.0-rc.0",
+  "version": "0.2.0-rc.3",
   "description": "Safe Auto: an independent reviewer vets each native sandbox escalation; only a pass auto-approves that one call.",
   "icon": "./icon.svg",
   "type": "module",
@@ -24,12 +24,12 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node --check src/config.js && node --check src/approval-review.js && node --check src/policy.js && node --check src/model-route.js && node --check src/reviewer.js && node --check src/gate.js && node --check src/index.js && node --check src/control.js && node --check src/ui-host.js && tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-safe-auto",
+    "build": "node --check src/config.js && node --check src/approval-review.js && node --check src/policy.js && node --check src/shell-command.js && node --check src/model-route.js && node --check src/review-context.js && node --check src/execution-evidence.js && node --check src/human-approval.js && node --check src/reviewer.js && node --check src/gate.js && node --check src/index.js && node --check src/control.js && node --check src/ui-host.js && tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-safe-auto",
     "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
-    "dsh": ">=0.1.7-rc.2"
+    "dsh": ">=0.2.0-rc.2"
   },
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
@@ -59,11 +59,12 @@
     }
   },
   "dependencies": {
-    "zod": "^4.1.5",
-    "@klarkxy/dsh-plugin-kit": "workspace:*"
+    "@klarkxy/dsh-plugin-kit": "workspace:*",
+    "unbash": "^5.0.0",
+    "zod": "^4.1.5"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-storage-domain": ">=0.1.7-rc.2"
+    "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-storage-domain": {
@@ -71,14 +72,15 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-storage-domain": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.2"
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-domain": "0.2.0-rc.2",
+    "@klarkxy/dsh-model-route": "workspace:*"
   },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "5321eedca85ac7fee0b810ab8d95dde54a4bb4ae60f7691dac5f9314251b2b33"
+    "contentHash": "b5399c69823392e3de57e30edbe0c7bf315cd66284fe6ade6a319027847d994a"
   }
 }

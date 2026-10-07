@@ -47,6 +47,10 @@ const INDEX_HTML = `<!doctype html>
             unset(ref) { return window.rpc({ kind: 'credentials.unset', ref }) },
           },
         },
+        locale: {
+          getSnapshot() { return { active: window.settingsLocale || 'zh' } },
+          subscribe() { return () => {} },
+        },
         slots: {
           inject(name, run) {
             if (name !== 'plugins.bundle.config') throw new Error('Unexpected settings slot: ' + name)
@@ -65,12 +69,24 @@ const INDEX_HTML = `<!doctype html>
 
     apply({ ...makeClient(), effect(run) { run() } })
     let root
-    window.mountSettings = () => {
+    let settingsHidden = false
+    window.mountSettings = (props) => {
       const el = document.getElementById('root')
       if (root) root.unmount()
       root = createRoot(el)
       if (!settingsRender) throw new Error('Plugin settings are not registered')
-      root.render(React.createElement(settingsRender, { view: 'page' }))
+      settingsHidden = Boolean(props && props.hidden)
+      root.render(React.createElement(settingsRender, { view: 'page', hidden: settingsHidden }))
+    }
+    window.setSettingsHidden = (hidden) => {
+      settingsHidden = Boolean(hidden)
+      if (!root || !settingsRender) return
+      root.render(React.createElement(settingsRender, { view: 'page', hidden: settingsHidden }))
+    }
+    window.unmountSettings = () => {
+      if (!root) return
+      root.unmount()
+      root = undefined
     }
     window.mountSettings()
   </script>
@@ -102,7 +118,7 @@ function failResult(error) {
   return { ok: false, error: { code, message, details: {} } }
 }
 
-function createHost({ WebSearchManager, BraveSearchProvider, defaultSettings, zhihuDescriptor }) {
+function createHost({ WebSearchManager, BraveSearchProvider, WebRuntime, Context, defaultSettings, zhihuDescriptor }) {
   const state = {
     manager: null,
     keys: new Map(),
@@ -111,7 +127,12 @@ function createHost({ WebSearchManager, BraveSearchProvider, defaultSettings, zh
     setLog: [],
     events: [],
     braveRequests: [],
-    wrappers: [],
+    web: null,
+    nativeOff: new Map(),
+    available: new Map(),
+    statusCalls: 0, activeStatus: 0, maxStatus: 0, statusGate: null, releaseStatus: null,
+    failNextStatus: false,
+    describeCalls: 0, activeDescribe: 0, describeGate: null, releaseDescribe: null,
   }
 
   function snapshot() {
@@ -122,6 +143,8 @@ function createHost({ WebSearchManager, BraveSearchProvider, defaultSettings, zh
       braveRequests: state.braveRequests.map((row) => ({ ...row })),
       keys: Object.fromEntries(state.keys),
       failNextSet: state.failNextSet,
+      statusCalls: state.statusCalls, activeStatus: state.activeStatus, maxStatus: state.maxStatus,
+      describeCalls: state.describeCalls, activeDescribe: state.activeDescribe,
     }
   }
 
@@ -133,22 +156,24 @@ function createHost({ WebSearchManager, BraveSearchProvider, defaultSettings, zh
     state.setLog = []
     state.events = []
     state.braveRequests = []
-    state.wrappers = []
+    state.nativeOff = new Map()
+    state.available = new Map()
+    state.releaseStatus?.()
+    state.releaseDescribe?.()
+    state.statusCalls = 0
+    state.activeStatus = 0
+    state.maxStatus = 0
+    state.statusGate = null
+    state.releaseStatus = null
+    state.failNextStatus = false
+    state.describeCalls = 0
+    state.activeDescribe = 0
+    state.describeGate = null
+    state.releaseDescribe = null
     const initial = { ...defaultSettings(), ...(options.settings ?? {}) }
     if (Array.isArray(options.settings?.searchOrder)) initial.searchOrder = [...options.settings.searchOrder]
-    const wrappers = state.wrappers
-    const registry = {
-      registerSearchProvider(wrapper) {
-        wrappers.push(wrapper)
-        return () => {
-          const index = wrappers.indexOf(wrapper)
-          if (index >= 0) wrappers.splice(index, 1)
-        }
-      },
-      registerFetchProvider() {
-        return () => {}
-      },
-    }
+    state.web = new WebRuntime(new Context())
+    const registry = state.web
     state.manager = new WebSearchManager({
       web: registry,
       initial,
@@ -205,8 +230,95 @@ function createHost({ WebSearchManager, BraveSearchProvider, defaultSettings, zh
         }))
       }
     }
+    if (options.native) {
+      registry.registerFetchProvider({ id: 'http', available: () => true, async fetch(request) {
+        return { url: request.url, statusCode: 200, body: { kind: 'text', content: 'http' } }
+      } })
+      registry.registerFetchProvider({ id: 'custom-fetch', available: () => true, async fetch(request) {
+        return { url: request.url, statusCode: 200, body: { kind: 'text', content: 'custom' } }
+      } })
+      registry.registerSearchProvider({ id: 'native-owned', dshWebManagement: {
+        id: 'native-owned', label: 'Native service', description: 'External settings', billing: 'unknown',
+        configurationOwner: 'Native plugin', credentialRef: 'EXTERNAL_KEY', credentialHint: 'Native plugin',
+      }, available: () => true, async search() { return { sources: [] } } })
+    }
+    if (options.links) {
+      registry.registerSearchProvider({
+        id: 'linked-path', available: () => true, async search() { return { sources: [] } },
+        dshWebManagement: {
+          id: 'linked-path', label: 'Path link', description: 'Host route', billing: 'unknown',
+          configurationUrl: '/plugins/custom',
+        },
+      })
+      registry.registerSearchProvider({
+        id: 'linked-hash', available: () => true, async search() { return { sources: [] } },
+        dshWebManagement: {
+          id: 'linked-hash', label: 'Hash link', description: 'Hash route', billing: 'unknown',
+          configurationUrl: '#/plugin-settings',
+        },
+      })
+      registry.registerSearchProvider({
+        id: 'linked-https', available: () => true, async search() { return { sources: [] } },
+        dshWebManagement: {
+          id: 'linked-https', label: 'HTTPS link', description: 'External settings', billing: 'unknown',
+          configurationUrl: 'https://example.com/settings',
+        },
+      })
+      registry.registerSearchProvider({
+        id: 'linked-https-upper', available: () => true, async search() { return { sources: [] } },
+        dshWebManagement: {
+          id: 'linked-https-upper', label: 'HTTPS upper link', description: 'External settings', billing: 'unknown',
+          configurationUrl: 'HTTPS://example.com/settings',
+        },
+      })
+      registry.registerSearchProvider({
+        id: 'unsafe-link', available: () => true, async search() { return { sources: [] } },
+        dshWebManagement: {
+          id: 'unsafe-link', label: 'Unsafe link', description: 'Rejected', billing: 'unknown',
+          configurationUrl: 'javascript:alert(1)',
+        },
+      })
+      registry.registerSearchProvider({
+        id: 'unknown-owner', available: () => true, async search() { return { sources: [] } },
+        dshWebManagement: { id: 'unknown-owner', label: 'Unknown owner', description: 'No owner', billing: 'unknown' },
+      })
+      registry.registerSearchProvider({
+        id: 'named-owner', available: () => true, async search() { return { sources: [] } },
+        dshWebManagement: {
+          id: 'named-owner', label: 'Named owner', description: 'Owner only', billing: 'unknown',
+          configurationOwner: '@example/plugin', credentialHint: '/plugins/guessed',
+        },
+      })
+      registry.registerSearchProvider({
+        id: 'native-brave', available: () => true, async search() { return { sources: [] } },
+        dshWebManagement: {
+          id: 'native-brave', label: 'Native Brave', description: 'Live native description', billing: 'none',
+        },
+      })
+    }
     await state.manager.refresh()
     return snapshot()
+  }
+
+  function registerLiveSearch(payload = {}) {
+    const id = payload.id
+    state.available.set(id, payload.available !== false)
+    const off = state.web.registerSearchProvider({
+      id,
+      dshWebManagement: {
+        id,
+        label: payload.label ?? id,
+        description: payload.description ?? '',
+        billing: payload.billing ?? 'unknown',
+        ...(payload.configurationUrl ? { configurationUrl: payload.configurationUrl } : {}),
+        ...(payload.configurationOwner ? { configurationOwner: payload.configurationOwner } : {}),
+        ...(payload.credentialHint ? { credentialHint: payload.credentialHint } : {}),
+      },
+      available: () => state.available.get(id) !== false,
+      async search() { return { sources: [] } },
+    })
+    state.nativeOff.set(id, off)
+    return off
   }
 
   async function rpc(request) {
@@ -214,6 +326,27 @@ function createHost({ WebSearchManager, BraveSearchProvider, defaultSettings, zh
       const kind = request?.kind
       if (kind === 'fixture.reset') return await reset(request.payload ?? {})
       if (kind === 'fixture.snapshot') return snapshot()
+      if (kind === 'fixture.holdStatus') {
+        state.statusGate = new Promise(resolve => { state.releaseStatus = resolve })
+        state.maxStatus = 0
+        return snapshot()
+      }
+      if (kind === 'fixture.releaseStatus') {
+        state.releaseStatus?.(); state.statusGate = null; state.releaseStatus = null
+        return snapshot()
+      }
+      if (kind === 'fixture.failNextStatus') {
+        state.failNextStatus = true
+        return snapshot()
+      }
+      if (kind === 'fixture.holdDescribe') {
+        state.describeGate = new Promise(resolve => { state.releaseDescribe = resolve })
+        return snapshot()
+      }
+      if (kind === 'fixture.releaseDescribe') {
+        state.releaseDescribe?.(); state.describeGate = null; state.releaseDescribe = null
+        return snapshot()
+      }
       if (kind === 'fixture.failNextSet') {
         state.failNextSet = true
         return { ok: true, value: true }
@@ -224,13 +357,16 @@ function createHost({ WebSearchManager, BraveSearchProvider, defaultSettings, zh
       }
       if (kind === 'credentials.describe') {
         const refs = request.refs ?? []
-        return {
-          ok: true,
-          value: Object.fromEntries(refs.map((ref) => [ref, {
-            configured: Boolean(state.keys.get(ref)?.trim()),
-            writable: state.writable.get(ref) !== false,
-          }])),
-        }
+        const value = Object.fromEntries(refs.map((ref) => [ref, {
+          configured: Boolean(state.keys.get(ref)?.trim()),
+          writable: state.writable.get(ref) !== false,
+        }]))
+        state.describeCalls += 1
+        state.activeDescribe += 1
+        try {
+          if (state.describeGate) await state.describeGate
+          return { ok: true, value }
+        } finally { state.activeDescribe -= 1 }
       }
       if (kind === 'credentials.set') {
         const { ref, value } = request
@@ -252,16 +388,45 @@ function createHost({ WebSearchManager, BraveSearchProvider, defaultSettings, zh
         state.events.push({ type: 'unset', ref: request.ref })
         return { ok: true, value: null }
       }
+      if (kind === 'fixture.registerSearch') {
+        registerLiveSearch(request.payload ?? request)
+        await state.manager.refresh()
+        return snapshot()
+      }
+      if (kind === 'fixture.unregisterSearch') {
+        const id = request.id ?? request.payload?.id
+        state.nativeOff.get(id)?.()
+        state.nativeOff.delete(id)
+        await state.manager.refresh()
+        return snapshot()
+      }
+      if (kind === 'fixture.setAvailable') {
+        state.available.set(request.id ?? request.payload?.id, Boolean(request.available ?? request.payload?.available))
+        await state.manager.refresh()
+        return snapshot()
+      }
       const endpoint = request.endpoint ?? kind
-      if (endpoint === 'status') return { ok: true, value: await state.manager.refresh() }
+      if (endpoint === 'status') {
+        state.statusCalls += 1
+        state.activeStatus += 1
+        state.maxStatus = Math.max(state.maxStatus, state.activeStatus)
+        try {
+          if (state.failNextStatus) {
+            state.failNextStatus = false
+            if (state.statusGate) await state.statusGate
+            return failResult({ code: 'WEB_REQUEST_FAILED', message: 'status fixture failed' })
+          }
+          const response = { ok: true, value: await state.manager.refresh() }
+          if (state.statusGate) await state.statusGate
+          return response
+        } finally { state.activeStatus -= 1 }
+      }
       if (endpoint === 'update') {
         const next = await state.manager.update(request.payload.settings, request.payload.expectedRevision)
         return { ok: true, value: next }
       }
       if (endpoint === 'test') {
-        const wrapper = state.wrappers.find((item) => item.available())
-        if (!wrapper) return failResult({ code: 'WEB_DISABLED', message: '网络搜索未启用或设置已改变。' })
-        const result = await wrapper.search({ query: 'test' })
+        const result = await state.web.search({ query: 'test' })
         return { ok: true, value: { sources: result.sources.length } }
       }
       return failResult({ code: 'WEB_INVALID_REQUEST', message: '未知操作。' })
@@ -288,6 +453,21 @@ async function waitReady(page) {
 async function remount(page) {
   await page.evaluate(() => window.mountSettings())
   await waitReady(page)
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function waitSnapshot(label, check, timeout = 10_000) {
+  const deadline = Date.now() + timeout
+  let snap = host.snapshot()
+  while (!check(snap) && Date.now() < deadline) {
+    await sleep(50)
+    snap = host.snapshot()
+  }
+  assert.ok(check(snap), label)
+  return snap
 }
 
 async function shot(page, name) {
@@ -374,7 +554,10 @@ try {
     vite.ssrLoadModule('/plugins/dsh-web-search-manager/src/contracts.ts'),
     vite.ssrLoadModule('/plugins/dsh-zhihu/src/web-search-provider.ts'),
   ])
-  host = createHost({ WebSearchManager, BraveSearchProvider, defaultSettings: contracts.defaultSettings,
+  const managerRequire = createRequire(resolve(root, 'plugins/dsh-web-search-manager/package.json'))
+  const { WebRuntime } = await import(pathToFileURL(managerRequire.resolve('@deepseek-ai/dsh-web')).href)
+  const { Context } = await import(pathToFileURL(managerRequire.resolve('@deepseek-ai/cordis')).href)
+  host = createHost({ WebSearchManager, BraveSearchProvider, WebRuntime, Context, defaultSettings: contracts.defaultSettings,
     zhihuDescriptor: ZHIHU_WEB_SEARCH_DESCRIPTOR })
   await host.reset()
 
@@ -764,6 +947,317 @@ try {
     const snap = host.snapshot()
     assert.ok(snap.braveRequests.some((row) => row.token === 'synthetic-key-new'), JSON.stringify(snap.braveRequests))
     await shot(page, '02-brave-enabled.png')
+  })
+  await test('native discovery preserves owner settings and allows fetch selection on desktop and mobile', async () => {
+    await host.reset({ native: true, settings: { searchOrder: ['temporarily-absent', 'ddg'] } })
+    await remount(page)
+    const owned = page.getByTestId('web-search-rank-native-owned')
+    assert.match(await owned.innerText(), /配置入口：Native plugin/)
+    assert.equal(await owned.locator('input[type="password"]').count(), 0)
+    const dormant = page.getByTestId('web-search-rank-temporarily-absent')
+    assert.equal(await dormant.getAttribute('data-availability'), 'dormant')
+    assert.match(await dormant.innerText(), /未加载，保留选择/)
+    assert.equal(await page.getByTestId('web-search-rank-ddg').getAttribute('data-availability'), 'available')
+    assert.equal(await page.getByTestId('web-search-rank-ddg').getAttribute('data-in-use'), 'true')
+    assert.equal(await owned.getAttribute('data-in-use'), null)
+    const searchSwitch = page.getByRole('switch', { name: '联网搜索', exact: true })
+    await searchSwitch.click()
+    await settle(page)
+    assert.equal(host.snapshot().status.settings.fetchEnabled, true)
+    assert.deepEqual(host.snapshot().status.settings.searchOrder, ['temporarily-absent', 'ddg'])
+    await searchSwitch.click()
+    await settle(page)
+    await page.getByRole('combobox', { name: '读取服务' }).selectOption('custom-fetch')
+    await settle(page)
+    assert.equal(host.snapshot().status.settings.fetchProvider, 'custom-fetch')
+    await page.getByRole('button', { name: '保存', exact: true }).click()
+    await settle(page)
+    assert.equal(host.snapshot().status.settings.fetchProvider, 'custom-fetch')
+    await page.getByRole('switch', { name: '网页读取', exact: true }).click()
+    await settle(page)
+    assert.equal(host.snapshot().status.settings.fetchEnabled, false)
+    await searchSwitch.click()
+    await settle(page)
+    await searchSwitch.click()
+    await settle(page)
+    assert.equal(host.snapshot().status.settings.fetchEnabled, false)
+    await shot(page, 'native-desktop.png')
+    await page.setViewportSize({ width: 390, height: 844 })
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+    await page.getByRole('button', { name: '拖动排序 DuckDuckGo' }).focus()
+    await page.keyboard.press('ArrowDown')
+    await settle(page)
+    assert.deepEqual(host.snapshot().status.settings.searchOrder, ['temporarily-absent', 'ddg'])
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '拖动排序 DuckDuckGo')
+    await shot(page, 'native-mobile.png')
+    await page.setViewportSize({ width: 960, height: 1100 })
+  })
+  await test('live registration, dormant restore, explicit remove, and drafts survive status refresh', async () => {
+    await host.reset({ settings: { searchEnabled: true, searchOrder: ['ddg', 'brave'] } })
+    await remount(page)
+    await host.rpc({ kind: 'fixture.registerSearch', payload: { id: 'late-native', label: 'Late native', description: 'Appeared after open' } })
+    await page.waitForFunction(() => Boolean(document.querySelector('[data-testid="web-search-rank-late-native"]')), { timeout: 8_000 })
+    assert.equal(await page.getByTestId('web-search-rank-late-native').getAttribute('data-availability'), 'available')
+    await page.getByTestId('web-search-rank-late-native').getByRole('switch').click()
+    await settle(page)
+    assert.deepEqual(host.snapshot().status.settings.searchOrder, ['ddg', 'brave', 'late-native'])
+    await page.locator('[data-testid="web-search-rank-brave"] input[type="password"]').fill('draft-key-keep')
+    await page.getByRole('tab', { name: '请求限制', exact: true }).click()
+    await page.getByLabel('每条查询结果上限').fill('11')
+    await page.getByRole('tab', { name: '搜索服务', exact: true }).click()
+    await host.rpc({ kind: 'fixture.unregisterSearch', id: 'late-native' })
+    await page.waitForFunction(() => (
+      document.querySelector('[data-testid="web-search-rank-late-native"]')?.getAttribute('data-availability') === 'dormant'
+    ), { timeout: 8_000 })
+    assert.match(await page.getByTestId('web-search-rank-late-native').innerText(), /未加载，保留选择/)
+    assert.deepEqual(host.snapshot().status.settings.searchOrder, ['ddg', 'brave', 'late-native'])
+    assert.equal(await page.locator('[data-testid="web-search-rank-brave"] input[type="password"]').inputValue(), 'draft-key-keep')
+    await page.getByRole('tab', { name: '请求限制', exact: true }).click()
+    assert.equal(await page.getByLabel('每条查询结果上限').inputValue(), '11')
+    await page.getByRole('tab', { name: '搜索服务', exact: true }).click()
+    await host.rpc({ kind: 'fixture.registerSearch', payload: { id: 'late-native', label: 'Late native', description: 'Appeared after open' } })
+    await page.waitForFunction(() => (
+      document.querySelector('[data-testid="web-search-rank-late-native"]')?.getAttribute('data-availability') === 'available'
+    ), { timeout: 8_000 })
+    assert.deepEqual(host.snapshot().status.settings.searchOrder, ['ddg', 'brave', 'late-native'])
+    await page.getByTestId('web-search-rank-late-native').getByRole('switch').click()
+    await settle(page)
+    assert.deepEqual(host.snapshot().status.settings.searchOrder, ['ddg', 'brave'])
+    assert.equal(await page.getByTestId('web-search-rank-late-native').count(), 1)
+    await page.getByTestId('web-search-rank-late-native').getByRole('switch').click()
+    await settle(page)
+    await host.rpc({ kind: 'fixture.unregisterSearch', id: 'late-native' })
+    await page.waitForFunction(() => (
+      document.querySelector('[data-testid="web-search-rank-late-native"]')?.getAttribute('data-availability') === 'dormant'
+    ), { timeout: 8_000 })
+    await page.getByTestId('web-search-rank-late-native').getByRole('switch').click()
+    await settle(page)
+    assert.deepEqual(host.snapshot().status.settings.searchOrder, ['ddg', 'brave'])
+    assert.equal(await page.getByTestId('web-search-rank-late-native').count(), 0)
+    await page.getByRole('tab', { name: '请求限制', exact: true }).click()
+    assert.equal(await page.getByLabel('每条查询结果上限').inputValue(), '11')
+    assert.notEqual(host.snapshot().status.settings.maxResults, 11)
+    await page.setViewportSize({ width: 390, height: 844 })
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+    await page.setViewportSize({ width: 960, height: 1400 })
+  })
+  await test('configuration links stay explicit and English copy names unknown owners', async () => {
+    await host.reset({
+      links: true,
+      native: true,
+      settings: { searchOrder: ['ddg'], fetchProvider: 'missing-fetch', fetchEnabled: true },
+    })
+    await remount(page)
+    const pathRow = page.getByTestId('web-search-rank-linked-path')
+    const pathLink = pathRow.getByRole('link', { name: '打开配置' })
+    assert.equal(await pathLink.getAttribute('href'), '/plugins/custom')
+    assert.equal(await pathLink.getAttribute('target'), null)
+    const hashLink = page.getByTestId('web-search-rank-linked-hash').getByRole('link', { name: '打开配置' })
+    assert.equal(await hashLink.getAttribute('href'), '#/plugin-settings')
+    assert.equal(await hashLink.getAttribute('target'), null)
+    const httpsRow = page.getByTestId('web-search-rank-linked-https')
+    const httpsLink = httpsRow.getByRole('link', { name: '打开配置' })
+    assert.equal(await httpsLink.getAttribute('href'), 'https://example.com/settings')
+    await page.evaluate(() => {
+      window.openedConfigUrls = []
+      window.dshWindow = { openExternal(url) { window.openedConfigUrls.push(url) } }
+    })
+    await httpsLink.click()
+    await httpsLink.focus()
+    await page.keyboard.press('Enter')
+    assert.deepEqual(await page.evaluate(() => window.openedConfigUrls), [
+      'https://example.com/settings', 'https://example.com/settings',
+    ])
+    await page.evaluate(() => { delete window.dshWindow })
+    const unsafe = page.getByTestId('web-search-rank-unsafe-link')
+    assert.equal(await unsafe.getByRole('link', { name: '打开配置' }).count(), 0)
+    assert.match(await unsafe.innerText(), /请在服务所属插件中配置/)
+    assert.doesNotMatch(await unsafe.innerText(), /javascript:/)
+    assert.match(await page.getByTestId('web-search-rank-unknown-owner').innerText(), /请在服务所属插件中配置/)
+    assert.match(await page.getByTestId('web-search-rank-named-owner').innerText(), /配置入口：@example\/plugin/)
+    assert.doesNotMatch(await page.getByTestId('web-search-rank-named-owner').innerText(), /\/plugins\/guessed/)
+    const nativeBrave = page.getByTestId('web-search-rank-native-brave')
+    assert.match(await nativeBrave.innerText(), /Live native description/)
+    assert.match(await nativeBrave.innerText(), /未提供费用信息/)
+    assert.doesNotMatch(await nativeBrave.innerText(), /每月赠/)
+    const fetch = page.getByTestId('web-search-fetch')
+    assert.equal(await fetch.getAttribute('data-availability'), 'dormant')
+    assert.match(await fetch.innerText(), /未加载，保留选择/)
+    assert.equal(await page.getByRole('combobox', { name: '读取服务' }).inputValue(), 'missing-fetch')
+    await page.getByRole('switch', { name: '联网搜索', exact: true }).click()
+    await settle(page)
+    assert.equal(host.snapshot().status.settings.fetchProvider, 'missing-fetch')
+    await page.evaluate(() => { window.settingsLocale = 'en' })
+    await remount(page)
+    assert.match(await page.getByTestId('web-search-rank-unknown-owner').innerText(), /Configure this service in its plugin/)
+    assert.match(await page.getByTestId('web-search-rank-linked-path').innerText(), /Open configuration/)
+    assert.match(await page.getByTestId('web-search-fetch').innerText(), /Not loaded; selection kept/)
+    assert.match(await page.getByTestId('web-search-rank-native-brave').innerText(), /No pricing information provided/)
+    await page.setViewportSize({ width: 390, height: 844 })
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+    await page.evaluate(() => { window.settingsLocale = 'zh' })
+    await page.setViewportSize({ width: 960, height: 1400 })
+  })
+  await test('unmounting the settings page stops status refresh', async () => {
+    await host.reset()
+    await remount(page)
+    await settle(page)
+    await new Promise(resolve => setTimeout(resolve, 200))
+    await page.evaluate(() => window.unmountSettings())
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    const frozen = host.snapshot().statusCalls
+    await new Promise(resolve => setTimeout(resolve, 4000))
+    assert.equal(host.snapshot().statusCalls, frozen)
+    await remount(page)
+  })
+  await test('delayed background status does not overlap a user save or roll back drafts', async () => {
+    await host.reset()
+    await remount(page)
+    const searchSwitch = page.getByRole('switch', { name: '联网搜索', exact: true })
+    try {
+      await host.rpc({ kind: 'fixture.holdStatus' })
+      await page.getByRole('tab', { name: '请求限制', exact: true }).click()
+      await page.getByLabel('每条查询结果上限').fill('12')
+      await page.getByRole('tab', { name: '搜索服务', exact: true }).click()
+      await waitSnapshot('background status started', snap => snap.activeStatus === 1)
+      const heldRevision = host.snapshot().status.settings.revision
+      await searchSwitch.click()
+      const saved = await waitSnapshot('user save written', snap => snap.status.settings.searchEnabled === false)
+      assert.equal(saved.maxStatus, 1)
+      assert.equal(saved.activeStatus, 1)
+      assert.ok(saved.status.settings.revision > heldRevision)
+      assert.equal(await page.getByLabel('每条查询结果上限').inputValue(), '12')
+      await host.rpc({ kind: 'fixture.releaseStatus' })
+      await settle(page)
+      const after = host.snapshot()
+      assert.equal(after.maxStatus, 1)
+      assert.equal(after.status.settings.searchEnabled, false)
+      assert.ok(after.status.settings.revision > heldRevision)
+      assert.equal(await page.getByTestId('web-search-tool').getAttribute('data-on'), 'false')
+      await page.getByRole('tab', { name: '请求限制', exact: true }).click()
+      const limit = page.getByLabel('每条查询结果上限')
+      await limit.focus()
+      assert.equal(await limit.inputValue(), '12')
+      assert.equal(await limit.evaluate(el => document.activeElement === el), true)
+    } finally {
+      await host.rpc({ kind: 'fixture.releaseStatus' })
+    }
+  })
+  await test('hidden pause skips polls and resume starts one coordinated status read', async () => {
+    await host.reset()
+    await remount(page)
+    try {
+      await page.evaluate(() => window.setSettingsHidden(true))
+      await sleep(200)
+      const paused = host.snapshot().statusCalls
+      await sleep(4000)
+      assert.equal(host.snapshot().statusCalls, paused)
+      await host.rpc({ kind: 'fixture.holdStatus' })
+      await page.evaluate(() => window.setSettingsHidden(false))
+      await waitSnapshot('resume status started', snap => snap.activeStatus === 1)
+      assert.equal(host.snapshot().maxStatus, 1)
+      await host.rpc({ kind: 'fixture.releaseStatus' })
+      await settle(page)
+    } finally {
+      await host.rpc({ kind: 'fixture.releaseStatus' })
+      await page.evaluate(() => window.setSettingsHidden(false))
+    }
+  })
+  await test('a failed background status keeps drafts and the next poll recovers', async () => {
+    await host.reset()
+    await remount(page)
+    try {
+      await host.rpc({ kind: 'fixture.failNextStatus' })
+      await host.rpc({ kind: 'fixture.holdStatus' })
+      await page.getByRole('tab', { name: '请求限制', exact: true }).click()
+      const limit = page.getByLabel('每条查询结果上限')
+      await limit.fill('12')
+      await limit.focus()
+      await waitSnapshot('failing status started', snap => snap.activeStatus === 1)
+      const failedCalls = host.snapshot().statusCalls
+      await host.rpc({ kind: 'fixture.releaseStatus' })
+      await waitSnapshot('failing status finished', snap => snap.activeStatus === 0)
+      assert.equal(await limit.inputValue(), '12')
+      assert.equal(await limit.evaluate(el => document.activeElement === el), true)
+      // A failed poll keeps the draft and focus, while exposing the current
+      // transport failure and its manual recovery action.
+      assert.equal(await page.getByRole('alert').count(), 1)
+      assert.equal(await page.getByRole('button', { name: /重新连接|Reconnect/ }).count(), 1)
+      await waitSnapshot('background status recovered', snap => snap.statusCalls > failedCalls)
+      await settle(page)
+      assert.equal(await limit.inputValue(), '12')
+      assert.equal(await page.getByRole('alert').count(), 0)
+    } finally {
+      await host.rpc({ kind: 'fixture.releaseStatus' })
+    }
+  })
+  await test('unmount drops pending status and permission facts for the replacement page', async () => {
+    await host.reset({
+      keys: { [BRAVE_REF]: 'synthetic-key-1' },
+      settings: { searchEnabled: true, searchOrder: ['brave', 'ddg'], searchProvider: 'brave' },
+    })
+    await remount(page)
+    try {
+      await host.rpc({ kind: 'fixture.holdStatus' })
+      await waitSnapshot('pending status before unmount', snap => snap.activeStatus === 1)
+      const { revision, ...settings } = host.snapshot().status.settings
+      await page.evaluate(() => window.unmountSettings())
+      await host.rpc({
+        kind: 'manager', endpoint: 'update',
+        payload: { settings: { ...settings, searchEnabled: false }, expectedRevision: revision },
+      })
+      await page.evaluate(() => window.mountSettings())
+      await waitSnapshot('replacement status started', snap => snap.activeStatus === 2)
+      await host.rpc({ kind: 'fixture.releaseStatus' })
+      await waitReady(page)
+      assert.equal(host.snapshot().status.settings.searchEnabled, false)
+      assert.equal(await page.getByTestId('web-search-tool').getAttribute('data-on'), 'false')
+
+      await host.rpc({ kind: 'fixture.holdDescribe' })
+      await page.evaluate(() => window.setSettingsHidden(true))
+      await page.evaluate(() => window.setSettingsHidden(false))
+      await waitSnapshot('pending describe before unmount', snap => snap.activeDescribe === 1)
+      await host.rpc({ kind: 'fixture.setWritable', ref: BRAVE_REF, writable: false })
+      await page.evaluate(() => window.unmountSettings())
+      await page.evaluate(() => window.mountSettings())
+      await waitSnapshot('replacement describe started', snap => snap.activeDescribe === 2)
+      await host.rpc({ kind: 'fixture.releaseDescribe' })
+      await waitSnapshot('describe drained', snap => snap.activeDescribe === 0)
+      await waitReady(page)
+      await page.waitForFunction(() => {
+        const input = document.querySelector('[data-testid="web-search-rank-brave"] input[type="password"]')
+        return Boolean(input) && input.disabled
+      })
+    } finally {
+      await host.rpc({ kind: 'fixture.releaseStatus' })
+      await host.rpc({ kind: 'fixture.releaseDescribe' })
+      await page.evaluate(() => window.setSettingsHidden(false)).catch(() => {})
+    }
+  })
+  await test('uppercase HTTPS configuration links use the desktop bridge', async () => {
+    await host.reset({ links: true })
+    await remount(page)
+    const row = page.getByTestId('web-search-rank-linked-https-upper')
+    const link = row.getByRole('link', { name: '打开配置' })
+    assert.equal(await link.getAttribute('href'), 'HTTPS://example.com/settings')
+    assert.equal(await link.getAttribute('target'), '_blank')
+    await page.evaluate(() => {
+      window.openedConfigUrls = []
+      window.dshWindow = { openExternal(url) { window.openedConfigUrls.push(url) } }
+    })
+    try {
+      const beforePages = page.context().pages().length
+      await link.click()
+      await link.focus()
+      await page.keyboard.press('Enter')
+      assert.deepEqual(await page.evaluate(() => window.openedConfigUrls), [
+        'HTTPS://example.com/settings', 'HTTPS://example.com/settings',
+      ])
+      assert.equal(page.context().pages().length, beforePages)
+      assert.equal(page.url(), origin + '/')
+    } finally {
+      await page.evaluate(() => { delete window.dshWindow })
+    }
   })
   await test('all provider introductions and prices remain readable when disabled', async () => {
     await host.reset({ catalog: true })

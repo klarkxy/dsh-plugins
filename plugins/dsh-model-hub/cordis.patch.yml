@@ -1,0 +1,5 @@
+# Verification probe stage: detection + projection questions first, UI later.
+- insert:
+    - id: model-hub
+      name: '@klarkxy/dsh-model-hub'
+      disabled: false

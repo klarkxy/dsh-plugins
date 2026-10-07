@@ -89,14 +89,14 @@ describe('zhihu-global web search adapter', () => {
 })
 
 describe('bindZhihuWebSearch', () => {
-  it('waits for webSearchManager and registers the shared-credential backend', () => {
+  it('waits for web and registers the shared-credential backend', () => {
     const registerSearchProvider = vi.fn(() => () => {})
     const inject = vi.fn((deps: readonly string[], apply: (inner: { get(name: string): unknown }) => unknown) => {
-      expect(deps).toEqual(['webSearchManager'])
-      apply({ get: (name: string) => name === 'webSearchManager' ? { registerSearchProvider } : undefined })
+      expect(deps).toEqual(['web'])
+      apply({ get: (name: string) => name === 'web' ? { registerSearchProvider } : undefined })
     })
     bindZhihuWebSearch({ inject }, host(makeFetcher(() => jsonResponse(ENVELOPE([])))))
-    expect(registerSearchProvider).toHaveBeenCalledWith(ZHIHU_WEB_SEARCH_DESCRIPTOR, expect.any(Function))
+    expect(registerSearchProvider).toHaveBeenCalledWith(expect.objectContaining({ id: ZHIHU_WEB_SEARCH_ID, dshWebManagement: ZHIHU_WEB_SEARCH_DESCRIPTOR }))
     expect(ZHIHU_WEB_SEARCH_DESCRIPTOR).toMatchObject({
       id: 'zhihu-global',
       credentialRef: 'ZHIHU_ACCESS_TOKEN',
@@ -109,10 +109,10 @@ describe('bindZhihuWebSearch', () => {
     expect(ZHIHU_WEB_SEARCH_DESCRIPTOR.credentialRef).toMatch(/^[A-Z][A-Z0-9_]{1,127}$/)
   })
 
-  it('does not register when the profile has no webSearchManager', () => {
+  it('does not register when the profile has no web', () => {
     const inject = vi.fn()
     bindZhihuWebSearch({ inject }, host(makeFetcher(() => jsonResponse(ENVELOPE([])))))
-    expect(inject).toHaveBeenCalledWith(['webSearchManager'], expect.any(Function))
+    expect(inject).toHaveBeenCalledWith(['web'], expect.any(Function))
     const apply = inject.mock.calls[0]?.[1] as (inner: { get(name: string): unknown }) => unknown
     expect(apply({ get: () => undefined })).toBeUndefined()
   })
@@ -123,19 +123,18 @@ describe('bindZhihuWebSearch', () => {
     expect(inject).toHaveBeenCalled()
   })
 
-  it('routes manager searches through the Zhihu service lifetime', async () => {
+  it('routes native searches through the Zhihu service lifetime and resolves its own key per call', async () => {
     const events: Array<{ ok: boolean; results: number }> = []
     const fetcher = makeFetcher(() => jsonResponse(ENVELOPE([ITEM])))
-    let factory: ((options: { apiKey?: string; timeoutMs: number }) => { search: Function }) | undefined
-    registerZhihuGlobalSearchProvider({
-      registerSearchProvider(_descriptor, next) {
-        factory = next
-        return () => {}
-      },
-    }, host(fetcher, events))
-    const provider = factory!({ apiKey: 'fixture-secret', timeoutMs: 15_000 })
-    const result = await provider.search({ query: 'q', maxResults: 1 })
+    const service = host(fetcher, events)
+    let key = 'fixture-secret'
+    service.toolOptions = { ...service.toolOptions, resolveCredential: async () => key } as typeof service.toolOptions
+    let provider: ReturnType<typeof createZhihuWebSearchProvider> | undefined
+    registerZhihuGlobalSearchProvider({ registerSearchProvider(next) { provider = next; return () => {} } }, service, () => true)
+    const result = await provider!.search({ query: 'q', maxResults: 1 })
     expect(result.sources).toEqual([{ url: 'https://example.com/a', title: 'A', snippet: '摘要' }])
     expect(events).toEqual([{ ok: true, results: 1 }])
+    key = ''
+    await expect(provider!.search({ query: 'q' })).rejects.toThrow(/Access Secret/)
   })
 })

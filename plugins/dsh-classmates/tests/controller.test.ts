@@ -31,7 +31,7 @@ it('dispatches the packaged JSON contract through the official gateway and rejec
     } as unknown as RoleConfig);
     const load = classmatesRemote.descriptors.find(item => item.method === 'load')!;
     expect(classmatesRemote.descriptors.map(item => item.method)).toEqual([
-      'load', 'save', 'deleteRole', 'batch', 'saveModelProfile', 'deleteModelProfile', 'batchModelProfiles', 'setModelProtection', 'team',
+      'load', 'save', 'deleteRole', 'batch', 'saveModelProfile', 'deleteModelProfile', 'batchModelProfiles', 'setModelProtection', 'team', 'subagents',
     ]);
     await expect(ctx.typertGateway.invoke({ namespace: load.namespace, method: load.method, args: {} })).resolves.toMatchObject({ writable: true });
     await expect(ctx.typertGateway.invoke({ namespace: 'classmates', method: 'save', args: { role: {}, expected: 0 } })).resolves.toEqual({ saved: true });

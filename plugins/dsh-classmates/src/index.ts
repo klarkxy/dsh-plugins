@@ -22,7 +22,17 @@ const roleSchema = z.object({
   name: z.string().required(), description: z.string().required(), instructions: z.string().required(),
   enabled: z.boolean().required(),
   reasoningEffort: z.string(),
-  model: z.union([z.const(null), z.object({ provider: z.string().required(), id: z.string().required(), reasoningEffort: z.string() })]),
+  // Legacy input field: validateRole migrates it into a strong profile reference.
+  recommendedModelProfileId: z.string(),
+  // Discriminated members must come first: strict union resolution strips
+  // undeclared keys, so a legacy-first match would drop kind/effort.
+  model: z.union([
+    z.const(null),
+    z.object({ kind: z.const('inherit') }),
+    z.object({ kind: z.const('profile'), profileId: z.string().required() }),
+    z.object({ kind: z.const('fixed'), provider: z.string().required(), id: z.string().required(), effort: z.string() }),
+    z.object({ provider: z.string().required(), id: z.string().required(), reasoningEffort: z.string() }),
+  ]),
 });
 const modelProfileSchema = z.object({
   id: z.string().required(), revision: z.number().min(0).step(1).required(),
@@ -45,7 +55,7 @@ export async function apply(ctx: Context): Promise<void> {
   ctx.effect(() => ctx.settings.configure({ auto: false }));
   new ClassmatesController(ctx, roles, store);
   let tools: ClassmateTools | undefined;
-  const subagentRoles = new SubagentRoles(ctx, roles);
+  const subagentRoles = new SubagentRoles(ctx, roles, store);
   ctx.effect(() => installLiteralRolePersonas(ctx));
   let teamScope: Context | undefined;
   type Agent = Parameters<ClassmateTools['install']>[0];

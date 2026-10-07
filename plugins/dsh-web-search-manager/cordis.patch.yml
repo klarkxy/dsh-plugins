@@ -1,11 +1,4 @@
-# Explicit provider authorization replaces the base bundle's automatic DeepSeek path.
-# Keep DSH's registry; availability of each managed provider determines selection.
-- id: web
-  config: {}
-- id: web-search-deepseek
-  disabled: true
-- id: web-fetch-http
-  disabled: true
+# Keep native provider rows and their own configuration. The manager observes ctx.web.
 - id: tool-web
   disabled: true
 - insert:

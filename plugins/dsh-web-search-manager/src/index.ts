@@ -18,15 +18,22 @@ type Host = Context & HostRpcContext & {
 export async function apply(ctx: Context): Promise<void> {
   const host = ctx as Host
   const domain = await ctx.storageDomain.open(webSettingsDomain)
+  // Own storage before a compatibility check can throw during startup.
+  let managed: WebSearchManager | undefined
+  ctx.effect(() => async () => { await managed?.dispose(); await domain.close() }, 'web-search-manager.dispose')
   const table = domain.table('settings')
-  const manager = new WebSearchManager({
+  const manager = managed = new WebSearchManager({
     web: ctx.web, initial: table.get('global'),
     resolveCredential: async ref => (await host.credentials.resolve(credentialRef(ref)))?.value,
     save: settings => table.put('global', settings),
   })
-  ctx.effect(() => async () => { await manager.dispose(); await domain.close() }, 'web-search-manager.dispose')
   ctx.provide('webSearchManager', manager)
-  ctx.effect(() => registerBuiltins(manager), 'web-search-manager.providers')
+  ctx.on('credentials/reference-updated', () => { void manager.refresh() })
+  ctx.on('web/provider-availability-updated', () => { void manager.refresh() })
+  ctx.effect(() => registerBuiltins(ctx.web, {
+    settings: () => manager.status().settings,
+    resolveCredential: async ref => (await host.credentials.resolve(credentialRef(ref)))?.value,
+  }), 'web-search-manager.providers')
   ctx.effect(() => registerHostRpc(host, WEB_SEARCH_RPC_CHANNEL, async (endpoint, payload, signal): Promise<RpcResult> => {
     try {
       signal.throwIfAborted()
@@ -49,4 +56,10 @@ export async function apply(ctx: Context): Promise<void> {
       } }
     }
   }), 'web-search-manager.rpc')
+}
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /** Repository extension: native providers announce a local availability change. */
+    'web/provider-availability-updated'(kind: 'search' | 'fetch', id: string): void
+  }
 }

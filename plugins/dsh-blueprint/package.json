@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-blueprint",
-  "version": "0.2.0-alpha.0",
+  "version": "0.2.0-alpha.1",
   "description": "Blueprint: share plugin sets, exact versions, and install order as blueprint codes.",
   "icon": "./icon.svg",
   "type": "module",
@@ -34,13 +34,13 @@
   },
   "engines": {
     "node": ">=22",
-    "dsh": ">=0.1.7-0"
+    "dsh": ">=0.2.0-rc.2"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-app-boot": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-atomic-write": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-plugin-manager": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-sandbox": ">=0.1.7-rc.2"
+    "@deepseek-ai/dsh-app-boot": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-atomic-write": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-plugin-manager": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-sandbox": ">=0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-app-boot": {
@@ -82,9 +82,9 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.2"
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2"
   },
   "dshRelease": {
-    "contentHash": "4e6805288a2c3a317d838d2e1d5247219fd3395990c24adc03be7748d0c87b56"
+    "contentHash": "9f9bd274a1431f0f56a009ad0d7d3038ba574c034a4decd2b5d7a84da1418140"
   }
 }

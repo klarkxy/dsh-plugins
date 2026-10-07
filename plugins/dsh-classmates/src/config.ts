@@ -1,8 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type {} from '@deepseek-ai/dsh-llm';
 import type {} from '@deepseek-ai/dsh-settings';
-import type { ClassmateDefinition, ClassmatesState, ModelBinding, ModelChoice, ModelProfile, RoleChange } from './contracts.js';
-import { MEMBER_NAME, SETTINGS_NS } from './contracts.js';
+import type { ClassmateDefinition, ClassmatesState, ModelBinding, ModelChoice, ModelProfile, NormalizedRole, RoleChange, RoleModelSelection } from './contracts.js';
+import { fixedModelBinding, MEMBER_NAME, normalizeRole, SETTINGS_NS } from './contracts.js';
 import { isModelProtected, validateModelRoute, validateProtectedModels } from './model-protection.js';
 import {
   applyModelProfileChanges,
@@ -16,7 +16,50 @@ export class ClassmatesError extends Error {
   constructor(readonly code: string, message: string) { super(message); this.name = 'ClassmatesError'; }
 }
 
-export function validateRole(value: unknown): ClassmateDefinition {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function routeField(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() && value.length <= 250 ? value : undefined;
+}
+
+/** Validate any accepted model shape and return the legacy-tolerant representation. */
+function validateRoleModel(role: Record<string, unknown>): ClassmateDefinition['model'] | RoleModelSelection {
+  const model = role.model;
+  if (model === null || model === undefined) return null;
+  if (!isRecord(model)) throw new ClassmatesError('INVALID_MODEL', '模型绑定无效');
+  if (model.kind !== undefined) {
+    if (model.kind === 'inherit') return { kind: 'inherit' };
+    if (model.kind === 'profile') {
+      if (typeof model.profileId !== 'string' || !MEMBER_NAME.test(model.profileId) || model.profileId.length > 80) {
+        throw new ClassmatesError('INVALID_PROFILE', '模型预设标识须为小写英文、数字和连字符');
+      }
+      return { kind: 'profile', profileId: model.profileId };
+    }
+    if (model.kind === 'fixed') {
+      const provider = routeField(model.provider);
+      const id = routeField(model.id);
+      if (!provider || !id) throw new ClassmatesError('INVALID_MODEL', '模型路由无效');
+      if (model.effort !== undefined && !routeField(model.effort)) throw new ClassmatesError('INVALID_EFFORT', '思考强度无效');
+      return {
+        kind: 'fixed', provider, id,
+        ...model.effort === undefined ? {} : { effort: model.effort as string },
+      };
+    }
+    throw new ClassmatesError('INVALID_MODEL', '模型绑定无效');
+  }
+  for (const key of ['provider', 'id'] as const) {
+    if (!routeField(model[key])) throw new ClassmatesError('INVALID_MODEL', '模型路由无效');
+  }
+  if (model.reasoningEffort !== undefined && (typeof model.reasoningEffort !== 'string' || !model.reasoningEffort.trim())) throw new ClassmatesError('INVALID_EFFORT', '思考强度无效');
+  return {
+    provider: model.provider as string, id: model.id as string,
+    ...model.reasoningEffort === undefined ? {} : { reasoningEffort: model.reasoningEffort as string },
+  };
+}
+
+export function validateRole(value: unknown): NormalizedRole {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ClassmatesError('INVALID_ROLE', '角色格式无效');
   const role = value as ClassmateDefinition;
   if (role.schemaVersion !== 1) throw new ClassmatesError('SCHEMA_VERSION', '不支持此角色格式版本');
@@ -27,34 +70,31 @@ export function validateRole(value: unknown): ClassmateDefinition {
   }
   if (typeof role.enabled !== 'boolean') throw new ClassmatesError('INVALID_ROLE', '启用状态无效');
   if (role.reasoningEffort !== undefined && (typeof role.reasoningEffort !== 'string' || !role.reasoningEffort.trim() || role.reasoningEffort.length > 250)) throw new ClassmatesError('INVALID_EFFORT', '思考强度无效');
-  if (role.model !== null) {
-    if (!role.model || typeof role.model !== 'object' || Array.isArray(role.model)) throw new ClassmatesError('INVALID_MODEL', '模型绑定无效');
-    for (const key of ['provider', 'id'] as const) {
-      if (typeof role.model[key] !== 'string' || !role.model[key].trim() || role.model[key].length > 250) throw new ClassmatesError('INVALID_MODEL', '模型路由无效');
+  const model = validateRoleModel(role as unknown as Record<string, unknown>);
+  const modelEffort = fixedModelBinding({ ...role, model: model as ClassmateDefinition['model'] } as ClassmateDefinition)?.reasoningEffort;
+  if (role.reasoningEffort !== undefined && modelEffort !== undefined && role.reasoningEffort !== modelEffort) throw new ClassmatesError('INVALID_EFFORT', '新旧思考强度配置冲突');
+  const recommendedRaw = (role as { recommendedModelProfileId?: unknown }).recommendedModelProfileId;
+  let recommendedModelProfileId: string | undefined;
+  if (recommendedRaw !== undefined && recommendedRaw !== null && recommendedRaw !== '') {
+    if (typeof recommendedRaw !== 'string' || !MEMBER_NAME.test(recommendedRaw) || recommendedRaw.length > 80) {
+      throw new ClassmatesError('INVALID_PROFILE', '建议的模型预设标识须为小写英文、数字和连字符');
     }
-    if (role.model.reasoningEffort !== undefined && (typeof role.model.reasoningEffort !== 'string' || !role.model.reasoningEffort.trim())) throw new ClassmatesError('INVALID_EFFORT', '思考强度无效');
-    if (role.reasoningEffort !== undefined && role.model.reasoningEffort !== undefined && role.reasoningEffort !== role.model.reasoningEffort) throw new ClassmatesError('INVALID_EFFORT', '新旧思考强度配置冲突');
+    recommendedModelProfileId = recommendedRaw;
   }
-  return {
+  return normalizeRole({
     schemaVersion: 1, id: role.id, revision: role.revision, name: role.name,
     description: role.description, instructions: role.instructions, enabled: role.enabled,
     ...(role.reasoningEffort === undefined ? {} : { reasoningEffort: role.reasoningEffort }),
-    model: role.model === null ? null : {
-      provider: role.model.provider, id: role.model.id,
-      ...(role.model.reasoningEffort === undefined ? {} : { reasoningEffort: role.model.reasoningEffort }),
-    },
-  };
+    ...(recommendedModelProfileId === undefined ? {} : { recommendedModelProfileId }),
+    model: model as ClassmateDefinition['model'],
+  });
 }
 
-export function validateRoles(value: unknown): ClassmateDefinition[] {
+export function validateRoles(value: unknown): NormalizedRole[] {
   if (!Array.isArray(value) || value.length > 100) throw new ClassmatesError('INVALID_ROLES', '角色列表无效或超过 100 项');
   const roles = value.map(validateRole);
   if (new Set(roles.map(role => role.id)).size !== roles.length) throw new ClassmatesError('DUPLICATE_ID', '角色标识重复');
   return roles;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 const MODEL_ROUTE_MAX = 250;
@@ -115,12 +155,22 @@ export function validateRoleChanges(value: unknown): RoleChange[] {
   return changes;
 }
 
-export async function validateModel(ctx: Context, role: ClassmateDefinition): Promise<void> {
-  if (role.model === null || !role.enabled) return;
-  if (!ctx.llm.listProviders().some(provider => provider.id === role.model!.provider)) throw new ClassmatesError('MODEL_UNAVAILABLE', '模型供应商未配置');
-  const model = await ctx.llm.resolveModelInfo(role.model.provider, role.model.id);
-  const selectedEffort = role.reasoningEffort ?? role.model.reasoningEffort;
+export async function validateModel(ctx: Context, role: ClassmateDefinition | NormalizedRole): Promise<void> {
+  if (!role.enabled) return;
+  // Only a fixed route resolves against the catalog here. A profile reference
+  // is validated at dispatch (missing/disabled is a hard error with guidance).
+  const binding = fixedModelBinding(role);
+  if (binding === null) return;
+  if (!ctx.llm.listProviders().some(provider => provider.id === binding.provider)) throw new ClassmatesError('MODEL_UNAVAILABLE', '模型供应商未配置');
+  const model = await ctx.llm.resolveModelInfo(binding.provider, binding.id);
+  const selectedEffort = role.reasoningEffort ?? binding.reasoningEffort;
   if (selectedEffort !== undefined && !model.reasoning?.efforts.some(effort => effort.id === selectedEffort)) throw new ClassmatesError('INVALID_EFFORT', '所选模型不支持该思考强度');
+}
+
+/** Persisted form: normalized role without the read-time migration notice. */
+function toStoredRole(role: NormalizedRole): Omit<NormalizedRole, 'migratedRecommendation'> {
+  const { migratedRecommendation: _notice, ...stored } = role;
+  return stored;
 }
 
 export class RoleConfig {
@@ -178,6 +228,7 @@ export class RoleConfig {
               id: modelId,
               name: modelName,
               ...typeof info.description === 'string' && info.description ? { description: info.description } : {},
+              ...typeof info.context?.contextWindow === 'number' ? { contextWindow: info.context.contextWindow } : {},
               efforts: info.reasoning?.efforts.map(effort => ({
                 id: effort.id,
                 name: effort.name,
@@ -209,7 +260,7 @@ export class RoleConfig {
     const next = { ...role, revision: (existing?.revision ?? 0) + 1 };
     const roles = existing ? state.roles.map(item => item.id === role.id ? next : item) : [...state.roles, next];
     validateRoles(roles);
-    await this.ctx.settings.mutate(this.namespace, [{ op: 'set', path: ['roles'], value: roles }], expected);
+    await this.ctx.settings.mutate(this.namespace, [{ op: 'set', path: ['roles'], value: roles.map(toStoredRole) }], expected);
     return this.load();
   }
 
@@ -231,7 +282,7 @@ export class RoleConfig {
     if (state.settingsRevision !== expected) throw new ClassmatesError('SETTINGS_CONFLICT', '配置已被其他页面修改，请刷新后重试；当前输入仍保留');
     if (changes.length === 0) return this.load();
     let roles = state.roles;
-    const upserts: ClassmateDefinition[] = [];
+    const upserts: NormalizedRole[] = [];
     for (const change of changes) {
       if (change.op === 'upsert') {
         const existing = roles.find(item => item.id === change.role.id);
@@ -247,7 +298,7 @@ export class RoleConfig {
     }
     validateRoles(roles);
     await Promise.all(upserts.map(role => validateModel(this.ctx, role)));
-    await this.ctx.settings.mutate(this.namespace, [{ op: 'set', path: ['roles'], value: roles }], expected);
+    await this.ctx.settings.mutate(this.namespace, [{ op: 'set', path: ['roles'], value: roles.map(toStoredRole) }], expected);
     return this.load();
   }
 

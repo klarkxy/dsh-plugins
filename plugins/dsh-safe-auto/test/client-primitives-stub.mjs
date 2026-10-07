@@ -22,19 +22,55 @@ export function Tag({ tone, className, children }) {
   return h('span', { className }, children);
 }
 
-/** The header row always renders; its content follows the controlled `open`. */
-export function DisclosureRow({ icon, title, open, expandable, expandOnRowClick, onToggle, children, className }) {
-  return h('div', { className, role: expandOnRowClick ? 'button' : undefined, tabIndex: expandOnRowClick ? 0 : undefined, 'aria-expanded': expandOnRowClick ? open : undefined },
-    h('span', null, icon),
-    h('span', null, title),
-    expandable && !expandOnRowClick ? h('button', { type: 'button', 'aria-expanded': open, onClick: onToggle }, icon) : null,
-    open ? children : null);
+/** Controlled tablist: one button per tab with roving selection; panels are
+ * the plugin's own markup, linked by id/aria-controls. */
+export function SegmentedTabs({ items, value, onChange, label, className }) {
+  return h('div', { role: 'tablist', 'aria-label': label, className },
+    items.map(item => h('button', { key: item.value, type: 'button', role: 'tab', id: item.id,
+      'aria-controls': item.panelId, 'aria-selected': item.value === value,
+      tabIndex: item.value === value ? 0 : -1, onClick: () => onChange(item.value) }, item.label)));
 }
 
 export function Switch({ checked, onChange, label, disabled, className }) {
   return h('button', { type: 'button', role: 'switch', 'aria-checked': checked, 'aria-label': label, disabled, className, onClick: () => onChange(!checked) });
 }
 
+/** Anchored dropdown: the anchor always renders; rows render only while open. */
+export function Menu({ open, anchor, items = [], selectedId, onSelect, children, listClassName }) {
+  return h('span', { className: listClassName }, anchor,
+    open ? h('div', { role: 'menu' }, items.map(item => item.type ? null :
+      h('button', { key: item.id, type: 'button', role: 'menuitem', disabled: item.disabled,
+        'aria-checked': selectedId === item.id, onClick: () => onSelect?.(item.id) }, item.icon, item.label))) : null,
+    children);
+}
+
+export function MenuItemButton({ children, disabled, onSelect }) {
+  return h('button', { type: 'button', role: 'menuitem', disabled, onClick: onSelect }, children);
+}
+
+/** SSR records modal content and control state; real portals, focus trapping,
+ * Escape and backdrop dismissal are exercised by the host browser tests. */
+export function Modal({ open, title, closeLabel, onClose, footer, className, contentClassName, children }) {
+  return open ? h('section', { role: 'dialog', 'aria-modal': 'true', 'aria-label': title, className },
+    h('button', { type: 'button', 'aria-label': closeLabel, onClick: onClose }, closeLabel),
+    h('div', { className: contentClassName }, children), footer) : null;
+}
+
 export function IconShieldOutlineRegular(props) {
+  return h('svg', { ...props, 'aria-hidden': 'true' });
+}
+export function IconChevronUpOutlineRegular(props) {
+  return h('svg', { ...props, 'aria-hidden': 'true' });
+}
+export function IconChevronDownOutlineRegular(props) {
+  return h('svg', { ...props, 'aria-hidden': 'true' });
+}
+export function PermissionIconReadOnlyRegular(props) {
+  return h('svg', { ...props, 'aria-hidden': 'true' });
+}
+export function PermissionIconWorkspaceWriteRegular(props) {
+  return h('svg', { ...props, 'aria-hidden': 'true' });
+}
+export function PermissionIconFullAccessRegular(props) {
   return h('svg', { ...props, 'aria-hidden': 'true' });
 }

@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-dev-index",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "description": "DSH Docs: read the official DSH documentation in the Plugins page; Creator mode searches docs and checks plugin npm metadata with native tools.",
   "icon": "./icon.svg",
   "keywords": [
@@ -56,7 +56,7 @@
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
-    "dsh": ">=0.1.7-rc.2"
+    "dsh": ">=0.2.0-rc.2"
   },
   "license": "SEE LICENSE IN LICENSE",
   "dsh": {
@@ -73,10 +73,10 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-agent-preset-registry": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-system-prompt": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-agent-preset-registry": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-system-prompt": ">=0.2.0-rc.2",
     "@deepseek-ai/schemastery": "^3.18.2",
-    "@deepseek-ai/dsh-tools": ">=0.1.7-rc.2"
+    "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-agent-preset-registry": {
@@ -92,18 +92,18 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
     "@deepseek-ai/schemastery": "3.18.4",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-agent-preset-registry": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-system-prompt": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-tools": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-scope": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-invariants": "0.1.7-rc.2"
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-scope": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-invariants": "0.2.0-rc.2"
   },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "0778ecf2ce276ea3ebc49c845fb1a980ad8c1d041faee741cff1f63045d2a9f8"
+    "contentHash": "1eb32e2409d1061c4a649fa942165c84b1251841b871a8b4b1beb966ca995e85"
   }
 }

@@ -1,0 +1,5 @@
+{
+  "reviewDate": "2026-10-07",
+  "releaseCondition": "Remove a package only after reviewing its final packed contents, passing relevant checks, and accepting new behavior in the target DSH host. Include bundled workspace code in that acceptance.",
+  "packages": []
+}

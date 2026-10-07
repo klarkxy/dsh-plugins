@@ -2,36 +2,37 @@
 
 [简体中文](README.zh-CN.md) / English
 
-A small pnpm monorepo for focused DeepSeek Harness plugins that do not need a repository of their own. Each package under `plugins/` is a DSH bundle or native preset that installs, tests, and releases on its own.
+A small pnpm monorepo for focused DeepSeek Harness plugins and shared libraries that do not need a repository of their own. Each package under `plugins/` tests and releases on its own; bundles and native presets install through DSH.
 
-This README also catalogs klarkxy's public DSH plugins on npm, including packages maintained in other repositories. The browsable version is the [plugin site](https://klarkxy.github.io/dsh-plugins/). When a new plugin is published, add it to `site/catalog.json` and to both READMEs.
+This README also catalogs klarkxy's public DSH plugins on npm, including packages maintained in other repositories. The browsable version is the [plugin site](https://klarkxy.github.io/dsh-plugins/). List preview releases in both READMEs; add a DSH plugin to `site/catalog.json` once npm has its `latest` release.
 
 ## Published plugins
 
-Package names link to npm for plugins maintained in other repositories and to the package README for the two published from here; the last column points at the other one. Follow each plugin's documentation for installation, host compatibility, and configuration.
+Package names link to npm or the package README; the last column provides the other entry point. Follow each plugin's documentation for installation, host compatibility, and configuration. Retired packages remain on npm for historical use.
 
 | Package | Purpose | Docs / npm |
 | --- | --- | --- |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: read official DSH docs in the Plugins page; Creator mode searches docs and checks plugin npm metadata with native tools. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
-| [`@klarkxy/dsh-pruner`](plugins/dsh-pruner/README.md) | Code Prune: review and simplify code while keeping existing behavior, cutting redundancy and needless abstraction. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
+| [`@klarkxy/dsh-pruner`](https://www.npmjs.com/package/@klarkxy/dsh-pruner) | Retired locally; historical npm releases remain available. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
 | [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | Auto Title: session titles follow the latest task; manual names stay put. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title#readme) |
-| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | Sidekick: persistent Lead–Sidekick collaboration with author-reviewed results. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion#readme) |
-| [`@klarkxy/dsh-memory`](https://www.npmjs.com/package/@klarkxy/dsh-memory) | Long-term Memory: scoped vocabulary, preferences, recent activity, and Dream consolidation. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory#readme) |
-| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | Mood: record, read and update the current task requirements with the current Agent. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood#readme) |
-| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | Session Recap: background recaps and bounded agent checkpoints. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap#readme) |
-| [`@klarkxy/dsh-self-improvement`](https://www.npmjs.com/package/@klarkxy/dsh-self-improvement) | Experience Learning: learn conditional methods from outcome evidence, with optional skill export. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement#readme) |
+| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | Retired locally; retained for historical records. Use Classmates roles with native delegation for new work. | [Migration](plugins/dsh-classmates/docs/fusion-migration.md) |
+| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | Retired locally; historical npm releases remain available. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/078b69632ddf054a404fcb81c2543dc8887e2acc/plugins/dsh-mood#readme) |
+| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | Retired locally; historical npm releases remain available. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/078b69632ddf054a404fcb81c2543dc8887e2acc/plugins/dsh-recap#readme) |
 | [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | Web Search: manage web search providers and public-page fetching from one settings page. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
 | [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | Zhihu: Zhihu search, agent tools, knowledge bases, and usage tracking. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
 | [`@klarkxy/dsh-git-commit`](https://www.npmjs.com/package/@klarkxy/dsh-git-commit) | Git Commit: commit workspace changes from the conversation header, with model-planned commit groups. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-git-commit#readme) |
 | [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | Discover, review, and install reusable capabilities. | [Docs](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
 
-## Unpublished development packages
+## Preview packages (`next`)
 
 | Package | Purpose | Status |
 | --- | --- | --- |
-| [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.md) | Teammate Roles: reusable teammate roles and native Team UI enhancements. | Local alpha; excluded from automatic npm publication and the plugin site. |
+| [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.md) | Teammate Roles: reusable roles and model profiles for native delegation. | Release candidate on `next`; excluded from the stable plugin catalog. |
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: an independent reviewer vets each sandbox escalation; only a pass auto-approves. | npm release candidate; the plugin site catalog lists stable releases only. |
 | [`@klarkxy/dsh-blueprint`](plugins/dsh-blueprint/README.md) | Blueprint: share a plugin set as an exact-version blueprint code. | npm preview release; the plugin site catalog lists stable releases only. |
+| [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface font, code font, and conversation font size of the Web GUI. | Release candidate on `next`; excluded from the stable plugin catalog. |
+| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Model Hub: edit model fields exposed by installed plugin settings. | Release candidate on `next`. |
+| [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: find sessions and read conversations across working directories. | Release candidate on `next`; advanced thread actions need the supplied host patch. |
 
 Migrated from the local `dsh-teammates` directory. See the [migration record](docs/classmates-migration.md).
 
@@ -73,6 +74,8 @@ pnpm check
 Each package owns its assets, tests, and release version. Native presets need no runtime plugin or build. The repository root is not a DSH bundle.
 
 ## Automatic npm releases
+
+`scripts/npm-release-holds.json` records packages awaiting acceptance. Both planning and publishing enforce the list, including previously saved plans. Before removing a package, review its final archive, pass relevant checks, and accept new behavior in the target DSH host, including bundled workspace dependencies. Private development packages still participate in builds and tests.
 
 Every `plugins/dsh-xxx` package is named `@klarkxy/dsh-xxx`, and public packages select the public npm registry. Private development packages (`private: true`) join checks but stay out of automatic releases. `.github/workflows/npm-publish.yml` checks the packages on every `main` update and can be retried manually from Actions; release tags are not required.
 

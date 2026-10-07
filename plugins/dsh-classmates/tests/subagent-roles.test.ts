@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { installModelSelection } from '@deepseek-ai/dsh-agent';
 import { createUserMessage, ReasoningEffortId, ToolCallId } from '@deepseek-ai/dsh-llm';
@@ -12,6 +12,7 @@ import SettingsForms from '@deepseek-ai/dsh-settings';
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry';
 import type { Context } from '@deepseek-ai/cordis';
 import type { ClassmateDefinition, ModelProfile } from '../src/contracts.js';
+import { BindingStore } from '../src/bindings.js';
 import * as SourceClassmates from '../src/index.js';
 import { pathToFileURL } from 'node:url';
 
@@ -102,6 +103,19 @@ function childId(result: Awaited<ReturnType<Awaited<ReturnType<typeof setup>>['c
   return value.subagentId;
 }
 
+/**
+ * Capture the current role tool so a later update can be awaited precisely:
+ * the reinstall gap (old removed, new not yet registered) must not resolve.
+ */
+function reinstallMarker(runtime: Awaited<ReturnType<typeof setup>>) {
+  const previous = runtime.ctx.tools.get(runtime.toolName, runtime.lead);
+  return () => vi.waitFor(() => {
+    const current = runtime.ctx.tools.get(runtime.toolName, runtime.lead);
+    expect(current).toBeDefined();
+    expect(current).not.toBe(previous);
+  });
+}
+
 it.each(['rejected', 'cancelled', 'unavailable', 'missing'])('does not create a protected role child when approval is %s', async outcome => {
   const runtime = await setup({ protectedModels: [{ provider: 'mock', id: 'specialist-a' }] });
   if (outcome !== 'missing') runtime.ctx.provide('approval', { request: async () => outcome });
@@ -126,10 +140,12 @@ it('approves each new native child once and never prompts for its continuation',
   let asks = 0;
   runtime.ctx.provide('approval', { request: async () => { asks++; return 'allowed-once'; } });
   const id = childId(await runtime.call());
-  await vi.waitFor(() => expect(runtime.adapter.requests).toHaveLength(1));
+  // Count by child-persona/request content: the parent's completion-notification
+  // turn also produces adapter requests and must not confuse these assertions.
+  await vi.waitFor(() => expect(runtime.adapter.requests.filter(request => requestText(request).includes('ROLE_LITERAL'))).toHaveLength(1));
   await vi.waitFor(() => expect(runtime.ctx.agents.get(SessionId(id))).toBeUndefined());
   await runtime.ctx.subagents.sendMessage(runtime.lead, SessionId(id), [{ type: 'text', text: 'Continue' }], { signal: SIGNAL });
-  await vi.waitFor(() => expect(runtime.adapter.requests).toHaveLength(2));
+  await vi.waitFor(() => expect(runtime.adapter.requests.filter(request => requestText(request).includes('Continue'))).toHaveLength(1));
   expect(asks).toBe(1);
   expect((await runtime.call(false)).isError).toBe(false);
   expect(asks).toBe(2);
@@ -246,8 +262,9 @@ it.each([false, true])('approves the frozen profile after preflight despite late
   expect(approval.mock.calls[0]).toEqual([expect.objectContaining({
     reason: expect.stringContaining('"model":{"provider":"mock","id":"specialist-a","reasoningEffort":"low"}'),
   })]);
-  await vi.waitFor(() => expect(runtime.adapter.requests).toHaveLength(1));
-  expect(runtime.adapter.requests[0]).toMatchObject({ model: 'specialist-a', reasoningEffort: 'low' });
+  // Filter by the child persona: background completion also turns the parent.
+  await vi.waitFor(() => expect(runtime.adapter.requests.filter(request => requestText(request).includes('ROLE_LITERAL'))).toHaveLength(1));
+  expect(runtime.adapter.requests.find(request => requestText(request).includes('ROLE_LITERAL'))).toMatchObject({ model: 'specialist-a', reasoningEffort: 'low' });
 });
 
 it.each([
@@ -561,4 +578,177 @@ it('rejects unknown and disabled profiles without creating a child or retrying a
   expect(unknownAgain.isError).toBe(true);
   expect(runtime.adapter.requests).toHaveLength(0);
   expect(runtime.ctx.agents.list().map(agent => agent.id)).toEqual([runtime.lead.id]);
+});
+
+it('prefers a legacy fixed model over a recommendation and keeps it on omitted calls', async () => {
+  const runtime = await setup({
+    definition: {
+      recommendedModelProfileId: 'coding-high',
+      model: { provider: 'mock', id: 'specialist-a', reasoningEffort: 'low' },
+    },
+    modelProfiles: [LOW, HIGH, PARKED],
+  });
+  const assembly = await runtime.ctx.systemPrompt.assemble({ scope: runtime.lead });
+  const prompt = assembly.sections.map(section => section.text).join('\n');
+  // The legacy recommendation migrated to a note; a fixed role shows no binding line.
+  expect(prompt).not.toContain('bound model_profile');
+  expect(prompt).toMatch(/highest-priority one-call override/);
+  expect(prompt).toMatch(/Lead may work alone/);
+  expect((await runtime.call(false)).isError).toBe(false);
+  expect(runtime.adapter.requests.find(request => requestText(request).includes('ROLE_LITERAL'))).toMatchObject({
+    model: 'specialist-a', reasoningEffort: 'low',
+  });
+  expect((await runtime.call(false, SIGNAL, { model_profile: 'coding-high' })).isError).toBe(false);
+  expect(runtime.adapter.requests.filter(request => requestText(request).includes('ROLE_LITERAL')).at(-1)).toMatchObject({
+    model: 'specialist-a', reasoningEffort: 'high',
+  });
+});
+
+it('shows a bound profile on the role line and uses it on omitted calls', async () => {
+  const runtime = await setup({
+    definition: {
+      recommendedModelProfileId: 'coding-high',
+      model: null,
+    },
+    modelProfiles: [LOW, HIGH, PARKED],
+  });
+  const readPrompt = async () => {
+    const assembly = await runtime.ctx.systemPrompt.assemble({ scope: runtime.lead });
+    return assembly.sections.map(section => section.text).join('\n');
+  };
+  const prompt = await readPrompt();
+  expect(prompt).toMatch(/bound model_profile coding-high \(Deep coding; available\)/);
+  const roleLine = prompt.split('\n').find(line => line.includes(runtime.toolName));
+  expect(roleLine).toContain('coding-high');
+  expect(roleLine).not.toContain('cheap draft pass');
+  expect((await runtime.call(false)).isError).toBe(false);
+  expect(runtime.adapter.requests.find(request => requestText(request).includes('ROLE_LITERAL'))).toMatchObject({
+    model: 'specialist-a', reasoningEffort: 'high',
+  });
+
+  // A disabled bound preset hard-fails with guidance; a deleted one also hard-fails.
+  const waitDisabled = reinstallMarker(runtime);
+  runtime.update([{ ...runtime.definition, model: null, recommendedModelProfileId: 'coding-parked' }], [PARKED]);
+  await waitDisabled();
+  await vi.waitFor(async () => {
+    expect(await readPrompt()).toMatch(/bound model_profile coding-parked \(Parked coding\); unavailable \(disabled\)/);
+  });
+  const disabled = await runtime.call(false);
+  expect(disabled.isError).toBe(true);
+  if (disabled.isError) expect(disabled.error.message).toContain('预设 coding-parked 已停用，请在角色 Reviewer 的模型设置中改选或改为跟随主控');
+  const waitMissing = reinstallMarker(runtime);
+  runtime.update([{ ...runtime.definition, model: null, recommendedModelProfileId: 'gone-profile' }], []);
+  await waitMissing();
+  await vi.waitFor(async () => {
+    expect(await readPrompt()).toMatch(/bound model_profile gone-profile; unavailable \(missing\)/);
+  });
+  const missing = await runtime.call(false);
+  expect(missing.isError).toBe(true);
+  if (missing.isError) expect(missing.error.message).toContain('预设 gone-profile 不存在，请在角色 Reviewer 的模型设置中改选或改为跟随主控');
+  expect(runtime.adapter.requests.filter(request => requestText(request).includes('ROLE_LITERAL'))).toHaveLength(1);
+
+  // The one-call override still wins over the broken strong reference.
+  runtime.update([{ ...runtime.definition, model: null, recommendedModelProfileId: 'gone-profile' }], [LOW]);
+  await vi.waitFor(() => expect(runtime.ctx.tools.get(runtime.toolName, runtime.lead)).toBeDefined());
+  expect((await runtime.call(false, SIGNAL, { model_profile: 'coding-low' })).isError).toBe(false);
+  expect(runtime.adapter.requests.filter(request => requestText(request).includes('ROLE_LITERAL')).at(-1)).toMatchObject({
+    model: 'specialist-a', reasoningEffort: 'low',
+  });
+});
+
+function pluginStore(root: string): BindingStore {
+  // Same root/profileId derivation as src/index.ts apply().
+  return new BindingStore(join(root, 'data', 'classmates'), resolve(root));
+}
+
+it('inherits conversation effort for a fixed role with the UI empty-effort selection', async () => {
+  const runtime = await setup({
+    definition: { model: { kind: 'fixed', provider: 'mock', id: 'specialist-a' } as never },
+  });
+  expect((await runtime.call(false)).isError).toBe(false);
+  expect(runtime.adapter.requests.find(request => requestText(request).includes('ROLE_LITERAL'))).toMatchObject({
+    model: 'specialist-a', reasoningEffort: 'high',
+  });
+});
+
+it('keeps a new-shape fixed role exact through settings validation and dispatch', async () => {
+  // Strict zod union resolution strips undeclared keys; the discriminated
+  // member must match before the legacy object member or effort is lost.
+  const runtime = await setup({
+    definition: { model: { kind: 'fixed', provider: 'mock', id: 'specialist-a', effort: 'low' } as never },
+  });
+  expect((await runtime.call(false)).isError).toBe(false);
+  expect(runtime.adapter.requests.find(request => requestText(request).includes('ROLE_LITERAL'))).toMatchObject({
+    model: 'specialist-a', reasoningEffort: 'low',
+  });
+  const store = pluginStore(runtime.root);
+  const id = childId(await runtime.call());
+  await vi.waitFor(async () => expect((await store.listSubagentBindings(runtime.lead.id)).bindings).toHaveLength(1));
+  expect((await store.listSubagentBindings(runtime.lead.id)).bindings[0]).toMatchObject({
+    childId: id,
+    modelSource: 'fixed',
+    model: { provider: 'mock', id: 'specialist-a', effort: 'low' },
+  });
+});
+
+it('writes a complete subagent binding after a background dispatch and never for a foreground one-shot', async () => {
+  const runtime = await setup();
+  const store = pluginStore(runtime.root);
+  expect((await store.listSubagentBindings(runtime.lead.id)).bindings).toHaveLength(0);
+
+  expect((await runtime.call(false)).isError).toBe(false);
+  expect((await store.listSubagentBindings(runtime.lead.id)).bindings).toHaveLength(0);
+
+  const id = childId(await runtime.call());
+  await vi.waitFor(async () => expect((await store.listSubagentBindings(runtime.lead.id)).bindings).toHaveLength(1));
+  const { bindings, warnings } = await store.listSubagentBindings(runtime.lead.id);
+  expect(warnings).toBe(0);
+  expect(bindings[0]).toMatchObject({
+    kind: 'subagent',
+    childId: id,
+    parentSessionId: runtime.lead.id,
+    role: { id: 'reviewer', revision: 1, name: 'Reviewer', description: 'Review changes' },
+    modelSource: 'fixed',
+    model: { provider: 'mock', id: 'specialist-a', effort: 'high' },
+  });
+  expect(bindings[0].createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  expect(bindings[0].checksum).toMatch(/^[0-9a-f]{64}$/);
+  expect(JSON.stringify(bindings[0])).not.toContain('ROLE_LITERAL');
+  // Enumerating another parent session never leaks the row.
+  expect((await store.listSubagentBindings('another-parent')).bindings).toHaveLength(0);
+});
+
+it('records inherit, override, and profile model sources on their bindings', async () => {
+  const runtime = await setup({ definition: { model: null }, modelProfiles: [LOW] });
+  const store = pluginStore(runtime.root);
+
+  const inheritedId = childId(await runtime.call());
+  await vi.waitFor(async () => expect((await store.listSubagentBindings(runtime.lead.id)).bindings).toHaveLength(1));
+  const inherited = (await store.listSubagentBindings(runtime.lead.id)).bindings.find(row => row.childId === inheritedId);
+  expect(inherited).toMatchObject({
+    modelSource: 'inherit',
+    model: { provider: 'mock', id: 'mock', effort: 'high' },
+  });
+  expect(inherited).not.toHaveProperty('modelProfileId');
+
+  const overriddenId = childId(await runtime.call(true, SIGNAL, { model_profile: 'coding-low' }));
+  await vi.waitFor(async () => expect((await store.listSubagentBindings(runtime.lead.id)).bindings).toHaveLength(2));
+  const overridden = (await store.listSubagentBindings(runtime.lead.id)).bindings.find(row => row.childId === overriddenId);
+  expect(overridden).toMatchObject({
+    modelSource: 'override',
+    modelProfileId: 'coding-low',
+    model: { provider: 'mock', id: 'specialist-a', effort: 'low' },
+  });
+
+  const waitProfiled = reinstallMarker(runtime);
+  runtime.update([{ ...runtime.definition, model: null, recommendedModelProfileId: 'coding-low' }], [LOW]);
+  await waitProfiled();
+  const profiledId = childId(await runtime.call());
+  await vi.waitFor(async () => expect((await store.listSubagentBindings(runtime.lead.id)).bindings).toHaveLength(3));
+  const profiled = (await store.listSubagentBindings(runtime.lead.id)).bindings.find(row => row.childId === profiledId);
+  expect(profiled).toMatchObject({
+    modelSource: 'profile',
+    modelProfileId: 'coding-low',
+    model: { provider: 'mock', id: 'specialist-a', effort: 'low' },
+  });
 });

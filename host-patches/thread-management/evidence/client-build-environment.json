@@ -1,0 +1,13 @@
+{
+  "formatVersion": 1,
+  "environment": {
+    "DSH_CLIENT_BUILD_PROFILE": "official",
+    "DSH_CLIENT_COMMIT_HASH": "639ed01",
+    "DSH_CLIENT_TITLE": "DeepSeek Harness",
+    "DSH_CLIENT_VERSION": "0.2.0-rc.2"
+  },
+  "artifacts": {
+    "fileCount": 347,
+    "sha256": "b7028c1bd9557ef62c87774e71682c8e57c2839ccad94bd0115b1a07d53a96ca"
+  }
+}

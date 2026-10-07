@@ -1,6 +1,5 @@
 /**
- * Optional web-search-manager backend. Registers only when this profile already
- * provides `webSearchManager`; Zhihu still works without that plugin.
+ * Native ctx.web backend. Configuration and credentials belong to Zhihu.
  * Official model tool remains `web_search`. Dedicated `zhihu_global_search` is unchanged.
  */
 import { ZHIHU_CREDENTIAL_REF } from './contracts.ts'
@@ -28,6 +27,7 @@ export const ZHIHU_WEB_SEARCH_DESCRIPTOR = {
   pricing: '注册可获 5,000 次/天试用额度；超额价格需向平台咨询。',
   pricingUrl: 'https://developer.zhihu.com/',
   signupUrl: 'https://developer.zhihu.com',
+  configurationOwner: '@klarkxy/dsh-zhihu',
 }
 
 export type ZhihuWebSearchSource = { url: string; title?: string; snippet?: string }
@@ -40,11 +40,10 @@ export type ZhihuWebSearchProvider = {
   search(request: ZhihuWebSearchRequest, signal?: AbortSignal): Promise<ZhihuWebSearchResult>
 }
 
-export type ZhihuWebSearchManager = {
-  registerSearchProvider(
-    descriptor: typeof ZHIHU_WEB_SEARCH_DESCRIPTOR,
-    factory: (options: { apiKey?: string; timeoutMs: number }) => ZhihuWebSearchProvider,
-  ): () => void
+export type ZhihuWebRegistry = {
+  registerSearchProvider(provider: ZhihuWebSearchProvider & {
+    dshWebManagement: typeof ZHIHU_WEB_SEARCH_DESCRIPTOR
+  }): () => void
 }
 
 export type ZhihuWebSearchProviderOptions = ZhihuClientOptions & {
@@ -63,8 +62,8 @@ function sourceFrom(url: string, title: string, snippet: string): ZhihuWebSearch
   }
 }
 
-function isWebSearchManager(value: unknown): value is ZhihuWebSearchManager {
-  return !!value && typeof value === 'object' && typeof (value as ZhihuWebSearchManager).registerSearchProvider === 'function'
+function isWebRegistry(value: unknown): value is ZhihuWebRegistry {
+  return !!value && typeof value === 'object' && typeof (value as ZhihuWebRegistry).registerSearchProvider === 'function'
 }
 
 export function createZhihuWebSearchProvider(options: ZhihuWebSearchProviderOptions): ZhihuWebSearchProvider {
@@ -99,36 +98,57 @@ export function createZhihuWebSearchProvider(options: ZhihuWebSearchProviderOpti
 }
 
 export function registerZhihuGlobalSearchProvider(
-  manager: ZhihuWebSearchManager,
+  web: ZhihuWebRegistry,
   service: ZhihuWebSearchHost,
+  configured: () => boolean,
 ): () => void {
-  return manager.registerSearchProvider(ZHIHU_WEB_SEARCH_DESCRIPTOR, options => {
-    const provider = createZhihuWebSearchProvider({
-      ...service.toolOptions,
-      apiKey: options.apiKey,
-      timeoutMs: options.timeoutMs,
-    })
-    return {
-      id: provider.id,
-      available: () => provider.available(),
-      search: (request, signal) => service.run(
-        combined => provider.search(request, combined),
+  return web.registerSearchProvider({
+    id: ZHIHU_WEB_SEARCH_ID, dshWebManagement: ZHIHU_WEB_SEARCH_DESCRIPTOR,
+    available: configured,
+    search: (request, signal) => service.run(
+        async combined => {
+          combined.throwIfAborted()
+          const apiKey = await service.toolOptions.resolveCredential?.()
+          combined.throwIfAborted()
+          const provider = createZhihuWebSearchProvider({ ...service.toolOptions, apiKey })
+          return provider.search(request, combined)
+        },
         signal ?? new AbortController().signal,
       ),
-    }
   })
 }
 
-/** Wait for `webSearchManager` if this profile loaded it; no-op otherwise. */
+type BindingContext = {
+  get(name: string): unknown
+  on?(event: 'credentials/reference-updated', handler: (ref: string) => void): () => void
+  emit?(event: 'web/provider-availability-updated', kind: 'search', id: string): void
+}
+/** Wait for the native web service; no manager dependency and no network probe. */
 export function bindZhihuWebSearch(
-  ctx: { inject(deps: readonly string[], apply: (inner: { get(name: string): unknown }) => (() => void) | void): unknown },
+  ctx: { inject(deps: readonly string[], apply: (inner: BindingContext) => (() => void) | void): unknown },
   service: ZhihuWebSearchHost,
 ): void {
-  ctx.inject(['webSearchManager'], (inner) => {
-    let manager: unknown
-    try { manager = inner.get('webSearchManager') }
+  ctx.inject(['web'], (inner) => {
+    let web: unknown
+    try { web = inner.get('web') }
     catch { return }
-    if (!isWebSearchManager(manager)) return
-    return registerZhihuGlobalSearchProvider(manager, service)
+    if (!isWebRegistry(web)) return
+    let configured = false, alive = true, revision = 0
+    const refresh = async () => {
+      const current = ++revision
+      let ready = false
+      try { ready = Boolean((await service.toolOptions.resolveCredential?.())?.trim()) } catch { /* unavailable */ }
+      if (!alive || current !== revision) return
+      if (configured !== ready) {
+        configured = ready
+        inner.emit?.('web/provider-availability-updated', 'search', ZHIHU_WEB_SEARCH_ID)
+      }
+    }
+    const off = registerZhihuGlobalSearchProvider(web, service, () => configured)
+    const unlisten = inner.on?.('credentials/reference-updated', ref => {
+      if (ref === ZHIHU_CREDENTIAL_REF) { void refresh() }
+    })
+    void refresh()
+    return () => { alive = false; revision++; configured = false; unlisten?.(); off() }
   })
 }
