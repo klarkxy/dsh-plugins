@@ -103,9 +103,10 @@ test('latest direct user text is the only authority; no tool or assistant prose'
 
 function host(extra = {}, llm) {
   const listeners = {}, logs = []; let guard; let dispose;
+  const cwd = process.cwd(); // Native absolute path on both Windows and POSIX.
   const services = { fs: { processPathFromHostPath: p => p }, shell: { sandboxMode: 'workspace-write' }, jobs: {} };
   const ctx = { tools: { guard(fn) { guard = fn; } },
-    sandboxPolicy: { resolve: () => ({ mode: 'workspace-write', workspaceRoot: 'D:\\work' }) },
+    sandboxPolicy: { resolve: () => ({ mode: 'workspace-write', workspaceRoot: cwd }) },
     logger: { info(_format, row) { logs.push(JSON.parse(row)); } }, effect(fn) { dispose = fn(); },
     get(name) { return services[name]; },
     on(event, fn) { listeners[event] = fn; },
@@ -113,7 +114,7 @@ function host(extra = {}, llm) {
   if (llm) ctx.inject = (_dependencies, mount) => mount({ llm, effect: ctx.effect });
   apply(ctx, extra);
   const exec = (name = 'read', args = { file_path: 'a.txt' }) => ({ token: Symbol(), callId: 'same-id', name, arguments: args,
-    signal: signal(), agent: { session: { header: { cwd: 'D:\\work' }, snapshotEvents: () => [] } } });
+    signal: signal(), agent: { session: { header: { cwd }, snapshotEvents: () => [] } } });
   return { ctx, listeners, exec, logs, guard: x => guard?.(x), dispose: () => dispose?.() };
 }
 test('adapter preserves downstream verdicts rather than approving over them', async () => {
