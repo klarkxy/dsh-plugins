@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto'
+import { resolve } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import SessionStore, { Session, SessionId, type SessionEvent, type SessionHeader, type SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { foldSurface } from '@deepseek-ai/dsh-session/surface'
@@ -10,6 +11,9 @@ import { itemsFromSurface, PAGE_BUDGET_NOTE, pageItems } from './conversation.ts
 import { createCursorKey, decodeCursor, encodeCursor, prefixDigest } from './cursor.ts'
 import { listSessions, readSession, searchSessions, withObservationLease } from './query.ts'
 import { apply } from './index.ts'
+
+const HERE_CWD = resolve(process.cwd(), 'session-fixture', 'here')
+const OTHER_CWD = resolve(process.cwd(), 'session-fixture', 'other')
 
 class ScanQuery extends SessionQueryEngine {
   mode: 'ok' | 'disabled' | 'corrupt' = 'ok'
@@ -88,9 +92,9 @@ afterEach(async () => {
 describe('session discovery', () => {
   it('lists across directories, ranks the caller directory first, and filters without inventing ids', async () => {
     const { ctx, query } = await mount()
-    const caller = live(ctx, 'caller', 'C:/work/here', 50)
-    live(ctx, 'newer-other', 'C:/work/other', 200, 'Elsewhere')
-    live(ctx, 'older-here', 'C:/work/here', 100, 'Here')
+    const caller = live(ctx, 'caller', HERE_CWD, 50)
+    live(ctx, 'newer-other', OTHER_CWD, 200, 'Elsewhere')
+    live(ctx, 'older-here', HERE_CWD, 100, 'Here')
     const exec = { signal: new AbortController().signal, agent: { session: caller } }
     const listed = await listSessions(query, {}, exec, config, cursors)
     expect(listed.status).toBe('ok')
@@ -99,7 +103,7 @@ describe('session discovery', () => {
     expect(items.map(item => item.sessionId)).toEqual(['older-here', 'caller', 'newer-other'])
     expect(items.find(item => item.sessionId === 'older-here')?.title).toBe('Here')
     expect(items.filter(item => item.sameCwd).map(item => item.sessionId)).toEqual(['older-here', 'caller'])
-    const filtered = await listSessions(query, { cwd: 'C:/work/other' }, exec, config, cursors)
+    const filtered = await listSessions(query, { cwd: OTHER_CWD }, exec, config, cursors)
     expect(okItems(filtered).map(item => item.sessionId)).toEqual(['newer-other'])
     const missing = await listSessions(query, { sessionId: 'not-in-corpus' }, exec, config, cursors)
     expect(okItems(missing)).toEqual([])
@@ -109,8 +113,8 @@ describe('session discovery', () => {
 
   it('filters by parent and creation time', async () => {
     const { ctx, query } = await mount()
-    const parent = live(ctx, 'parent', 'C:/work/here', 10)
-    ctx.sessions.create(SessionId('child'), { meta: { cwd: 'C:/work/other', createdAt: 20, parentSession: parent.id } })
+    const parent = live(ctx, 'parent', HERE_CWD, 10)
+    ctx.sessions.create(SessionId('child'), { meta: { cwd: OTHER_CWD, createdAt: 20, parentSession: parent.id } })
     const exec = { signal: new AbortController().signal, agent: { session: parent } }
     const children = await listSessions(query, { parentSessionId: 'parent' }, exec, config, cursors)
     expect(okItems(children).map(item => item.sessionId)).toEqual(['child'])
@@ -123,7 +127,7 @@ describe('session discovery', () => {
   it('reads a live session and a cold stored session', async () => {
     const cold = detached('cold', 'stored line')
     const { ctx, query } = await mount(new Map([['cold', cold]]))
-    const liveSession = live(ctx, 'live', 'C:/work/here', 1)
+    const liveSession = live(ctx, 'live', HERE_CWD, 1)
     say(liveSession, 'live line')
     const signal = new AbortController().signal
     const liveRead = await readSession(query, { sessionId: 'live' }, { signal }, config, cursors)
@@ -136,7 +140,7 @@ describe('session discovery', () => {
 
   it('pages one oversized message without dropping the tail', async () => {
     const { ctx, query } = await mount()
-    const session = live(ctx, 'long', 'C:/work/here', 1)
+    const session = live(ctx, 'long', HERE_CWD, 1)
     const text = 'abcdefghij'.repeat(250)
     say(session, text)
     const pages: string[] = []
@@ -165,7 +169,7 @@ describe('session discovery', () => {
 
   it('keeps fork-inherited text and reports surface replacement separately from the transcript', async () => {
     const { ctx, query } = await mount()
-    const parent = live(ctx, 'parent', 'C:/work/here', 1)
+    const parent = live(ctx, 'parent', HERE_CWD, 1)
     say(parent, 'from parent')
     const child = ctx.sessions.fork(parent, undefined, SessionId('child'))
     say(child, 'child only')
@@ -175,7 +179,7 @@ describe('session discovery', () => {
     const items = read.items as Array<{ text: string; inherited: boolean }>
     expect(items.map(item => [item.text, item.inherited])).toEqual([['from parent', true], ['child only', false]])
 
-    const compacted = live(ctx, 'compacted', 'C:/work/here', 2)
+    const compacted = live(ctx, 'compacted', HERE_CWD, 2)
     const original = say(compacted, 'original words')
     compacted.append('user/message', message('compacted summary'), {
       surfaceOp: { op: 'replace', startSeq: original.seq, endSeq: original.seq },
@@ -200,7 +204,7 @@ describe('session discovery', () => {
 
   it('summarizes tools, omits reasoning, and can include tool detail', async () => {
     const { ctx, query } = await mount()
-    const session = live(ctx, 'tools', 'C:/work/here', 1)
+    const session = live(ctx, 'tools', HERE_CWD, 1)
     session.append('assistant/message', {
       turn: 1,
       step: 1,
@@ -245,7 +249,7 @@ describe('session discovery', () => {
 
   it('rejects a malformed cursor, a tampered cursor, and a stale cut', async () => {
     const { ctx, query } = await mount()
-    const session = live(ctx, 'cut', 'C:/work/here', 1)
+    const session = live(ctx, 'cut', HERE_CWD, 1)
     say(session, 'one'.repeat(400))
     const signal = new AbortController().signal
     const readable = await readSession(query, { sessionId: 'cut' }, { signal }, config, cursors)
@@ -280,9 +284,9 @@ describe('session discovery', () => {
 
   it('returns typed search failures and ranks snippets from the caller directory', async () => {
     const { ctx, query } = await mount()
-    const caller = live(ctx, 'caller', 'C:/work/here', 10)
+    const caller = live(ctx, 'caller', HERE_CWD, 10)
     say(caller, 'shared-token here')
-    const other = live(ctx, 'other', 'C:/work/other', 20)
+    const other = live(ctx, 'other', OTHER_CWD, 20)
     say(other, 'shared-token elsewhere')
     const exec = { signal: new AbortController().signal, agent: { session: caller } }
     const found = await searchSessions(query, { query: 'shared-token' }, exec, config, cursors)
@@ -462,7 +466,7 @@ describe('session discovery', () => {
 
   it('cancels instead of returning an empty page and releases observation leases', async () => {
     const { ctx, query } = await mount()
-    const session = live(ctx, 'lease', 'C:/work/here', 1)
+    const session = live(ctx, 'lease', HERE_CWD, 1)
     say(session, 'kept')
     let releases = 0
     const original = query.observeSession.bind(query)
@@ -490,7 +494,7 @@ describe('session discovery', () => {
 
   it('reads the edited branch, keeps compaction history, and uses the host model projection', async () => {
     const { ctx, query } = await mount()
-    const session = live(ctx, 'branch', 'C:/work/here', 4)
+    const session = live(ctx, 'branch', HERE_CWD, 4)
     const prompt = say(session, 'old prompt')
     const attempt = say(session, 'old attempt')
     const branch = {
@@ -533,7 +537,7 @@ describe('session discovery', () => {
 
   it('rejects a new branch revision when the raw prefix is unchanged, and keeps append growth on the captured cut', async () => {
     const { ctx, query } = await mount()
-    const session = live(ctx, 'revise', 'C:/work/here', 5)
+    const session = live(ctx, 'revise', HERE_CWD, 5)
     const original = say(session, 'one'.repeat(400))
     const signal = new AbortController().signal
     let events: SessionEvent[] = [original]
@@ -571,7 +575,7 @@ describe('session discovery', () => {
 
   it('rejects an unchanged prefix when event metadata changes and refuses a branch log without selectors', async () => {
     const { ctx, query } = await mount()
-    const session = live(ctx, 'meta', 'C:/work/here', 6)
+    const session = live(ctx, 'meta', HERE_CWD, 6)
     const original = say(session, 'one'.repeat(400))
     const signal = new AbortController().signal
     let events: SessionEvent[] = [original]
@@ -584,7 +588,7 @@ describe('session discovery', () => {
     expect(changed).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_STALE_CURSOR' })
     expect(changed).not.toHaveProperty('items')
 
-    const bare = live(ctx, 'bare', 'C:/work/here', 7)
+    const bare = live(ctx, 'bare', HERE_CWD, 7)
     const prompt = say(bare, 'old prompt')
     const attempt = say(bare, 'old attempt')
     installFace(query, () => ({
@@ -599,7 +603,7 @@ describe('session discovery', () => {
 
   it('keeps the observation as this when the default transcript calls readModelSurface', async () => {
     const { ctx, query } = await mount()
-    const session = live(ctx, 'receiver', 'C:/work/here', 8)
+    const session = live(ctx, 'receiver', HERE_CWD, 8)
     const prompt = say(session, 'visible prompt')
     let calls = 0
     installFace(query, () => ({
@@ -642,7 +646,7 @@ describe('session discovery', () => {
 
   it('registers the three tools and removes them on unload', async () => {
     const { ctx } = await mount()
-    const session = live(ctx, 'tool', 'C:/work/here', 1)
+    const session = live(ctx, 'tool', HERE_CWD, 1)
     say(session, 'tool text')
     const registered = new Map<string, { execute: (args: unknown, exec: unknown) => Promise<string> }>()
     ctx.provide('tools', {
@@ -664,7 +668,7 @@ describe('session discovery', () => {
       throw new Error(`read: ${typeof raw} ${String(raw).slice(0, 300)}`)
     }
     const caller = callerFromExecution({ agent: { session } })
-    if (caller.cwd !== 'C:/work/here') throw new Error(`cwd ${caller.cwd}`)
+    if (caller.cwd !== HERE_CWD) throw new Error(`cwd ${caller.cwd}`)
     await ctx.fiber.dispose()
     contexts.pop()
     if (registered.size !== 0) throw new Error(`still registered ${registered.size}`)

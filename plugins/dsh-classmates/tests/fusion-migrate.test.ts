@@ -6,7 +6,6 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { build as esbuild } from 'esbuild';
 import {
   escapeHtml,
   fusionProfileId,
@@ -191,16 +190,10 @@ function classmatesConfig(profiles: ModelProfile[] = []) {
 const io = { readFile, writeFile, mkdir };
 
 async function ensureCompiledCli() {
-  await mkdir(join(pkgRoot, 'dist'), { recursive: true });
-  await esbuild({
-    entryPoints: [join(pkgRoot, 'src/migrate-fusion-cli.ts')],
-    outfile: compiledCli,
-    bundle: true,
-    platform: 'node',
-    format: 'esm',
-    target: 'node24',
-    packages: 'external',
-  });
+  // Exercise the documented production build rather than replacing its output
+  // with a differently configured test bundle after release fingerprinting.
+  const result = await spawnNode(join(pkgRoot, 'scripts', 'build.mjs'), []);
+  if (result.code !== 0) throw new Error(`CLI build failed: ${result.stderr}`);
 }
 
 function spawnNode(entry: string, args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
