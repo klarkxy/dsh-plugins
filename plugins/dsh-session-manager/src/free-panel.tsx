@@ -171,15 +171,6 @@ export function DeleteChatDialog(props: { model: FreeChatModel; locale: CopyLoca
   )
 }
 
-export function FreeChatScreen(props: { model: FreeChatModel; locale: CopyLocale }): React.ReactElement {
-  return (
-    <>
-      <FreeChatPanel model={props.model} locale={props.locale} />
-      <DeleteChatDialog model={props.model} locale={props.locale} />
-    </>
-  )
-}
-
 async function writeClipboard(value: string): Promise<void> {
   const clipboard = globalThis.navigator?.clipboard
   if (clipboard === undefined) throw new Error('clipboard unavailable')

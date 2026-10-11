@@ -45,7 +45,7 @@
   },
   "peerDependencies": {
     "zod": "^4.1.5",
-    "@deepseek-ai/schemastery": "3.18.4",
+    "@deepseek-ai/schemastery": ">=3.18.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
@@ -91,6 +91,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "50ef6743bb9354e05e7e4220b9d4ff35d513915f3cab038868565886e2ae9c25"
+    "contentHash": "721ae6590874d0fbde84555505320183b44ac930927bb554a838492ecedeaab8"
   }
 }

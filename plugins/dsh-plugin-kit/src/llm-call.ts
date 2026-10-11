@@ -50,7 +50,11 @@ function routeOf(value: { provider?: unknown; model?: unknown; reasoningEffort?:
     : { provider: value.provider.trim(), model: value.model.trim() }
 }
 
-/** Plugin selection first; otherwise the live session model, then the host default. */
+/**
+ * Plugin selection first; otherwise the live session model, then the host default.
+ * Cordis callers must declare agents, sessionProjections and agentDefaultModel
+ * in their inject list so the fallback reads use the caller's live services.
+ */
 export function resolveFeatureModel(host: unknown, saved: FeatureModelRoute | undefined, sessionId?: string): FeatureModelRoute | undefined {
   const explicit = routeOf(saved)
   if (explicit) return explicit

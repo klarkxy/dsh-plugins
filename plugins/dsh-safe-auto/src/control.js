@@ -10,10 +10,12 @@ const modes = new Set(['read-only', 'workspace-write', 'danger-full-access']);
 export function createControl(base, { table, presets, sandboxPolicy, sessions, platform = process.platform, onChange = () => {} }) {
   let settings = table.get('reviewer') ?? { revision: 0, values: {} };
   let tail = Promise.resolve();
+  const lifetime = new AbortController();
   const selections = new WeakMap();
   let generation = 0;
   const effective = () => parseConfig({ ...base, ...settings.values });
   function active(session) {
+    if (lifetime.signal.aborted) return false;
     const selected = session && selections.get(session);
     if (!selected || selected.enabled === false) return false;
     const events = session.snapshotEvents();
@@ -81,6 +83,9 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
       const next = { revision: settings.revision + 1, values: Object.fromEntries(REVIEW_FIELDS.map(k => [k, nextConfig[k] ?? ''])) };
       await table.put('reviewer', next);
       settings = next;
+      // The save may already be durable. Cancellation suppresses publication,
+      // and disposal still waits for this write before closing the domain.
+      signal?.throwIfAborted();
       onChange();
       return settingsView();
     }
@@ -113,9 +118,15 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
     onChange();
     return sessionView(session);
   }
-  return { state, config, settingsView, getSession,
+  return { state, config, settingsView, getSession, signal: lifetime.signal,
+    async dispose() {
+      lifetime.abort(new Error('Safe Auto control unloaded'));
+      await tail;
+    },
     call(endpoint, payload, signal) {
-      const work = tail.then(() => dispatch(endpoint, payload, signal));
+      if (lifetime.signal.aborted) return Promise.reject(lifetime.signal.reason);
+      const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
+      const work = tail.then(() => dispatch(endpoint, payload, combined));
       tail = work.catch(() => {});
       return work;
     },

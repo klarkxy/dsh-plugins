@@ -15441,7 +15441,7 @@ index 0954b2d..10df667 100644
      const { ctx, session } = await harness()
      const view = vi.fn((state: StableViewState) => state.value)
 diff --git a/packages/session/session-title/src/index.ts b/packages/session/session-title/src/index.ts
-index 8d9a550..3322ac2 100644
+index 8d9a550..3ef6728 100644
 --- a/packages/session/session-title/src/index.ts
 +++ b/packages/session/session-title/src/index.ts
 @@ -15,7 +15,7 @@ import type {
@@ -15461,22 +15461,18 @@ index 8d9a550..3322ac2 100644
    readonly throughSeq: SessionSeq
  }
  
-@@ -361,6 +362,14 @@ export class SessionTitleService extends Service {
+@@ -361,6 +362,10 @@ export class SessionTitleService extends Service {
          case 'request/header':
            this.onRequestHeader(session, event)
            break
 +        case 'session/active-branch': {
-+          const state = this.work.get(session)
-+          if (state !== undefined) {
-+            this.supersede(state, 'active branch changed during title generation')
-+            delete state.fallback
-+          }
++          this.onActiveBranch(session)
 +          break
 +        }
          default:
            break
        }
-@@ -384,7 +393,7 @@ export class SessionTitleService extends Service {
+@@ -384,7 +389,7 @@ export class SessionTitleService extends Service {
     */
    get(session: Session): SessionTitleSnapshot | undefined {
      // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
@@ -15485,7 +15481,21 @@ index 8d9a550..3322ac2 100644
    }
  
    /**
-@@ -455,6 +464,7 @@ export class SessionTitleService extends Service {
+@@ -433,6 +438,8 @@ export class SessionTitleService extends Service {
+     if (this.ctx.sessions.get(session.id) !== session) {
+       throw new Error(`session "${session.id}" is not live in this store`)
+     }
++    const state = this.stateFor(session)
++    const revision = this.supersede(state, 'explicit title refresh superseded older generation')
+     const registration = this.registration
+     const input = this.titleInputOf(session)
+     if (registration === undefined || registration.closing || input.lastSeq === null) {
+@@ -450,11 +457,10 @@ export class SessionTitleService extends Service {
+       signal?.throwIfAborted()
+       return fallback
+     }
+-    const state = this.stateFor(session)
+-    const revision = this.supersede(state, 'explicit title refresh superseded older generation')
      const work = this.activate({
        registration,
        revision,
@@ -15493,7 +15503,52 @@ index 8d9a550..3322ac2 100644
        throughSeq: input.lastSeq,
      }, state, signal)
      const config = session.requestHeader()?.config
-@@ -509,7 +519,7 @@ export class SessionTitleService extends Service {
+@@ -495,6 +501,44 @@ export class SessionTitleService extends Service {
+     return dispose
+   }
+ 
++  /** Recover session naming and schedule the rewritten prompt on its new branch. */
++  private onActiveBranch(session: Session): void {
++    if (!this.serviceActive()) return
++    const state = this.work.get(session)
++    if (state !== undefined) {
++      this.supersede(state, 'active branch changed during title generation')
++      delete state.fallback
++    }
++    // A rewrite replaces a prompt at its original seq; it emits no new
++    // user/message. Requeue from the projected prompt and wait for its actual
++    // agent-loop route, just like a newly submitted message.
++    // oxlint-disable-next-line typescript/no-deprecated -- Branch and pin recovery require the durable log.
++    const events = session.snapshotEvents()
++    const latestTitle = events.findLast(event => event.type === 'session/title')
++    if (latestTitle?.type === 'session/title' && latestTitle.data.source.kind === 'user') {
++      // User naming is session metadata: replacing earlier conversation must
++      // not erase this explicit pin. Manual refresh remains the unpin path.
++      const branchRevision = session.branchRevision
++      const pinState = this.stateFor(session)
++      const revision = pinState.revision
++      // Session observers cannot append reentrantly. Restore after this append,
++      // unless a newer branch, rename, or explicit refresh supersedes the pin.
++      this.defer(async () => {
++        if (this.ctx.sessions.get(session.id) !== session || session.branchRevision !== branchRevision
++          || this.work.get(session) !== pinState || pinState.revision !== revision) return
++        // oxlint-disable-next-line typescript/no-deprecated -- Fence the saved naming decision against a newer logged title.
++        const currentTitle = session.snapshotEvents().findLast(event => event.type === 'session/title')
++        if (currentTitle?.seq !== latestTitle.seq) return
++        session.append('session/title', {
++          title: latestTitle.data.title, messageSeqs: [...latestTitle.data.messageSeqs], source: { kind: 'user' },
++        })
++      })
++      return
++    }
++    const prompt = projectActiveBranch(events).findLast(event => sessionTitleUserMessageOf(event) !== undefined)
++    if (prompt?.type === 'user/message') this.onUserMessage(session, prompt)
++  }
++
+   /** Schedule fallback creation and any provider cadence for one eligible event. */
+   private onUserMessage(session: Session, event: Extract<SessionEvent, { type: 'user/message' }>): void {
+     if (!this.serviceActive()) return
+@@ -509,7 +553,7 @@ export class SessionTitleService extends Service {
        if (shouldSchedule) {
          const state = this.stateFor(session)
          const revision = this.supersede(state, 'newer user message superseded title generation')
@@ -15502,7 +15557,7 @@ index 8d9a550..3322ac2 100644
        }
      }
      this.defer(async () => {
-@@ -563,7 +573,8 @@ export class SessionTitleService extends Service {
+@@ -563,7 +607,8 @@ export class SessionTitleService extends Service {
        if (this.registration !== pending.registration
          || pending.registration.closing
          || this.work.get(session) !== state
@@ -15512,7 +15567,7 @@ index 8d9a550..3322ac2 100644
        const work = this.activate(pending, state)
        try {
          await this.startProvider(session, work, route)
-@@ -595,7 +606,7 @@ export class SessionTitleService extends Service {
+@@ -595,7 +640,7 @@ export class SessionTitleService extends Service {
        await this.ensureFallback(session)
        this.assertCurrent(session, work)
        // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
@@ -15521,7 +15576,7 @@ index 8d9a550..3322ac2 100644
        const result = await work.registration.provider.generate({
          session,
          messages,
-@@ -604,6 +615,7 @@ export class SessionTitleService extends Service {
+@@ -604,6 +649,7 @@ export class SessionTitleService extends Service {
        })
        this.assertCurrent(session, work)
        const accepted = this.validateResult(result, messages)
@@ -15529,7 +15584,7 @@ index 8d9a550..3322ac2 100644
        session.append('session/title', {
          title: accepted.title,
          messageSeqs: [...accepted.messageSeqs],
-@@ -680,6 +692,7 @@ export class SessionTitleService extends Service {
+@@ -680,6 +726,7 @@ export class SessionTitleService extends Service {
      if (this.registration !== work.registration
        || state?.active !== work
        || state.revision !== work.revision
@@ -15537,7 +15592,7 @@ index 8d9a550..3322ac2 100644
        || this.ctx.sessions.get(session.id) !== session) {
        throw new Error('session title generation state changed without cancellation')
      }
-@@ -799,6 +812,7 @@ export class SessionTitleService extends Service {
+@@ -799,6 +846,7 @@ export class SessionTitleService extends Service {
      this.assertServiceActive()
      const current = this.get(session)
      if (current !== undefined) return current
@@ -15545,7 +15600,7 @@ index 8d9a550..3322ac2 100644
      const first = this.titleInputOf(session).first
      if (first === null) return undefined
      const title = fallbackSessionTitle(
-@@ -814,6 +828,7 @@ export class SessionTitleService extends Service {
+@@ -814,6 +862,7 @@ export class SessionTitleService extends Service {
        if (this.ctx.sessions.get(session.id) !== session) {
          throw new Error(`session "${session.id}" is not live in this store`)
        }
@@ -15553,7 +15608,7 @@ index 8d9a550..3322ac2 100644
        const accepted = this.get(session)
        if (accepted !== undefined) return accepted
        session.append('session/title', {
-@@ -827,7 +842,7 @@ export class SessionTitleService extends Service {
+@@ -827,7 +876,7 @@ export class SessionTitleService extends Service {
      try {
        return await fallback
      } finally {
@@ -15595,10 +15650,10 @@ index ef16436..a950807 100644
      await reader.fiber.dispose()
    })
 diff --git a/packages/session/session-title/tests/provider.spec.ts b/packages/session/session-title/tests/provider.spec.ts
-index d9632ea..c04c714 100644
+index d9632ea..ee4f2fc 100644
 --- a/packages/session/session-title/tests/provider.spec.ts
 +++ b/packages/session/session-title/tests/provider.spec.ts
-@@ -51,6 +51,125 @@ function appendRoute(session: ReturnType<Context['sessions']['create']>, reason:
+@@ -51,6 +51,203 @@ function appendRoute(session: ReturnType<Context['sessions']['create']>, reason:
  }
  
  describe('SessionTitleService Provider lifecycle', () => {
@@ -15640,13 +15695,14 @@ index d9632ea..c04c714 100644
 +    await ctx.fiber.dispose()
 +  })
 +
-+  it('invalidates pending automatic work when a branch lands before its deferred provider activation', async () => {
++  it('invalidates old queued work and titles the edited branch after its fresh route', async () => {
 +    const ctx = new Context()
 +    await ctx.plugin(SessionStore)
 +    await ctx.plugin(SessionProjectionRegistry)
 +    await ctx.plugin(SessionTitleService, CONFIG)
 +    const generate = vi.fn(async (request: SessionTitleProviderRequest) => ({
-+      title: 'OLD_PROMPT_TITLE', messageSeqs: request.messages.map(message => message.seq),
++      title: request.messages.at(-1)?.text === 'NEW_PROMPT' ? 'NEW_PROMPT_TITLE' : 'OLD_PROMPT_TITLE',
++      messageSeqs: request.messages.map(message => message.seq),
 +    }))
 +    ctx.sessionTitle.register({ id: SessionTitleProviderId('pending-branch'), automatic: 'all-prompts', generate })
 +    const session = ctx.sessions.create(SessionId('pending-branch-fence'))
@@ -15659,8 +15715,85 @@ index d9632ea..c04c714 100644
 +    })
 +    appendRoute(session, 'change')
 +    await settle()
++    expect(generate).toHaveBeenCalledOnce()
++    expect(generate.mock.calls[0]?.[0].messages).toEqual([{ seq: anchor.seq, text: 'NEW_PROMPT' }])
++    expect(ctx.sessionTitle.get(session)?.title).toBe('NEW_PROMPT_TITLE')
++    await ctx.fiber.dispose()
++  })
++
++  it('automatically restores the title after a completed prompt is retried', async () => {
++    const ctx = new Context()
++    await ctx.plugin(SessionStore)
++    await ctx.plugin(SessionProjectionRegistry)
++    await ctx.plugin(SessionTitleService, CONFIG)
++    const generate = vi.fn(async (request: SessionTitleProviderRequest) => ({
++      title: 'RETRY_TITLE', messageSeqs: request.messages.map(message => message.seq),
++    }))
++    ctx.sessionTitle.register({ id: SessionTitleProviderId('retry-title'), automatic: 'all-prompts', generate })
++    const session = ctx.sessions.create(SessionId('retry-title'))
++    const anchor = appendHumanPrompt(session, 'RETRY_PROMPT')
++    appendRoute(session)
++    await settle()
++    expect(generate).toHaveBeenCalledOnce()
++    session.append('session/active-branch', {
++      revision: 1, expectedRevision: 0, anchorSeq: anchor.seq,
++      messageId: anchor.data.id, requestId: 'retry', inputRevision: 'input', prompt: anchor.data,
++    })
++    appendRoute(session, 'change')
++    await settle()
++    expect(generate).toHaveBeenCalledTimes(2)
++    expect(ctx.sessionTitle.get(session)?.title).toBe('RETRY_TITLE')
++    await ctx.fiber.dispose()
++  })
++
++  it('preserves a manual title pin across edited branch projection and requires refresh to unpin', async () => {
++    const ctx = new Context()
++    await ctx.plugin(SessionStore)
++    await ctx.plugin(SessionProjectionRegistry)
++    await ctx.plugin(SessionTitleService, CONFIG)
++    const generate = vi.fn(async (request: SessionTitleProviderRequest) => ({
++      title: 'EDITED_TITLE', messageSeqs: request.messages.map(message => message.seq),
++    }))
++    ctx.sessionTitle.register({ id: SessionTitleProviderId('branch-pin'), automatic: 'all-prompts', generate })
++    const session = ctx.sessions.create(SessionId('branch-pin'))
++    const anchor = appendHumanPrompt(session, 'ORIGINAL')
++    await settle()
++    ctx.sessionTitle.rename(session, 'Pinned by hand')
++    session.append('session/active-branch', {
++      revision: 1, expectedRevision: 0, anchorSeq: anchor.seq,
++      messageId: anchor.data.id, requestId: 'edit', inputRevision: 'input',
++      prompt: { ...anchor.data, content: [{ type: 'text', text: 'EDITED' }] },
++    })
++    appendRoute(session)
++    await settle()
 +    expect(generate).not.toHaveBeenCalled()
-+    expect(ctx.sessionTitle.get(session)?.title).not.toBe('OLD_PROMPT_TITLE')
++    expect(ctx.sessionTitle.get(session)).toMatchObject({ title: 'Pinned by hand', source: { kind: 'user' } })
++    await ctx.sessionTitle.refresh(session)
++    expect(generate).toHaveBeenCalledOnce()
++    expect(ctx.sessionTitle.get(session)?.title).toBe('EDITED_TITLE')
++    await ctx.fiber.dispose()
++  })
++
++  it.each(['refresh', 'rename'] as const)('lets an immediate %s supersede deferred branch pin restoration without a provider', async action => {
++    const ctx = new Context()
++    await ctx.plugin(SessionStore)
++    await ctx.plugin(SessionProjectionRegistry)
++    await ctx.plugin(SessionTitleService, CONFIG)
++    const session = ctx.sessions.create(SessionId(`branch-pin-${action}`))
++    const anchor = appendHumanPrompt(session, 'ORIGINAL')
++    await settle()
++    ctx.sessionTitle.rename(session, 'Pinned by hand')
++    session.append('session/active-branch', {
++      revision: 1, expectedRevision: 0, anchorSeq: anchor.seq,
++      messageId: anchor.data.id, requestId: 'edit', inputRevision: 'input',
++      prompt: { ...anchor.data, content: [{ type: 'text', text: 'EDITED' }] },
++    })
++    if (action === 'refresh') await ctx.sessionTitle.refresh(session)
++    else ctx.sessionTitle.rename(session, 'New manual name')
++    await settle()
++    expect(ctx.sessionTitle.get(session)).toMatchObject(action === 'refresh'
++      ? { title: 'EDITED', source: { kind: 'fallback' } }
++      : { title: 'New manual name', source: { kind: 'user' } })
 +    await ctx.fiber.dispose()
 +  })
 +

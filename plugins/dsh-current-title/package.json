@@ -6,7 +6,8 @@
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "dsh": ">=0.2.0-rc.2"
   },
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
@@ -76,7 +77,7 @@
     "zod": "^4.1.5"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/cordis": ">=4.0.4",
     "@deepseek-ai/dsh-llm": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2"
   },
@@ -89,7 +90,7 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/cordis": "4.0.4",
     "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
     "@deepseek-ai/dsh-storage-domain": "0.2.0-rc.2",
     "react": "^18.2.0",
@@ -118,6 +119,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "242de6de7c0d725d7385cbe5aa8473c209805af2cf9130b418a9821f2ce38cb6"
+    "contentHash": "6390c26dbfb21193f674966c510a776783c7afda84caa58fcf65ed38f5c099b2"
   }
 }

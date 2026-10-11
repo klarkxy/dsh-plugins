@@ -285,22 +285,6 @@ export async function readSession(
   }
 }
 
-export async function withObservationLease<T>(
-  query: QueryHost,
-  sessionId: SessionId,
-  signal: AbortSignal | undefined,
-  read: (events: readonly SessionEvent[]) => T,
-): Promise<T> {
-  signal?.throwIfAborted()
-  const observation = await query.observeSession(sessionId, { signal, projectionMode: 'none' })
-  try {
-    signal?.throwIfAborted()
-    return read(observation.events)
-  } finally {
-    observation[Symbol.dispose]()
-  }
-}
-
 function sessionFilters(request: ListRequest | SearchRequest): SessionResultFilter[] {
   const filters: SessionResultFilter[] = []
   if ('sessionId' in request && request.sessionId !== undefined) {

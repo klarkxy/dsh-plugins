@@ -210,6 +210,8 @@ export interface SubagentSessionLike {
     readonly parentSession?: unknown
     readonly origin?: unknown
     readonly delegationDepth?: unknown
+    readonly isSeeded?: unknown
+    readonly classification?: unknown
   }
 }
 
@@ -225,9 +227,16 @@ export interface SubagentSessionLike {
 export function isSubagentSession(session: unknown): boolean {
   const header = (session as SubagentSessionLike | null | undefined)?.header
   if (!header || typeof header !== 'object') return false
-  return Boolean(header.parentSession)
-    || header.origin === 'subagent'
-    || Number(header.delegationDepth ?? 0) > 0
+  if (header.origin === 'subagent' || Number(header.delegationDepth ?? 0) > 0) return true
+  // Native human forks also persist parentSession for history lineage. A fork's
+  // seeded header distinguishes it from legacy children whose parent is the
+  // only marker. Native rc.2 forks omit depth; patched hosts may persist zero.
+  // Explicit delegation and unknown metadata still keep the child guard.
+  const humanFork = header.isSeeded === true
+    && (header.delegationDepth === undefined || header.delegationDepth === 0)
+    && header.origin === undefined
+    && (header.classification === undefined || header.classification === 'ordinary' || header.classification === 'free')
+  return Boolean(header.parentSession) && !humanFork
 }
 
 /** Project keys come only from the host-validated session directory, never client input. */

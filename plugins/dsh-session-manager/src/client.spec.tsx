@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { COPY_THREAD_FAILED, COPY_THREAD_LABEL, copyMenuState, copyThreadId } from './copy-action.ts'
+import { COPY_THREAD_LABEL, copyThreadId } from './copy-action.ts'
 import { COPY_THREAD_MENU_ID, COPY_THREAD_MENU_ORDER, USER_ACTIONS_SLOT } from './contracts.ts'
 import { CopyThreadMenuItem, apply } from './client.tsx'
 
@@ -20,8 +20,6 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', async () => {
 
 describe('copy thread id', () => {
   it('copies the session id from the menu row and keeps a visible failure open', async () => {
-    expect(copyMenuState(false, 'zh').failure).toBe(COPY_THREAD_FAILED.zh)
-    expect(copyMenuState(false, 'en').failure).toBe(COPY_THREAD_FAILED.en)
     const writes: string[] = []
     const close = vi.fn()
     const html = renderToStaticMarkup(

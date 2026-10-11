@@ -79,23 +79,24 @@ describe('zhihu_search', () => {
       expect(readFileMock).not.toHaveBeenCalled()
     })
 
-    it('falls through to env when resolveCredential returns undefined', async () => {
+    it.each([undefined, '', '   ', 'short', 'x'.repeat(257)])('rejects an absent or malformed host credential (%s) without fallback', async value => {
       readFileMock.mockResolvedValue(JSON.stringify({ access_secret: 'filetoken1234' }))
-      const token = await resolveZhihuToken(
-        { ZHIHU_ACCESS_TOKEN: 'primarytoken1' },
-        { resolveCredential: async () => undefined },
-      )
-      expect(token).toEqual({ token: 'primarytoken1', source: 'env-primary' })
+      const error = await resolveZhihuToken(
+        { ZHIHU_ACCESS_TOKEN: 'primarytoken1', ZHIHU_ACCESS_SECRET: 'fallbacktok1' },
+        { resolveCredential: async () => value },
+      ).catch(error => error)
+      expect(error).toMatchObject({ name: 'ZhihuSearchError', code: 'TOKEN_MISSING', message: expect.stringContaining('设置') })
+      for (const secret of ['primarytoken1', 'fallbacktok1', 'filetoken1234', value?.trim()].filter(Boolean)) {
+        expect(error.message).not.toContain(secret)
+      }
+      expect(error.message).not.toContain('环境变量')
       expect(readFileMock).not.toHaveBeenCalled()
     })
 
-    it('falls through to env when resolveCredential returns a malformed value', async () => {
+    it('does not read the CLI credentials file when the host credential is cleared and env is empty', async () => {
       readFileMock.mockResolvedValue(JSON.stringify({ access_secret: 'filetoken1234' }))
-      const token = await resolveZhihuToken(
-        { ZHIHU_ACCESS_TOKEN: 'primarytoken1' },
-        { resolveCredential: async () => 'short' },
-      )
-      expect(token).toEqual({ token: 'primarytoken1', source: 'env-primary' })
+      await expect(resolveZhihuToken({}, { resolveCredential: async () => undefined }))
+        .rejects.toMatchObject({ code: 'TOKEN_MISSING' })
       expect(readFileMock).not.toHaveBeenCalled()
     })
 
@@ -109,10 +110,10 @@ describe('zhihu_search', () => {
       expect(fromFile).toEqual({ token: 'filetoken1234', source: 'file' })
     })
 
-    it('throws TOKEN_MISSING pointing at the settings UI when no source has a token', async () => {
+    it('throws TOKEN_MISSING when the standalone client has no token source', async () => {
       readFileMock.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }))
       await expect(
-        resolveZhihuToken({}, { resolveCredential: async () => undefined }),
+        resolveZhihuToken({}),
       ).rejects.toMatchObject({
         name: 'ZhihuSearchError',
         code: 'TOKEN_MISSING',

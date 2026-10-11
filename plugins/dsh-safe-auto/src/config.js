@@ -3,7 +3,7 @@ import { validateModelConfig } from './model-route.js';
 const defaults = Object.freeze({
   enabled: true,
   provider: '', model: '', reasoningEffort: '', reviewerPrompt: '',
-  timeoutMs: 30000, maxInputBytes: 32768, outputTokens: 256,
+  timeoutMs: 30000, maxInputBytes: 32768, outputTokens: 1024,
   humanApprovalTimeoutMs: 60000,
   maxReviewsPerTask: 20, consecutiveDenials: 3,
   staticReadonly: true,

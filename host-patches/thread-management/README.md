@@ -11,7 +11,9 @@ node host-patches/thread-management/start-local.mjs --check
 node host-patches/thread-management/start-local.mjs
 ```
 
-启动器检查补丁涉及的源码哈希、冻结的完整编译产物和官方客户端构建记录，再启动候选 Web 宿主。它按补丁哈希使用仓库 `.scratch/thread-management/local-home-<哈希前缀>` 下的独立配置、会话与工作目录，保留早期候选目录。模型需要在这个独立应用中配置；验收使用假模型，未测试真实提供方的持续运行。现有桌面应用没有安装、重启或覆盖。
+启动器检查补丁涉及的源码哈希、冻结的完整编译产物和官方客户端构建记录，再启动候选 Web 宿主。它按补丁哈希使用仓库 `.scratch/thread-management/local-home-<哈希前缀>` 下的独立配置、会话与工作目录，保留早期候选目录。模型需要在这个独立应用中配置。初版假模型验收保留在历史记录中；2026-10-07 已用 MiniMax-M3.1-Flash-Preview 对当前工作区插件完成真实 Web 修复复验，见 [修复验收](fix-acceptance.json) 与 [独立审查](fix-independent-review.md)。未测试真实提供方的长期持续运行，现有桌面应用没有安装、重启或覆盖。
+
+本轮宿主修复在活动分支编辑、重试后重新安排标题，并保留真人手动命名；主动刷新可解除固定名称。最终补丁、完整官方构建、源码与产物哈希已同步，`reproduction-check.json` 验证其可应用到精确上游基线。`acceptance.json` 记录当前针对性复验，初版广泛验收见 `historical-acceptance-before-fixes.json`。
 
 `plugins/dsh-session-manager` 以 `0.1.0-rc.1` 进入 npm `next` 预发布通道；本目录保留已验收的 `.tgz` 和其精确校验值。基础宿主可用跨目录查找、分页读取和复制线程 ID；自由聊天和原会话重发依赖本补丁增加的宿主能力，只在宿主声明能力后显示。不要把插件单独安装成功当作全部能力已启用。
 

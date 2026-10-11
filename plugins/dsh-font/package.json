@@ -60,15 +60,18 @@
     "@klarkxy/dsh-plugin-kit": "workspace:*"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.4"
+    "@deepseek-ai/cordis": ">=4.0.4"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/cordis": "4.0.4",
     "react": "^18.2.0",
     "@types/react": "18.3.31",
     "react-dom": "^18.2.0",
     "@types/react-dom": "^18.3.1",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2"
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-theme": "0.2.0-rc.2",
+    "jsdom": "29.1.1",
+    "@types/jsdom": "28.0.3"
   },
   "keywords": [
     "dsh",
@@ -94,6 +97,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/font/",
   "dshRelease": {
-    "contentHash": "873cbef26b6126f34a75b0300d66db8209bf848e56aebab4d5868b2a40d34a00"
+    "contentHash": "1f567ad16d1f6458065a2f677da2d2a1509609d9c95f9de7628c2304aa1394a4"
   }
 }

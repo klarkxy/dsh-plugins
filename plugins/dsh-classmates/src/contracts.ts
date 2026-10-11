@@ -164,6 +164,7 @@ export interface ClassmatesState {
   /** Routes requiring native approval before Classmates creates a child. */
   protectedModels?: ModelRoute[];
   settingsRevision: number;
+  /** Advisory directory from the last completed load; mutations do not refresh it. */
   models: ModelChoice[];
   writable: boolean;
   catalogErrors?: string[];

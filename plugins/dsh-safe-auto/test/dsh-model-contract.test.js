@@ -34,6 +34,7 @@ test('real Cordis, ToolRuntime, ApprovalService and LlmRuntime: conversation-fol
     const target = join(root, 'target.txt'); writeFileSync(target, 'before');
     let modelCalls = 0; let humanCalls = 0; let verdict = 'allow';
     const ctx = new Context(); const mounted = [];
+    ctx.provide('workingDirectory', { get: session => session.currentCwd ?? session.header.cwd });
     t.after(async () => {
       try { for (const fiber of mounted.reverse()) await fiber.dispose(); }
       finally { rmSync(root, { recursive: true, force: true }); }
@@ -58,7 +59,7 @@ test('real Cordis, ToolRuntime, ApprovalService and LlmRuntime: conversation-fol
         seen.push(options);
         assert.deepEqual(options.tools, []);
         assert.equal(options.messages.length, 1);
-        assert.equal(options.maxTokens, 256);
+        assert.equal(options.maxTokens, 1024);
         assert.equal(options.sessionId, undefined);
         modelCalls++;
         const text = JSON.stringify({ decision: verdict, risk: 'low', authorization: 'high', bounded: true, reason: 'Bounded user-requested write.' });

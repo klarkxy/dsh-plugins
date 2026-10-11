@@ -7,9 +7,9 @@ import SessionQueryEngine, { SessionQueryError, SessionSearchCursor, type Sessio
 import { afterEach, describe, expect, it } from 'vitest'
 import { resolveConfig } from './contracts.ts'
 import { callerFromExecution } from './caller.ts'
-import { itemsFromSurface, PAGE_BUDGET_NOTE, pageItems } from './conversation.ts'
+import { itemsFromSurface, pageItems } from './conversation.ts'
 import { createCursorKey, decodeCursor, encodeCursor, prefixDigest } from './cursor.ts'
-import { listSessions, readSession, searchSessions, withObservationLease } from './query.ts'
+import { listSessions, readSession, searchSessions } from './query.ts'
 import { apply } from './index.ts'
 
 const HERE_CWD = resolve(process.cwd(), 'session-fixture', 'here')
@@ -314,7 +314,6 @@ describe('session discovery', () => {
   })
 
   it('bounds empty pages, keeps unicode tails, and rejects forged cursors', () => {
-    expect(PAGE_BUDGET_NOTE).toContain('truncated')
     const empty = Array.from({ length: 20_000 }, (_, seq) => ({
       seq, role: 'assistant' as const, text: '', truncated: false, inherited: false,
     }))
@@ -483,8 +482,13 @@ describe('session discovery', () => {
     controller.abort()
     await expect(readSession(query, { sessionId: 'lease' }, { signal: controller.signal }, config, cursors)).rejects.toThrow()
     expect(releases).toBe(0)
-    await expect(withObservationLease(query, session.id, undefined, () => { throw new Error('boom') })).rejects.toThrow('boom')
+    const readTitles = query.readTitleSnapshots.bind(query)
+    query.readTitleSnapshots = async () => { throw new Error('title read failed') }
+    expect(await readSession(query, { sessionId: 'lease' }, {}, config, cursors)).toMatchObject({
+      status: 'failed', code: 'SESSION_QUERY_TOOL_FAILED', message: 'title read failed',
+    })
     expect(releases).toBe(1)
+    query.readTitleSnapshots = readTitles
     await readSession(query, { sessionId: 'lease' }, { signal: new AbortController().signal }, config, cursors)
     expect(releases).toBe(2)
     const missing = await readSession(query, { sessionId: 'absent' }, { signal: new AbortController().signal }, config, cursors)

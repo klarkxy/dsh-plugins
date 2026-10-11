@@ -1,5 +1,10 @@
 {
-  "reviewDate": "2026-10-07",
+  "reviewDate": "2026-10-10",
   "releaseCondition": "Remove a package only after reviewing its final packed contents, passing relevant checks, and accepting new behavior in the target DSH host. Include bundled workspace code in that acceptance.",
-  "packages": []
+  "packages": [
+    {
+      "name": "@klarkxy/dsh-unrestricted",
+      "reason": "New Unrestricted agent preset; pending packed-content review and target-host acceptance of the scenarios in plugins/dsh-unrestricted/ACCEPTANCE.md."
+    }
+  ]
 }

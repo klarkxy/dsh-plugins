@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
 import { COPY_THREAD_FAILED } from './copy-action.ts'
-import { FreeChatPanel, FreeChatScreen } from './free-panel.tsx'
+import { DeleteChatDialog, FreeChatPanel } from './free-panel.tsx'
 import { createFreeChatModel, createRetryModel, type SessionHost } from './session-actions.ts'
 import { UserMessageActions } from './user-actions.tsx'
 import { failureText } from './ui-copy.ts'
@@ -70,7 +70,7 @@ describe('free chat panel', () => {
       await model.reloadCapabilities()
       let root: Root | undefined
       const render = (locale: 'en' | 'zh') => {
-        root!.render(<FreeChatScreen model={model} locale={locale} />)
+        root!.render(<><FreeChatPanel model={model} locale={locale} /><DeleteChatDialog model={model} locale={locale} /></>)
       }
       try {
         await act(async () => {

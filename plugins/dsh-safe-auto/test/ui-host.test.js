@@ -89,6 +89,64 @@ test('control route fails closed and rejects malformed requests before the handl
   assert.deepEqual(calls, [['settings.get', {}]]);
 });
 
+for (const saveOutcome of ['saved', 'failed']) {
+  test(`UI unload drains an in-flight ${saveOutcome} write and rejects queued native permission changes`, async () => {
+    const write = Promise.withResolvers();
+    const started = Promise.withResolvers();
+    const disposers = [], changes = [], rows = new Map();
+    let route, attached = false, closed = false, removed = false, invalidations = 0;
+    let current = 'workspace-write';
+    const session = { id: 's', seq: 0, header: { id: 's' }, snapshotEvents: () => [] };
+    const specs = { 'workspace-write': { sandbox: 'workspace-write', approval: 'ask' },
+      'danger-full-access': { sandbox: 'danger-full-access', approval: 'never' } };
+    const ctx = {
+      safeAutoRuntime: {
+        base: parseConfig({ provider: 'p', model: 'm' }),
+        attach() { attached = true; return () => { attached = false; }; },
+        invalidateApprovals() { invalidations++; },
+      },
+      storageDomain: { async open() { return {
+        table: () => ({ get: key => rows.get(key), async put(key, value) {
+          started.resolve(); await write.promise; rows.set(key, value);
+        } }),
+        async close() { closed = true; },
+      }; } },
+      permissionPresets: {
+        catalog: () => ({ options: Object.keys(specs).map(value => ({ value })) }),
+        resolve: value => specs[value], current: () => current,
+        set(_session, value) { current = value; changes.push({ value, attached }); },
+      },
+      sandboxPolicy: { resolve: () => ({ mode: specs[current].sandbox }) },
+      sessions: { get: () => session, list: () => [session] },
+      connection: { requestRejection: () => undefined },
+      webServer: { register(value) { route = value; return () => { removed = true; }; } },
+      effect(fn) { disposers.push(fn()); },
+    };
+    await apply(ctx);
+    const call = (endpoint, payload) => roundTrip(route.handler, request('POST', `/dsh-safe-auto/${endpoint}`,
+      envelope(endpoint, payload), { 'content-type': 'application/json', 'sec-fetch-mode': 'cors' }));
+    const saving = call('settings.save', { expectedRevision: 0, values: { model: 'new' } });
+    await started.promise;
+    const selecting = call('session.select', { sessionId: 's', expectedRevision: '0:0', value: 'danger-full-access' });
+    await new Promise(setImmediate);
+    const unloading = (async () => { for (const dispose of disposers.reverse()) await dispose(); })();
+    await new Promise(setImmediate);
+    assert.equal(attached, false); assert.equal(removed, true); assert.equal(closed, false);
+    assert.deepEqual(changes, []);
+    if (saveOutcome === 'saved') write.resolve();
+    else write.reject(new Error('storage write failed'));
+    const [saveResponse, selectResponse] = await Promise.all([saving, selecting, unloading]);
+    assert.equal(JSON.parse(saveResponse.body).result.ok, false);
+    assert.match(JSON.parse(selectResponse.body).result.error.message, /unloaded/);
+    assert.equal(closed, true); assert.equal(invalidations, 0);
+    assert.equal(current, 'workspace-write'); assert.deepEqual(changes, []);
+    assert.equal(rows.has('reviewer'), saveOutcome === 'saved');
+    // A previously admitted request whose body arrives late must also be rejected.
+    const late = await call('approval.answer', { sessionId: 's' });
+    assert.equal(JSON.parse(late.body).result.ok, false);
+  });
+}
+
 test('approval endpoints admit browser and authenticated desktop fetches, rejecting incomplete or hostile metadata', async () => {
   const calls = []; let route;
   registerControlRoute({ connection: { requestRejection: () => undefined }, webServer: { register(value) { route = value; } } },

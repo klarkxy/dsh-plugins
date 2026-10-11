@@ -32,6 +32,7 @@ describe('font client contract', () => {
 function documentFixture() {
   const nodes: Array<{ attrs: Map<string, string>; textContent: string; remove(): void }> = []
   const styleCalls: string[] = []
+  const values = new Map<string, string>()
   const head = {
     appendChild(node: (typeof nodes)[number]) { nodes.push(node) },
   }
@@ -50,8 +51,10 @@ function documentFixture() {
       },
       documentElement: {
         style: {
-          setProperty(name: string, value: string) { styleCalls.push(`set ${name} = ${value}`) },
-          removeProperty(name: string) { styleCalls.push(`remove ${name}`) },
+          getPropertyValue: (name: string) => values.get(name) ?? '',
+          getPropertyPriority: () => '',
+          setProperty(name: string, value: string) { values.set(name, value); styleCalls.push(`set ${name} = ${value}`) },
+          removeProperty(name: string) { values.delete(name); styleCalls.push(`remove ${name}`) },
         },
       },
     },
@@ -77,6 +80,7 @@ function mountClient(options: { locale?: string; storage?: Record<string, string
   let registration: unknown
   let render: ((props: unknown) => ReactNode) | undefined
   const sizes: number[] = []
+  const listeners = new Set<() => void>()
   const context = {
     effect(run: () => (() => void) | void, label?: string) { effects.push({ run, label, dispose: run() }) },
     slots: {
@@ -91,10 +95,11 @@ function mountClient(options: { locale?: string; storage?: Record<string, string
       getSnapshot: () => ({ active: options.locale ?? 'zh-CN' }),
       subscribe: () => () => {},
     },
-    on: () => () => {},
+    on(_event: string, listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } },
   }
   apply(context as never)
-  return { fixture, effects, sizes, getSeat: () => seat, getRegistration: () => registration, getRender: () => render }
+  return { fixture, effects, sizes, listeners, change: () => { for (const listener of listeners) listener() },
+    getSeat: () => seat, getRegistration: () => registration, getRender: () => render }
 }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -125,6 +130,16 @@ describe('font client apply', () => {
     const mounted = mountClient()
     expect(mounted.getSeat()).toBe('plugins.bundle.config')
     expect(mounted.getRegistration()).toMatchObject({ name: 'plugins.bundle.config', key: '@klarkxy/dsh-font' })
+  })
+
+  it('stops writing after unload', async () => {
+    const mounted = mountClient({ storage: { [STORAGE_KEY]: '{"codeFont":"Local Mono"}' } })
+    mounted.change()
+    for (const effect of mounted.effects) effect.dispose?.()
+    const afterUnload = [...mounted.fixture.styleCalls]
+    await Promise.resolve()
+    expect(mounted.fixture.styleCalls).toEqual(afterUnload)
+    expect(mounted.listeners.size).toBe(0)
   })
 })
 

@@ -99,7 +99,9 @@ function childId(result: Awaited<ReturnType<Awaited<ReturnType<typeof setup>>['c
   expect(result.isError, JSON.stringify(result)).toBe(false);
   if (result.isError) throw new Error(result.error.message);
   const value = result.value as { subagentId: string };
+  expect(result.value).toMatchObject({ kind: 'continuable' });
   expect(value.subagentId).toBeTypeOf('string');
+  expect(result.content).toEqual([{ type: 'text', text: `started subagent ${value.subagentId}` }]);
   return value.subagentId;
 }
 
@@ -716,6 +718,20 @@ it('writes a complete subagent binding after a background dispatch and never for
   expect(JSON.stringify(bindings[0])).not.toContain('ROLE_LITERAL');
   // Enumerating another parent session never leaks the row.
   expect((await store.listSubagentBindings('another-parent')).bindings).toHaveLength(0);
+});
+
+it('keeps an admitted background child successful when the binding write fails', async () => {
+  const runtime = await setup();
+  runtime.adapter.hold = true;
+  vi.spyOn(BindingStore.prototype, 'recordSubagent').mockRejectedValueOnce(new Error('binding storage unavailable'));
+  const warn = vi.spyOn(runtime.ctx.logger, 'warn');
+  const id = childId(await runtime.call());
+  await vi.waitFor(() => expect(runtime.adapter.requests).toHaveLength(1));
+  expect(runtime.ctx.agents.get(SessionId(id))).toBeDefined();
+  expect(runtime.ctx.agents.list().filter(agent => agent.id !== runtime.lead.id)).toHaveLength(1);
+  expect(warn).toHaveBeenCalledWith('classmates: subagent binding write failed: %s', 'binding storage unavailable');
+  expect((await pluginStore(runtime.root).listSubagentBindings(runtime.lead.id)).bindings).toHaveLength(0);
+  runtime.adapter.release();
 });
 
 it('records inherit, override, and profile model sources on their bindings', async () => {

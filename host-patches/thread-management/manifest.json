@@ -6,7 +6,7 @@
   "upstreamVersion": "0.2.0-rc.2",
   "hostSource": "H:\\Code\\dsh-plugins\\.scratch\\thread-management\\host",
   "plugin": "@klarkxy/dsh-session-manager@0.1.0-rc.1",
-  "patchSha256": "a10de75e66795f0de0b6fd0f6f253eef57aa1e7436a619497a7f2246a03d9a22",
+  "patchSha256": "49b0f60f89fb21e19aa8de9d6264c66d3dcab0920b688b87097d0f44904010b0",
   "sourceHashNormalization": "UTF-8 text with LF line endings",
   "files": {
     "apps/cli/tests/fixtures/dsh-badge/snapshot.ts": "ab9c3aee97e0e2083edbe38a9a1b0d5102e4b725aa6da28c4da6f5e9cd67679a",
@@ -241,9 +241,9 @@
     "packages/session/session-persistence/tsconfig.json": "d74e9bbcbe6cc6d2ddcb9bcae6a44eddd5ec4b1b7b18e48558aac295f563dba1",
     "packages/session/session-projection/src/index.ts": "405a55f74994a7fc1f32aaeae8f5e137f33e36ced85044043fc486dff2426ff4",
     "packages/session/session-projection/tests/registry.spec.ts": "d2b9f28b9089b4fa79a33e963c5212374b82a4874c4e8e36affc072c6e8e767c",
-    "packages/session/session-title/src/index.ts": "48d63731af862660332983b2394bb2e74c041535ce8286e81075161539be0100",
+    "packages/session/session-title/src/index.ts": "22e32168a0231463409b0a92bde61cc6a5b8a8980eecf3d28adc4da8043d51b7",
     "packages/session/session-title/tests/persistence.spec.ts": "d2cf895cba8526358c56a671eb37fdf91ef3c5550d80c525217172c7cb01cfff",
-    "packages/session/session-title/tests/provider.spec.ts": "d6a74eccd7511d0a217733934b763f554085a87f5776d554fa16e7cc7da2e01e",
+    "packages/session/session-title/tests/provider.spec.ts": "6040f9e237fee6118f4ebec3d71ba9358db7bd0798142a78ec5f96a03dc4de66",
     "packages/shell/tool-bash-persistent/tests/loader-composition.spec.ts": "16cb0935f4a78b3c916fcef5d1f80f688e34892e2787e610c3e8ca18fbd57e2a",
     "packages/shell/tool-bash-persistent/tests/tools.spec.ts": "fc8adf29d05350944e270091d60d984d6140e56086f1a934c869fdb443038555",
     "packages/shell/tool-bash/tests/background.spec.ts": "8d2e2c93c58ddab67b4ff2877d98da32732a4170462ea0c94bdbab98b62b5c22",
@@ -290,64 +290,42 @@
     "README.zh-CN.md": "0a756c459fa32ddd41adb7ea673e4340112ac37dcb6411d4731d261d36bc24d8"
   },
   "acceptance": {
-    "checkedAt": "2026-10-07T05:13:44.134Z",
-    "overall": "PASS final rebuilt candidate",
-    "baseline": "639ed015397290b3745d163aafe02ffee4aa3f84",
-    "patchSha256": "a10de75e66795f0de0b6fd0f6f253eef57aa1e7436a619497a7f2246a03d9a22",
+    "checkedAt": "2026-10-07T14:44:50.363Z",
+    "patchSha256": "49b0f60f89fb21e19aa8de9d6264c66d3dcab0920b688b87097d0f44904010b0",
+    "model": {
+      "provider": "minimax-cn",
+      "model": "MiniMax-M3.1-Flash-Preview"
+    },
+    "sourceMode": "current workspace plugins in isolated Web",
+    "repoCheck": "pnpm check exit 0",
+    "hostBuild": "complete build:official exit 0",
+    "hostTitleTests": 57,
+    "web": {
+      "blueprint": "PASS 1440x1000, 390x844, 390x600",
+      "title": "PASS same-id edit/retry, manual pin, explicit unpin",
+      "safeAuto": "PASS persisted human fork, package-default 1024, allowed-once, MODEL_NOT_ALLOWED and HUMAN_REJECTED"
+    },
+    "desktopActivation": false,
+    "originalAcceptance": "historical acceptance.json retained separately",
+    "overall": "PASS targeted fixes on final rebuilt candidate",
     "sourceReproduction": {
-      "passed": true,
-      "files": 263,
-      "receipt": "reproduction-check.json"
+      "baseline": "639ed015397290b3745d163aafe02ffee4aa3f84",
+      "appliedToFreshBaseline": true,
+      "sourceHashesMatched": 263,
+      "patchSha256": "49b0f60f89fb21e19aa8de9d6264c66d3dcab0920b688b87097d0f44904010b0",
+      "windowsBaselineLinkRepresentation": "Git core.symlinks=false text",
+      "upstreamLinks": 14,
+      "checkedAt": "2026-10-07T14:47:13.993Z"
     },
-    "officialAggregateBuild": {
-      "passed": true,
-      "profile": "official",
-      "clientArtifacts": 347
+    "officialClientArtifacts": 347,
+    "independentFixReview": {
+      "result": "READY",
+      "titleTests": 57,
+      "safeAutoChecks": 78,
+      "sessionHeaderChecks": 15,
+      "report": "fix-independent-review.md"
     },
-    "independentRepairReview": {
-      "passed": true,
-      "tests": 62,
-      "report": "independent-review.md"
-    },
-    "launcherRevisedHome": {
-      "passed": true,
-      "tests": 14,
-      "preservesEarlierCandidate": true
-    },
-    "finalCloseout": {
-      "passed": true,
-      "files": 5,
-      "tests": 8
-    },
-    "finalBuiltConsumers": {
-      "passed": true,
-      "files": 2,
-      "tests": 2
-    },
-    "finalNativeBrowser": {
-      "passed": true,
-      "tests": 1,
-      "behavior": [
-        "create",
-        "send",
-        "same-ID edit/resend",
-        "fork with independent files",
-        "delete",
-        "mobile layout"
-      ],
-      "pageErrors": 0
-    },
-    "pluginArchive": {
-      "filename": "klarkxy-dsh-session-manager-0.1.0-rc.1.tgz",
-      "sha256": "095f889ba3b3573f733ff10fc878190ed81e76d65f2b91fdc484c940eaf52182",
-      "integrity": "sha512-+DjAJiM5RXaulQ5q1buickiGiNwH6Oug3GB4mones97qjhejTyWYlfCFlKmhDprzjOF1tjhuWqwJI+gdRAdsfg==",
-      "contentHash": "df5f556c98b41e074aa17f43e8bb32ab56e88212a06c767e8bdd725497027e5c"
-    },
-    "limits": [
-      "Isolated homes and fake model adapters; no installed Desktop activation or user-profile changes.",
-      "Durable same-home recovery snapshots; no operating-system process-kill or sustained real-provider test.",
-      "V5 logs require preserving candidate data before any V4 rollback."
-    ]
+    "historicalBroaderAcceptance": "historical-acceptance-before-fixes.json"
   },
   "installation": "Isolated candidate only; no installed Desktop activation or user-profile changes",
   "pluginArchive": {
@@ -358,7 +336,7 @@
   },
   "build": {
     "formatVersion": 1,
-    "sourceSha256": "c4f1cb9013c566c32b45009c2dbd76ba80f2fc73a8325b744b7ff4a7e4a97987",
+    "sourceSha256": "17f355779f01c4af94af01033eb6dceb02b705c63cc71e00bf5055be268dbb6a",
     "artifacts": {
       "apps/cli/lib/bin.js": "1a03dee18683483ff6a1b27b2a1e650230da6bcca9a0f55f7d81b3308c3f307f",
       "apps/cli/lib/dump-config-BEDI-dNY.js": "fa34d3397b9ac9423f3b98a9f4798b9205f684e1eaf368352e0a93c09831d28f",
@@ -9653,16 +9631,16 @@
       "packages/session/session-title-llm/lib/types/index.d.ts.map": "16cf12b27296313e22cd723116c3ae7c31c4ec8fe275c5a313c4eaec5b0420a3",
       "packages/session/session-title-llm/lib/types/index.js": "5cb6ca818173eb995b09c208f3c4233a9e8c65176ccbc0142d19472c41540296",
       "packages/session/session-title-llm/lib/types/index.js.map": "13f8379c4c02311cb49d3fdf250c94f219ef72be0b9508ab7f5577738bacc5d4",
-      "packages/session/session-title/lib/index.js": "0e444ec5e8e2bcef3881e7fbed4190ba1f82f98ba0a073e94dbd682686fc2417",
+      "packages/session/session-title/lib/index.js": "775f30fe991faba7e2e1dc932f97f711be2f598d7f4286a3874f043510a03874",
       "packages/session/session-title/lib/invariant.js": "fa80bcb91af335b5eaa9823662a354f5be1a6b5c89a2b9da61b04caba3077da6",
       "packages/session/session-title/lib/types/client.d.ts": "1561c6bb8f6232827752e16304356951d003c2674f359042cdc2d7900ef520af",
       "packages/session/session-title/lib/types/client.d.ts.map": "94f797181e043478e9f47284544e41245c0f6212431f5cf48478aa088b43aae6",
       "packages/session/session-title/lib/types/client.js": "1ea006bcde8dcbfb977fe531694efc1ebc313935cac44fae8e61fc9468e7f45a",
       "packages/session/session-title/lib/types/client.js.map": "d627e881c7a2c8627d9e575d615e0dafd84a2d6191fcfd393542387c7c9660c7",
-      "packages/session/session-title/lib/types/index.d.ts": "ec808215f7987fb1cb559a9c3339356aee27d25f62484573fc7ae6fc859d9906",
-      "packages/session/session-title/lib/types/index.d.ts.map": "f74939233e46cbd538bd463544d8f4449cfb598175edf18991f624aa9da40042",
-      "packages/session/session-title/lib/types/index.js": "d2c03323c5fdf4b4701fc56249775161069b06a2b1794662947959b3d5080532",
-      "packages/session/session-title/lib/types/index.js.map": "db5c5506079a59d99ae2c985b12a8e424711184637cfc92a9aecc7f863b518da",
+      "packages/session/session-title/lib/types/index.d.ts": "b68a015e154b923dd53662cb21083bb0a9841b5b8aac70e61e1e9940e1983d19",
+      "packages/session/session-title/lib/types/index.d.ts.map": "8181349064589e181ea5796cad9d76b150ed0b0762955a27ea946d30081de2f4",
+      "packages/session/session-title/lib/types/index.js": "8b65f953a6458c21c4ea6c3d4196479f70511dd3e97bfc64d23897ceedc5cc85",
+      "packages/session/session-title/lib/types/index.js.map": "72efe29bd48953c0daf7c8f410cc93f36d2fc9076cd01908bece3ff869623baa",
       "packages/session/session-title/lib/types/invariant.d.ts": "44faf2a40d4570f2aab3e66d28d70df41b839a3f32ef4ed08e114d2e0fc8ebfb",
       "packages/session/session-title/lib/types/invariant.d.ts.map": "5b276c488001707a4a74425658de3edda996dac9540f0a66e4641cf93300923a",
       "packages/session/session-title/lib/types/invariant.js": "3012979029d583471c6b3b6626b17ce621d2e65fda030a43de6b7cb4f95c4701",
@@ -11122,5 +11100,26 @@
       "vendor/timer/lib/types/index.js.map": "b11720adb4392571d9fd326aa64c244c7d11bf7dd96d0e918187335286015c74"
     },
     "clientBuildRecordSha256": "b7a8f49877c377ce549576990177d9219ce672dd2a77bf32dd473f5c4f9677b3"
-  }
+  },
+  "updatedAt": "2026-10-07T14:44:50.363Z",
+  "realModelFixAcceptance": {
+    "checkedAt": "2026-10-07T14:44:50.363Z",
+    "patchSha256": "49b0f60f89fb21e19aa8de9d6264c66d3dcab0920b688b87097d0f44904010b0",
+    "model": {
+      "provider": "minimax-cn",
+      "model": "MiniMax-M3.1-Flash-Preview"
+    },
+    "sourceMode": "current workspace plugins in isolated Web",
+    "repoCheck": "pnpm check exit 0",
+    "hostBuild": "complete build:official exit 0",
+    "hostTitleTests": 57,
+    "web": {
+      "blueprint": "PASS 1440x1000, 390x844, 390x600",
+      "title": "PASS same-id edit/retry, manual pin, explicit unpin",
+      "safeAuto": "PASS persisted human fork, package-default 1024, allowed-once, MODEL_NOT_ALLOWED and HUMAN_REJECTED"
+    },
+    "desktopActivation": false,
+    "originalAcceptance": "historical acceptance.json retained separately"
+  },
+  "historicalAcceptanceFile": "historical-acceptance-before-fixes.json"
 }

@@ -74,7 +74,7 @@ export function normalizeModelRoute(value: unknown): CommitModelRoute {
 export interface CommitModelInfo {
   readonly provider: string
   readonly model: string
-  /** 'page' is the plugin-page selection; 'default' is the host chat model. */
+  /** 'page' is the plugin-page selection; 'default' follows the session or host chat model. */
   readonly source: 'page' | 'default'
 }
 

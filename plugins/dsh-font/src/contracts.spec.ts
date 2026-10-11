@@ -65,7 +65,7 @@ describe('presets', () => {
 })
 
 describe('css variable application', () => {
-  /** The whole feature hinges on these two host token names (ui-theme base.css). */
+  /** The rc.2 font tokens in ui-theme base.css. */
   it('targets the host font tokens verbatim', () => {
     expect(UI_FONT_VARIABLE).toBe('--dsw-font-family')
     expect(CODE_FONT_VARIABLE).toBe('--ds-font-family-code')

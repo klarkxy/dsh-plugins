@@ -1,5 +1,5 @@
 import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
-import { modelMenuOverride } from '@klarkxy/dsh-plugin-kit/model-menu'
+import { modelRouteOverride } from '@klarkxy/dsh-model-route'
 import {
   DEFAULT_MAX_OUTPUT_TOKENS, RECENT_LOG_COUNT,
   defaultSettings, normalizeFallback, type CommitGroupResult, type CommitModelInfo, type CommitRunResult,
@@ -72,6 +72,8 @@ export class GitCommitService {
   private settings: GitCommitSettings
   private settingsPending: Promise<void> = Promise.resolve()
   private readonly settingsReady: Promise<void>
+  private settingsFailure: CommitRunError | undefined
+  private settingsAdopted = false
   private disposed = false
 
   constructor(deps: GitCommitServiceDeps) {
@@ -79,31 +81,63 @@ export class GitCommitService {
     this.run = deps.run ?? execGit
     this.preview = deps.preview ?? untrackedPreview
     this.settings = defaultSettings()
-    // The stored row is adopted once it resolves; a failed read keeps the default.
+    // A missing row is resolved by storage; an unreadable row must not select a different model.
     this.settingsReady = deps.settings?.load().then(
-      loaded => { if (loaded) this.settings = structuredClone(loaded) },
-      () => { this.settings = defaultSettings() },
+      loaded => { if (loaded && !this.settingsAdopted) this.settings = structuredClone(loaded) },
+      () => {
+        if (!this.settingsAdopted) this.settingsFailure = new CommitRunError(
+          'settings-unavailable', 'dsh-git-commit: saved settings could not be read; reload the plugin before retrying',
+        )
+      },
     ) ?? Promise.resolve()
   }
 
-  /** Apply a freshly loaded settings row; the default stays until a row is read. */
+  /** A refreshed row wins over a pending initial read. */
   adoptSettings(next: GitCommitSettings): void {
+    if (this.disposed) throw new CommitRunError('disposed', 'dsh-git-commit: plugin disabled')
+    this.settingsAdopted = true
+    this.settingsFailure = undefined
     this.settings = structuredClone(next)
   }
 
+  /** Existing synchronous snapshot API; host operations wait for initialization first. */
   getSettings(): GitCommitSettings {
+    if (this.settingsFailure) throw this.settingsFailure
     return structuredClone(this.settings)
   }
 
-  private selectedModel() {
-    const page = modelMenuOverride(this.settings.model)
-    return { route: resolveFeatureModel(this.deps.host, page), source: page ? 'page' as const : 'default' as const }
+  async ready(): Promise<void> {
+    await this.settingsReady
+    if (this.settingsFailure) throw this.settingsFailure
+  }
+
+  private async waitForSettings(signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted()
+    if (!signal) { await this.ready(); return }
+    let onAbort: () => void = () => {}
+    const aborted = new Promise<never>((_, reject) => {
+      onAbort = () => {
+        try { signal.throwIfAborted() }
+        catch (error) { reject(error) }
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      if (signal.aborted) onAbort()
+    })
+    try { await Promise.race([this.settingsReady, aborted]) }
+    finally { signal.removeEventListener('abort', onAbort) }
+    signal.throwIfAborted()
+    if (this.settingsFailure) throw this.settingsFailure
+  }
+
+  private selectedModel(sessionId: string) {
+    const page = modelRouteOverride(this.settings.model)
+    return { route: resolveFeatureModel(this.deps.host, page, sessionId), source: page ? 'page' as const : 'default' as const }
   }
 
   async updateSettings(patch: Omit<GitCommitSettings, 'revision'>, expectedRevision: number): Promise<GitCommitSettings> {
     const detached = structuredClone(patch)
     const result = this.settingsPending.then(async () => {
-      await this.settingsReady
+      await this.ready()
       if (this.disposed) throw new CommitRunError('disposed', 'dsh-git-commit: plugin disabled')
       if (expectedRevision !== this.settings.revision) {
         throw new CommitRunError('stale', 'dsh-git-commit: settings changed; reload and retry')
@@ -125,6 +159,7 @@ export class GitCommitService {
 
   async dispose(): Promise<void> {
     this.disposed = true
+    await this.settingsReady
     await this.settingsPending
     await this.running?.catch(() => {})
   }
@@ -143,6 +178,7 @@ export class GitCommitService {
   }
 
   async status(sessionId: string): Promise<GitCommitStatus> {
+    await this.ready()
     let resolved
     try {
       resolved = await this.resolveRepo(sessionId)
@@ -153,7 +189,7 @@ export class GitCommitService {
       throw error
     }
     const changes = await workingTreeChanges(this.run, resolved.root)
-    const selected = this.selectedModel()
+    const selected = this.selectedModel(sessionId)
     const model = modelInfo(selected.route, selected.source)
     return {
       available: true,
@@ -176,6 +212,8 @@ export class GitCommitService {
   }
 
   private async runCommit(sessionId: string, signal?: AbortSignal): Promise<CommitRunResult> {
+    await this.waitForSettings(signal)
+    if (this.disposed) throw new CommitRunError('cancelled', 'dsh-git-commit: plugin is no longer active')
     const session = this.deps.sessions.get(sessionId)
     const sessionCwd = normalizeCwd(session?.header?.cwd)
     const resolved = await this.resolveRepo(sessionId)
@@ -211,7 +249,7 @@ export class GitCommitService {
     let groups: PlanGroup[] | undefined
     let planFailure = 'no model route was available'
     let model: CommitModelInfo | undefined
-    const planned = this.selectedModel()
+    const planned = this.selectedModel(sessionId)
     if (planned.route) {
       try {
         const result = await callLlmText(this.deps.llm, {

@@ -13,6 +13,34 @@ function fixture(fetcher: ZhihuSearchFetcher) {
 }
 const empty: ZhihuSearchFetcher = async () => ({ok:true,status:200,async text(){return ''},async json(){return {Code:0,Data:{Items:[]}}}})
 describe('independent Zhihu service', () => {
+  it('stops RPC and tool requests after the host credential is cleared despite a compatibility env token', async () => {
+    let credential: string | undefined = 'host-secret-only'
+    let requests = 0
+    const rows = new Map<string, ReturnType<ZhihuUsageTableLike['get']>>()
+    const usage = createZhihuUsageRecorder({ get: key => rows.get(key), async put(key, value) { rows.set(key, value) } })
+    const service = createZhihuService({
+      env: { ZHIHU_ACCESS_TOKEN: 'compatibility-secret', ZHIHU_ACCESS_SECRET: 'cli-secret-only' },
+      resolveCredential: async () => credential,
+      fetcher: async (url, init) => {
+        requests++
+        expect(init?.headers?.Authorization).toBe('Bearer host-secret-only')
+        return empty(url, init)
+      },
+    }, usage)
+    const tool = createZhihuSearchTool(service.toolOptions) as unknown as { execute(args: unknown, ctx: { signal: AbortSignal }): Promise<unknown> }
+    try {
+      expect(await service.call('search', { query: '已保存密钥' }, signal())).toMatchObject({ ok: true })
+      await tool.execute({ query: '已保存密钥' }, { signal: signal() })
+      credential = undefined
+      const result = await service.call('search', { query: '已清除密钥' }, signal())
+      expect(result).toMatchObject({ ok: false, error: { code: 'token-missing' } })
+      expect(JSON.stringify(result)).not.toContain('secret')
+      await expect(tool.execute({ query: '已清除密钥' }, { signal: signal() })).rejects.toMatchObject({ code: 'TOKEN_MISSING' })
+      expect(requests).toBe(2)
+    } finally {
+      await service.dispose()
+    }
+  })
   it('serializes one count per concurrent RPC and Tool call in the existing usage domain',async () => {
     const service=fixture(empty)
     const tool=createZhihuSearchTool(service.toolOptions) as unknown as {execute(args:unknown,ctx:{signal:AbortSignal}):Promise<unknown>}

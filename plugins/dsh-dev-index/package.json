@@ -72,10 +72,10 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/cordis": ">=4.0.4",
     "@deepseek-ai/dsh-agent-preset-registry": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-system-prompt": ">=0.2.0-rc.2",
-    "@deepseek-ai/schemastery": "^3.18.2",
+    "@deepseek-ai/schemastery": ">=3.18.4",
     "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
@@ -96,14 +96,13 @@
     "@deepseek-ai/dsh-agent-preset-registry": "0.2.0-rc.2",
     "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-scope": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-invariants": "0.2.0-rc.2"
+    "@deepseek-ai/dsh-scope": "0.2.0-rc.2"
   },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "1eb32e2409d1061c4a649fa942165c84b1251841b871a8b4b1beb966ca995e85"
+    "contentHash": "86b92da533a7e389d749cf259566d408bf24cda58835211c4ba58e544daf5ff7"
   }
 }

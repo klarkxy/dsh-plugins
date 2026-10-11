@@ -1,0 +1,3 @@
+- insert:
+    - id: chatgpt
+      name: '@klarkxy/dsh-chatgpt'

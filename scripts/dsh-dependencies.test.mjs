@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import test from 'node:test'
+import semver from 'semver'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const read = path => JSON.parse(readFileSync(join(root, path), 'utf8'))
@@ -13,7 +14,7 @@ const plugins = readdirSync(join(root, 'plugins'), { withFileTypes: true })
   .filter(entry => entry.isDirectory()).map(entry => read(`plugins/${entry.name}/package.json`))
 
 test('DSH development dependencies and both override declarations share one baseline', () => {
-  assert.match(target, /^\d+\.\d+\.\d+-rc\.\d+$/)
+  assert.equal(semver.valid(target), target)
   for (const pkg of [manifest, ...plugins]) {
     for (const [name, version] of Object.entries(pkg.devDependencies ?? {})) {
       if (official(name)) assert.equal(version, target, `${pkg.name}: ${name}`)

@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-10-07T14:44:50.363Z",
+  "patchSha256": "49b0f60f89fb21e19aa8de9d6264c66d3dcab0920b688b87097d0f44904010b0",
+  "model": {
+    "provider": "minimax-cn",
+    "model": "MiniMax-M3.1-Flash-Preview"
+  },
+  "sourceMode": "current workspace plugins in isolated Web",
+  "repoCheck": "pnpm check exit 0",
+  "hostBuild": "complete build:official exit 0",
+  "hostTitleTests": 57,
+  "web": {
+    "blueprint": "PASS 1440x1000, 390x844, 390x600",
+    "title": "PASS same-id edit/retry, manual pin, explicit unpin",
+    "safeAuto": "PASS persisted human fork, package-default 1024, allowed-once, MODEL_NOT_ALLOWED and HUMAN_REJECTED"
+  },
+  "desktopActivation": false,
+  "originalAcceptance": "historical acceptance.json retained separately"
+}

@@ -1,0 +1,51 @@
+{
+  "name": "@klarkxy/dsh-unrestricted",
+  "version": "0.1.0-rc.1",
+  "description": "Unrestricted: a session preset that answers under the unrestricted delivery contract, instead of injecting that contract into every prompt.",
+  "icon": "./icon.svg",
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/unrestricted/",
+  "type": "module",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klarkxy/dsh-plugins.git",
+    "directory": "plugins/dsh-unrestricted"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-preset",
+    "unrestricted"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "icon.svg",
+    "locale/*.json",
+    "cordis.patch.yml",
+    "README*.md",
+    "ACCEPTANCE.md",
+    "NOTICE.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "dsh": ">=0.2.0-rc.2"
+  },
+  "scripts": {
+    "test": "node tests/preset.test.mjs"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh": "0.2.0-rc.2"
+  }
+}

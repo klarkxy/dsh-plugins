@@ -20,6 +20,8 @@ The shared support package for the feature plugins in this repository: shared re
 - `./llm-call` — `callLlmText` and `resolveFeatureModel` as separate exports.
 - `./official-ui` — the shared browser-side style contract: `officialUiCss(roots)`, the `--dsw-*` token allowlist, and the focus/elevation helpers.
 
+Plugins passing their Cordis context to `resolveFeatureModel` must declare `agents`, `sessionProjections` and `agentDefaultModel` in `inject`. These services supply the live session selection and the host default when the plugin has no saved model.
+
 ## Plugin UI convention
 
 A feature plugin's browser half composes the host's own UI rather than
@@ -45,6 +47,13 @@ restyling controls of its own. Concretely:
 
 `OFFICIAL_THEME_TOKEN_NAMES` is that allowlist. Adding a token to it is a
 deliberate act: confirm the name against the host theme first.
+
+## Session ancestry
+
+`isSubagentSession` uses durable session headers, never the author of a user message.
+Explicit subagent origin or positive delegation depth wins. A seeded human fork with
+zero or omitted depth and ordinary/free classification keeps its parent as history
+lineage; incomplete legacy parent metadata still identifies a child session.
 
 ## Deprecated types
 

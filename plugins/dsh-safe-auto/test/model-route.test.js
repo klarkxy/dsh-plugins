@@ -68,7 +68,7 @@ test('native request is fresh, tool-free, capped and has no parent session/repla
   let received;
   assert.equal((await nativeReview(runtime(opts => { received = opts; }))).decision, 'allow');
   assert.deepEqual(Object.keys(received).sort(), ['maxTokens', 'messages', 'model', 'provider', 'signal', 'system', 'tools']);
-  assert.equal(received.maxTokens, 256);
+  assert.equal(received.maxTokens, 1024);
   assert.deepEqual(received.tools, []);
   assert.equal(received.messages.length, 1);
   assert.equal(received.messages[0].role, 'user');

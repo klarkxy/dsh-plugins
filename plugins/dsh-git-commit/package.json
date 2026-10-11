@@ -6,7 +6,8 @@
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "dsh": ">=0.2.0-rc.2"
   },
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
@@ -73,11 +74,12 @@
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-git-commit/src"
   },
   "dependencies": {
+    "@klarkxy/dsh-model-route": "workspace:*",
     "@klarkxy/dsh-plugin-kit": "workspace:*",
     "zod": "^4.1.5"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/cordis": ">=4.0.4",
     "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
@@ -86,7 +88,7 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/cordis": "4.0.4",
     "@deepseek-ai/dsh-storage-domain": "0.2.0-rc.2",
     "zod": "^4.1.5",
     "react": "^18.2.0",
@@ -117,6 +119,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "478e402ef57dfefa4f3550e32d21e5c2f2790782258c450a6b6804e7ac9a32e5"
+    "contentHash": "52e225ce6bf5d5b2540793c5ebc8e9fea44619456fa2986adb04ce2284cf263e"
   }
 }

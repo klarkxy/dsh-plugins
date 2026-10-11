@@ -128,7 +128,7 @@
     "@klarkxy/dsh-plugin-kit": "workspace:*"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/cordis": ">=4.0.4",
     "@deepseek-ai/dsh-agent": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-atomic-write": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-llm": ">=0.2.0-rc.2",
@@ -137,7 +137,7 @@
     "@deepseek-ai/dsh-subagent": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-typert-protocol": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-tool-subagent": ">=0.2.0-rc.2",
-    "@deepseek-ai/schemastery": "3.18.4"
+    "@deepseek-ai/schemastery": ">=3.18.4"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-scope": {
@@ -177,6 +177,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/classmates/",
   "dshRelease": {
-    "contentHash": "48d34bf913f39d4da598ed86af0c93e2b8553c76ec9e4c09aa50aa055e849be3"
+    "contentHash": "c2c5e6ef7eb2d381db9e61029278b2465d539a8f67092cec63854facc40c3524"
   }
 }

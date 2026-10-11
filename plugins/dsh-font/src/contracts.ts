@@ -16,10 +16,8 @@ export const FONT_SIZE_MIN = 10
 export const FONT_SIZE_MAX = 22
 export const FONT_SIZE_DEFAULT = 14
 
-/** The two custom properties the host theme defines on `:root` and every
- * consumer resolves dynamically (ui-theme base.css). Overriding them by inline
- * style on <html> wins the cascade and every derived token
- * (--dsw-font-family-brand, --dsw-font-markdown-code*, terminal) follows. */
+/** DSH rc.2 defines these font stacks on :root. Root inline overrides also
+ * reach derived Markdown, brand and terminal font tokens. */
 export const UI_FONT_VARIABLE = '--dsw-font-family'
 export const CODE_FONT_VARIABLE = '--ds-font-family-code'
 
@@ -161,6 +159,48 @@ export function applyFontSettings(style: FontStyleTarget, settings: FontSettings
 export function clearFontSettings(style: FontStyleTarget): void {
   style.removeProperty(UI_FONT_VARIABLE)
   style.removeProperty(CODE_FONT_VARIABLE)
+}
+
+/** Read face required to restore only overrides still owned by this instance. */
+export interface OwnedFontStyleTarget extends FontStyleTarget {
+  getPropertyValue(name: string): string
+  getPropertyPriority(name: string): string
+  setProperty(name: string, value: string, priority?: string): void
+}
+
+/** Root inline overrides preserve the existing local persistence/unload
+ * boundary. Save the underlying value (including !important) on first write
+ * or when the host replaces a value, and never retract somebody else's write. */
+export function createFontSettingsOverride(style: OwnedFontStyleTarget) {
+  const owned = new Map<string, { previous: string; priority: string; value: string }>()
+  function release(name: string) {
+    const entry = owned.get(name)
+    if (!entry) return
+    if (style.getPropertyValue(name) === entry.value && style.getPropertyPriority(name) === '') {
+      if (entry.previous) style.setProperty(name, entry.previous, entry.priority)
+      else style.removeProperty(name)
+    }
+    owned.delete(name)
+  }
+  return {
+    apply(settings: FontSettings) {
+      for (const [name, value] of [
+        [UI_FONT_VARIABLE, settings.uiFont],
+        [CODE_FONT_VARIABLE, settings.codeFont],
+      ] as const) {
+        if (!value) { release(name); continue }
+        const current = style.getPropertyValue(name)
+        const priority = style.getPropertyPriority(name)
+        const entry = owned.get(name)
+        if (!entry || current !== entry.value || priority !== '') {
+          owned.set(name, { previous: current, priority, value: '' })
+        }
+        style.setProperty(name, value)
+        owned.get(name)!.value = style.getPropertyValue(name)
+      }
+    },
+    dispose() { for (const name of [...owned.keys()]) release(name) },
+  }
 }
 
 export interface FontSettingsStorage {

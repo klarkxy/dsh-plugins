@@ -20,6 +20,8 @@
 - `./llm-call` — 单独导出 `callLlmText` 与 `resolveFeatureModel`。
 - `./official-ui` — 浏览器端共享样式契约：`officialUiCss(roots)`、`--dsw-*` token 白名单，以及焦点环与层级辅助。
 
+将 Cordis 上下文传给 `resolveFeatureModel` 的插件须在 `inject` 中声明 `agents`、`sessionProjections` 和 `agentDefaultModel`。插件未保存模型时，这三个服务提供当前会话选择和宿主默认模型。
+
 ## 插件 UI 约定
 
 功能插件的浏览器端用宿主自己的组件拼装界面，而不是自己重画控件。具体是：
@@ -29,6 +31,10 @@
 - **颜色、圆角、层级和焦点环直接写宿主的 `--dsw-*` token**，不另起一套私有别名，也不带字面量回落：宿主同时发布浅色与深色，字面量会把其中一套钉死。样式表里写错 token 不会报错——边框直接消失、文字继承错颜色——所以 `src/official-ui.spec.ts` 会在插件样式表点到白名单之外的 token 时让构建失败。
 
 `OFFICIAL_THEME_TOKEN_NAMES` 就是这份白名单。往里加 token 是一个需要确认的动作：先对照宿主主题核实名字。
+
+## 会话关系
+
+`isSubagentSession` 只读取持久会话头，不根据 user 消息判断真人。明确的子代理来源或正派发深度优先；派发深度为零或由原生宿主省略、明确带 seed 的普通/自由真人分叉保留 parent 作为历史继承关系，仅有 parent 的旧会话及未知元数据仍按子线程处理。
 
 ## 已停用的类型
 

@@ -51,7 +51,7 @@ bundle 会插入 `dsh-safe-auto` 与 `dsh-safe-auto-ui` 两个 profile 条目。
 | `timeoutMs` | `30000` | 单次审查超时。 |
 | `humanApprovalTimeoutMs` | `60000` | 独立于模型审查的人工确认窗口；`0` 关闭，最多 300000 ms，只在 profile 配置。 |
 | `maxInputBytes` | `32768` | 提示词与输入合计的 UTF-8 字节上限；已有显式配置保持原值。 |
-| `outputTokens` | `256` | 审核输出上限。思考模型可能需要更大。 |
+| `outputTokens` | `1024` | 审核输出上限，含模型计入的思考预算。已有 profile 显式值保持不变；不完整或无效结论仍需人工确认。 |
 | `maxReviewsPerTask` | `20` | 每个真人任务的审查次数上限。 |
 | `consecutiveDenials` | `3` | 连续明确拒绝达到该值后熔断。不确定和故障重置拒绝计数，但仍消耗审查预算。 |
 | `staticReadonly` | `true` | 可证明只读的 `bash` 提权不调模型直接放行；`false` 则一律送审核模型。 |

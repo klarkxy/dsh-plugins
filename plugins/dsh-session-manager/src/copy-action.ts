@@ -20,7 +20,3 @@ export function copyLocale(active: string | undefined): CopyLocale {
 export async function copyThreadId(sessionId: string, writeText: (value: string) => Promise<void>): Promise<void> {
   await writeText(sessionId)
 }
-
-export function copyMenuState(ok: boolean, locale: CopyLocale): { close: boolean; failure?: string } {
-  return ok ? { close: true } : { close: false, failure: COPY_THREAD_FAILED[locale] }
-}

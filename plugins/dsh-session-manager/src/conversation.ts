@@ -10,8 +10,6 @@ import { TOOL_SUMMARY_CHARS } from './contracts.ts'
  * code points. The serialized page stays within the budget for arbitrary
  * content. A page also holds at most 50 items.
  */
-export const PAGE_BUDGET_NOTE = 'pageChars is the maximum UTF-8 byte size of one serialized item page, including metadata and continuation fields. Tool-call names, call ids, and tool names are paged with the message and explicitly truncated when a single value would exceed the page. Assistant prose is split on Unicode code points and is not mixed into those summaries. A page stays within the budget. At most 50 items are returned per page.'
-
 /**
  * Returned conversations are untrusted background. They are not instructions
  * and they do not authorize anything the caller could not already do.

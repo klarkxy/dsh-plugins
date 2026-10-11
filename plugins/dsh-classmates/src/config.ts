@@ -174,6 +174,8 @@ function toStoredRole(role: NormalizedRole): Omit<NormalizedRole, 'migratedRecom
 }
 
 export class RoleConfig {
+  private catalogSnapshot: { models: ModelChoice[]; catalogErrors: string[] } = { models: [], catalogErrors: [] };
+
   constructor(private readonly ctx: Context, readonly namespace = SETTINGS_NS) {}
 
   read() {
@@ -244,8 +246,16 @@ export class RoleConfig {
   }
 
   async load(): Promise<ClassmatesState> {
-    const catalog = await this.catalog();
-    return { ...this.read(), ...catalog };
+    this.catalogSnapshot = await this.catalog();
+    return this.currentState();
+  }
+
+  /** Writes return committed settings without waiting for unrelated providers.
+   * Only load refreshes the advisory catalog; preserve its rows and diagnostics
+   * for existing RPC clients that replace their entire state after a mutation.
+   */
+  private currentState(): ClassmatesState {
+    return { ...this.read(), ...structuredClone(this.catalogSnapshot) };
   }
 
   async save(input: unknown, expected: number): Promise<ClassmatesState> {
@@ -261,7 +271,7 @@ export class RoleConfig {
     const roles = existing ? state.roles.map(item => item.id === role.id ? next : item) : [...state.roles, next];
     validateRoles(roles);
     await this.ctx.settings.mutate(this.namespace, [{ op: 'set', path: ['roles'], value: roles.map(toStoredRole) }], expected);
-    return this.load();
+    return this.currentState();
   }
 
   async remove(id: string, revision: number, expected: number): Promise<ClassmatesState> {
@@ -270,7 +280,7 @@ export class RoleConfig {
     const existing = state.roles.find(item => item.id === id);
     if (!existing || existing.revision !== revision || state.settingsRevision !== expected) throw new ClassmatesError('ROLE_CONFLICT', '角色已改变，请刷新后重试');
     await this.ctx.settings.mutate(this.namespace, [{ op: 'set', path: ['roles'], value: state.roles.filter(item => item.id !== id) }], expected);
-    return this.load();
+    return this.currentState();
   }
 
   /** All-or-nothing role edits: every op validates, then one settings CAS mutation. */
@@ -280,7 +290,7 @@ export class RoleConfig {
     const changes = validateRoleChanges(input);
     const state = this.read();
     if (state.settingsRevision !== expected) throw new ClassmatesError('SETTINGS_CONFLICT', '配置已被其他页面修改，请刷新后重试；当前输入仍保留');
-    if (changes.length === 0) return this.load();
+    if (changes.length === 0) return this.currentState();
     let roles = state.roles;
     const upserts: NormalizedRole[] = [];
     for (const change of changes) {
@@ -299,7 +309,7 @@ export class RoleConfig {
     validateRoles(roles);
     await Promise.all(upserts.map(role => validateModel(this.ctx, role)));
     await this.ctx.settings.mutate(this.namespace, [{ op: 'set', path: ['roles'], value: roles.map(toStoredRole) }], expected);
-    return this.load();
+    return this.currentState();
   }
 
   async saveModelProfile(input: unknown, expected: number): Promise<ClassmatesState> {
@@ -313,12 +323,12 @@ export class RoleConfig {
     if (typeof required !== 'boolean') throw new ClassmatesError('INVALID_PROTECTION', '模型审批开关无效');
     const state = this.read();
     if (state.settingsRevision !== expected) throw new ClassmatesError('SETTINGS_CONFLICT', '配置已被其他页面修改，请刷新后重试；当前输入仍保留');
-    if (isModelProtected(state.protectedModels, model) === required) return this.load();
+    if (isModelProtected(state.protectedModels, model) === required) return this.currentState();
     const protectedModels = required ? [...state.protectedModels, model]
       : state.protectedModels.filter(route => route.provider !== model.provider || route.id !== model.id);
     validateProtectedModels(protectedModels);
     await this.ctx.settings.mutate(this.namespace, [{ op: 'set', path: ['protectedModels'], value: protectedModels }], expected);
-    return this.load();
+    return this.currentState();
   }
 
   async removeModelProfile(id: string, revision: number, expected: number): Promise<ClassmatesState> {
@@ -332,7 +342,7 @@ export class RoleConfig {
     const changes = validateModelProfileChanges(input);
     const state = this.read();
     if (state.settingsRevision !== expected) throw new ClassmatesError('SETTINGS_CONFLICT', '配置已被其他页面修改，请刷新后重试；当前输入仍保留');
-    if (changes.length === 0) return this.load();
+    if (changes.length === 0) return this.currentState();
     const modelProfiles = applyModelProfileChanges(state.modelProfiles, changes);
     const upserts: ModelProfile[] = [];
     for (const change of changes) {
@@ -343,6 +353,6 @@ export class RoleConfig {
     }
     await Promise.all(upserts.map(profile => validateEnabledProfileModel(this.ctx, profile)));
     await this.ctx.settings.mutate(this.namespace, [{ op: 'set', path: ['modelProfiles'], value: modelProfiles }], expected);
-    return this.load();
+    return this.currentState();
   }
 }

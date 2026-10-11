@@ -1,5 +1,7 @@
 # dsh-plugins
 
+当前工作区适配 DSH **0.2.0-rc.2**，开发基线同时使用 Cordis **4.0.4** 与 Schemastery **3.18.4**。开发依赖统一锁定版本，插件的宿主兼容范围保持开放下界，DSH 宿主包仍为可选 peer。本次源码升级不代表 npm 上的包已更新。
+
 简体中文 / [English](README.md)
 
 这是一个用于收纳轻量 DeepSeek Harness 插件与共享库的 pnpm monorepo。`plugins/` 下的每个包独立测试和发布；DSH bundle 与原生 Preset 通过宿主安装。
@@ -29,10 +31,11 @@
 | --- | --- | --- |
 | [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.zh-CN.md) | 队友角色：为原生委派维护角色和模型用途配置。 | `next` 候选版；不收录到稳定插件目录。 |
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.zh-CN.md) | Safe Auto：沙箱提权由独立审核模型把关，通过才自动放行。 | npm 发布候选版；插件站 catalog 只收录稳定版。 |
-| [`@klarkxy/dsh-blueprint`](plugins/dsh-blueprint/README.zh-CN.md) | Blueprint：把一套插件组合分享成带确切版本的蓝图码。 | npm 预览版；插件站 catalog 只收录稳定版。 |
+| [`@klarkxy/dsh-blueprint`](https://github.com/klarkxy/dsh-spaces/tree/main/packages/blueprint) | 分享插件组合蓝图，仍可在 DSH 0.2 中独立使用。 | 源码及发布归属已迁至 dsh-spaces。 |
 | [`@klarkxy/dsh-font`](plugins/dsh-font/docs/README.zh-CN.md) | 字体：自定义 Web GUI 的界面字体、代码字体与会话字号。 | `next` 候选版；不收录到稳定插件目录。 |
 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/docs/README.zh-CN.md) | 模型枢纽：编辑已安装插件暴露的模型字段。 | `next` 候选版。 |
 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.zh-CN.md) | 会话管理：跨工作目录查找会话并读取对话。 | `next` 候选版；高级线程操作需要附带的宿主补丁。 |
+| [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.zh-CN.md) | 破限：按破限交付契约回答的会话 Preset，只作用于选用它的会话。 | 未发布；在发布暂缓名单，待打包内容复核与目标宿主验收。 |
 
 从本地 `dsh-teammates` 目录迁入，详见[迁移记录](docs/classmates-migration.md)。
 

@@ -51,7 +51,7 @@ Everything is optional; with no configuration the reviewer follows the current c
 | `timeoutMs` | `30000` | Per-review deadline. |
 | `humanApprovalTimeoutMs` | `60000` | Human confirmation window, separate from model review; `0` disables it. Maximum 300000 ms; profile-owned. |
 | `maxInputBytes` | `32768` | Combined UTF-8 prompt/input cap; existing explicit values are retained. |
-| `outputTokens` | `256` | Reviewer output cap. Reasoning models may need more. |
+| `outputTokens` | `1024` | Reviewer output cap, including reasoning where the model counts it. Explicit profile values are retained; incomplete or invalid verdicts still require human confirmation. |
 | `maxReviewsPerTask` | `20` | Review calls per direct user task. |
 | `consecutiveDenials` | `3` | Consecutive explicit denials before the breaker opens. Uncertainty and failures reset the streak but still consume review reservations. |
 | `staticReadonly` | `true` | Grant provably read-only `bash` escalations without a model call. `false` sends everything to the reviewer. |

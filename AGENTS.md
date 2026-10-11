@@ -95,7 +95,7 @@ pnpm check                                         # 全仓检查
 - **只读注入可以保留。** 记忆、经验注入不写盘也不调模型，子线程读到的是真人会话产生的知识，按需保留即可。
 - **要跨子线程必须显式 opt-in**，在代码注释里写明理由，不要靠沉默默认。
 
-判据只能用 `session.header`：`isSubagentSession` 认 `parentSession` / `origin === 'subagent'` / `delegationDepth > 0`，这三项是宿主在创建子线程时快照的持久会话数据（`@deepseek-ai/dsh-agent` 的 `CreateAgentOptions.meta`）。**不要用 `message.source.kind === 'user'` 判断是不是真人**——官方 `SubagentStartRequest.prompt` 的定义就是「作为子线程的 user 消息投递」，主控派的任务在子线程里和真人输入无法区分。
+判据只能用 `session.header`：`isSubagentSession` 优先认 `origin === 'subagent'` / `delegationDepth > 0`，仅有 `parentSession` 的旧会话仍排除。原生真人分叉也保存 `parentSession` 表示历史继承；只有明确 `isSeeded === true`、派发深度为零或由原生宿主省略、无子代理来源且分类为普通/自由聊天（普通分类可以省略）的持久头才认作真人分叉。DSH `0.2.0-rc.2` 原生真人分叉省略深度，带补丁的宿主可显式保存零；未知来源、分类或无效深度仍按旧 parent 判据排除。这些都是宿主创建会话时快照的持久数据（`@deepseek-ai/dsh-agent` 的 `CreateAgentOptions.meta`），不推断消息作者。**不要用 `message.source.kind === 'user'` 判断是不是真人**——官方 `SubagentStartRequest.prompt` 的定义就是「作为子线程的 user 消息投递」，主控派的任务在子线程里和真人输入无法区分。
 
 调用生命周期跟着工作走：自建 `AbortController` 时用 `AbortSignal.any([宿主 signal, 自己的])` 合并，不要另起一个与工作步骤无关的后台调用。
 

@@ -64,7 +64,8 @@
     "zod": "^4.1.5"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2"
+    "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2",
+    "@deepseek-ai/cordis": ">=4.0.4"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-storage-domain": {
@@ -74,13 +75,14 @@
   "devDependencies": {
     "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
     "@deepseek-ai/dsh-storage-domain": "0.2.0-rc.2",
-    "@klarkxy/dsh-model-route": "workspace:*"
+    "@klarkxy/dsh-model-route": "workspace:*",
+    "@deepseek-ai/cordis": "4.0.4"
   },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "b5399c69823392e3de57e30edbe0c7bf315cd66284fe6ade6a319027847d994a"
+    "contentHash": "61fa3fbc6bc610f5b4b82d752ce55a0d10df8d7437aee4e5c29de203010f48ba"
   }
 }

@@ -10,7 +10,7 @@ import { CommitRunError, GitCommitService, type AgentStoreLike, type SessionStor
 import { gitCommitDomain, parseSettings, updateSettingsSchema } from './storage.ts'
 
 export const name = PLUGIN_NAME
-export const inject = ['llm', 'sessions', 'agents', 'storageDomain', 'connection', 'webServer'] as const
+export const inject = ['llm', 'sessions', 'agents', 'storageDomain', 'connection', 'webServer', 'sessionProjections', 'agentDefaultModel'] as const
 export { GitCommitService } from './service.ts'
 export { parsePorcelain } from './git.ts'
 export { parsePlan, buildPlanInput } from './plan.ts'
@@ -64,6 +64,7 @@ export async function handleRpc(
         return { ok: true, value }
       }
       case 'settings': {
+        await service.ready()
         return { ok: true, value: service.getSettings() }
       }
       case 'settings.update': {
@@ -94,7 +95,7 @@ export async function handleRpc(
 
 export function apply(ctx: Context): void {
   const host = ctx as Host
-  // Opening is async; the service starts on defaults and adopts the stored row once it lands.
+  // Publish immediately; service operations wait for the initial stored row.
   const domainPromise = host.storageDomain.open(gitCommitDomain)
   const tablePromise = domainPromise.then(domain => domain.table('settings'))
   const service = new GitCommitService({

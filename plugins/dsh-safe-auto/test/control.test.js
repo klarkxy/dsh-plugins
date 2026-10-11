@@ -72,6 +72,39 @@ test('settings save is revision checked, persisted, and limited to reviewer fiel
 test('explicit disabled profile cannot be enabled from the panel', async () => {
   const f = fixture({ enabled: false }); await assert.rejects(f.select('safe-auto'), /disabled/);
 });
+
+test('disposing control revokes activation and rejects later work; fresh control stays independent', async () => {
+  const f = fixture();
+  await f.select('safe-auto');
+  await f.control.dispose();
+  await f.control.dispose();
+  assert.equal(f.control.state(f.session).active, false);
+  assert.equal(f.control.config(f.session).enabled, false);
+  await assert.rejects(f.control.call('session.get', { sessionId: 's' }), /unloaded/);
+  const fresh = createControl(f.base, f.options);
+  assert.equal((await fresh.call('session.get', { sessionId: 's' })).safeAuto, false);
+  await fresh.dispose();
+});
+
+test('request cancellation rejects queued permissions without cancelling another settings save', async () => {
+  const f = fixture();
+  const write = Promise.withResolvers();
+  const started = Promise.withResolvers();
+  const originalPut = f.options.table.put;
+  f.options.table.put = async (...args) => { started.resolve(); await write.promise; await originalPut(...args); };
+  const saving = f.control.call('settings.save', { expectedRevision: 0, values: { model: 'new' } });
+  await started.promise;
+  const request = new AbortController();
+  const selecting = assert.rejects(f.control.call('session.select', {
+    sessionId: 's', expectedRevision: '0:0', value: 'danger-full-access',
+  }, request.signal), { name: 'AbortError' });
+  request.abort();
+  write.resolve();
+  assert.equal((await saving).revision, 1);
+  await selecting;
+  assert.equal(f.options.presets.current(), 'workspace-write');
+  await f.control.dispose();
+});
 test('native no-op switches still reject stale concurrent activation', async () => {
   const f = fixture(); const enabled = await f.select('safe-auto');
   const results = await Promise.allSettled(['workspace-write', 'safe-auto'].map(value => f.control.call('session.select', { sessionId: 's', expectedRevision: enabled.revision, value })));

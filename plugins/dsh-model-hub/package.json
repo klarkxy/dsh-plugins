@@ -51,8 +51,8 @@
     "@klarkxy/dsh-plugin-kit": "workspace:*"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "4.0.4",
-    "@deepseek-ai/schemastery": "3.18.4",
+    "@deepseek-ai/cordis": ">=4.0.4",
+    "@deepseek-ai/schemastery": ">=3.18.4",
     "@deepseek-ai/dsh-settings": ">=0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
@@ -94,6 +94,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/",
   "dshRelease": {
-    "contentHash": "bbe9aa33a9725e439fac3145fe8526be51726f90807ce13dd6a34eaaba48c3af"
+    "contentHash": "8de3caaf382085c9aa9a5b9dffb1efc74cd881716d9aa2e300aafc8fea91433f"
   }
 }

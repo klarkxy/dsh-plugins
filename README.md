@@ -4,6 +4,8 @@
 
 A small pnpm monorepo for focused DeepSeek Harness plugins and shared libraries that do not need a repository of their own. Each package under `plugins/` tests and releases on its own; bundles and native presets install through DSH.
 
+The current workspace targets DSH **0.2.0-rc.2**, with Cordis **4.0.4** and Schemastery **3.18.4**. Development dependencies are pinned together; installed plugins use open host compatibility ranges and optional DSH peers. This source baseline does not change the versions already published on npm.
+
 This README also catalogs klarkxy's public DSH plugins on npm, including packages maintained in other repositories. The browsable version is the [plugin site](https://klarkxy.github.io/dsh-plugins/). List preview releases in both READMEs; add a DSH plugin to `site/catalog.json` once npm has its `latest` release.
 
 ## Published plugins
@@ -29,10 +31,11 @@ Package names link to npm or the package README; the last column provides the ot
 | --- | --- | --- |
 | [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.md) | Teammate Roles: reusable roles and model profiles for native delegation. | Release candidate on `next`; excluded from the stable plugin catalog. |
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: an independent reviewer vets each sandbox escalation; only a pass auto-approves. | npm release candidate; the plugin site catalog lists stable releases only. |
-| [`@klarkxy/dsh-blueprint`](plugins/dsh-blueprint/README.md) | Blueprint: share a plugin set as an exact-version blueprint code. | npm preview release; the plugin site catalog lists stable releases only. |
+| [`@klarkxy/dsh-blueprint`](https://github.com/klarkxy/dsh-spaces/tree/main/packages/blueprint) | Share plugin compositions as blueprint codes. Independently usable on DSH 0.2. | Moved to dsh-spaces; source and release ownership live there. |
 | [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface font, code font, and conversation font size of the Web GUI. | Release candidate on `next`; excluded from the stable plugin catalog. |
 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Model Hub: edit model fields exposed by installed plugin settings. | Release candidate on `next`. |
 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: find sessions and read conversations across working directories. | Release candidate on `next`; advanced thread actions need the supplied host patch. |
+| [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | Unrestricted: a session preset that answers under the unrestricted delivery contract, only in sessions that pick it. | Unreleased; on the release-hold list pending packed-content review and target-host acceptance. |
 
 Migrated from the local `dsh-teammates` directory. See the [migration record](docs/classmates-migration.md).
 

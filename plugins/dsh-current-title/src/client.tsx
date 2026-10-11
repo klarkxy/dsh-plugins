@@ -30,7 +30,6 @@ interface CatalogChoice {
   provider: string
   model: string
   label: string
-  efforts: ReadonlyArray<{ id: string; name: string }>
 }
 
 function catalogChoices(value: unknown, selected: TitleModelRoute): CatalogChoice[] {
@@ -53,19 +52,11 @@ function catalogChoices(value: unknown, selected: TitleModelRoute): CatalogChoic
       const id = typeof item.id === 'string' ? item.id : ''
       if (!id) continue
       const name = typeof item.name === 'string' && item.name ? item.name : id
-      const reasoning = item.reasoning && typeof item.reasoning === 'object' ? item.reasoning as Record<string, unknown> : undefined
-      const efforts = Array.isArray(reasoning?.efforts)
-        ? reasoning.efforts.flatMap(effort => {
-          if (!effort || typeof effort !== 'object') return []
-          const entry = effort as Record<string, unknown>
-          return typeof entry.id === 'string' && entry.id ? [{ id: entry.id, name: typeof entry.name === 'string' && entry.name ? entry.name : entry.id }] : []
-        })
-        : []
-      choices.push({ provider, model: id, label: `${providerName} / ${name}`, efforts })
+      choices.push({ provider, model: id, label: `${providerName} / ${name}` })
     }
   }
   if (selected.provider && selected.model && !choices.some(item => item.provider === selected.provider && item.model === selected.model)) {
-    choices.push({ provider: selected.provider, model: selected.model, label: `${selected.provider} / ${selected.model}`, efforts: [] })
+    choices.push({ provider: selected.provider, model: selected.model, label: `${selected.provider} / ${selected.model}` })
   }
   return choices
 }
@@ -176,11 +167,6 @@ export function TitleSettings(props: {
   const pinned = status?.session?.pinned === true
   const weOwn = status?.support.weOwn === true
   const canRegenerate = Boolean(sessionId) && weOwn && !busy
-  const selectedChoice = choices.find(item => item.provider === savedModel.provider && item.model === savedModel.model)
-  const efforts = selectedChoice ? [...selectedChoice.efforts] : []
-  if (selectedChoice && savedModel.reasoningEffort && !efforts.some(item => item.id === savedModel.reasoningEffort)) {
-    efforts.push({ id: savedModel.reasoningEffort, name: savedModel.reasoningEffort })
-  }
 
   function saveSettings(patch: { model?: TitleModelRoute; cadence?: TitleCadence }) {
     if (!status) return
@@ -287,22 +273,6 @@ export function TitleSettings(props: {
         ))}
       </select>
     </label>
-    {selectedChoice && efforts.length > 0 ? <label className="dsh-ui-field">
-      <span className="dsh-ui-label">{text.effort}</span>
-      <select
-        className="dsh-ui-select"
-        value={savedModel.reasoningEffort ?? ''}
-        disabled={busy || !status}
-        onChange={event => {
-          const effort = event.target.value
-          const model: TitleModelRoute = { provider: savedModel.provider, model: savedModel.model }
-          saveSettings({ model: effort ? { ...model, reasoningEffort: effort } : model })
-        }}
-      >
-        <option value="">{text.effortDefault}</option>
-        {efforts.map(effort => <option key={effort.id} value={effort.id}>{effort.name}</option>)}
-      </select>
-    </label> : null}
     <label className="dsh-ui-field">
       <span className="dsh-ui-label">{text.cadence}</span>
       <select

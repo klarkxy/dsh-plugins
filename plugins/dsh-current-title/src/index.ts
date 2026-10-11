@@ -8,7 +8,7 @@ import type { SessionLike } from './messages.ts'
 import { parseTitleSettings, titleDomain } from './storage.ts'
 
 export const name = PLUGIN_NAME
-export const inject = ['sessionTitle', 'llm', 'sessions', 'loader', 'storageDomain', 'connection', 'webServer'] as const
+export const inject = ['sessionTitle', 'llm', 'sessions', 'loader', 'storageDomain', 'connection', 'webServer', 'agents', 'sessionProjections', 'agentDefaultModel'] as const
 export { CurrentTitleService }
 export { selectRecentMessages, frameMessages } from './input.ts'
 export { parseModelTitle, formatTitle, resolveTitleLocale } from './output.ts'

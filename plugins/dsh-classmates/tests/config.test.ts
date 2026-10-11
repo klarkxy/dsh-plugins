@@ -2,23 +2,26 @@ import { describe, expect, it } from 'vitest';
 import type { Context } from '@deepseek-ai/cordis';
 import { currentModelFromOwnRequestHeaders, RoleConfig, validateRole, validateRoles } from '../src/config.js';
 import { validateModelProfiles } from '../src/model-profiles.js';
+import { validateProtectedModels } from '../src/model-protection.js';
 import { createPresets, SOFTWARE_COLLABORATION_RULES } from '../src/presets.js';
-import type { ModelProfile, NormalizedRole } from '../src/contracts.js';
+import type { ModelProfile, ModelRoute, NormalizedRole } from '../src/contracts.js';
 
 function fixture() {
   let roles: NormalizedRole[] = validateRoles(createPresets().slice(0, 3));
   let profiles: ModelProfile[] | undefined;
+  let protectedModels: ModelRoute[] = [];
   let revision = 2;
   let writable = true;
   const context = {
     settings: {
       get writable() { return writable; },
-      describe: () => [{ ns: 'classmates', revision, value: { roles, ...profiles === undefined ? {} : { modelProfiles: profiles } } }],
+      describe: () => [{ ns: 'classmates', revision, value: { roles, protectedModels, ...profiles === undefined ? {} : { modelProfiles: profiles } } }],
       mutate: async (_ns: string, ops: { path: string[]; value: unknown }[], expected: number) => {
         if (revision !== expected) throw new Error('SETTINGS_CONFLICT');
         for (const op of ops) {
           if (op.path[0] === 'roles') roles = validateRoles(op.value);
           else if (op.path[0] === 'modelProfiles') profiles = validateModelProfiles(op.value);
+          else if (op.path[0] === 'protectedModels') protectedModels = validateProtectedModels(op.value);
         }
         revision++;
       },
@@ -42,6 +45,20 @@ function fixture() {
     interfere: () => { revision++; },
     setWritable: (value: boolean) => { writable = value; },
   };
+}
+
+async function promptly<T>(operation: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Mutation waited for the model directory')), 500);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer!);
+  }
 }
 
 function profile(partial: Partial<ModelProfile> & Pick<ModelProfile, 'id'>): ModelProfile {
@@ -158,6 +175,105 @@ describe('role configuration', () => {
     const deleted = await store.remove(saved.roles[0].id, saved.roles[0].revision, saved.settingsRevision);
     expect(deleted.roles).toHaveLength(2);
   });
+
+  it('returns every settings mutation while an unrelated directory refresh never resolves', async () => {
+    const { store, context } = fixture();
+    context.llm.listProviders = () => [{ id: 'test', name: 'Test' }, { id: 'offline', name: 'Offline' }];
+    context.llm.listModels = async provider => {
+      if (provider === 'offline') throw new Error('catalog offline');
+      return [{ provider, id: 'one', name: 'One' }];
+    };
+    const initial = await store.load();
+    const calls: string[] = [];
+    context.llm.listModels = provider => {
+      calls.push(provider);
+      return provider === 'offline' ? new Promise(() => {}) : Promise.resolve([{ provider, id: 'one', name: 'One' }]);
+    };
+    void store.load(); // A separately requested refresh is stuck in the unrelated provider.
+
+    let next = await promptly(store.save({
+      ...initial.roles[0], name: 'Saved promptly', enabled: true,
+      model: { kind: 'fixed', provider: 'test', id: 'one', effort: 'high' },
+    }, initial.settingsRevision));
+    expect(next.roles[0]).toMatchObject({ name: 'Saved promptly', revision: 2 });
+    expect(next.settingsRevision).toBe(initial.settingsRevision + 1);
+    expect(next.models).toEqual(initial.models);
+    expect(next.catalogErrors).toEqual(initial.catalogErrors);
+
+    next = await promptly(store.batch([{ op: 'upsert', role: { ...next.roles[0], name: 'Batch saved' } }], next.settingsRevision));
+    next = await promptly(store.remove(next.roles[1].id, next.roles[1].revision, next.settingsRevision));
+    next = await promptly(store.saveModelProfile(profile({ id: 'quick' }), next.settingsRevision));
+    next = await promptly(store.batchModelProfiles([{ op: 'upsert', profile: { ...next.modelProfiles![0], name: 'Updated' } }], next.settingsRevision));
+    expect(next.modelProfiles![0]).toMatchObject({ name: 'Updated', revision: 2 });
+    next = await promptly(store.removeModelProfile('quick', 2, next.settingsRevision));
+    next = await promptly(store.setModelProtection({ provider: 'test', id: 'one' }, true, next.settingsRevision));
+    expect(next.protectedModels).toEqual([{ provider: 'test', id: 'one' }]);
+    expect(next.settingsRevision).toBe(initial.settingsRevision + 7);
+
+    const revision = next.settingsRevision;
+    next = await promptly(store.batch([], revision));
+    next = await promptly(store.batchModelProfiles([], revision));
+    next = await promptly(store.setModelProtection({ provider: 'test', id: 'one' }, true, revision));
+    expect(next.settingsRevision).toBe(revision);
+    expect(next.roles).toEqual(store.read().roles);
+    expect(next.modelProfiles).toEqual([]);
+    expect(next.catalogErrors).toEqual(initial.catalogErrors);
+    expect(calls).toEqual(['test', 'offline']);
+
+    // Returned state is detached: consumers cannot corrupt the saved directory snapshot.
+    next.models.length = 0;
+    next.catalogErrors!.length = 0;
+    const again = await promptly(store.batch([], revision));
+    expect(again.models).toEqual(initial.models);
+    expect(again.catalogErrors).toEqual(initial.catalogErrors);
+  });
+
+  it('refreshes the advisory directory only when load is explicitly requested', async () => {
+    const { store, context } = fixture();
+    const initial = store.read();
+    const saved = await store.save({ ...initial.roles[0], name: 'Before load' }, initial.settingsRevision);
+    expect(saved.models).toEqual([]);
+    const loaded = await store.load();
+    expect(loaded.models).toHaveLength(1);
+    context.llm.listProviders = () => [];
+    const renamed = await store.save({ ...loaded.roles[0], name: 'After load' }, loaded.settingsRevision);
+    expect(renamed.models).toEqual(loaded.models);
+    const refreshed = await store.load();
+    expect(refreshed.models).toEqual([]);
+    expect(refreshed.roles[0].name).toBe('After load');
+    expect(refreshed.settingsRevision).toBe(renamed.settingsRevision);
+  });
+
+  it.each(['save', 'batch', 'saveModelProfile', 'batchModelProfiles'] as const)(
+    'preserves settings CAS when another edit arrives during %s model validation', async method => {
+      const { store, context, interfere, getRoles, getProfiles } = fixture();
+      const state = store.read();
+      let release!: () => void;
+      const waiting = new Promise<void>(resolve => { release = resolve; });
+      let validating!: () => void;
+      const started = new Promise<void>(resolve => { validating = resolve; });
+      const resolveModel = context.llm.resolveModelInfo.bind(context.llm);
+      context.llm.resolveModelInfo = async (...args) => {
+        validating();
+        await waiting;
+        return resolveModel(...args);
+      };
+      const role = { ...state.roles[0], name: 'Stale', enabled: true, model: { kind: 'fixed' as const, provider: 'test', id: 'one' } };
+      const modelProfile = profile({ id: 'stale' });
+      const operation = method === 'save' ? store.save(role, state.settingsRevision)
+        : method === 'batch' ? store.batch([{ op: 'upsert', role }], state.settingsRevision)
+        : method === 'saveModelProfile' ? store.saveModelProfile(modelProfile, state.settingsRevision)
+        : store.batchModelProfiles([{ op: 'upsert', profile: modelProfile }], state.settingsRevision);
+      const rejected = expect(operation).rejects.toThrow(method === 'save' ? '其他页面' : 'SETTINGS_CONFLICT');
+      await started;
+      interfere();
+      release();
+      await rejected;
+      expect(getRoles()[0]).toMatchObject({ name: 'Researcher', revision: 1 });
+      expect(getProfiles()).toBeUndefined();
+      expect(store.read().settingsRevision).toBe(state.settingsRevision + 1);
+    },
+  );
 
   it('increments a persistent role revision only after a successful save', async () => {
     const { store, getRoles } = fixture();

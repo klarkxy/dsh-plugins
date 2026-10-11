@@ -5,7 +5,7 @@ import { useState, useSyncExternalStore } from 'react'
 import {
   CODE_FONT_PRESETS, FONT_SIZE_DEFAULT, FONT_SIZE_MAX, FONT_SIZE_MIN, PLUGIN_NAME,
   UI_FONT_PRESETS,
-  applyFontSettings, clearFontSettings, createFontSettingsStore, fontStackFor, normalizeFontFamily,
+  createFontSettingsOverride, createFontSettingsStore, fontStackFor, normalizeFontFamily,
   presetFor, systemFontLabel, uniqueSystemFonts,
   type FontGenericFamily, type FontPreset, type FontSettings, type FontSettingsStorage, type FontSettingsStore,
   type SystemFontFamily,
@@ -191,6 +191,7 @@ export function FontField(props: {
 export function FontSettingsPanel(props: {
   client: Client
   store: FontSettingsStore
+  applySettings(settings: FontSettings): void
   view?: 'summary' | 'page'
 }) {
   const locale = useLocale(props.client)
@@ -226,7 +227,7 @@ export function FontSettingsPanel(props: {
       codeFont: normalizeFontFamily(patch.codeFont ?? settings.codeFont),
     }
     props.store.save(next)
-    if (typeof document !== 'undefined') applyFontSettings(document.documentElement.style, next)
+    props.applySettings(next)
     setSettings(next)
   }
 
@@ -307,6 +308,7 @@ export function FontSettingsPanel(props: {
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client & { effect: Context['effect'] }
   const store = createFontSettingsStore(readStorage())
+  let applySettings = (_settings: FontSettings) => {}
   ctx.effect(() => {
     if (typeof document === 'undefined') return () => {}
     const style = document.createElement('style')
@@ -315,17 +317,18 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'font.styles')
-  // Apply the stored stacks at boot. Inline custom properties on <html> win the
-  // cascade over ui-theme's :root stylesheet, and every derived token
-  // (--dsw-font-markdown-code*, brand font, terminal) resolves dynamically.
+  // rc.2 defines font stacks on :root; root inline overrides reach its derived
+  // code, Markdown and terminal tokens without changing host theme settings.
   ctx.effect(() => {
     if (typeof document === 'undefined') return () => {}
-    applyFontSettings(document.documentElement.style, store.load())
-    return () => clearFontSettings(document.documentElement.style)
+    const override = createFontSettingsOverride(document.documentElement.style)
+    applySettings = next => override.apply(next)
+    applySettings(store.load())
+    return () => { override.dispose(); applySettings = () => {} }
   }, 'font.apply')
   ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
     { name: 'plugins.bundle.config', key: PLUGIN_NAME, label: COPY.zh.label },
     (slotProps: { view?: 'summary' | 'page' }) =>
-      <FontSettingsPanel client={client} store={store} view={slotProps?.view} />,
+      <FontSettingsPanel client={client} store={store} applySettings={next => applySettings(next)} view={slotProps?.view} />,
   )), 'font.settings')
 }

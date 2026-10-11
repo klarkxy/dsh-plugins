@@ -6,13 +6,11 @@
  *   - 公共 Headers: Authorization: Bearer <access_secret>、X-Request-Timestamp、Accept
  *   - 除直答外的 REST 接口返回 {Code, Message, Data} 信封,Code 非 0 表示业务错误。
  *
- * Token 解析顺序（按契约,**不**把 token 放进 schema 参数）：
- *   1. 可选的 credential 解析器（应用设置界面写入 `ZHIHU_ACCESS_TOKEN` 后,
- *      通过 `ctx.credentials.resolve` 取回）;命中即返回,source 标记为 `credential`。
- *   2. 环境变量 ZHIHU_ACCESS_TOKEN
- *   3. 环境变量 ZHIHU_ACCESS_SECRET（zhihu-search CLI 同名变量）
- *   4. ~/.config/zhihu-search/credentials.json 的 access_secret 字段
- * 都没有则抛出带中文配置指引的 TOKEN_MISSING。
+ * Token 解析（按契约,**不**把 token 放进 schema 参数）：
+ *   - 提供 credential 解析器时只使用它，缺失或无效时抛出 TOKEN_MISSING。
+ *     宿主通过 `ctx.credentials.resolve` 统一管理凭据来源和清除操作。
+ *   - 未提供解析器的独立客户端依次兼容 ZHIHU_ACCESS_TOKEN、
+ *     ZHIHU_ACCESS_SECRET 和 ~/.config/zhihu-search/credentials.json。
  */
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -65,7 +63,7 @@ async function readCredentialsFile(path: string): Promise<string | undefined> {
 }
 
 export type ZhihuSearchResolveOptions = {
-  /** Resolve the Access Secret via host-managed credentials (e.g. the settings UI). */
+  /** Authoritative Access Secret resolver; absence/invalid values never fall back to env or CLI files. */
   resolveCredential?: () => Promise<string | undefined>
 }
 
@@ -74,10 +72,12 @@ export async function resolveZhihuToken(
   options: ZhihuSearchResolveOptions = {},
 ): Promise<ZhihuSearchToken> {
   if (options.resolveCredential) {
-    const fromCredential = (await options.resolveCredential())?.trim()
+    const value = await options.resolveCredential()
+    const fromCredential = typeof value === 'string' ? value.trim() : undefined
     if (fromCredential && looksLikeToken(fromCredential)) {
       return { token: fromCredential, source: 'credential' }
     }
+    throw new ZhihuSearchError('TOKEN_MISSING', '未配置有效的知乎 Access Secret。请在「插件 → 知乎 → 设置」中填写。')
   }
   const primary = env[ZHIHU_CREDENTIALS_PRIMARY]?.trim()
   if (primary && looksLikeToken(primary)) return { token: primary, source: 'env-primary' }
