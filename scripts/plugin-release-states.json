@@ -3,13 +3,18 @@
   "packages": [
     {
       "name": "@klarkxy/dsh-chatgpt",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "已有隔离宿主验收；当前模型设置改动及最终包仍待复核，继续保持私有。",
-        "en": "Isolated-host acceptance exists; current model-setting changes and the final archive need review. Remains private."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
       },
       "evidence": {
         "targetHost": "plugins/dsh-chatgpt/ACCEPTANCE.md"
+      },
+      "publication": {
+        "version": "0.1.0-alpha.1",
+        "publishedAt": "2026-10-13T15:52:23.464Z",
+        "integrity": "sha512-aGD08L5HucBVYW6Uw5CpifJCv5DrsE+3lHOCd8q2xFtY9iNMULc6U9On8VoMhHDKC+yBEMqZFUowLSG2Tih1Cw=="
       }
     },
     {
@@ -80,24 +85,34 @@
     },
     {
       "name": "@klarkxy/dsh-grok-build",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "已实现官方 CLI 能力并完成隔离宿主媒体验收；保持私有测试中，具体边界见验收记录。",
-        "en": "Official CLI capabilities implemented with isolated-host media acceptance; remains private and Testing. See acceptance limits."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
       },
       "evidence": {
         "targetHost": "plugins/dsh-grok-build/ACCEPTANCE.md"
+      },
+      "publication": {
+        "version": "0.1.0-alpha.1",
+        "publishedAt": "2026-10-13T15:52:30.429Z",
+        "integrity": "sha512-hS412YFu2QRiDsxUa+ROJcrzcx9bihkoiO+fvHI/EERrGoDo9wnkf3eojc28Zf930eVtJUhjOc4DAFrF4hIjNw=="
       }
     },
     {
       "name": "@klarkxy/dsh-minimax-code",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "已实现官方 CLI 能力并完成隔离宿主媒体验收；保持私有测试中，具体边界见验收记录。",
-        "en": "Official CLI capabilities implemented with isolated-host media acceptance; remains private and Testing. See acceptance limits."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
       },
       "evidence": {
         "targetHost": "plugins/dsh-minimax-code/ACCEPTANCE.md"
+      },
+      "publication": {
+        "version": "0.1.0-alpha.1",
+        "publishedAt": "2026-10-13T15:53:04.122Z",
+        "integrity": "sha512-5qjBTBVnRL6a8d2X8To9CXTXF/33cnUPBUgNi6B7VgqqCvPIOJKo3V4Bz38Oyi0ZpdZTGzP3JCXoJfceV8fbcg=="
       }
     },
     {
@@ -180,10 +195,15 @@
     },
     {
       "name": "@klarkxy/dsh-unrestricted",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "尚未发布的私有开发包，保持测试中。",
-        "en": "Unpublished private development package; remains Testing."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
+      },
+      "publication": {
+        "version": "0.1.0-rc.1",
+        "publishedAt": "2026-10-13T15:53:09.765Z",
+        "integrity": "sha512-TBvcZFROLgNdnsmpYPrS2KqScv+1y74D9COl2eKUBtsU/VLemIDM9vp0zqx8dK6bt3sUEwOIPreo5oFtSlVEAA=="
       }
     },
     {

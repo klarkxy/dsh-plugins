@@ -76,19 +76,19 @@ pnpm check
 <!-- plugin-release-states:start -->
 | 包 | 生命周期 | 说明 |
 | --- | --- | --- |
-| [@klarkxy/dsh-chatgpt](plugins/dsh-chatgpt/README.md) | 测试中 (`testing`) | 已有隔离宿主验收；当前模型设置改动及最终包仍待复核，继续保持私有。 |
+| [@klarkxy/dsh-chatgpt](plugins/dsh-chatgpt/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-current-title](plugins/dsh-current-title/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-font](plugins/dsh-font/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
-| [@klarkxy/dsh-grok-build](plugins/dsh-grok-build/README.md) | 测试中 (`testing`) | 已实现官方 CLI 能力并完成隔离宿主媒体验收；保持私有测试中，具体边界见验收记录。 |
-| [@klarkxy/dsh-minimax-code](plugins/dsh-minimax-code/README.md) | 测试中 (`testing`) | 已实现官方 CLI 能力并完成隔离宿主媒体验收；保持私有测试中，具体边界见验收记录。 |
+| [@klarkxy/dsh-grok-build](plugins/dsh-grok-build/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
+| [@klarkxy/dsh-minimax-code](plugins/dsh-minimax-code/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-model-hub](plugins/dsh-model-hub/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
-| [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.md) | 测试中 (`testing`) | 尚未发布的私有开发包，保持测试中。 |
+| [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-zhihu](plugins/dsh-zhihu/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 <!-- plugin-release-states:end -->
