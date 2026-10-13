@@ -34,18 +34,9 @@ export type FailureReason = keyof typeof reasons.zh
 
 const text = {
   zh: {
-    panel: '自由聊天',
-    newChat: '新建聊天',
-    empty: '还没有自由聊天。',
-    loading: '正在读取聊天',
-    noMatch: '没有匹配的聊天。',
-    listError: '聊天列表没有读出来。',
+    tempWorkspace: '临时工作区',
+    createFailed: '无法创建临时工作区',
     retryList: '重试',
-    search: '搜索聊天',
-    running: '运行中',
-    idle: '空闲',
-    menu: '聊天操作',
-    fork: '分叉',
     deleteChat: '删除聊天',
     deleting: '正在删除',
     deleteFree: '将删除这个聊天及其拥有的文件。',
@@ -59,18 +50,9 @@ const text = {
     draft: '消息文本',
   },
   en: {
-    panel: 'Free chat',
-    newChat: 'New chat',
-    empty: 'No free chats yet.',
-    loading: 'Reading chats',
-    noMatch: 'No matching chats.',
-    listError: 'The chat list could not be read.',
+    tempWorkspace: 'Temporary Workspace',
+    createFailed: 'Could not create the temporary workspace',
     retryList: 'Retry',
-    search: 'Search chats',
-    running: 'Running',
-    idle: 'Idle',
-    menu: 'Chat actions',
-    fork: 'Fork',
     deleteChat: 'Delete chat',
     deleting: 'Deleting',
     deleteFree: 'This deletes this chat and its owned files.',
@@ -92,7 +74,7 @@ export function uiText(locale: CopyLocale, key: UiTextKey): string {
 }
 
 export function failureReason(failure: OperationFailure): FailureReason {
-  if (failure.code === 'session/lifecycle-unavailable') return 'unsupported'
+  if (failure.code === 'session/lifecycle-unavailable' || failure.code === 'session/fork-unavailable') return 'unsupported'
   if (
     failure.code === 'session/retry-revision'
     || failure.code === 'session/branch-moved'

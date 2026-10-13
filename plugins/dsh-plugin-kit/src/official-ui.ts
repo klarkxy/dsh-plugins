@@ -344,7 +344,7 @@ ${scope} {
   border: 0.5px solid var(--dsw-alias-border-l3);
   border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-layer-1);
-  font-family: var(--ds-font-family-code, ui-monospace, 'Cascadia Mono', Consolas, monospace);
+  font-family: var(--ds-font-family-code);
   font-size: 12px;
   line-height: 20px;
   color: var(--dsw-alias-label-secondary);

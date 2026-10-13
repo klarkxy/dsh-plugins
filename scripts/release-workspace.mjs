@@ -1,6 +1,7 @@
 /** Pack a publishable snapshot without leaking pnpm workspace specifiers. */
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { dependencyClosure, localDependencyGraph, releaseEligibility } from './release-state.mjs';
 
 const dependencyFields = ['dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies'];
 function workspaceDependencies(root, pkg) {
@@ -11,6 +12,7 @@ function workspaceDependencies(root, pkg) {
 
 export function orderedPackages(root, packages) {
   const byName = new Map(packages.map(pkg => [pkg.name, pkg]));
+  const graph = localDependencyGraph(root, packages);
   const visiting = new Set(), complete = new Set(), ordered = [];
   const visit = pkg => {
     if (complete.has(pkg.name)) return;
@@ -18,6 +20,8 @@ export function orderedPackages(root, packages) {
     visiting.add(pkg.name);
     for (const name of workspaceDependencies(root, pkg)) {
       if (!byName.has(name)) throw new Error(`${pkg.name}: workspace dependency ${name} is not a release target`);
+    }
+    for (const name of graph.get(pkg.name)) {
       visit(byName.get(name));
     }
     visiting.delete(pkg.name); complete.add(pkg.name); ordered.push(pkg);
@@ -70,10 +74,11 @@ export function packRelease(root, pkg, packages, npm, fingerprint) {
 }
 
 /** Imported packages stay unpublished until the old publisher has relinquished ownership. */
-export function releaseCandidates(root, packages) {
+export function releaseCandidates(root, packages, eligibility = releaseEligibility(root)) {
   // Review holds apply to both planning and publishing, including saved plans.
   const holdsFile = join(root, 'scripts/npm-release-holds.json');
-  let candidates = packages;
+  const publicNames = new Set(eligibility.inventory.filter(pkg => !pkg.private).map(pkg => pkg.name));
+  let candidates = packages.filter(pkg => publicNames.has(pkg.name) && eligibility.blockers.get(pkg.name)?.length === 0);
   if (existsSync(holdsFile)) {
     const holds = JSON.parse(readFileSync(holdsFile, 'utf8'));
     if (!Array.isArray(holds.packages)) throw new Error('Invalid npm release holds');
@@ -85,7 +90,7 @@ export function releaseCandidates(root, packages) {
       }
       names.add(entry.name);
     }
-    candidates = packages.filter(pkg => !names.has(pkg.name));
+    candidates = candidates.filter(pkg => !names.has(pkg.name));
   }
   const file = join(root, 'scripts/editor-plugin-migration.json');
   if (!existsSync(file)) return candidates;
@@ -97,14 +102,31 @@ export function releaseCandidates(root, packages) {
 }
 
 /** Held packages remain version inputs without becoming publication targets. */
-export function releaseWorkspace(root, packages) {
-  const ordered = orderedPackages(root, packages);
-  const candidates = releaseCandidates(root, ordered);
+export function releaseWorkspace(root, packages, firstReleases = []) {
+  const eligibility = releaseEligibility(root, firstReleases);
+  const supplied = new Map(packages.map(pkg => [pkg.name, pkg]));
+  const ordered = orderedPackages(root, eligibility.inventory).filter(pkg => supplied.has(pkg.name)).map(pkg => supplied.get(pkg.name));
+  const candidates = releaseCandidates(root, ordered, eligibility);
+  for (const name of firstReleases) {
+    if (!candidates.some(pkg => pkg.name === name)) throw new Error(`${name}: first release is held or blocked by unpublished dependencies`);
+  }
+  const privateNames = new Set(eligibility.inventory.filter(pkg => pkg.private).map(pkg => pkg.name));
+  for (const pkg of candidates) {
+    const manifest = JSON.parse(readFileSync(join(root, pkg.directory, 'package.json'), 'utf8'));
+    for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
+      for (const name of Object.keys(manifest[field] ?? {})) {
+        if (privateNames.has(name)) throw new Error(`${pkg.name}: private runtime dependency ${name} cannot be published as an npm dependency`);
+      }
+    }
+  }
   const targets = new Set(candidates.map(pkg => pkg.name));
   const dependencies = new Set(candidates.flatMap(pkg => workspaceDependencies(root, pkg)));
+  const reviewNames = dependencyClosure(eligibility.graph, candidates.map(pkg => pkg.name));
   return {
+    ...eligibility,
     packages: ordered,
     candidates,
     heldDependencies: ordered.filter(pkg => !targets.has(pkg.name) && dependencies.has(pkg.name)),
+    reviewPackages: eligibility.inventory.filter(pkg => reviewNames.has(pkg.name)),
   };
 }

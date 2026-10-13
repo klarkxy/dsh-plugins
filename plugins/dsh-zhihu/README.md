@@ -1,5 +1,8 @@
 # @klarkxy/dsh-zhihu
 
+<!-- release-state-note -->
+The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
+
 Hand Zhihu to the agent as a research source: in-site search, global web search, the hot list, 直答 AI answers and public knowledge bases, plus question discovery, creator statistics and usage tracking. Every call uses your own Zhihu Access Secret, and what comes back is reference material for the agent, not a settled verdict.
 
 [简体中文](docs/README.zh-CN.md)
@@ -42,8 +45,8 @@ Aligned with [zhihu-search PR #4](https://github.com/klarkxy/zhihu-search/pull/4
 
 | Agent tool | RPC endpoint on `/zhihu` | Parameters | Official quota |
 | --- | --- | --- | --- |
-| `zhihu_question_recommendations` | `question.recommendations` | Optional `query`; `count` 1–20, default 5 | `creator` |
-| `zhihu_question_answers` | `question.answers` | `questionUrl`; `offset`, `limit` | `question_answers` |
+| `zhihu_question_recommendations` | `question.recommendations` | Optional `query`; `count` 1–20, default 5 | `question_discovery` |
+| `zhihu_question_answers` | `question.answers` | `questionUrl`; `offset`, `limit` | `question_discovery` |
 | `zhihu_user_content_detail` | `content.detail` | `contentUrl` | `creator` |
 | `zhihu_user_content_comments` | `content.comments` | `contentUrl`; `offset`, `limit`; `order`: `score` (default), `reverse`, `ascending` | `creator` |
 | `zhihu_creator_account_stats` | `creator.account.stats` | `contentType`: `all` (default), `answer`, `article`, `pin`, `zvideo`; paired dates | `creator` |
@@ -60,7 +63,7 @@ Both statistics tools require `startDate` and `endDate` together, as valid `YYYY
 
 ### Official quota versus local usage
 
-`zhihu_quota` calls `GET /api/v1/quota`; it is the only source of official remaining quota. Its `apiIds` allowlist is `global_search`, `zhihu_search`, `hot_list`, `question_answers`, `zhida_openai`, `tools`, `knowledge`, `user_data`, and `creator`. Duplicate IDs are removed in first-seen order. Quota reads do not emit business-usage events, even on failure. No remaining-quota prediction, reset countdown, or automatic retry is added.
+`zhihu_quota` calls `GET /api/v1/quota`; it is the only source of official remaining quota. Its `apiIds` allowlist is `global_search`, `zhihu_search`, `hot_list`, `question_discovery`, `zhida_openai`, `tools`, `knowledge`, `user_data`, and `creator`. Duplicate IDs are removed in first-seen order. Quota reads do not emit business-usage events, even on failure. No remaining-quota prediction, reset countdown, or automatic retry is added.
 
 Local usage is still tracked as daily counters of calls, failures, and returned results; usage views default to the last 30 days and accept at most 90. New business operations emit one event per tool/RPC call, with their quota category; local counters are not a billing ledger or official balance. Existing storage identifiers are unchanged. Knowledge-base uploads remain limited to 20 MB per file.
 
@@ -89,3 +92,26 @@ pnpm --filter @klarkxy/dsh-zhihu build
 ```
 
 [Publishing](../PUBLISHING.md) · [License](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/LICENSE)
+
+
+## Call and cost protection (2026-10-13)
+
+Free protection is the default. Every business request checks fresh official free allowance for its quota group. Missing/invalid allowance, failed checks, insufficient capacity or an unknown mapping block the business request. Quota reads bypass the guard and daily cap without recursive preflight. The old quota input `question_answers` maps to `question_discovery`; business names and paths stay unchanged.
+
+The local cap defaults to 100 reserved business requests per Beijing day and accepts 1–100000. Failed/cancelled/unknown dispatched requests still count; failed preflight does not. These counters are not official allowance, wallet balances or a bill. No prices or balances are estimated.
+
+Known quota groups allow unpriced fast/thinking Zhida, recommendations and PDF/PPT tasks in free mode. Explicit paid mode blocks capabilities without confirmed billing and suggests free mode instead. Generic resource-file upload has no reliable quota mapping and is blocked; knowledge upload has a confirmed mapping.
+
+Plugin row configuration accepts `allowPaid` (default false) and `dailyCallLimit` (default 100), overriding the server environment `ZHIHU_ALLOW_PAID` and `ZHIHU_DAILY_CALL_LIMIT`. Reload using the host's normal configuration workflow. The Settings tab shows the active policy; business RPC/tool arguments cannot opt into paid use. `policy.status` is local and does not query Zhihu.
+
+```yaml
+config:
+  allowPaid: false
+  dailyCallLimit: 50
+```
+
+Both projects share `~/.config/zhihu-search/call-policy/daily.json` and `request.lock`. `ZHIHU_SEARCH_HOME` changes the root; `ZHIHU_CALL_POLICY_DIR` explicitly selects the shared directory. All accounts/processes using that directory share the cap. The mutex covers preflight and dispatch; reservations persist before sending. No quota cache or automatic retry is used. Unknown outcomes retain conservative quota reservations across day rollover. Crashed owners' locks are not reclaimed automatically: confirm both clients have no in-flight requests and check the official console before manually removing the lock. Damaged ledgers fail closed.
+
+This local protection cannot guarantee zero charges: other clients on the same account may consume free allowance after a check. Existing local usage is not billing. No recharge, redemption or wallet API is added. Sources: [prices](https://developer.zhihu.com/docs?key=billing_price), [free quota](https://developer.zhihu.com/docs?key=quota), [order agreement](https://developer.zhihu.com/content/order-agreement) (V1.0, effective 2026-10-10). Paying for API calls does not expand content access or redistribution rights.
+
+Official quota updates may lag. Free mode still queries every time, and also keeps a monotone local reservation ceiling, using the more conservative value without replenishing it during the day. This internal ceiling is never displayed as official remaining allowance. It resets per Beijing day; uncertain reservations remain.

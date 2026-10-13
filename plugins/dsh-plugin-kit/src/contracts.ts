@@ -25,91 +25,6 @@ export function producerMessageSource(plugin: string): ProducerMessageSource {
   return { kind: `plugin:${plugin}`, plugin }
 }
 
-/** @deprecated Legacy call shape. Features should call host `llm` directly. */
-export type ModelRole = 'normal' | 'weak' | 'strong' | 'fantasy'
-/** @deprecated Legacy call shape. Features should call host `llm` directly. */
-export type ModelTarget = { kind: 'role'; role: ModelRole } | { kind: 'session' } | ({ kind: 'model' } & ModelRoute)
-/** @deprecated Legacy call shape. Features should call host `llm` directly. */
-export interface AiPolicy {
-  revision: number
-  roles: Partial<Record<ModelRole, ModelRoute>>
-  purposes: Record<string, ModelTarget>
-  limits: { concurrency: number; timeoutMs: number; maxInputChars: number; maxOutputTokens: number; maxAttempts: number }
-}
-/** @deprecated Legacy call shape. Features should call host `llm` directly. */
-export interface PurposeSpec {
-  id: string
-  label: string
-  defaultTarget: ModelTarget
-  maxOutputTokens?: number
-  maxInputChars?: number
-  timeoutMs?: number
-}
-/** @deprecated Legacy call shape. Features should call host `llm` directly. */
-export interface ResolvedRoute extends ModelRoute {
-  source: 'override' | 'purpose' | 'default'
-  target: ModelTarget
-  policyRevision: number
-  inheritedRole?: ModelRole
-}
-/** @deprecated Legacy call shape. Features should call host `llm` directly. */
-export interface AuxiliaryRequest {
-  purpose: string
-  sessionId?: string
-  input: string
-  system: string
-  sourceVersion: string
-  contractVersion?: number
-  promptVersion?: string
-  schemaVersion?: string
-  override?: ModelTarget
-  signal?: AbortSignal
-  isCurrent?: () => boolean
-  priority?: 'interactive' | 'background'
-  insert?: { maxChars: number }
-}
-/** @deprecated Legacy call shape. Features should call host `llm` directly. */
-export interface UsageReceipt {
-  id: string
-  plugin: string
-  purpose: string
-  sessionId?: string
-  sourceVersion: string
-  contractVersion?: number
-  promptVersion?: string
-  schemaVersion?: string
-  route?: ResolvedRoute
-  status: 'success' | 'failed' | 'cancelled' | 'superseded' | 'skipped'
-  attempts: number
-  inputTokens?: number
-  outputTokens?: number
-  cost: number | null
-  startedAt: number
-  finishedAt: number
-  error?: string
-}
-/** @deprecated Legacy call shape. Features should call host `llm` directly. */
-export interface AuxiliaryResult { text: string; receipt: UsageReceipt }
-/** @deprecated Legacy call shape. Features should call host `llm` directly. */
-export interface AiFeatureScope {
-  readonly plugin: string
-  readonly signal: AbortSignal
-  readonly active: boolean
-  registerPurpose(spec: PurposeSpec): () => void
-  run(request: AuxiliaryRequest): Promise<AuxiliaryResult>
-  dispose(): void
-}
-/** @deprecated Legacy call shape. Features should call host `llm` directly. */
-export interface AiServices {
-  activate(plugin: string): AiFeatureScope
-  importPurposes(migrationId: string, defaults: Record<string, ModelTarget>, roles?: AiPolicy['roles']): Promise<AiPolicy>
-  getPolicy(): AiPolicy
-  updatePolicy(policy: Omit<AiPolicy, 'revision'>, expectedRevision: number): Promise<AiPolicy>
-  resolve(purpose: string, sessionId?: string, override?: ModelTarget): Promise<ResolvedRoute>
-  purposes(): Array<PurposeSpec & { plugin: string }>
-  usage(): UsageReceipt[]
-}
-
 export type RpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
 export const CHAT_EVENTS_SLOT = 'dsh-editor.chat.events'
 export interface EvidenceRef { sessionId: string; seq: number; kind: 'user' | 'tool' | 'turn' | 'manual'; excerpt?: string }
@@ -246,3 +161,66 @@ export function projectIdFromCwd(cwd: string | undefined): string | undefined {
   if (!normalized) return undefined
   return normalized === '/' || /^[A-Za-z]:\/$/.test(normalized) ? normalized : normalized.replace(/\/+$/, '')
 }
+
+/**
+ * Remote contribution for model-settings change notifications.
+ * Provided by `@klarkxy/dsh-model-hub` (`ModelSettingsChangesController`);
+ * subscribers degrade silently when that package is not installed.
+ * The stream carries invalidations only — `ready` is never a settings snapshot.
+ */
+export const MODEL_SETTINGS_CHANGES_REMOTE = {
+  package: '@klarkxy/dsh-model-hub',
+  descriptors: [{
+    id: 'modelSettingsChanges/watch',
+    service: 'modelSettingsChangesController',
+    namespace: 'modelSettingsChanges',
+    method: 'watch',
+    mode: 'stream' as const,
+    invocation: { kind: 'direct' as const },
+    parameters: [] as const,
+    cancellation: { parameter: 'signal' as const },
+  }],
+}
+
+/**
+ * Repository extension: a native web provider announces that its local
+ * availability changed. Kind is `search` or `fetch`; id is the provider id.
+ * Listeners refresh management state and must not treat this as a network probe.
+ */
+export const WEB_PROVIDER_AVAILABILITY_EVENT = 'web/provider-availability-updated' as const
+
+/**
+ * Optional display metadata a provider may attach when it registers directly
+ * with `ctx.web`. Execution and credentials stay with the provider; this object
+ * is display-only and must never carry secret values.
+ */
+export interface DshWebManagementDescriptor {
+  readonly id: string
+  readonly label: string
+  readonly description: string
+  readonly defaultBaseURL?: string
+  readonly credentialRef?: string
+  /** True when the key is shared with another surface. The page must not delete it. */
+  readonly credentialShared?: boolean
+  /** Optional notice naming the settings surface that owns a shared credential. */
+  readonly credentialHint?: string
+  readonly billing: 'request' | 'model-and-tools' | 'none' | 'unknown'
+  /** Optional provider-supplied billing summary. */
+  readonly pricing?: string
+  /** Public HTTPS page explaining provider charges. */
+  readonly pricingUrl?: string
+  /** Public HTTPS page where the user can create an API key. */
+  readonly signupUrl?: string
+  /** Plugin that owns configuration. Native providers keep their settings there. */
+  readonly configurationOwner?: string
+  /** Explicit settings link supplied by the provider, never inferred from its id. */
+  readonly configurationUrl?: string
+  /** Fixed legacy route migrated by a bundle-owned adapter; not used by native plugins. */
+  readonly legacyId?: string
+}
+
+/**
+ * Host Creator agent-preset id (`agentPresets.composedPreset`).
+ * Plugins that gate Creator-only tools or prompt sections compare against this.
+ */
+export const CREATOR_PRESET_ID = 'cordis'

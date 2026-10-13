@@ -18,6 +18,8 @@ function mount(write?: (value: unknown) => Promise<void>) {
   const put = vi.fn(async (_key, value) => { await write?.(value); row = value })
   const close = vi.fn(async () => {})
   const ctx = {
+    parallel: vi.fn(async () => {}),
+    on: () => () => {},
     storageDomain: { open: async () => ({ table: () => ({ get: () => row, put }), close }) },
     tools: { register: (tool: unknown) => { tools.push(tool) } },
     sandboxPolicy: { resolve: () => ({ workspaceRoot: process.cwd(), mode: 'workspace-write' }) },
@@ -26,7 +28,7 @@ function mount(write?: (value: unknown) => Promise<void>) {
   }
   apply(ctx as any)
   const call = (endpoint: string, payload: unknown = {}) => mocks.call!(endpoint, payload, new AbortController().signal)
-  return { tools, put, call, close, off }
+  return { tools, put, call, close, off, notify: ctx.parallel }
 }
 
 describe('ChatGPT host integration', () => {
@@ -54,6 +56,8 @@ describe('ChatGPT host integration', () => {
     expect(await app.call('settings.update', { settings, expectedRevision: 0 })).toMatchObject({ ok: false, error: { code: 'conflict' } })
     expect(await app.call('settings.update', { settings: { ...settings, timeoutMs: 1 }, expectedRevision: 1 })).toMatchObject({ ok: false, error: { code: 'bad-request' } })
     expect(app.put).toHaveBeenCalledTimes(1)
+    expect(app.notify).toHaveBeenCalledTimes(1)
+    expect(app.notify).toHaveBeenCalledWith('model-settings/changed', { ns: '@klarkxy/dsh-chatgpt', revision: 1 })
     await app.off.at(-1)!()
     expect(app.close).toHaveBeenCalled()
     expect(await app.call('status')).toMatchObject({ ok: false, error: { code: 'cancelled' } })
@@ -69,6 +73,24 @@ describe('ChatGPT host integration', () => {
     expect(await app.call('status')).toMatchObject({ ok: false, error: { code: 'busy' } })
     expect(mocks.status).not.toHaveBeenCalled()
     finish(); expect(await save).toMatchObject({ ok: true })
+    await app.off.at(-1)!()
+  })
+  it('notifies after runtime replacement and releasing the settings lock', async () => {
+    let finish!: () => void, entered!: () => void
+    const pending = new Promise<void>(resolve => { finish = resolve })
+    const disposing = new Promise<void>(resolve => { entered = resolve })
+    mocks.dispose.mockImplementationOnce(async () => { entered(); await pending })
+    const app = mount()
+    const reads: unknown[] = []
+    let observed!: () => void
+    const notificationRead = new Promise<void>(resolve => { observed = resolve })
+    app.notify.mockImplementation(async () => { reads.push(await app.call('status')); observed() })
+    const save = app.call('settings.update', { settings: DEFAULT_SETTINGS, expectedRevision: 0 })
+    await disposing
+    expect(app.notify).not.toHaveBeenCalled()
+    finish(); await save
+    await notificationRead
+    expect(reads).toMatchObject([{ ok: true }])
     await app.off.at(-1)!()
   })
 })

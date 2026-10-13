@@ -1,10 +1,10 @@
-import { createRef, forwardRef, type ReactElement, type Ref } from 'react'
+import { createRef, type ReactElement, type Ref } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { ZhihuButton, type HostButton, type HostButtonProps } from './client-host-ui.tsx'
+import { ZhihuButton, type ZhihuButtonProps } from './client-host-ui.tsx'
 
-type Props = HostButtonProps & { host?: HostButton }
+type Props = ZhihuButtonProps
 function render(props: Props, ref: Ref<HTMLButtonElement> = null) {
   return (ZhihuButton as unknown as {
     render(props: Props, ref: Ref<HTMLButtonElement>): ReactElement<Props & { ref?: Ref<HTMLButtonElement> }>
@@ -32,19 +32,6 @@ describe('portable Zhihu button adapter', () => {
     expect(button.props).toMatchObject({ onClick, disabled: true, role: 'tab', tabIndex: -1,
       'aria-selected': true, 'aria-controls': 'zhihu-results', 'data-testid': 'zhihu-search' })
     expect(onClick).not.toHaveBeenCalled()
-  })
-
-  it('forwards host controls and refs without leaking the adapter-only host prop', () => {
-    const Host = forwardRef<HTMLButtonElement, HostButtonProps>((props, ref) => <button ref={ref} {...props} />)
-    const ref = createRef<HTMLButtonElement>()
-    const onClick = vi.fn()
-    const button = render({ host: Host, variant: 'primary', className: 'zhihu-button',
-      disabled: true, onClick, 'aria-label': '搜索', children: '执行' }, ref)
-    expect(button.type).toBe(Host)
-    expect((button as unknown as { ref: unknown }).ref).toBe(ref)
-    expect(button.props).toMatchObject({ variant: 'primary', className: 'zhihu-button',
-      disabled: true, onClick, 'aria-label': '搜索', children: '执行' })
-    expect(button.props).not.toHaveProperty('host')
   })
 
   it('defaults to a non-submitting button but preserves an explicit submit type', () => {

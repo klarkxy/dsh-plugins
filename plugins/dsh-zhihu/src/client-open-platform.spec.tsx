@@ -159,7 +159,7 @@ describe('open platform initial SSR', () => {
     const call = vi.fn()
     const html = renderToStaticMarkup(<ZhihuOpenPlatformSection rpc={{ call }} quotaOnly />)
     expect(call).not.toHaveBeenCalled()
-    expect(html).toContain('官方每日额度')
+    expect(html).toContain('官方每日免费额度')
     expect(html).toContain('全部额度项')
     expect(html).toContain('不推算余额')
     // The choice list is the official checkbox on a contract card, so it

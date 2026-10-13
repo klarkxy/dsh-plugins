@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-zhihu",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Zhihu search, agent tools, knowledge bases, and usage tracking for DeepSeek Harness.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -57,6 +57,7 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-api-remotes",
         "@deepseek-ai/dsh-client-ui-primitives"
       ]
@@ -115,6 +116,9 @@
     "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-credentials": {
       "optional": true
     },
@@ -149,6 +153,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "a3c9e878f104b277262d585294e48e66a0c20da986d0c2efd7e0bb3811028b56"
+    "contentHash": "f9e696f7ae39fbab8b853a434171e6aa519bdcd4b3e0c9d137322644489fc63a"
   }
 }

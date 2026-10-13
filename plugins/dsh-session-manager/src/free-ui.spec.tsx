@@ -2,8 +2,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
-import { COPY_THREAD_FAILED } from './copy-action.ts'
-import { DeleteChatDialog, FreeChatPanel } from './free-panel.tsx'
+import { DeleteChatDialog } from './free-panel.tsx'
 import { createFreeChatModel, createRetryModel, type SessionHost } from './session-actions.ts'
 import { UserMessageActions } from './user-actions.tsx'
 import { failureText } from './ui-copy.ts'
@@ -46,31 +45,23 @@ async function useDom(run: (dom: JSDOM) => Promise<void>): Promise<void> {
   }
 }
 
-describe('free chat panel', () => {
-  it('lists only free rows, creates through the host, and follows the locale of a delete failure', async () => {
+describe('delete chat dialog', () => {
+  it('confirms a delete through the host, keeps a cleanup-pending failure, and follows the locale', async () => {
     await useDom(async dom => {
-      const create = vi.fn(async () => 'made')
-      const openSession = vi.fn()
-      const deleteSession = vi.fn(async () => ({ phase: 'cleanup-pending' as const, releasedSelection: false }))
+      const deleteSession = vi.fn(async () => ({ phase: 'cleanup-pending' as const }))
       const host: SessionHost = {
         list: {
-          getSnapshot: () => listed([
-            session('alpha', { displayTitle: 'Alpha' }),
-            session('project', { classification: 'ordinary', displayTitle: 'Project' }),
-            session('child', { origin: 'subagent', displayTitle: 'Child' }),
-          ]),
+          getSnapshot: () => listed([session('project', { classification: 'ordinary', displayTitle: 'Project' })]),
           subscribe: () => () => {},
         },
-        capabilities: async () => ({ retry: false, freeSession: true, deleteSession: true }),
-        create,
-        openSession,
+        capabilities: async () => ({ retry: false, freeSession: false, deleteSession: true }),
         deleteSession,
       }
       const model = createFreeChatModel(host)
       await model.reloadCapabilities()
       let root: Root | undefined
       const render = (locale: 'en' | 'zh') => {
-        root!.render(<><FreeChatPanel model={model} locale={locale} /><DeleteChatDialog model={model} locale={locale} /></>)
+        root!.render(<DeleteChatDialog model={model} locale={locale} />)
       }
       try {
         await act(async () => {
@@ -78,13 +69,7 @@ describe('free chat panel', () => {
           render('en')
         })
         const text = () => dom.window.document.body.textContent ?? ''
-        expect(text()).toContain('Alpha')
-        expect(text()).not.toContain('Project')
-        expect(text()).not.toContain('Child')
-        const createButton = [...dom.window.document.querySelectorAll('button')].find(button => button.textContent === 'New chat')
-        await act(async () => { createButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
-        expect(create.mock.calls[0]?.[0]).toEqual({ kind: 'free' })
-        expect(openSession).toHaveBeenCalledWith('made')
+        expect(text()).not.toContain('Project files remain')
         await act(async () => { model.requestDelete('project') })
         expect(text()).toContain('Project files remain')
         await act(async () => { model.confirmDelete() })
@@ -222,113 +207,6 @@ describe('user message actions', () => {
         await model.sendEdit('B', 'm', new AbortController().signal)
         expect(retry).not.toHaveBeenCalled()
       } finally {
-        await act(async () => { root?.unmount() })
-      }
-    })
-  })
-})
-
-describe('free chat panel failures', () => {
-  it('explains a busy free-chat fork in both locales and retries through the existing action', async () => {
-    await useDom(async dom => {
-      const forkSession = vi.fn(async (): Promise<string> => {
-        throw Object.assign(new Error('fork refused'), {
-          name: 'SessionForkError',
-          rpcError: { code: 'session/agent-busy', details: { reason: 'free-session-work-active' } },
-        })
-      })
-      const openSession = vi.fn()
-      const model = createFreeChatModel({
-        list: { getSnapshot: () => listed([session('chat')]), subscribe: () => () => {} },
-        capabilities: async () => ({ retry: false, freeSession: true, deleteSession: false }),
-        forkSession,
-        openSession,
-      })
-      await model.reloadCapabilities()
-      let root: Root | undefined
-      const chooseFork = async (menuLabel: string, forkLabel: string) => {
-        await act(async () => {
-          dom.window.document.querySelector(`[aria-label="${menuLabel}"]`)!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
-        })
-        const fork = [...dom.window.document.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === forkLabel)
-        await act(async () => { fork!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
-      }
-      try {
-        await act(async () => {
-          root = createRoot(dom.window.document.getElementById('root')!)
-          root.render(<FreeChatPanel model={model} locale="en" />)
-        })
-        await chooseFork('Chat actions', 'Fork')
-        expect(forkSession).toHaveBeenCalledWith('chat')
-        expect(dom.window.document.querySelector('[role="alert"]')?.textContent).toBe(
-          'This chat is still running. Wait for the current work to finish, then try again.',
-        )
-        expect(openSession).not.toHaveBeenCalled()
-        await act(async () => { root!.render(<FreeChatPanel model={model} locale="zh" />) })
-        expect(dom.window.document.querySelector('[role="alert"]')?.textContent).toBe(
-          '这个聊天仍在运行。请等待当前工作结束后再试。',
-        )
-        forkSession.mockResolvedValueOnce('forked')
-        await chooseFork('聊天操作', '分叉')
-        expect(forkSession).toHaveBeenCalledTimes(2)
-        expect(openSession).toHaveBeenCalledWith('forked')
-        expect(dom.window.document.querySelector('[role="alert"]')).toBeNull()
-      } finally {
-        await act(async () => { root?.unmount() })
-      }
-    })
-  })
-
-  it('shows a host list error instead of an empty catalog', async () => {
-    await useDom(async dom => {
-      const model = createFreeChatModel({
-        list: {
-          getSnapshot: () => ({ ids: [], byId: {}, phase: 'error' as const, error: { code: 'session/catalog', message: 'catalog down' } }),
-          subscribe: () => () => {},
-        },
-      })
-      let root: Root | undefined
-      try {
-        await act(async () => {
-          root = createRoot(dom.window.document.getElementById('root')!)
-          root.render(<FreeChatPanel model={model} locale="en" />)
-        })
-        expect(dom.window.document.body.textContent).toContain('catalog down')
-        expect(dom.window.document.body.textContent).not.toContain('No free chats yet.')
-      } finally {
-        await act(async () => { root?.unmount() })
-      }
-    })
-  })
-
-  it('keeps the copy failure visible when the clipboard rejects', async () => {
-    await useDom(async dom => {
-      const model = createFreeChatModel({
-        list: {
-          getSnapshot: () => listed([session('chat')]),
-          subscribe: () => () => {},
-        },
-      })
-      const previousNavigator = globalThis.navigator
-      Object.defineProperty(globalThis, 'navigator', {
-        configurable: true,
-        writable: true,
-        value: { clipboard: { writeText: async () => { throw new Error('denied') } } },
-      })
-      let root: Root | undefined
-      try {
-        await act(async () => {
-          root = createRoot(dom.window.document.getElementById('root')!)
-          root.render(<FreeChatPanel model={model} locale="en" />)
-        })
-        const menu = dom.window.document.querySelector('[aria-label="Chat actions"]')
-        await act(async () => { menu!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
-        const copy = [...dom.window.document.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === 'Copy thread ID')
-        await act(async () => { copy!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
-        expect(dom.window.document.querySelector('[role="menu"]')).not.toBeNull()
-        expect(dom.window.document.body.textContent).toContain(COPY_THREAD_FAILED.en)
-      } finally {
-        Object.defineProperty(globalThis, 'navigator', { configurable: true, writable: true, value: previousNavigator })
         await act(async () => { root?.unmount() })
       }
     })

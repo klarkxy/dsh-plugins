@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useState, useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore, type ComponentProps } from 'react'
+import { CopyThreadShortcutNotice, writeClipboard, type HostShortcuts } from './copy-shortcut.tsx'
 import {
   COPY_THREAD_FAILED,
   COPY_THREAD_LABEL,
@@ -11,19 +12,22 @@ import {
 import {
   COPY_THREAD_MENU_ID,
   COPY_THREAD_MENU_ORDER,
+  COPY_THREAD_SHORTCUT_ID,
   DELETE_DIALOG_ID,
-  FREE_PANEL_ID,
   USER_ACTIONS_ID,
   USER_ACTIONS_SLOT,
 } from './contracts.ts'
-import { DeleteChatDialog, FreeChatIcon, FreeChatPanel } from './free-panel.tsx'
+import { installContextMenuForwarding } from './context-menu.ts'
+import { CreateNoticeDialog, DeleteChatDialog } from './free-panel.tsx'
+import { installTemporaryWorkspacePicker, TemporaryWorkspaceNotice, type PickerRegistry } from './temporary-picker.tsx'
+import { bindTemporaryWorkspaceHost, createTemporaryWorkspaceModel } from './temporary-workspace.ts'
 import { bindHost, createFreeChatModel, createRetryModel, type FreeChatModel, type RetryModel } from './session-actions.ts'
 import { freeChatCss } from './styles.ts'
 import { UserMessageActions } from './user-actions.tsx'
 import { uiText } from './ui-copy.ts'
 
 export const name = 'dsh-session-manager-client'
-export const inject = ['slots', 'locale', 'sessions', 'uiWorkspace', 'layout'] as const
+export const inject = ['slots', 'locale', 'sessions', 'uiWorkspace', 'shortcuts', 'connection', 'workspaces', 'layout'] as const
 
 interface LocaleService {
   getSnapshot(): { active: string }
@@ -46,13 +50,14 @@ type Client = Context & {
   locale?: LocaleService
   sessions?: Parameters<typeof bindHost>[0]['sessions']
   uiWorkspace?: Parameters<typeof bindHost>[0]['uiWorkspace']
-  layout?: Parameters<typeof bindHost>[0]['layout']
+  shortcuts?: HostShortcuts
   on?(name: string, listener: () => void): () => void
 }
 
 export function CopyThreadMenuItem(props: MenuProps & {
   locale: CopyLocale
   writeText?: (value: string) => Promise<void>
+  shortcut?: ComponentProps<typeof MenuItemButton>['shortcut']
 }) {
   const [failed, setFailed] = useState(false)
   const [, setMenuOpen] = props.useMenuOpenState()
@@ -67,30 +72,32 @@ export function CopyThreadMenuItem(props: MenuProps & {
   // would run before ui-primitives Menu.tsx applies its composition, modifier,
   // and repeat guards (packages/client/ui-primitives/src/Menu.tsx).
   return (
-    <MenuItemButton separatorBefore onSelect={onSelect}>
+    <MenuItemButton separatorBefore shortcut={props.shortcut} onSelect={onSelect}>
       {label}
     </MenuItemButton>
   )
 }
+
 
 export function apply(ctx: Context): void {
   const client = ctx as Client
   const host = bindHost(client)
   const chats = createFreeChatModel(host)
   const retries = createRetryModel(host)
+  const temporaryHost = bindTemporaryWorkspaceHost(client as unknown as Parameters<typeof bindTemporaryWorkspaceHost>[0])
+  const temporary = createTemporaryWorkspaceModel(temporaryHost, undefined,
+    () => uiText(copyLocale(client.locale?.getSnapshot().active), 'tempWorkspace'))
+  const currentLocale = () => client.locale?.getSnapshot().active
   client.effect(() => {
     const stops: Array<() => void> = []
-    const localeStop = client.locale?.register?.('sessionManager', {
-      zh: { panel: uiText('zh', 'panel') },
-      en: { panel: uiText('en', 'panel') },
-    })
-    if (typeof localeStop === 'function') stops.push(localeStop)
+    // The relay needs no host slot and no service; a non-browser host simply skips it.
+    if (typeof document !== 'undefined') stops.push(installContextMenuForwarding(document))
     stops.push(client.slots.inject('sidebar.workspaces.session.menu.item', () => (
       client.slots.register({
         name: 'sidebar.workspaces.session.menu.item',
         id: COPY_THREAD_MENU_ID,
         order: COPY_THREAD_MENU_ORDER,
-      }, props => <CopyThreadSlot locale={client.locale} {...props as MenuProps} />)
+      }, props => <CopyThreadSlot locale={client.locale} shortcuts={client.shortcuts} {...props as MenuProps} />)
     )))
     stops.push(client.slots.inject('sidebar.workspaces.session.menu.item', () => (
       client.slots.register({
@@ -99,20 +106,8 @@ export function apply(ctx: Context): void {
         order: COPY_THREAD_MENU_ORDER + 10,
       }, props => <DeleteMenuItem locale={client.locale} model={chats} {...props as MenuProps} />)
     )))
-    stops.push(client.slots.inject('main', () => (
-      client.slots.register({
-        name: 'main',
-        key: FREE_PANEL_ID,
-      }, () => <FreeChatPanel model={chats} locale={useLiveLocale(client.locale)} />)
-    )))
-    stops.push(client.slots.inject('sidebar.panellist', () => (
-      client.slots.register({
-        name: 'sidebar.panellist',
-        id: FREE_PANEL_ID,
-        order: 20,
-        label: () => uiText(copyLocale(client.locale?.getSnapshot().active), 'panel'),
-      }, props => <FreeChatIcon size={(props as { size?: number }).size ?? 16} />)
-    )))
+    stops.push(installTemporaryWorkspacePicker(client.slots as unknown as PickerRegistry, temporary,
+      temporaryHost.createWorkspace, client.locale))
     stops.push(client.slots.inject(USER_ACTIONS_SLOT, () => (
       client.slots.register({
         name: USER_ACTIONS_SLOT,
@@ -134,12 +129,18 @@ export function apply(ctx: Context): void {
         name: 'shell.overlay',
         id: DELETE_DIALOG_ID,
         order: 40,
-      }, () => (
-        <>
-          <style>{freeChatCss}</style>
-          <DeleteChatDialog model={chats} locale={useLiveLocale(client.locale)} />
-        </>
-      ))
+      }, () => {
+        const locale = useLiveLocale(client.locale)
+        return (
+          <>
+            <style>{freeChatCss}</style>
+            <CopyThreadShortcutNotice shortcuts={client.shortcuts} list={client.sessions?.list} locale={locale} currentLocale={currentLocale} />
+            <TemporaryWorkspaceNotice model={temporary} locale={locale} />
+            <DeleteChatDialog model={chats} locale={locale} />
+            <CreateNoticeDialog model={chats} locale={locale} />
+          </>
+        )
+      })
     )))
     const reset = client.on?.('connection/reset', () => {
       void chats.reloadCapabilities()
@@ -151,14 +152,23 @@ export function apply(ctx: Context): void {
     return () => {
       chats.cancel()
       retries.cancel()
+      temporary.cancel()
       for (const stop of stops) stop()
     }
   })
 }
 
-function CopyThreadSlot(props: MenuProps & { locale?: LocaleService }) {
+const EMPTY_SHORTCUTS: ReturnType<HostShortcuts['catalog']['getSnapshot']> = []
+
+function CopyThreadSlot(props: MenuProps & { locale?: LocaleService; shortcuts?: HostShortcuts }) {
   const locale = useLiveLocale(props.locale)
-  return <CopyThreadMenuItem sessionId={props.sessionId} useMenuOpenState={props.useMenuOpenState} locale={locale} />
+  const shortcuts = useSyncExternalStore(
+    listener => props.shortcuts?.catalog.subscribe(listener) ?? (() => {}),
+    () => props.shortcuts?.catalog.getSnapshot() ?? EMPTY_SHORTCUTS,
+    () => EMPTY_SHORTCUTS,
+  )
+  return <CopyThreadMenuItem sessionId={props.sessionId} useMenuOpenState={props.useMenuOpenState} locale={locale}
+    shortcut={shortcuts.find(row => row.id === COPY_THREAD_SHORTCUT_ID)} />
 }
 
 function DeleteMenuItem(props: MenuProps & { locale?: LocaleService; model: FreeChatModel }): React.ReactElement | null {
@@ -179,16 +189,10 @@ function DeleteMenuItem(props: MenuProps & { locale?: LocaleService; model: Free
 function useLiveLocale(locale: LocaleService | undefined): CopyLocale {
   const active = useSyncExternalStore(
     listener => locale?.subscribe(listener) ?? (() => {}),
-    () => locale?.getSnapshot().active ?? 'zh',
-    () => 'zh',
+    () => locale?.getSnapshot().active ?? 'en',
+    () => locale?.getSnapshot().active ?? 'en',
   )
   return copyLocale(active)
-}
-
-async function writeClipboard(value: string): Promise<void> {
-  const clipboard = globalThis.navigator?.clipboard
-  if (clipboard === undefined) throw new Error('clipboard unavailable')
-  await clipboard.writeText(value)
 }
 
 export type { FreeChatModel, RetryModel }

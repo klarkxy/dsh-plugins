@@ -17,14 +17,15 @@ import {
   StateDot,
   type SegmentedTab,
 } from '@deepseek-ai/dsh-client-ui-primitives';
-import { translator, useHostLocale, useT, ZhihuLocaleContext, type HostLocaleService, type Translate } from './client-locale.ts'
+import { clientText, translator, useHostLocale, useT, ZhihuLocaleContext, type HostLocaleService, type Translate, type ClientText } from './client-locale.ts'
 import { ZHIHU_CREDENTIAL_REF, ZHIHU_RPC_CHANNEL, type ZhihuRpcResult } from './contracts.ts'
 import { createZhihuClientState, type ZhihuClientState } from './client-state.ts'
 import { zhihuClientStyles } from './client-styles.ts'
-import { hostComponentsFromRenderProps, renderInput, renderSelect, zhihuQueryKeyDown, type HostButton, type HostInput, type HostSelect } from './client-host-ui.tsx'
+import { renderInput, renderSelect, zhihuQueryKeyDown } from './client-host-ui.tsx'
 import { ZhihuButton, ZhihuDetails } from './client-host-ui.tsx'
 import { openPlatformOptions, ZhihuOpenPlatformSection } from './client-open-platform.tsx'
 import type { ZhihuOpenPlatformOperation } from './open-platform.ts'
+import { ZhihuCallPolicySection } from './client-call-policy.tsx'
 import { ZhihuQuotaSection } from './client-quota.tsx'
 
 export const name = 'dsh-zhihu-client'
@@ -32,7 +33,6 @@ export const inject = ['slots', 'connection', 'remote', 'remote.credentials', 'l
 
 const PACKAGE_NAME = '@klarkxy/dsh-zhihu'
 const SLOT_ORDER = 120
-const SLOT_LABEL = '知乎'
 
 /* 活动暗示:三点呼吸(参数改写自 Amicro pulse-dots,MIT);装饰 aria-hidden,
    关键帧在 client-styles.ts,reduced-motion 停循环后保留静态点。 */
@@ -103,19 +103,19 @@ function safeUrl(url: string): string | null {
   return /^https?:\/\//i.test(url) ? url : null;
 }
 
-type Failure = { kind: 'credential' | 'network' | 'request'; text: string }
+type Failure = { kind: 'credential' | 'network' | 'request'; text: ClientText }
 
 /** Credential absence and transport failure read differently from a plain bad request. */
-function failureOf(code: string, message: string, t: Translate = translator()): Failure {
+function failureOf(code: string, message: string): Failure {
   if (code === 'token-missing') {
-    return { kind: 'credential', text: t('未配置知乎 Access Secret 或凭证不可用，请到「设置」页配置。', 'Zhihu Access Secret is missing or unavailable. Set it on the Settings tab.') }
+    return { kind: 'credential', text: ['未配置知乎 Access Secret 或凭证不可用，请到「设置」页配置。', 'Zhihu Access Secret is missing or unavailable. Set it on the Settings tab.'] }
   }
-  return { kind: 'request', text: t(`请求失败：${message}`, `Request failed: ${message}`) }
+  return { kind: 'request', text: [`请求失败：${clientText(message, translator('zh'))}`, `Request failed: ${clientText(message, translator('en'))}`] }
 }
 
-function networkFailure(cause: unknown, t: Translate = translator()): Failure {
+function networkFailure(cause: unknown): Failure {
   const detail = cause instanceof Error ? cause.message : String(cause)
-  return { kind: 'network', text: t(`网络或连接失败：${detail}`, `Network or connection failed: ${detail}`) }
+  return { kind: 'network', text: [`网络或连接失败：${detail}`, `Network or connection failed: ${detail}`] }
 }
 
 /**
@@ -165,12 +165,12 @@ function testOptions(t: Translate) {
 export const TEST_OPTIONS = testOptions(translator('zh'))
 type TestOperation = Mode | Exclude<ZhihuOpenPlatformOperation, 'quota'>
 
-export function ZhihuTestSelector({ value, onChange, Select }: {
-  value: TestOperation; onChange(value: TestOperation): void; Select?: HostSelect
+export function ZhihuTestSelector({ value, onChange }: {
+  value: TestOperation; onChange(value: TestOperation): void
 }) {
   const t = useT()
   const options = testOptions(t)
-  return renderSelect(Select, {
+  return renderSelect({
     'aria-label': t('测试功能', 'Feature to test'), value, options,
     onChange: next => { if (options.some(option => option.value === next)) onChange(next as TestOperation) },
   }, 'dsh-ui-select')
@@ -401,7 +401,7 @@ function keyFailure(draft: string): 'blank' | 'illegal' | undefined {
 type CredentialLoad =
   | { status: 'loading' }
   | { status: 'ready'; credential: CredentialView | undefined }
-  | { status: 'error'; error: string }
+  | { status: 'error'; error: ClientText }
 
 /**
  * Track mount lifetime so late resolves after tab change/close never touch
@@ -453,7 +453,7 @@ function SettingsShell(props: { children?: ReactNode }): ReactNode {
 /** Which credential action is in flight; the two never share a spinner. */
 export type CredentialAction = 'save' | 'clear' | null
 
-function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButton; Input?: HostInput }): ReactNode {
+function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
   const { credentials } = props
   const t = useT()
   const alive = useAlive()
@@ -461,8 +461,8 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
   const [keyDraft, setKeyDraft] = useState('')
   const [pending, setPending] = useState<CredentialAction>(null)
   const [confirmClear, setConfirmClear] = useState(false)
-  const [failure, setFailure] = useState<string | undefined>(undefined)
-  const [note, setNote] = useState<string | undefined>(undefined)
+  const [failure, setFailure] = useState<ClientText | undefined>(undefined)
+  const [note, setNote] = useState<ClientText | undefined>(undefined)
   const busy = pending !== null
   // Typing again means the previous "saved" note no longer describes the field.
   const editDraft = (value: string) => { setKeyDraft(value); setNote(undefined) }
@@ -497,10 +497,10 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
     return (
       <SettingsShell>
         <p className="dsh-ui-error" role="alert">
-          {t(`读取失败：${state.error}`, `Could not load: ${state.error}`)}
+          {t(`读取失败：${clientText(state.error, t)}`, `Could not load: ${clientText(state.error, t)}`)}
         </p>
         <div className="dsh-ui-actions">
-          <ZhihuButton host={props.Button} onClick={() => void load()}>
+          <ZhihuButton onClick={() => void load()}>
             {t('重试', 'Retry')}
           </ZhihuButton>
         </div>
@@ -538,7 +538,7 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
       if (!alive.current) return
       if (!result.ok) { setFailure(result.error.message); return }
       setKeyDraft('')
-      setNote(t('已保存。', 'Saved.'))
+      setNote(['已保存。', 'Saved.'])
       await load()
     } catch (cause) {
       if (!alive.current) return
@@ -560,7 +560,7 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
       if (!alive.current) return
       if (!result.ok) { setFailure(result.error.message); return }
       setKeyDraft('')
-      setNote(t('已清除。', 'Cleared.'))
+      setNote(['已清除。', 'Cleared.'])
       await load()
     } catch (cause) {
       if (!alive.current) return
@@ -586,7 +586,7 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
           <span className="dsh-ui-label" id="zhihu-access-secret-label">Access Secret</span>
           <ExternalLink url={ZHIHU_CONSOLE_URL}>{t('获取密钥', 'Get a key')}</ExternalLink>
         </div>
-        {renderInput(props.Input, {
+        {renderInput({
           type: 'password',
           className: 'zhihu-input',
           value: keyDraft,
@@ -604,14 +604,13 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
         </p>}
       </div>
       {failure !== undefined ? <p className="dsh-ui-error" role="alert">
-        {failure}
+        {clientText(failure, t)}
       </p> : null}
       {note !== undefined ? <p className="dsh-ui-notice" role="status">
-        {note}
+        {clientText(note, t)}
       </p> : null}
       <div className="dsh-ui-actions">
         <ZhihuButton
-          host={props.Button}
           variant="danger"
           className="zhihu-button-danger"
           disabled={busy || keyLocked || !configured}
@@ -622,7 +621,6 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
           </Fragment> : t('清除', 'Clear')}
         </ZhihuButton>
         <ZhihuButton
-          host={props.Button}
           variant="primary"
           disabled={busy || keyLocked || keyValue.length === 0 || draftFailure !== undefined}
           onClick={() => void save()}>
@@ -641,8 +639,8 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
         // class so the contract classes inside it resolve.
         className="zhihu-panel"
         footer={<div className="dsh-ui-actions">
-          <ZhihuButton host={props.Button} onClick={() => setConfirmClear(false)}>{t('取消', 'Cancel')}</ZhihuButton>
-          <ZhihuButton host={props.Button} variant="danger" className="zhihu-button-danger" onClick={() => void clear()}>
+          <ZhihuButton onClick={() => setConfirmClear(false)}>{t('取消', 'Cancel')}</ZhihuButton>
+          <ZhihuButton variant="danger" className="zhihu-button-danger" onClick={() => void clear()}>
             {t('清除', 'Clear')}
           </ZhihuButton>
         </div>}>
@@ -888,9 +886,9 @@ function UsageChart(props: { days: DailyUsage[]; totals: UsageTotals }): ReactNo
 type UsageLoad =
   | { status: 'loading' }
   | { status: 'ready'; days: DailyUsage[] }
-  | { status: 'error'; error: string }
+  | { status: 'error'; error: ClientText }
 
-function UsageSection(props: { rpc: RpcCaller; Button?: HostButton }): ReactNode {
+function UsageSection(props: { rpc: RpcCaller }): ReactNode {
   const { rpc } = props
   const t = useT()
   const gateRef = useRef<ZhihuClientState | null>(null)
@@ -911,7 +909,7 @@ function UsageSection(props: { rpc: RpcCaller; Button?: HostButton }): ReactNode
       if (!gate.isCurrent(ticket)) return
       const result = raw as ZhihuRpcResult
       if (!result.ok) { setState({ status: 'error', error: result.error.message }); return }
-      if (!isUsageSummary(result.value)) { setState({ status: 'error', error: 'invalid response shape' }); return }
+      if (!isUsageSummary(result.value)) { setState({ status: 'error', error: ['响应格式与契约不符。', 'The response does not match the expected shape.'] }); return }
       setState({ status: 'ready', days: result.value.days })
     } catch (cause) {
       if (!gate.isCurrent(ticket)) return
@@ -937,10 +935,10 @@ function UsageSection(props: { rpc: RpcCaller; Button?: HostButton }): ReactNode
     return (
       <section className="dsh-ui-stack" data-testid="zhihu-usage" aria-label={sectionLabel}>
         <p className="dsh-ui-error" role="alert">
-          {t(`读取失败：${state.error}`, `Could not load: ${state.error}`)}
+          {t(`读取失败：${clientText(state.error, t)}`, `Could not load: ${clientText(state.error, t)}`)}
         </p>
         <div className="dsh-ui-actions">
-          <ZhihuButton host={props.Button} onClick={() => void load()}>
+          <ZhihuButton onClick={() => void load()}>
             {t('重试', 'Retry')}
           </ZhihuButton>
         </div>
@@ -957,7 +955,7 @@ function UsageSection(props: { rpc: RpcCaller; Button?: HostButton }): ReactNode
         {t('本地调用计数，非知乎官方额度或费用。', 'Calls recorded locally; not Zhihu official quota or billing.')}
       </p>
       <div className="dsh-ui-actions">
-        <ZhihuButton host={props.Button} onClick={() => void load()}>{t('刷新统计', 'Refresh')}</ZhihuButton>
+        <ZhihuButton onClick={() => void load()}>{t('刷新统计', 'Refresh')}</ZhihuButton>
       </div>
       <div className="zhihu-usage-cards">
         <UsageCard label={t('今日调用', 'Today')} value={totals.todayCalls} unit={times} />
@@ -1074,7 +1072,7 @@ function formatSize(size: number): string {
   return `${size} B`
 }
 
-function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?: HostButton }): ReactNode {
+function KnowledgeSection(props: { rpc: RpcCaller }): ReactNode {
   const { rpc } = props
   const t = useT()
   const gateRef = useRef<ZhihuClientState | null>(null)
@@ -1085,8 +1083,8 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
   const [file, setFile] = useState<File | undefined>(undefined)
   const [fileKey, setFileKey] = useState(0)
   const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState<string | undefined>(undefined)
-  const [failure, setFailure] = useState<string | undefined>(undefined)
+  const [note, setNote] = useState<ClientText | undefined>(undefined)
+  const [failure, setFailure] = useState<ClientText | undefined>(undefined)
 
   // Unmount (tab change/panel close/slot collapse): abort the in-flight read
   // or upload and stale its ticket.
@@ -1101,14 +1099,14 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
       const raw = await rpc.call(ZHIHU_RPC_CHANNEL, 'knowledge.bases', {}, signal)
       if (!gate.isCurrent(ticket)) return
       const result = raw as ZhihuRpcResult
-      if (!result.ok) { setList({ status: 'error', failure: failureOf(result.error.code, result.error.message, t) }); return }
-      if (!isKnowledgeBaseList(result.value)) { setList({ status: 'error', failure: { kind: 'request', text: t('响应格式与契约不符。', 'The response does not match the expected shape.') } }); return }
+      if (!result.ok) { setList({ status: 'error', failure: failureOf(result.error.code, result.error.message) }); return }
+      if (!isKnowledgeBaseList(result.value)) { setList({ status: 'error', failure: { kind: 'request', text: ['响应格式与契约不符。', 'The response does not match the expected shape.'] } }); return }
       setList({ status: 'ready', bases: result.value.bases })
     } catch (cause) {
       if (!gate.isCurrent(ticket)) return
-      setList({ status: 'error', failure: networkFailure(cause, t) })
+      setList({ status: 'error', failure: networkFailure(cause) })
     }
-  }, [gate, rpc, t])
+  }, [gate, rpc])
 
   useEffect(() => { void load() }, [load])
 
@@ -1117,7 +1115,7 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
     if (!file || busy) return
     setFailure(undefined)
     setNote(undefined)
-    if (file.size > KB_MAX_BYTES) { setFailure(t('文件超过 20 MB 上限。', 'The file exceeds the 20 MB limit.')); return }
+    if (file.size > KB_MAX_BYTES) { setFailure(['文件超过 20 MB 上限。', 'The file exceeds the 20 MB limit.']); return }
     const { ticket, signal } = gate.begin()
     setBusy(true)
     try {
@@ -1132,15 +1130,15 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
       }, signal)
       if (!gate.isCurrent(ticket)) return
       const result = raw as ZhihuRpcResult
-      if (!result.ok) { setFailure(t(`上传失败：${result.error.message}`, `Upload failed: ${result.error.message}`)); return }
-      setNote(t('已上传到知乎知识库。', 'Uploaded to the Zhihu knowledge base.'))
+      if (!result.ok) { setFailure([`上传失败：${result.error.message}`, `Upload failed: ${result.error.message}`]); return }
+      setNote(['已上传到知乎知识库。', 'Uploaded to the Zhihu knowledge base.'])
       setFile(undefined)
       setFileKey((key) => key + 1)
       await load()
     } catch (cause) {
       if (!gate.isCurrent(ticket)) return
       const detail = cause instanceof Error ? cause.message : String(cause)
-      setFailure(t(`上传失败：${detail}`, `Upload failed: ${detail}`))
+      setFailure([`上传失败：${detail}`, `Upload failed: ${detail}`])
     } finally {
       setBusy(false)
     }
@@ -1158,10 +1156,10 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
         {t('正在读取知识库列表…', 'Loading knowledge bases…')}
       </p> : null}
       {list.status === 'error' ? <Fragment>
-        <p className="dsh-ui-error" role="alert">{list.failure.text}</p>
+        <p className="dsh-ui-error" role="alert">{clientText(list.failure.text, t)}</p>
         {list.failure.kind !== 'credential'
           ? <div className="dsh-ui-actions">
-            <ZhihuButton host={props.Button} onClick={() => void load()}>{t('重试', 'Retry')}</ZhihuButton>
+            <ZhihuButton onClick={() => void load()}>{t('重试', 'Retry')}</ZhihuButton>
           </div>
           : null}
       </Fragment> : null}
@@ -1170,7 +1168,7 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
           {t('目标知识库', 'Target knowledge base')}
         </label>
         <div className="dsh-ui-row">
-          {renderSelect(props.Select, {
+          {renderSelect({
             id: 'zhihu-kb-base',
             value: baseId,
             disabled: busy,
@@ -1188,7 +1186,6 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
             ],
           }, 'dsh-ui-select')}
           <ZhihuButton
-            host={props.Button}
             disabled={busy}
             onClick={() => void load()}>
             {t('刷新', 'Refresh')}
@@ -1233,7 +1230,6 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
       </div> : null}
       {list.status === 'ready' ? <div className="dsh-ui-actions">
         <ZhihuButton
-          host={props.Button}
           variant="primary"
           disabled={busy || !file}
           onClick={() => void upload()}>
@@ -1244,10 +1240,10 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
         </ZhihuButton>
       </div> : null}
       {note ? <p className="dsh-ui-notice" role="status">
-        {note}
+        {clientText(note, t)}
       </p> : null}
       {failure ? <p className="dsh-ui-error" role="alert">
-        {failure}
+        {clientText(failure, t)}
       </p> : null}
     </section>
   );
@@ -1279,8 +1275,8 @@ export function nextVisitedTabs(visited: readonly Tab[], next: Tab): Tab[] {
   return visited.includes(next) ? [...visited] : [...visited, next]
 }
 
-function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?: HostSelect; Button?: HostButton; Input?: HostInput }) {
-  const { rpc, credentials, Select, Button, Input } = props
+function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi }) {
+  const { rpc, credentials } = props
   const t = useT()
   const gateRef = useRef<ZhihuClientState | null>(null)
   if (!gateRef.current) gateRef.current = createZhihuClientState()
@@ -1322,7 +1318,7 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
       if (response.ok) {
         const parsed = parseOutcome(mode, response.value)
         if (!parsed) {
-          setFailure({ kind: 'request', text: t('响应格式与契约不符。', 'The response does not match the expected shape.') })
+          setFailure({ kind: 'request', text: ['响应格式与契约不符。', 'The response does not match the expected shape.'] })
           setPhase('error')
           return
         }
@@ -1332,12 +1328,12 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
       } else if (response.error.code === 'cancelled') {
         setPhase('idle')
       } else {
-        setFailure(failureOf(response.error.code, response.error.message, t))
+        setFailure(failureOf(response.error.code, response.error.message))
         setPhase('error')
       }
     } catch (cause) {
       if (!gate.isCurrent(ticket)) return
-      setFailure(networkFailure(cause, t))
+      setFailure(networkFailure(cause))
       setPhase('error')
     }
   }, [gate, rpc, mode, query, askModel, scopes, t])
@@ -1420,10 +1416,10 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
     </div>
     : null
   const testPanel = <div className="dsh-ui-field">
-      <ZhihuTestSelector value={testOperation} onChange={onTestOperationChange} Select={Select} />
+      <ZhihuTestSelector value={testOperation} onChange={onTestOperationChange} />
       {isSearchOperation ? <Fragment>
       <div className="dsh-ui-row">
-        {mode === 'ask' ? renderSelect(Select, {
+        {mode === 'ask' ? renderSelect({
           'aria-label': t('直答模型', 'Answer model'),
           value: askModel,
           onChange: (next) => onAskModelChange(next as AskModel),
@@ -1449,7 +1445,7 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
         </div>
         <p className="dsh-ui-hint" id="zhihu-scope-hint">{t('至少保留一个检索范围。', 'Keep at least one scope selected.')}</p>
       </Fragment> : null}
-      {renderInput(Input, {
+      {renderInput({
         type: 'search',
         className: 'zhihu-input',
         'data-testid': 'zhihu-query',
@@ -1462,7 +1458,6 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
       })}
       <div className="dsh-ui-actions">
         <ZhihuButton
-          host={Button}
           variant="primary"
           data-testid="zhihu-search"
           disabled={searchDisabled}
@@ -1471,7 +1466,6 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
         </ZhihuButton>
         {phase === 'loading'
           ? <ZhihuButton
-          host={Button}
           onClick={() => { gate.cancel(); setPhase('idle') }}>
           {t('取消', 'Cancel')}
         </ZhihuButton>
@@ -1485,12 +1479,12 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
         </Fragment> : phase === 'idle' && mode !== 'hot' && !query.trim() ? t('输入关键词后搜索。', 'Enter keywords to search.') : null}
       </div>
       {phase === 'error' && failure ? <div className="dsh-ui-error" role="alert">
-        {failure.text}
+        {clientText(failure.text, t)}
       </div> : null}
       {phase === 'done' && outcome ? <OutcomeView outcome={outcome} stale={stale} /> : null}
       </Fragment> : <ZhihuOpenPlatformSection
         key={testOperation} selectedOperation={testOperation as ZhihuOpenPlatformOperation}
-        rpc={rpc} Button={Button} Input={Input} Select={Select} />}
+        rpc={rpc} />}
     </div>
   return (
     <section
@@ -1498,10 +1492,10 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi; Sel
       data-testid="zhihu-settings-embed"
       aria-label={t('知乎', 'Zhihu')}>
       {tablist}
-      {panel('settings', <SettingsSection credentials={credentials} Button={Button} Input={Input} />)}
-      {panel('usage', <UsageSection rpc={rpc} Button={Button} />)}
-      {panel('quota', <ZhihuQuotaSection rpc={rpc} Button={Button} />)}
-      {panel('knowledge', <KnowledgeSection rpc={rpc} Select={Select} Button={Button} />)}
+      {panel('settings', <Fragment><SettingsSection credentials={credentials} /><ZhihuCallPolicySection rpc={rpc} /></Fragment>)}
+      {panel('usage', <UsageSection rpc={rpc} />)}
+      {panel('quota', <ZhihuQuotaSection rpc={rpc} />)}
+      {panel('knowledge', <KnowledgeSection rpc={rpc} />)}
       {panel('test', testPanel)}
     </section>
   )
@@ -1524,12 +1518,11 @@ export function apply(ctx: Context): void {
   // lacks it throws, so the lookup is guarded and a missing one stays Chinese.
   let locale: HostLocaleService | undefined
   try { locale = client.locale } catch { locale = undefined }
-  const settingsRender = (props: unknown) => <ZhihuSettingsRoot
+  const settingsRender = () => <ZhihuSettingsRoot
     rpc={client.connection.rpc}
     credentials={wrapCredentials(client.remote.credentials)}
-    locale={locale}
-    {...hostComponentsFromRenderProps(props)} />
+    locale={locale} />
   // DSH 0.1.7-rc.2 renders a bundle's configuration on its Plugins detail page.
   ctx.effect(() => client.slots.inject('plugins.bundle.config', () =>
-    client.slots.register({ name: 'plugins.bundle.config', key: PACKAGE_NAME, order: SLOT_ORDER, label: SLOT_LABEL }, settingsRender)), 'zhihu.settings')
+    client.slots.register({ name: 'plugins.bundle.config', key: PACKAGE_NAME, order: SLOT_ORDER }, settingsRender)), 'zhihu.settings')
 }

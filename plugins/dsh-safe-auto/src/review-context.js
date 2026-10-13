@@ -14,6 +14,10 @@ export function authority(session) {
   const messages = [];
   let bytes = 0, task, intent, incomplete = false;
   for (const [index, event] of events.entries()) {
+    // 约定禁例：source.kind === 'user' 不能当真人判据。此处安全依赖两道闸：
+    // 上方 isSubagentSession(session) 排除子线程，以及下游 assessApproval 再核授权。
+    // 宿主若改变事件来源语义，这道过滤会失效；若宿主把委派提示注入父会话为 user 事件，
+    // 此处授权面会扩大，评审模型 prompt 构建前必须复核。
     if (event?.type !== 'user/message' || event.data?.source?.kind !== 'user') continue;
     task = event.seq ?? index;
     const blocks = event.data.content;

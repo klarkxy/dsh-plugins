@@ -28,6 +28,39 @@ describe('Tavily direct API adapter', () => {
     const { provider } = adapter({ results: [{ url: 'https://example.com/a' }, { url: 'https://example.com/b' }] })
     expect(await provider.search({ query: 'test', maxResults: 1 })).toMatchObject({ sources: [{ url: 'https://example.com/a' }], truncated: true })
   })
+  it('preserves empty strings, field caps and publication dates through shared source validation', async () => {
+    const { provider } = adapter({ results: [
+      { url: 'http://example.com/empty', title: '', content: '', published_date: '2026-01-01' },
+      { url: 'https://example.com/long', title: 't'.repeat(1001), content: 's'.repeat(8001) },
+    ] })
+    const { sources } = await provider.search({ query: 'test' })
+    expect(sources[0]).toEqual({ url: 'http://example.com/empty', title: '', snippet: '', publishedAt: '2026-01-01T00:00:00.000Z' })
+    expect(sources[1]?.title).toHaveLength(1000)
+    expect(sources[1]?.snippet).toHaveLength(8000)
+    expect(sources[1]).not.toHaveProperty('publishedAt')
+  })
+  it.each(['http://api.tavily.com', 'https://user:secret@api.tavily.com',
+    'https://api.tavily.com?query=1', 'https://api.tavily.com#fragment'])('rejects unsafe endpoint %s before sending', async baseURL => {
+    const transport = vi.fn()
+    const provider = new TavilySearchProvider({ apiKey: 'fixture-secret', baseURL, fetch: transport })
+    expect(provider.available()).toBe(false)
+    await expect(provider.search({ query: 'test' })).rejects.toMatchObject({ code: 'WEB_CREDENTIAL_MISSING' })
+    expect(transport).not.toHaveBeenCalled()
+  })
+  it('allows the exact JSON byte cap and cancels/releases an oversized stream', async () => {
+    const valid = '{"results":[]}'
+    const cancel = vi.fn()
+    const oversized = new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new Uint8Array(2_000_001)) }, cancel,
+    }))
+    const transport = vi.fn().mockResolvedValueOnce(new Response(valid + ' '.repeat(2_000_000 - valid.length)))
+      .mockResolvedValueOnce(oversized)
+    const provider = new TavilySearchProvider({ apiKey: 'fixture-secret', fetch: transport })
+    expect(await provider.search({ query: 'test' })).toEqual({ sources: [], truncated: false })
+    await expect(provider.search({ query: 'test' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(oversized.body?.locked).toBe(false)
+  })
   it.each([401, 429, 500])('does not retry or leak an HTTP %s response body', async status => {
     const transport = vi.fn(async () => new Response('fixture-secret echo', { status }))
     const provider = new TavilySearchProvider({ apiKey: 'fixture-secret', fetch: transport })

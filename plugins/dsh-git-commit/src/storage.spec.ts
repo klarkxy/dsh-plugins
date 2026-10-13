@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSettings } from './contracts.ts'
+import { defaultSettings, normalizeModelRoute } from './contracts.ts'
 import { parseSettings, updateSettingsSchema } from './storage.ts'
 
 describe('git commit settings row', () => {
@@ -30,5 +30,20 @@ describe('git commit settings row', () => {
     })
     expect(patched.success).toBe(true)
     expect(updateSettingsSchema.safeParse({ expectedRevision: 0, settings: { model: {}, nope: 1 } }).success).toBe(false)
+  })
+})
+
+describe('commit model route contract', () => {
+  it('matches the shared normalizer, including the 250/80 caps', async () => {
+    const { normalizeModelRoute: sharedNormalize } = await import('@klarkxy/dsh-model-route')
+    const samples = [
+      undefined,
+      null,
+      [],
+      { provider: ' p ', model: ' m ', reasoningEffort: ' high ' },
+      { provider: 'x'.repeat(251), model: 'm' },
+      { provider: 'a', model: 'b', reasoningEffort: 'y'.repeat(81) },
+    ]
+    for (const sample of samples) expect(normalizeModelRoute(sample)).toEqual(sharedNormalize(sample))
   })
 })

@@ -53,6 +53,38 @@ const providerInfo: Record<string, ProviderInfo> = {
   },
 }
 
+// The prices are the same dated notes in both languages; translation is not a price refresh.
+const englishInfo: Record<string, Pick<ProviderInfo, 'description' | 'pricing'>> = {
+  ddg: { description: 'Search public DuckDuckGo pages without registration or an API key.', pricing: 'Free to use; no search API fees.' },
+  bocha: { description: 'Search Chinese web content, returning titles, links and summaries.', pricing: 'Charged per request: listed price ¥0.036/request; trial credits depend on official offers.' },
+  brave: { description: 'Search web pages, news and more with Brave’s independent index.', pricing: '$5 in monthly credits (about 1,000 requests); then $5/1,000 requests. A payment card is required to activate.' },
+  'deepseek-official': { description: 'Call built-in search through a DeepSeek model using the model API key.', pricing: 'Default Flash token pricing per million: input ¥1–2 (cache hits ¥0.02–0.04), output ¥4–8, varying by peak/off-peak hours. Platform terms govern promotional balance and tool fees.' },
+  exa: { description: 'Web search for AI with relevant pages and content snippets.', pricing: '$20 on signup, then $10 monthly credits; $7/1,000 requests (up to 10 results each), plus $1/1,000 additional results beyond 10.' },
+  firecrawl: { description: 'Search the web and extract page content.', pricing: '1,000 free credits/month; 2 credits per 10 search results. Hobby includes 5,000 credits/month at $16/month billed annually; extra credits cost $5/1,000.' },
+  serper: { description: 'Get Google web search results.', pricing: '2,500 one-time signup requests; $50/50,000 requests ($1/1,000). Paid credits expire after 6 months.' },
+  tavily: { description: 'Web search for AI, currently using basic search.', pricing: '1,000 free credits/month; basic search uses 1 credit/request. Pay as you go: $0.008/credit ($8/1,000 requests).' },
+}
+
+const bundledDescriptions: Record<string, readonly [string, string]> = {
+  ddg: ['无需注册。默认后端。', 'No registration required. Default backend.'],
+  'deepseek-official': ['使用已配置的 DeepSeek API Key，可能产生额外搜索费用。', 'Uses the configured DeepSeek API key; additional search fees may apply.'],
+  exa: ['独立 Search API。', 'Independent Search API.'],
+  brave: ['Brave Search API。', 'Brave Search API.'],
+  bocha: ['中文网页搜索 API。', 'Chinese web search API.'],
+  serper: ['Google 结果的 Search API。', 'Search API for Google results.'],
+  firecrawl: ['网页搜索与提取 API。', 'Web search and extraction API.'],
+  tavily: ['Search API；固定 basic 检索，不自动升级搜索深度。', 'Search API using basic search; search depth is never upgraded automatically.'],
+}
+
+/** Translate only manager-owned labels; externally supplied metadata stays verbatim. */
+export function providerDisplayLabel(provider: ProviderView, locale: 'zh' | 'en'): string {
+  if (!bundledCatalogId(provider)) return provider.label
+  if (provider.label === 'DeepSeek 搜索') return locale === 'zh' ? provider.label : 'DeepSeek search'
+  if (provider.label === '博查') return locale === 'zh' ? provider.label : 'Bocha'
+  if (provider.label === '网页读取') return locale === 'zh' ? provider.label : 'Read web pages'
+  return provider.label
+}
+
 function bundledCatalogId(provider: ProviderView): string | undefined {
   const owned = typeof provider.configurationOwned === 'boolean'
     ? provider.configurationOwned
@@ -73,8 +105,13 @@ export function usesBundledPricing(provider: ProviderView): boolean {
 
 export function searchProviderInfo(provider: ProviderView, locale: 'zh' | 'en' = 'zh'): ProviderInfo {
   const catalogId = bundledCatalogId(provider)
-  const known = catalogId && Object.hasOwn(providerInfo, catalogId) ? providerInfo[catalogId] : undefined
-  const description = provider.description.trim() ? provider.description : (known?.description ?? provider.description)
+  const base = catalogId && Object.hasOwn(providerInfo, catalogId) ? providerInfo[catalogId] : undefined
+  const known = base && locale === 'en' ? { ...base, ...englishInfo[catalogId!] } : base
+  const ownedCopy = catalogId ? bundledDescriptions[catalogId] : undefined
+  const description = ownedCopy && provider.description === ownedCopy[0]
+    ? ownedCopy[locale === 'zh' ? 0 : 1]
+    : base && provider.description === base.description ? known!.description
+      : provider.description.trim() ? provider.description : (known?.description ?? provider.description)
   if (provider.pricing?.trim()) {
     return {
       description,

@@ -1,5 +1,8 @@
 # @klarkxy/dsh-font
 
+<!-- release-state-note -->
+The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
+
 Font: customize the **interface font**, **code font**, and **conversation font size** of the DeepSeek Harness Web GUI from one settings panel.
 
 [中文文档](docs/README.zh-CN.md)
@@ -18,7 +21,7 @@ Changes apply immediately through owned inline overrides on `<html>` for the hos
 
 ## Where settings live
 
-Font choices keep the existing browser `localStorage` key and format. Each browser and machine has its own installed fonts, so this plugin's font choices remain browser-local. The font size needs no local copy: the theme service persists it host-side through `setFontSize(px)`.
+Font choices keep the existing browser `localStorage` key and format. Each browser and machine has its own installed fonts, so this plugin's font choices remain browser-local. Font preferences live in the browser's `localStorage`, so they must be set again after switching browser, domain or port. The font size needs no local copy: the theme service persists it host-side through `setFontSize(px)`.
 
 The host half is intentionally empty: no Host service, no RPC, no model calls.
 

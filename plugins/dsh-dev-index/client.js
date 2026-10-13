@@ -85,18 +85,17 @@ const css = `
     const hostLanguage = locale => locale.getSnapshot().active.startsWith('zh') ? 'zh' : 'en';
 
     function DocumentationBrowser({ hostLocale }) {
-      const [language, setLanguage] = React.useState(() => hostLanguage(hostLocale));
+      const subscribe = React.useCallback(listener => hostLocale.subscribe(listener), [hostLocale]);
+      const snapshot = React.useCallback(() => hostLanguage(hostLocale), [hostLocale]);
+      const uiLanguage = React.useSyncExternalStore(subscribe, snapshot, snapshot);
+      const [selectedLanguage, setLanguage] = React.useState(uiLanguage);
       /* Once the reader picks a language, the host locale stops driving it. */
       const [pinned, setPinned] = React.useState(false);
       const [revision, setRevision] = React.useState(0);
       const [status, setStatus] = React.useState('loading');
+      const language = pinned ? selectedLanguage : uiLanguage;
       const url = language === 'zh' ? pages : `${pages}en/`;
-      const chinese = language === 'zh';
-
-      React.useEffect(() => {
-        if (pinned) return undefined;
-        return hostLocale.subscribe(() => setLanguage(hostLanguage(hostLocale)));
-      }, [hostLocale, pinned]);
+      const chinese = uiLanguage === 'zh';
 
       React.useEffect(() => {
         setStatus('loading');
@@ -107,7 +106,7 @@ const css = `
       function reload() { setRevision(value => value + 1); }
       function choose(nextLanguage) {
         setPinned(true);
-        if (nextLanguage !== language) setLanguage(nextLanguage);
+        setLanguage(nextLanguage);
       }
 
       const open = h('a', {

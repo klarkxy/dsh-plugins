@@ -426,7 +426,6 @@ const READONLY_COMMANDS = new Map(Object.entries({
   which: grammar('-a --all', {}, { min: 1 }),
   echo: grammar('-n -e -E'),
   printf: printfReadonly,
-  printenv: grammar('-0 --null'),
   uname: grammar('-a -s -n -r -v -m -p -i -o --all --kernel-name --nodename --kernel-release --kernel-version --machine --processor --hardware-platform --operating-system', {}, { max: 0 }),
   id: grammar('-u -g -G -n -r -un -gn --user --group --groups --name --real', {}, { max: 1 }),
   whoami: grammar('', {}, { max: 0 }), groups: grammar(),
@@ -497,4 +496,52 @@ function readonlyInvocation(invocation) {
 /** Every invocation must satisfy its whole positive grammar. */
 export function isReadonly(analysis) {
   return analysis.ok && analysis.invocations.length > 0 && analysis.invocations.every(readonlyInvocation);
+}
+
+// Read-only is an integrity property, not a privacy guarantee: cat, grep,
+// Git object/config readers and ps can expose secrets without changing a file.
+// Static approval only covers metadata and already-literal output. Every
+// invocation in a pipeline must qualify; filters do not sanitize prior output.
+const STATIC_METADATA_COMMANDS = new Set([
+  'ls', 'stat', 'pwd', 'which', 'uname', 'id', 'whoami', 'groups', 'uptime',
+  'df', 'du', 'free', 'true', 'false', 'basename', 'dirname', 'realpath',
+  'readlink', 'tree', 'find', 'echo', 'printf',
+]);
+
+function gitStaticExposure(args) {
+  if (args.length === 1 && ['--version', 'version'].includes(args[0])) return true;
+  let index = 0;
+  // gitReadonly has already validated these exact original controls.
+  while (args[index]?.startsWith('-')) index += args[index] === '-c' ? 2 : 1;
+  const sub = args[index++], rest = args.slice(index);
+  switch (sub) {
+    case 'config': return rest.length === 2 && rest[0] === '--get' && ['user.name', 'user.email'].includes(rest[1]);
+    case 'branch': return grammar('-a --all -r --remotes --list --show-current --no-color', {},
+      { max: rest.includes('--list') ? Infinity : 0 })(rest);
+    case 'tag': return (rest.includes('--list') || rest.includes('-l')) && grammar('-l --list -i --ignore-case --no-color')(rest);
+    case 'rev-parse':
+    case 'ls-files':
+    case 'ls-tree': return true;
+    default: return false; // includes history, object contents, remote URLs and config enumeration
+  }
+}
+
+function staticExposureInvocation(invocation) {
+  if (!readonlyInvocation(invocation)) return false;
+  // Even a metadata command must not inherit arbitrary input file descriptors.
+  // Here-strings are fully literal; output redirects were checked above.
+  if (invocation.redirects.some(redirect => redirect.operator === '<')) return false;
+  const [program, ...args] = invocation.argv;
+  if (STATIC_METADATA_COMMANDS.has(program)) return true;
+  if (program === 'git') return gitStaticExposure(args);
+  // date --file can include raw input in parse-error output. Timestamp and
+  // literal date/format forms are safe; reference only reads file metadata.
+  if (program === 'date') return !args.some(arg => arg === '-f' || arg === '--file' || arg.startsWith('--file='));
+  return false;
+}
+
+/** Privacy proof kept separate from the no-mutation proof. Unknown or
+ * content-reading commands fall back to review, not a hard refusal. */
+export function isSafeStaticExposure(analysis) {
+  return analysis.ok && analysis.invocations.length > 0 && analysis.invocations.every(staticExposureInvocation);
 }

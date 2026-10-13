@@ -4,6 +4,7 @@ import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import { GitCommitService, type SessionStoreLike } from './service.ts'
 import type { GitRunner } from './git.ts'
 import { defaultSettings, type GitCommitSettings } from './contracts.ts'
+import { handleRpc } from './index.ts'
 
 const NUL = String.fromCharCode(0)
 
@@ -66,6 +67,83 @@ function makeLlm(): LlmTextCaller {
 }
 
 beforeEach(() => { vi.restoreAllMocks() })
+
+describe('Git Commit partial results and unload', () => {
+  it('passes completed groups and remaining failure through the RPC response', async () => {
+    const inner = repoRunner()
+    let commits = 0
+    const run: GitRunner = async (args, options) => {
+      if (args[0] === 'commit' && ++commits === 2) throw new Error('second rejected')
+      return inner(args, options)
+    }
+    stubPlan(JSON.stringify({ groups: [{ message: 'first', files: ['src/a.ts'] }, { message: 'second', files: ['src/b.ts', 'docs/c.md'] }] }))
+    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+      preview: async (_root, path) => ({ path, preview: '', binary: false }) })
+    const response = await handleRpc(service, 'commit', { sessionId: 's1' }, new AbortController().signal)
+    expect(response).toMatchObject({ ok: false, error: { code: 'commit-failed', partial: {
+      branch: 'main', commits: [{ hash: 'abc1234', message: 'first', files: ['src/a.ts'] }],
+      failure: { code: 'commit-failed', message: 'second rejected' },
+      remaining: [{ message: 'second', files: ['src/b.ts', 'docs/c.md'] }],
+    } } })
+    expect(commits).toBe(2)
+    await service.dispose()
+  })
+
+  it.each(['request', 'unload'])('aborts an aware planner on %s without fallback or later Git mutations', async reason => {
+    const entered = deferred<void>()
+    let plannerSignal!: AbortSignal
+    vi.spyOn(kit, 'callLlmText').mockImplementation(async (_llm, request) => {
+      plannerSignal = request.signal
+      entered.resolve()
+      await new Promise<void>((_resolve, reject) => request.signal.addEventListener('abort', () => reject(request.signal.reason), { once: true }))
+      throw new Error('unreachable')
+    })
+    const run = repoRunner(), controller = new AbortController()
+    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+      preview: async (_root, path) => ({ path, preview: '', binary: false }) })
+    await service.updateSettings({ model: defaultSettings().model, allowFallback: true }, 0)
+    const committing = service.commit('s1', controller.signal)
+    const rejected = expect(committing).rejects.toMatchObject({ code: 'cancelled', name: 'AbortError' })
+    await entered.promise
+    const disposing = reason === 'unload' ? service.dispose() : undefined
+    if (reason === 'request') controller.abort()
+    await rejected
+    await disposing
+    expect(plannerSignal.aborted).toBe(true)
+    expect(run.calls.some(args => args[0] === 'add' || args[0] === 'commit')).toBe(false)
+    if (reason === 'unload') {
+      await expect(service.commit('s1')).rejects.toMatchObject({ code: 'disposed' })
+      await expect(service.status('s1')).rejects.toMatchObject({ code: 'disposed' })
+      await expect(service.updateSettings({ model: defaultSettings().model, allowFallback: false }, 1)).rejects.toMatchObject({ code: 'disposed' })
+    } else await service.dispose()
+  })
+
+  it('aborts Git during unload, drains cleanup, and keeps the first commit in its result', async () => {
+    const entered = deferred<void>(), inner = repoRunner()
+    let commits = 0
+    const run: GitRunner = async (args, options) => {
+      if (args[0] === 'commit') commits += 1
+      if (args[0] === 'add' && commits === 1) {
+        entered.resolve()
+        await new Promise<void>((_resolve, reject) => options.signal!.addEventListener('abort', () => reject(options.signal!.reason), { once: true }))
+      }
+      return inner(args, options)
+    }
+    stubPlan(JSON.stringify({ groups: [{ message: 'first', files: ['src/a.ts'] }, { message: 'second', files: ['src/b.ts', 'docs/c.md'] }] }))
+    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+      preview: async (_root, path) => ({ path, preview: '', binary: false }) })
+    const committing = service.commit('s1')
+    const rejected = expect(committing).rejects.toMatchObject({ code: 'cancelled', partial: {
+      commits: [{ hash: 'abc1234', message: 'first', files: ['src/a.ts'] }],
+      remaining: [{ message: 'second', files: ['src/b.ts', 'docs/c.md'] }],
+    } })
+    await entered.promise
+    await service.dispose()
+    await rejected
+    expect(commits).toBe(1)
+    expect(inner.calls.some(args => args[0] === 'rev-parse' && args[1] === '--verify')).toBe(true)
+  })
+})
 
 function stubPlan(planText: string | Error, beforeReturn?: () => Promise<void> | void) {
   vi.spyOn(kit, 'callLlmText').mockImplementation(async () => {

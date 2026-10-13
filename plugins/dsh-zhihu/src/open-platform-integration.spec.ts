@@ -1,3 +1,4 @@
+import '../tests/legacy-call-policy.ts'
 import { describe, it } from 'vitest'
 import assert from 'node:assert/strict'
 import type { Context } from '@deepseek-ai/cordis'
@@ -79,8 +80,8 @@ describe('open platform real RPC and optional tool registration', () => {
     await service.dispose()
     assert.equal(stored.length, 12, 'six business operations through two entry points; quota is not metered')
     assert.deepEqual(stored, emitted)
-    assert.equal(stored.filter(event => event.quotaId === 'creator').length, 10)
-    assert.equal(stored.filter(event => event.quotaId === 'question_answers').length, 2)
+    assert.equal(stored.filter(event => event.quotaId === 'creator').length, 8)
+    assert.equal(stored.filter(event => event.quotaId === 'question_discovery').length, 4)
     assert.ok(stored.every(event => event.ok && event.results === 1))
   })
   it('preserves risk-control metadata through RPC and meters a business failure once', async () => {
@@ -97,7 +98,7 @@ describe('open platform real RPC and optional tool registration', () => {
     assert.match(rpc.error.message, /不要立即重试/)
     await service.dispose()
     assert.equal(requests, 1)
-    assert.deepEqual(stored, [{ ok: false, results: 0, quotaId: 'creator' }])
+    assert.deepEqual(stored, [{ ok: false, results: 0, quotaId: 'question_discovery' }])
   })
   it('exposes Retry-After for actual rate limits through RPC', async () => {
     const { service } = fixture(async () => ({ ok: true, status: 200, headers: new Headers({ 'Retry-After': '9' }), async text() { return '' }, async json() { return { Code: 30002, Message: 'quota exhausted' } } }))
@@ -143,7 +144,7 @@ describe('open platform real RPC and optional tool registration', () => {
     const { service, tools, stored } = fixture(async () => { throw new Error('offline') })
     await assert.rejects(tools.find(tool => tool.name === 'zhihu_question_answers')!.execute({ questionUrl: 'https://www.zhihu.com/question/1' }, { signal: signal() }))
     await service.dispose()
-    assert.deepEqual(stored, [{ ok: false, results: 0, quotaId: 'question_answers' }])
+    assert.deepEqual(stored, [{ ok: false, results: 0, quotaId: 'question_discovery' }])
   })
   it('unload aborts active creator RPC/tools and flushes their failure events', async () => {
     let started = 0
@@ -163,7 +164,7 @@ describe('open platform real RPC and optional tool registration', () => {
     if (rpcResult.ok) throw new Error('expected cancellation')
     assert.equal(rpcResult.error.code, 'cancelled')
     assert.ok(await execution instanceof Error)
-    assert.deepEqual(stored, [{ ok: false, results: 0, quotaId: 'creator' }, { ok: false, results: 0, quotaId: 'creator' }])
+    assert.deepEqual(stored, [{ ok: false, results: 0, quotaId: 'question_discovery' }, { ok: false, results: 0, quotaId: 'creator' }])
     await assert.rejects(tool.execute({}, { signal: signal() }))
     assert.equal(started, 2)
   })

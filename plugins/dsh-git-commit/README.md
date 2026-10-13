@@ -1,5 +1,8 @@
 # @klarkxy/dsh-git-commit
 
+<!-- release-state-note -->
+The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
+
 Commit workspace changes to git without leaving the chat. Every conversation
 thread gets a **Commit** action in its header: click it, check the branch, the
 file count and the model that will be used, then confirm to commit every
@@ -68,6 +71,16 @@ nothing.
 
 The button is disabled while the session is running. The host checks again
 before committing, and stops the run if the workspace changes during planning.
+
+If a later group fails or the run is cancelled, completed commits stay in place.
+The panel shows those commits, the remaining groups and the stopping reason,
+then refreshes repository status. A commit whose hash could not be read is
+marked explicitly. It never rolls back completed commits or retries them
+automatically. Unloading the plugin cancels in-flight planning and rejects new
+runs while existing cleanup finishes.
+If a rejected Git command leaves HEAD changed or unreadable, its group's outcome
+is marked uncertain without attributing a commit to the plugin. Check Git log
+and status before acting on that group; it is separate from groups not executed.
 
 ## Notes
 

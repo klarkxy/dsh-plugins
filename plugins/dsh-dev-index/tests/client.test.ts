@@ -17,6 +17,8 @@ function loadBrowser(active: string) {
     }),
     useState: (initial: unknown) => [typeof initial === "function" ? (initial as () => unknown)() : initial, () => {}],
     useEffect: () => {},
+    useCallback: (callback: unknown) => callback,
+    useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) => snapshot(),
   };
   const client = definition!.factory((id: string) => {
     /* The host resolves its own modules by id: React here, and the shared

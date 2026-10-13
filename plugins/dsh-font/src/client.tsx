@@ -102,7 +102,7 @@ function readStorage(): FontSettingsStorage | undefined {
 }
 
 function useLocale(client: Client): 'zh' | 'en' {
-  const getSnapshot = () => (client.locale.getSnapshot().active.startsWith('zh') ? 'zh' : 'en') as 'zh' | 'en'
+  const getSnapshot = () => (client.locale.getSnapshot().active.toLowerCase().startsWith('zh') ? 'zh' : 'en') as 'zh' | 'en'
   return useSyncExternalStore(
     fn => client.locale.subscribe(fn),
     getSnapshot,
@@ -327,7 +327,7 @@ export function apply(ctx: Context): void {
     return () => { override.dispose(); applySettings = () => {} }
   }, 'font.apply')
   ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
-    { name: 'plugins.bundle.config', key: PLUGIN_NAME, label: COPY.zh.label },
+    { name: 'plugins.bundle.config', key: PLUGIN_NAME },
     (slotProps: { view?: 'summary' | 'page' }) =>
       <FontSettingsPanel client={client} store={store} applySettings={next => applySettings(next)} view={slotProps?.view} />,
   )), 'font.settings')

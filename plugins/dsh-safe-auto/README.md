@@ -1,6 +1,9 @@
-# Safe Auto (release candidate)
+# Safe Auto
 
-Automatic review of native sandbox escalation requests. When a real `write`/`edit`/`bash`/`pwsh` call asks to widen its sandbox beyond Workspace Write, an independent reviewer model vets that one call — except a `bash` call the built-in static proof can show is read-only, which is granted without a model. A pass continues automatically; other review results offer an exact-call confirmation in the current session, with 60 seconds to approve once or reject. No response means rejection. The plugin never switches the standing session to Full Access.
+<!-- release-state-note -->
+The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
+
+Automatic review of native sandbox escalation requests. When a real `write`/`edit`/`bash`/`pwsh` call asks to widen its sandbox beyond Workspace Write, an independent reviewer model vets that one call. A narrow set of metadata-only or literal-output `bash` commands can pass static checks without a model. A pass continues automatically; other review results offer an exact-call confirmation in the current session, with 60 seconds to approve once or reject. No response means rejection. The plugin never switches the standing session to Full Access.
 
 [简体中文](README.zh-CN.md) · [One-shot escalation](docs/ADR-0002.md) · [Reviewer routing](docs/ADR-0003.md) · [Authorization and evidence](docs/ADR-0004.md) · [Timed human confirmation](docs/ADR-0005.md) · [Static shell proof](docs/ADR-0006.md)
 
@@ -8,8 +11,10 @@ Automatic review of native sandbox escalation requests. When a real `write`/`edi
 
 ## Install and enable
 
+After 0.2.0 is published to npm:
+
 ```sh
-dsh plugin --profile <profile> add @klarkxy/dsh-safe-auto
+dsh plugin --profile <profile> add @klarkxy/dsh-safe-auto@0.2.0
 ```
 
 From a checked source checkout instead:
@@ -28,15 +33,19 @@ The bundle inserts the `dsh-safe-auto` and `dsh-safe-auto-ui` profile rows. Safe
 
 1. A native tool call asks for `sandbox_permissions` widening (`workspace-write` or `danger-full-access`).
 2. The plugin binds the live execution — agent, callId, signal, exact arguments, cwd, sandbox policy and the ordered direct-human instructions, including later restrictions and revocations.
-3. A fully literal `bash` command is granted without evidence or a model only when every invocation matches an exact positive grammar: case-sensitive POSIX program names, supported flags and values, input-only operand counts, safe redirects and bounded environment prefixes. Unknown options, abbreviations, clusters, output operands and assignment-only statements continue to review. Ordinary reads such as `ls -la`, `cat input | jq .name`, `grep -rn pattern src`, `find . -name "*.md"` and `ps aux` retain this fast path; `pwsh` does not.
+3. A fully literal `bash` command is granted without evidence or a model only when every invocation passes both the no-mutation grammar and the metadata/literal-output check. Examples include `ls -la`, `pwd`, and `find . -name "*.md"`. `printenv`, `ps`, file-content readers, recursive content searches, Git content and Git configuration enumeration always continue to review. Unknown options, abbreviations, output operands and persistent assignments also continue to review; `pwsh` has no static path.
 4. The exact request is reviewed once. For shell calls, bounded workspace package definitions and referenced local scripts provide untrusted evidence; their canonical paths and content are rechecked before granting.
-5. A reviewed pass returns `allowed-once`. For an otherwise eligible action, model denial, uncertainty, failure or budget exhaustion opens a timed confirmation. The dialog shows the exact operation, requested permission, reviewer opinion and countdown. Explicit approval grants this call after another binding/evidence check; rejection or expiry returns `rejected`. Closing the dialog rejects. No downstream approval answerer is consulted.
+5. A reviewed pass returns `allowed-once`. For an otherwise eligible action, model denial, uncertainty, failure or budget exhaustion opens a timed confirmation. The dialog shows the exact operation, reviewer opinion and countdown. Explicit approval grants this call after another binding/evidence check; rejection or expiry returns `rejected`. Closing the dialog rejects. No downstream approval answerer is consulted.
 
 Native prohibitions, structural refusals, changed evidence, cancellation and invalidated requests cannot be overridden. Timed confirmation requires the UI row and an authenticated browser client; without them, or with the timeout set to zero, the existing non-grant path remains. Headless sessions do not gain an automatic fallback.
 
 The reviewer sees the bounded action, chronological direct-human instructions and local evidence, with no main-agent prompt, private reasoning or tools. Authorization is judged by substance: necessary local installation, build and test steps may implement a requested development task without the user naming every command. Earlier authority remains visible after a progress question or “continue”; later restrictions still apply. Automatic allowance requires low/medium risk, medium/high authorization and bounded side effects.
 
 Human text is retained without lossy selection, up to 12 KiB. Sensitive text, nontext constraints or overflow prevent automatic review rather than silently dropping restrictions; an otherwise valid action can receive fresh explicit confirmation through the timed UI without sending that history to the model. Evidence is capped at eight files, 6 KiB per file and 12 KiB overall. Protected, escaped, sensitive or unreadable files are withheld with explicit omission markers. Evidence coverage is partial: dependencies, imported code and workspace-wide scripts are not exhaustively inspected. Material remaining uncertainty prevents automatic permission.
+
+The native `load_workspace_dependencies` result can identify the current agent's local Node/pnpm entry points. A single literal invocation of that exact pair is not treated as reading a protected `.dsh` path; the original command still goes through normal policy and escalation review. Tool identity and local file identity are rechecked. Data operands, credentials, redirects and compound commands receive no exemption. Run the dependency tool again after a plugin/agent restart or runtime replacement; transcript text cannot register paths.
+
+Relative paths follow native tool bases: PowerShell uses the session cwd; Bash and file mutations prefer the sandbox workspace root. Resolved review paths are bound separately without rewriting tool arguments. Command timeouts accept positive finite values (including 240000–600000 ms); the native executor owns its limits. The review deadline and 30-second approval freshness window remain separate.
 
 ## Configuration
 
@@ -54,7 +63,7 @@ Everything is optional; with no configuration the reviewer follows the current c
 | `outputTokens` | `1024` | Reviewer output cap, including reasoning where the model counts it. Explicit profile values are retained; incomplete or invalid verdicts still require human confirmation. |
 | `maxReviewsPerTask` | `20` | Review calls per direct user task. |
 | `consecutiveDenials` | `3` | Consecutive explicit denials before the breaker opens. Uncertainty and failures reset the streak but still consume review reservations. |
-| `staticReadonly` | `true` | Grant provably read-only `bash` escalations without a model call. `false` sends everything to the reviewer. |
+| `staticReadonly` | `true` | Grant `bash` escalations proven non-mutating and limited to metadata/literal output without a model call. `false` sends eligible requests to the reviewer. |
 
 Unknown keys fail validation rather than being ignored. Reviewer model, effort and prompt can also be set per deployment on the plugin page; those saved values override the profile route but never the budgets.
 
@@ -69,7 +78,7 @@ Unknown keys fail validation rather than being ignored. Reviewer model, effort a
 | Request | Outcome |
 | --- | --- |
 | Bound single escalation of `write`/`edit`/`bash`/`pwsh`, reviewer passes | `allowed-once`, this call only |
-| Bound `bash` escalation proven read-only by the strict static parse | `allowed-once`, no model call, no budget consumed |
+| Bound `bash` escalation passing both static mutation and exposure checks | `allowed-once`, no model call, no budget consumed |
 | Protected credentials/security files, secrets, dangerous programs (anywhere in a fully parsed command) | Hard denial before review |
 | Model denial (including risk opinions), uncertainty or review failure for an eligible action | Timed human confirmation; no grant without explicit approval |
 | Unknown tools, subagents, nested or unbound requests | No automatic grant |
@@ -77,6 +86,14 @@ Unknown keys fail validation rather than being ignored. Reviewer model, effort a
 | Changed evidence, invalidated grants, audit failure or cancellation | No grant; terminal feedback |
 
 Native `approval: never` still rejects before any answerer. Never stack this with another automatic approval answerer.
+
+## Reading configuration and session files
+
+Ordinary sessions, skills and settings under `.codex`, `.dsh`, `.claude`, `.agents`, `.config` and other directories remain readable. Protection follows dedicated credential stores and actual credential fields, not whole directories. Auth/credential stores, private SSH keys and private-key stores are refused; ordinary public keys and certificates are readable. Mutation protection remains stricter.
+
+Native `read` masks recognized credential values in JSON/JSONC, JSONL, YAML, TOML, ENV/INI and ordinary text, while keeping non-secret fields, references, line numbers and the host's original output caps. A fresh sanitized value regenerates both display text and metadata. Native `grep` masks or withholds sensitive matches before the host's result spill policy. Secret-bearing editor views and known raw shell dumps direct you to native `read`.
+
+Structured files are screened as complete sources up to 1 MiB; larger JSONL sessions are processed by complete selected lines (1 MiB per line, 8 MiB selected source). Malformed, unsupported or oversized structured content yields a safe error instead of raw fragments. Canonical targets, source versions and returned windows are checked through the mounted filesystem. Unknown opaque secrets cannot be identified by their content alone. These checks cover the pinned native tools; arbitrary Full Access scripts, custom tools and remote providers are not a secret-isolation sandbox. Shell output cannot be made safe by redacting it after execution because jobs may already have retained it.
 
 ## Migrating from 0.1.x
 
@@ -89,7 +106,7 @@ Native `approval: never` still rejects before any answerer. Never stack this wit
 - **Not an audited boundary.** The reviewer is a language model and can be wrong, especially in adversarial contexts. Keep the native sandbox, isolation and backups you already rely on.
 - **Static proof assumes operator-trusted PATH and runtimes.** It checks the original command text, not installed binary identity, shell functions or ambient runtime integrity. Explicit executable paths, `.exe`/`.cmd` suffixes, case variants, executable pager/config environment prefixes and persistent assignments do not qualify. Parser or grammar defects can produce incorrect proofs; this is not a runtime attestation or an absolute safety guarantee. An unproven command returns to reviewer/manual confirmation, not a new hard refusal.
 - **Quoting does not bypass hard refusals.** Literal argv, environment and redirect values are decoded before the protected-path/secret checks, including adjacent quote fragments. These checks also apply outside the static path and cannot be overridden by reviewer or manual confirmation. Unquoted wildcard fragments still invalidate proof even next to quoted text. Bash `/dev/tcp` and `/dev/udp` file redirects return to review, including quoted and numbered-fd input redirects; ordinary file input, fd merges and `/dev/null` output retain their existing rules.
-- **Git is not read-only by subcommand name.** Bare `git status`, worktree diffs, `git ls-files --modified` and other content-checking worktree operations remain under review because refresh/conversion can execute configured clean/process filters. Supported object/index reads require the original `--no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false`; cached/staged diff also requires `--no-ext-diff --no-textconv --ignore-submodules=all`. History reads additionally need `--no-show-signature` and a supported fixed format such as `--oneline`. The plugin never prepends controls or rewrites argv. Exact `git version` and `git --no-pager config --get user.name` are narrow independent reads; transport helpers, editors, filters and mixed config mutations do not qualify. Ordinary `sort` can spill to temporary files, so only its check mode qualifies.
+- **Git is not safe by subcommand name.** Content, history, remote URLs and configuration enumeration require review even when their flags prevent mutation. Metadata commands retain the original disabling controls required by the no-mutation grammar. Exact `git version` and `git --no-pager config --get user.name` / `user.email` are narrow static cases. The plugin never prepends controls or rewrites argv.
 - **Dedicated confirmation channel.** Pinned DSH 0.2.0-rc.2 approval and question waterfalls accept automatic answerers. Manual confirmation instead uses the plugin's authenticated browser HTTP endpoints and unpredictable single-use request IDs. Fetch metadata and host origin/authentication checks protect the browser channel against cross-site requests; they do not prove physical human action. Authenticated clients, their transport and same-process plugins remain trusted. No model tool is registered for approval.
 - **Server-owned expiry.** The window starts when a pending request is published. The server uses a monotonic deadline and atomically accepts the first valid answer; duplicate, late or cross-session answers fail. Disabling, changing settings, unloading or cancelling invalidates pending requests. Requests are in memory only, so restarts do not restore them. Both direct browser requests and the authenticated DSH desktop carrier are supported; incompatible request metadata is rejected.
 - **Foreign native approvals remain native.** Blueprint order and Classmates model approvals continue to downstream answerers when no Safe Auto-owned execution context exists. Requests in an owned context, including mismatches, stale/claimed requests, and unbound impersonation of `bash`/`pwsh`/`write`/`edit`, remain fail-closed.

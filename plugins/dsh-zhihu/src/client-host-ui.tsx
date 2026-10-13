@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useState, type ChangeEvent, type ComponentType, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref } from 'react';
+import { forwardRef, useCallback, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { Button, DisclosureRow, IconChecklistOutlineRegular, Input as OfficialInput, type ButtonVariant } from '@deepseek-ai/dsh-client-ui-primitives';
 
 /**
@@ -17,8 +17,8 @@ export function ZhihuDetails(props: { title: string; children: ReactNode; testId
   )
 }
 
-/** Structural host Select — no private package import. */
-export type HostSelectProps = {
+/** The platform select retains value-based callbacks used by the plugin. */
+export type ZhihuSelectProps = {
   value: string
   options: readonly { value: string; label: string }[]
   onChange(value: string): void
@@ -29,8 +29,8 @@ export type HostSelectProps = {
   id?: string
 }
 
-/** Structural host Button — no private package import. */
-export type HostButtonProps = {
+/** Plugin button props map its existing variants to official primitives. */
+export type ZhihuButtonProps = {
   type?: 'button' | 'submit'
   variant?: 'default' | 'primary' | 'danger' | 'icon'
   className?: string
@@ -52,8 +52,8 @@ export type HostButtonProps = {
   children?: ReactNode
 }
 
-/** Structural host Input — no private package import. */
-export type HostInputProps = {
+/** Value-based input callbacks used by the plugin fields. */
+export type ZhihuInputProps = {
   value: string
   onChange(value: string): void
   disabled?: boolean
@@ -67,24 +67,6 @@ export type HostInputProps = {
   'data-testid'?: string
   onKeyDown?(event: KeyboardEvent<HTMLInputElement>): void
 }
-
-/** Structural host Dialog — no private package import. */
-export type HostDialogProps = {
-  open: boolean
-  onOpenChange(open: boolean): void
-  title: string
-  description?: string
-  children?: ReactNode
-  className?: string
-  overlayClassName?: string
-  dismissible?: boolean
-  initialFocusRef?: { current: HTMLElement | null }
-}
-
-export type HostSelect = ComponentType<HostSelectProps>
-export type HostButton = ComponentType<HostButtonProps>
-export type HostDialog = ComponentType<HostDialogProps>
-export type HostInput = ComponentType<HostInputProps>
 
 export const IME_KEYCODE = 229
 
@@ -137,47 +119,14 @@ export function dockEscapeKeyDown(
   run.close()
 }
 
-export function hostComponentsFromRenderProps(props: unknown): {
-  Select?: HostSelect
-  Dialog?: HostDialog
-  Button?: HostButton
-  Input?: HostInput
-} {
-  if (!props || typeof props !== 'object') return {}
-  const record = props as Record<string, unknown>
-  const sources: Record<string, unknown>[] = [record]
-  if (record.owner && typeof record.owner === 'object') sources.push(record.owner as Record<string, unknown>)
-  let Select: HostSelect | undefined
-  let Dialog: HostDialog | undefined
-  let Button: HostButton | undefined
-  let Input: HostInput | undefined
-  for (const source of sources) {
-    if (typeof source.Select === 'function') Select = source.Select as HostSelect
-    if (typeof source.Dialog === 'function') Dialog = source.Dialog as HostDialog
-    if (typeof source.Button === 'function') Button = source.Button as HostButton
-    if (typeof source.Input === 'function') Input = source.Input as HostInput
-  }
-  return { Select, Dialog, Button, Input }
-}
-
-export type RenderInputProps = HostInputProps & { ref?: Ref<HTMLInputElement> }
-
-export function renderInput(Input: HostInput | undefined, props: RenderInputProps) {
-  if (Input) {
-    const Host = Input as ComponentType<RenderInputProps>
-    return <Host {...props} />;
-  }
-  // The official field is a controlled native input, so this adapter keeps
-  // speaking the plugin's own "hand me the value" callback and unwraps the
-  // event here instead of leaking it to a call site. Its wrapper span owns the
-  // visible box, so the caller's class rides on the wrapper and the caller's
-  // ref — which only the host field can take — is left behind.
-  const { onChange, ref, ...rest } = props
+export function renderInput(props: ZhihuInputProps) {
+  // Keep the plugin's value-based callback by unwrapping the DOM event from
+  // the controlled official input here.
+  const { onChange, ...rest } = props
   return <OfficialInput {...rest} onChange={event => onChange(event.target.value)} />;
 }
 
-export function renderSelect(Select: HostSelect | undefined, props: HostSelectProps, className?: string) {
-  if (Select) return <Select {...props} />;
+export function renderSelect(props: ZhihuSelectProps, className = 'dsh-ui-select') {
   return (
     <select
       id={props.id}
@@ -193,28 +142,16 @@ export function renderSelect(Select: HostSelect | undefined, props: HostSelectPr
   );
 }
 
-/**
- * The host's own Button still wins whenever the slot supplies one, so a page
- * rendered inside DSH keeps the surrounding chrome. Standalone there is no host
- * to defer to, and the plugin renders the official primitive instead of a
- * hand-rolled `<button>`: the two legacy variant names the call sites use are
- * mapped onto it here. `danger` has no primitive variant, so it keeps the
- * outlined appearance and takes its tone from a class in the plugin stylesheet
- * — the way every other destructive action in the host reads.
- */
-const BUTTON_VARIANT: Record<NonNullable<HostButtonProps['variant']>, ButtonVariant> = {
+/** Map existing plugin variants onto the injected official Button. */
+const BUTTON_VARIANT: Record<NonNullable<ZhihuButtonProps['variant']>, ButtonVariant> = {
   default: 'outline',
   primary: 'primary',
   danger: 'outline',
   icon: 'ghost',
 }
 
-export const ZhihuButton = forwardRef<HTMLButtonElement, HostButtonProps & { host?: HostButton }>(
-  function ZhihuButton({ host, variant, className, ...rest }, ref) {
-    if (host) {
-      const Host = host as ComponentType<HostButtonProps & { ref?: Ref<HTMLButtonElement> }>
-      return <Host ref={ref} variant={variant} className={className} {...rest} />
-    }
+export const ZhihuButton = forwardRef<HTMLButtonElement, ZhihuButtonProps>(
+  function ZhihuButton({ variant, className, ...rest }, ref) {
     return <Button ref={ref} variant={BUTTON_VARIANT[variant ?? 'default']} className={className} {...rest} />
   },
 )

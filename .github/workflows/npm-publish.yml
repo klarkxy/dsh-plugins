@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      first_release:
+        description: 'Space-separated package names for explicitly approved first releases (testing only)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -17,6 +22,8 @@ jobs:
     if: github.repository == 'klarkxy/dsh-plugins' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      RELEASE_STATE_BASE: ${{ github.event.before || 'HEAD^' }}
     permissions:
       contents: write
       id-token: write
@@ -47,7 +54,15 @@ jobs:
         run: pnpm build
       - name: Compare package contents and select versions
         if: steps.source.outputs.current == 'true'
-        run: node scripts/publish-npm.mjs plan
+        env:
+          FIRST_RELEASE: ${{ inputs.first_release }}
+        run: |
+          if [ -n "$FIRST_RELEASE" ]; then
+            read -r -a packages <<< "$FIRST_RELEASE"
+            node scripts/publish-npm.mjs plan --first-release "${packages[@]}"
+          else
+            node scripts/publish-npm.mjs plan
+          fi
       - if: steps.source.outputs.current == 'true'
         run: pnpm check
       - name: Publish changed packages and verify archives

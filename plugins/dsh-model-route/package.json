@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-route",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Model-route field contract for DSH plugins: shared ModelRoute value shape, schema marker, catalog helpers, and projected-schema detection.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -69,8 +69,8 @@
     "zod": "4.5.4",
     "@deepseek-ai/schemastery": "3.18.4",
     "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "@types/react": "18.3.31",
     "@types/react-dom": "^18.3.0"
   },
@@ -91,6 +91,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "cd64f58d48085081109efaa5575f86d4f135a76f07f3308a4fda30eb1d2f980f"
+    "contentHash": "6e635d1904a592570eb932bc429ecf733950a2a9257abfc79fbc3ae506cf16e7"
   }
 }

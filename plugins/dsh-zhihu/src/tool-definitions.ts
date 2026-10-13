@@ -192,7 +192,7 @@ export function createZhihuAskTool(options: ZhihuToolOptions = {}) {
     description: '知乎直答（POST /v1/chat/completions，OpenAI 兼容），基于社区内容生成综合回答，适合考据与背景调研；仅作参考，不构成 canon，不写入项目文件。',
     parameters: {
       query: { type: 'string', required: true, description: '要问的问题。' },
-      model: { type: 'string', description: 'zhida-thinking-1p5（默认，带思考过程）、zhida-fast-1p5（快，仅适合简单事实查询）或 zhida-agent（最慢最强，仅在明确要求时使用）。' },
+      model: { type: 'string', description: 'zhida-thinking-1p5（默认，带思考过程）、zhida-fast-1p5（快，仅适合简单事实查询）或 zhida-agent（最慢最强，仅在明确要求时使用）。fast/thinking 仅在免费额度足够时允许；付费模式拒绝未确认计费的模型。' },
     },
     output: {
       schema: {

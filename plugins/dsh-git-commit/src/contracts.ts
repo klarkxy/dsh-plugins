@@ -1,5 +1,12 @@
+import { defaultModelRoute, normalizeModelRoute, type ModelRoute } from '@klarkxy/dsh-model-route'
+export { defaultModelRoute, normalizeModelRoute }
+
 /** Browser-safe contracts. Shared RPC/result types stay on @klarkxy/dsh-plugin-kit. */
-export type { RpcResult } from '@klarkxy/dsh-plugin-kit/contracts'
+import type { RpcResult as SharedRpcResult } from '@klarkxy/dsh-plugin-kit/contracts'
+export type RpcResult<T = unknown> = Extract<SharedRpcResult<T>, { ok: true }> | {
+  ok: false
+  error: { code: string; message: string; partial?: PartialCommitResult }
+}
 
 export const PLUGIN_NAME = '@klarkxy/dsh-git-commit'
 export const FEATURE_ID = 'git-commit'
@@ -23,12 +30,12 @@ export const MAX_MESSAGE_CHARS = 120
 export const GIT_TIMEOUT_MS = 30_000
 export const SETTINGS_KEY = 'current'
 
-/** Plugin-page model selection. Empty provider/model means "follow the default". */
-export interface CommitModelRoute {
-  readonly provider: string
-  readonly model: string
-  readonly reasoningEffort?: string
-}
+/**
+ * Plugin-page model selection. Empty provider/model means "follow the default".
+ * The value shape, empty default, and 250/80 normalizer live in
+ * @klarkxy/dsh-model-route; this alias keeps the commit-specific name.
+ */
+export type CommitModelRoute = ModelRoute
 
 export interface GitCommitSettings {
   readonly revision: number
@@ -41,8 +48,6 @@ export interface GitCommitSettings {
   readonly allowFallback: boolean
 }
 
-export const defaultModelRoute = (): CommitModelRoute => ({ provider: '', model: '' })
-
 export const defaultSettings = (): GitCommitSettings => ({
   revision: 0, model: defaultModelRoute(), allowFallback: false,
 })
@@ -50,25 +55,6 @@ export const defaultSettings = (): GitCommitSettings => ({
 /** Untrusted stored flags stay opt-in: anything but a literal true is false. */
 export function normalizeFallback(value: unknown): boolean {
   return value === true
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
-}
-
-function asText(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
-}
-
-/** Untrusted stored routes collapse to the default so a bad row never breaks the run. */
-export function normalizeModelRoute(value: unknown): CommitModelRoute {
-  const row = asRecord(value)
-  if (!row) return defaultModelRoute()
-  const provider = asText(row.provider) ?? ''
-  const model = asText(row.model) ?? ''
-  const effort = asText(row.reasoningEffort)
-  if (!provider || !model || provider.length > 250 || model.length > 250) return defaultModelRoute()
-  return effort && effort.length <= 80 ? { provider, model, reasoningEffort: effort } : { provider, model }
 }
 
 export interface CommitModelInfo {
@@ -90,6 +76,7 @@ export interface GitCommitStatus {
 }
 
 export interface CommitGroupResult {
+  /** Empty only when a created commit's hash could not be read. */
   readonly hash: string
   readonly message: string
   readonly files: readonly string[]
@@ -101,4 +88,20 @@ export interface CommitRunResult {
   /** True when the model plan was unavailable and a single fallback commit was used. */
   readonly fallback: boolean
   readonly model?: CommitModelInfo
+}
+
+/**
+ * Commits that already exist when a later group fails or the run is cancelled.
+ * `commits` is the durable outcome; `failure` is why the rest did not run.
+ * A recorded commit is never rolled back and never retried by this plugin.
+ */
+export interface PartialCommitResult {
+  readonly branch: string
+  readonly commits: readonly CommitGroupResult[]
+  readonly fallback: boolean
+  readonly model?: CommitModelInfo
+  readonly failure: { readonly code: string; readonly message: string }
+  readonly remaining: readonly { readonly message: string; readonly files: readonly string[] }[]
+  /** After a rejected commit command, unchanged HEAD could not be proved; completion and ownership are unconfirmed. */
+  readonly uncertain?: readonly { readonly message: string; readonly files: readonly string[] }[]
 }

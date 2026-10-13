@@ -41,7 +41,9 @@ export function assessApproval(call, config) {
       (Object.hasOwn(args, 'replace_all') && typeof args.replace_all !== 'boolean')) return verdict('ask', 'INVALID_FILE_ARGUMENTS');
   } else {
     if (!nonempty(args.command) || !nonempty(args.description)) return verdict('ask', 'INVALID_COMMAND_ARGUMENTS');
-    if (Object.hasOwn(args, 'timeoutMs') && (!Number.isSafeInteger(args.timeoutMs) || args.timeoutMs <= 0 || args.timeoutMs > 60000)) return verdict('ask', 'INVALID_TIMEOUT');
+    // Native shell tools accept positive finite values; the executor owns caps.
+    // This process timeout is independent of the review budget and grant lease.
+    if (Object.hasOwn(args, 'timeoutMs') && (!Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0)) return verdict('ask', 'INVALID_TIMEOUT');
     if (Object.hasOwn(args, 'workdir') && !nonempty(args.workdir)) return verdict('ask', 'INVALID_WORKDIR');
     if (Object.hasOwn(args, 'run_in_background') && typeof args.run_in_background !== 'boolean') return verdict('ask', 'INVALID_BACKGROUND');
   }
@@ -55,6 +57,8 @@ export function assessApproval(call, config) {
   if (containsSecret(serialized)) return verdict('deny', 'SENSITIVE_ARGUMENTS');
   return verdict('review', 'NATIVE_APPROVAL_REVIEW', { action: {
     tool: call.tool, arguments: JSON.parse(serialized), cwd: call.cwd,
+    ...(call.reviewPaths === undefined ? {} : { reviewPaths: call.reviewPaths }),
+    ...(call.trustedRuntime === undefined ? {} : { trustedRuntime: call.trustedRuntime }),
     permission: { from: call.sandbox.mode, to: args.sandbox_permissions, scope: 'this-call-only' },
   } });
 }
@@ -67,7 +71,7 @@ export function escalationReason(call) {
 /** Include execution identity in the pending decision; authorization is never cached across calls. */
 export function bindingOf(call, assessment) {
   return createHash('sha256').update(JSON.stringify({
-    tool: call.tool, args: call.args, cwd: call.cwd, sandbox: call.sandbox,
+    tool: call.tool, args: call.args, cwd: call.cwd, sandbox: call.sandbox, reviewPaths: call.reviewPaths, trustedRuntime: call.trustedRuntime,
     task: call.task, intent: call.intent, authorizationContext: call.authorizationContext,
     authorityIncomplete: call.authorityIncomplete, subagent: call.subagent, nested: call.nested,
     localExecution: call.localExecution, jobsAvailable: call.jobsAvailable, shellConfined: call.shellConfined,

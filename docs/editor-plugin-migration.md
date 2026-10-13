@@ -1,58 +1,33 @@
 # Editor public-plugin extraction
 
-## Scope and source
+## Current maintained scope
 
-Ten public packages move from `klarkxy/dsh-editor` revision `66d03814ecdac679947e9198c2e9be931462703a` into this repository:
+The extracted packages still maintained in this repository are:
 
-| Package (`@klarkxy/` scope) | Existing version |
+| Package (`@klarkxy/` scope) | Version at extraction |
 | --- | --- |
-| dsh-ai-services | 0.1.3 |
 | dsh-current-title | 0.1.4 |
-| dsh-mood | 0.1.4 |
-| dsh-recap | 0.1.4 |
-| dsh-memory | 0.1.4 |
-| dsh-self-improvement | 0.1.4 |
-| dsh-model-center | 0.1.3 |
-| dsh-fusion | 0.1.0 |
 | dsh-web-search-manager | 0.1.7 |
 | dsh-zhihu | 0.1.7 |
 
-Package names, public exports, plugin IDs, backend implementation, default toggles, storage-domain names, and data formats are preserved. Zhihu alone replaces its private SeatButton build import with a package-local structural host/native adapter, retaining classes, events, ref forwarding, and accessibility props. Its tools, credentials, and original tests are unchanged. `scripts/editor-plugin-migration.json` records the source revision and SHA-256 of every original package file; it is provenance, not a claim that future revisions remain byte-identical. Git history remains accessible in the original repository.
+The source was `klarkxy/dsh-editor` revision `66d03814ecdac679947e9198c2e9be931462703a`; Zhihu has its own pinned consumer revision in `scripts/editor-plugin-migration.json`. That manifest retains source-file fingerprints for these maintained packages only. The complete original extraction remains in Git history.
 
-Zhihu is included from the pinned Editor consumer revision recorded on its migration entry. It has no private runtime, peer, or development dependency. Existing optional settings/overlay slot names remain for host compatibility; they do not require Editor. Manuscript, proofread, and all Editor-specific packages stay in Editor. Desktop packaging and offline profile deployment remain Editor responsibilities. Making the writing environment reproducible through a blueprint remains a future direction; this migration does not redesign blueprints or add startup network installation.
+Package identities and stored data remain compatible with their extraction contracts. Current feature calls use the native host `llm` service through `@klarkxy/dsh-plugin-kit`; model selection follows each feature's settings and the host/session defaults. The shared kit does not start background inference. The current client settings use the host's plugin configuration slots and injected UI primitives.
+
+Manuscript, proofread and application-private packages remain in Editor. Desktop packaging, preinstallation and offline profile startup remain Editor responsibilities.
 
 ## Build and test ownership
 
-Run `pnpm install --frozen-lockfile` and `pnpm check`. The imported packages retain their own tests, with a dedicated `tsconfig.editor-plugins.json` and `vitest.editor-plugins.config.ts` for shared source aliases. Browser wrapping and its node-shim/style-ownership regressions live under `scripts/editor-plugins/`. Public Fusion Node suites move with Fusion. Editor keeps its host integration tests against published exports.
+Run `pnpm install --frozen-lockfile` and `pnpm check`. Each maintained package owns its tests. Shared source aliases live in `tsconfig.editor-plugins.json` and `vitest.editor-plugins.config.ts`; browser wrapping and node-shim/style-ownership regressions live under `scripts/editor-plugins/`.
 
-The optional search-settings browser suite is `pnpm test:e2e:web-search`; install the matching Playwright browser before running it. It was moved, not claimed to have been executed during extraction.
+`pnpm test:e2e:web-search` exercises the real registration entry through an isolated browser fixture. It does not claim installed Desktop activation or live provider acceptance.
 
-## Publication handoff: closed by default
+## Publication ownership
 
-The ten packages are held by `holdPublish: true` in the migration manifest. Both release planning and publishing exclude them. Existing unrelated packages remain eligible. No npm release is needed for Editor to consume the already-published exact versions.
+The handoff is complete: `scripts/editor-plugin-migration.json` has `holdPublish: false` and lists the three packages above. This repository owns their source and publication. Editor consumes published packages and must not independently publish the same names.
 
-Merge this source-import PR first, then the Editor consumer/removal PR. Before a separate change removes the hold:
+The [release guide](../RELEASING.md) governs current lifecycle, first publication and normal updates. Existing publication history survives maintenance and source retirement. Release plans resolve workspace dependency ranges and verify the exact planned contents before npm submission.
 
-1. Confirm Editor no longer discovers or publishes these packages and no old publishing job remains active.
-2. Update each package's npm Trusted Publisher to this repository and workflow, preserving package ownership and names. Do not copy credentials into Git.
-3. Validate the packed artifacts and compatibility, then explicitly release from this repository.
+## Historical verification
 
-The publisher now stages the npm-selected files, resolves supported `workspace:*`, `workspace:^`, and `workspace:~` dependencies using current workspace versions, computes fingerprints from that staged content, and publishes the same archive. Dependency-first release planning propagates changed shared-library versions to dependants. Unsupported ranges, cycles, missing targets, and stale plans containing held packages fail explicitly. Lifecycle scripts are not run by packing. The source manifests retain workspace references for local development.
-
-### Later change: hold released
-
-The hold was lifted after the handoff completed. `scripts/editor-plugin-migration.json` now carries `holdPublish: false` and lists the eight packages that remain here; `dsh-ai-services` and `dsh-model-center` were removed from this repository, as recorded below. All eight now publish from this repository, so the conditions in the numbered list above are satisfied rather than pending.
-
-## Verification record
-
-Extraction CI run [36305516870](https://github.com/klarkxy/dsh-plugins/actions/runs/36305516870) generated the lockfile, committed the extraction, verified a frozen install, and passed the full `pnpm check` on Linux, Node 24.21.0 and pnpm 10.29.2. This includes original package tests, typechecks, builds, npm pack checks, existing site/release tests, and six added release-workspace tests. Two of those tests inspect actual npm archives without publishing.
-
-Later PR checks are authoritative for later commits. No claim is made here of real DSH/Electron end-to-end, Windows/macOS installer, or browser visual acceptance. No installed user Home, credentials, or application data were touched.
-
-## Zhihu follow-up validation scope
-
-The original Zhihu package tests and three stylesheet lifecycle regressions move with the source. New control-adapter tests cover hosted/native rendering, variants, events, refs, disabled, and ARIA properties. The shared private-dependency guard includes Zhihu. The existing Editor pin remains the already-published 0.1.7 archive; this source refactor needs a later authorized release before consumers receive the new adapter. No live Zhihu request, credential migration, or npm publication is performed. UI layout and stylesheet bytes are unchanged; real browser/Electron visual acceptance is not implied by unit/build results.
-
-## Later change: shared model service retired
-
-`dsh-ai-services` and `dsh-model-center` were removed from this repository. Features that used the shared `ctx.aiServices.activate(plugin)` / `registerPurpose` / `run` call shape now call the host `llm` service directly through `@klarkxy/dsh-plugin-kit`: one native call per feature, no retry, no provider queue. A feature's own plugin-page model row still wins; otherwise the live session model and then the host default chat model are used. The kit is the shared, published support package for those calls and for the plugin-page model menu; it never starts inference and is not a DSH bundle. Model tiers, purpose registration, usage receipts, and the model-settings UI left with the two removed packages; published `0.1.x` copies of them remain valid for hosts that still load them.
+Extraction CI run [36305516870](https://github.com/klarkxy/dsh-plugins/actions/runs/36305516870) passed the extraction-time frozen installation and full repository checks. Those results apply to that source snapshot; current checks are required for later changes. No historical CI result implies current installed-host, browser, provider or installer acceptance.

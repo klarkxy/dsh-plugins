@@ -15,7 +15,7 @@ export type Request = { mode: Capability; prompt: string; images?: string[] }
 export type Source = { url: string; title?: string }
 export type ImageResult = { path: string; mediaType: string }
 export type Result = { id: string; mode: Capability; answer: string; images: ImageResult[]; sources: Source[]; searchCount: number; elapsedMs: number }
-export type RpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
+export type { RpcResult } from '@klarkxy/dsh-plugin-kit/contracts'
 export class ChatGptError extends Error {
   constructor(public readonly code: string, message: string) { super(message); this.name = 'ChatGptError' }
 }

@@ -1,3 +1,4 @@
+import '../tests/legacy-call-policy.ts'
 import { describe, it } from 'vitest'
 import assert from 'node:assert/strict'
 import {
@@ -96,7 +97,7 @@ describe('question/creator request contracts', () => {
     const data = [{ APIID: 'creator', RemainingQuota: 4 }]
     const { options, calls } = fixture(data)
     const result = await executeZhihuOpenPlatform('quota', { apiIds: ['creator', 'question_answers', 'creator'] }, options)
-    assert.equal(calls[0]!.url.searchParams.get('APIIDs'), 'creator,question_answers')
+    assert.equal(calls[0]!.url.searchParams.get('APIIDs'), 'creator,question_discovery')
     assert.deepEqual(result.data, { Items: data })
     assert.equal(result.quotaId, undefined)
   })

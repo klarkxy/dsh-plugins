@@ -5,8 +5,7 @@
  * and delete/retry have to update the catalog and the open selection.
  */
 import type { OperationFailure } from './ui-copy.ts'
-import { freeChatRows, matchFreeRows, type ListedSession, type SessionListSnapshot } from './free-list.ts'
-import { FREE_PANEL_ID } from './contracts.ts'
+import type { SessionListSnapshot } from './free-list.ts'
 
 export interface SessionCapabilities {
   readonly retry: boolean
@@ -47,7 +46,6 @@ export interface EditRetryRequest extends DirectRetryRequest {
 
 export interface DeleteOutcome {
   readonly phase: 'deleted' | 'cleanup-pending'
-  readonly releasedSelection: boolean
 }
 
 export interface ObservableList {
@@ -59,14 +57,10 @@ export interface SessionHost {
   readonly list: ObservableList
   capabilities?: () => Promise<unknown> | unknown
   create?: (opts: { kind: 'free' }) => Promise<unknown>
-  fork?: (opts: { sessionId: string; increaseTitle?: boolean }) => Promise<unknown>
-  refresh?: () => Promise<unknown>
   previewRetry?: (request: { sessionId: string; messageId: string }) => Promise<unknown>
   retry?: (request: DirectRetryRequest | EditRetryRequest) => Promise<unknown>
   openSession?: (sessionId: string) => void
-  forkSession?: (sessionId: string) => Promise<unknown>
   deleteSession?: (sessionId: string, requestId: string) => Promise<unknown>
-  selectPanel?: (id: string) => void
 }
 
 interface RemoteFailure {
@@ -152,13 +146,11 @@ export async function readCapabilities(host: SessionHost): Promise<SessionCapabi
 
 export function controlsFor(capabilities: SessionCapabilities, ready: boolean, host: SessionHost): {
   create: boolean
-  fork: boolean
   delete: boolean
   retry: boolean
 } {
   return {
     create: ready && capabilities.freeSession && typeof host.create === 'function',
-    fork: ready && capabilities.freeSession && (typeof host.forkSession === 'function' || typeof host.fork === 'function'),
     delete: ready && capabilities.deleteSession && typeof host.deleteSession === 'function',
     retry: ready && capabilities.retry && typeof host.previewRetry === 'function' && typeof host.retry === 'function',
   }
@@ -178,13 +170,6 @@ export async function createFreeSession(host: SessionHost): Promise<string> {
   return sessionIdOf(await unwrap(host.create({ kind: 'free' })))
 }
 
-/** Returns the child id. The caller opens it only while its generation is still current. */
-export async function forkOwnedChild(host: SessionHost, sessionId: string): Promise<string> {
-  if (typeof host.forkSession === 'function') return sessionIdOf(await unwrap(host.forkSession(sessionId)))
-  if (typeof host.fork === 'function') return sessionIdOf(await unwrap(host.fork({ sessionId, increaseTitle: true })))
-  throw new HostOperationError('session/fork-unavailable')
-}
-
 export async function deleteOwnedSession(host: SessionHost, sessionId: string, requestId: string): Promise<DeleteOutcome> {
   if (typeof host.deleteSession !== 'function') throw new HostOperationError('session/lifecycle-unavailable')
   const value = await unwrap(host.deleteSession(sessionId, requestId))
@@ -193,7 +178,7 @@ export async function deleteOwnedSession(host: SessionHost, sessionId: string, r
   if (phase !== 'deleted' && phase !== 'cleanup-pending') {
     throw new HostOperationError('session/delete-pending', 'missing-outcome')
   }
-  return { phase, releasedSelection: (value as { releasedSelection?: unknown }).releasedSelection === true }
+  return { phase }
 }
 
 export function directRetryRequest(input: {
@@ -290,27 +275,19 @@ export interface DeleteRequestState {
 }
 
 export interface FreeChatSnapshot {
-  readonly rows: readonly ListedSession[]
-  readonly listStatus: 'loading' | 'empty' | 'nomatch' | 'ready' | 'error'
-  readonly listFailure?: OperationFailure
-  readonly query: string
   readonly controls: ReturnType<typeof controlsFor>
   readonly capabilitiesReady: boolean
   readonly creating: boolean
   readonly notice?: OperationFailure
   readonly deleteRequest?: DeleteRequestState
-  readonly focusNonce: number
 }
 
 export interface FreeChatModel {
   subscribe(listener: Listener): () => void
   getSnapshot(): FreeChatSnapshot
   reloadCapabilities(): Promise<void>
-  setQuery(query: string): void
-  refreshList(): Promise<void>
   create(): Promise<void>
-  open(sessionId: string): void
-  fork(sessionId: string): Promise<void>
+  dismissNotice(): void
   requestDelete(sessionId: string): void
   cancelDelete(): void
   confirmDelete(): Promise<void>
@@ -321,56 +298,19 @@ export function createFreeChatModel(host: SessionHost, ids: () => string = () =>
   const events = store()
   let capabilities = UNSUPPORTED_CAPABILITIES
   let capabilitiesReady = false
-  let query = ''
   let creating = false
   let notice: OperationFailure | undefined
   let deleteRequest: DeleteRequestState | undefined
-  let focusNonce = 0
-  let listFailure: OperationFailure | undefined
   let generation = 0
   let snapshot: FreeChatSnapshot = build()
-  const stopList = host.list.subscribe(() => publish())
-
-  function listError(listed: SessionListSnapshot): OperationFailure {
-    const code = typeof listed.error?.code === 'string' && listed.error.code !== '' ? listed.error.code : 'transport'
-    const message = listed.error?.message
-    return { code, ...typeof message === 'string' && message !== '' ? { reason: message } : {} }
-  }
 
   function build(): FreeChatSnapshot {
-    let status: FreeChatSnapshot['listStatus'] = 'ready'
-    let rows: ListedSession[] = []
-    try {
-      const listed = host.list.getSnapshot()
-      if (listed.phase === 'error') {
-        status = 'error'
-        listFailure = listError(listed)
-        rows = []
-      } else {
-        listFailure = undefined
-        const matched = matchFreeRows(freeChatRows(listed), query)
-        if (listed.phase === 'pending' && matched.length === 0) status = 'loading'
-        else if (listed.phase === 'ready' && matched.length === 0 && query.trim() === '') status = 'empty'
-        else if (matched.length === 0) status = 'nomatch'
-        else status = 'ready'
-        rows = matched
-      }
-    } catch (error) {
-      status = 'error'
-      listFailure = readFailure(error)
-      rows = []
-    }
     return {
-      rows,
-      listStatus: status,
-      ...listFailure === undefined ? {} : { listFailure },
-      query,
       controls: controlsFor(capabilities, capabilitiesReady, host),
       capabilitiesReady,
       creating,
       ...notice === undefined ? {} : { notice },
       ...deleteRequest === undefined ? {} : { deleteRequest },
-      focusNonce,
     }
   }
 
@@ -385,15 +325,6 @@ export function createFreeChatModel(host: SessionHost, ids: () => string = () =>
     async reloadCapabilities() {
       capabilities = await readCapabilities(host)
       capabilitiesReady = true
-      publish()
-    },
-    setQuery(next) {
-      query = next
-      publish()
-    },
-    async refreshList() {
-      if (typeof host.refresh !== 'function') return
-      await unwrap(host.refresh())
       publish()
     },
     async create() {
@@ -417,22 +348,10 @@ export function createFreeChatModel(host: SessionHost, ids: () => string = () =>
         }
       }
     },
-    open(sessionId) {
-      host.openSession?.(sessionId)
-    },
-    async fork(sessionId) {
-      const ticket = generation
+    dismissNotice() {
+      if (notice === undefined) return
       notice = undefined
-      try {
-        const child = await forkOwnedChild(host, sessionId)
-        if (ticket !== generation) return
-        if (typeof host.openSession !== 'function') throw new HostOperationError('session/lifecycle-unavailable', 'open-session')
-        host.openSession(child)
-      } catch (error) {
-        if (ticket !== generation) return
-        notice = readFailure(error)
-      }
-      if (ticket === generation) publish()
+      publish()
     },
     requestDelete(sessionId) {
       if (!controlsFor(capabilities, capabilitiesReady, host).delete) return
@@ -469,11 +388,8 @@ export function createFreeChatModel(host: SessionHost, ids: () => string = () =>
           publish()
           return
         }
+        // The host clears the open selection itself; there is no panel to jump to.
         deleteRequest = undefined
-        if (outcome.releasedSelection) {
-          host.selectPanel?.(FREE_PANEL_ID)
-          focusNonce += 1
-        }
       } catch (error) {
         if (ticket !== generation) return
         const failure = readFailure(error)
@@ -486,7 +402,6 @@ export function createFreeChatModel(host: SessionHost, ids: () => string = () =>
       creating = false
       notice = undefined
       deleteRequest = undefined
-      stopList()
       publish()
     },
   }
@@ -753,17 +668,13 @@ export function bindHost(ctx: {
     list?: ObservableList
     capabilities?: SessionHost['capabilities']
     create?: (opts?: { workspaceId?: string; cwd?: string; sessionId?: string }) => Promise<unknown>
-    fork?: SessionHost['fork']
-    refresh?: SessionHost['refresh']
     previewRetry?: SessionHost['previewRetry']
     retry?: SessionHost['retry']
   }
   uiWorkspace?: {
     openSession?: SessionHost['openSession']
-    forkSession?: SessionHost['forkSession']
     deleteSession?: SessionHost['deleteSession']
   }
-  layout?: { selectPanel?: SessionHost['selectPanel'] }
 }): SessionHost {
   const sessions = ctx.sessions
   const workspace = ctx.uiWorkspace
@@ -777,13 +688,9 @@ export function bindHost(ctx: {
     ...typeof sessions?.create === 'function'
       ? { create: (opts: { kind: 'free' }) => (sessions.create as (input: { kind: 'free' }) => Promise<unknown>)(opts) }
       : {},
-    ...typeof sessions?.fork === 'function' ? { fork: opts => sessions.fork!(opts) } : {},
-    ...typeof sessions?.refresh === 'function' ? { refresh: () => sessions.refresh!() } : {},
     ...typeof sessions?.previewRetry === 'function' ? { previewRetry: request => sessions.previewRetry!(request) } : {},
     ...typeof sessions?.retry === 'function' ? { retry: request => sessions.retry!(request) } : {},
     ...typeof workspace?.openSession === 'function' ? { openSession: sessionId => workspace.openSession!(sessionId) } : {},
-    ...typeof workspace?.forkSession === 'function' ? { forkSession: sessionId => workspace.forkSession!(sessionId) } : {},
     ...typeof workspace?.deleteSession === 'function' ? { deleteSession: (sessionId, requestId) => workspace.deleteSession!(sessionId, requestId) } : {},
-    ...typeof ctx.layout?.selectPanel === 'function' ? { selectPanel: id => ctx.layout!.selectPanel!(id) } : {},
   }
 }

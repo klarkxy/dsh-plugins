@@ -42,13 +42,39 @@ test('hard refusals: protected paths, secrets and dangerous programs', () => {
   for (const file of ['.env', '.env.local', '.git/config', '.ssh/id_rsa', 'AGENTS.md', '.github/workflows/ci.yml', 'secret.pem']) {
     assert.equal(hardRisk({ tool: 'write', args: { file_path: file } })?.code, 'PROTECTED_PATH');
   }
-  assert.equal(hardRisk({ tool: 'bash', args: { command: 'cat .env' } })?.code, 'SENSITIVE_COMMAND');
+  assert.equal(hardRisk({ tool: 'bash', args: { command: 'cat .env' } })?.code, 'USE_SAFE_READ');
   assert.equal(hardRisk({ tool: 'bash', args: { command: 'echo token=abc123' } })?.code, 'SENSITIVE_COMMAND');
   assert.equal(hardRisk({ tool: 'bash', args: { command: 'echo {"password":"fictional"}' } })?.code, 'SENSITIVE_COMMAND');
   assert.equal(hardRisk({ tool: 'bash', args: { command: 'rm -rf x' } })?.code, 'DANGEROUS_PROGRAM');
   assert.equal(hardRisk({ tool: 'bash', args: { command: 'git status' } }), undefined);
   assert.equal(hardRisk({ tool: 'write', args: { file_path: 'src/a.txt' } }), undefined);
   assert.equal(simpleCommand('git status --short'), true);
+});
+
+test('ordinary agent/config paths are readable while actual credential stores and mutations remain protected', () => {
+  const ordinary = ['.codex/config.toml', '.codex/sessions/demo.jsonl', '.codex/skills/example/SKILL.md',
+    '.dsh/profiles/test/config.json', '.claude/settings.json', '.agents/skills/example.md',
+    '.config/tool/config.yaml', '.git/config', '.ssh/config', '.aws/config', '.env.local', '.npmrc', 'AGENTS.md'];
+  for (const path of ordinary) {
+    for (const tool of ['read', 'read_image', 'grep']) assert.equal(hardRisk({ tool, args: { file_path: path, path } }), undefined, `${tool}: ${path}`);
+    assert.equal(hardRisk({ tool: 'str_replace_editor', args: { path, command: 'view' } }), undefined, path);
+    for (const tool of ['write', 'edit']) assert.equal(hardRisk({ tool, args: { file_path: path } })?.code, 'PROTECTED_PATH', `${tool}: ${path}`);
+    for (const command of ['create', 'str_replace', 'insert', 'undo_edit']) {
+      assert.equal(hardRisk({ tool: 'str_replace_editor', args: { path, command } })?.code, 'PROTECTED_PATH', `${command}: ${path}`);
+    }
+  }
+  for (const path of ['.codex/auth.json', '.dsh/credentials.json', '.claude/.credentials.json', '.aws/credentials', '.ssh/id_ed25519']) {
+    for (const tool of ['read', 'read_image', 'grep', 'write', 'edit']) assert.equal(hardRisk({ tool, args: { file_path: path, path } })?.code, 'PROTECTED_PATH', `${tool}: ${path}`);
+    assert.equal(hardRisk({ tool: 'str_replace_editor', args: { path, command: 'view' } })?.code, 'PROTECTED_PATH', path);
+  }
+  for (const command of ['cat .codex/sessions/demo.jsonl', 'cat .agents/skills/example.md', 'ls -la .codex', 'ls .env']) {
+    assert.equal(hardRisk({ tool: 'bash', args: { command } }), undefined, command);
+  }
+  for (const command of ['cat .env', 'cat .git/config', 'cat .codex/config.toml']) {
+    assert.equal(hardRisk({ tool: 'bash', args: { command } })?.code, 'USE_SAFE_READ', command);
+  }
+  assert.equal(hardRisk({ tool: 'bash', args: { command: 'node helper.js' } }), undefined, 'ordinary unknown shell keeps review fallback');
+  assert.equal(hardRisk({ tool: 'bash', args: { command: 'node .codex/helper.js' } })?.code, 'SENSITIVE_COMMAND', 'unknown execution does not prove mutation-safe use');
 });
 test('review sends a tool-free structured request with the configured output cap', async () => {
   let received;
@@ -156,9 +182,9 @@ const bashEscalation = (h, command) => {
     signal: e.signal, reason: escalationReason({ args: e.arguments }) }, async () => 'native-ask');
   return { e, ask };
 };
-test('provably read-only bash escalation is allowed once without any model service', async () => {
+test('metadata-only bash escalation is allowed once without any model service', async () => {
   const h = host(); // no llm service is injected in this harness at all
-  const { e, ask } = bashEscalation(h, 'ls -la | head -5');
+  const { e, ask } = bashEscalation(h, 'ls -la && pwd');
   let outcome;
   await h.listeners['tools/execute'](e, async () => { outcome = await ask(); return { isError: false, content: [] }; });
   assert.equal(outcome, 'allowed-once');
@@ -185,11 +211,9 @@ test('dangerous program inside a parsed compound is denied before any review', a
   h.dispose();
 });
 
-test('adapter grants exact ordinary reads without evidence or a model, retaining original argv', async () => {
+test('adapter grants exact metadata reads without evidence or a model, retaining original argv', async () => {
   for (const command of [
-    'ls -la', 'cat input | jq .name', 'grep -rn pattern src', 'find . -name "*.md"', 'ps aux',
-    'git --no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false cat-file -t HEAD',
-    'git --no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false diff --cached --no-ext-diff --no-textconv --ignore-submodules=all --stat',
+    'ls -la', 'stat input', 'find . -name "*.md"', 'pwd', 'git --no-pager config --get user.email',
     'git --no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false ls-files --cached -s',
   ]) {
     const h = host({ provider: 'p', model: 'm' }, streamer(verdict(), () => assert.fail('proven read must not call model')));
@@ -206,8 +230,11 @@ test('adapter grants exact ordinary reads without evidence or a model, retaining
     h.listeners['tools/result'](e, {}); h.dispose();
   }
 });
-test('adapter sends unproven helper/mutation forms to review instead of static grant or hard denial', async () => {
+test('adapter sends content reads and unproven helper/mutation forms to normal review', async () => {
   for (const command of [
+    'cat input | jq .name', 'grep -rn pattern src', 'ps aux', 'printenv',
+    'git --no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false cat-file -t HEAD',
+    'git --no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false diff --cached --no-ext-diff --no-textconv --ignore-submodules=all --stat',
     'rg --pre=node pattern input', 'rg --pre node pattern input', 'rg --p=node pattern input',
     'xxd input output', 'xxd -rps input', 'uniq input output', 'file --compile input', 'file -z input',
     'date --debug --set=2020-01-01', 'date --resolution -s 2020-01-01',
@@ -240,22 +267,25 @@ test('adapter sends unproven helper/mutation forms to review instead of static g
 
 test('sensitive decoded literals refuse at every adapter boundary, with static proof on or off', async () => {
   for (const staticReadonly of [true, false]) {
-    for (const command of [
-      "cat '.env'", 'cat ".git/config"', 'cat .e""nv', "cat .en'v'", "cat < '.env'", 'cat < .e""nv',
-      "echo 'tok'en=fictional123", "printf '%s' 'tok'en=fictional123", 'CI="tok"en=fictional123 ls',
-      "date --file='.env'", "cat '.env' && echo \"$UNRESOLVED\"",
-      "cat '.env' " + 'x'.repeat(11000),
+    for (const [command, expectedCode] of [
+      ["cat '.env'", 'USE_SAFE_READ'], ['cat ".git/config"', 'USE_SAFE_READ'],
+      ['cat .e""nv', 'USE_SAFE_READ'], ["cat .en'v'", 'USE_SAFE_READ'],
+      ["cat < '.env'", 'USE_SAFE_READ'], ['cat < .e""nv', 'USE_SAFE_READ'],
+      ["echo 'tok'en=fictional123", 'SENSITIVE_COMMAND'], ["printf '%s' 'tok'en=fictional123", 'SENSITIVE_COMMAND'],
+      ['CI="tok"en=fictional123 ls', 'SENSITIVE_COMMAND'], ["date --file='.env'", 'USE_SAFE_READ'],
+      ["cat '.env' && echo \"$UNRESOLVED\"", 'SENSITIVE_COMMAND'],
+      ["cat '.env' " + 'x'.repeat(11000), 'SENSITIVE_COMMAND'],
     ]) {
       const h = host({ provider: 'p', model: 'm', staticReadonly }, streamer(verdict(), () => assert.fail('hard refusal cannot call reviewer')));
       const { e, ask } = bashEscalation(h, command);
       assert.equal((await h.listeners['tools/pre-execute'](e, async () => assert.fail('hard refusal cannot run downstream'))).kind, 'deny', command);
-      assert.match(h.guard(e), /SENSITIVE_COMMAND/, command);
+      assert.ok(h.guard(e).includes(expectedCode), command);
       // Challenge the final approval seam even when a caller ignores pre-execute.
       await h.listeners['tools/execute'](e, async () => {
         assert.equal(await ask(), 'rejected', command);
         return { isError: true, content: [] };
       });
-      assert.equal(h.logs.find(row => row.phase === 'approval').code, 'SENSITIVE_COMMAND', command);
+      assert.equal(h.logs.find(row => row.phase === 'approval').code, expectedCode, command);
       assert.ok(!h.logs.some(row => row.code === 'STATIC_READONLY'));
       h.listeners['tools/result'](e, {}); h.dispose();
     }

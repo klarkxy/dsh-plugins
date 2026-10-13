@@ -1,5 +1,8 @@
 # DSH Docs
 
+<!-- release-state-note -->
+The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
+
 [简体中文](README.zh-CN.md) | [English](README.md)
 
 Runtime: Node `^22.19.0 || >=24.0.0` and DSH `>=0.1.7-rc.2`. The documentation reader is a DSH Web client; the four read-only tools and the Creator-mode guidance run in the host.
@@ -23,7 +26,7 @@ The host half adds one system-prompt section when the session uses the `cordis` 
 - `dsh_docs_search({ query: "plugin", language: "en" })` searches the live official `llms.txt` directory: titles, categories and paths. This is a directory search, not full-text search; an empty result does not establish that a topic is absent from the document bodies, so try broader Chinese or English keywords.
 - `dsh_docs_fetch({ id: "en/develop/basic/tool.md" })` reads a document ID returned by search. Results include the source URL, fetch time, content revision and `nextOffset`. Continue with that offset and the same `revision`; if the document changes, restart from offset zero. The default page size is 12,000 characters, at most 16,000.
 - `dsh_plugins_search({ query: "memory" })` finds candidate plugins. The default `catalog` source searches the curated klarkxy Chinese/English plugin catalog; `source: "npm"` searches npm's `dsh-plugin` keyword more broadly. Neither source is exhaustive, and a hit is a candidate rather than verified compatibility.
-- `dsh_plugins_fetch({ package: "@klarkxy/dsh-mood", version: "latest" })` reads npm registry metadata for an exact package name: dist-tags, published versions in publication-time order, and the selected version's bundle declaration, DSH/Node engine ranges, dependencies and deprecation. `version` accepts an exact release or a dist-tag; ranges are rejected.
+- `dsh_plugins_fetch({ package: "@klarkxy/dsh-current-title", version: "latest" })` reads npm registry metadata for an exact package name: dist-tags, published versions in publication-time order, and the selected version's bundle declaration, DSH/Node engine ranges, dependencies and deprecation. `version` accepts an exact release or a dist-tag; ranges are rejected.
 
 The plugin-registry tools are read-only metadata lookups: nothing is downloaded, installed or executed, and a declared engines range is not runtime compatibility proof. GitHub-installed plugins have no registry metadata; install those directly with the official plugin manager as `github:owner/repo#commit`, and review their `package.json` yourself.
 

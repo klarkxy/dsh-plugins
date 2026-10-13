@@ -1,5 +1,8 @@
 # DSH ChatGPT
 
+<!-- release-state-note -->
+The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
+
 Give any DeepSeek Harness agent five directly registered tools: web search, image generation, image editing, vision, and bounded text analysis. Tool descriptions explain when to use them; users do not need to name a skill.
 
 All requests run through the official local Codex app-server. The plugin never calls OpenAI HTTP endpoints, reads account tokens, or falls back to an API key. Codex owns authentication and token refresh.

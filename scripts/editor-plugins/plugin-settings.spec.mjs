@@ -76,8 +76,8 @@ describe('plugin settings page registrations', () => {
       const configs = () => h.registered.filter(entry => entry.spec.name === slot)
       expect(configs().map(entry => entry.spec)).toEqual([
         pkg === '@klarkxy/dsh-zhihu'
-          // Zhihu keeps its native page order and label from the earlier migration.
-          ? { name: slot, key: pkg, order: 120, label: '知乎' }
+          // The host resolves the bundle's exported metadata in its active locale.
+          ? { name: slot, key: pkg, order: 120 }
           : { name: slot, key: pkg },
       ])
       // Registering or opening a settings page must not perform inference or write data.

@@ -26,7 +26,7 @@ const CONTENT_URL = { type: 'string', required: true, description: '当前账号
 const DEFINITIONS = {
   'question.recommendations': {
     name: ZHIHU_QUESTION_RECOMMENDATIONS_TOOL_NAME,
-    description: '推荐适合当前账号回答的问题；省略主题按画像推荐，条目可能少于 Count，不支持分页。使用 creator 额度。',
+    description: '推荐适合当前账号回答的问题；省略主题按画像推荐，条目可能少于 Count，不支持分页。使用 question_discovery 额度；免费模式须有足够额度，付费模式因计费未确认而阻止。',
     parameters: {
       query: { type: 'string', description: '可选主题；不传才按画像推荐，空白字符串无效。' },
       count: { type: 'integer', description: '推荐数量，1-20，默认 5。' },
@@ -34,7 +34,7 @@ const DEFINITIONS = {
   },
   'question.answers': {
     name: ZHIHU_QUESTION_ANSWERS_TOOL_NAME,
-    description: '读取问题下的回答摘要，非全文，也非新生成的 AI 摘要。一次一页，只有 paging.canContinue=true 时才用 nextOffset。使用 question_answers 额度。',
+    description: '读取问题下的回答摘要，非全文，也非新生成的 AI 摘要。一次一页，只有 paging.canContinue=true 时才用 nextOffset。使用 question_discovery 额度。',
     parameters: {
       questionUrl: { type: 'string', required: true, description: 'https://www.zhihu.com/question/{id} 形式的问题链接。' },
       ...PAGE_PARAMETERS,
@@ -63,7 +63,7 @@ const DEFINITIONS = {
   quota: {
     name: ZHIHU_QUOTA_TOOL_NAME,
     description: '查询官方每日额度，本接口不消耗业务额度。不同于本地 usage.summary；不推算余额或重置时间。',
-    parameters: { apiIds: { type: 'array', items: { type: 'string', enum: ZHIHU_QUOTA_IDS }, description: '可选官方额度项，默认全部；去重后发送。问题回答摘要为 question_answers，其他问题推荐/创作接口共用 creator。' } },
+    parameters: { apiIds: { type: 'array', items: { type: 'string', enum: [...ZHIHU_QUOTA_IDS, 'question_answers'] }, description: '可选官方额度项，默认全部；去重后发送。问题推荐与回答摘要共用 question_discovery；本人创作共用 creator。' } },
   },
 } as const
 

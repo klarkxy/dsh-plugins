@@ -1,3 +1,4 @@
+import '../tests/legacy-call-policy.ts'
 import { describe, expect, it, vi } from 'vitest'
 import type { ZhihuSearchFetcher } from './zhihu-client.ts'
 import {

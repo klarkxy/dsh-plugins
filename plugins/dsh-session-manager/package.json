@@ -1,7 +1,8 @@
 {
   "name": "@klarkxy/dsh-session-manager",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0",
   "description": "Cross-session discovery and managed free conversations for DeepSeek Harness.",
+  "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -17,7 +18,8 @@
       "default": "./lib/index.js"
     },
     "./client": "./lib/client.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "lib",
@@ -59,6 +61,7 @@
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-session-manager/src"
   },
   "peerDependencies": {
+    "@deepseek-ai/dsh-llm": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-agent": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-session": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-session-query": ">=0.2.0-rc.2",
@@ -68,6 +71,9 @@
     "@deepseek-ai/schemastery": ">=3.18.4"
   },
   "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-agent": {
       "optional": true
     },
@@ -91,6 +97,7 @@
     }
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
     "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
     "@deepseek-ai/dsh-session": "0.2.0-rc.2",
     "@deepseek-ai/dsh-session-query": "0.2.0-rc.2",
@@ -122,6 +129,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/",
   "dshRelease": {
-    "contentHash": "622ebc72b98081a77a390b4b7a830e6393e0168a8547b19f86b5700ba56ed921"
+    "contentHash": "d263ac76baaf85fdf80f3d5ef5524f3d1c382333674cbc65d7cc197b414f3a15"
   }
 }

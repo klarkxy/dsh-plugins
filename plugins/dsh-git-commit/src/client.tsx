@@ -9,9 +9,10 @@ import {
   Button, IconRefreshOutlineRegular, Switch, Tag, Tooltip, useAnchoredPosition, useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
+import { createModelSettingsSubscriber } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import {
   GIT_COMMIT_CLIENT_SERVICE, PLUGIN_NAME, RPC_CHANNEL, type CommitModelRoute, type CommitRunResult,
-  type GitCommitSettings, type GitCommitStatus, type RpcResult,
+  type GitCommitSettings, type GitCommitStatus, type PartialCommitResult, type RpcResult,
 } from './contracts.ts'
 
 export const name = 'dsh-git-commit-client'
@@ -34,6 +35,12 @@ const zh = {
   loading: '正在读取仓库状态…',
   running: '正在整理修改并分次提交…',
   done: '已创建提交',
+  partial: '本次提交未全部完成；以下提交已保留',
+  stopped: '本次操作未确认完成',
+  uncertain: '以下提交组的结果不确定。请检查 Git 日志和状态，确认后再操作。',
+  hashUnavailable: '提交已创建，哈希未读取',
+  remaining: '尚未提交：{n} 组',
+  cancelled: '提交操作已取消',
   fallback: '模型不可用，已合并为单个提交',
   noWorkspace: '工作区没有修改',
   unavailable: '不可用',
@@ -44,6 +51,12 @@ const zh = {
   sessionRunning: '会话正在运行，提交已暂停',
   refresh: '刷新',
   failed: '操作失败',
+  disabled: '插件已停用',
+  busy: '已有提交操作正在进行',
+  stale: '设置已更新，请刷新后重试',
+  workspaceChanged: '工作区或分支已变更，请刷新后重试提交',
+  settingsUnavailable: '无法读取提交设置，请重新加载插件后重试',
+  invalidRequest: '提交请求无效，请刷新后重试',
   planUnavailable: '模型没有给出可用的提交方案，已取消本次提交，工作区没有被改动。换一个模型重试，或在插件设置里开启兜底提交。',
   close: '关闭',
 }
@@ -63,6 +76,12 @@ const en: Record<keyof typeof zh, string> = {
   loading: 'Reading repository status…',
   running: 'Organizing changes into commits…',
   done: 'Commits created',
+  partial: 'This run stopped before completion; these commits were kept',
+  stopped: 'This run did not finish with a confirmed result',
+  uncertain: 'The outcome of these groups is uncertain. Check Git log and status before taking further action.',
+  hashUnavailable: 'Commit created; hash unavailable',
+  remaining: 'Groups not committed: {n}',
+  cancelled: 'Commit run cancelled',
   fallback: 'Model unavailable; used a single commit',
   noWorkspace: 'No workspace changes',
   unavailable: 'Unavailable',
@@ -73,6 +92,12 @@ const en: Record<keyof typeof zh, string> = {
   sessionRunning: 'Session is running; commits paused',
   refresh: 'Refresh',
   failed: 'Operation failed',
+  disabled: 'Plugin disabled',
+  busy: 'A commit run is already in progress',
+  stale: 'Settings changed; refresh and retry',
+  workspaceChanged: 'The workspace or branch changed; refresh and retry the commit',
+  settingsUnavailable: 'Could not read commit settings; reload the plugin and retry',
+  invalidRequest: 'Invalid commit request; refresh and retry',
   planUnavailable: 'The model returned no usable commit plan, so the run was cancelled and your workspace is untouched. Try another model, or turn on the fallback in plugin settings.',
   close: 'Close',
 }
@@ -95,10 +120,12 @@ interface UseSessionLike {
 /** A failed RPC keeps its code so the panel can explain a rejection in its own words. */
 class RpcError extends Error {
   readonly code: string
-  constructor(code: string, message: string) {
+  readonly partial?: PartialCommitResult
+  constructor(code: string, message: string, partial?: PartialCommitResult) {
     super(message)
     this.name = 'RpcError'
     this.code = code
+    this.partial = partial
   }
 }
 
@@ -110,12 +137,13 @@ export interface GitCommitActionProps {
 }
 
 async function rpc<T>(
-  call: GitCommitActionProps['call'], endpoint: string, payload: unknown = {}, fallback = 'Operation failed',
+  call: GitCommitActionProps['call'], endpoint: string, payload: unknown = {}, fallback = '',
 ): Promise<T> {
   const result = await call(endpoint, payload) as RpcResult<T> | undefined
   if (!result || result.ok !== true) {
     const failed = result && 'error' in result ? result.error : undefined
-    throw new RpcError(failed?.code ?? 'unknown', failed?.message ? failed.message : fallback)
+    throw new RpcError(failed?.code ?? 'unknown', failed?.message ? failed.message : fallback,
+      failed && 'partial' in failed ? failed.partial : undefined)
   }
   return result.value
 }
@@ -132,7 +160,15 @@ function reasonText(t: Translate, status: GitCommitStatus): string {
 
 /** A refusal the plugin can name gets its own sentence; the rest stay verbatim. */
 function errorText(t: Translate, error: { code: string; message: string }): string {
-  return error.code === 'plan-unavailable' ? t('planUnavailable') : error.message
+  const keys: Record<string, Key> = {
+    'plan-unavailable': 'planUnavailable', 'no-session': 'reasonNoSession', 'no-cwd': 'reasonNoCwd',
+    'no-git': 'reasonNoGit', 'not-a-repo': 'reasonNoRepo', 'no-changes': 'noWorkspace',
+    'session-running': 'sessionRunning', 'session-changed': 'workspaceChanged', 'workspace-changed': 'workspaceChanged',
+    busy: 'busy', stale: 'stale', disposed: 'disabled', cancelled: 'cancelled',
+    'settings-unavailable': 'settingsUnavailable', 'bad-request': 'invalidRequest', 'not-found': 'invalidRequest',
+  }
+  const key = keys[error.code]
+  return key ? t(key) : error.message || t('failed')
 }
 
 function panelError(reason: unknown): { code: string; message: string } {
@@ -158,7 +194,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
   const [status, setStatus] = useState<GitCommitStatus>()
   const [loading, setLoading] = useState(false)
   const [running, setRunning] = useState(false)
-  const [result, setResult] = useState<CommitRunResult | null>(null)
+  const [result, setResult] = useState<CommitRunResult | PartialCommitResult | null>(null)
   const [error, setError] = useState<{ code: string; message: string } | null>(null)
   const [confirming, setConfirming] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -199,7 +235,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
     setLoading(true)
     setError(null)
     try {
-      const next = await rpc<GitCommitStatus>(call, 'status', { sessionId }, t('failed'))
+      const next = await rpc<GitCommitStatus>(call, 'status', { sessionId })
       if (generationRef.current !== generation) return
       setStatus(next)
     } catch (reason) {
@@ -209,7 +245,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
     } finally {
       if (generationRef.current === generation) setLoading(false)
     }
-  }, [call, sessionId, t])
+  }, [call, sessionId])
 
   useEffect(() => {
     if (!open) return
@@ -235,19 +271,24 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
     setResult(null)
     setError(null)
     try {
-      const value = await rpc<CommitRunResult>(call, 'commit', { sessionId }, t('failed'))
+      const value = await rpc<CommitRunResult>(call, 'commit', { sessionId })
       if (generationRef.current !== generation) return
       setResult(value)
-      const next = await rpc<GitCommitStatus>(call, 'status', { sessionId }).catch(() => undefined)
-      if (generationRef.current !== generation) return
-      if (next) setStatus(next)
     } catch (reason) {
       if (generationRef.current !== generation) return
+      if (reason instanceof RpcError && reason.partial) setResult(reason.partial)
       setError(panelError(reason))
     } finally {
-      if (generationRef.current === generation) setRunning(false)
+      if (generationRef.current === generation) {
+        // Even a rejected run may have durable commits or changed the index.
+        const next = await rpc<GitCommitStatus>(call, 'status', { sessionId }).catch(() => undefined)
+        if (generationRef.current === generation) {
+          setStatus(next)
+          setRunning(false)
+        }
+      }
     }
-  }, [call, sessionId, t])
+  }, [call, sessionId])
 
   const available = status?.available === true
   const workspaceCount = status?.workspace.files ?? 0
@@ -324,15 +365,32 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
             {running && <p className="dsh-ui-hint" role="status">{t('running')}</p>}
             {result && (
               <div className="dsh-ui-stack">
-                <p className="dsh-ui-hint dsh-ui-wrap">{t('done')} · {result.branch}</p>
+                <p className="dsh-ui-hint dsh-ui-wrap">{t('failure' in result ? result.commits.length ? 'partial' : 'stopped' : 'done')} · {result.branch}</p>
                 <ul className="gcm-commits">
-                  {result.commits.map(commit => (
-                    <li key={commit.hash || commit.message}>
-                      <code>{commit.hash}</code> {commit.message}
+                  {result.commits.map((commit, index) => (
+                    <li key={`${index}:${commit.hash}`}>
+                      <code>{commit.hash || t('hashUnavailable')}</code> {commit.message}
+                      <div className="dsh-ui-hint">{commit.files.join(', ')}</div>
                     </li>
                   ))}
                 </ul>
                 {result.fallback && <p className="dsh-ui-hint">{t('fallback')}</p>}
+                {'uncertain' in result && result.uncertain?.length ? <>
+                  <p className="dsh-ui-hint" role="status">{t('uncertain')}</p>
+                  <ul className="gcm-commits">
+                    {result.uncertain.map((group, index) => <li key={index}>{group.message}
+                      <div className="dsh-ui-hint">{group.files.join(', ')}</div>
+                    </li>)}
+                  </ul>
+                </> : null}
+                {'remaining' in result && <>
+                  <p className="dsh-ui-hint">{t('remaining').replace('{n}', String(result.remaining.length))}</p>
+                  <ul className="gcm-commits">
+                    {result.remaining.map((group, index) => <li key={index}>{group.message}
+                      <div className="dsh-ui-hint">{group.files.join(', ')}</div>
+                    </li>)}
+                  </ul>
+                </>}
               </div>
             )}
           </div>
@@ -381,13 +439,13 @@ type Client = Context & {
   }
 }
 
-/** Host UI language, following live switches; falls back to zh when the service lacks a snapshot. */
+/** Host UI language, following live switches with the host's English fallback. */
 function useHostLocale(client: Client): string {
   const subscribe = useCallback(
     (listener: () => void) => client.locale.subscribe?.(listener) ?? (() => {}),
     [client],
   )
-  const snapshot = useCallback(() => client.locale.getSnapshot?.().active ?? 'zh', [client])
+  const snapshot = useCallback(() => client.locale.getSnapshot?.().active ?? 'en', [client])
   return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
 
@@ -404,6 +462,8 @@ const settingsZh = {
   stale: '设置已更新，请刷新后重试。',
   failed: '无法读取提交设置。',
   retry: '重试',
+  refresh: '刷新设置',
+  syncUnavailable: '自动刷新不可用，请手动刷新设置。',
 }
 
 const settingsEn: Record<keyof typeof settingsZh, string> = {
@@ -419,6 +479,8 @@ const settingsEn: Record<keyof typeof settingsZh, string> = {
   stale: 'Settings changed; refresh and retry.',
   failed: 'Could not load commit settings.',
   retry: 'Retry',
+  refresh: 'Refresh settings',
+  syncUnavailable: 'Automatic refresh unavailable; refresh settings manually.',
 }
 
 function settingsCopy(locale: string): Record<keyof typeof settingsZh, string> {
@@ -426,29 +488,53 @@ function settingsCopy(locale: string): Record<keyof typeof settingsZh, string> {
 }
 
 /** Plugin-page settings row: pick the model this plugin's planning call uses. */
-export function GitCommitSettingsPanel(props: { client: Client; locale?: string }) {
+export function GitCommitSettingsPanel(props: { client: Client; locale?: string; subscribeSettings?: (change: () => void, error?: (message: string) => void) => () => void }) {
   const hostLocale = useHostLocale(props.client)
   const text = settingsCopy(props.locale ?? hostLocale)
   const [settings, setSettings] = useState<GitCommitSettings | undefined>(undefined)
   const [choices, setChoices] = useState<ModelMenuChoice[]>([])
-  const [error, setError] = useState('')
-  const [note, setNote] = useState('')
+  const [error, setError] = useState<'' | 'failed' | 'stale'>('')
+  const [note, setNote] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [syncError, setSyncError] = useState('')
+  const operation = useRef({ epoch: 0, active: false, reading: false, writing: false, pending: false })
+  const refreshRef = useRef<() => void>(() => {})
 
   const call = useCallback(
     (endpoint: string, payload: unknown = {}) => props.client.connection.rpc.call(RPC_CHANNEL, endpoint, payload),
     [props.client],
   )
 
-  // Settings load once per client; the catalog effect below is keyed on route
-  // strings, so saving a new settings object never re-triggers either fetch.
-  useEffect(() => {
-    let live = true
+  const refresh = () => {
+    const state = operation.current
+    if (!state.active) return
+    if (state.reading || state.writing) { state.pending = true; return }
+    state.pending = false; state.reading = true; setBusy(true)
+    const epoch = state.epoch
     void rpc<GitCommitSettings>(call, 'settings', {}, text.failed).then(next => {
-      if (live) { setSettings(next); setError('') }
-    }).catch(() => { if (live) setError(text.failed) })
-    return () => { live = false }
-  }, [call, text.failed])
+      if (state.active && state.epoch === epoch && !state.pending) { setSettings(next); setError('') }
+    }).catch(() => {
+      if (state.active && state.epoch === epoch && !state.pending) setError('failed')
+    }).finally(() => {
+      if (!state.active || state.epoch !== epoch) return
+      state.reading = false; setBusy(false)
+      if (state.pending) refreshRef.current()
+    })
+  }
+  refreshRef.current = refresh
+  useEffect(() => {
+    const state = operation.current
+    state.epoch++; state.active = true; state.reading = false; state.writing = false; state.pending = false
+    setBusy(false); setSettings(undefined); setError(''); setNote(false)
+    refreshRef.current()
+    return () => { state.active = false; state.epoch++ }
+  }, [call])
+  useEffect(() => {
+    setSyncError('')
+    let live = true
+    const stop = props.subscribeSettings?.(() => { if (live) { setSyncError(''); refreshRef.current() } }, message => { if (live) setSyncError(message) })
+    return () => { live = false; stop?.() }
+  }, [props.subscribeSettings, props.client])
 
   const boundProvider = settings?.model.provider ?? ''
   const boundModel = settings?.model.model ?? ''
@@ -464,8 +550,11 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
   // One patch shape for both rows: the service replaces the whole row, so an
   // update to the toggle must carry the model it is not changing.
   const save = useCallback((patch: { model?: CommitModelRoute; allowFallback?: boolean }) => {
-    if (!settings) return
-    setBusy(true); setNote(''); setError('')
+    const state = operation.current
+    if (!settings || !state.active || state.writing || state.reading) return
+    state.writing = true
+    const epoch = state.epoch
+    setBusy(true); setNote(false); setError('')
     void rpc<GitCommitSettings>(call, 'settings.update', {
       settings: {
         model: patch.model ?? settings.model,
@@ -473,9 +562,13 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
       },
       expectedRevision: settings.revision,
     }, text.stale).then(next => {
-      setSettings(next); setNote(text.saved); setBusy(false)
+      if (state.active && state.epoch === epoch) { setSettings(next); setNote(true) }
     }).catch(() => {
-      setError(text.stale); setBusy(false)
+      if (state.active && state.epoch === epoch) setError('stale')
+    }).finally(() => {
+      if (!state.active || state.epoch !== epoch) return
+      state.writing = false; setBusy(false)
+      if (state.pending) refreshRef.current()
     })
   }, [call, settings, text.saved, text.stale])
 
@@ -483,8 +576,10 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
     return (
       <section className="gcm-root gcm-settings">
         {error
-          ? <p role="alert" className="dsh-ui-error">{error}</p>
+          ? <p role="alert" className="dsh-ui-error">{text[error]}</p>
           : <p role="status" className="dsh-ui-hint">{text.loading}</p>}
+        {syncError && <p role="status" className="dsh-ui-hint">{text.syncUnavailable}</p>}
+        <Button variant="ghost" size="sm" disabled={busy} onClick={() => refreshRef.current()}>{text.retry}</Button>
       </section>
     )
   }
@@ -496,8 +591,10 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
   return (
     <section className="gcm-root gcm-settings" data-testid="git-commit-settings">
       <div className="gcm-settings-status">
-        {error && <p role="alert" className="dsh-ui-error">{error}</p>}
-        {note && <p role="status" className="dsh-ui-notice">{note}</p>}
+        {syncError && <p role="status" className="dsh-ui-hint">{text.syncUnavailable}</p>}
+        <Button variant="ghost" size="sm" disabled={busy} onClick={() => refreshRef.current()}>{text.refresh}</Button>
+        {error && <p role="alert" className="dsh-ui-error">{text[error]}</p>}
+        {note && <p role="status" className="dsh-ui-notice">{text.saved}</p>}
       </div>
       <label className="dsh-ui-field">
         <span className="dsh-ui-label">{text.model}</span>
@@ -555,6 +652,8 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string 
 
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
+  const settingsSubscriber = createModelSettingsSubscriber(ctx, PLUGIN_NAME)
+  const subscribeSettings = (change: () => void, error?: (message: string) => void) => settingsSubscriber.subscribe(change, error)
   ctx.provide(GIT_COMMIT_CLIENT_SERVICE, { active: true })
   ctx.effect(() => client.locale.register(NS, { zh: { ...zh }, en: { ...en } }), 'git-commit.locale')
   // One stylesheet for both the header popover and the plugin-page settings,
@@ -569,7 +668,7 @@ export function apply(ctx: Context): void {
   }, 'git-commit.styles')
   ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
     { name: 'plugins.bundle.config', key: PLUGIN_NAME },
-    () => <GitCommitSettingsPanel client={client} />,
+    () => <GitCommitSettingsPanel client={client} subscribeSettings={subscribeSettings} />,
   )), 'git-commit.settings')
   ctx.effect(() => client.slots.inject('conversation.session.header.actions', () => client.slots.register(
     {

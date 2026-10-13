@@ -13,7 +13,16 @@ function writePackage(root, name, dependencies = {}) {
   const directory = `plugins/${name.split('/').pop()}`;
   mkdirSync(join(root, directory), { recursive: true });
   const pkg = { name, version: '1.2.3', directory };
-  writeFileSync(join(root, directory, 'package.json'), JSON.stringify({ name, version: pkg.version, type: 'module', files: ['index.js'], dependencies }));
+  writeFileSync(join(root, directory, 'package.json'), JSON.stringify({ name, version: pkg.version, type: 'module', files: ['index.js'], dependencies,
+    publishConfig: { access: 'public', registry: 'https://registry.npmjs.org/' } }));
+  mkdirSync(join(root, 'scripts'), { recursive: true });
+  const statesFile = join(root, 'scripts/plugin-release-states.json');
+  const data = { schemaVersion: 2, packages: [] };
+  try { data.packages = JSON.parse(readFileSync(statesFile, 'utf8')).packages; } catch {}
+  writeFileSync(join(root, 'ACCEPTANCE.md'), 'Fixture acceptance evidence.');
+  data.packages.push({ name, state: 'published', reason: { zh: '测试夹具', en: 'Test fixture' },
+    publication: { version: '1.2.3', publishedAt: '2026-10-01T00:00:00.000Z', integrity: 'sha512-' + 'A'.repeat(86) + '==' } });
+  writeFileSync(statesFile, JSON.stringify(data));
   writeFileSync(join(root, directory, 'index.js'), 'export const ready = true;\n'); return pkg;
 }
 const npm = (args, cwd) => execFileSync(process.platform === 'win32' ? 'cmd.exe' : 'npm', process.platform === 'win32' ? ['/d', '/s', '/c', 'npm', ...args] : args, { cwd, encoding: 'utf8', env: { ...process.env, npm_config_audit: 'false', npm_config_fund: 'false' } });
@@ -21,6 +30,11 @@ test('orders workspace dependencies before dependants regardless of directory or
   const root = fixture(t), base = writePackage(root, '@klarkxy/dsh-base');
   const feature = writePackage(root, '@klarkxy/dsh-feature', { [base.name]: 'workspace:*' });
   assert.deepEqual(orderedPackages(root, [feature, base]).map(p => p.name), [base.name, feature.name]);
+});
+test('orders explicitly selected local dependencies using ordinary version ranges too', t => {
+  const root = fixture(t), dependency = writePackage(root, '@klarkxy/dsh-z-dependency');
+  const consumer = writePackage(root, '@klarkxy/dsh-a-consumer', { [dependency.name]: '^1.2.3' });
+  assert.deepEqual(orderedPackages(root, [consumer, dependency]).map(p => p.name), [dependency.name, consumer.name]);
 });
 test('rejects missing release targets and cycles', t => {
   const root = fixture(t), a = writePackage(root, '@klarkxy/dsh-a', { '@klarkxy/dsh-b': 'workspace:*' });
@@ -58,7 +72,7 @@ test('staging preserves archive integrity without workspace dependencies', t => 
 });
 test('release handoff gate holds only migrated packages and rejects malformed data', t => {
   const root = fixture(t), migrated = writePackage(root, '@klarkxy/dsh-migrated'), other = writePackage(root, '@klarkxy/dsh-other');
-  const packages = [migrated, other]; mkdirSync(join(root, 'scripts'));
+  const packages = [migrated, other];
   const file = join(root, 'scripts/editor-plugin-migration.json');
   writeFileSync(file, JSON.stringify({ holdPublish: true, packages: [migrated] }));
   assert.deepEqual(releaseCandidates(root, packages), [other]);
@@ -71,7 +85,6 @@ test('release handoff gate holds only migrated packages and rejects malformed da
 test('held dependencies supply versions without joining the publication targets', t => {
   const root = fixture(t), held = writePackage(root, '@klarkxy/dsh-held');
   const child = writePackage(root, '@klarkxy/dsh-child', { [held.name]: 'workspace:*' });
-  mkdirSync(join(root, 'scripts'));
   writeFileSync(join(root, 'scripts/editor-plugin-migration.json'), JSON.stringify({ holdPublish: true, packages: [held] }));
   const workspace = releaseWorkspace(root, [child, held]);
   assert.deepEqual(workspace.packages, [held, child]);
@@ -98,7 +111,6 @@ test('held dependency versions must already exist on npm', async () => {
 
 test('review holds compose with the migration gate and can hold every public package', t => {
   const root = fixture(t), a = writePackage(root, '@klarkxy/dsh-a'), b = writePackage(root, '@klarkxy/dsh-b');
-  mkdirSync(join(root, 'scripts'));
   const file = join(root, 'scripts/npm-release-holds.json');
   writeFileSync(file, JSON.stringify({ packages: [{ name: a.name, reason: 'Pending host acceptance' }] }));
   assert.deepEqual(releaseCandidates(root, [a, b]), [b]);
@@ -109,7 +121,6 @@ test('review holds compose with the migration gate and can hold every public pac
 
 test('review holds reject malformed, duplicate and unknown package entries', t => {
   const root = fixture(t), a = writePackage(root, '@klarkxy/dsh-a');
-  mkdirSync(join(root, 'scripts'));
   for (const holds of [{}, { packages: null }, { packages: [null] },
     { packages: [{ name: a.name, reason: '' }] },
     { packages: [{ name: '@klarkxy/dsh-typo', reason: 'Pending' }] },

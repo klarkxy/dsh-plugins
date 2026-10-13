@@ -32,6 +32,9 @@ export interface ReadCursor {
   readonly offset: number
 }
 
+/** A source locator can reopen the same immutable cut in another reading mode. */
+export type SnapshotCursor = Omit<ReadCursor, 'kind' | 'filter' | 'index' | 'offset'> & { readonly kind: 'snapshot' }
+
 /** Continuation bound to one list filter and corpus stamp. */
 export interface ListCursor {
   readonly kind: 'list'
@@ -47,11 +50,16 @@ export interface ListCursor {
 export interface SearchCursor {
   readonly kind: 'search'
   readonly filter: string
-  readonly phase: 'same' | 'rest'
+  readonly phase: 'title' | 'same' | 'rest'
   readonly hostCursor: string
+  /** Re-read a partially consumed provider page at its original input cursor. */
+  readonly hostOffset?: number
+  readonly hostPageStamp?: string
+  readonly titleOffset?: number
+  readonly titleStamp?: string
 }
 
-export type PageCursor = ReadCursor | ListCursor | SearchCursor
+export type PageCursor = ReadCursor | SnapshotCursor | ListCursor | SearchCursor
 
 export function encodeCursor(cursor: PageCursor, key: CursorKey): string {
   const payload = JSON.stringify(cursor)
@@ -59,6 +67,10 @@ export function encodeCursor(cursor: PageCursor, key: CursorKey): string {
 }
 
 export function decodeCursor(token: string, kind: PageCursor['kind'], key: CursorKey): PageCursor {
+  function invalid(): never {
+    const field = kind === 'snapshot' ? 'snapshot' : 'cursor'
+    throw new SessionQueryError(`${field} must be a valid ${kind} token returned by this plugin; empty strings and altered tokens are invalid. Omit ${field} or pass null when starting without it.`, 'SESSION_QUERY_INVALID_CURSOR')
+  }
   const split = token.lastIndexOf('.')
   if (split <= 0) invalid()
   const encoded = token.slice(0, split)
@@ -103,16 +115,16 @@ function isCursor(value: unknown, kind: PageCursor['kind']): value is PageCursor
   if (value === null || typeof value !== 'object') return false
   const row = value as Record<string, unknown>
   if (row.kind !== kind) return false
-  if (kind === 'read') {
-    return text(row.sessionId, 1, 512)
+  if (kind === 'read' || kind === 'snapshot') {
+    const valid = text(row.sessionId, 1, 512)
       && bounded(row.cut, -1, Number.MAX_SAFE_INTEGER)
       && text(row.prefix, 1, MAX_DIGEST)
       && bounded(row.branchRevision, 0, Number.MAX_SAFE_INTEGER)
       && bounded(row.inheritedEventCount, 0, Number.MAX_SAFE_INTEGER)
       && bounded(row.createdAt, 0, Number.MAX_SAFE_INTEGER)
-      && text(row.filter, 1, MAX_TEXT)
+    return valid && (kind === 'snapshot' || (text(row.filter, 1, MAX_TEXT)
       && bounded(row.index, 0, MAX_INDEX)
-      && bounded(row.offset, 0, MAX_INDEX)
+      && bounded(row.offset, 0, MAX_INDEX)))
   }
   if (kind === 'list') {
     return text(row.filter, 1, MAX_TEXT)
@@ -120,8 +132,14 @@ function isCursor(value: unknown, kind: PageCursor['kind']): value is PageCursor
       && bounded(row.offset, 0, MAX_INDEX)
   }
   return text(row.filter, 1, MAX_TEXT)
-    && (row.phase === 'same' || row.phase === 'rest')
+    && (row.phase === 'title' || row.phase === 'same' || row.phase === 'rest')
     && text(row.hostCursor, 0, MAX_TEXT)
+    && (row.hostOffset === undefined || bounded(row.hostOffset, 0, MAX_INDEX))
+    && (row.hostPageStamp === undefined || text(row.hostPageStamp, 1, MAX_DIGEST))
+    && (!(typeof row.hostOffset === 'number' && row.hostOffset > 0) || row.hostPageStamp !== undefined)
+    && (row.titleStamp === undefined || text(row.titleStamp, 1, MAX_DIGEST))
+    && (row.titleOffset === undefined || bounded(row.titleOffset, 0, MAX_INDEX))
+    && (row.phase !== 'title' || (row.hostCursor === '' && row.titleOffset !== undefined && row.titleStamp !== undefined))
 }
 
 function text(value: unknown, min: number, max: number): value is string {
@@ -145,8 +163,4 @@ function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(item => stable(item)).join(',')}]`
   const row = value as Record<string, unknown>
   return `{${Object.keys(row).sort().map(key => `${JSON.stringify(key)}:${stable(row[key])}`).join(',')}}`
-}
-
-function invalid(): never {
-  throw new SessionQueryError('session query continuation is invalid', 'SESSION_QUERY_INVALID_CURSOR')
 }

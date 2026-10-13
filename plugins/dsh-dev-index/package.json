@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-dev-index",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "DSH Docs: read the official DSH documentation in the Plugins page; Creator mode searches docs and checks plugin npm metadata with native tools.",
   "icon": "./icon.svg",
   "keywords": [
@@ -78,6 +78,9 @@
     "@deepseek-ai/schemastery": ">=3.18.4",
     "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2"
   },
+  "dependencies": {
+    "@klarkxy/dsh-plugin-kit": "workspace:*"
+  },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-agent-preset-registry": {
       "optional": true
@@ -103,6 +106,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "535677b4a757c53e81a174500ca1408591b3bc10c5bf6c5969cdcb0863ca8df8"
+    "contentHash": "023408b42598f41437fc3923a9c2e939b4d59e1ded45523a02c59024fabad5d6"
   }
 }

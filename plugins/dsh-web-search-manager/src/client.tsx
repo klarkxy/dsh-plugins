@@ -1,9 +1,10 @@
+import { localErrorText } from './client-error.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { Button, Input, SegmentedTabs, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { createPluginReadGate } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { PROVIDER_PRICING_CHECKED, searchProviderInfo, usesBundledPricing } from './provider-info.ts'
+import { PROVIDER_PRICING_CHECKED, providerDisplayLabel, searchProviderInfo, usesBundledPricing } from './provider-info.ts'
 import {
   WEB_SEARCH_RPC_CHANNEL, WEB_MANAGER_OWNER, pickActiveSearch, safeConfigurationUrl,
   type ProviderView, type RpcResult, type WebSettings, type WebStatus,
@@ -290,6 +291,26 @@ const copy = {
 
 type Copy = (typeof copy)['zh'] | (typeof copy)['en']
 
+// Keep action outcomes as data so a language switch also updates existing notices.
+type UiMessage = string | { key: keyof Copy } | { sources: number } | { moved: string; position: number } | { invalid: LimitKey[] }
+class UiError extends Error {
+  constructor(readonly key: keyof Copy) { super(key) }
+}
+
+function uiMessage(message: UiMessage, locale: 'zh' | 'en', providers: ProviderView[] = []): string {
+  if (typeof message === 'string') return localErrorText(message, locale)
+  if ('key' in message) return copy[locale][message.key]
+  if ('sources' in message) return testOkText(locale, message.sources)
+  if ('moved' in message) {
+    const provider = providers.find(item => item.id === message.moved)
+    return movedText(locale, provider ? providerDisplayLabel(provider, locale) : message.moved, message.position)
+  }
+  return message.invalid.map(key => {
+    const [, min, max] = LIMITS.find(item => item[0] === key)!
+    return limitInvalidText(locale, copy[locale][key], min, max)
+  }).join(' ')
+}
+
 function movedText(locale: 'zh' | 'en', label: string, position: number): string {
   return locale === 'zh' ? `${label} 已移至第 ${position} 位` : `${label} moved to position ${position}`
 }
@@ -378,10 +399,10 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   const [pendingOrder, setPendingOrder] = useState<string[] | null>(null)
   const [dragSource, setDragSource] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
-  const [sortAnnouncement, setSortAnnouncement] = useState('')
-  const [note, setNote] = useState('')
-  const [error, setError] = useState('')
-  const [loadError, setLoadError] = useState('')
+  const [sortAnnouncement, setSortAnnouncement] = useState<UiMessage>('')
+  const [note, setNote] = useState<UiMessage>('')
+  const [error, setError] = useState<UiMessage>('')
+  const [loadError, setLoadError] = useState<UiMessage>('')
   const [writable, setWritable] = useState<Record<string, boolean>>({})
   const statusRef = useRef(status)
   statusRef.current = status
@@ -465,7 +486,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
       return next
     } catch (cause) {
       if (!mountedRef.current || mine !== requestSeq.current) return
-      setLoadError(cause instanceof Error && cause.message ? cause.message : text.failed)
+      setLoadError(cause instanceof Error && cause.message ? cause.message : { key: 'failed' })
       if (source === 'poll') return
       throw cause
     } finally {
@@ -476,7 +497,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   useEffect(() => {
     mountedRef.current = true
     readGate.reset()
-    void load().catch(cause => setLoadError(cause instanceof Error && cause.message ? cause.message : text.failed))
+    void load().catch(cause => setLoadError(cause instanceof Error && cause.message ? cause.message : { key: 'failed' }))
     const bind = () => bindStatusRefresh({
       isHidden: () => isPageHidden(hiddenRef.current),
       tick: async () => { await load(false, 'poll').catch(() => {}) },
@@ -528,7 +549,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
     busyRef.current = true
     setBusy(true); setNote(''); setError('')
     try { await run() }
-    catch (cause) { setError(cause instanceof Error && cause.message ? cause.message : text.failed); await load().catch(() => {}) }
+    catch (cause) { setError(cause instanceof UiError ? { key: cause.key } : cause instanceof Error && cause.message ? cause.message : { key: 'failed' }); await load().catch(() => {}) }
     finally { busyRef.current = false; setBusy(false) }
   }
 
@@ -556,7 +577,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
       const snapshot = keys[provider.id] ?? ''
       const typed = snapshot.trim()
       if (!ownsProviderConfiguration(provider) || !provider.credentialRef || !typed) continue
-      if (writable[provider.credentialRef] === false) throw new Error(text.readOnly)
+      if (writable[provider.credentialRef] === false) throw new UiError('readOnly')
       unwrap(await client.remote.credentials.set(provider.credentialRef, typed))
       setKeys(current => current[provider.id] === snapshot ? { ...current, [provider.id]: '' } : current)
     }
@@ -567,13 +588,13 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
     unwrap(await client.remote.credentials.unset(provider.credentialRef))
     setKeys(current => ({ ...current, [provider.id]: '' }))
     await load()
-    setNote(text.keyDeleted)
+    setNote({ key: 'keyDeleted' })
   }
 
   if (!status || !limitDraft) {
     return <section className="web-search-settings ws-root dsh-ui-panel">
       {loadError
-        ? <p role="alert" className="dsh-ui-error">{text.loadFailed}{loadError}</p>
+        ? <p role="alert" className="dsh-ui-error">{text.loadFailed}{uiMessage(loadError, locale, status?.providers)}</p>
         : <p role="status" className="dsh-ui-hint">{text.loading}</p>}
       {loadError ? <div className="dsh-ui-actions"><Button variant="outline" size="sm" disabled={busy}
         onClick={() => void action(async () => { await load() })}>{text.reconnect}</Button></div> : null}
@@ -606,7 +627,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
     pendingRef.current = next
     setPendingOrder(next)
     if (keyboard) refocusRef.current = id
-    setSortAnnouncement(movedText(locale, backends.find(provider => provider.id === id)?.label ?? id, nextIndex + 1))
+    setSortAnnouncement({ moved: id, position: nextIndex + 1 })
     clearTimeout(timerRef.current)
     const delay = keyboard ? REORDER_DEBOUNCE_MS : 0
     timerRef.current = setTimeout(() => {
@@ -625,14 +646,14 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   function saveAll() {
     const parsed: Partial<Record<LimitKey, number>> = {}
     const nextInvalid: Partial<Record<LimitKey, boolean>> = {}
-    const messages: string[] = []
+    const messages: LimitKey[] = []
     for (const [key, min, max] of LIMITS) {
       const value = parseLimit(limitDraft![key], min, max)
-      if (value === undefined) { nextInvalid[key] = true; messages.push(limitInvalidText(locale, text[key], min, max)) }
+      if (value === undefined) { nextInvalid[key] = true; messages.push(key) }
       else parsed[key] = value
     }
     setInvalid(nextInvalid)
-    if (messages.length) { setNote(''); setError(messages.join(' ')); return }
+    if (messages.length) { setNote(''); setError({ invalid: messages }); return }
     void action(async () => {
       await saveKeys()
       const current = statusRef.current!
@@ -642,7 +663,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
       })
       adopt(next, true)
       await load()
-      setNote(text.saved)
+      setNote({ key: 'saved' })
     })
   }
 
@@ -656,13 +677,13 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
         { value: 'limits', label: text.tabLimits, id: tabsId + '-limits-tab', panelId: tabsId + '-limits-panel' },
       ]}
     />
-    <span className="ws-sr-only" role="status" aria-live="polite">{sortAnnouncement}</span>
-    {error && <p role="alert" className="dsh-ui-error">{error}</p>}
+    <span className="ws-sr-only" role="status" aria-live="polite">{uiMessage(sortAnnouncement, locale, saved.providers)}</span>
+    {error && <p role="alert" className="dsh-ui-error">{uiMessage(error, locale, saved.providers)}</p>}
     {loadError ? <div className="dsh-ui-stack">
-      <p role="alert" className="dsh-ui-error">{text.loadFailed}{loadError}</p>
+      <p role="alert" className="dsh-ui-error">{text.loadFailed}{uiMessage(loadError, locale, status?.providers)}</p>
       <Button variant="outline" size="sm" disabled={busy} onClick={() => void action(async () => { await load() })}>{text.reconnect}</Button>
     </div> : null}
-    {note && <p role="status" className="dsh-ui-notice">{note}</p>}
+    {note && <p role="status" className="dsh-ui-notice">{uiMessage(note, locale, saved.providers)}</p>}
     {saved.storageFailed && <p role="alert" className="dsh-ui-banner dsh-ui-banner--danger">{text.storageFailed}</p>}
     <div role="tabpanel" id={tabsId + '-providers-panel'} aria-labelledby={tabsId + '-providers-tab'}
       hidden={tab !== 'providers'} tabIndex={0}>
@@ -729,7 +750,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
                   <circle cx="5" cy="15" r="1.5" /><circle cx="11" cy="15" r="1.5" />
                 </svg>}
                 draggable={!busy} aria-disabled={busy}
-                aria-label={text.dragPrefix + provider.label}
+                aria-label={text.dragPrefix + providerDisplayLabel(provider, locale)}
                 title={text.dragHint}
                 onDragStart={event => {
                   if (busy) { event.preventDefault(); return }
@@ -748,24 +769,26 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
                 }} /> : <span className="web-search-rank-index">{participating ? rank + 1 : '—'}</span>}
               <div className="web-search-provider">
                 <div className="web-search-provider-heading">
-                  <strong className="dsh-ui-heading">{provider.label}</strong>
+                  <strong className="dsh-ui-heading">{providerDisplayLabel(provider, locale)}</strong>
                   <span className="ws-provider-note">
                     <StateDot state={dormant ? 'idle' : provider.configured ? 'done' : 'warning'} />
                     <span>{dormant ? text.dormant : provider.configured ? text.available : text.unavailable}</span>
                   </span>
                   {active && <Tag tone="success">{text.inUse}</Tag>}
-                  {provider.signupUrl && <AppLink url={provider.signupUrl} label={provider.label + ' ' + text.signup}>{text.signup}</AppLink>}
+                  {provider.signupUrl && <AppLink url={provider.signupUrl} label={providerDisplayLabel(provider, locale) + ' ' + text.signup}>{text.signup}</AppLink>}
                 </div>
                 <div className="web-search-provider-info">
                   {info.description ? <p>{info.description}</p> : null}
                   <p>{info.pricing}{info.pricingUrl && <> <AppLink url={info.pricingUrl}
-                    label={provider.label + ' ' + text.pricing}>{provider.id === 'ddg' ? text.website : text.pricing}</AppLink></>}</p>
+                    label={providerDisplayLabel(provider, locale) + ' ' + text.pricing}>{provider.id === 'ddg' ? text.website : text.pricing}</AppLink></>}</p>
                 </div>
                 {access.kind === 'link' ? <p className="dsh-ui-hint"><AppLink url={access.url} label={text.openConfig}>{text.openConfig}</AppLink></p>
                   : access.kind === 'owner' ? <p className="dsh-ui-hint">{text.ownerSettings}{access.name}</p>
                     : access.kind === 'unknown' ? <p className="dsh-ui-hint">{text.unknownOwner}</p>
                       : null}
-                {shared && participating && owned ? <small className="dsh-ui-meta">{provider.credentialHint ?? text.sharedKey}</small> : null}
+                {shared && participating && owned ? <small className="dsh-ui-meta">{provider.credentialHint === '与模型设置共用 Key'
+                  ? locale === 'zh' ? provider.credentialHint : 'Shares a key with model settings'
+                  : provider.credentialHint ?? text.sharedKey}</small> : null}
                 {showKey ? <label className="dsh-ui-field">
                   <span className="dsh-ui-label">API Key</span>
                   <Input className="ws-input" type="password" autoComplete="off" spellCheck={false}
@@ -776,7 +799,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
                 </label> : null}
                 {showKey || (needsKey && !shared && provider.configured) ? <div className="dsh-ui-actions">
                   {showKey ? <Button variant="outline" size="sm" disabled={busy || readOnly || !typedKey}
-                    onClick={() => void action(async () => { await saveKeys(provider); await load(); setNote(text.keySaved) })}>
+                    onClick={() => void action(async () => { await saveKeys(provider); await load(); setNote({ key: 'keySaved' }) })}>
                     {text.saveKey}</Button> : null}
                   {needsKey && !shared && provider.configured ? <ConfirmButton
                     disabled={busy || readOnly}
@@ -787,7 +810,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
               <div className="web-search-rank-move">
                 <Switch
                   checked={participating}
-                  label={provider.label}
+                  label={providerDisplayLabel(provider, locale)}
                   disabled={busy}
                   onChange={next => {
                     const following = next ? [...order, provider.id] : order.filter(id => id !== provider.id)
@@ -808,7 +831,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
             await saveKeys()
             const result = await call<{ sources: number }>('test')
             await load()
-            setNote(testOkText(locale, result.sources))
+            setNote({ sources: result.sources })
           })}>{text.test}</Button>
         </div> : null}
       </article>}
@@ -850,7 +873,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
               }}>
               {fetchDormant && <option value={fetchId}>{fetchId} · {text.dormant}</option>}
               {saved.providers.filter(provider => provider.kind === 'fetch').map(provider =>
-                <option key={provider.id} value={provider.id}>{provider.label}{provider.configured ? '' : ' · ' + text.unavailable}</option>)}
+                <option key={provider.id} value={provider.id}>{providerDisplayLabel(provider, locale)}{provider.configured ? '' : ' · ' + text.unavailable}</option>)}
             </select>
           </label>
           {fetchAccess?.kind === 'link' ? <p className="dsh-ui-hint"><AppLink url={fetchAccess.url} label={text.openConfig}>{text.openConfig}</AppLink></p>

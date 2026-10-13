@@ -3,11 +3,11 @@ import { modelRouteOverride } from '@klarkxy/dsh-model-route'
 import {
   DEFAULT_MAX_OUTPUT_TOKENS, RECENT_LOG_COUNT,
   defaultSettings, normalizeFallback, type CommitGroupResult, type CommitModelInfo, type CommitRunResult,
-  type GitCommitSettings, type GitCommitStatus,
+  type GitCommitSettings, type GitCommitStatus, type PartialCommitResult,
 } from './contracts.ts'
 import {
-  commitGroups, diffAgainstHead, execGit, fallbackGroup, isGitMissing, pathVersions, recentSubjects, repoInfo,
-  untrackedPreview, workspaceSnapshot, workingTreeChanges, type ChangedFile, type GitRunner, type UntrackedPreview,
+  commitGroups, diffAgainstHead, execGit, fallbackGroup, isGitMissing, PartialCommitError, pathVersions, recentSubjects, repoInfo,
+  untrackedPreview, workspaceSnapshot, workingTreeChanges, type ChangedFile, type ExecutedCommit, type GitRunner, type UntrackedPreview,
 } from './git.ts'
 import { buildPlanInput, parsePlan, planSystemPrompt, type PlanGroup } from './plan.ts'
 
@@ -26,6 +26,7 @@ export interface AgentStoreLike {
 
 export interface GitCommitServiceDeps {
   readonly plugin: string
+  readonly onSettingsChanged?: (revision: number) => void
   readonly llm: LlmTextCaller
   readonly host?: unknown
   readonly sessions: SessionStoreLike
@@ -41,10 +42,13 @@ export interface GitCommitServiceDeps {
 
 export class CommitRunError extends Error {
   readonly code: string
-  constructor(code: string, message: string) {
+  /** Commits already created when this run stopped. Absent when nothing was written. */
+  readonly partial?: PartialCommitResult
+  constructor(code: string, message: string, partial?: PartialCommitResult) {
     super(message)
-    this.name = 'CommitRunError'
+    this.name = code === 'cancelled' ? 'AbortError' : 'CommitRunError'
     this.code = code
+    this.partial = partial
   }
 }
 
@@ -75,6 +79,8 @@ export class GitCommitService {
   private settingsFailure: CommitRunError | undefined
   private settingsAdopted = false
   private disposed = false
+  /** Aborted on unload so an in-flight model plan receives the same signal as a cancelled request. */
+  private readonly lifetime = new AbortController()
 
   constructor(deps: GitCommitServiceDeps) {
     this.deps = deps
@@ -102,13 +108,24 @@ export class GitCommitService {
 
   /** Existing synchronous snapshot API; host operations wait for initialization first. */
   getSettings(): GitCommitSettings {
+    this.workSignal()
     if (this.settingsFailure) throw this.settingsFailure
     return structuredClone(this.settings)
   }
 
   async ready(): Promise<void> {
+    this.workSignal()
     await this.settingsReady
+    this.workSignal()
     if (this.settingsFailure) throw this.settingsFailure
+  }
+
+  /** Request cancellation and plugin unload share one signal. A disposed service rejects before any new work. */
+  private workSignal(signal?: AbortSignal): AbortSignal {
+    if (this.disposed || this.lifetime.signal.aborted) {
+      throw new CommitRunError('disposed', 'dsh-git-commit: plugin is no longer active')
+    }
+    return signal ? AbortSignal.any([signal, this.lifetime.signal]) : this.lifetime.signal
   }
 
   private async waitForSettings(signal?: AbortSignal): Promise<void> {
@@ -149,7 +166,8 @@ export class GitCommitService {
       }
       await this.deps.settings?.save(next)
       this.settings = next
-      return this.getSettings()
+      try { this.deps.onSettingsChanged?.(next.revision) } catch {}
+      return structuredClone(next)
     })
     this.settingsPending = result.then(() => {}, () => {})
     return result
@@ -159,36 +177,40 @@ export class GitCommitService {
 
   async dispose(): Promise<void> {
     this.disposed = true
+    this.lifetime.abort()
     await this.settingsReady
     await this.settingsPending
     await this.running?.catch(() => {})
   }
 
-  private async resolveRepo(sessionId: string): Promise<{ root: string; branch: string }> {
+  private async resolveRepo(sessionId: string, signal?: AbortSignal): Promise<{ root: string; branch: string }> {
     const session = this.deps.sessions.get(sessionId)
     if (!session) throw new CommitRunError('no-session', 'dsh-git-commit: session is not live on this host')
     const cwd = normalizeCwd(session.header?.cwd)
     if (!cwd) throw new CommitRunError('no-cwd', 'dsh-git-commit: session has no working directory')
     try {
-      return await repoInfo(this.run, cwd)
+      return await repoInfo(this.run, cwd, signal)
     } catch (error) {
+      signal?.throwIfAborted()
       if (isGitMissing(error)) throw new CommitRunError('no-git', 'dsh-git-commit: git executable not found')
       throw new CommitRunError('not-a-repo', 'dsh-git-commit: session directory is not inside a git repository')
     }
   }
 
-  async status(sessionId: string): Promise<GitCommitStatus> {
-    await this.ready()
+  async status(sessionId: string, signal?: AbortSignal): Promise<GitCommitStatus> {
+    const work = this.workSignal(signal)
+    await this.waitForSettings(work)
     let resolved
     try {
-      resolved = await this.resolveRepo(sessionId)
+      resolved = await this.resolveRepo(sessionId, work)
     } catch (error) {
       if (error instanceof CommitRunError) {
         return { available: false, reason: error.code, detail: error.message, workspace: { files: 0 } }
       }
       throw error
     }
-    const changes = await workingTreeChanges(this.run, resolved.root)
+    const changes = await workingTreeChanges(this.run, resolved.root, work)
+    work.throwIfAborted()
     const selected = this.selectedModel(sessionId)
     const model = modelInfo(selected.route, selected.source)
     return {
@@ -201,22 +223,30 @@ export class GitCommitService {
   }
 
   async commit(sessionId: string, signal?: AbortSignal): Promise<CommitRunResult> {
+    if (this.disposed || this.lifetime.signal.aborted) {
+      throw new CommitRunError('disposed', 'dsh-git-commit: plugin is no longer active')
+    }
     if (this.running) throw new CommitRunError('busy', 'dsh-git-commit: a commit run is already in progress')
-    const run = this.runCommit(sessionId, signal)
+    const work = this.workSignal(signal)
+    const run = this.runCommit(sessionId, work)
     this.running = run
     try {
       return await run
+    } catch (error) {
+      if (error instanceof CommitRunError && error.partial) throw error
+      if (work.aborted) throw new CommitRunError('cancelled', 'dsh-git-commit: commit run cancelled')
+      throw error
     } finally {
       this.running = undefined
     }
   }
 
-  private async runCommit(sessionId: string, signal?: AbortSignal): Promise<CommitRunResult> {
+  private async runCommit(sessionId: string, signal: AbortSignal): Promise<CommitRunResult> {
     await this.waitForSettings(signal)
-    if (this.disposed) throw new CommitRunError('cancelled', 'dsh-git-commit: plugin is no longer active')
+    if (this.disposed || signal?.aborted) throw new CommitRunError('cancelled', 'dsh-git-commit: plugin is no longer active')
     const session = this.deps.sessions.get(sessionId)
     const sessionCwd = normalizeCwd(session?.header?.cwd)
-    const resolved = await this.resolveRepo(sessionId)
+    const resolved = await this.resolveRepo(sessionId, signal)
     const assertReady = () => {
       signal?.throwIfAborted()
       if (this.disposed || !this.deps.llm) throw new CommitRunError('cancelled', 'dsh-git-commit: plugin is no longer active')
@@ -243,6 +273,7 @@ export class GitCommitService {
     ])
     const untracked: UntrackedPreview[] = []
     for (const file of selected) {
+      assertReady()
       if (file.status === 'untracked') untracked.push(await this.preview(resolved.root, file.path))
     }
 
@@ -258,13 +289,14 @@ export class GitCommitService {
           system: planSystemPrompt(),
           text: buildPlanInput({ files: selected, recentSubjects: subjects, stat, diff, untracked }),
           maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
-          signal: signal ?? new AbortController().signal,
+          signal,
           sessionId,
         })
         model = modelInfo(result, planned.source)
         groups = parsePlan(result.text, selected)
         if (!groups) planFailure = 'the model returned a plan that does not cover the change set'
       } catch (error) {
+        assertReady()
         if (error instanceof CommitRunError) throw error
         planFailure = error instanceof Error ? error.message : String(error)
       }
@@ -283,25 +315,50 @@ export class GitCommitService {
       throw new CommitRunError('workspace-changed', 'dsh-git-commit: workspace changed during planning; retry the commit')
     }
     const effective = groups ?? [fallbackGroup(selected, looksChinese(subjects) ? 'zh' : 'en')]
-    const executed = await commitGroups(this.run, resolved.root, effective, selected, signal, async () => {
-      assertReady()
-      const currentBranchRef = await this.run(['symbolic-ref', '--quiet', 'HEAD'], { cwd: resolved.root, signal }).catch(() => 'DETACHED')
-      if (currentBranchRef !== branchRef) {
-        throw new CommitRunError('workspace-changed', 'dsh-git-commit: branch changed during the commit run')
+    const describe = (executed: readonly ExecutedCommit[]): CommitGroupResult[] => {
+      const commits: CommitGroupResult[] = []
+      for (let index = 0; index < executed.length; index += 1) {
+        const result = executed[index]
+        const group = effective[index]
+        if (!result || !group || result.skipped) continue
+        commits.push({ hash: result.hash, message: group.message, files: [...group.files] })
       }
-      if (await pathVersions(this.run, resolved.root, paths, signal) !== originalVersions) {
-        throw new CommitRunError('workspace-changed', 'dsh-git-commit: selected file changed during the commit run')
-      }
-      // A new merge conflict must never be passed to git add or git commit.
-      await workingTreeChanges(this.run, resolved.root, signal)
-    })
-    const commits: CommitGroupResult[] = []
-    for (let index = 0; index < effective.length; index += 1) {
-      const result = executed[index]
-      const group = effective[index]
-      if (!result || !group || result.skipped) continue
-      commits.push({ hash: result.hash, message: group.message, files: group.files })
+      return commits
     }
+    let executed: ExecutedCommit[]
+    try {
+      executed = await commitGroups(this.run, resolved.root, effective, selected, signal, async () => {
+        assertReady()
+        const currentBranchRef = await this.run(['symbolic-ref', '--quiet', 'HEAD'], { cwd: resolved.root, signal }).catch(() => 'DETACHED')
+        if (currentBranchRef !== branchRef) {
+          throw new CommitRunError('workspace-changed', 'dsh-git-commit: branch changed during the commit run')
+        }
+        if (await pathVersions(this.run, resolved.root, paths, signal) !== originalVersions) {
+          throw new CommitRunError('workspace-changed', 'dsh-git-commit: selected file changed during the commit run')
+        }
+        // A new merge conflict must never be passed to git add or git commit.
+        await workingTreeChanges(this.run, resolved.root, signal)
+      })
+    } catch (error) {
+      if (!(error instanceof PartialCommitError)) throw error
+      const commits = describe(error.commits)
+      const cause = error.cause
+      const cancelled = signal?.aborted
+        || (typeof cause === 'object' && cause !== null && (cause as { code?: unknown }).code === 'cancelled')
+        || (cause instanceof Error && cause.name === 'AbortError')
+      const code = cause instanceof CommitRunError ? cause.code : cancelled ? 'cancelled' : 'commit-failed'
+      const message = cause instanceof Error ? cause.message : String(cause)
+      throw new CommitRunError(code, message, {
+        branch: resolved.branch,
+        commits,
+        fallback: groups === undefined,
+        failure: { code, message },
+        remaining: effective.slice(error.commits.length + (error.uncertain ? 1 : 0)).map(group => ({ message: group.message, files: [...group.files] })),
+        ...(error.uncertain ? { uncertain: [error.uncertain] } : {}),
+        ...(model ? { model } : {}),
+      })
+    }
+    const commits = describe(executed)
     if (commits.length === 0) throw new CommitRunError('no-changes', 'dsh-git-commit: nothing was committed')
     return {
       branch: resolved.branch,

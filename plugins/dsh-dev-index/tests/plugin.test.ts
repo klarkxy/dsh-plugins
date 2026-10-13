@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CREATOR_PRESET_ID } from "@klarkxy/dsh-plugin-kit/contracts";
 
 import { CREATOR_GUIDANCE, OFFICIAL_LLMS_TXT, OFFICIAL_REPOSITORY } from "../src/creator-guidance.js";
 import { apply, resolveConfig, type CreatorPromptHost } from "../src/index.js";
@@ -12,7 +13,7 @@ describe("creator documentation guidance", () => {
 
   it("contributes official docs only to the Creator preset", () => {
     let section: Parameters<CreatorPromptHost["systemPrompt"]["section"]>[0] | undefined;
-    let preset = "cordis";
+    let preset: string = CREATOR_PRESET_ID;
     const toolNames: string[] = [];
     apply({
       tools: { register(tool: { name: string }) { toolNames.push(tool.name); return () => undefined; } },

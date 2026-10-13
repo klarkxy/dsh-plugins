@@ -1,5 +1,8 @@
 # @klarkxy/dsh-web-search-manager
 
+<!-- release-state-note -->
+The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
+
 Choose which service answers the agent's web searches, set the limits every request runs under, and let the agent read public pages — all from one settings page.
 
 [简体中文](docs/README.zh-CN.md)

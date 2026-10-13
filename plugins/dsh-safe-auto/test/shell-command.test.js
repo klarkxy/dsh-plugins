@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { analyzeShell, isReadonly, firstDangerousRoot, rootName } from '../src/shell-command.js';
+import { analyzeShell, isReadonly, isSafeStaticExposure, firstDangerousRoot, rootName } from '../src/shell-command.js';
 import { hardRisk } from '../src/policy.js';
 
 const readonly = command => isReadonly(analyzeShell(command));
+const staticExposure = command => isSafeStaticExposure(analyzeShell(command));
 const danger = command => firstDangerousRoot(analyzeShell(command));
 const git = 'git --no-pager --no-optional-locks --no-lazy-fetch -c core.fsmonitor=false ';
 const diffControls = '--no-ext-diff --no-textconv --ignore-submodules=all ';
@@ -87,6 +88,40 @@ test('read-only proof retains ordinary reads and original controlled Git forms',
     g('ls-files -s'), g('ls-files --deleted'), g('ls-files --others --exclude-standard'),
     'git --version', 'git version', 'git --no-pager config --get user.name',
   ]) assert.equal(readonly(command), true, JSON.stringify(command));
+});
+
+test('static privacy proof allows only metadata and literal output across every invocation', () => {
+  for (const command of [
+    'ls -la .codex/skills', 'pwd', 'stat -c %s package.json', 'find . -type f -maxdepth 2 -print',
+    'du -sh . && df -h', 'echo ordinary-text', 'printf "%s" ordinary-text', 'ls | pwd',
+    'CI=true LANG=C ls 2>&1', 'ls > /dev/null', 'date', 'date -r package.json +%F',
+    'git --version', 'git --no-pager config --get user.name', 'git --no-pager config --get user.email',
+    g('branch --show-current'), g('branch --list "feature*"'), g('tag -l "v1*"'),
+    g('rev-parse --show-toplevel'), g('ls-files -s'), g('ls-tree --name-only HEAD'),
+  ]) {
+    assert.equal(readonly(command), true, command);
+    assert.equal(staticExposure(command), true, command);
+  }
+});
+
+test('read-only content, process and environment exposure never earns static privacy proof', () => {
+  for (const command of [
+    'cat package.json', 'cat ordinary | jq .name', 'head -5 input', 'tail -5 input',
+    'grep -rn pattern .', 'rg --hidden --no-ignore pattern .', 'rg --files .',
+    'ps aux', 'ps -o pid,args', 'printenv', 'printenv API_KEY', 'printenv --null',
+    'strings input', 'xxd -p input', 'date --file=input', 'true < input',
+    'ls | head -5', 'cat input | wc -l',
+    g('diff ' + diffControls + '--cached --stat'), history('-10'),
+    g('show ' + diffControls + '--no-show-signature --format=%H HEAD'),
+    g('cat-file -p HEAD'), g('cat-file -t HEAD'), g('remote -v'), g('branch -v'), g('tag -l -n'),
+    'git --no-pager config --list', 'git --no-pager config --get core.fsmonitor',
+    'git --no-pager config --get-all user.email', 'git --no-pager config --get-regexp user.*',
+    'npm install', 'echo "$HOME"',
+  ]) assert.equal(staticExposure(command), false, command);
+  for (const command of ['printenv', 'printenv API_KEY', 'printenv --null']) {
+    assert.equal(readonly(command), false, command);
+    assert.equal(hardRisk({ tool: 'bash', args: { command } }), undefined, 'review fallback: ' + command);
+  }
 });
 test('read-only proof: write-capable or unknown commands fail closed', () => {
   for (const command of [
@@ -219,7 +254,7 @@ test('decoded argv, environment and redirects preserve sensitive hard refusals a
     "cat '.env' " + 'x'.repeat(11000),
   ]) {
     for (const tool of ['bash', 'pwsh', 'shell']) {
-      assert.equal(hardRisk({ tool, args: { command } })?.code, 'SENSITIVE_COMMAND', tool + ': ' + command);
+      assert.match(hardRisk({ tool, args: { command } })?.code ?? '', /^(?:SENSITIVE_COMMAND|USE_SAFE_READ)$/, tool + ': ' + command);
     }
   }
 });

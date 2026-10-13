@@ -2,9 +2,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import { registerModelSettings, notifyModelSettingsChanged, type ModelSettingsEvents } from '@klarkxy/dsh-plugin-kit/model-settings'
 import { ChatGptError, DEFAULT_SETTINGS, PLUGIN_NAME, RPC_CHANNEL, parseSettings, type Settings, type RpcResult } from './contracts.ts'
 import { CodexRuntime } from './runtime.ts'
 import { registerTools, type ToolHost } from './tools.ts'
+import { chatGptDiagnostic } from './client-copy.ts'
 
 export const name = PLUGIN_NAME
 export const inject = ['tools', 'sandboxPolicy', 'attachments', 'storageDomain', 'connection', 'webServer'] as const
@@ -50,13 +52,18 @@ export function apply(ctx: Context): void {
           if (active) throw new ChatGptError('busy', '请等当前调用完成后保存配置。')
           const next = { settings: parseSettings(parsed.data.settings), revision: revision + 1 }
           settingsUpdating = true
+          let committed = false
           try {
             await (await domain).table('settings').put('config', next)
             settings = next.settings; revision = next.revision
+            committed = true
             await runtime.dispose()
             runtime = new CodexRuntime(() => settings)
             return next
-          } finally { settingsUpdating = false }
+          } finally {
+            settingsUpdating = false
+            if (committed) notifyModelSettingsChanged(ctx, PLUGIN_NAME, next.revision)
+          }
         })
         settingsWrites = update.then(() => {}, () => {})
         return { ok: true, value: await update }
@@ -82,5 +89,34 @@ export function apply(ctx: Context): void {
     }
   }
   ctx.effect(() => registerHostRpc(host, RPC_CHANNEL, rpc), 'chatgpt.rpc')
+  ctx.effect(() => registerModelSettings(ctx as unknown as ModelSettingsEvents, {
+    ns: PLUGIN_NAME, title: 'ChatGPT',
+    async read(signal) {
+      return run(signal, async combined => {
+        // Capture the row before querying Codex: a settings save must not pair
+        // an old model selection with a newer revision after the await.
+        const snapshot = { settings: { ...settings }, revision }
+        const status = await runtime.status(combined)
+        const current = { provider: snapshot.settings.model ? 'codex' : '', model: snapshot.settings.model,
+          ...(snapshot.settings.effort ? { reasoningEffort: snapshot.settings.effort } : {}) }
+        return { revision: snapshot.revision, fields: [{ path: ['model'], label: { zh: 'ChatGPT 模型', en: 'ChatGPT model' }, current,
+          followLabel: { zh: 'Codex 默认模型', en: 'Codex default model' }, allowFollow: true }],
+          catalog: { groups: [{ id: 'codex', name: 'Codex', models: status.models.map(model => ({
+            id: model.id, name: model.label, reasoning: { efforts: model.efforts.map(id => ({ id, name: id })) },
+          })) }] },
+          ...(!status.available ? { catalogError: chatGptDiagnostic(status.error || 'Codex 模型目录不可用。') } : {}),
+        }
+      })
+    },
+    async write(path, route, expectedRevision, signal) {
+      if (path.length !== 1 || path[0] !== 'model') throw new Error('Unknown ChatGPT model setting')
+      if (route.provider && route.provider !== 'codex') throw new Error('ChatGPT requires a Codex model')
+      await ready; signal.throwIfAborted()
+      const result = await rpc('settings.update', { settings: { ...settings, model: route.model,
+        effort: route.reasoningEffort || '' }, expectedRevision }, signal)
+      if (!result.ok) throw new ChatGptError(result.error.code, result.error.message)
+      return result.value
+    },
+  }), 'chatgpt.model-settings')
   ctx.effect(() => async () => { closed = true; lifetime.abort(); await settingsWrites; await runtime.dispose(); await (await domain).close() }, 'chatgpt.lifecycle')
 }

@@ -1,5 +1,8 @@
 # 破限 / Unrestricted
 
+<!-- release-state-note -->
+The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
+
 [简体中文](README.zh-CN.md)
 
 A DeepSeek Harness agent preset that answers under the unrestricted delivery contract:

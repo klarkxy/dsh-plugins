@@ -15,11 +15,7 @@
 | 包 | 作用 | 文档 / npm |
 | --- | --- | --- |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | DSH 文档：在插件页阅读官方文档；创造模式用原生工具搜索文档、查核插件 npm 元数据。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-dev-index) |
-| [`@klarkxy/dsh-pruner`](https://www.npmjs.com/package/@klarkxy/dsh-pruner) | 本地已退役，npm 保留历史版本。 | [npm](https://www.npmjs.com/package/@klarkxy/dsh-pruner) |
 | [`@klarkxy/dsh-current-title`](https://www.npmjs.com/package/@klarkxy/dsh-current-title) | 自动标题：会话标题跟随最新任务更新，手动命名不被覆盖。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title#readme) |
-| [`@klarkxy/dsh-fusion`](https://www.npmjs.com/package/@klarkxy/dsh-fusion) | 本地已退役，保留历史记录；新任务使用 Classmates 角色与原生委派。 | [迁移](plugins/dsh-classmates/docs/fusion-migration.md) |
-| [`@klarkxy/dsh-mood`](https://www.npmjs.com/package/@klarkxy/dsh-mood) | 本地已退役，npm 保留历史版本。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/078b69632ddf054a404fcb81c2543dc8887e2acc/plugins/dsh-mood#readme) |
-| [`@klarkxy/dsh-recap`](https://www.npmjs.com/package/@klarkxy/dsh-recap) | 本地已退役，npm 保留历史版本。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/078b69632ddf054a404fcb81c2543dc8887e2acc/plugins/dsh-recap#readme) |
 | [`@klarkxy/dsh-web-search-manager`](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) | 网页搜索：在一个设置页管理搜索服务商和公开页面抓取。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager#readme) |
 | [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | 知乎：知乎搜索、智能体工具、知识库和用量跟踪。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
 | [`@klarkxy/dsh-git-commit`](https://www.npmjs.com/package/@klarkxy/dsh-git-commit) | Git 提交：在对话标题栏提交工作区改动，由模型规划分组并生成提交信息。 | [文档](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-git-commit#readme) |
@@ -29,7 +25,6 @@
 
 | 包 | 作用 | 状态 |
 | --- | --- | --- |
-| [`@klarkxy/dsh-classmates`](plugins/dsh-classmates/README.zh-CN.md) | 队友角色：为原生委派维护角色和模型用途配置。 | `next` 候选版；不收录到稳定插件目录。 |
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.zh-CN.md) | Safe Auto：沙箱提权由独立审核模型把关，通过才自动放行。 | npm 发布候选版；插件站 catalog 只收录稳定版。 |
 | [`@klarkxy/dsh-blueprint`](https://github.com/klarkxy/dsh-spaces/tree/main/packages/blueprint) | 分享插件组合蓝图，仍可在 DSH 0.2 中独立使用。 | 源码及发布归属已迁至 dsh-spaces。 |
 | [`@klarkxy/dsh-font`](plugins/dsh-font/docs/README.zh-CN.md) | 字体：自定义 Web GUI 的界面字体、代码字体与会话字号。 | `next` 候选版；不收录到稳定插件目录。 |
@@ -37,7 +32,6 @@
 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.zh-CN.md) | 会话管理：跨工作目录查找会话并读取对话。 | `next` 候选版；高级线程操作需要附带的宿主补丁。 |
 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.zh-CN.md) | 破限：按破限交付契约回答的会话 Preset，只作用于选用它的会话。 | 未发布；在发布暂缓名单，待打包内容复核与目标宿主验收。 |
 
-从本地 `dsh-teammates` 目录迁入，详见[迁移记录](docs/classmates-migration.md)。
 
 ## 安装
 
@@ -45,7 +39,6 @@
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-dev-index
-dsh plugin --profile web add @klarkxy/dsh-pruner
 ```
 
 把 `web` 换成你的 profile 名，安装后重启该 profile。每个插件在[插件站点](https://klarkxy.github.io/dsh-plugins/)的详情页都有一份按依赖顺序排好的安装命令。
@@ -76,19 +69,45 @@ pnpm check
 
 每个包自行维护资源、测试和版本号。原生 Preset 不需要额外运行时插件或构建，仓库根目录本身不是 DSH bundle。
 
+## 插件生命周期
+
+`scripts/plugin-release-states.json` 记录插件及共享库的不可逆生命周期：草稿 → 测试中 → 已发布。已发布插件的维护、测试和升版不会退回测试中。正常更新通过现有发布检查；首次发布须明确选择测试中的包，成功后才登记已发布。暂缓、冻结和私有属性单独管理。
+
+<!-- plugin-release-states:start -->
+| 包 | 生命周期 | 说明 |
+| --- | --- | --- |
+| [@klarkxy/dsh-chatgpt](plugins/dsh-chatgpt/README.md) | 测试中 (`testing`) | 已有隔离宿主验收；当前模型设置改动及最终包仍待复核，继续保持私有。 |
+| [@klarkxy/dsh-current-title](plugins/dsh-current-title/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-font](plugins/dsh-font/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-grok-build](plugins/dsh-grok-build/README.md) | 测试中 (`testing`) | 已实现官方 CLI 能力并完成隔离宿主媒体验收；保持私有测试中，具体边界见验收记录。 |
+| [@klarkxy/dsh-minimax-code](plugins/dsh-minimax-code/README.md) | 测试中 (`testing`) | 已实现官方 CLI 能力并完成隔离宿主媒体验收；保持私有测试中，具体边界见验收记录。 |
+| [@klarkxy/dsh-model-hub](plugins/dsh-model-hub/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.md) | 测试中 (`testing`) | 尚未发布的私有开发包，保持测试中。 |
+| [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-zhihu](plugins/dsh-zhihu/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+<!-- plugin-release-states:end -->
+
+已有 npm 发布记录的包登记为已发布；尚未发布的私有开发包保持测试中。规则见[发布指南](RELEASING.zh-CN.md)。修改清单后运行 `pnpm release:docs` 同步中英文表格，运行 `pnpm release:check` 校验阶段不可逆和发布逻辑。
+
 ## npm 自动发布
 
 `scripts/npm-release-holds.json` 记录尚待验收的包。暂缓名单同时用于生成发布计划和执行发布，旧计划也不能绕过。解除某个包前，须检查最终打包内容、通过相关测试，并在目标 DSH 宿主验收新行为（包括打包进去的工作区依赖）。私有开发包继续参与构建与测试。
 
 `plugins/dsh-xxx` 包统一命名为 `@klarkxy/dsh-xxx`，公开包设置公开 npm registry；标记 `private: true` 的开发包参与检查，但不参与自动发布。`.github/workflows/npm-publish.yml` 在 `main` 更新时检查各包，也可以在 Actions 页面手动运行来重试，不需要推送版本标签。
 
-流程先构建，再按 `npm pack` 的文件清单计算内容指纹并与 npm 已发布包比较，只有内容变更或显式提高版本的包才发布。仅更新仓库文档、索引网站或未进入包的测试文件，不会产生新 npm 版本；版本字段和 CI 自己写入的 `dshRelease.contentHash` 不参与指纹，避免重复发布。
+流程先构建并筛选已发布包（或明确选定首次发布的测试中包），再按 `npm pack` 的文件清单计算发布指纹并与 npm 已发布包比较，只有符合资格且内容变更或显式提高版本的包才发布。仅更新仓库文档、索引网站或未进入包的测试文件，不会产生新 npm 版本；版本字段和 CI 自己写入的 `dshRelease.contentHash` 不参与指纹，避免重复发布。
 
 首次发布沿用包内版本，显式指定的更高版本优先。内容改变但版本未提高时，稳定版自动增加 patch，预发布版增加预发布序号。CI 同步 `package.json` 与存在的 `dsh.plugin.json`，完成检查后发布并验证归档，再提交版本写回 `main`；正式版使用 `latest`，预发布使用 `next`。新功能或不兼容改动应手动选择合适的 minor/major，自动 patch 不替代兼容性判断。
 
 发布串行执行：旧提交会跳过，版本写回使用普通快进推送，不覆盖并发提交。机器人提交不会递归触发工作流；只有 registry 归档完整性与本次产物一致才算成功。失败后可在最新 `main` 上重跑，已成功发布且内容未变的包会跳过。
 
-npm 发布后可能先进行扫描，因此 CI 先提交所有变更包，再等待最多 20 分钟并匿名下载归档校验；超时会明确失败，已被接受的版本不会在重试时重复提交。
+npm 发布后可能先进行扫描，因此 CI 先提交变更包，再等待最多 20 分钟并匿名下载归档校验。后续提交失败仍会验证已提交的包；每个成功结果即时写入产物，失败不会清除已发布事实。首次发布失败后保留相同的明确选择重试，已被接受的相同版本不会重复提交。
 
 仓库 Actions secret `NPM_TOKEN` 用于首次发布。之后可为每个包配置 [Trusted Publisher](https://docs.npmjs.com/trusted-publishers/)：GitHub 用户 `klarkxy`、仓库 `dsh-plugins`、工作流 `npm-publish.yml`、环境名留空，并允许直接发布；绑定后可移除 token。版本回写需要工作流的 `contents: write` 权限，以及允许机器人推送 `main` 的分支规则。
 

@@ -1,6 +1,7 @@
 import type { Context } from "@deepseek-ai/cordis";
 import z from "@deepseek-ai/schemastery";
 import type { ToolDefinition } from "@deepseek-ai/dsh-tools";
+import { CREATOR_PRESET_ID } from "@klarkxy/dsh-plugin-kit/contracts";
 
 import { CREATOR_GUIDANCE } from "./creator-guidance.js";
 import { DocsClient } from "./docs.js";
@@ -50,7 +51,7 @@ export function apply(ctx: Context & CreatorPromptHost, config: Config): void {
   ctx.effect(() => ctx.systemPrompt.section({
     name: "dsh-dev-index.creator-docs",
     order: 100,
-    text: ({ agent }) => agent !== undefined && ctx.agentPresets.composedPreset(agent.ctx) === "cordis"
+    text: ({ agent }) => agent !== undefined && ctx.agentPresets.composedPreset(agent.ctx) === CREATOR_PRESET_ID
       ? CREATOR_GUIDANCE
       : "",
   }), "dsh-dev-index.creator-docs");

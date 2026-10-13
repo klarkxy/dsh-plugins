@@ -3,7 +3,7 @@ import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import semver from 'semver';
 
-export function discoverPackages(root) {
+export function discoverPackages(root, { includePrivate = false } = {}) {
   const packages = readdirSync(join(root, 'plugins'), { withFileTypes: true })
     .filter(entry => entry.isDirectory())
     .map(entry => {
@@ -16,13 +16,14 @@ export function discoverPackages(root) {
       if (semver.valid(manifest.version) !== manifest.version || manifest.version.includes('+')) {
         throw new Error(`${directory}: expected a valid release version`);
       }
-      if (manifest.private === true) return null;
-      if (manifest.private) throw new Error(`${directory}: private must be a boolean`);
-      if (manifest.publishConfig?.access !== 'public' ||
-          manifest.publishConfig?.registry !== 'https://registry.npmjs.org/') {
+      if (manifest.private !== undefined && typeof manifest.private !== 'boolean') throw new Error(`${directory}: private must be a boolean`);
+      if (manifest.private === true && !includePrivate) return null;
+      if (manifest.private !== true && (manifest.publishConfig?.access !== 'public' ||
+          manifest.publishConfig?.registry !== 'https://registry.npmjs.org/')) {
         throw new Error(`${directory}: publishConfig must select public access and the npm registry`);
       }
-      return { slug: entry.name, directory, name: manifest.name, version: manifest.version };
+      return { slug: entry.name, directory, name: manifest.name, version: manifest.version,
+        ...(includePrivate ? { private: manifest.private === true } : {}) };
     }).filter(Boolean);
   if (!packages.length) throw new Error('No plugins found');
   return packages;

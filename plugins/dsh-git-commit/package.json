@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-git-commit",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Git Commit: commit workspace changes from the conversation header, with model-planned commit groups.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -83,6 +83,9 @@
     "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-storage-domain": {
       "optional": true
     }
@@ -95,7 +98,9 @@
     "react-dom": "^18.2.0",
     "@types/react": "18.3.31",
     "@types/react-dom": "^18.3.0",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2"
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "jsdom": "29.1.1",
+    "@types/jsdom": "28.0.3"
   },
   "keywords": [
     "dsh",
@@ -119,6 +124,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "34adb59c173846af6674c4c592c1d1e828e010e2ef83f3bd61cfb17c42f966aa"
+    "contentHash": "afa4ef03b0a1667885ee44de552bb624feb0c7f30b4e70c854aa85381eb64270"
   }
 }

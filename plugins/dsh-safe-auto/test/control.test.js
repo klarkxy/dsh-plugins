@@ -25,6 +25,19 @@ function fixture(extra = {}) {
   return { base, control, select, session, events, root, options, live, specs };
 }
 
+test('durable cancelled settings writes notify the adopted revision despite failing observers', async () => {
+  const f = fixture(); const revisions = [];
+  const abort = new AbortController();
+  const put = f.options.table.put;
+  const control = createControl(f.base, { ...f.options,
+    table: { ...f.options.table, put: async (...args) => { await put(...args); abort.abort(); } },
+    onSettingsChanged: revision => { revisions.push(revision); throw new Error('observer failed'); } });
+  await assert.rejects(control.call('settings.save', { expectedRevision: 0, values: { provider: 'ocg', model: 'mimo-v2.6-flash' } }, abort.signal));
+  assert.deepEqual(revisions, [1]);
+  assert.equal(control.settingsView().values.model, 'mimo-v2.6-flash');
+  await control.dispose(); await f.control.dispose();
+});
+
 test('reads never enable Auto or persist; selection keeps workspace-write and ask', async () => {
   const f = fixture();
   const before = await f.control.call('session.get', { sessionId: 's' });
@@ -272,7 +285,8 @@ test('script mutation while awaiting user confirmation blocks a previously appro
 
 test('structural refusals never publish a human request even when takeover is enabled', async t => {
   const f = approvalFixture(t, async () => assert.fail('structural refusal cannot review'), { humanApprovalTimeoutMs: 500 });
-  await f.select('safe-auto'); f.exec.arguments.workdir = 'relative';
+  await f.select('safe-auto');
+  f.options.evidenceFs = { processPathFromHostPath: () => undefined };
   await f.handlers['tools/execute'](f.exec, async () => {
     assert.notEqual(await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate')), 'allowed-once');
   });
@@ -501,13 +515,14 @@ test('child and nested native requests never receive automatic grants', async t 
     assert.equal(f.calls(), 0);
   }
 });
-test('relative workdir cannot obtain automatic native approval', async t => {
-  const f = approvalFixture(t, async () => { assert.fail('relative locality is unverified'); }); await f.select('safe-auto');
+test('relative workdir can obtain bound native approval after local resolution', async t => {
+  const f = approvalFixture(t, async () => approvalVerdict('allow')); await f.select('safe-auto');
   f.exec.arguments.workdir = 'relative';
   await f.handlers['tools/execute'](f.exec, async () => {
-    assert.equal(await f.handlers['approval/request'](f.req(), async () => 'rejected'), 'unavailable');
+    assert.equal(await f.handlers['approval/request'](f.req(), async () => assert.fail('must not delegate')), 'allowed-once');
   });
-  assert.equal(f.calls(), 0);
+  assert.equal(f.calls(), 1);
+  assert.equal(f.exec.arguments.workdir, 'relative');
 });
 test('disabling before execute prevents review during the request', async t => {
   const f = approvalFixture(t, async () => { assert.fail('inactive controls cannot review'); }); const enabled = await f.select('safe-auto');

@@ -54,8 +54,8 @@ test('contents, symlink targets and absent manifests are rechecked before granti
   }
 });
 
-test('outside targets, protected paths, oversized and sensitive contents never reach model evidence', async () => {
-  const f = fixture('node ../outside/file.js; node .ssh/private.js; node large.js; node sensitive.js; node alias.js');
+test('outside targets, credential stores, oversized and sensitive contents never reach model evidence', async () => {
+  const f = fixture('node ../outside/file.js; node .gnupg/private-keys-v1.d/private.js; node large.js; node sensitive.js; node alias.js');
   f.files.set(resolve(f.root, 'large.js'), 'x'.repeat(7000));
   f.files.set(resolve(f.root, 'sensitive.js'), 'const password="private123";');
   f.aliases.set(resolve(f.root, 'alias.js'), resolve(f.root, '../outside/alias.js'));
@@ -66,7 +66,17 @@ test('outside targets, protected paths, oversized and sensitive contents never r
   assert.ok(evidence.data.omissions.includes('SENSITIVE_EVIDENCE_WITHHELD'));
   assert.ok(!JSON.stringify(evidence.data).includes('private123'));
   assert.ok(f.reads.every(path => path.startsWith(f.root)));
-  assert.ok(!f.reads.some(path => path.includes('.ssh')));
+  assert.ok(!f.reads.some(path => path.includes('.gnupg')));
+});
+
+test('ordinary scripts under agent/config directories remain eligible for bounded evidence', async () => {
+  const f = fixture('node .codex/skills/check.mjs; node .dsh/scripts/check.mjs; node .config/tool/check.mjs');
+  for (const path of ['.codex/skills/check.mjs', '.dsh/scripts/check.mjs', '.config/tool/check.mjs']) {
+    f.files.set(resolve(f.root, path), 'console.log("ordinary-evidence")');
+  }
+  const evidence = await collectExecutionEvidence(f.call, f.fs, f.signal);
+  assert.equal(evidence.data.files.filter(file => file.content === 'console.log("ordinary-evidence")').length, 3);
+  assert.equal(await evidence.verify(), true);
 });
 
 test('evidence prompt injection remains verbatim data, not an authorization source', async () => {

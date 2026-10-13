@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-current-title",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Auto Title: keep session titles following the latest task; names you set by hand stay put.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -73,6 +73,7 @@
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-current-title/src"
   },
   "dependencies": {
+    "@klarkxy/dsh-model-route": "workspace:*",
     "@klarkxy/dsh-plugin-kit": "workspace:*",
     "zod": "^4.1.5"
   },
@@ -82,6 +83,9 @@
     "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-llm": {
       "optional": true
     },
@@ -95,7 +99,9 @@
     "@deepseek-ai/dsh-storage-domain": "0.2.0-rc.2",
     "react": "^18.2.0",
     "@types/react": "18.3.31",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2"
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "jsdom": "29.1.1",
+    "@types/jsdom": "28.0.3"
   },
   "keywords": [
     "dsh",
@@ -119,6 +125,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "94c73e089e93f874a14b1056d3df5e96adeded18dbdcbcef6e48927e16364572"
+    "contentHash": "41a19e5a34a4d1b507c84c9b8d6fa418c126b0b82662d947bd2dd65712f7a3f8"
   }
 }

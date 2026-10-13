@@ -8,6 +8,6 @@ For a local manual archive, use `pnpm --filter <package-name> pack`, which resol
 
 A held package can supply a workspace dependency version to another plugin only when that exact version already exists on npm. It stays excluded from version updates and publication, and an unpublished held dependency blocks the release plan.
 
-Development packages may use `private: true`. They remain workspace members and run through `pnpm check`, but release discovery excludes them. Public packages require public npm access and registry in `publishConfig`. Classmates uses the repository's SATA 2.1 license, selected by the maintainer on 2026-10-07; retain its third-party notices.
+Development packages may use `private: true`. They remain workspace members and run through `pnpm check`, but release discovery excludes them. Public packages require public npm access and registry in `publishConfig`.
 
-Prereleases publish to `next`; stable versions publish to `latest`. Classmates, Font, Model Hub and Session Manager enter their first-release channel as release candidates. Blueprint and Safe Auto retain preview channels. Only DSH bundles with an npm `latest` tag belong in the stable site catalog; library packages do not. Session Manager's advanced thread actions require the separately delivered host patch in `host-patches/thread-management/`.
+Prereleases publish to `next`; stable versions publish to `latest`. Font, Model Hub, Session Manager and Safe Auto use preview channels. Blueprint is maintained and published by dsh-spaces. Only DSH bundles with an npm `latest` tag belong in the stable site catalog; library packages do not. Session Manager's advanced thread actions require the separately delivered host patch in `host-patches/thread-management/`.

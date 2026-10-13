@@ -18,7 +18,8 @@ export const ZHIHU_QUOTA_TOOL_NAME = 'zhihu_quota'
 
 /** Official quota IDs, not local execution counters or predicted balances. */
 export const ZHIHU_QUOTA_IDS = [
-  'global_search', 'zhihu_search', 'hot_list', 'question_answers',
+  'global_search', 'zhihu_search', 'hot_list', 'question_discovery',
   'zhida_openai', 'tools', 'knowledge', 'user_data', 'creator',
 ] as const
+export const normalizeZhihuQuotaId = (value: unknown): unknown => value === 'question_answers' ? 'question_discovery' : value
 export type ZhihuQuotaId = typeof ZHIHU_QUOTA_IDS[number]

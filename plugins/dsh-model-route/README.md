@@ -1,5 +1,8 @@
 # @klarkxy/dsh-model-route
 
+<!-- release-state-note -->
+The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
+
 Model-route field contract for DeepSeek Harness (DSH) plugins.
 
 Feature plugins each keep their own "which model should I use" setting. This
@@ -28,6 +31,12 @@ hub, and without the hub depending on them.
   use `[]` and `editable: false`. `arrayItem: true` tells editors to clear a
   direct array route by setting an empty route, because native unset removes
   the entire element.
+  Schema titles/descriptions and reasoning support are preserved. Root fields
+  expose `rootKeys`; fields combining routes and sibling settings expose
+  `preserveSiblings` / `writeKeys`, so editors update only model leaves instead
+  of replacing the object. Recursion is bounded and cycles stop when the same
+  schema/value pair repeats. Private settings can opt into the host-only
+  `@klarkxy/dsh-plugin-kit/model-settings` contribution entry.
 - **Catalog helpers** — `parseModelMenuChoices`, `modelMenuEffortOptions`,
   `knownModelFromChoices` for the host session model catalog.
 - **`@klarkxy/dsh-model-route/zod`** — optional zod binding:
@@ -83,6 +92,10 @@ const fields = detectModelFields(descriptor.schema, {
 })
 // → [{ path: ['summaryModel'], via: 'marker', marker: { purpose: 'summary', ... }, current, known }]
 ```
+
+## Localization
+
+`ModelMenu` accepts the active host `locale` (`zh` / `zh-CN` or `en` / `en-US`). Its default labels and standard effort IDs follow that value without resetting the open menu or search. Explicit labels and provider-defined effort names remain verbatim. Schema marker `label` may be a string or `{ zh, en }` display text.
 
 ## License
 

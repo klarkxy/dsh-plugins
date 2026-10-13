@@ -1,5 +1,6 @@
 import { createControl, CHANNEL, REVIEW_FIELDS } from './control.js';
 import { registerHostRpc } from '@klarkxy/dsh-plugin-kit/host-rpc';
+import { registerModelSettings, notifyModelSettingsChanged } from '@klarkxy/dsh-plugin-kit/model-settings';
 
 export const name = 'dsh-safe-auto-ui-host';
 // Register on this fiber. connection.rpc.handle mounts routes on connection's
@@ -47,9 +48,26 @@ export async function apply(ctx) {
   let control;
   ctx.effect(() => async () => { await control?.dispose(); await domain.close(); });
   control = createControl(ctx.safeAutoRuntime.base, { table: domain.table('settings'), presets: ctx.permissionPresets,
-    sandboxPolicy: ctx.sandboxPolicy, sessions: ctx.sessions, onChange: () => ctx.safeAutoRuntime.invalidateApprovals?.() });
+    sandboxPolicy: ctx.sandboxPolicy, sessions: ctx.sessions, onChange: () => ctx.safeAutoRuntime.invalidateApprovals?.(),
+    onSettingsChanged: revision => notifyModelSettingsChanged(ctx, '@klarkxy/dsh-safe-auto', revision) });
   // Validate stored settings before publishing any UI endpoint.
   control.settingsView();
+  ctx.effect(() => registerModelSettings(ctx, {
+    ns: '@klarkxy/dsh-safe-auto', title: { zh: '安全自动', en: 'Safe Auto' },
+    read(signal) {
+      signal.throwIfAborted(); control.signal.throwIfAborted();
+      const { revision, values } = control.settingsView();
+      const current = { provider: values.provider, model: values.model,
+        ...(values.reasoningEffort ? { reasoningEffort: values.reasoningEffort } : {}) };
+      return { revision, fields: [{ path: ['model'], label: { zh: '审查模型', en: 'Reviewer model' }, current,
+        followLabel: { zh: '当前会话模型', en: 'Current conversation model' }, allowFollow: true }] };
+    },
+    async write(path, route, expectedRevision, signal) {
+      if (path.length !== 1 || path[0] !== 'model') throw new Error('Unknown Safe Auto model setting');
+      return control.call('settings.save', { values: { provider: route.provider, model: route.model,
+        reasoningEffort: route.reasoningEffort || '' }, expectedRevision }, signal);
+    },
+  }));
   ctx.effect(() => ctx.safeAutoRuntime.attach(control));
   ctx.effect(() => registerControlRoute(ctx, async (endpoint, payload, signal, source) => {
     try {

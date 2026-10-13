@@ -218,21 +218,29 @@ export interface FontSettingsStore {
  * reset leaves no residue; storage failures (private mode, quota) degrade to
  * in-memory behaviour rather than breaking the panel. */
 export function createFontSettingsStore(storage: FontSettingsStorage | undefined): FontSettingsStore {
+  let current = defaultFontSettings()
+  // A failed local write must win over stale persisted values on page remount.
+  // Successful writes restore the existing ability to read external updates.
+  let pendingPersistence = false
   return {
     load() {
-      if (!storage) return defaultFontSettings()
-      try {
-        return parseFontSettings(storage.getItem(STORAGE_KEY))
-      } catch {
-        return defaultFontSettings()
+      if (storage && !pendingPersistence) {
+        try {
+          current = parseFontSettings(storage.getItem(STORAGE_KEY))
+        } catch {
+          /* keep the last readable or locally saved snapshot */
+        }
       }
+      return { ...current }
     },
     save(next) {
+      current = parseFontSettings(next)
       if (!storage) return
-      const normalized = parseFontSettings(serializeFontSettings(next))
+      pendingPersistence = true
       try {
-        if (!normalized.uiFont && !normalized.codeFont) storage.removeItem(STORAGE_KEY)
-        else storage.setItem(STORAGE_KEY, serializeFontSettings(normalized))
+        if (!current.uiFont && !current.codeFont) storage.removeItem(STORAGE_KEY)
+        else storage.setItem(STORAGE_KEY, serializeFontSettings(current))
+        pendingPersistence = false
       } catch {
         /* stay in-memory */
       }

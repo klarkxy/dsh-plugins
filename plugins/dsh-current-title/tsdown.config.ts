@@ -3,13 +3,13 @@ export default defineConfig([
   {
     entry: { index: 'src/index.ts', contracts: 'src/contracts.ts' },
     format: ['esm'], dts: true, clean: true, outDir: 'lib', platform: 'node', target: 'node22', sourcemap: true, hash: false,
-    deps: { neverBundle: ['@deepseek-ai/cordis', '@klarkxy/dsh-plugin-kit', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-storage-domain', 'zod'] },
+    deps: { neverBundle: ['@deepseek-ai/cordis', '@klarkxy/dsh-plugin-kit', '@klarkxy/dsh-model-route', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-storage-domain', 'zod'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
   },
   {
     entry: { 'client.inner': 'src/client.tsx' }, format: ['cjs'], dts: false, clean: false, outDir: 'lib',
     platform: 'browser', target: 'es2022', sourcemap: true, hash: false,
-    deps: { neverBundle: ['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-ui-primitives'], alwaysBundle: ['@klarkxy/dsh-plugin-kit/client-utils', '@klarkxy/dsh-plugin-kit/official-ui'] },
+    deps: { neverBundle: ['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-ui-primitives'], alwaysBundle: ['@klarkxy/dsh-plugin-kit/model-settings-client', '@klarkxy/dsh-model-route', '@klarkxy/dsh-plugin-kit/client-utils', '@klarkxy/dsh-plugin-kit/official-ui'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },
 ])

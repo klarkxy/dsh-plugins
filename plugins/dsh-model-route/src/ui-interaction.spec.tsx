@@ -45,6 +45,29 @@ function harness(extra: { disabled?: boolean; preventClick?: boolean; ownsClick?
 }
 
 describe('mounted ModelMenu interaction', () => {
+  it('updates portaled default copy while preserving the open search and selected model', async () => mounted(async (dom, root) => {
+    const catalog = parseModelMenuChoices({ groups: [{ id: 'p', models: Array.from({ length: 5 }, (_, index) => ({ id: `model-${index}` })) }] })
+    const picks = vi.fn(), changes = vi.fn()
+    const render = (locale: string) => root.render(<ModelMenu open locale={locale} onOpenChange={changes}
+      choices={catalog} selected={{ provider: 'p', model: 'model-0' }} onPick={picks}
+      anchor={<button type="button">Provider</button>} />)
+    await act(async () => render('zh-CN'))
+    expect(dom.window.document.querySelector('.dsh-model-menu-menu')?.getAttribute('lang')).toBe('zh')
+    expect(dom.window.document.querySelector('[role="menuitem"]')?.textContent).toContain('模型')
+    await act(async () => dom.window.document.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click())
+    const search = dom.window.document.querySelector<HTMLInputElement>('[role="searchbox"]')!
+    const { Simulate } = await import('react-dom/test-utils')
+    await act(async () => Simulate.change(search, { target: { value: 'missing' } } as never))
+    expect(dom.window.document.querySelector('[role="status"]')?.textContent).toBe('没有匹配的模型')
+    await act(async () => render('en-US'))
+    expect(search.value).toBe('missing')
+    expect(search.placeholder).toBe('Search models…')
+    expect(dom.window.document.querySelector('[role="status"]')?.textContent).toBe('No matching models')
+    expect(dom.window.document.querySelector('[aria-label="Clear search"]')).not.toBeNull()
+    expect(picks).not.toHaveBeenCalled()
+    expect(changes).not.toHaveBeenCalled()
+  }))
+
   it('opens a plain trigger, drills, picks once, dismisses, and restores focus', async () => mounted(async (dom, root) => {
     const { Harness, changes, picks, clicked } = harness()
     await act(async () => root.render(createElement(Harness)))

@@ -7,8 +7,8 @@
  * re-exports the core so existing plugin-kit consumers keep working, and adds
  * the React catalog hook on top. It must stay free of any ui-primitives
  * import so host-side and node-test consumers never load the component
- * bundle — the popover component and its styles are re-exported from
- * `./model-menu-ui` instead.
+ * bundle — the popover component and its styles live in
+ * `@klarkxy/dsh-model-route/ui`.
  */
 import { useEffect, useState } from 'react'
 import { parseModelMenuChoices, type ModelCatalogClient, type ModelMenuChoice, type ModelRoute } from '@klarkxy/dsh-model-route'
@@ -18,6 +18,7 @@ export {
   groupModelMenuChoices,
   knownModelFromChoices,
   modelMenuEffortOptions,
+  modelMenuEffortLabel,
   modelMenuShortName,
   modelRouteKey as modelMenuChoiceKey,
   modelRouteOverride as modelMenuOverride,

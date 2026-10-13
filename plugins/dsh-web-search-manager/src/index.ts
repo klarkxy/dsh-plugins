@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { WebError } from '@deepseek-ai/dsh-web'
+import { WEB_PROVIDER_AVAILABILITY_EVENT } from '@klarkxy/dsh-plugin-kit/contracts'
 import { WEB_SEARCH_RPC_CHANNEL, type RpcResult } from './contracts.ts'
 import { registerBuiltins } from './builtins.ts'
 import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
@@ -29,7 +30,7 @@ export async function apply(ctx: Context): Promise<void> {
   })
   ctx.provide('webSearchManager', manager)
   ctx.on('credentials/reference-updated', () => { void manager.refresh() })
-  ctx.on('web/provider-availability-updated', () => { void manager.refresh() })
+  ctx.on(WEB_PROVIDER_AVAILABILITY_EVENT, () => { void manager.refresh() })
   ctx.effect(() => registerBuiltins(ctx.web, {
     settings: () => manager.status().settings,
     resolveCredential: async ref => (await host.credentials.resolve(credentialRef(ref)))?.value,
@@ -60,6 +61,6 @@ export async function apply(ctx: Context): Promise<void> {
 declare module '@deepseek-ai/cordis' {
   interface Events {
     /** Repository extension: native providers announce a local availability change. */
-    'web/provider-availability-updated'(kind: 'search' | 'fetch', id: string): void
+    [WEB_PROVIDER_AVAILABILITY_EVENT](kind: 'search' | 'fetch', id: string): void
   }
 }

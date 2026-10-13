@@ -1,5 +1,8 @@
 # @klarkxy/dsh-plugin-kit
 
+<!-- release-state-note -->
+The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
+
 The shared support package for the feature plugins in this repository: shared record types, the plugin-page model menu, host RPC registration, the official-UI style contract, and one native `llm` text call. It is a library, not a DSH bundle — adding it as a dependency gives a feature plugin the pieces it needs, not a new user-visible feature of its own.
 
 [简体中文](docs/README.zh-CN.md)
@@ -15,10 +18,14 @@ The shared support package for the feature plugins in this repository: shared re
 - `.` — the shared contract types, plus `registerHostRpc`, `callLlmText` and `resolveFeatureModel`.
 - `./contracts` — browser-safe types and constants: shared memory/knowledge records, `TaskContract` / `TaskCheckpoint`, `ModelRoute`, `RpcResult`, `CHAT_EVENTS_SLOT`, `projectIdFromCwd`.
 - `./host-rpc` — host RPC registration helper and its context type.
+- `./model-settings` — host-only model settings contributions. Register the owning plugin's read snapshot and CAS writer with `registerModelSettings` inside `ctx.effect`; the hub discovers active owners using `collectModelSettings`. Each registration has an incarnation ID, so a stale page cannot write into a replacement instance. Reads expose only model fields and revision, with an optional independent model catalog; storage and validation stay with the owner.
 - `./client-utils` — browser-safe helpers for native plugin-page seats: `selectedSessionId`, `useNativeSeat`, `useFeatureRefresh`. `react` is an optional peer.
+- `./model-settings-client` — browser-safe optional invalidation subscription using `createModelSettingsSubscriber`. Model Hub mounts the native stream descriptor once; pages own their rereads and draft conflicts. Owners call host-side `notifyModelSettingsChanged` after persistence and memory state commit.
 - `./model-menu` — plugin-page model select: catalog parsing, empty-route handling, reasoning-effort options.
 - `./llm-call` — `callLlmText` and `resolveFeatureModel` as separate exports.
 - `./official-ui` — the shared browser-side style contract: `officialUiCss(roots)`, the `--dsw-*` token allowlist, and the focus/elevation helpers.
+- `./cli-process` — run a resolved executable without a command shell, with bounded output, serialized line callbacks, deadlines and owned-process-tree cancellation. Streaming mode delivers stdout through `onLine`; it does not also retain stdout.
+- `./cli-media` — validate and stage explicit workspace/current-session media, enforce file limits, and publish native image/file attachments. Remote job authority and vendor protocols remain in each plugin; these helpers do not sandbox a vendor CLI's own file access.
 
 Plugins passing their Cordis context to `resolveFeatureModel` must declare `agents`, `sessionProjections` and `agentDefaultModel` in `inject`. These services supply the live session selection and the host default when the plugin has no saved model.
 
@@ -55,11 +62,17 @@ Explicit subagent origin or positive delegation depth wins. A seeded human fork 
 zero or omitted depth and ordinary/free classification keeps its parent as history
 lineage; incomplete legacy parent metadata still identifies a child session.
 
-## Deprecated types
+## Shared string contracts
 
-`AiPolicy`, `PurposeSpec`, `ModelTarget`, `AiServices`, `AiFeatureScope`, `AuxiliaryRequest`, `AuxiliaryResult` and `UsageReceipt` are retained under `./contracts` marked `@deprecated`. They described the retired shared model-routing service; features must not use them for new calls.
+`./contracts` is the single source for cross-plugin literals:
+
+- `MODEL_SETTINGS_CHANGES_REMOTE` — the model-settings change stream provided by `@klarkxy/dsh-model-hub`. Subscribers degrade silently when that package is not installed.
+- `WEB_PROVIDER_AVAILABILITY_EVENT` and `DshWebManagementDescriptor` — native web providers announce a local availability change and optional display metadata.
+- `CREATOR_PRESET_ID` — the host Creator agent-preset id.
 
 ## Development
+
+Model settings contributions accept `ModelSettingsText` (`string | { zh: string; en: string }`) for provider titles, field labels/descriptions, follow labels and catalog errors. Built-in display copy should include both languages; user data and third-party literal strings stay unchanged. Model Hub resolves the text at render time when the host locale changes.
 
 ```sh
 pnpm --filter @klarkxy/dsh-plugin-kit typecheck

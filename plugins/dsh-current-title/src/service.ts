@@ -43,6 +43,7 @@ export class CurrentTitleService {
     localePreference?: () => string | undefined
     initialLocale?: TitleLocaleMode
     now?: () => Date
+    onSettingsChanged?: (revision: number) => void
   }) {
     const stored = storedSettings(options.store?.load(), options.initialLocale ?? 'auto')
     this.settings = stored
@@ -129,6 +130,8 @@ export class CurrentTitleService {
       }
       if (this.options.store) await this.options.store.save(next)
       this.settings = next
+      // Observer failures cannot roll back a committed settings write.
+      try { this.options.onSettingsChanged?.(next.revision) } catch {}
       this.config = { ...this.config, locale: 'auto' }
       if (!this.disposed && next.cadence !== previous.cadence) await this.reclaimWithCadence()
       return {

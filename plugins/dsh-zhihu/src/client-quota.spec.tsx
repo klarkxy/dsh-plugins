@@ -181,10 +181,10 @@ describe('quota initial SSR and host controls', () => {
     expect(html).toContain('说明') // local-counter separation lives in the folded details
     expect(html).not.toContain('<pre')
   })
-  it('reuses the supplied host Button', () => {
-    const Button = vi.fn(({ children }: { children?: import('react').ReactNode }) => <button data-host="quota">{children}</button>)
-    expect(renderToStaticMarkup(<ZhihuQuotaSection rpc={{ call: vi.fn() }} Button={Button} />)).toContain('data-host="quota"')
-    expect(Button).toHaveBeenCalled()
+  it('renders the quota action through the official button', () => {
+    const html = renderToStaticMarkup(<ZhihuQuotaSection rpc={{ call: vi.fn() }} />)
+    expect(html).toContain('刷新官方额度')
+    expect(html).toContain('type="button"')
   })
 })
 

@@ -12,6 +12,16 @@ export const COPY_THREAD_FAILED: Record<CopyLocale, string> = {
   en: 'Could not copy the thread ID',
 }
 
+export const COPY_THREAD_COPIED: Record<CopyLocale, string> = {
+  zh: '已复制线程 ID',
+  en: 'Thread ID copied',
+}
+
+export const COPY_THREAD_NO_SESSION: Record<CopyLocale, string> = {
+  zh: '请先打开一个会话',
+  en: 'Open a session first',
+}
+
 export function copyLocale(active: string | undefined): CopyLocale {
   return active?.toLowerCase().startsWith('zh') ? 'zh' : 'en'
 }

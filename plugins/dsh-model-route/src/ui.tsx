@@ -23,7 +23,7 @@ import {
   observeStickyMenuGroups, rankByName,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ModelMenuChoice } from './catalog.ts'
-import { groupModelMenuChoices, modelMenuShortName } from './menu.ts'
+import { groupModelMenuChoices, modelMenuEffortLabel, modelMenuShortName } from './menu.ts'
 
 /** Extra rows rendered above the model groups (e.g. a plugin's "follow"/"off" modes). */
 export interface ModelMenuLeadingItem {
@@ -33,6 +33,8 @@ export interface ModelMenuLeadingItem {
 }
 
 export interface ModelMenuProps {
+  /** Active host locale, supplied by the owning plugin's live locale subscription. */
+  readonly locale?: string
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
   /** Trigger rendered in place; the menu anchors to it and returns focus to it. */
@@ -66,11 +68,15 @@ type Pane = 'root' | 'model' | 'effort'
 const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
 
 export function ModelMenu(props: ModelMenuProps) {
+  const language = props.locale?.toLowerCase().startsWith('zh') ? 'zh' : 'en'
+  const copy = language === 'zh'
+    ? { model: '模型', effort: '思考强度', default: '默认', search: '搜索模型…', empty: '没有匹配的模型', clear: '清除搜索' }
+    : { model: 'Model', effort: 'Reasoning', default: 'Default', search: 'Search models…', empty: 'No matching models', clear: 'Clear search' }
   const {
     open, onOpenChange, anchor, choices, selected, onPick,
     leading = [], onPickLeading, efforts = [], selectedEffort, onPickEffort,
-    modelLabel = 'Model', modelValue = '—', effortLabel = 'Reasoning', effortValue, defaultEffortLabel = 'Default',
-    searchPlaceholder = 'Search models…', emptyLabel = 'No matching models', clearSearchLabel = 'Clear search',
+    modelLabel = copy.model, modelValue = '—', effortLabel = copy.effort, effortValue, defaultEffortLabel = copy.default,
+    searchPlaceholder = copy.search, emptyLabel = copy.empty, clearSearchLabel = copy.clear,
     className, listClassName,
   } = props
   const rootRef = useRef<HTMLSpanElement | null>(null)
@@ -90,7 +96,7 @@ export function ModelMenu(props: ModelMenuProps) {
   const [menuPos, setMenuPos] = useState<CSSProperties | null>(null)
   const id = useId()
   const showSearch = choices.length > 4
-  const effortRows = useMemo(() => [{ id: '', name: defaultEffortLabel }, ...efforts], [defaultEffortLabel, efforts])
+  const effortRows = useMemo(() => [{ id: '', name: defaultEffortLabel }, ...efforts.map(effort => ({ ...effort, name: modelMenuEffortLabel(effort, language) }))], [defaultEffortLabel, efforts, language])
   /* The official ranks each provider group by a case-insensitive ordered
    * subsequence (prefix hits first, then alignment score, then catalog order);
    * groups left empty by the query drop out. */
@@ -320,6 +326,7 @@ export function ModelMenu(props: ModelMenuProps) {
         style={menuPos ?? MEASURE_STYLE}
         role={pane === 'model' ? 'group' : 'menu'}
         aria-label={modelLabel}
+        lang={language}
       >
         {pane === 'root' ? <>
           <button ref={itemRef()} type="button" role="menuitem" className="dsh-model-menu-cell" onClick={() => drill('model')}>

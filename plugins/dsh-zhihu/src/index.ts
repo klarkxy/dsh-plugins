@@ -1,3 +1,4 @@
+import { resolveZhihuCallPolicy, type ZhihuCallPolicyOptions } from './call-policy.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { executeZhihuSearch, ZHIHU_SEARCH_DEFAULT_COUNT } from './search-api.ts'
@@ -56,6 +57,7 @@ export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsag
       const quotaId = operation ? ZHIHU_OPEN_PLATFORM_APIS[operation].quotaId : undefined
       const metering = quotaId ? { quotaId } : {}
       try {
+        if (endpoint === 'policy.status') return { ok: true, value: resolveZhihuCallPolicy(options.env, options.callPolicy) }
         if (endpoint === 'usage.summary') { await pendingUsage; return { ok: true, value: { days: await usage.read(resolveDays(body.days)) } } }
         const query = typeof body.query === 'string' ? body.query : ''
         if (['search', 'global.search', 'ask', 'knowledge.search'].includes(endpoint) && (!query.trim() || query.length > 4000)) {
@@ -137,10 +139,11 @@ export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsag
   }
 }
 
-export async function apply(ctx: Context): Promise<void> {
+export async function apply(ctx: Context, config: ZhihuCallPolicyOptions = {}): Promise<void> {
   const host = ctx as Host
   const domain = await ctx.storageDomain.open(zhihuUsageDomainSpec)
   const service = createZhihuService({
+    callPolicy: config,
     resolveCredential: async () => (await host.credentials.resolve(credentialRef(ZHIHU_CREDENTIAL_REF)))?.value,
   }, createZhihuUsageRecorder(domain.table('daily')), event => {
     const emit = ctx.emit as unknown as (name: string, event: ZhihuSearchExecuted) => void

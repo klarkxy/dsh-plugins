@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { act, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { Simulate } from 'react-dom/test-utils'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from './client.tsx'
@@ -39,14 +40,21 @@ async function mounted(run: (view: {
   sizes: number[]
   publish(patch: Partial<ThemeSnapshot>): Promise<void>
   select(index: number, value: string): Promise<void>
+  locale(active: string): Promise<void>
+  remount(): Promise<void>
   disposePlugin(): void
-}) => Promise<void>, legacy = { uiFont: '', codeFont: '' }, presenterFirst = true) {
+}) => Promise<void>, legacy = { uiFont: '', codeFont: '' }, presenterFirst = true, storageMode?: 'missing' | 'throwing') {
   const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div></body></html>', { url: 'https://font.test/' })
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document,
     HTMLElement: dom.window.HTMLElement, HTMLInputElement: dom.window.HTMLInputElement,
     getComputedStyle: dom.window.getComputedStyle.bind(dom.window), localStorage: dom.window.localStorage,
     IS_REACT_ACT_ENVIRONMENT: true })) vi.stubGlobal(key, value)
   localStorage.setItem(STORAGE_KEY, JSON.stringify(legacy))
+  if (storageMode === 'missing') vi.stubGlobal('localStorage', undefined)
+  if (storageMode === 'throwing') {
+    vi.spyOn(dom.window.Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota') })
+    vi.spyOn(dom.window.Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('denied') })
+  }
   let snapshot: ThemeSnapshot = { preference: 'light', revision: 0, themes: [],
     active: { id: 'light', colorScheme: 'light', tokens: {} },
     fontSize: 14 }
@@ -57,6 +65,8 @@ async function mounted(run: (view: {
   if (presenterFirst) listeners.add(present)
   const effects: Array<() => void> = []
   const sizes: number[] = []
+  let activeLocale = 'en'
+  const localeListeners = new Set<() => void>()
   let render: ((props: { view: string }) => ReactNode) | undefined
   const context = {
     effect(run: () => (() => void)) { effects.push(run()) },
@@ -66,7 +76,9 @@ async function mounted(run: (view: {
       sizes.push(px); snapshot = { ...snapshot, fontSize: px, revision: snapshot.revision + 1 }
       for (const listener of listeners) listener(snapshot)
     } },
-    locale: { getSnapshot: () => ({ active: 'en' }), subscribe: () => () => {} },
+    locale: { getSnapshot: () => ({ active: activeLocale }), subscribe: (listener: () => void) => {
+      localeListeners.add(listener); return () => { localeListeners.delete(listener) }
+    } },
     on(_event: string, listener: (snapshot: ThemeSnapshot) => void) { listeners.add(listener); return () => { listeners.delete(listener) } },
   }
   apply(context as never)
@@ -76,6 +88,11 @@ async function mounted(run: (view: {
   try {
     await act(async () => { root.render(render!({ view: 'page' })); await Promise.resolve() })
     await run({ dom, sizes, disposePlugin,
+      async remount() {
+        await act(async () => root.render(null))
+        await act(async () => root.render(render!({ view: 'page' })))
+      },
+      async locale(active) { await act(async () => { activeLocale = active; for (const listener of localeListeners) listener() }) },
       async publish(patch) { await act(async () => {
         snapshot = { ...snapshot, ...patch, revision: snapshot.revision + 1 }
         for (const listener of listeners) listener(snapshot)
@@ -88,11 +105,34 @@ async function mounted(run: (view: {
     })
   } finally {
     await act(async () => root.unmount())
-    disposePlugin(); presenter.dispose(); vi.unstubAllGlobals(); dom.window.close()
+    disposePlugin(); presenter.dispose(); vi.restoreAllMocks(); vi.unstubAllGlobals(); dom.window.close()
   }
 }
 
 describe('font interaction with DSH target presenter', () => {
+  it.each(['missing', 'throwing'] as const)('preserves both font choices across page remount with %s storage', async mode => {
+    await mounted(async ({ dom, select, remount, disposePlugin }) => {
+      const style = dom.window.document.documentElement.style
+      await select(0, 'yahei')
+      expect(style.getPropertyValue(UI_FONT_VARIABLE)).toBe(UI_FONT_PRESETS[0]!.value)
+      await remount()
+      expect(dom.window.document.querySelectorAll('select')[0]!.value).toBe('yahei')
+      await select(1, 'consolas')
+      expect(style.getPropertyValue(UI_FONT_VARIABLE)).toBe(UI_FONT_PRESETS[0]!.value)
+      expect(style.getPropertyValue(CODE_FONT_VARIABLE)).toBe('Consolas, monospace')
+      await remount()
+      expect(dom.window.document.querySelectorAll('select')[0]!.value).toBe('yahei')
+      expect(dom.window.document.querySelectorAll('select')[1]!.value).toBe('consolas')
+      const reset = [...dom.window.document.querySelectorAll('button')].find(button => button.textContent?.includes('Reset'))!
+      await act(async () => reset.click())
+      await remount()
+      expect(dom.window.document.querySelectorAll('select')[0]!.value).toBe('')
+      expect(style.getPropertyValue(UI_FONT_VARIABLE)).toBe('')
+      expect(style.getPropertyValue(CODE_FONT_VARIABLE)).toBe('')
+      disposePlugin()
+    }, { uiFont: 'Old font', codeFont: '' }, true, mode)
+  })
+
   it('restores prior declarations and priorities without retracting a later third-party write', () => {
     const dom = new JSDOM('<body></body>')
     const style = dom.window.document.documentElement.style
@@ -157,6 +197,30 @@ describe('font interaction with DSH target presenter', () => {
       expect(dom.window.document.body.textContent).toContain('denied or is unsupported')
       expect(query).toHaveBeenCalledTimes(3)
       expect(dom.window.document.querySelector('option[value="custom"]')).not.toBeNull()
+    })
+  })
+
+  it('switches live field, option and status copy while preserving an uncommitted font draft', async () => {
+    await mounted(async ({ dom, select, locale }) => {
+      vi.stubGlobal('queryLocalFonts', vi.fn().mockResolvedValue([{family:'User Font'}]))
+      await select(0, 'custom')
+      const input = dom.window.document.querySelector('input')!
+      await act(async () => { Simulate.change(input, {target:{value:'"My draft font", sans-serif'}} as never) })
+      await act(async () => dom.window.document.querySelectorAll('button')[0]!.click())
+      expect(dom.window.document.querySelector('[role="status"]')!.textContent).toContain('1 installed fonts')
+      const stored = dom.window.localStorage.getItem(STORAGE_KEY)
+      await locale('zh-CN')
+      expect(dom.window.document.body.textContent).toContain('界面字体')
+      expect(dom.window.document.querySelector('option[value="yahei"]')!.textContent).toBe('微软雅黑')
+      expect(dom.window.document.querySelector('[role="status"]')!.textContent).toContain('已读取 1 款')
+      expect(input.value).toBe('"My draft font", sans-serif')
+      expect(input.placeholder).toContain('例如')
+      expect(dom.window.localStorage.getItem(STORAGE_KEY)).toBe(stored)
+      await locale('en-US')
+      expect(dom.window.document.body.textContent).toContain('Interface font')
+      expect(input.value).toBe('"My draft font", sans-serif')
+      expect(input.placeholder).toContain('e.g.')
+      expect(dom.window.document.querySelector('option[value="sys:User Font"]')!.textContent).toBe('User Font')
     })
   })
 })

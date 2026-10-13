@@ -17,6 +17,12 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
+      "@klarkxy/dsh-plugin-kit/model-settings-client": [
+        "plugins/dsh-plugin-kit/src/model-settings-client.ts"
+      ],
+      "@klarkxy/dsh-plugin-kit/model-settings": [
+        "plugins/dsh-plugin-kit/src/model-settings.ts"
+      ],
       "@klarkxy/dsh-model-route": [
         "plugins/dsh-model-route/src/index.ts"
       ],
@@ -44,9 +50,6 @@
       "@klarkxy/dsh-plugin-kit/model-menu": [
         "plugins/dsh-plugin-kit/src/model-menu.ts"
       ],
-      "@klarkxy/dsh-plugin-kit/model-menu-ui": [
-        "plugins/dsh-plugin-kit/src/model-menu-ui.tsx"
-      ],
       "@klarkxy/dsh-plugin-kit/llm-call": [
         "plugins/dsh-plugin-kit/src/llm-call.ts"
       ],
@@ -59,26 +62,11 @@
       "@klarkxy/dsh-current-title/contracts": [
         "plugins/dsh-current-title/src/contracts.ts"
       ],
-      "@klarkxy/dsh-mood": [
-        "plugins/dsh-mood/src/index.ts"
+      "@klarkxy/dsh-plugin-kit/cli-process": [
+        "plugins/dsh-plugin-kit/src/cli-process.ts"
       ],
-      "@klarkxy/dsh-mood/contracts": [
-        "plugins/dsh-mood/src/contracts.ts"
-      ],
-      "@klarkxy/dsh-recap": [
-        "plugins/dsh-recap/src/index.ts"
-      ],
-      "@klarkxy/dsh-recap/contracts": [
-        "plugins/dsh-recap/src/contracts.ts"
-      ],
-      "@klarkxy/dsh-fusion": [
-        "plugins/dsh-fusion/src/index.ts"
-      ],
-      "@klarkxy/dsh-fusion/contracts": [
-        "plugins/dsh-fusion/src/contracts.ts"
-      ],
-      "@klarkxy/dsh-fusion/host-contracts": [
-        "plugins/dsh-fusion/src/host-contracts.ts"
+      "@klarkxy/dsh-plugin-kit/cli-media": [
+        "plugins/dsh-plugin-kit/src/cli-media.ts"
       ]
     }
   }

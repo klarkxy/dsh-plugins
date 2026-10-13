@@ -58,6 +58,7 @@ describe('copy thread id', () => {
     const ctx = {
       effect(callback: () => () => void) { unload = callback() },
       slots: {
+        entriesOfSlot: () => [], spec: () => undefined, subscribe: () => () => {},
         inject(_key: string, callback: () => () => void) {
           const inner = callback()
           return () => { disposed.push('inject'); inner() }
@@ -79,46 +80,12 @@ describe('copy thread id', () => {
     expect(specs.map(spec => spec['name'])).toEqual([
       'sidebar.workspaces.session.menu.item',
       'sidebar.workspaces.session.menu.item',
-      'main',
-      'sidebar.panellist',
+      'conversation.hero.workspace',
       USER_ACTIONS_SLOT,
       'shell.overlay',
     ])
     unload()
-    expect(disposed.filter(item => item === 'inject')).toHaveLength(6)
+    expect(disposed.filter(item => item === 'inject')).toHaveLength(5)
     expect(disposed).toContain(COPY_THREAD_MENU_ID)
-  })
-
-  it('reads the sidebar label from the locale snapshot when an earlier subscriber runs first', () => {
-    let active = 'zh-CN'
-    const listeners: Array<() => void> = []
-    let label = () => ''
-    let seen = ''
-    listeners.push(() => { seen = label() })
-    const ctx = {
-      effect(callback: () => () => void) { callback() },
-      slots: {
-        inject(_key: string, callback: () => () => void) {
-          callback()
-          return () => {}
-        },
-        register(spec: { label?: () => string }) {
-          if (typeof spec.label === 'function') label = spec.label
-          return () => {}
-        },
-      },
-      locale: {
-        getSnapshot: () => ({ active }),
-        subscribe(listener: () => void) {
-          listeners.push(listener)
-          return () => {}
-        },
-      },
-    }
-    apply(ctx as never)
-    active = 'en'
-    for (const listener of listeners) listener()
-    expect(seen).toBe('Free chat')
-    expect(label()).toBe('Free chat')
   })
 })

@@ -1,35 +1,13 @@
 import type { WebFetchProvider, WebSearchProvider } from '@deepseek-ai/dsh-web'
+import type { DshWebManagementDescriptor } from '@klarkxy/dsh-plugin-kit/contracts'
 
 export const WEB_SEARCH_RPC_CHANNEL = '/web-search-manager'
 export type RpcResult<T = unknown> = { ok: true; value: T } | {
   ok: false; error: { code: string; message: string; details: Record<string, unknown> }
 }
 export type ProviderKind = 'search' | 'fetch'
-/** Management metadata only. Execution and source vocabulary belong to ctx.web. */
-export interface ProviderDescriptor {
-  readonly id: string
-  readonly label: string
-  readonly description: string
-  readonly defaultBaseURL?: string
-  readonly credentialRef?: string
-  /** True when the key is shared with another surface. The page must not delete it. */
-  readonly credentialShared?: boolean
-  /** Optional notice naming the settings surface that owns a shared credential. */
-  readonly credentialHint?: string
-  readonly billing: 'request' | 'model-and-tools' | 'none' | 'unknown'
-  /** Optional provider-supplied billing summary. */
-  readonly pricing?: string
-  /** Public HTTPS page explaining provider charges. */
-  readonly pricingUrl?: string
-  /** Public HTTPS page where the user can create an API key. */
-  readonly signupUrl?: string
-  /** Plugin that owns configuration. Native providers keep their settings there. */
-  readonly configurationOwner?: string
-  /** Explicit settings link supplied by the provider, never inferred from its id. */
-  readonly configurationUrl?: string
-  /** Fixed legacy route migrated by a bundle-owned adapter; not used by native plugins. */
-  readonly legacyId?: string
-}
+/** Management metadata only. Field contract lives in plugin-kit; execution stays with ctx.web. */
+export interface ProviderDescriptor extends DshWebManagementDescriptor {}
 export const WEB_MANAGER_OWNER = '@klarkxy/dsh-web-search-manager'
 /** Optional display metadata on a provider registered directly with ctx.web. */
 export type DiscoverableSearchProvider = WebSearchProvider & { readonly dshWebManagement?: ProviderDescriptor }

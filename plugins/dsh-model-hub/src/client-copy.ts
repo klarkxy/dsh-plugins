@@ -1,0 +1,77 @@
+import type { ModelSettingsText } from '@klarkxy/dsh-plugin-kit/model-settings'
+
+export function hubText(value: ModelSettingsText | undefined, language: 'zh' | 'en'): string {
+  return typeof value === 'string' ? value : value?.[language] ?? ''
+}
+
+/** Local validation defaults, without rewriting provider diagnostics. */
+export const hubMessages = [
+  ['请求失败', 'Request failed'],
+  ['字段引用无效', 'Invalid field reference'],
+  ['请先刷新，以获取有效的设置版本', 'A valid expected revision is required; refresh and retry'],
+  ['模型路由无效', 'Invalid model route'],
+  ['模型设置提供方已变化，请刷新后重试', 'Model settings owner changed; refresh and retry'],
+  ['设置已变化，请刷新后重试', 'Settings changed; refresh and retry'],
+  ['此模型字段不可编辑', 'Not an editable model field'],
+  ['此设置需要选择具体模型', 'This model setting requires a concrete model'],
+  ['模型设置提供方已卸载，请刷新后重试', 'Model settings owner unloaded; refresh and retry'],
+  ['自测字段仅用于诊断', 'Self-test fields are diagnostic only'],
+  ['提供方设置版本无效', 'Invalid owner revision'],
+  ['未检测到此模型字段', 'Not a detected model field'],
+  ['没有可编辑的集合条目', 'No collection item to edit'],
+  ['设置版本无效', 'Invalid revision'],
+  ['ChatGPT 需要 Codex 模型', 'ChatGPT requires a Codex model'],
+  ['Codex 模型目录不可用。', 'Codex model catalog is unavailable.'],
+  ['配置已在别处修改，请刷新后重试。', 'Settings changed elsewhere. Refresh and try again.'],
+  ['设置已更新，请刷新后重试。', 'Settings changed. Refresh and try again.'],
+  ['正在保存配置，请稍后重试。', 'Settings are being saved. Try again shortly.'],
+  ['ChatGPT 插件已卸载。', 'The ChatGPT plugin has been unloaded.'],
+  ['配置格式无效。', 'Invalid settings format.'],
+  ['请等当前调用完成后保存配置。', 'Wait for the current call to finish before saving settings.'],
+  ['无法保存标题设置。', 'Could not save title settings.'],
+  ['标题设置无效。', 'Invalid title settings.'],
+  ['模型设置同步服务不可用', 'Model settings sync service unavailable'],
+  ['模型设置变更消息无效', 'Invalid model settings change frame'],
+  ['模型设置同步尚未就绪便收到变更消息', 'Model settings sync change arrived before ready'],
+  ['模型设置同步在就绪后中断；请刷新或重新打开页面', 'Model settings sync stream ended after ready; refresh or reopen the page'],
+  ['模型设置同步在就绪前中断；请刷新或重新打开页面', 'Model settings sync stream ended before ready; refresh or reopen the page'],
+  ['Git 提交模型设置字段不存在', 'Unknown Git Commit model setting'],
+  ['Git 提交插件已停用', 'dsh-git-commit: plugin disabled'],
+  ['Git 提交设置已变化；请重新加载后重试', 'dsh-git-commit: settings changed; reload and retry'],
+  ['安全自动模型设置字段不存在', 'Unknown Safe Auto model setting'],
+  ['设置已变化；请重新加载后重试', 'Settings changed; reload and retry'],
+  ['请求无效', 'Invalid request'],
+  ['此处只能编辑审查设置', 'Only reviewer settings may be edited here'],
+  ['配置必须是对象', 'config must be an object'],
+  ['启用状态必须是布尔值', 'enabled must be a boolean'],
+  ['静态只读开关必须是布尔值', 'staticReadonly must be a boolean'],
+  ['审查模型供应商或模型标识无效', 'invalid reviewer provider/model identifier'],
+  ['供应商和模型必须一起配置', 'provider and model must be configured together'],
+  ['设置思考强度需要先选择审查模型', 'reasoningEffort requires a reviewer model'],
+  ['所选模型不支持该思考强度', 'The selected model does not support this reasoning effort'],
+  ['启用状态无效', 'Invalid enabled state'],
+  ['找不到原生子代理模型选择设置', 'native subagent-model-selection-settings not found'],
+  ['路由需要非空的供应商和模型标识', 'A route requires non-empty provider and model ids'],
+  ['供应商和模型标识最长 250 字符', 'Route provider and model ids are limited to 250 characters'],
+  ['路由思考强度必须是非空字符串', 'A route reasoning effort must be a non-empty string'],
+  ['路由思考强度最长 250 字符', 'Route reasoning effort is limited to 250 characters'],
+  ['无效的路由下标', 'Invalid route index'],
+  ['没有 profile 目录，无法保存任务倾向', 'No profile directory; cast tendencies cannot be stored'],
+  ['任务倾向需要非空的供应商和模型标识', 'A tendency requires non-empty provider and model ids'],
+  ['任务倾向必须是字符串', 'A tendency must be a string'],
+  ['任务倾向最长 500 字符', 'A tendency is limited to 500 characters'],
+  ['添加模型后才能启用子代理阵容', 'Add a model before enabling subagent cast'],
+  ['任务倾向已变化，请刷新后重试', 'Cast tendencies changed; refresh and retry'],
+  ['任务倾向版本已达上限', 'Cast tendency revision limit reached'],
+  ['无法读取任务倾向文件；请恢复 cast.json 的访问权限后刷新', 'Cast tendency store cannot be read; restore access to cast.json and refresh'],
+  ['任务倾向文件损坏；请修复 cast.json 后刷新', 'Cast tendency store is damaged; repair cast.json and refresh'],
+  ['任务倾向文件版本不受支持；请使用兼容的插件再保存', 'Cast tendency store version is unsupported; use a compatible plugin before saving'],
+  ['任务倾向文件格式无效；请修复 cast.json 后刷新', 'Cast tendency store schema is invalid; repair cast.json and refresh'],
+  ...(['provider', 'model', 'reasoningEffort', 'reviewerPrompt'] as const).map(key => [`${key} 必须是字符串`, `${key} must be a string`] as const),
+  ...(['timeoutMs', 'maxInputBytes', 'outputTokens', 'maxReviewsPerTask', 'consecutiveDenials', 'humanApprovalTimeoutMs'] as const).map(key => [`${key} 无效`, `invalid ${key}`] as const),
+] as const
+
+export function hubMessage(message: string, language: 'zh' | 'en'): string {
+  const pair = hubMessages.find(pair => (pair as readonly string[]).includes(message))
+  return pair?.[language === 'zh' ? 0 : 1] ?? message
+}

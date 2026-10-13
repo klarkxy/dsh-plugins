@@ -12,9 +12,17 @@ const T = {
     siteTitle: "klarkxy 的 DSH 插件",
     switchLabel: "English",
     skip: "跳到正文",
+    heroEyebrow: "DeepSeek Harness · Plugins",
+    heroTitleA: "klarkxy 的 ",
+    heroTitleGrad: "DSH",
+    heroTitleB: " 插件",
     heroLead: (n) => `${n} 个 DeepSeek Harness 插件，都已发布到 npm。挑一个，在终端里装上。`,
     heroArg: "<包名>",
     heroNote: "把 web 换成你在用的 profile。装完重启 profile，插件会出现在「设置 → 插件」里。",
+    statPlugins: (n) => `${n} 个插件`,
+    statCategories: (n) => `${n} 个分类`,
+    statUpdated: (date) => `更新于 ${date}`,
+    all: "全部",
     catalog: "插件",
     filterLabel: "筛选插件",
     filterPlaceholder: "按名称、包名或用途筛选",
@@ -24,6 +32,9 @@ const T = {
     copy: "复制",
     needs: (list) => `需先装 ${list}`,
     recent: "最近发布",
+    changelog: "版本动态",
+    changelogLead: "所有插件的完整版本时间线，数据来自 npm。",
+    allReleases: "查看全部版本动态",
     footerData: (date) => `版本和 README 取自 npm，生成于 ${date}。`,
     source: "源码",
     npmProfile: "npm 主页",
@@ -61,9 +72,17 @@ const T = {
     siteTitle: "klarkxy's DSH plugins",
     switchLabel: "中文",
     skip: "Skip to content",
+    heroEyebrow: "DeepSeek Harness · Plugins",
+    heroTitleA: "klarkxy's ",
+    heroTitleGrad: "DSH",
+    heroTitleB: " plugins",
     heroLead: (n) => `${n} DeepSeek Harness plugins, all published on npm. Pick one and install it from a terminal.`,
     heroArg: "<package>",
     heroNote: "Replace web with your profile name. Restart the profile after installing; the plugin then shows up under Settings → Plugins.",
+    statPlugins: (n) => `${n} plugin${n === 1 ? "" : "s"}`,
+    statCategories: (n) => `${n} categories`,
+    statUpdated: (date) => `Updated ${date}`,
+    all: "All",
     catalog: "Plugins",
     filterLabel: "Filter plugins",
     filterPlaceholder: "Filter by name, package, or purpose",
@@ -73,6 +92,9 @@ const T = {
     copy: "Copy",
     needs: (list) => `Needs ${list}`,
     recent: "Recent releases",
+    changelog: "Release timeline",
+    changelogLead: "The complete version timeline across all plugins, straight from npm.",
+    allReleases: "See the full release timeline",
     footerData: (date) => `Versions and READMEs come from npm. Generated ${date}.`,
     source: "Source",
     npmProfile: "npm profile",
@@ -387,8 +409,9 @@ function head({ lang, title, description, root, path, altPath, catalog, assetVer
 <a class="skip" href="#main">${t.skip}</a>
 <header class="masthead">
 <div class="wrap masthead-inner">
-<a class="brand" href="${root}${langPrefix(lang) || "./"}"><img src="${root}assets/mark.svg" width="28" height="28" alt="">${esc(t.siteTitle)}</a>
+<a class="brand" href="${root}${langPrefix(lang) || "./"}"><img class="mark" src="${root}assets/mark.svg" width="26" height="26" alt="">${esc(t.siteTitle)}</a>
 <nav class="masthead-nav">
+<a href="${root}${langPrefix(lang)}changelog/">${t.changelog}</a>
 <a href="${root}${altPath}" hreflang="${T[other].htmlLang}" lang="${T[other].htmlLang}">${t.switchLabel}</a>
 <a href="${esc(catalog.source)}">GitHub</a>
 </nav>
@@ -404,6 +427,7 @@ function foot({ lang, generatedAt, catalog, root }) {
 <p>${esc(t.footerData(day(generatedAt)))}</p>
 <ul>
 <li><a href="${esc(catalog.source)}">${t.source}</a></li>
+<li><a href="${root}${langPrefix(lang)}changelog/">${t.changelog}</a></li>
 <li><a href="${esc(catalog.owner.npm)}">${t.npmProfile}</a></li>
 <li><a href="${OFFICIAL_DOCS}${lang === "en" ? "en/" : ""}">${t.officialDocs}</a></li>
 <li><a href="${root}plugins.json">plugins.json</a></li>
@@ -418,32 +442,33 @@ function foot({ lang, generatedAt, catalog, root }) {
 const iconImg = (root, plugin, size) =>
   `<img class="icon" src="${root}assets/icons/${plugin.slug}.svg" width="${size}" height="${size}" alt="">`;
 
-function copyButton(lang, commands, label) {
-  return `<button type="button" class="copy" data-copy="${esc(commands.join("\n"))}" data-done="${lang === "zh" ? "已复制" : "Copied"}">${esc(label)}</button>`;
+function copyButton(lang, commands, label, variant = "") {
+  return `<button type="button" class="copy${variant ? ` ${variant}` : ""}" data-copy="${esc(commands.join("\n"))}" data-done="${lang === "zh" ? "已复制" : "Copied"}">${esc(label)}</button>`;
 }
 
 // ---------------------------------------------------------------------------
 // Pages
 
 function homePage(ctx, lang) {
-  const { catalog, plugins } = ctx;
+  const { catalog, plugins, generatedAt } = ctx;
   const t = T[lang];
   const root = lang === "en" ? "../" : "";
   const path = langPrefix(lang);
   const pageFor = (p) => `${root}${langPrefix(lang)}plugins/${p.slug}/`;
+  const categories = catalog.categories
+    .map((c) => ({ ...c, members: plugins.filter((p) => p.category === c.id) }))
+    .filter((c) => c.members.length);
 
-  const sections = catalog.categories
+  const sections = categories
     .map((c) => {
-      const members = plugins.filter((p) => p.category === c.id);
-      if (!members.length) return "";
-      const rows = members
+      const rows = c.members
         .map((p) => {
           const needs = p.deps.length ? `<span class="needs">${esc(t.needs(p.deps.map((d) => d.title[lang]).join("、")))}</span>` : "";
           const haystack = [p.title.zh, p.title.en, p.package, p.summary[lang], c.title[lang]].join(" ").toLowerCase();
-          return `<li class="row" data-search="${esc(haystack)}">
+          return `<li class="row" data-search="${esc(haystack)}" data-category="${esc(c.id)}">
 ${iconImg(root, p, 40)}
 <div class="row-text">
-<h4><a class="row-link" href="${pageFor(p)}">${esc(p.title[lang])}</a></h4>
+<h4><a class="row-link" href="${pageFor(p)}">${esc(p.title[lang])}</a><span class="tag">${esc(t.kind[p.kind])}</span></h4>
 <code class="pkg">${esc(p.package)}</code>
 <p>${esc(p.summary[lang])}</p>
 </div>
@@ -451,8 +476,8 @@ ${iconImg(root, p, 40)}
 <span class="ver">${esc(p.npm.version)}</span>
 <span>${day(p.npm.modified)}</span>
 ${needs}
-</div>
 ${copyButton(lang, p.commands, t.copy)}
+</div>
 </li>`;
         })
         .join("\n");
@@ -468,8 +493,17 @@ ${rows}
     })
     .join("\n");
 
-  const releases = plugins
-    .flatMap((p) => p.npm.versions.map((v) => ({ p, ...v })))
+  const catnav = `<nav class="catnav" aria-label="${esc(t.catalog)}">
+<div class="wrap">
+<ul>
+<li><a href="#main" data-category="" aria-current="true">${esc(t.all)}<span class="n">${plugins.length}</span></a></li>
+${categories.map((c) => `<li><a href="#cat-${c.id}" data-category="${esc(c.id)}">${esc(c.title[lang])}<span class="n">${c.members.length}</span></a></li>`).join("\n")}
+</ul>
+</div>
+</nav>`;
+
+  const allVersions = plugins.flatMap((p) => p.npm.versions.map((v) => ({ p, ...v })));
+  const releases = allVersions
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 8)
     .map(
@@ -482,12 +516,19 @@ ${rows}
     `<main id="main">
 <section class="hero">
 <div class="wrap">
-<h1>${esc(t.siteTitle)}</h1>
+<p class="eyebrow">${esc(t.heroEyebrow)}</p>
+<h1>${esc(t.heroTitleA)}<span class="grad">${esc(t.heroTitleGrad)}</span>${esc(t.heroTitleB)}</h1>
 <p class="lede">${esc(t.heroLead(plugins.length))}</p>
 <pre class="terminal hero-terminal" aria-label="${esc(t.install)}"><span class="prompt" aria-hidden="true">$</span> dsh plugin --profile web add <span class="arg">${esc(t.heroArg)}</span></pre>
 <p class="hero-note">${esc(t.heroNote)}</p>
+<ul class="hero-stats">
+<li><strong>${plugins.length}</strong> ${esc(t.statPlugins(plugins.length).replace(String(plugins.length), "").trim())}</li>
+<li><strong>${categories.length}</strong> ${esc(t.statCategories(categories.length).replace(String(categories.length), "").trim())}</li>
+<li>${esc(t.statUpdated(day(generatedAt)))}</li>
+</ul>
 </div>
 </section>
+${catnav}
 <section class="catalog wrap" aria-labelledby="catalog-title">
 <div class="catalog-bar">
 <h2 id="catalog-title">${t.catalog}</h2>
@@ -505,7 +546,48 @@ ${sections}
 <ol>
 ${releases}
 </ol>
+<p class="more"><a href="${root}${langPrefix(lang)}changelog/">${esc(t.allReleases)} →</a></p>
 </section>
+</main>
+` +
+    foot({ ...ctx, lang, root })
+  );
+}
+
+function changelogPage(ctx, lang) {
+  const { plugins } = ctx;
+  const t = T[lang];
+  const root = lang === "en" ? "../../" : "../";
+  const path = `${langPrefix(lang)}changelog/`;
+  const altPath = `${lang === "zh" ? "en/" : ""}changelog/`;
+  const pageFor = (p) => `${root}${langPrefix(lang)}plugins/${p.slug}/`;
+
+  const entries = plugins
+    .flatMap((p) => p.npm.versions.map((v) => ({ p, ...v })))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const months = new Map();
+  for (const e of entries) {
+    const key = day(e.date).slice(0, 7);
+    if (!months.has(key)) months.set(key, []);
+    months.get(key).push(e);
+  }
+  const body = [...months]
+    .map(
+      ([month, list]) => `<section class="month" aria-labelledby="m-${month}">
+<h2 id="m-${month}">${month}</h2>
+<ol>
+${list.map((e) => `<li><time datetime="${esc(e.date)}">${day(e.date)}</time><a href="${pageFor(e.p)}">${esc(e.p.title[lang])}</a><span class="ver">${esc(e.version)}</span></li>`).join("\n")}
+</ol>
+</section>`,
+    )
+    .join("\n");
+
+  return (
+    head({ ...ctx, lang, root, path, altPath, title: `${t.changelog} · ${t.siteTitle}`, description: t.changelogLead }) +
+    `<main id="main" class="wrap changelog">
+<h1>${esc(t.changelog)}</h1>
+<p class="lede">${esc(t.changelogLead)}</p>
+${body}
 </main>
 ` +
     foot({ ...ctx, lang, root })
@@ -583,7 +665,7 @@ function detailPage(ctx, plugin, lang) {
   const related = plugins.filter((p) => p.category === plugin.category && p.slug !== plugin.slug);
   const relatedBlock = related.length
     ? `<section class="related wrap" aria-labelledby="related-title"><h2 id="related-title">${t.related}</h2><ul>${related
-        .map((p) => `<li>${iconImg(root, p, 28)}<a href="${pageFor(p)}">${esc(p.title[lang])}</a><span>${esc(p.summary[lang])}</span></li>`)
+        .map((p) => `<li class="card">${iconImg(root, p, 28)}<a href="${pageFor(p)}">${esc(p.title[lang])}</a><span>${esc(p.summary[lang])}</span></li>`)
         .join("")}</ul></section>`
     : "";
 
@@ -597,20 +679,25 @@ ${iconImg(root, plugin, 64)}
 <div>
 <h1>${esc(plugin.title[lang])}</h1>
 <code class="pkg">${esc(plugin.package)}</code>
+<div class="tags">
+<span class="tag">${esc(t.kind[plugin.kind])}</span>
+<span class="tag">${esc(category.title[lang])}</span>
+${plugin.webUi ? `<span class="tag">${esc(t.webUi)}</span>` : ""}
+</div>
 <p class="lede">${esc(plugin.summary[lang])}</p>
 </div>
 </header>
-<section class="install" aria-labelledby="install-title">
+<section class="install card" aria-labelledby="install-title">
 <h2 id="install-title">${t.install}</h2>
 <div class="terminal-wrap">
 <pre class="terminal">${plugin.commands.map((c) => `<span class="prompt" aria-hidden="true">$</span> ${esc(c)}`).join("\n")}</pre>
-${copyButton(lang, plugin.commands, t.copyInstall)}
+${copyButton(lang, plugin.commands, t.copyInstall, "primary")}
 </div>
 ${plugin.deps.length ? `<p class="small">${t.installDeps(list(plugin.installPackages.filter((p) => p.slug !== plugin.slug)))}</p>` : ""}
 <p class="small">${esc(t.heroNote)}</p>
 </section>
 <div class="plugin-body">
-<aside class="facts" aria-labelledby="facts-title">
+<aside class="facts card" aria-labelledby="facts-title">
 <h2 id="facts-title">${t.facts}</h2>
 <dl>
 ${facts}
@@ -720,6 +807,7 @@ export function renderSite(catalog, data, { generatedAt, assetVersion = "0" }) {
   const out = new Map();
   for (const lang of LANGS) {
     out.set(`${langPrefix(lang)}index.html`, homePage(ctx, lang));
+    out.set(`${langPrefix(lang)}changelog/index.html`, changelogPage(ctx, lang));
     for (const p of plugins) out.set(`${langPrefix(lang)}plugins/${p.slug}/index.html`, detailPage(ctx, p, lang));
   }
   for (const p of plugins) {

@@ -5,6 +5,17 @@
  */
 import type { ModelMenuChoice } from './catalog.ts'
 
+/** Localize standard effort ids only when the provider has not supplied a display name. */
+export function modelMenuEffortLabel(effort: { id: string; name: string }, locale?: string): string {
+  if (effort.name !== effort.id) return effort.name
+  const labels: Record<string, readonly [string, string]> = {
+    off: ['关闭', 'Off'], none: ['无', 'None'], minimal: ['最低', 'Minimal'], low: ['低', 'Low'],
+    medium: ['中', 'Medium'], high: ['高', 'High'], xhigh: ['极高', 'Extra high'],
+    max: ['最高', 'Maximum'], ultra: ['超高', 'Ultra'],
+  }
+  return labels[effort.id]?.[locale?.toLowerCase().startsWith('zh') ? 0 : 1] ?? effort.name
+}
+
 /** One provider group in the menu, in catalog order, after applying the search query. */
 export interface ModelMenuGroup {
   readonly provider: string

@@ -4,6 +4,7 @@
  * plus whether this plugin's own self-test markers survived projection.
  */
 import { detectModelFields, modelRouteOverride, normalizeModelRoute, type ModelRoute } from '@klarkxy/dsh-model-route'
+import type { ModelSettingsText } from '@klarkxy/dsh-plugin-kit/model-settings'
 
 /** Structural subset of the host SettingsDescriptor the probe needs. */
 export interface ProbeDescriptorLike {
@@ -15,7 +16,15 @@ export interface ProbeDescriptorLike {
 
 export interface ProbeField {
   path: string[]
-  via: 'marker' | 'shape'
+  via: 'marker' | 'shape' | 'contribution'
+  label?: ModelSettingsText
+  description?: ModelSettingsText
+  supportsReasoning?: false
+  rootKeys?: string[]
+  writeKeys?: string[]
+  preserveSiblings?: true
+  allowFollow?: boolean
+  followLabel?: string | { zh: string; en: string }
   marker?: Record<string, unknown>
   current?: ModelRoute
   editable?: false
@@ -27,7 +36,7 @@ export interface ProbeEntry {
   fields: ProbeField[]
 }
 
-export type SelfTestChannel = 'marker' | 'shape' | 'absent'
+export type SelfTestChannel = 'marker' | 'shape' | 'absent' | 'contribution'
 
 export interface ProbeReport {
   generatedAt: string
@@ -75,6 +84,12 @@ export function buildProbeReport(descriptors: readonly ProbeDescriptorLike[], no
 /** One namespace's detected fields plus the CAS revision a write must carry. */
 export interface HubEntry {
   ns: string
+  title?: ModelSettingsText
+  source?: 'owner'
+  ownerId?: string
+  catalog?: unknown
+  catalogError?: ModelSettingsText
+  error?: ModelSettingsText
   revision: number
   fields: ProbeField[]
 }
@@ -91,6 +106,12 @@ export function listModelFields(descriptors: readonly ProbeDescriptorLike[]): Hu
       fields: fields.map(field => ({
         path: [...field.path],
         via: field.via,
+        ...(field.label ? { label: field.label } : {}),
+        ...(field.description ? { description: field.description } : {}),
+        ...(field.supportsReasoning === false ? { supportsReasoning: false as const } : {}),
+        ...(field.rootKeys ? { rootKeys: [...field.rootKeys] } : {}),
+        ...(field.writeKeys ? { writeKeys: [...field.writeKeys] } : {}),
+        ...(field.preserveSiblings ? { preserveSiblings: true as const } : {}),
         ...(field.marker ? { marker: field.marker as Record<string, unknown> } : {}),
         ...(field.current ? { current: field.current } : {}),
         ...(field.editable === false ? { editable: false as const } : {}),
@@ -104,8 +125,8 @@ export function listModelFields(descriptors: readonly ProbeDescriptorLike[]): Hu
 /** One validated write against a detected field: path ops plus the CAS revision. */
 export interface FieldWritePlan {
   ns: string
-  ops: ReadonlyArray<{ op: 'set'; path: readonly string[]; value: ModelRoute } | { op: 'unset'; path: readonly string[] }>
-  expectedRevision?: number
+  ops: ReadonlyArray<{ op: 'set'; path: readonly string[]; value: unknown } | { op: 'unset'; path: readonly string[] }>
+  expectedRevision: number
 }
 
 /**
@@ -117,7 +138,7 @@ export interface FieldWritePlan {
 export function planFieldWrite(entries: readonly HubEntry[], payload: unknown): FieldWritePlan {
   const row = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : undefined
   const ns = typeof row?.ns === 'string' ? row.ns : ''
-  const path = Array.isArray(row?.path) && row.path.length > 0 && row.path.every(s => typeof s === 'string' && s) ? row.path as string[] : undefined
+  const path = Array.isArray(row?.path) && row.path.every(s => typeof s === 'string' && s) ? row.path as string[] : undefined
   if (!ns || !path) throw new Error('Invalid field reference')
   const entry = entries.find(item => item.ns === ns)
   const field = entry?.fields.find(item => item.path.length === path.length && item.path.every((segment, index) => segment === path[index]))
@@ -125,7 +146,13 @@ export function planFieldWrite(entries: readonly HubEntry[], payload: unknown): 
   if (field.editable === false) throw new Error('No collection item to edit')
   const override = modelRouteOverride(normalizeModelRoute(row?.route))
   if (row?.expectedRevision !== undefined && (!Number.isSafeInteger(row.expectedRevision) || (row.expectedRevision as number) < 0)) throw new Error('Invalid revision')
-  const expectedRevision = typeof row?.expectedRevision === 'number' ? row.expectedRevision : entry.revision
+  if (typeof row?.expectedRevision !== 'number') throw new Error('A valid expected revision is required; refresh and retry')
+  const expectedRevision = row.expectedRevision
+  if (!path.length || field.preserveSiblings) return { ns, expectedRevision, ops: (field.rootKeys ?? field.writeKeys ?? ['provider', 'model']).map(key => {
+    const route = override ?? (field.arrayItem ? { provider: '', model: '' } : undefined)
+    const value = route?.[key as keyof ModelRoute]
+    return value === undefined ? { op: 'unset' as const, path: [...path, key] } : { op: 'set' as const, path: [...path, key], value }
+  }) }
   // Native unset on an array index splices the element. Follow mode preserves it.
   return { ns, expectedRevision, ops: override || field.arrayItem
     ? [{ op: 'set', path, value: override ?? { provider: '', model: '' } }]

@@ -1,6 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
-  <rect x="4" y="5" width="12" height="14" rx="2" stroke="#1d4e89" stroke-width="1.6"/>
-  <path d="M8 9h6M8 12h6M8 15h4" stroke="#1d4e89" stroke-width="1.6" stroke-linecap="round"/>
-  <rect x="9" y="8" width="11" height="12" rx="2" fill="#f4f7fb" stroke="#1d4e89" stroke-width="1.6"/>
-  <path d="M12 12h5M12 15h3" stroke="#1d4e89" stroke-width="1.6" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" fill="none">
+  <title>Session Manager</title>
+  <defs>
+    <linearGradient id="session-front" x1="5" y1="12" x2="26" y2="29" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4D75F5"/>
+      <stop offset="1" stop-color="#8EB6FF"/>
+    </linearGradient>
+    <linearGradient id="session-back" x1="13" y1="5" x2="31" y2="22" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#39ABA9"/>
+      <stop offset="1" stop-color="#65DED0"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(3.6 3.6) scale(.8)">
+    <path d="M16 5H28A4 4 0 0 1 32 9V17A4 4 0 0 1 28 21H27V25L22 21H16A4 4 0 0 1 12 17V9A4 4 0 0 1 16 5Z" fill="url(#session-back)"/>
+    <path d="M18 10H26" stroke="#D9FFF5" stroke-width="2" stroke-linecap="round"/>
+    <path d="M8 12H22A4 4 0 0 1 26 16V24A4 4 0 0 1 22 28H13L7 32V28A4 4 0 0 1 4 24V16A4 4 0 0 1 8 12Z" fill="url(#session-front)"/>
+    <path d="M10 18H20M10 23H16" stroke="#E0EBFF" stroke-width="2.2" stroke-linecap="round"/>
+  </g>
 </svg>

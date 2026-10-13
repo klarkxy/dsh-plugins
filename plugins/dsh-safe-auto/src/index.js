@@ -1,9 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { isAbsolute } from 'node:path';
+import { resolveReviewPaths } from './review-paths.js';
+import { createHostRuntimeRegistry } from './host-runtime.js';
 import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts';
 import { parseConfig } from './config.js';
 import { hardRisk, containsSecret } from './policy.js';
-import { analyzeShell, isReadonly } from './shell-command.js';
+import { analyzeShell, isReadonly, isSafeStaticExposure } from './shell-command.js';
+import { createCredentialReads } from './credential-reads.js';
 import { assessApproval, bindingOf, escalationReason } from './approval-review.js';
 import { createGate } from './gate.js';
 import { resolveReviewRoute, sameRoute } from './model-route.js';
@@ -52,6 +54,8 @@ export function apply(ctx, raw = {}) {
   const decisions = new Map();
   const execution = new AsyncLocalStorage();
   const lifetime = new AbortController();
+  const hostRuntime = createHostRuntimeRegistry(ctx.tools);
+  const credentialReads = createCredentialReads(ctx, lifetime.signal);
   let llm;
   // Optional dependency: losing the model service must NOT unload the safety guards.
   if (typeof ctx.inject === 'function') ctx.inject(['llm'], scope => {
@@ -60,7 +64,7 @@ export function apply(ctx, raw = {}) {
     scope.effect(() => () => { if (llm === active) llm = undefined; });
   });
   const gate = createGate(config, { getLlm: () => llm, audit: row => ctx.logger.info('safe-auto %s', JSON.stringify(row)) });
-  ctx.effect(() => () => { lifetime.abort(); humanApprovals.dispose(); gate.dispose(); decisions.clear(); execution.disable(); });
+  ctx.effect(() => () => { lifetime.abort(); hostRuntime.dispose(); humanApprovals.dispose(); gate.dispose(); decisions.clear(); execution.disable(); });
 
   const reviewable = exec => REVIEW_TOOLS.has(exec.name) && ESCALATION.has(exec.arguments?.sandbox_permissions);
 
@@ -72,13 +76,13 @@ export function apply(ctx, raw = {}) {
       cwd: session?.header?.cwd, sandbox, signal: exec.signal,
       subagent: isSubagentSession(session),
       nested: exec.parent !== undefined, ...info };
-    if (reviewable(exec)) {
+    if (REVIEW_TOOLS.has(exec.name)) {
       // These are optional capability reads, not model assertions about its environment.
       const fs = ctx.get?.('fs');
       const shell = ctx.get?.('shell');
-      const paths = [call.cwd, ...(['bash', 'pwsh'].includes(call.tool)
-        ? (call.args.workdir === undefined ? [] : [call.args.workdir]) : [call.args.file_path])];
-      call.localExecution = paths.every(p => typeof p === 'string' && isAbsolute(p) && fs?.processPathFromHostPath?.(p) === p);
+      call.reviewPaths = resolveReviewPaths(call, fs);
+      call.localExecution = call.reviewPaths.localExecution;
+      if (call.localExecution && ['bash', 'pwsh'].includes(call.tool)) call.trustedRuntime = hostRuntime.get(exec);
       call.jobsAvailable = typeof ctx.get !== 'function' || ctx.get('jobs') !== undefined;
       call.shellConfined = ['read-only', 'workspace-write', 'danger-full-access'].includes(shell?.sandboxMode);
     }
@@ -105,6 +109,7 @@ export function apply(ctx, raw = {}) {
   });
 
   ctx.on('tools/pre-execute', async (exec, next) => {
+    hostRuntime.begin(exec);
     const config = configFor(exec);
     if (!config.enabled) return next();
     if (exec.signal.aborted || lifetime.signal.aborted) return { kind: 'cancel' };
@@ -117,14 +122,16 @@ export function apply(ctx, raw = {}) {
   // Bind the approval to the active execution, never a process-wide visible callId cache.
   ctx.on('tools/execute', async (exec, next) => {
     const config = configFor(exec);
-    if (!config.enabled || !reviewable(exec)) return next();
+    if (!config.enabled) return next();
+    const run = () => credentialReads.execute(exec, next);
+    if (!reviewable(exec)) return run();
     const call = callOf(exec, true);
     const saved = { kind: 'approval', binding: bindingOf(call, assessApproval(call, config)), signal: exec.signal, controlBinding: controlBinding(exec) };
-    if (decisions.size >= 1024) return next();
+    if (decisions.size >= 1024) return run();
     decisions.set(exec.token, saved);
     const store = { exec, saved, active: true, claimed: false };
     try {
-      const result = await execution.run(store, next);
+      const result = await execution.run(store, run);
       // Around-dispatch may return result content; tools/result is a read-only
       // observer in the pinned host. Expose recovery through the actual result.
       if (result?.isError && saved.feedback) return { ...result,
@@ -135,6 +142,7 @@ export function apply(ctx, raw = {}) {
   }, { prepend: true });
 
   ctx.on('tools/result', (exec, result) => {
+    hostRuntime.observe(exec, result);
     decisions.delete(exec.token);
     ctx.logger.info('safe-auto %s', JSON.stringify({ phase: 'result', tool: exec.name,
       callId: String(exec.callId), isError: result?.isError }));
@@ -202,12 +210,14 @@ export function apply(ctx, raw = {}) {
     // structural, secret and host constraints under the original live binding.
     const manualAssessment = assessment.code === 'AUTHORITY_CONTEXT_INCOMPLETE'
       ? assessApproval({ ...callOf(exec, true), authorityIncomplete: false }, config) : assessment;
-    // Static proof, no model: a fully literal bash parse where every invocation
-    // is provably read-only skips evidence and review entirely. pwsh and
-    // unparseable commands always fall through to the reviewer.
+    // No mutation is only half the proof: content/environment dumps can expose
+    // credentials. Only metadata/literal output may skip evidence and review.
     let staticAllow = false;
     if (assessment.kind === 'review' && config.staticReadonly && exec.name === 'bash') {
-      try { staticAllow = isReadonly(analyzeShell(exec.arguments?.command)); } catch { staticAllow = false; }
+      try {
+        const analysis = analyzeShell(exec.arguments?.command);
+        staticAllow = isReadonly(analysis) && isSafeStaticExposure(analysis);
+      } catch { staticAllow = false; }
     }
     try {
       const call = callOf(exec, true);

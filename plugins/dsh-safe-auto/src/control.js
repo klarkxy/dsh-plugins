@@ -7,7 +7,7 @@ export const SETTINGS_FIELDS = REVIEW_FIELDS;
 const modes = new Set(['read-only', 'workspace-write', 'danger-full-access']);
 
 /** UI writes only reviewer preferences. The enable switch and budgets remain operator-owned profile config. */
-export function createControl(base, { table, presets, sandboxPolicy, sessions, platform = process.platform, onChange = () => {} }) {
+export function createControl(base, { table, presets, sandboxPolicy, sessions, platform = process.platform, onChange = () => {}, onSettingsChanged = () => {} }) {
   let settings = table.get('reviewer') ?? { revision: 0, values: {} };
   let tail = Promise.resolve();
   const lifetime = new AbortController();
@@ -83,8 +83,8 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
       const next = { revision: settings.revision + 1, values: Object.fromEntries(REVIEW_FIELDS.map(k => [k, nextConfig[k] ?? ''])) };
       await table.put('reviewer', next);
       settings = next;
-      // The save may already be durable. Cancellation suppresses publication,
-      // and disposal still waits for this write before closing the domain.
+      // Notify committed writes even when the caller was cancelled while saving.
+      try { onSettingsChanged(next.revision); } catch {}
       signal?.throwIfAborted();
       onChange();
       return settingsView();

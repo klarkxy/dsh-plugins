@@ -1,7 +1,7 @@
 import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
-import type { ModelRoute } from '@klarkxy/dsh-plugin-kit/contracts'
+import type { ModelRoute } from '@klarkxy/dsh-model-route'
 import type { GenerateConfig, TitleMessage, TitleModelRoute } from './contracts.ts'
-import { PLUGIN_NAME } from './contracts.ts'
+import { DEFAULT_TIMEOUT_MS, PLUGIN_NAME } from './contracts.ts'
 import { frameMessages, selectRecentMessages } from './input.ts'
 import { formatTitle, normalizeSessionTitle, parseModelTitle, resolveTitleLocale, type TitleLocaleMode } from './output.ts'
 import { sourceVersionOf } from './messages.ts'
@@ -26,6 +26,12 @@ export function systemPrompt(config: GenerateConfig, customPrompt = ''): string 
   ].join('\n')
 }
 
+/**
+ * Saved override passed to resolveFeatureModel. Unlike modelRouteOverride,
+ * this does not trim or re-apply the 250/80 caps: stored rows are already
+ * normalized, and a whitespace-only id must stay a miss (not a trimmed hit)
+ * so the host-default fallback is unchanged.
+ */
 export function titleModelRoute(route: TitleModelRoute | undefined): ModelRoute | undefined {
   if (!route?.provider || !route.model) return undefined
   return route.reasoningEffort
@@ -71,17 +77,40 @@ export async function generateCurrentTitle(options: {
     options.localePreference,
   )
   const sourceVersion = sourceVersionOf(options.sessionId, selected)
-  const result = await callLlmText(options.llm, {
-    plugin: PLUGIN_NAME,
-    route: callRoute,
-    system: systemPrompt(options.config, options.prompt),
-    text: framedInput,
-    maxTokens: options.config.maxOutputTokens,
-    purpose: 'session-title',
-    signal: options.signal,
-    sessionId: options.sessionId,
-    isCurrent: options.isCurrent,
+  const deadline = new AbortController()
+  const timeoutMs = Number.isFinite(options.config.timeoutMs) && options.config.timeoutMs > 0
+    ? options.config.timeoutMs : DEFAULT_TIMEOUT_MS
+  const timer = setTimeout(() => deadline.abort(new DOMException('Title generation timed out.', 'TimeoutError')), timeoutMs)
+  const signal = AbortSignal.any([options.signal, deadline.signal])
+  let abort = () => {}
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    abort = () => reject(signal.reason)
+    if (signal.aborted) abort()
+    else signal.addEventListener('abort', abort, { once: true })
   })
+  let result
+  try {
+    result = await Promise.race([callLlmText(options.llm, {
+      plugin: PLUGIN_NAME,
+      route: callRoute,
+      system: systemPrompt(options.config, options.prompt),
+      text: framedInput,
+      maxTokens: options.config.maxOutputTokens,
+      purpose: 'session-title',
+      signal,
+      sessionId: options.sessionId,
+      isCurrent: options.isCurrent,
+    }), cancelled])
+    signal.throwIfAborted()
+  } catch (error) {
+    // The shared caller translates stream cancellation to AbortError. Retain
+    // the originating deadline or lifecycle reason at this feature boundary.
+    signal.throwIfAborted()
+    throw error
+  } finally {
+    clearTimeout(timer)
+    signal.removeEventListener('abort', abort)
+  }
   options.signal.throwIfAborted()
   if (!options.isCurrent()) {
     throw Object.assign(new Error('dsh-current-title: generation is no longer current'), { code: 'superseded' })

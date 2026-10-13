@@ -24,13 +24,14 @@ export default defineConfig([
     sourcemap: true,
     hash: false,
     deps: {
+      alwaysBundle: ['@klarkxy/dsh-plugin-kit/host-rpc', '@klarkxy/dsh-plugin-kit/llm-call'],
       neverBundle: [
         '@deepseek-ai/cordis',
         '@deepseek-ai/schemastery',
         '@deepseek-ai/dsh-session',
         '@deepseek-ai/dsh-session-query',
         '@deepseek-ai/dsh-tools',
-        '@klarkxy/dsh-plugin-kit',
+        '@deepseek-ai/dsh-llm',
       ],
     },
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),

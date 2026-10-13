@@ -1,5 +1,8 @@
 # @klarkxy/dsh-model-route
 
+<!-- release-state-note -->
+插件生命周期见[仓库状态清单](../../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../../RELEASING.zh-CN.md)。
+
 DeepSeek Harness（DSH）插件的模型路由字段契约。
 
 每个功能插件各自维护"我该用哪个模型"的设置。这个包是它们共享的小而稳的
@@ -22,6 +25,10 @@ DeepSeek Harness（DSH）插件的模型路由字段契约。
   实际数组按数字索引返回每个元素及其对应值；空数组或只有 schema 的元素模板使用
   `[]` 路径并标记 `editable: false`。`arrayItem: true` 表示该字段就是数组元素，
   清空路由应写入空路由；宿主的 unset 会删除整个元素。
+  保留 schema 的标题、说明和思考强度限制。根字段提供 `rootKeys`；模型与附加设置
+  组合的字段提供 `preserveSiblings` / `writeKeys`，编辑器据此只更新模型叶字段，
+  避免覆盖整个对象。递归有深度上限，同一 schema/值重复时停止。私有设置可以通过
+  仅供宿主使用的 `@klarkxy/dsh-plugin-kit/model-settings` 主动提供模型字段。
 - **目录辅助**：`parseModelMenuChoices`、`modelMenuEffortOptions`、
   `knownModelFromChoices`，对应宿主会话模型目录。
 - **`@klarkxy/dsh-model-route/zod`**：可选 zod 绑定：`modelRouteZod(meta?)`
@@ -76,6 +83,10 @@ const fields = detectModelFields(descriptor.schema, {
 })
 // → [{ path: ['summaryModel'], via: 'marker', marker: { purpose: 'summary', ... }, current, known }]
 ```
+
+## 国际化
+
+`ModelMenu` 接受宿主当前 `locale`（`zh` / `zh-CN` 或 `en` / `en-US`）。默认文案和标准思考强度 ID 随语言变化，菜单开关与搜索状态保持不变；显式文案和供应商自定义强度名称保留原文。schema marker 的 `label` 支持字符串或 `{ zh, en }` 双语文案。
 
 ## 许可证
 

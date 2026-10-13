@@ -1,10 +1,10 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { RpcResult } from '@klarkxy/dsh-plugin-kit/contracts'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import { registerModelSettings, notifyModelSettingsChanged, type ModelSettingsEvents } from '@klarkxy/dsh-plugin-kit/model-settings'
 import {
   PLUGIN_NAME, RPC_CHANNEL, SETTINGS_KEY, normalizeFallback, normalizeModelRoute,
-  type CommitRunResult, type GitCommitSettings, type GitCommitStatus,
+  type CommitRunResult, type GitCommitSettings, type GitCommitStatus, type RpcResult,
 } from './contracts.ts'
 import { CommitRunError, GitCommitService, type AgentStoreLike, type SessionStoreLike } from './service.ts'
 import { gitCommitDomain, parseSettings, updateSettingsSchema } from './storage.ts'
@@ -44,7 +44,16 @@ function stringField(payload: unknown, key: string): string | undefined {
 }
 
 function fail(error: unknown): RpcResult<never> {
-  if (error instanceof CommitRunError) return { ok: false, error: { code: error.code, message: error.message } }
+  if (error instanceof CommitRunError) {
+    return {
+      ok: false,
+      error: {
+        code: error.code,
+        message: error.message,
+        ...(error.partial ? { partial: error.partial } : {}),
+      },
+    }
+  }
   const message = error instanceof Error ? error.message : String(error)
   return { ok: false, error: { code: 'internal', message } }
 }
@@ -60,7 +69,7 @@ export async function handleRpc(
       case 'status': {
         const sessionId = stringField(payload, 'sessionId')
         if (!sessionId) return { ok: false, error: { code: 'bad-request', message: 'sessionId is required' } }
-        const value: GitCommitStatus = await service.status(sessionId)
+        const value: GitCommitStatus = await service.status(sessionId, signal)
         return { ok: true, value }
       }
       case 'settings': {
@@ -100,6 +109,7 @@ export function apply(ctx: Context): void {
   const tablePromise = domainPromise.then(domain => domain.table('settings'))
   const service = new GitCommitService({
     plugin: PLUGIN_NAME,
+    onSettingsChanged: revision => notifyModelSettingsChanged(ctx, PLUGIN_NAME, revision),
     llm: host.llm,
     host,
     sessions: host.sessions,
@@ -116,4 +126,18 @@ export function apply(ctx: Context): void {
     await (await domainPromise).close()
   }, 'git-commit.lifecycle')
   ctx.effect(() => registerHostRpc(host, RPC_CHANNEL, (endpoint, payload, signal) => handleRpc(service, endpoint, payload, signal)), 'git-commit.rpc')
+  ctx.effect(() => registerModelSettings(ctx as unknown as ModelSettingsEvents, {
+    ns: PLUGIN_NAME, title: { zh: 'Git 提交', en: 'Git Commit' },
+    async read(signal) {
+      await service.ready(); signal.throwIfAborted()
+      const settings = service.getSettings()
+      return { revision: settings.revision, fields: [{ path: ['model'], label: { zh: '提交模型', en: 'Commit model' }, current: settings.model,
+        followLabel: { zh: '当前会话 / 宿主默认模型', en: 'Current conversation / host default' }, allowFollow: true }] }
+    },
+    async write(path, route, expectedRevision, signal) {
+      if (path.length !== 1 || path[0] !== 'model') throw new Error('Unknown Git Commit model setting')
+      await service.ready(); signal.throwIfAborted()
+      return service.updateSettings({ ...service.getSettings(), model: route }, expectedRevision)
+    },
+  }), 'git-commit.model-settings')
 }

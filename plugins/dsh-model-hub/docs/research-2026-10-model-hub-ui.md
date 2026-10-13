@@ -26,8 +26,6 @@
 | 官方 UI 样式与 token 白名单 | `plugins/dsh-plugin-kit/src/official-ui.ts` | 排版/卡片/表单/横幅/空态/浮层齐全 |
 | 辅助 LLM 调用封装（**天然埋点点位**） | `plugins/dsh-plugin-kit/src/llm-call.ts` `callLlmText` 返回 `{text, provider, model, inputTokens?, outputTokens?}` | 无记录，需包一层 |
 | 用量统计页蓝本（storage-domain 按日表 + RPC summary + 纯 SVG 图） | `plugins/dsh-zhihu` UsageSection / usage.ts | 直接可借鉴 |
-| 最复杂模型管理 UI（master/detail、CAS 冲突 banner、草稿保护） | `plugins/dsh-classmates` ClassmatesPage / ModelsPage | 页面模式范本 |
-| 原生 select + modelCatalog 的轻量模型选择 | `plugins/dsh-recap` RecapModelSelect | **已从工作树删除**（仅存 git 历史与已发布 npm 包），仅作历史参考 |
 
 ---
 
@@ -37,12 +35,12 @@
 
 - **客户端**：`remote.session.modelCatalog(): Promise<ModelCatalog>`（`sessionController` 的 `@Remote`）。
   `ModelCatalog = { default: ModelSelection; routableProviders: string[]; groups: ModelProviderGroup[]; failures: ModelCatalogFailure[] }`，
-  每个模型含 `id/name/description?/reasoning?{efforts:[{id,name,description?}], defaultEffort?}`。仓内 dsh-recap、dsh-model-hub 已在用。
+  每个模型含 `id/name/description?/reasoning?{efforts:[{id,name,description?}], defaultEffort?}`。仓内 dsh-model-hub 已在用。
 - **宿主侧更丰富的面**：`ctx.llm`（LlmRuntime）
   - `@Remote listProviders(): LlmProviderInfo[]`、`@Remote listConfigurableProviders(): LlmConfigurableProvider[]`
     （后者带 `settingsNs/settingsPath/declared?/error?`——可展示「provider 配置状态」，包括休眠路由与错误）；
   - `listModels(provider)`、`resolveModelInfo(provider, model)`（含 contextWindow、defaultMaxTokens、efforts、modalities）——
-    **未标 @Remote**，按 API Gateway 规则客户端不可直接调，需经自建 RPC 转发（classmates 的 `RoleConfig.catalog()` 正是这个模式）；
+    **未标 @Remote**，按 API Gateway 规则客户端不可直接调，需经自建 RPC 转发；
   - `@Remote discoverModels(settingsNs, request)`：草稿端点探测（凭据一次性），可做「测试连接/发现模型」。
 - **默认模型**：`ctx.agentDefaultModel.currentSelection()/saveSelection()`；`ctx.subagentModelSelection.current()`；
   会话级 `remote.session.selectModel()`。
@@ -107,7 +105,7 @@
 
 | 目标 | 数据源 | 缺口 | 建议 |
 | --- | --- | --- | --- |
-| ① 每插件模型选择 | `settings.describe/mutate` + model-route 检测 | 无数据源缺口 | 探针产品化：补 CAS 冲突 banner（classmates 模式）、stale guard（zhihu 模式）、`settings/document-updated` 自动刷新 |
+| ① 每插件模型选择 | `settings.describe/mutate` + model-route 检测 | 无数据源缺口 | 探针产品化：补 CAS 冲突 banner、stale guard（zhihu 模式）、`settings/document-updated` 自动刷新 |
 | ② DSH 模型目录 | 客户端 `modelCatalog`；宿主 `llm.list*`（自建 RPC 转发） | 无缺口 | 新增「模型目录」分区：按 provider 分组展示模型/effort/上下文窗/默认模型/provider 配置状态（`listConfigurableProviders` 的 error/declared） |
 | ③ 各插件用量统计 | **需新建**：`llm/stream` 全局计量 + plugin-kit recorder 合作归因 + storage-domain 按日聚合 | 插件归属无宿主支持 | 双轨：全局/会话/purpose 维度立即可做；「按插件」数字随契约接入逐步覆盖，未接入进「未归因」桶 |
 
@@ -121,7 +119,7 @@
 ### RPC 选型
 
 继续用 plugin-kit `registerHostRpc`（鉴权委托宿主 `connection.requestRejection`、fail-closed、有测试）。
-**不选 Typert `$mount` 自建 namespace**：官方文档对第三方插件如何生成 `typert.remote-client.*` 产物是空白（classmates 能用是因为仓内自行复刻了生成流程），风险高于收益。
+**不选 Typert `$mount` 自建 namespace**：官方文档对第三方插件如何生成 `typert.remote-client.*` 产物是空白，风险高于收益。
 
 ### 存储选型
 
@@ -138,7 +136,7 @@ usage 聚合落 storage-domain（`openCompatibleDomain`），表结构对齐 zhi
 
 ## 五、风险与待验证项
 
-1. **插件归因覆盖率**：契约接入前「按插件」只有总量+未归因桶；需要在 plugin-kit 加 recorder 并逐个插件接入（dsh-recap、dsh-zhihu 等先行）。
+1. **插件归因覆盖率**：契约接入前「按插件」只有总量+未归因桶；需要在 plugin-kit 加 recorder 并逐个插件接入（dsh-zhihu 等先行）。
 2. **`llm/stream` 性能**：每次模型调用都过监听器；实现必须同步、无分配热路径、失败静默不阻断（waterfall 纪律）。
 3. **文档空白项**（以运行时为准复核）：SettingsDescriptor 对 `x-model-route` 的投影保留（探针自检持续观测）；`remote.llm.*` 客户端可达性（按规则推断不可达，转发方案不依赖它）；`ctx.remote.$on` 事件转发白名单是否含 `llm/adapters-updated`。
 4. **整页入口决策**：是否接受 `sidebar.panellist`+`main` 或右侧栏 tab 作为枢纽整页（超出仓规现状，需用户拍板；默认守住 `plugins.bundle.config` 多分区）。

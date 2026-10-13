@@ -2,6 +2,14 @@
 
 本仓库是 klarkxy 的 DSH 插件 monorepo，同时托管插件发布站 <https://klarkxy.github.io/dsh-plugins/>。
 
+## 排查问题的顺序
+
+遇到行为异常、报错或功能不工作时，**先怀疑并排查本仓库的插件代码**，而不是先去查官方宿主或第三方插件的问题。本仓库的插件、共享库和配置是变量最多、最常改动的部分，大概率是问题来源：
+
+- 先检查本仓库相关插件的源码、配置、依赖声明和最近改动（`git log` / `git diff`），确认是否由我们的代码或发布内容引起。
+- 排除本仓库原因后，再去对照 ZCode 源码、DSH 运行时和第三方插件找宿主侧原因。
+- 不要一上来就把问题归因为宿主 bug 或第三方插件缺陷；没有本仓库证据支撑时不写「官方的问题」式的结论。
+
 ## 核心参考：ZCode 源码
 
 `H:\Refernece\ZCode`（本地镜像，写本节时为 v3.14.3）是 ZCode AI 编程工作台的完整源码，与 DSH 宿主同族。设计或调试插件行为时**先读它的源码再下结论**，不要凭记忆或想象编造宿主 API、事件语义和生命周期。
@@ -72,11 +80,15 @@ pnpm check                                         # 全仓检查
 
 ## 与 npm 发布的关系
 
-`scripts/npm-release-holds.json` 是本批待验收公开包的发布暂缓名单，生成计划和执行发布均检查它；不要通过旧计划、改私有标记或仅凭构建成功绕过。解除某个包前核对最终打包内容、相关测试和目标宿主中新行为的验收证据，包含被打包的工作区依赖。
+`scripts/plugin-release-states.json` 记录所有 `plugins/*` 包的不可逆生命周期：`draft`（草稿）→ `testing`（测试中）→ `published`（已发布）。已发布包的修复、测试、README 调整和升版都保持已发布；禁止为维护降级，也不再把人工验收指纹绑定到生命周期。`publication` 保存不可改写的历史 npm 发布凭据。完整规则见 `RELEASING.zh-CN.md`。
 
-标记 `private: true` 的开发包参加构建、测试与打包检查，但 `scripts/release-target.mjs` 会将其排除在自动发布目标之外；未发布包不加入站点 catalog。
+正常自动发布只选择已发布的公开包。测试中包首次发布须通过手动工作流的 `first_release` 或 `plan --first-release NAME ...` 明确选择；草稿不能首次发布。首次发布在 npm 归档下载与完整性验证成功后才登记已发布。首次发布失败不提前晋级；部分成功逐包保存在发布产物中，重试可恢复，不能撤销已成功的发布事实。
 
-公开包 `plugins/*` 下被 `npm pack` 打包的文件（含 `package.json`、README）内容一变，`npm-publish.yml` 就会自动发布 patch 版本。只改 `site/`、根 README 或测试不会触发发布。插件的 `homepage` 指向对应详情页 `https://klarkxy.github.io/dsh-plugins/plugins/<slug>/`。
+每次更新仍检查测试、最终归档、依赖和当前计划内容。计划自动记录包与依赖闭包的内容指纹，源码或依赖变化会拒绝旧计划；不要求每次修改重新人工晋级。私有开发包参加检查但不发布；测试中的私有开发依赖可以随使用方构建验收，私有运行依赖不能进入公开包。新的公开依赖须已发布，或同批被明确选定首次发布。
+
+`scripts/npm-release-holds.json` 独立表示暂缓或封存，迁移冻结继续由 `scripts/editor-plugin-migration.json` 管理；二者都不降低生命周期。解除暂缓仍须核对其原因及最终包、相关测试和目标宿主行为。不要通过旧计划或改私有标记绕过限制。
+
+修改清单后运行 `pnpm release:docs` 和 `pnpm release:check`。本地检查与已提交清单比较；发布 CI 以本次推送前提交为基准，拒绝阶段倒退、删除历史条目或改写发布凭据。移除废弃包源码时，在原清单条目设置 `retired: true` 并保留阶段和历史发布凭据；该条目不再参与工作区、状态表或发布，不增加新的生命周期阶段。`pnpm release:status` 显示生命周期及发布资格，不代表当前版本已经通过检查。只改 `site/`、根 README 或未打包测试不会触发发布。未发布包不加入站点 catalog；插件 `homepage` 仍指向对应详情页。
 
 ## 官方包依赖约定
 
@@ -117,7 +129,7 @@ pnpm check                                         # 全仓检查
 - 颜色、圆角、层级、焦点环直接写宿主 `--dsw-*` token（白名单即 `OFFICIAL_THEME_TOKEN_NAMES`），不另起私有别名、不带字面量回落；写错 token 不报错而是静默丢样式，token 守卫测试会拦截白名单外的引用。
 - `Modal` 和 `Menu` 会 portal 到 `document.body`，脱离插件子树，portal 出来的浮层要在 portal 内部的元素上单独挂根类名才有样式。
 
-测试：vitest 用 `vitest.editor-plugins.config.ts` 里的别名把该包指到 `scripts/editor-plugins/ui-primitives-stub.tsx`；Node SSR 测试（如 dsh-safe-auto、dsh-blueprint）在 `require` 层打桩。不要为了在测试里跑通而引入真实组件包或 jsdom 之外的渲染环境。
+测试：vitest 用 `vitest.editor-plugins.config.ts` 里的别名把该包指到 `scripts/editor-plugins/ui-primitives-stub.tsx`；Node SSR 测试（如 dsh-safe-auto）在 `require` 层打桩。不要为了在测试里跑通而引入真实组件包或 jsdom 之外的渲染环境。
 
 ## 插件配置入口
 

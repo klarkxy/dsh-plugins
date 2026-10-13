@@ -89,6 +89,6 @@ describe('current title settings seat', () => {
     const { readFileSync } = await import('node:fs')
     const source = readFileSync(new URL('./client.tsx', import.meta.url), 'utf8')
     expect(source).not.toContain('owner={ctx}')
-    expect(source).toContain('<TitleSettings client={client} marker={marker} />')
+    expect(source).toContain('<TitleSettings client={client} marker={marker}')
   })
 })

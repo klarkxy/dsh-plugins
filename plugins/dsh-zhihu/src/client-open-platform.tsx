@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Checkbox } from '@deepseek-ai/dsh-client-ui-primitives'
-import { ZHIHU_QUOTA_IDS, ZHIHU_RPC_CHANNEL } from './contracts.ts'
+import { ZHIHU_QUOTA_IDS, normalizeZhihuQuotaId, ZHIHU_RPC_CHANNEL } from './contracts.ts'
 import { createZhihuClientState, type ZhihuClientState } from './client-state.ts'
-import { renderInput, renderSelect, ZhihuButton, ZhihuDetails, type HostButton, type HostInput, type HostSelect } from './client-host-ui.tsx'
+import { renderInput, renderSelect, ZhihuButton, ZhihuDetails } from './client-host-ui.tsx'
 import type { ZhihuOpenPlatformOperation, ZhihuOpenPlatformResult } from './open-platform.ts'
-import { translator, useT, type Translate } from './client-locale.ts'
+import { clientText, translator, useT, type ClientText, type Translate } from './client-locale.ts'
 
 export type ZhihuOpenPlatformRpc = {
   call(channel: string, endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown>
@@ -16,7 +16,7 @@ const OPERATION_COPY = [
   { value: 'content.comments', zh: '本人创作评论', en: 'Comments on my content' },
   { value: 'creator.account.stats', zh: '账号创作数据', en: 'Account creator stats' },
   { value: 'creator.content.stats', zh: '单篇创作数据', en: 'Per-post creator stats' },
-  { value: 'quota', zh: '官方每日额度', en: 'Official daily quota' },
+  { value: 'quota', zh: '官方每日免费额度', en: 'Official daily quota' },
 ] as const
 type OperationValue = (typeof OPERATION_COPY)[number]['value']
 
@@ -105,6 +105,7 @@ export function buildOpenPlatformParams(operation: ZhihuOpenPlatformOperation, f
     }
   }
   if (operation === 'quota') {
+    if (Array.isArray(form.apiIds)) form = { ...form, apiIds: form.apiIds.map(value => normalizeZhihuQuotaId(value) as typeof value) }
     if (!Array.isArray(form.apiIds) || form.apiIds.some(id => !(ZHIHU_QUOTA_IDS as readonly string[]).includes(id))) throw new Error(t('包含未知的额度项。', 'Contains an unknown quota item.'))
     if (form.apiIds.length) params.apiIds = [...new Set(form.apiIds)]
   }
@@ -126,11 +127,11 @@ export function parseOpenPlatformResponse(operation: ZhihuOpenPlatformOperation,
   }
   const value = raw.value
   if (!isRecord(value) || value.version !== 1 || value.operation !== operation || !isRecord(value.data) || !jsonValue(value.data)) throw new Error('开放平台响应格式无效。')
-  if (value.quotaId !== undefined && !(ZHIHU_QUOTA_IDS as readonly unknown[]).includes(value.quotaId)) throw new Error('响应额度项无效。')
+  if (value.quotaId !== undefined && !(ZHIHU_QUOTA_IDS as readonly unknown[]).includes(normalizeZhihuQuotaId(value.quotaId))) throw new Error('响应额度项无效。')
   if (value.paging !== undefined && (!isRecord(value.paging) || typeof value.paging.canContinue !== 'boolean'
     || (value.paging.isEnd !== undefined && typeof value.paging.isEnd !== 'boolean')
     || (value.paging.warning !== undefined && typeof value.paging.warning !== 'string'))) throw new Error('分页响应格式无效。')
-  return value as unknown as ZhihuOpenPlatformResult
+  return { ...value, ...(value.quotaId === undefined ? {} : { quotaId: normalizeZhihuQuotaId(value.quotaId) }) } as unknown as ZhihuOpenPlatformResult
 }
 export function openPlatformNextOffset(result: ZhihuOpenPlatformResult | null, currentOffset: string): string | null {
   if (!result || !['question.answers', 'content.comments'].includes(result.operation) || result.paging?.canContinue !== true || result.paging.isEnd === true) return null
@@ -153,8 +154,8 @@ export async function requestOpenPlatform(rpc: ZhihuOpenPlatformRpc, state: Zhih
   }
 }
 
-export function ZhihuOpenPlatformSection({ rpc, Button, Input, Select, quotaOnly = false, selectedOperation }: {
-  rpc: ZhihuOpenPlatformRpc; Button?: HostButton; Input?: HostInput; Select?: HostSelect; quotaOnly?: boolean
+export function ZhihuOpenPlatformSection({ rpc, quotaOnly = false, selectedOperation }: {
+  rpc: ZhihuOpenPlatformRpc; quotaOnly?: boolean
   /** Controlled by the unified test selector; omit the standalone heading and selector. */
   selectedOperation?: ZhihuOpenPlatformOperation
 }) {
@@ -162,7 +163,7 @@ export function ZhihuOpenPlatformSection({ rpc, Button, Input, Select, quotaOnly
   const [operation, setOperation] = useState<ZhihuOpenPlatformOperation>(quotaOnly ? 'quota' : 'question.recommendations')
   const [form, setForm] = useState(createOpenPlatformForm)
   const [result, setResult] = useState<ZhihuOpenPlatformResult | null>(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<ClientText>('')
   const [loading, setLoading] = useState(false)
   // A result stays visible after an edit but is marked stale, like the search section.
   const [stale, setStale] = useState(false)
@@ -179,18 +180,24 @@ export function ZhihuOpenPlatformSection({ rpc, Button, Input, Select, quotaOnly
     const hintId = `zhihu-op-${key}-hint`
     return <label key={key} className="dsh-ui-field">
       <span className="dsh-ui-label">{label}</span>
-      {renderInput(Input, { value: form[key], onChange: value => change(key, value), 'aria-label': label, 'aria-describedby': hintId, placeholder, className: 'zhihu-input' })}
+      {renderInput({ value: form[key], onChange: value => change(key, value), 'aria-label': label, 'aria-describedby': hintId, placeholder, className: 'zhihu-input' })}
       <span className="dsh-ui-hint" id={hintId}>{hint}</span>
     </label>
   }
   const select = (key: 'order' | 'contentType', label: string, hint: string, options: readonly { value: string; label: string }[]) => <label className="dsh-ui-field">
-    <span className="dsh-ui-label">{label}</span>{renderSelect(Select, { value: form[key], onChange: value => change(key, value), 'aria-label': label, options }, 'dsh-ui-select')}
+    <span className="dsh-ui-label">{label}</span>{renderSelect({ value: form[key], onChange: value => change(key, value), 'aria-label': label, options }, 'dsh-ui-select')}
     <span className="dsh-ui-hint">{hint}</span>
   </label>
   const run = (offset?: string) => {
     let params: Record<string, unknown>
     const nextForm = offset === undefined ? form : { ...form, offset }
-    try { params = buildOpenPlatformParams(activeOperation, nextForm, t) } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); return }
+    try { params = buildOpenPlatformParams(activeOperation, nextForm) } catch {
+      const message = (locale: 'zh' | 'en') => {
+        try { buildOpenPlatformParams(activeOperation, nextForm, translator(locale)); return '' }
+        catch (cause) { return cause instanceof Error ? cause.message : String(cause) }
+      }
+      setError([message('zh'), message('en')]); return
+    }
     if (offset !== undefined) setForm(nextForm)
     setLoading(true); setError('')
     void requestOpenPlatform(rpc, state, activeOperation, params, outcome => {
@@ -202,13 +209,13 @@ export function ZhihuOpenPlatformSection({ rpc, Button, Input, Select, quotaOnly
   const paged = activeOperation === 'question.answers' || activeOperation === 'content.comments'
   const dated = activeOperation === 'creator.account.stats' || activeOperation === 'creator.content.stats'
   const options = openPlatformOptions(t)
-  const title = quotaOnly ? t('官方每日额度', 'Official daily quota') : t('问题与创作', 'Questions and creator')
+  const title = quotaOnly ? t('官方每日免费额度', 'Official daily quota') : t('问题与创作', 'Questions and creator')
   return <section className="zhihu-open-platform dsh-ui-stack" aria-label={title}>
     {selectedOperation === undefined && <h3 className="dsh-ui-heading">{title}</h3>}
     <p className="dsh-ui-help">{quotaOnly
       ? t('查询知乎返回的官方额度，不推算余额。', 'Shows the quota Zhihu reports; no balance is inferred.')
       : t('手动触发，不自动翻页或重试。', 'Manual trigger only; no automatic paging or retry.')}</p>
-    {!quotaOnly && selectedOperation === undefined && renderSelect(Select, { value: activeOperation, options, 'aria-label': t('开放平台操作', 'Open Platform operation'), onChange: value => {
+    {!quotaOnly && selectedOperation === undefined && renderSelect({ value: activeOperation, options, 'aria-label': t('开放平台操作', 'Open Platform operation'), onChange: value => {
       if (options.some(option => option.value === value)) { reset(); setOperation(value as ZhihuOpenPlatformOperation) }
     } }, 'dsh-ui-select')}
     <OpenPlatformDetails quotaOnly={quotaOnly} />
@@ -242,19 +249,19 @@ export function ZhihuOpenPlatformSection({ rpc, Button, Input, Select, quotaOnly
       </fieldset>}
     </div>
     <div className="dsh-ui-actions">
-      <ZhihuButton host={Button} variant="primary" disabled={loading} onClick={() => run()}>
+      <ZhihuButton variant="primary" disabled={loading} onClick={() => run()}>
         {activeOperation === 'quota' ? t('查询官方额度', 'Check quota') : t('执行请求', 'Run request')}
       </ZhihuButton>
-      {loading && <ZhihuButton host={Button} onClick={() => { state.cancel(); setLoading(false); setError(t('已取消；晚到的结果将被丢弃。', 'Cancelled; a late response will be discarded.')) }}>{t('取消请求', 'Cancel')}</ZhihuButton>}
-      {nextOffset !== null && !loading && <ZhihuButton host={Button} onClick={() => run(nextOffset)}>{t('下一页', 'Next page')}</ZhihuButton>}
+      {loading && <ZhihuButton onClick={() => { state.cancel(); setLoading(false); setError(['已取消；晚到的结果将被丢弃。', 'Cancelled; a late response will be discarded.']) }}>{t('取消请求', 'Cancel')}</ZhihuButton>}
+      {nextOffset !== null && !loading && <ZhihuButton onClick={() => run(nextOffset)}>{t('下一页', 'Next page')}</ZhihuButton>}
     </div>
     {/* The single live region for this section. */}
     <p className={loading ? 'dsh-ui-loading' : 'dsh-ui-hint'} role="status">{loading ? t('等待响应…', 'Waiting for response…') : ''}</p>
-    {error && <p className="dsh-ui-error" role="alert">{error}</p>}
+    {error && <p className="dsh-ui-error" role="alert">{clientText(error, t)}</p>}
     {result && <div className="dsh-ui-stack">
       {stale && <p className="dsh-ui-banner">{t('参数已变化，结果对应旧参数，请重新请求。', 'Parameters changed; results are from the previous request. Run it again.')}</p>}
       <h4 className="dsh-ui-heading">{activeOperation === 'quota' ? t('官方原始额度字段', 'Raw quota fields') : t('返回数据', 'Response data')}</h4>
-      {result.paging?.warning && <p className="dsh-ui-banner">{result.paging.warning}</p>}
+      {result.paging?.warning && <p className="dsh-ui-banner">{clientText(result.paging.warning, t)}</p>}
       {!stale && paged && result.paging?.canContinue && nextOffset === null && <p className="dsh-ui-banner">{t('下一页位置缺失或未前进，已停止翻页。', 'The next page position is missing or did not advance; paging stopped.')}</p>}
       {activeOperation === 'content.detail' && (typeof result.data.Body !== 'string' || !result.data.Body.trim()) && <p className="dsh-ui-banner dsh-ui-banner--danger">{t('响应缺少正文（Body），未取得全文。', 'The response has no body (Body); full text was not retrieved.')}</p>}
       <pre className="zhihu-open-platform-data dsh-ui-code">{JSON.stringify(result.data, null, 2)}</pre>

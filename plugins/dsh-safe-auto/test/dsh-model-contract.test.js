@@ -236,3 +236,54 @@ test('pinned native ApprovalService preserves foreign Blueprint and Classmates a
     assert.equal(downstream.length, 2);
     assert.equal(ctx.sandboxPolicy.resolve().mode, 'workspace-write');
   });
+
+test('native escalation no longer auto-approves environment dumps or dedicated credential reads',
+  { skip: !host && 'DSH dependencies unavailable locally; mandatory in CI' }, async t => {
+    const { Context, Service } = host.cordis;
+    const ctx = new Context(), mounted = [], events = [];
+    const root = process.cwd();
+    class SandboxFixture extends Service {
+      constructor(scope) { super(scope, 'sandboxPolicy'); }
+      resolve() { return { mode: 'workspace-write', workspaceRoot: root }; }
+    }
+    class FilesystemFixture extends Service {
+      constructor(scope) { super(scope, 'fs'); }
+      processPathFromHostPath(path) { return path; }
+    }
+    t.after(async () => { for (const fiber of mounted.reverse()) await fiber.dispose(); });
+    for (const plugin of [host.prompt.default, host.tools.default, SandboxFixture, FilesystemFixture]) mounted.push(await ctx.plugin(plugin, {}));
+    mounted.push(await ctx.plugin(host.approval.default, { policy: 'ask' }));
+    let bodies = 0, downstream = 0;
+    ctx.tools.register({ name: 'bash', description: 'approval-only fixture; never starts a shell', parameters: { type: 'object' },
+      output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+      async execute(args, exec) {
+        bodies++;
+        return host.sandbox.approveEscalation({ requestedMode: args.sandbox_permissions, effectiveMode: 'workspace-write',
+          justification: args.justification, subject: 'operation' },
+        { approver: ctx.approval, agent: exec.agent, callId: exec.callId, toolName: 'bash', signal: exec.signal });
+      } });
+    ctx.on('approval/request', async () => { downstream++; return 'allowed-once'; });
+    mounted.push(await ctx.plugin(safeAuto, {}));
+    const session = { id: 'privacy-escalation', header: { cwd: root },
+      get seq() { return events.length; }, eventAt(seq) { return events[seq]; }, snapshotEvents: () => [...events],
+      append(type, data) { events.push({ seq: events.length, type, data }); } };
+    session.append('turn/start', {});
+    session.append('user/message', { source: { kind: 'user' }, content: [{ type: 'text', text: 'Inspect this project.' }] });
+    const agent = { id: 'privacy-agent', session };
+    const run = command => ctx.tools.execute({ callId: 'same-visible-id', name: 'bash', agent,
+      signal: new AbortController().signal, arguments: { command, description: 'fixture',
+        sandbox_permissions: 'danger-full-access', justification: 'Inspect project metadata.' } });
+    assert.equal((await run('ls -la')).isError, false, 'metadata control retains static approval');
+    const allowedBefore = events.filter(event => event.type === 'approval/decided' && event.data.outcome === 'allowed-once').length;
+    for (const command of ['printenv', 'printenv AWS_SECRET_ACCESS_KEY', 'grep -rn pattern .', 'cat normal.md']) {
+      assert.equal((await run(command)).isError, true, command);
+      assert.equal(events.filter(event => event.type === 'approval/decided').at(-1).data.outcome, 'unavailable', 'reviewer absence cannot become a static grant');
+    }
+    const before = bodies;
+    for (const command of ["cat '/synthetic/.codex/auth.json'", "cat '/synthetic/.claude/.credentials.json'", "cat '/synthetic/.dsh/credentials.json'"]) {
+      assert.equal((await run(command)).isError, true);
+    }
+    assert.equal(bodies, before, 'dedicated reads never reach even the approval-only shell body');
+    assert.equal(events.filter(event => event.type === 'approval/decided' && event.data.outcome === 'allowed-once').length, allowedBefore);
+    assert.equal(downstream, 0, 'no fallback answerer grants the request');
+  });

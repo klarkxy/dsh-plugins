@@ -6,24 +6,31 @@
  * matrix to the browser half over an authenticated RPC channel. Writes go
  * through `settings.mutate` — the official settings page's own path — with
  * the descriptor revision as CAS. The boot probe report is kept: it is logged
- * and written to `<profile>/data/model-hub/probe-report.json`.
+ * and written to `<profile>/data/model-hub/probe-report.json`. The subagent
+ * cast (cast.ts) edits the native subagent model-selection settings the same
+ * way and injects per-route task tendencies into the system prompt.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-system-prompt'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { modelRouteRoleSchemastery, modelRouteSchemastery } from '@klarkxy/dsh-model-route/schemastery'
-import { buildProbeReport, listModelFields, planFieldWrite, type ProbeDescriptorLike } from './probe.ts'
+import { buildProbeReport, planFieldWrite, type ProbeDescriptorLike } from './probe.ts'
+import { createHubSettings } from './owners.ts'
+import { notifyModelSettingsChanged, type ModelSettingsDiscovery } from '@klarkxy/dsh-plugin-kit/model-settings'
+import { ModelSettingsChangesController } from './changes.ts'
+import { CAST_TENDENCIES_NAMESPACE, createCast } from './cast.ts'
 
 export const name = '@klarkxy/dsh-model-hub'
-export const inject = ['settings', 'webServer', 'connection'] as const
+export const inject = ['settings', 'webServer', 'connection', 'systemPrompt'] as const
 export const CHANNEL = '/dsh-model-hub'
 
 export const Config = Schema.object({
-  selfTestMeta: modelRouteSchemastery({ purpose: 'self-test-meta', label: '自检字段（自定义键通道）' }).volatile(),
-  selfTestRole: modelRouteRoleSchemastery({ purpose: 'self-test-role', label: '自检字段（role 通道）' }).volatile(),
+  selfTestMeta: modelRouteSchemastery({ purpose: 'self-test-meta', label: { zh: '自检字段（自定义键通道）', en: 'Self-test field (custom key)' } }).volatile(),
+  selfTestRole: modelRouteRoleSchemastery({ purpose: 'self-test-role', label: { zh: '自检字段（role 通道）', en: 'Self-test field (role)' } }).volatile(),
 })
 
 interface ProfileContextLike {
@@ -37,9 +44,34 @@ interface SettingsLike {
 }
 
 export function apply(ctx: Context): void {
+  new ModelSettingsChangesController(ctx)
   const profile = ctx.get('profileContext') as ProfileContextLike | undefined
   const settings = ctx.settings as unknown as SettingsLike
   const describe = () => settings.describe({ redactSecrets: true }) as unknown as ProbeDescriptorLike[]
+  // Loader adds entry to the runtime fiber; the settings-only type dependency
+  // does not import that optional augmentation.
+  const ownNamespace = (ctx.fiber as unknown as { entry?: { options?: { id?: string } } }).entry?.options?.id ?? name
+  const hub = createHubSettings(ctx as unknown as ModelSettingsDiscovery, {
+    describe, mutate: (ns, ops, revision) => settings.mutate(ns, ops, revision),
+  }, ownNamespace)
+  const cast = createCast({
+    describe, mutate: (ns, ops, revision) => settings.mutate(ns, ops, revision),
+    profileDir: profile?.dir, logger: ctx.logger,
+    notifyTendenciesChanged: revision => notifyModelSettingsChanged(ctx, CAST_TENDENCIES_NAMESPACE, revision),
+  })
+
+  /* Subagent cast guidance: read-only advisory text evaluated at each prompt
+   * assembly — it never writes to disk or calls a model. It intentionally
+   * applies to every session including subagent threads: the native selection
+   * policy is inherited by child sessions, so the same tendencies stay valid
+   * there. User-provided tendency text is injected verbatim
+   * (interpolate: false). */
+  ctx.systemPrompt.section({
+    name: 'model-hub:subagent-cast',
+    order: ctx.systemPrompt.getSectionOrder('TOOL_SUBAGENT') + 1,
+    interpolate: false,
+    text: () => cast.promptText(() => (ctx.get('subagentModelSelection') as { current(): unknown } | undefined)?.current()),
+  })
 
   const run = (reason: string) => {
     let report
@@ -70,17 +102,25 @@ export function apply(ctx: Context): void {
   /* Browser-facing field matrix: list detected fields, write one field back.
    * registerHostRpc keeps the host's origin/auth policy authoritative and
    * fails closed when it is absent. */
-  ctx.effect(() => registerHostRpc(ctx as unknown as HostRpcContext, CHANNEL, async (endpoint, payload) => {
+  ctx.effect(() => registerHostRpc(ctx as unknown as HostRpcContext, CHANNEL, async (endpoint, payload, signal) => {
     try {
-      if (endpoint === 'fields.list') return { ok: true, value: listModelFields(describe()) }
+      if (endpoint === 'fields.list') return { ok: true, value: await hub.list(signal) }
       if (endpoint === 'fields.set') {
-        const plan = planFieldWrite(listModelFields(describe()), payload)
-        await settings.mutate(plan.ns, plan.ops, plan.expectedRevision)
-        return { ok: true, value: listModelFields(describe()) }
+        return { ok: true, value: await hub.set(payload, signal) }
+      }
+      if (endpoint.startsWith('cast.')) {
+        const row = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
+        if (endpoint === 'cast.get') return { ok: true, value: cast.getCast() }
+        if (endpoint === 'cast.setEnabled') return { ok: true, value: await cast.setEnabled(row.enabled, row.expectedRevision) }
+        if (endpoint === 'cast.addRoute') return { ok: true, value: await cast.addRoute(row.route, row.expectedRevision) }
+        if (endpoint === 'cast.setRoute') return { ok: true, value: await cast.setRoute(row.index, row.route, row.expectedRevision) }
+        if (endpoint === 'cast.removeRoute') return { ok: true, value: await cast.removeRoute(row.index, row.expectedRevision) }
+        if (endpoint === 'cast.setTendency') return { ok: true, value: cast.setTendency(row.provider, row.model, row.tendency, row.expectedRevision, signal) }
       }
       throw new Error(`Unknown endpoint: ${endpoint}`)
     } catch (error) {
       return { ok: false, error: { code: 'model-hub/rejected', message: error instanceof Error ? error.message : String(error) } }
     }
-  }))
+    // Camel-case cast endpoints widen the default lowercase-only endpoint gate.
+  }, { isEndpoint: endpoint => /^[a-z][a-zA-Z.]*$/.test(endpoint) }))
 }

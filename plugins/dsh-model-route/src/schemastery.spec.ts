@@ -5,6 +5,14 @@ import { detectModelFields } from './detect.ts'
 import { modelRouteRoleSchemastery, modelRouteSchemastery } from './schemastery.ts'
 
 describe('schemastery binding', () => {
+  it('keeps inner marker labels and reasoning restrictions through same-path wrappers', () => {
+    const route = modelRouteRoleSchemastery({ label: 'Owner label', reasoningEffort: false })
+    const wrappers = [Schema.transform(route, value => value), Schema.union([route, Schema.const(null)]), Schema.intersect([route, Schema.object({ prompt: Schema.string() })])]
+    for (const wrapper of wrappers) {
+      const [field] = detectModelFields(Schema.object({ model: wrapper }).toJSON())
+      expect(field).toMatchObject({ path: ['model'], via: 'marker', marker: { label: 'Owner label', reasoningEffort: false } })
+    }
+  })
   it('attaches the marker to the node metadata (extra-key channel)', () => {
     const schema = modelRouteSchemastery({ purpose: 'summary' })
     expect((schema.meta as Record<string, unknown>)[MODEL_ROUTE_MARKER]).toEqual({ purpose: 'summary' })
@@ -39,16 +47,18 @@ describe('schemastery binding', () => {
         },
       },
     }
-    expect(detectModelFields(projected)).toEqual([{ path: ['titleModel'], via: 'marker', marker: { purpose: 'title' } }])
+    expect(detectModelFields(projected)).toEqual([{ path: ['titleModel'], via: 'marker', marker: { purpose: 'title' }, supportsReasoning: false }])
   })
 
   it('walks real native transforms and bounded cycles, without treating unknown list nodes as branches', () => {
     const route = Schema.object({ provider: Schema.string(), model: Schema.string() })
     const wrapped = Schema.object({ transformed: Schema.transform(route, value => value) })
-    expect(detectModelFields(wrapped.toJSON())).toEqual([{ path: ['transformed'], via: 'shape' }])
+    expect(detectModelFields(wrapped.toJSON())).toEqual([{ path: ['transformed'], via: 'shape', supportsReasoning: false }])
     const cyclic = Schema.object({ child: Schema.lazy(() => cyclic), modelRoute: route })
     const fields = detectModelFields(cyclic.toJSON(), { maxDepth: 3 })
-    expect(fields.map(field => field.path)).toEqual([['child', 'modelRoute'], ['modelRoute']])
+    // An absent recursive child is not a live collection item. Stop the
+    // repeated schema/value pair rather than inventing phantom nested routes.
+    expect(fields.map(field => field.path)).toEqual([['modelRoute']])
     expect(detectModelFields({ type: 'unknown', list: [route.toJSON()] })).toEqual([])
   })
 })

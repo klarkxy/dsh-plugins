@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 2,
+  "packages": [
+    {
+      "name": "@klarkxy/dsh-chatgpt",
+      "state": "testing",
+      "reason": {
+        "zh": "已有隔离宿主验收；当前模型设置改动及最终包仍待复核，继续保持私有。",
+        "en": "Isolated-host acceptance exists; current model-setting changes and the final archive need review. Remains private."
+      },
+      "evidence": {
+        "targetHost": "plugins/dsh-chatgpt/ACCEPTANCE.md"
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-classmates",
+      "state": "published",
+      "reason": {
+        "zh": "源码已移除；仅保留历史发布凭据，不参与构建或发布。",
+        "en": "Source removed; historical publication proof only, excluded from builds and releases."
+      },
+      "publication": {
+        "version": "0.0.0-stage",
+        "publishedAt": "2026-10-11T01:39:54.128Z",
+        "integrity": "sha512-7U8M9oEH9K586e2p6HgV1zD8O92JmNosG3etz7Zf5wB0wBDbek4HM5OdBSVZOQHlhqPmnQLF9DRwQPBmthuzIA=="
+      },
+      "retired": true
+    },
+    {
+      "name": "@klarkxy/dsh-current-title",
+      "state": "published",
+      "reason": {
+        "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
+        "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-09-23T08:28:55.941Z",
+        "integrity": "sha512-QKJvQuJ0ZblvYlHtp+o6w6NwymWtlixFeP1EdSo7bQz+b3mI7vN63FD1xH64hM2XfWqv8OdBfNYuxnbq8SYKUw=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-dev-index",
+      "state": "published",
+      "reason": {
+        "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
+        "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-09-26T01:20:51.302Z",
+        "integrity": "sha512-8HHHAWw58eGDSuduXyPxgY3O4wK1M+CnJ1Z1DpXZQXPgP+MUIBdNGPmKRy0UDpNq7nyF7TUdUGB3RwpIDY9CTw=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-font",
+      "state": "published",
+      "reason": {
+        "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
+        "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
+      },
+      "publication": {
+        "version": "0.0.0-stage",
+        "publishedAt": "2026-10-11T01:40:08.768Z",
+        "integrity": "sha512-gLw1SWDX7dNzkW+v98QYJ8BRRCauZAQ6HZJWbCM6mEpRsp8FJWIGX6iacjb1Ks41k+xp7Jfe249vJdV3VE2m4w=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-git-commit",
+      "state": "published",
+      "reason": {
+        "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
+        "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
+      },
+      "publication": {
+        "version": "0.1.3",
+        "publishedAt": "2026-09-28T07:57:39.487Z",
+        "integrity": "sha512-QYKZFjYU+onoK6q7yeEtNYEhYSZUTNXJ3BvQA8sDu/zlI3w31AelFstYPj+wvCFAARFzesJppu23ohXwDV0Yrg=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-grok-build",
+      "state": "testing",
+      "reason": {
+        "zh": "已实现官方 CLI 能力并完成隔离宿主媒体验收；保持私有测试中，具体边界见验收记录。",
+        "en": "Official CLI capabilities implemented with isolated-host media acceptance; remains private and Testing. See acceptance limits."
+      },
+      "evidence": {
+        "targetHost": "plugins/dsh-grok-build/ACCEPTANCE.md"
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-minimax-code",
+      "state": "testing",
+      "reason": {
+        "zh": "已实现官方 CLI 能力并完成隔离宿主媒体验收；保持私有测试中，具体边界见验收记录。",
+        "en": "Official CLI capabilities implemented with isolated-host media acceptance; remains private and Testing. See acceptance limits."
+      },
+      "evidence": {
+        "targetHost": "plugins/dsh-minimax-code/ACCEPTANCE.md"
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-model-hub",
+      "state": "published",
+      "reason": {
+        "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
+        "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
+      },
+      "evidence": {
+        "tests": "plugins/dsh-model-hub/docs/acceptance-2026-10-11.md"
+      },
+      "publication": {
+        "version": "0.0.0-stage",
+        "publishedAt": "2026-10-11T01:40:22.34Z",
+        "integrity": "sha512-oO/k4zAa0tQ6/CfS5/wrSttbRslJSqdqj5f28PNCz0BZnKoY8kEfcl3j1V4SlI3TXMUVpSbzUuCQnflD2Up9ww=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-model-route",
+      "state": "published",
+      "reason": {
+        "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
+        "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
+      },
+      "evidence": {
+        "packedContent": "scripts/acceptance/shared-libraries-remediation-2026-10-12.md",
+        "tests": "scripts/acceptance/shared-libraries-remediation-2026-10-12.md",
+        "targetHost": "scripts/acceptance/shared-libraries-remediation-2026-10-12.md"
+      },
+      "publication": {
+        "version": "0.0.0-stage",
+        "publishedAt": "2026-10-11T01:39:41.696Z",
+        "integrity": "sha512-AUG+3wniMqMeJMpV2O4hsy6Z5X9CPTDD6gjotH0BprTZDIALRD+7YtiLoQS2APMPQiXyN3vsjBnVt3fUPaw1ug=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-plugin-kit",
+      "state": "published",
+      "reason": {
+        "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
+        "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
+      },
+      "evidence": {
+        "packedContent": "scripts/acceptance/shared-libraries-remediation-2026-10-12.md",
+        "tests": "scripts/acceptance/shared-libraries-remediation-2026-10-12.md",
+        "targetHost": "scripts/acceptance/shared-libraries-remediation-2026-10-12.md"
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-10-01T11:53:24.029Z",
+        "integrity": "sha512-UmLOhPHA2JfR9+NT1SzdKIIbi3QeH9Rv4442iL0uQP3cqN4SExcPsCP/omaHtCp2ilUacGLX5MD7zERykRXyiA=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-safe-auto",
+      "state": "published",
+      "reason": {
+        "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
+        "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
+      },
+      "publication": {
+        "version": "0.1.0-rc.3",
+        "publishedAt": "2026-09-27T07:05:52.72Z",
+        "integrity": "sha512-/y9ZnWZ8YPzdy2PtaL0VGTwVrE/ceajED4zpY8c6tAdqnyoxGsuwd4P3ZKXjtw3qZ9CVRA5obIhL3ZfXhkuV2Q=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-session-manager",
+      "state": "published",
+      "reason": {
+        "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
+        "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
+      },
+      "publication": {
+        "version": "0.0.0-stage",
+        "publishedAt": "2026-10-11T01:40:33.091Z",
+        "integrity": "sha512-U8iX2z4iO/pt/scZeMYCGFDoNGftLvJwYRIl3Qnp/uFOaUtpm+D/4xIkESZMVoqTiPgEnIzNvWTCU8F1ipYQPQ=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-unrestricted",
+      "state": "testing",
+      "reason": {
+        "zh": "尚未发布的私有开发包，保持测试中。",
+        "en": "Unpublished private development package; remains Testing."
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-web-search-manager",
+      "state": "published",
+      "reason": {
+        "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
+        "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-09-21T06:00:28.616Z",
+        "integrity": "sha512-Zg001/eSP56j/SQWlKovKY9Xynlepk8GTpBYF6bZ837j3dddNED+psiEixODHULdnIDBmJNt51lXAz9HNMmaig=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-zhihu",
+      "state": "published",
+      "reason": {
+        "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
+        "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-09-21T06:00:37.46Z",
+        "integrity": "sha512-PqJbwSRVYq60TVkVjYZ6cnlNIOh0JSQdyhrhEyFT8TwmMI5sUYnWrp28Ii2Xc/t3E3lrnNFHZEBUQi7QbxjxiA=="
+      }
+    }
+  ]
+}

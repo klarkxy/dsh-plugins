@@ -3,7 +3,7 @@ import { buildProbeReport, listModelFields, planFieldWrite } from './probe.ts'
 
 const ROUTE_NODE = {
   type: 'object',
-  properties: { provider: { type: 'string' }, model: { type: 'string' } },
+  properties: { provider: { type: 'string' }, model: { type: 'string' }, reasoningEffort: { type: 'string' } },
 }
 
 describe('buildProbeReport', () => {
@@ -65,12 +65,12 @@ describe('planFieldWrite', () => {
   })
 
   it('unsets an empty route back to the schema default', () => {
-    expect(planFieldWrite(entries, { ns: 'router-plugin', path: ['summary'], route: { provider: '', model: '' } }).ops)
+    expect(planFieldWrite(entries, { ns: 'router-plugin', path: ['summary'], route: { provider: '', model: '' }, expectedRevision: 7 }).ops)
       .toEqual([{ op: 'unset', path: ['summary'] }])
   })
 
-  it('uses the fresh revision when omitted and rejects malformed revisions', () => {
-    expect(planFieldWrite(entries, { ns: 'router-plugin', path: ['summary'], route: {} }).expectedRevision).toBe(7)
+  it('requires the caller revision and rejects malformed revisions', () => {
+    expect(() => planFieldWrite(entries, { ns: 'router-plugin', path: ['summary'], route: {} })).toThrow('expected revision')
     for (const revision of [-1, 1.5, NaN, '7']) {
       expect(() => planFieldWrite(entries, { ns: 'router-plugin', path: ['summary'], route: {}, expectedRevision: revision })).toThrow('Invalid revision')
     }
@@ -80,7 +80,7 @@ describe('planFieldWrite', () => {
     expect(() => planFieldWrite(entries, { ns: 'router-plugin', path: ['title'], route: {} })).toThrow(/Not a detected model field/)
     expect(() => planFieldWrite(entries, { ns: 'other', path: ['summary'], route: {} })).toThrow(/Not a detected model field/)
     expect(() => planFieldWrite(entries, { ns: '', path: ['summary'], route: {} })).toThrow(/Invalid field reference/)
-    expect(() => planFieldWrite(entries, { ns: 'router-plugin', path: [], route: {} })).toThrow(/Invalid field reference/)
+    expect(() => planFieldWrite(entries, { ns: 'router-plugin', path: [], route: {} })).toThrow(/Not a detected model field/)
     expect(() => planFieldWrite(entries, null)).toThrow(/Invalid field reference/)
   })
 })

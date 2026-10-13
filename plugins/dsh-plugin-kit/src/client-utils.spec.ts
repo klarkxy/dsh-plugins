@@ -17,7 +17,7 @@ describe('background plugin read recovery', () => {
   it('bounds failing native requests and permits one probe after the pause', async () => {
     let now = 0
     const gate = createPluginReadGate(() => now)
-    const read = vi.fn().mockRejectedValue(new Error('transport failure for /dsh-recap/status: HTTP 405'))
+    const read = vi.fn().mockRejectedValue(new Error('transport failure for /fixture-plugin/status: HTTP 405'))
     const poll = () => gate.canRead() ? gate.run(read).catch(() => {}) : undefined
     await poll()
     for (let i = 0; i < 100; i++) { now += 150; await poll() }

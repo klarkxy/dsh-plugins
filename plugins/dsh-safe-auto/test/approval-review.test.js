@@ -37,6 +37,22 @@ test('hard risk and secrets precede review', () => {
   assert.equal(assessApproval(call({ tool: 'write', args: { file_path: 'a.txt', content: 'api_key=abc123',
     sandbox_permissions: 'danger-full-access', justification: 'Write requested source' } }), config()).kind, 'deny');
 });
+
+test('review preserves ordinary agent-directory reads and refuses actual auth stores or raw mixed config', () => {
+  const base = call();
+  for (const command of ['cat .codex/sessions/demo.jsonl', 'cat .agents/skills/example/SKILL.md', 'cat package.json', 'printenv']) {
+    const req = call({ tool: 'bash', args: { ...base.args, command } });
+    const result = assessApproval(req, config());
+    assert.equal(result.kind, 'review', command);
+    assert.equal(result.action.arguments.command, command);
+  }
+  for (const command of ["cat '.codex/auth.json'", "cat '.aws/credentials'", "cat '.ssh/id_ed25519'"]) {
+    assert.equal(assessApproval(call({ tool: 'bash', args: { ...base.args, command } }), config()).code, 'SENSITIVE_COMMAND', command);
+  }
+  for (const command of ['cat .env', 'cat .npmrc', 'cat .codex/config.toml']) {
+    assert.equal(assessApproval(call({ tool: 'bash', args: { ...base.args, command } }), config()).code, 'USE_SAFE_READ', command);
+  }
+});
 test('unknown and invalid native parameters fail closed', () => {
   const req = call();
   for (const args of [{ ...req.args, env: {} }, { ...req.args, timeout: 2 }, { ...req.args, timeoutMs: 0 },
@@ -46,6 +62,44 @@ test('unknown and invalid native parameters fail closed', () => {
   }
   const invisible = { ...req.args }; Object.defineProperty(invisible, 'hidden', { value: 1 });
   assert.equal(assessApproval(call({ args: invisible }), config()).kind, 'ask');
+});
+test('shell timeouts follow native positive finite validation without a plugin cap', () => {
+  const base = call();
+  for (const tool of ['pwsh', 'bash']) {
+    for (const timeoutMs of [0.5, 60000, 240000, 300000, 600000, 600001, Number.MAX_SAFE_INTEGER + 1]) {
+      const req = call({ tool, args: { ...base.args, timeoutMs } });
+      const result = assessApproval(req, config());
+      assert.equal(result.kind, 'review', `${tool}: ${timeoutMs}`);
+      assert.equal(result.action.arguments.timeoutMs, timeoutMs);
+      assert.equal(req.args.timeoutMs, timeoutMs);
+    }
+    for (const timeoutMs of [0, -1, NaN, Infinity, -Infinity, '600000', null, undefined]) {
+      const result = assessApproval(call({ tool, args: { ...base.args, timeoutMs } }), config());
+      assert.equal(result.code, 'INVALID_TIMEOUT', `${tool}: ${String(timeoutMs)}`);
+    }
+    assert.equal(assessApproval(call({ tool }), config()).kind, 'review');
+  }
+});
+test('review paths and trusted runtime bind grants without rewriting native arguments', () => {
+  const original = call();
+  const args = Object.freeze({ ...original.args, workdir: '.' });
+  const req = call({ args, reviewPaths: { localExecution: true, workdir: 'D:\\work' },
+    trustedRuntime: { node: 'C:\\runtime\\node.exe', pnpm: 'C:\\runtime\\pnpm.mjs' } });
+  const result = assessApproval(req, config());
+  assert.equal(result.kind, 'review');
+  assert.deepEqual(result.action.arguments, args);
+  assert.equal(result.action.arguments.workdir, '.');
+  assert.equal(result.action.cwd, req.cwd);
+  assert.deepEqual(result.action.reviewPaths, req.reviewPaths);
+  assert.deepEqual(result.action.trustedRuntime, req.trustedRuntime);
+  assert.equal(escalationReason(req), escalationReason({ ...req, reviewPaths: undefined, trustedRuntime: undefined }));
+  const binding = bindingOf(req, result);
+  assert.notEqual(binding, bindingOf({ ...req, reviewPaths: { ...req.reviewPaths, workdir: 'D:\\other' } }, result));
+  assert.notEqual(binding, bindingOf({ ...req, trustedRuntime: { ...req.trustedRuntime, node: 'C:\\other\\node.exe' } }, result));
+  assert.notEqual(binding, bindingOf({ ...req, args: { ...args, workdir: 'D:\\work' } }, result));
+  const legacy = assessApproval(original, config());
+  assert.equal(Object.hasOwn(legacy.action, 'reviewPaths'), false);
+  assert.equal(Object.hasOwn(legacy.action, 'trustedRuntime'), false);
 });
 test('file schemas accept empty content/replacement but reject invalid fields', () => {
   const base = { file_path: 'D:\\elsewhere\\a.txt', sandbox_permissions: 'danger-full-access', justification: 'Write requested file' };

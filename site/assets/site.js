@@ -1,4 +1,5 @@
-// Progressive enhancement only: copy buttons and the catalog filter. Pages work without it.
+// Progressive enhancement only: copy buttons, the catalog filter and the
+// category pills. Pages work without it.
 (() => {
   const zh = document.documentElement.lang.startsWith("zh");
   const live = document.createElement("div");
@@ -53,25 +54,28 @@
     bindCopy(button, () => pre.querySelector("code")?.textContent ?? "");
   }
 
-  // Catalog filter.
+  // Catalog: text filter + category pills work together.
   const filter = document.querySelector(".filter");
   const input = document.getElementById("filter");
   if (!filter || !input) return;
   filter.hidden = false;
   const rows = [...document.querySelectorAll(".row[data-search]")];
   const shelves = [...document.querySelectorAll(".shelf")];
+  const pills = [...document.querySelectorAll(".catnav a[data-category]")];
   const count = filter.querySelector(".count");
   const empty = document.querySelector(".empty");
+  let category = "";
 
   function apply() {
     const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
     let shown = 0;
     for (const row of rows) {
-      const match = words.every((w) => row.dataset.search.includes(w));
+      const match = (!category || row.dataset.category === category) && words.every((w) => row.dataset.search.includes(w));
       row.hidden = !match;
       if (match) shown++;
     }
     for (const shelf of shelves) shelf.hidden = !shelf.querySelector(".row:not([hidden])");
+    for (const pill of pills) pill.setAttribute("aria-current", String(pill.dataset.category === category));
     count.textContent = shown === 1 ? count.dataset.single : count.dataset.template.replace("{n}", String(shown));
     empty.hidden = shown > 0;
   }
@@ -82,5 +86,22 @@
       input.value = "";
       apply();
     }
+  });
+
+  for (const pill of pills) {
+    pill.addEventListener("click", (event) => {
+      event.preventDefault();
+      const next = pill.dataset.category;
+      category = category === next ? "" : next;
+      apply();
+      if (category) document.getElementById(`cat-${category}`)?.scrollIntoView({ block: "start" });
+    });
+  }
+
+  // "/" focuses the filter, like most dev-tool sites.
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "/" || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    event.preventDefault();
+    input.focus();
   });
 })();

@@ -1,0 +1,84 @@
+/** Plugin-owned diagnostic copy. External diagnostics and user content stay verbatim. */
+export const chatGptMessages = [
+  ['已保存。', 'Saved.'],
+  ['超时须在 10–1800 秒之间。', 'Timeout must be between 10 and 1800 seconds.'],
+  ['正在保存配置，请稍后重试。', 'Settings are being saved. Try again shortly.'],
+  ['ChatGPT 插件已卸载。', 'The ChatGPT plugin has been unloaded.'],
+  ['配置格式无效。', 'Invalid settings format.'],
+  ['配置已在别处修改，请刷新后重试。', 'Settings changed elsewhere. Refresh and try again.'],
+  ['请等当前调用完成后保存配置。', 'Wait for the current call to finish before saving settings.'],
+  ['请选择浏览器或设备码登录。', 'Choose browser or device code sign-in.'],
+  ['需要本次登录的标识。', 'The current sign-in identifier is required.'],
+  ['未知操作。', 'Unknown operation.'],
+  ['操作已取消。', 'Operation cancelled.'],
+  ['操作失败。', 'Operation failed.'],
+  ['Codex 模型目录不可用。', 'Codex model catalog is unavailable.'],
+  ['Codex 状态读取失败。', 'Could not read Codex status.'],
+  ['Codex 可执行文件无效。', 'Invalid Codex executable.'],
+  ['指定的 Codex 可执行文件不可用。', 'The specified Codex executable is unavailable.'],
+  ['未找到官方 Codex 运行时，请在配置中指定路径。', 'Official Codex runtime not found. Specify its path in settings.'],
+  ['Codex 进程已结束。', 'The Codex process has exited.'],
+  ['无法启动 Codex 运行时。', 'Could not start the Codex runtime.'],
+  ['Codex 通信已断开。', 'Codex communication was disconnected.'],
+  ['Codex 输出超过安全上限。', 'Codex output exceeded the safety limit.'],
+  ['Codex 消息超过安全上限。', 'A Codex message exceeded the safety limit.'],
+  ['Codex 返回了无效协议消息。', 'Codex returned an invalid protocol message.'],
+  ['Codex 请求了被禁止的客户端能力。', 'Codex requested a prohibited client capability.'],
+  ['Codex 事件处理失败。', 'Could not process a Codex event.'],
+  ['Codex 拒绝了请求；请检查运行时兼容性或登录状态。', 'Codex rejected the request. Check runtime compatibility or sign-in status.'],
+  ['Codex 协议请求超时。', 'The Codex protocol request timed out.'],
+  ['此 Codex 运行时不支持已验证的隔离协议；需要 0.162.0-alpha.17.2 或更新版本。', 'This Codex runtime does not support the verified isolation protocol. Version 0.162.0-alpha.17.2 or later is required.'],
+  ['Codex 模型列表格式不兼容。', 'The Codex model list format is incompatible.'],
+  ['图片不在本次请求允许的目录内。', 'The image is outside the directories allowed for this request.'],
+  ['不支持符号链接图片。', 'Symbolic link images are not supported.'],
+  ['图片必须是 20 MB 以内的普通栅格文件。', 'The image must be a regular raster file no larger than 20 MB.'],
+  ['文件不是受支持的 PNG、JPEG、GIF 或 WebP 图片。', 'The file is not a supported PNG, JPEG, GIF or WebP image.'],
+  ['已有登录流程正在等待完成，请先完成或取消。', 'A sign-in is already pending. Complete or cancel it first.'],
+  ['Codex 登录协议不兼容。', 'The Codex sign-in protocol is incompatible.'],
+  ['Codex 登录响应无效。', 'Invalid Codex sign-in response.'],
+  ['登录流程已变化，请刷新后重试。', 'The sign-in changed. Refresh and try again.'],
+  ['请求模式或提示词无效。', 'Invalid request mode or prompt.'],
+  ['请求目录无效。', 'Invalid request directory.'],
+  ['每次最多提供五张图片。', 'Provide at most five images per request.'],
+  ['此操作需要输入图片。', 'This operation requires input images.'],
+  ['请先通过官方 Codex 登录 ChatGPT 账号。', 'Sign in to your ChatGPT account through official Codex first.'],
+  ['所选模型不可用，或 Codex 未提供默认模型。', 'The selected model is unavailable, or Codex did not provide a default model.'],
+  ['所选模型不支持此推理强度。', 'The selected model does not support this reasoning effort.'],
+  ['Codex 未提供可验证的有效配置。', 'Codex did not provide a verifiable effective configuration.'],
+  ['Codex MCP 配置格式不兼容。', 'The Codex MCP configuration format is incompatible.'],
+  ['Codex MCP 配置超过安全上限。', 'Codex MCP configuration exceeded the safety limit.'],
+  ['Codex 未提供可验证的 MCP 传输类型。', 'Codex did not provide a verifiable MCP transport type.'],
+  ['Codex 未确认只读沙箱与禁止审批，已停止调用。', 'Codex did not confirm the read-only sandbox and disabled approvals. The call was stopped.'],
+  ['Codex 请求了被禁止的客户端能力或通信已中断。', 'Codex requested a prohibited client capability or communication was interrupted.'],
+  ['Codex 事件超过安全上限。', 'Codex events exceeded the safety limit.'],
+  ['Codex 调用了请求范围外的工具，已停止。', 'Codex called a tool outside the request scope. The call was stopped.'],
+  ['ChatGPT 调用超时。', 'The ChatGPT call timed out.'],
+  ['Codex 未返回调用标识。', 'Codex did not return a call identifier.'],
+  ['ChatGPT 未成功完成本次调用。', 'ChatGPT did not complete this call successfully.'],
+  ['本次调用没有完成原生网页搜索并返回有效来源。', 'This call did not complete native web search with valid sources.'],
+  ['本次调用没有成功生成原生图片。', 'This call did not successfully generate a native image.'],
+  ['Codex 未提供图片生成目录的可信路径。', 'Codex did not provide a trusted image generation directory path.'],
+  ['图片输出目录无效。', 'Invalid image output directory.'],
+  ['ChatGPT 未返回回答。', 'ChatGPT did not return an answer.'],
+  ['ChatGPT 调用失败，请检查运行时与输入图片。', 'The ChatGPT call failed. Check the runtime and input images.'],
+  ['ChatGPT 模型设置无效。', 'Unknown ChatGPT model setting'],
+  ['ChatGPT 需要 Codex 模型。', 'ChatGPT requires a Codex model'],
+] as const
+
+export function chatGptMessage(message: string, english: boolean): string {
+  const pair = chatGptMessages.find(pair => (pair as readonly string[]).includes(message))
+  return pair?.[english ? 1 : 0] ?? message
+}
+
+/** A known plugin default travels bilingually to other clients such as Model Hub. */
+export function chatGptDiagnostic(message: string): string | { zh: string; en: string } {
+  const pair = chatGptMessages.find(pair => (pair as readonly string[]).includes(message))
+  return pair ? { zh: pair[0], en: pair[1] } : message
+}
+
+const effortLabels: Record<string, [string, string]> = {
+  none: ['无', 'None'], minimal: ['最低', 'Minimal'], low: ['低', 'Low'],
+  medium: ['中', 'Medium'], high: ['高', 'High'], xhigh: ['极高', 'Extra high'],
+  max: ['最高', 'Maximum'], ultra: ['超高', 'Ultra'],
+}
+export const chatGptEffortLabel = (value: string, english: boolean): string => effortLabels[value]?.[english ? 1 : 0] ?? value

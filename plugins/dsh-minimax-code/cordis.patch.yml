@@ -1,0 +1,3 @@
+- insert:
+    - id: minimax-code
+      name: '@klarkxy/dsh-minimax-code'

@@ -1,6 +1,9 @@
+// This suite verifies registration and credential rotation; quota protection has its own suite.
+import '../../dsh-zhihu/tests/legacy-call-policy.ts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { WebRuntime, type WebSearchProvider, type WebFetchProvider } from '@deepseek-ai/dsh-web'
+import { WEB_PROVIDER_AVAILABILITY_EVENT } from '@klarkxy/dsh-plugin-kit/contracts'
 import { WebSearchManager } from './manager.ts'
 import { defaultSettings, type DiscoverableSearchProvider, type WebSettings } from './contracts.ts'
 import { registerBuiltins } from './builtins.ts'
@@ -266,7 +269,7 @@ describe('discovery from native ctx.web, using actual DSH and Cordis lifecycles'
     const plugin = ctx.plugin({ name: 'native-zhihu-binding', apply(child: Context) { bindZhihuWebSearch(child, service) } })
     await vi.waitFor(() => expect((web as unknown as { searchProviders: Map<string, WebSearchProvider> }).searchProviders.size).toBe(1))
     if (!managerFirst) manager = manage(web).manager
-    ctx.on('web/provider-availability-updated', () => { void manager!.refresh() })
+    ctx.on(WEB_PROVIDER_AVAILABILITY_EVENT, () => { void manager!.refresh() })
     await vi.waitFor(() => expect(manager!.status().providers[0]?.configured).toBe(true))
     await update(manager!, { searchEnabled: true, searchOrder: ['zhihu-global'] })
     await web.search({ query: 'q' })

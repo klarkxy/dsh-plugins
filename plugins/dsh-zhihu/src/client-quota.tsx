@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createZhihuClientState } from './client-state.ts'
 import { requestOpenPlatform, type ZhihuOpenPlatformRpc } from './client-open-platform.tsx'
-import { ZhihuButton, ZhihuDetails, type HostButton } from './client-host-ui.tsx'
-import { translator, useT, useZhihuLocale, type Translate } from './client-locale.ts'
+import { ZhihuButton, ZhihuDetails } from './client-host-ui.tsx'
+import { clientText, translator, useT, useZhihuLocale, type ClientText, type Translate } from './client-locale.ts'
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 const identityFields = new Set(['APIID', 'ApiId', 'apiId', 'api_id', 'id', 'Name', 'name', 'APIName', 'ApiName', 'Description', 'description', 'Date', 'date', 'Period', 'period', 'Unit', 'unit', 'Timestamp', 'timestamp', 'version'])
@@ -200,11 +200,11 @@ export function QuotaCharts({ data }: { data: unknown }) {
   </div>
 }
 
-export function ZhihuQuotaSection({ rpc, Button }: { rpc: ZhihuOpenPlatformRpc; Button?: HostButton }) {
+export function ZhihuQuotaSection({ rpc }: { rpc: ZhihuOpenPlatformRpc }) {
   const state = useRef(createZhihuClientState()).current
   const [snapshot, setSnapshot] = useState<{ data: Record<string, unknown>; timestamp: string } | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<ClientText>('')
   const [stale, setStale] = useState(false)
   const t = useT()
   const locale = useZhihuLocale()
@@ -220,7 +220,7 @@ export function ZhihuQuotaSection({ rpc, Button }: { rpc: ZhihuOpenPlatformRpc; 
     })
   }, [rpc, state])
   useEffect(() => { refresh(); return () => state.cancel() }, [refresh, state])
-  const title = t('官方额度用量', 'Official quota')
+  const title = t('官方免费额度用量', 'Official quota')
   return <section className="dsh-ui-stack" aria-label={title}>
     <h3 className="dsh-ui-heading">{title}</h3>
     <p className="dsh-ui-help">{t('打开此页时自动查询，不自动重试。', 'Loads when this tab opens; never retried automatically.')}</p>
@@ -229,12 +229,12 @@ export function ZhihuQuotaSection({ rpc, Button }: { rpc: ZhihuOpenPlatformRpc; 
       <li>{t('官方额度与本地每日调用计数分开，额度查询不计入本地调用次数。', 'Official quota is separate from local daily counts; quota checks are not counted locally.')}</li>
     </ZhihuDetails>
     <div className="dsh-ui-actions">
-      <ZhihuButton host={Button} variant="primary" disabled={loading} onClick={refresh}>{t('刷新官方额度', 'Refresh quota')}</ZhihuButton>
-      {loading && <ZhihuButton host={Button} onClick={() => { state.cancel(); setLoading(false); setError(t('已取消；晚到的结果将被丢弃。', 'Cancelled; a late response will be discarded.')) }}>{t('取消请求', 'Cancel')}</ZhihuButton>}
+      <ZhihuButton variant="primary" disabled={loading} onClick={refresh}>{t('刷新官方额度', 'Refresh quota')}</ZhihuButton>
+      {loading && <ZhihuButton onClick={() => { state.cancel(); setLoading(false); setError(['已取消；晚到的结果将被丢弃。', 'Cancelled; a late response will be discarded.']) }}>{t('取消请求', 'Cancel')}</ZhihuButton>}
     </div>
     {/* The single live region for this section. */}
     <p className={loading ? 'dsh-ui-loading' : 'dsh-ui-hint'} role="status">{loading ? t('正在查询官方额度…', 'Checking official quota…') : !snapshot && !error ? t('等待查询官方额度。', 'Waiting to check official quota.') : ''}</p>
-    {error && <p className="dsh-ui-error" role="alert">{error}</p>}
+    {error && <p className="dsh-ui-error" role="alert">{clientText(error, t)}</p>}
     {snapshot && <div className="dsh-ui-stack">
       <p className={stale ? 'dsh-ui-warn' : 'dsh-ui-hint'}>{stale ? t('旧数据（刷新未成功） · ', 'Old data (refresh failed) · ') : t('最近成功查询 · ', 'Last checked · ')}<time dateTime={snapshot.timestamp}>{new Date(snapshot.timestamp).toLocaleString(locale === 'en' ? 'en' : 'zh-CN')}</time></p>
       <QuotaCharts data={snapshot.data} />

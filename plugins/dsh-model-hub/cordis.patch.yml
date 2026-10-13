@@ -1,4 +1,4 @@
-# Verification probe stage: detection + projection questions first, UI later.
+# Model settings hub; self-test fields remain diagnostic only.
 - insert:
     - id: model-hub
       name: '@klarkxy/dsh-model-hub'

@@ -2,10 +2,13 @@
 
 export const PLUGIN_NAME = '@klarkxy/dsh-session-manager'
 export const COPY_THREAD_MENU_ID = '@klarkxy/dsh-session-manager.copy-thread-id'
+export const COPY_THREAD_SHORTCUT_ID = 'session-manager.copy-thread-id'
 /** After the shipped pin/rename/fork/archive rows (100–400). */
 export const COPY_THREAD_MENU_ORDER = 500
-/** Sidebar list id and the matching main panel key. */
-export const FREE_PANEL_ID = 'free-chat'
+/** Temporary-workspace row inside the New Session workspace picker (host list slot). */
+export const TEMP_WORKSPACE_ITEM_ID = '@klarkxy/dsh-session-manager.temp-workspace'
+export const TEMP_WORKSPACE_CHANNEL = '/dsh-session-manager'
+export const TEMP_WORKSPACE_FLOW_SLOT = 'session-manager.workspace.directoryFlow'
 export const USER_ACTIONS_SLOT = 'conversation.chat.user-actions'
 export const USER_ACTIONS_ID = '@klarkxy/dsh-session-manager.user-actions'
 export const DELETE_DIALOG_ID = '@klarkxy/dsh-session-manager.delete-chat'

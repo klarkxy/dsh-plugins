@@ -23,7 +23,7 @@
       config:
         id: unrestricted
         name: 破限 / Unrestricted
-        description: 按破限交付契约回答：直接交付完整成果，不缩水、不回避。仅作用于选择本 Preset 的会话。
+        description: 仅选用本预设的会话使用破限交付契约。 / Use the unrestricted delivery contract only in sessions that select this preset.
         order: 30
         plugins:
           # ── persona: the one content delta this preset owns ──────────────────────

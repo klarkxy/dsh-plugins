@@ -1,5 +1,8 @@
 # @klarkxy/dsh-zhihu
 
+<!-- release-state-note -->
+插件生命周期见[仓库状态清单](../../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../../RELEASING.zh-CN.md)。
+
 把知乎交给模型当调研信源：站内搜索、全网搜索、热榜、直答和公开知识库，外加问题发现、创作数据与用量统计。每次请求都只用你自己的知乎 Access Secret，取回的内容是给模型参考的资料，不是定论。
 
 [English](../README.md)
@@ -42,8 +45,8 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 
 | 模型工具 | `/zhihu` 上的 RPC 端点 | 参数 | 官方额度分类 |
 | --- | --- | --- | --- |
-| `zhihu_question_recommendations` | `question.recommendations` | 可选 `query`；`count` 1–20，默认 5 | `creator` |
-| `zhihu_question_answers` | `question.answers` | `questionUrl`；`offset`、`limit` | `question_answers` |
+| `zhihu_question_recommendations` | `question.recommendations` | 可选 `query`；`count` 1–20，默认 5 | `question_discovery` |
+| `zhihu_question_answers` | `question.answers` | `questionUrl`；`offset`、`limit` | `question_discovery` |
 | `zhihu_user_content_detail` | `content.detail` | `contentUrl` | `creator` |
 | `zhihu_user_content_comments` | `content.comments` | `contentUrl`；`offset`、`limit`；`order` 为 `score`（默认）、`reverse`、`ascending` | `creator` |
 | `zhihu_creator_account_stats` | `creator.account.stats` | `contentType` 为 `all`（默认）、`answer`、`article`、`pin`、`zvideo`；成对日期 | `creator` |
@@ -60,7 +63,7 @@ RPC 还接受主库风格的下划线别名：`question_recommendations`、`ques
 
 ### 官方额度与本地用量
 
-`zhihu_quota` 调用 `GET /api/v1/quota`，是官方剩余额度的唯一来源。`apiIds` 白名单为 `global_search`、`zhihu_search`、`hot_list`、`question_answers`、`zhida_openai`、`tools`、`knowledge`、`user_data`、`creator`；重复项按首次出现顺序去重。额度查询本身不记录业务调用事件，失败时也不计入。不会用本地计数预测余额或推算额度重置时间，也不自动重试。
+`zhihu_quota` 调用 `GET /api/v1/quota`，是官方剩余额度的唯一来源。`apiIds` 白名单为 `global_search`、`zhihu_search`、`hot_list`、`question_discovery`、`zhida_openai`、`tools`、`knowledge`、`user_data`、`creator`；重复项按首次出现顺序去重。额度查询本身不记录业务调用事件，失败时也不计入。不会用本地计数预测余额或推算额度重置时间，也不自动重试。
 
 本地用量仍按日计数（调用次数、失败次数与成功调用返回的条目数），视图默认展示最近 30 天，最多可查 90 天。新增业务工具与 RPC 每次调用只记录一次事件，并带有额度分类；本地计数不是账单，也不是官方余额。存储标识保持不变。知识库上传单文件上限仍为 20 MB。
 
@@ -89,3 +92,33 @@ pnpm --filter @klarkxy/dsh-zhihu build
 ```
 
 [发布维护](../../PUBLISHING.md) · [许可证](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/LICENSE)
+
+
+## 调用与费用保护（2026-10-13）
+
+默认是免费保护模式：每个业务请求先即时查询对应的官方免费额度；查询失败、缺少有效额度、额度不足或映射未确认时，不发送业务请求。额度查询本身不递归预查、不消耗本地上限。工具名及业务路径保持原样；旧额度输入 `question_answers` 映射为 `question_discovery`，问题推荐和回答摘要共用该组。
+
+本地北京时间每日上限默认 **100 次**，可设为 1–100000。计数口径是已持久化预留的业务请求：包括已发送后失败、取消或结果未知的请求；预查失败不占用上限。它与官方免费次数、已有本地工具使用统计、钱包和账单分别处理，不估算费用或余额。
+
+免费模式可使用有可靠额度映射的 fast/thinking 直答、问题推荐以及 PDF/PPT 任务；缺少单价不影响使用已确认的免费额度。显式付费模式对未确认计费的能力保守拒绝，并提示切换回免费保护模式。通用资源文件上传尚无可靠额度映射，暂时阻止；知识库上传的 `knowledge` 映射已确认。
+
+两个客户端共用 `~/.config/zhihu-search/call-policy/daily.json` 和 `request.lock`；`ZHIHU_SEARCH_HOME` 可改变根目录，`ZHIHU_CALL_POLICY_DIR` 可显式指定共同保护目录。同目录内所有账号/进程共用一个本地上限，避免多 Secret 或多入口绕开计数；自定义目录时需让两项目使用同一路径。锁覆盖预查与请求，状态先原子预留，不缓存额度、不自动重试。网络失败或取消后的未知请求保守占用对应免费容量，跨日仍保留这些未知预留。
+
+本地保护**不能承诺绝对零费用**：同账号其他客户端可能在预查后竞争免费额度，平台扣费时间也不由本机控制。结果未知时先在官方控制台核对，不盲目重试。进程崩溃留下的锁不会自动抢占；确认两个客户端均无在途请求、核对未知请求后才可手动移除 `request.lock`。损坏的计数文件会失败关闭，不自动清零。
+
+鉴权和账号设置保持不变。不提供充值、权益兑换或钱包查询。官方依据：[服务价格](https://developer.zhihu.com/docs?key=billing_price)、[免费额度](https://developer.zhihu.com/docs?key=quota)、[线上订购协议](https://developer.zhihu.com/content/order-agreement)（V1.0，2026-10-10 生效）。API 计费不扩大内容访问或传播授权范围。
+
+
+### DSH 配置
+
+插件行配置支持 `allowPaid`（默认 false）和 `dailyCallLimit`（默认 100）；也可在 DSH 服务端启动环境设置 `ZHIHU_ALLOW_PAID`、`ZHIHU_DAILY_CALL_LIMIT`。显式插件行配置优先。例：
+
+```yaml
+config:
+  allowPaid: false
+  dailyCallLimit: 50
+```
+
+只有用户显式把 `allowPaid` 改为 true 才允许付费续用，不能在业务 RPC/工具参数里打开。设置页展示当前保护模式及每日上限；更改插件行配置或启动环境后按宿主方式重载。共享请求层覆盖页面 RPC、可选模型工具、原生 web search、独立客户端和知识库上传；`policy.status` 仅报告本地保护配置，不发送官方请求。
+
+官方额度更新也可能滞后：免费模式每次仍查询官方值，同时保留本机已消耗预留的容量上限，取更保守的值，不在当天自动补回；这个内部上限不会作为官方余额展示。次日按北京时间重置，结果未知的预留仍保留。

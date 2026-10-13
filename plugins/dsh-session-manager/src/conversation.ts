@@ -1,6 +1,7 @@
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { deriveEventMessage, foldSurface, isAppendSurfaceEvent, type SurfaceFoldResult } from '@deepseek-ai/dsh-session/surface'
 import { TOOL_SUMMARY_CHARS } from './contracts.ts'
+import type { SourceReference } from './turns.ts'
 
 /**
  * `pageChars` is the maximum UTF-8 size of one serialized item page, including
@@ -31,13 +32,15 @@ export interface ToolCallSummary {
 
 export interface ConversationItem {
   readonly seq: number
-  readonly role: 'user' | 'assistant' | 'tool'
+  readonly role: 'user' | 'assistant' | 'tool' | 'system'
   readonly text: string
   readonly toolName?: string
   readonly toolNameTruncated?: boolean
   readonly toolCalls?: readonly ToolCallSummary[]
   readonly truncated: boolean
   readonly inherited: boolean
+  readonly eventType?: string
+  readonly reference?: SourceReference
 }
 
 export type ConversationView = 'transcript' | 'surface'
@@ -199,6 +202,8 @@ function placeItem(
     ...chosen.length === 0 ? {} : { toolCalls: chosen },
     truncated: partial,
     inherited: item.inherited,
+    ...item.eventType ? { eventType: item.eventType } : {},
+    ...item.reference ? { reference: { ...item.reference, start: textIndex, end: textIndex + codePointLength(text) } } : {},
   })
   const fits = (nameSentNow: boolean, callAt: number, textAt: number): boolean => {
     const done = nameSentNow && callAt >= calls.length && textAt >= textLen

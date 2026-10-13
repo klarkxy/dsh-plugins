@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { freeChatRows, formatQuietTime, matchFreeRows, type ListedSession, type SessionListSnapshot } from './free-list.ts'
+import type { ListedSession, SessionListSnapshot } from './free-list.ts'
 import {
   bindHost,
   createFreeChatModel,
@@ -9,7 +9,6 @@ import {
   type SessionHost,
 } from './session-actions.ts'
 import { failureText } from './ui-copy.ts'
-import { FREE_PANEL_ID } from './contracts.ts'
 
 function row(id: string, patch: Partial<ListedSession> = {}): ListedSession {
     return {
@@ -32,23 +31,6 @@ function host(snapshot: SessionListSnapshot, extra: Partial<SessionHost> = {}): 
     ...extra,
   }
 }
-
-describe('free chat selection', () => {
-  it('keeps free chats and independent forks, and ignores cwd', () => {
-    const rows = freeChatRows(list([
-      row('free', { displayTitle: 'Alpha', cwd: 'C:/secret' }),
-      row('ordinary', { classification: 'ordinary', displayTitle: 'Project' }),
-      row('child', { origin: 'subagent', displayTitle: 'Owned' }),
-      row('fork', { parentId: 'free', displayTitle: 'Alpha (1)' }),
-    ]))
-    expect(rows.map(item => item.id)).toEqual(['free', 'fork'])
-    expect(matchFreeRows(rows, 'secret')).toEqual([])
-    expect(matchFreeRows(rows, 'alpha').map(item => item.id)).toEqual(['free', 'fork'])
-    const now = Date.parse('2026-10-07T08:30:00Z')
-    expect(formatQuietTime(now, 'en', now)).toMatch(/\d/)
-    expect(formatQuietTime(now - 86_400_000, 'zh', now).length).toBeGreaterThan(0)
-  })
-})
 
 describe('session actions', () => {
   it('creates a free chat only through sessions.create and opens that id', async () => {
@@ -76,39 +58,43 @@ describe('session actions', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
-  it('forks through the workspace and opens the child', async () => {
-    const forkSession = vi.fn(async () => 'child')
-    const openSession = vi.fn()
-    const model = createFreeChatModel(host(list([row('parent')]), { forkSession, openSession }))
-    await model.fork('parent')
-    expect(forkSession).toHaveBeenCalledWith('parent')
-    expect(openSession).toHaveBeenCalledWith('child')
-  })
-
   it('retries delete with the same id until the host reports deleted', async () => {
     const deleteSession = vi.fn()
-      .mockResolvedValueOnce({ phase: 'cleanup-pending', releasedSelection: false })
-      .mockResolvedValueOnce({ phase: 'deleted', releasedSelection: true })
-    const selectPanel = vi.fn()
+      .mockResolvedValueOnce({ phase: 'cleanup-pending' })
+      .mockResolvedValueOnce({ phase: 'deleted' })
     const model = createFreeChatModel(host(list([
       row('free'),
       row('project', { classification: 'ordinary', displayTitle: 'Project' }),
     ]), {
       capabilities: async () => ({ retry: false, freeSession: false, deleteSession: true }),
       deleteSession,
-      selectPanel,
     }), () => 'req-1')
     await model.reloadCapabilities()
     model.requestDelete('project')
     expect(model.getSnapshot().deleteRequest).toMatchObject({ classification: 'ordinary', requestId: 'req-1' })
     await model.confirmDelete()
     expect(model.getSnapshot().deleteRequest?.failure?.code).toBe('session/delete-pending')
-    expect(selectPanel).not.toHaveBeenCalled()
     await model.confirmDelete()
     expect(deleteSession.mock.calls.map(call => call[1])).toEqual(['req-1', 'req-1'])
-    expect(selectPanel).toHaveBeenCalledWith(FREE_PANEL_ID)
-    expect(model.getSnapshot().focusNonce).toBe(1)
     expect(model.getSnapshot().deleteRequest).toBeUndefined()
+  })
+
+  it('stores a failed create as a notice and clears it on dismiss', async () => {
+    const create = vi.fn(async (): Promise<string> => {
+      throw Object.assign(new Error('no lifecycle'), { code: 'session/lifecycle-unavailable' })
+    })
+    const model = createFreeChatModel(host(list([]), {
+      capabilities: async () => ({ retry: false, freeSession: true, deleteSession: false }),
+      create,
+      openSession: () => {},
+    }))
+    await model.reloadCapabilities()
+    await model.create()
+    expect(model.getSnapshot().notice).toEqual({ code: 'session/lifecycle-unavailable' })
+    model.dismissNotice()
+    expect(model.getSnapshot().notice).toBeUndefined()
+    model.dismissNotice()
+    expect(model.getSnapshot().notice).toBeUndefined()
   })
 
   it('omits text on a direct retry and reuses the request id after a transport failure', async () => {
@@ -346,22 +332,7 @@ describe('session actions', () => {
     expect(retry.mock.calls[1]?.[0]).toEqual(retry.mock.calls[0]?.[0])
   })
 
-  it('hides fork while free session capability is pending or unsupported', async () => {
-    const forkSession = vi.fn()
-    const pending = createFreeChatModel(host(list([]), { forkSession }))
-    expect(pending.getSnapshot().controls.fork).toBe(false)
-    await pending.reloadCapabilities()
-    expect(pending.getSnapshot().controls.fork).toBe(false)
-    const ready = createFreeChatModel(host(list([]), {
-      forkSession,
-      capabilities: async () => ({ retry: false, freeSession: true, deleteSession: false }),
-    }))
-    expect(ready.getSnapshot().controls.fork).toBe(false)
-    await ready.reloadCapabilities()
-    expect(ready.getSnapshot().controls.fork).toBe(true)
-  })
-
-  it('does not open or select a panel when create, fork, or delete finish after cancel', async () => {
+  it('does not open or settle anything when create or delete finish after cancel', async () => {
     let releaseCreate: (value: string) => void = () => {}
     const openSession = vi.fn()
     const create = vi.fn(() => new Promise<string>(resolve => { releaseCreate = resolve }))
@@ -377,48 +348,20 @@ describe('session actions', () => {
     await pendingCreate
     expect(openSession).not.toHaveBeenCalled()
 
-    let releaseFork: (value: string) => void = () => {}
-    const forkSession = vi.fn(() => new Promise<string>(resolve => { releaseFork = resolve }))
-    const forking = createFreeChatModel(host(list([row('parent')]), {
-      capabilities: async () => ({ retry: false, freeSession: true, deleteSession: false }),
-      forkSession,
-      openSession,
-    }))
-    await forking.reloadCapabilities()
-    const pendingFork = forking.fork('parent')
-    forking.cancel()
-    releaseFork('child')
-    await pendingFork
-    expect(openSession).not.toHaveBeenCalled()
-
     let releaseDelete: (value: unknown) => void = () => {}
-    const selectPanel = vi.fn()
     const deleteSession = vi.fn(() => new Promise(resolve => { releaseDelete = resolve }))
     const deleting = createFreeChatModel(host(list([row('free')]), {
       capabilities: async () => ({ retry: false, freeSession: true, deleteSession: true }),
       deleteSession,
-      selectPanel,
     }), () => 'req')
     await deleting.reloadCapabilities()
     deleting.requestDelete('free')
     const pendingDelete = deleting.confirmDelete()
     deleting.cancel()
-    releaseDelete({ phase: 'deleted', releasedSelection: true })
+    releaseDelete({ phase: 'deleted' })
     await pendingDelete
-    expect(selectPanel).not.toHaveBeenCalled()
-    expect(deleting.getSnapshot().focusNonce).toBe(0)
-  })
-
-  it('keeps a host list error instead of an empty catalog', () => {
-    const model = createFreeChatModel(host({
-      ids: [],
-      byId: {},
-      phase: 'error',
-      error: { code: 'session/catalog', message: 'catalog down' },
-    }))
-    expect(model.getSnapshot().listStatus).toBe('error')
-    expect(model.getSnapshot().listFailure).toEqual({ code: 'session/catalog', reason: 'catalog down' })
-    expect(model.getSnapshot().rows).toEqual([])
+    expect(deleting.getSnapshot().deleteRequest).toBeUndefined()
+    expect(deleting.getSnapshot().capabilitiesReady).toBe(true)
   })
 
   it('binds only methods the live services actually have', () => {

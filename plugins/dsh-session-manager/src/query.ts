@@ -10,16 +10,26 @@ import {
 } from '@deepseek-ai/dsh-session-query'
 import type { CallerExecution } from './caller.ts'
 import { callerFromExecution } from './caller.ts'
-import { pageItems, projectConversation, surfaceNote, UNTRUSTED_BACKGROUND, type ConversationItem, type ConversationView, type ModelSurfaceRow } from './conversation.ts'
+import { pageItems, surfaceNote, UNTRUSTED_BACKGROUND, type ConversationItem, type ConversationView, type ModelSurfaceRow } from './conversation.ts'
 import type { ResolvedConfig } from './contracts.ts'
-import { corpusStamp, decodeCursor, encodeCursor, prefixDigest, type CursorKey, type ListCursor, type ReadCursor, type SearchCursor } from './cursor.ts'
+import { corpusStamp, decodeCursor, encodeCursor, prefixDigest, type CursorKey, type ListCursor, type ReadCursor, type SnapshotCursor, type SearchCursor } from './cursor.ts'
+import { findTitleMatches } from './title-search.ts'
+import { pageTurns, projectTurns } from './turns.ts'
+import { projectDetails } from './details.ts'
+import { extractHandoff, type HandoffSummarizer } from './handoff.ts'
 
 export interface ReadRequest {
   readonly sessionId: string
+  readonly mode?: 'conversation' | 'handoff' | 'details'
+  readonly turnId?: string
+  readonly seq?: number
+  readonly snapshot?: string
+  readonly limit?: number
+  readonly summarize?: boolean
   readonly cursor?: string
   readonly includeToolDetail?: boolean
   readonly includeReasoning?: boolean
-  /** Explicit model-visible surface. The default is the human append transcript. */
+  /** Explicit model-visible surface, only in details mode. */
   readonly modelSurface?: boolean
 }
 
@@ -36,6 +46,7 @@ export interface ListRequest {
 
 export interface SearchRequest {
   readonly query: string
+  readonly scope?: 'title' | 'content' | 'both'
   readonly cwd?: string
   readonly parentSessionId?: string
   readonly includeRoots?: boolean
@@ -117,34 +128,62 @@ export async function searchSessions(
     signal?.throwIfAborted()
     const text = request.query.trim()
     if (text === '') throw new SessionQueryError('session query was rejected', 'SESSION_QUERY_INVALID_QUERY')
+    const scope = request.scope ?? 'content'
+    if (!['title', 'content', 'both'].includes(scope)) throw new SessionQueryError('session search scope was rejected', 'SESSION_QUERY_INVALID_QUERY')
     const caller = callerFromExecution(exec)
     const filters = sessionFilters(request)
     const limit = request.limit ?? config.searchLimit
     assertLimit(limit, config.searchLimit)
     const rankSameCwd = caller.cwd !== undefined && request.cwd === undefined
-    const filterKey = JSON.stringify({ text, filters, cwd: caller.cwd ?? null, limit, rankSameCwd })
-    let phase: SearchCursor['phase'] = rankSameCwd ? 'same' : 'rest'
+    const filterKey = JSON.stringify({ text, scope, filters, cwd: caller.cwd ?? null, limit, rankSameCwd })
+    const titleMatches = scope === 'content' ? undefined : await findTitleMatches(query, filters, text, caller.cwd, signal)
+    const excluded = new Set(titleMatches?.items.map(item => item.sessionId))
+    let phase: SearchCursor['phase'] = titleMatches ? 'title' : rankSameCwd ? 'same' : 'rest'
     let hostCursor = ''
+    let hostOffset = 0, hostPageStamp: string | undefined
+    let titleOffset = 0
     if (request.cursor !== undefined) {
       const cursor = decodeCursor(request.cursor, 'search', cursors) as SearchCursor
       if (cursor.filter !== filterKey) invalid()
+      if (cursor.titleStamp !== titleMatches?.stamp) stale()
+      if ((cursor.phase === 'title' && !titleMatches) || (scope === 'title' && cursor.phase !== 'title')) invalid()
       if (!rankSameCwd && cursor.phase === 'same') invalid()
       phase = cursor.phase
       hostCursor = cursor.hostCursor
+      hostOffset = cursor.hostOffset ?? 0
+      hostPageStamp = cursor.hostPageStamp
+      titleOffset = cursor.titleOffset ?? 0
     }
+    const titleRows: Record<string, unknown>[] = []
+    if (phase === 'title' && titleMatches) {
+      if (titleOffset > titleMatches.items.length) invalid()
+      titleRows.push(...titleMatches.items.slice(titleOffset, titleOffset + limit))
+      titleOffset += titleRows.length
+      if (titleOffset < titleMatches.items.length || (scope === 'both' && titleRows.length === limit)) {
+        const next: SearchCursor = titleOffset < titleMatches.items.length
+          ? { kind: 'search', filter: filterKey, phase: 'title', hostCursor: '', titleOffset, titleStamp: titleMatches.stamp }
+          : { kind: 'search', filter: filterKey, phase: rankSameCwd ? 'same' : 'rest', hostCursor: '', titleStamp: titleMatches.stamp }
+        return { status: 'ok', trust: UNTRUSTED_BACKGROUND, items: titleRows, nextCursor: encodeCursor(next, cursors) }
+      }
+      if (scope === 'title') return { status: 'ok', trust: UNTRUSTED_BACKGROUND, items: titleRows }
+      phase = rankSameCwd ? 'same' : 'rest'
+    }
+    const contentLimit = limit - titleRows.length
     const collected: SessionSearchHit[] = []
-    let pending: { phase: SearchCursor['phase']; hostCursor: string } | undefined
-    while (collected.length < limit) {
-      const pulled = await pullSearchPhase(query, text, phaseFilters(filters, phase, rankSameCwd ? caller.cwd : undefined), limit - collected.length, hostCursor, phase === 'rest' && rankSameCwd, caller.cwd, signal)
+    let pending: ({ phase: SearchCursor['phase'] } & SearchProgress) | undefined
+    while (collected.length < contentLimit) {
+      const pulled = await pullSearchPhase(query, text, phaseFilters(filters, phase, rankSameCwd ? caller.cwd : undefined), contentLimit - collected.length, limit,
+        { hostCursor, hostOffset, hostPageStamp }, phase === 'rest' && rankSameCwd, caller.cwd, signal, excluded)
       collected.push(...pulled.items)
-      if (collected.length >= limit) {
-        if (pulled.nextHostCursor !== undefined) pending = { phase, hostCursor: pulled.nextHostCursor }
+      if (collected.length >= contentLimit) {
+        if (pulled.next !== undefined) pending = { phase, ...pulled.next }
         else if (phase === 'same') pending = { phase: 'rest', hostCursor: '' }
         break
       }
       if (phase === 'same') {
         phase = 'rest'
         hostCursor = ''
+        hostOffset = 0; hostPageStamp = undefined
         continue
       }
       break
@@ -152,11 +191,13 @@ export async function searchSessions(
     const titles = await titlesFor(query, collected.map(hit => hit.header.id), signal)
     const next = pending === undefined
       ? undefined
-      : encodeCursor({ kind: 'search', filter: filterKey, phase: pending.phase, hostCursor: pending.hostCursor }, cursors)
+      : encodeCursor({ kind: 'search', filter: filterKey, ...pending,
+        ...titleMatches ? { titleStamp: titleMatches.stamp } : {},
+      }, cursors)
     return {
       status: 'ok',
       trust: UNTRUSTED_BACKGROUND,
-      items: collected.map(hit => ({
+      items: [...titleRows, ...collected.map(hit => ({
         sessionId: hit.header.id,
         title: titles.get(hit.header.id) ?? null,
         cwd: hit.header.cwd ?? null,
@@ -168,7 +209,8 @@ export async function searchSessions(
         surface: hit.bestMatch.surface,
         time: hit.bestMatch.time,
         snippet: hit.bestMatch.snippet,
-      })),
+        matchedBy: 'content',
+      }))],
       ...next === undefined ? {} : { nextCursor: next },
     }
   } catch (error) {
@@ -182,16 +224,31 @@ export async function readSession(
   exec: { signal?: AbortSignal },
   config: ResolvedConfig,
   cursors: CursorKey,
+  summarize?: HandoffSummarizer,
 ): Promise<ToolOutcome> {
   const signal = exec.signal
   let observation: Awaited<ReturnType<QueryHost['observeSession']>> | undefined
   try {
     signal?.throwIfAborted()
     const sessionId = brandSessionId(requiredId(request.sessionId))
-    const includeToolDetail = request.includeToolDetail === true
+    const mode = request.mode ?? 'conversation'
+    if (!['conversation', 'handoff', 'details'].includes(mode)) invalidFilter('mode must be conversation, handoff, or details; omit it or pass null for conversation.')
+    if (mode !== 'details') {
+      if (request.seq !== undefined) invalidFilter('seq requires mode="details". Keep seq and switch mode to inspect that event, or omit seq / pass null to read conversation turns.')
+      if (request.includeToolDetail !== undefined) invalidFilter('include_tool_detail requires mode="details", including false. Omit it or pass null in conversation/handoff mode.')
+      if (request.includeReasoning === true) invalidFilter('include_reasoning=true requires mode="details".')
+      if (request.modelSurface === true) invalidFilter('model_surface=true requires mode="details".')
+    }
+    if (mode !== 'handoff' && request.summarize === true) invalidFilter('summarize=true requires mode="handoff".')
+    if (request.seq !== undefined && (!Number.isSafeInteger(request.seq) || request.seq < 0)) invalidFilter('seq must be a non-negative safe integer from a returned source reference; omit it or pass null when unused.')
+    if (request.turnId !== undefined && request.turnId.trim() === '') invalidFilter('turn_id must be a non-empty returned turn ID; omit it or pass null when unused.')
+    const turnLimit = request.limit ?? 5
+    assertLimit(turnLimit, 20)
+    const includeToolDetail = request.includeToolDetail !== false
     const includeReasoning = request.includeReasoning === true
     const view: ConversationView = request.modelSurface === true ? 'surface' : 'transcript'
-    const filterKey = JSON.stringify({ includeToolDetail, includeReasoning, view })
+    const filterKey = JSON.stringify({ projection: 2, mode, includeToolDetail, includeReasoning, view,
+      turnId: request.turnId ?? null, seq: request.seq ?? null, turnLimit, summarize: request.summarize === true })
     observation = await query.observeSession(sessionId, { signal, projectionMode: 'none' })
     try {
       signal?.throwIfAborted()
@@ -201,82 +258,100 @@ export async function readSession(
       let cut: number = observation.cursor
       let index = 0
       let offset = 0
+      const validateSnapshot = (cursor: ReadCursor | SnapshotCursor) => {
+        if (cursor.sessionId !== sessionId) invalid()
+        if (cursor.inheritedEventCount !== inheritedEventCount || cursor.createdAt !== createdAt) stale()
+        if (observation!.cursor < cursor.cut || cursor.branchRevision !== face.revision) stale()
+        if (prefixDigest(observation!.events.filter(event => event.seq <= cursor.cut)) !== cursor.prefix) stale()
+      }
+      if (request.snapshot !== undefined) {
+        const anchor = decodeCursor(request.snapshot, 'snapshot', cursors) as SnapshotCursor
+        validateSnapshot(anchor); cut = anchor.cut
+      }
       if (request.cursor !== undefined) {
         const cursor = decodeCursor(request.cursor, 'read', cursors) as ReadCursor
-        if (cursor.sessionId !== sessionId || cursor.filter !== filterKey) invalid()
-        if (cursor.inheritedEventCount !== inheritedEventCount || cursor.createdAt !== createdAt) stale()
-        if (observation.cursor < cursor.cut) stale()
-        if (cursor.branchRevision !== face.revision) stale()
-        const livePrefix = observation.events.filter(event => event.seq <= cursor.cut)
-        if (prefixDigest(livePrefix) !== cursor.prefix) stale()
+        if (cursor.filter !== filterKey) invalid()
+        validateSnapshot(cursor)
+        if (request.snapshot !== undefined && cursor.cut !== cut) invalid()
         cut = cursor.cut
         index = cursor.index
         offset = cursor.offset
       }
       const transcriptEvents = face.transcript(cut)
-      const modelRows = face.modelRows(cut, view === 'surface')
-      let projected: ReturnType<typeof projectConversation>
+      const allTurns = projectTurns(transcriptEvents, sessionId, inheritedEventCount)
+      const selectedTurn = request.turnId === undefined ? undefined : allTurns.find(turn => turn.turnId === request.turnId)
+      if (request.turnId !== undefined && !selectedTurn) invalidFilter('turn_id was not found in the selected session/snapshot. Use a turn ID and snapshot returned together by read_session.')
+      const turns = selectedTurn ? [selectedTurn] : allTurns
+      const snapshotBase = { sessionId, cut, prefix: prefixDigest(observation.events.filter(event => event.seq <= cut)),
+        branchRevision: face.revision, inheritedEventCount, createdAt }
+      const snapshot = encodeCursor({ kind: 'snapshot', ...snapshotBase }, cursors)
+      let paged: { items?: readonly ConversationItem[]; turns?: ReturnType<typeof pageTurns>['turns']; nextIndex?: number; nextOffset?: number }
+      let projection: ReturnType<typeof projectDetails> | undefined
       try {
-        projected = projectConversation(
-          transcriptEvents,
-          inheritedEventCount,
-          includeToolDetail,
-          includeReasoning,
-          view,
-          modelRows,
-          modelRows !== undefined || !face.branched,
-        )
+        if (mode === 'details') {
+          const modelRows = face.modelRows(cut, view === 'surface')
+          projection = projectDetails(transcriptEvents, sessionId, inheritedEventCount, includeToolDetail, includeReasoning, view,
+            modelRows, modelRows !== undefined || !face.branched)
+          let items = projection.items.filter(item => (!selectedTurn || selectedTurn.eventSeqs.includes(item.seq))
+            && (request.seq === undefined || item.seq === request.seq))
+          if (request.seq !== undefined && items.length === 0) {
+            const event = transcriptEvents.find(event => event.seq === request.seq)
+            if ((event?.type === 'turn/start' || event?.type === 'turn/end') && (!selectedTurn || selectedTurn.eventSeqs.includes(event.seq))) {
+              const owner = allTurns.find(turn => turn.eventSeqs.includes(event.seq))!
+              items = [{ seq: event.seq, role: 'system', text: JSON.stringify(event.data), eventType: event.type,
+                truncated: false, inherited: event.seq < inheritedEventCount,
+                reference: { sessionId, turnId: owner.turnId, seq: event.seq } }]
+            } else invalidFilter('seq does not select a readable event in this session/snapshot/turn and projection. Use the matching source reference and snapshot; check turn_id and details options.')
+          }
+          paged = pageItems(items, index, offset, config.pageChars)
+        } else paged = pageTurns(turns, index, offset, config.pageChars, turnLimit)
       } catch (error) {
-        throw new SessionQueryError(
-          `session event history is invalid: ${error instanceof Error ? error.message : 'unknown error'}`,
-          'SESSION_QUERY_INVALID_SURFACE',
-          { cause: error },
-        )
-      }
-      let paged: { items: ConversationItem[]; nextIndex?: number; nextOffset?: number }
-      try {
-        paged = pageItems(projected.items, index, offset, config.pageChars)
-      } catch (error) {
-        if (error instanceof RangeError) invalid()
-        throw error
+        if (error instanceof SessionQueryError) throw error
+        throw new SessionQueryError(error instanceof Error ? error.message : 'Invalid session history', 'SESSION_QUERY_INVALID_SURFACE')
       }
       const next = paged.nextIndex === undefined
         ? undefined
         : encodeCursor({
           kind: 'read',
-          sessionId,
-          cut,
-          prefix: prefixDigest(observation.events.filter(event => event.seq <= cut)),
-          branchRevision: face.revision,
-          inheritedEventCount,
-          createdAt,
+          ...snapshotBase,
           filter: filterKey,
           index: paged.nextIndex,
           offset: paged.nextOffset ?? 0,
         }, cursors)
-      const note = surfaceNote(projected)
+      const note = projection ? surfaceNote(projection) : undefined
       const titles = await query.readTitleSnapshots([sessionId], signal)
       signal?.throwIfAborted()
       const titleRow = titles[0]
       if (titleRow?.status === 'rejected') throw titleRow.reason
-      return {
-        status: 'ok',
+      const metadata = {
+        status: 'ok' as const,
         trust: UNTRUSTED_BACKGROUND,
         sessionId,
         source: observation.source,
-        view,
+        mode, view: mode === 'details' ? view : 'turns',
+        snapshot, capturedThroughSeq: cut,
         cwd: observation.header.cwd ?? null,
         title: titleRow?.status === 'fulfilled' ? titleRow.value.title?.title ?? null : null,
         inheritedEventCount,
-        surfaceDiffers: projected.surfaceDiffers,
-        surfaceCount: projected.surfaceCount,
-        transcriptCount: projected.transcriptCount,
+        ...projection ? { surfaceDiffers: projection.surfaceDiffers, surfaceCount: projection.surfaceCount, transcriptCount: projection.transcriptCount } : {},
         ...note === undefined ? {} : { surfaceNote: note },
-        items: paged.items,
+        ...mode === 'details' ? { items: paged.items } : { turns: paged.turns, turnCount: allTurns.length,
+          coverage: { returnedTurns: paged.turns?.map(turn => turn.turnId), partial: paged.turns?.some(turn => turn.partial), hasMoreHistory: next !== undefined } },
         ...next === undefined ? {} : { nextCursor: next },
       }
+      // A model call consumes the captured source material, not a live observation lease.
+      observation[Symbol.dispose](); observation = undefined
+      if (mode !== 'handoff') return metadata
+      let handoff = extractHandoff(paged.turns ?? [], next !== undefined)
+      if (request.summarize === true) {
+        if (!signal) throw new SessionQueryError('Handoff summarization needs a host execution signal', 'SESSION_QUERY_INVALID_FILTER')
+        handoff = summarize ? await summarize(paged.turns ?? [], handoff, signal, config.pageChars)
+          : { ...handoff, summaryStatus: 'unavailable', error: 'No host model is available; source excerpts are retained.' }
+      }
+      signal?.throwIfAborted()
+      return { ...metadata, handoff }
     } finally {
-      observation[Symbol.dispose]()
+      observation?.[Symbol.dispose]()
       observation = undefined
     }
   } catch (error) {
@@ -337,52 +412,65 @@ function phaseFilters(filters: readonly SessionResultFilter[], phase: SearchCurs
   return [...filters, { kind: 'cwd', values: [cwd] }]
 }
 
+type SearchProgress = Pick<SearchCursor, 'hostCursor' | 'hostOffset' | 'hostPageStamp'>
+
 async function pullSearchPhase(
   query: QueryHost,
   text: string,
   filters: readonly SessionResultFilter[],
-  limit: number,
-  hostCursor: string,
+  resultLimit: number,
+  providerLimit: number,
+  progress: SearchProgress,
   skipCallerCwd: boolean,
   callerCwd: string | undefined,
   signal: AbortSignal | undefined,
-): Promise<{ items: SessionSearchHit[]; nextHostCursor?: string }> {
+  excluded: ReadonlySet<string>,
+): Promise<{ items: SessionSearchHit[]; next?: SearchProgress }> {
   const hits: SessionSearchHit[] = []
-  let cursor = hostCursor
+  let cursor = progress.hostCursor, offset = progress.hostOffset ?? 0, expectedStamp = progress.hostPageStamp
   let hops = 0
-  while (hits.length < limit) {
+  while (hits.length < resultLimit) {
     if (hops++ > 10_000) {
       throw new SessionQueryError('session search continuation did not advance', 'SESSION_QUERY_INVALID_CURSOR')
     }
     signal?.throwIfAborted()
-    const remaining = limit - hits.length
     const page = await query.searchSessions({
       query: text,
       sessionFilters: filters,
-      limit: remaining,
+      // Standard SQLite binds its cursor to limit. Keep it stable across title/body pages and skipped hits.
+      limit: providerLimit,
       ...cursor === '' ? {} : { cursor: SessionSearchCursor(cursor) },
     }, { signal })
-    if (page.items.length > remaining) {
+    if (page.items.length > providerLimit) {
       throw new SessionQueryError('session search page exceeded the requested limit', 'SESSION_QUERY_INVALID_LIMIT')
     }
     const next = page.nextCursor === undefined ? undefined : String(page.nextCursor)
     if (next !== undefined && next === cursor) {
       throw new SessionQueryError('session search continuation did not advance', 'SESSION_QUERY_INVALID_CURSOR')
     }
-    for (const hit of page.items) {
+    const stamp = corpusStamp(JSON.stringify(page.items))
+    if (expectedStamp !== undefined && expectedStamp !== stamp) stale()
+    if (offset > page.items.length) invalid()
+    for (; offset < page.items.length; offset++) {
+      const hit = page.items[offset]!
+      if (excluded.has(hit.header.id)) continue
       if (skipCallerCwd && hit.header.cwd === callerCwd) continue
       hits.push(hit)
+      if (hits.length === resultLimit) {
+        if (offset + 1 < page.items.length) return { items: hits, next: { hostCursor: cursor, hostOffset: offset + 1, hostPageStamp: stamp } }
+        return { items: hits, ...next === undefined ? {} : { next: { hostCursor: next } } }
+      }
     }
     if (next === undefined) return { items: hits }
-    if (hits.length >= limit) return { items: hits, nextHostCursor: next }
     cursor = next
+    offset = 0; expectedStamp = undefined
   }
   return { items: hits }
 }
 
 function assertLimit(limit: number, ceiling: number): void {
   if (!Number.isInteger(limit) || limit < 1 || limit > ceiling) {
-    throw new SessionQueryError('session query result limit was rejected', 'SESSION_QUERY_INVALID_LIMIT')
+    throw new SessionQueryError(`limit must be an integer from 1 to ${ceiling}; omit it or pass null for the default`, 'SESSION_QUERY_INVALID_LIMIT')
   }
 }
 
@@ -483,6 +571,10 @@ function stale(): never {
   throw new SessionQueryError('session search continuation is stale', 'SESSION_QUERY_STALE_CURSOR')
 }
 
+function invalidFilter(message: string): never {
+  throw new SessionQueryError(message, 'SESSION_QUERY_INVALID_FILTER')
+}
+
 function invalid(): never {
-  throw new SessionQueryError('session query continuation is invalid', 'SESSION_QUERY_INVALID_CURSOR')
+  throw new SessionQueryError('session query continuation is invalid; reuse the returned cursor with its original session, mode, options and snapshot, or omit cursor / pass null to start a new read', 'SESSION_QUERY_INVALID_CURSOR')
 }

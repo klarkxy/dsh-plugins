@@ -54,86 +54,6 @@
   ],
   "plugins": [
     {
-      "slug": "pruner",
-      "package": "@klarkxy/dsh-pruner",
-      "category": "workflow",
-      "kind": "preset",
-      "title": {
-        "zh": "代码精简",
-        "en": "Code Prune"
-      },
-      "summary": {
-        "zh": "审查并精简代码：保留现有行为，削减冗余和多余抽象。",
-        "en": "Review and simplify code while keeping existing behavior, cutting redundancy and needless abstraction."
-      },
-      "readme": {
-        "zh": "README.zh-CN.md",
-        "en": "README.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugins",
-      "directory": "plugins/dsh-pruner"
-    },
-    {
-      "slug": "autoevo",
-      "package": "dsh-plugin-autoevo",
-      "category": "workflow",
-      "kind": "plugin",
-      "title": {
-        "zh": "进化模式",
-        "en": "Evolution mode"
-      },
-      "summary": {
-        "zh": "查找和审查可复用能力，经你确认后安装、修改或创建。",
-        "en": "Find and review reusable capabilities, then install, modify, or create them after you confirm."
-      },
-      "readme": {
-        "zh": "README.md",
-        "en": "README.en.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugin-autoevo",
-      "directory": ""
-    },
-    {
-      "slug": "fusion",
-      "package": "@klarkxy/dsh-fusion",
-      "category": "workflow",
-      "kind": "plugin",
-      "title": {
-        "zh": "副驾协作",
-        "en": "Sidekick"
-      },
-      "summary": {
-        "zh": "查看旧版副驾协作说明；新任务使用原生委派与 Classmates 角色。",
-        "en": "Read the legacy Sidekick documentation; use native delegation and Classmates roles for new work."
-      },
-      "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugins",
-      "directory": "plugins/dsh-fusion"
-    },
-    {
-      "slug": "mood",
-      "package": "@klarkxy/dsh-mood",
-      "category": "workflow",
-      "kind": "plugin",
-      "title": {
-        "zh": "需求澄清",
-        "en": "Mood"
-      },
-      "summary": {
-        "zh": "由当前代理先分析不明确的需求，再开始执行。",
-        "en": "Clarify ambiguous requests before acting, using the current Agent."
-      },
-      "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugins",
-      "directory": "plugins/dsh-mood"
-    },
-    {
       "slug": "git-commit",
       "package": "@klarkxy/dsh-git-commit",
       "category": "workflow",
@@ -172,26 +92,6 @@
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-current-title"
-    },
-    {
-      "slug": "recap",
-      "package": "@klarkxy/dsh-recap",
-      "category": "sessions",
-      "kind": "plugin",
-      "title": {
-        "zh": "会话回顾",
-        "en": "Session Recap"
-      },
-      "summary": {
-        "zh": "离开一段时间后返回会话时，展示简短的进展提示。",
-        "en": "Show a brief reminder when you return to a conversation after time away."
-      },
-      "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugins",
-      "directory": "plugins/dsh-recap"
     },
     {
       "slug": "web-search-manager",

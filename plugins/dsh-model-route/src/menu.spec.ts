@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupModelMenuChoices, modelMenuShortName } from './menu.ts'
+import { groupModelMenuChoices, modelMenuEffortLabel, modelMenuShortName } from './menu.ts'
 import { parseModelMenuChoices } from './catalog.ts'
 
 const CATALOG = {
@@ -16,6 +16,12 @@ const CATALOG = {
 }
 
 describe('model menu grouping', () => {
+  it('translates standard effort ids without rewriting provider names or unknown ids', () => {
+    expect(modelMenuEffortLabel({ id: 'high', name: 'high' }, 'zh-CN')).toBe('高')
+    expect(modelMenuEffortLabel({ id: 'high', name: 'high' }, 'en-US')).toBe('High')
+    expect(modelMenuEffortLabel({ id: 'high', name: 'Provider custom name' }, 'zh')).toBe('Provider custom name')
+    expect(modelMenuEffortLabel({ id: 'custom', name: 'custom' }, 'zh')).toBe('custom')
+  })
   it('groups catalog choices by provider with display names and short model labels', () => {
     const choices = parseModelMenuChoices(CATALOG)
     const groups = groupModelMenuChoices(choices, '')

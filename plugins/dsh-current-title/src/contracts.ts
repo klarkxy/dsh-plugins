@@ -1,3 +1,6 @@
+import { defaultModelRoute, normalizeModelRoute, type ModelRoute } from '@klarkxy/dsh-model-route'
+export { defaultModelRoute, normalizeModelRoute }
+
 /** Browser-safe contracts. Shared RPC/result types stay on @klarkxy/dsh-plugin-kit. */
 export type { RpcResult } from '@klarkxy/dsh-plugin-kit/contracts'
 
@@ -39,12 +42,12 @@ export interface TitleSnapshot {
   readonly updatedAt: number
 }
 
-/** Empty provider and model means the shared weak role. Both must be set together. */
-export interface TitleModelRoute {
-  provider: string
-  model: string
-  reasoningEffort?: string
-}
+/**
+ * Empty provider and model means the shared weak role. Both must be set together.
+ * No title-only fields: the stored value is the shared ModelRoute (250/80 caps
+ * live in @klarkxy/dsh-model-route). The alias keeps the title-specific name.
+ */
+export type TitleModelRoute = ModelRoute
 
 export interface TitleSettings {
   revision: number
@@ -88,10 +91,6 @@ export interface GenerateConfig {
   readonly maxTitleBytes: number
 }
 
-export function defaultModelRoute(): TitleModelRoute {
-  return { provider: '', model: '' }
-}
-
 export function defaultSettings(locale: TitleLocaleMode = 'auto'): TitleSettings {
   return { revision: 0, locale, prompt: '', model: defaultModelRoute(), cadence: 'all-prompts' }
 }
@@ -103,16 +102,6 @@ export function normalizeCadence(value: unknown): TitleCadence {
 export function normalizePrompt(value: unknown): string {
   if (typeof value !== 'string') return ''
   return value.replace(/\u0000/gu, '').trim().slice(0, MAX_PROMPT_CHARS)
-}
-
-export function normalizeModelRoute(value: unknown): TitleModelRoute {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return defaultModelRoute()
-  const route = value as Record<string, unknown>
-  const provider = typeof route.provider === 'string' ? route.provider.trim() : ''
-  const model = typeof route.model === 'string' ? route.model.trim() : ''
-  const effort = typeof route.reasoningEffort === 'string' ? route.reasoningEffort.trim() : ''
-  if (!provider || !model || provider.length > 250 || model.length > 250) return defaultModelRoute()
-  return effort && effort.length <= 80 ? { provider, model, reasoningEffort: effort } : { provider, model }
 }
 
 export function defaultGenerateConfig(locale: TitleLocaleMode = 'auto'): GenerateConfig {

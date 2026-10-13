@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-safe-auto",
-  "version": "0.2.0-rc.3",
+  "version": "0.2.0",
   "description": "Safe Auto: an independent reviewer vets each native sandbox escalation; only a pass auto-approves that one call.",
   "icon": "./icon.svg",
   "type": "module",
@@ -24,7 +24,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node --check src/config.js && node --check src/approval-review.js && node --check src/policy.js && node --check src/shell-command.js && node --check src/model-route.js && node --check src/review-context.js && node --check src/execution-evidence.js && node --check src/human-approval.js && node --check src/reviewer.js && node --check src/gate.js && node --check src/index.js && node --check src/control.js && node --check src/ui-host.js && tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-safe-auto",
+    "build": "node --check src/config.js && node --check src/approval-review.js && node --check src/policy.js && node --check src/credential-paths.js && node --check src/credential-text.js && node --check src/credential-reads.js && node --check src/host-runtime.js && node --check src/review-paths.js && node --check src/shell-command.js && node --check src/model-route.js && node --check src/review-context.js && node --check src/execution-evidence.js && node --check src/human-approval.js && node --check src/reviewer.js && node --check src/gate.js && node --check src/index.js && node --check src/control.js && node --check src/ui-host.js && tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-safe-auto",
     "test": "node --test test/*.test.js"
   },
   "engines": {
@@ -60,12 +60,15 @@
   },
   "dependencies": {
     "@klarkxy/dsh-plugin-kit": "workspace:*",
+    "jsonc-parser": "^3.3.1",
+    "toml-eslint-parser": "^1.0.3",
     "unbash": "^5.0.0",
+    "yaml": "^2.9.1",
     "zod": "^4.1.5"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2",
-    "@deepseek-ai/cordis": ">=4.0.4"
+    "@deepseek-ai/cordis": ">=4.0.4",
+    "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-storage-domain": {
@@ -73,16 +76,17 @@
     }
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
     "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
     "@deepseek-ai/dsh-storage-domain": "0.2.0-rc.2",
     "@klarkxy/dsh-model-route": "workspace:*",
-    "@deepseek-ai/cordis": "4.0.4"
+    "jsdom": "29.1.1"
   },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "d405563303cf48dee8fe7b27e6bafc98a03859115493dc97c75880034656b868"
+    "contentHash": "b0fb81ed80c50c0598bd71d14dda7d7ce7f7a7d0c507ce1d4be75a7abec004e4"
   }
 }

@@ -1,4 +1,5 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
+import { modelRouteKey as sharedModelRouteKey } from '@klarkxy/dsh-model-route'
 import { z } from 'zod'
 import {
   SETTINGS_KEY, defaultModelRoute, isTitleLocaleMode, normalizeCadence, normalizeModelRoute, normalizePrompt,
@@ -84,6 +85,7 @@ export function settingsPatch(current: TitleSettings, patch: {
   }
 }
 
+/** Same separator and empty-id rule as @klarkxy/dsh-model-route. No in-tree callers. */
 export function modelRouteKey(route: TitleModelRoute): string {
-  return route.provider && route.model ? `${route.provider}\u001f${route.model}` : ''
+  return sharedModelRouteKey(route.provider, route.model)
 }

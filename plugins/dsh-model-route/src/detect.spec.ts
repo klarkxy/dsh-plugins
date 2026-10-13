@@ -29,7 +29,7 @@ describe('model-route marker', () => {
 describe('detectModelFields', () => {
   it('finds a flat provider/model pair at the config root', () => {
     const found = detectModelFields(ROUTE_NODE)
-    expect(found).toEqual([{ path: [], via: 'shape' }])
+    expect(found).toEqual([{ path: [], via: 'shape', rootKeys: ['provider', 'model', 'reasoningEffort'] }])
   })
 
   it('finds nested route objects and treats them as leaves', () => {
@@ -121,5 +121,19 @@ describe('detectModelFields', () => {
     expect(hasModelRouteShape(ROUTE_NODE)).toBe(true)
     expect(hasModelRouteShape({ type: 'object', properties: { provider: { type: 'string' } } })).toBe(false)
     expect(hasModelRouteShape({ type: 'string' })).toBe(false)
+  })
+
+  it('finds deeply nested dictionaries and keeps projected labels without visiting unused definitions', () => {
+    const leaf = { ...ROUTE_NODE, title: 'Summary', description: 'Summarizes this item.' }
+    let nested: unknown = leaf
+    for (let i = 0; i < 10; i++) nested = { type: 'object', properties: { next: nested } }
+    const schema = { type: 'object', additionalProperties: nested }
+    let value: unknown = { provider: 'p', model: 'm' }
+    for (let i = 0; i < 10; i++) value = { next: value }
+    const [field] = detectModelFields(schema, { value: { item: value } })
+    expect(field).toMatchObject({ path: ['item', ...Array(10).fill('next')], label: 'Summary', description: 'Summarizes this item.', current: { provider: 'p', model: 'm' } })
+    const circular: Record<string, unknown> = { type: 'object' }
+    circular.properties = { left: circular, right: circular, route: ROUTE_NODE }
+    expect(detectModelFields(circular).map(field => field.path)).toEqual([['route']])
   })
 })

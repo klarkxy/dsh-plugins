@@ -2,6 +2,7 @@
  * Native ctx.web backend. Configuration and credentials belong to Zhihu.
  * Official model tool remains `web_search`. Dedicated `zhihu_global_search` is unchanged.
  */
+import { WEB_PROVIDER_AVAILABILITY_EVENT, type DshWebManagementDescriptor } from '@klarkxy/dsh-plugin-kit/contracts'
 import { ZHIHU_CREDENTIAL_REF } from './contracts.ts'
 import { reportExecuted, type ZhihuClientOptions, type ZhihuSearchExecuted } from './zhihu-client.ts'
 import {
@@ -16,7 +17,7 @@ type ZhihuWebSearchHost = {
 
 export const ZHIHU_WEB_SEARCH_ID = 'zhihu-global'
 
-export const ZHIHU_WEB_SEARCH_DESCRIPTOR = {
+export const ZHIHU_WEB_SEARCH_DESCRIPTOR: DshWebManagementDescriptor = {
   id: ZHIHU_WEB_SEARCH_ID,
   label: '知乎全网搜索',
   description: '融合知乎问答与全网内容，返回可溯源的搜索结果。',
@@ -83,7 +84,7 @@ export function createZhihuWebSearchProvider(options: ZhihuWebSearchProviderOpti
         const result = await executeZhihuGlobalSearch(request.query.trim(), count, 'all', {
           ...client,
           signal,
-          env: {},
+          env: client.env ?? process.env,
           resolveCredential: async () => apiKey,
         })
         reportExecuted(onExecuted, { ok: true, results: result.items.length })
@@ -121,7 +122,7 @@ export function registerZhihuGlobalSearchProvider(
 type BindingContext = {
   get(name: string): unknown
   on?(event: 'credentials/reference-updated', handler: (ref: string) => void): () => void
-  emit?(event: 'web/provider-availability-updated', kind: 'search', id: string): void
+  emit?(event: typeof WEB_PROVIDER_AVAILABILITY_EVENT, kind: 'search', id: string): void
 }
 /** Wait for the native web service; no manager dependency and no network probe. */
 export function bindZhihuWebSearch(
@@ -141,7 +142,7 @@ export function bindZhihuWebSearch(
       if (!alive || current !== revision) return
       if (configured !== ready) {
         configured = ready
-        inner.emit?.('web/provider-availability-updated', 'search', ZHIHU_WEB_SEARCH_ID)
+        inner.emit?.(WEB_PROVIDER_AVAILABILITY_EVENT, 'search', ZHIHU_WEB_SEARCH_ID)
       }
     }
     const off = registerZhihuGlobalSearchProvider(web, service, () => configured)

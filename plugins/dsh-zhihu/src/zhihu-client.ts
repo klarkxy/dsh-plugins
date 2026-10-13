@@ -15,6 +15,7 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { withZhihuCallPolicy, ZhihuCallPolicyError, type ZhihuCallPolicyOptions } from './call-policy.ts'
 import type { ZhihuQuotaId } from './contracts.ts'
 
 export const ZHIHU_BASE_URL = 'https://developer.zhihu.com'
@@ -99,7 +100,7 @@ export type ZhihuErrorDetails = {
 
 export class ZhihuSearchError extends Error {
   readonly code: 'TOKEN_MISSING' | 'HTTP_ERROR' | 'TIMEOUT' | 'BAD_RESPONSE'
-    | 'INVALID_ARGUMENTS' | 'TOKEN_INVALID' | 'RATE_LIMITED' | 'UPSTREAM_UNAVAILABLE' | 'CANCELLED'
+    | 'CALL_BLOCKED' | 'INVALID_ARGUMENTS' | 'TOKEN_INVALID' | 'RATE_LIMITED' | 'UPSTREAM_UNAVAILABLE' | 'CANCELLED'
   readonly status?: number
   readonly upstreamCode?: number
   readonly retryAfter?: number
@@ -129,6 +130,7 @@ export function reportExecuted(hook: ((event: ZhihuSearchExecuted) => void) | un
 }
 
 export type ZhihuClientOptions = ZhihuSearchResolveOptions & {
+  callPolicy?: ZhihuCallPolicyOptions
   fetcher?: ZhihuSearchFetcher
   /** Allows tests to bypass process env; defaults to process.env. */
   env?: NodeJS.ProcessEnv
@@ -238,12 +240,30 @@ export async function zhihuFetchJson(
       if (!response.ok) throw httpError()
       return body
     }
-    return await Promise.race([request(), aborted])
+    const quota = async (apiId: string) => {
+      const quotaUrl = new URL('/api/v1/quota', ZHIHU_BASE_URL)
+      quotaUrl.searchParams.set('APIIDs', apiId)
+      const response = await fetcher(quotaUrl.toString(), {
+        method: 'GET', signal: controller.signal,
+        headers: { Authorization: `Bearer ${token.token}`, 'X-Request-Timestamp': String(Math.floor(Date.now() / 1000)), Accept: 'application/json' },
+      })
+      const body = await response.json()
+      const data = parseZhihuEnvelope(body, { status: response.status, officialErrors: true })
+      if (!response.ok) throw new Error('官方额度查询失败')
+      return data
+    }
+    const guarded = path === '/api/v1/quota' && method === 'GET' ? Promise.race([request(), aborted]) : withZhihuCallPolicy(
+      path, init.body, apiId => Promise.race([quota(apiId), aborted]),
+      () => Promise.race([request(), aborted]),
+      { ...options.callPolicy, env: options.env, signal: controller.signal },
+    )
+    return await guarded
   } catch (error) {
     if (linked?.aborted) throw new ZhihuSearchError('CANCELLED', '请求已取消')
     if (controller.signal.aborted || isAbortError(error)) {
       throw new ZhihuSearchError('TIMEOUT', `${label}超时（${Math.round(timeout / 1000)} 秒），请稍后再试。`)
     }
+    if (error instanceof ZhihuCallPolicyError) throw new ZhihuSearchError('CALL_BLOCKED', error.message, undefined, { retryable: false })
     if (error instanceof ZhihuSearchError) {
       error.message = error.message.replaceAll(token.token, '[REDACTED]')
       throw error

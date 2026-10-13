@@ -1,6 +1,7 @@
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { containsSecret, hardRisk } from './policy.js';
+import { redactCredentialText } from './credential-text.js';
 
 const MAX_FILES = 8;
 const MAX_FILE_BYTES = 6144;
@@ -25,7 +26,7 @@ export async function collectExecutionEvidence(call, fs, signal) {
   if (!['bash', 'pwsh'].includes(call.tool)) return { data: undefined, verify: async () => true };
   if (!fs || ['resolve', 'contains', 'stat', 'readBytes', 'processPath'].some(key => typeof fs[key] !== 'function')) return unavailable();
   const rootPath = call.sandbox?.workspaceRoot;
-  const workdir = call.args.workdir ?? call.cwd;
+  const workdir = call.reviewPaths?.workdir ?? call.args.workdir ?? call.cwd;
   if (!isAbsolute(rootPath ?? '') || !isAbsolute(workdir ?? '')) return unavailable();
   const root = await fs.resolve(rootPath, { signal });
   const cwd = await fs.resolve(workdir, { signal });
@@ -71,7 +72,7 @@ export async function collectExecutionEvidence(call, fs, signal) {
       // UTF-16/NUL and other binary/control encodings must not bypass secret
       // screening or make the model review a different source representation.
       if (/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(content)) { omissions.push('NON_TEXT_EVIDENCE_WITHHELD'); continue; }
-      if (containsSecret(content)) { omissions.push('SENSITIVE_EVIDENCE_WITHHELD'); continue; }
+      if (containsSecret(content) || redactCredentialText(content, canonical).redacted) { omissions.push('SENSITIVE_EVIDENCE_WITHHELD'); continue; }
       // JSON keys can use escape sequences: screen their decoded form too.
       let manifest;
       if (path.endsWith('package.json')) {

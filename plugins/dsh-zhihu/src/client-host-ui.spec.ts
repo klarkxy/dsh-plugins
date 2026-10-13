@@ -5,14 +5,13 @@ import { apply } from './client.tsx'
 import {
   dockEscapeKeyDown,
   guardImeEnter,
-  hostComponentsFromRenderProps,
   IME_KEYCODE,
   renderInput,
+  renderSelect,
   zhihuQueryKeyDown,
 } from './client-host-ui.tsx'
 
 function MockSelect() { return null }
-function MockDialog() { return null }
 function MockButton() { return null }
 function MockInput() { return null }
 
@@ -36,41 +35,9 @@ function reactKey(partial: {
 }
 
 describe('public zhihu host compatibility', () => {
-  it('extracts structural Select/Dialog/Button/Input from the slot owner without private imports', () => {
-    expect(hostComponentsFromRenderProps({
-      Select: MockSelect,
-      Dialog: MockDialog,
-      Button: MockButton,
-      Input: MockInput,
-    })).toEqual({
-      Select: MockSelect,
-      Dialog: MockDialog,
-      Button: MockButton,
-      Input: MockInput,
-    })
-    expect(hostComponentsFromRenderProps({
-      owner: { Select: MockSelect, Dialog: MockDialog, Button: MockButton, Input: MockInput },
-    })).toEqual({
-      Select: MockSelect,
-      Dialog: MockDialog,
-      Button: MockButton,
-      Input: MockInput,
-    })
-  })
-
-  it('uses the host Input when provided and the official field otherwise', () => {
-    const hosted = renderInput(MockInput, {
-      value: '港口',
-      type: 'search',
-      onChange() {},
-      'aria-label': '搜索',
-    }) as { type: unknown; props: { value?: string; type?: string } }
-    expect(hosted.type).toBe(MockInput)
-    expect(hosted.props.value).toBe('港口')
-    expect(hosted.props.type).toBe('search')
-
+  it('renders the official Input with value-based callbacks', () => {
     const onChange = vi.fn()
-    const native = renderInput(undefined, {
+    const native = renderInput({
       value: '港口',
       type: 'password',
       onChange,
@@ -87,6 +54,17 @@ describe('public zhihu host compatibility', () => {
     expect(html).toContain('<input')
     expect(html).toContain('type="password"')
     expect(html).toContain('aria-label="密钥"')
+  })
+
+  it('renders the platform select with the shared class, label, state and callback', () => {
+    const onChange = vi.fn()
+    const select = renderSelect({ id: 'feature', value: 'search', disabled: true, onChange,
+      'aria-label': 'Feature', options: [{ value: 'search', label: 'Search' }] })
+    expect(select.type).toBe('select')
+    expect(select.props).toMatchObject({ id: 'feature', value: 'search', disabled: true,
+      className: 'dsh-ui-select', 'aria-label': 'Feature' })
+    select.props.onChange({ target: { value: 'ask' } })
+    expect(onChange).toHaveBeenCalledWith('ask')
   })
 
   it('query consumer ignores synthetic isComposing and blocks native IME Enter/229', () => {
@@ -118,7 +96,7 @@ describe('public zhihu host compatibility', () => {
     expect(closes).toEqual(['x'])
   })
 
-  it('registers only the package settings page and supports native and host controls', () => {
+  it('registers the package settings page using injected official controls', () => {
     const renders: Array<(props: unknown) => { props: Record<string, unknown> }> = []
     const injected: string[] = []
     const registrations: unknown[] = []
@@ -149,10 +127,10 @@ describe('public zhihu host compatibility', () => {
     apply(ctx as never)
     expect(injected).toEqual(['plugins.bundle.config'])
     expect(registrations).toEqual([{
-      name: 'plugins.bundle.config', key: '@klarkxy/dsh-zhihu', order: 120, label: '知乎',
+      name: 'plugins.bundle.config', key: '@klarkxy/dsh-zhihu', order: 120,
     }])
     expect(renders).toHaveLength(1)
-    const standalone = renders[0]!({ owner: { view: 'page' } })
+    const standalone = renders[0]!({ view: 'page' })
     const html = renderToStaticMarkup(standalone as never)
     expect(html).toContain('zhihu-settings-embed')
     expect(html).toContain('知乎凭证设置')
@@ -163,9 +141,10 @@ describe('public zhihu host compatibility', () => {
     expect(html).not.toContain('zhihu-open')
     expect(html).not.toContain('zhihu-dock')
     const hosted = renders[0]!({ owner: { Select: MockSelect, Button: MockButton, Input: MockInput } })
-    expect(hosted.props.Select).toBe(MockSelect)
-    expect(hosted.props.Button).toBe(MockButton)
-    expect(hosted.props.Input).toBe(MockInput)
+    expect(hosted.props).not.toHaveProperty('Select')
+    expect(hosted.props).not.toHaveProperty('Button')
+    expect(hosted.props).not.toHaveProperty('Input')
+    expect(renderToStaticMarkup(hosted as never)).toBe(html)
     for (const dispose of disposers) dispose()
     expect(slotDisposed).toBe(true)
   })

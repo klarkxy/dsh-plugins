@@ -130,8 +130,8 @@ describe('session discovery', () => {
     const liveSession = live(ctx, 'live', HERE_CWD, 1)
     say(liveSession, 'live line')
     const signal = new AbortController().signal
-    const liveRead = await readSession(query, { sessionId: 'live' }, { signal }, config, cursors)
-    const coldRead = await readSession(query, { sessionId: 'cold' }, { signal }, config, cursors)
+    const liveRead = await readSession(query, { mode: 'details', sessionId: 'live' }, { signal }, config, cursors)
+    const coldRead = await readSession(query, { mode: 'details', sessionId: 'cold' }, { signal }, config, cursors)
     expect(liveRead).toMatchObject({ status: 'ok', source: 'live', items: [expect.objectContaining({ text: 'live line', role: 'user' })] })
     expect(coldRead).toMatchObject({ status: 'ok', source: 'prepared', items: [expect.objectContaining({ text: 'stored line' })] })
     const listed = await listSessions(query, {}, { signal }, config, cursors)
@@ -147,7 +147,7 @@ describe('session discovery', () => {
     let cursor: string | undefined
     const seen = new Set<string>()
     for (let step = 0; step < 6; step += 1) {
-      const page = await readSession(query, { sessionId: 'long', cursor }, { signal: new AbortController().signal }, config, cursors)
+      const page = await readSession(query, { mode: 'details', sessionId: 'long', cursor }, { signal: new AbortController().signal }, config, cursors)
       expect(page.status).toBe('ok')
       if (page.status !== 'ok') return
       const items = page.items as Array<{ text: string; truncated: boolean }>
@@ -173,7 +173,7 @@ describe('session discovery', () => {
     say(parent, 'from parent')
     const child = ctx.sessions.fork(parent, undefined, SessionId('child'))
     say(child, 'child only')
-    const read = await readSession(query, { sessionId: 'child' }, { signal: new AbortController().signal }, config, cursors)
+    const read = await readSession(query, { mode: 'details', sessionId: 'child' }, { signal: new AbortController().signal }, config, cursors)
     expect(read.status).toBe('ok')
     if (read.status !== 'ok') return
     const items = read.items as Array<{ text: string; inherited: boolean }>
@@ -185,7 +185,7 @@ describe('session discovery', () => {
       surfaceOp: { op: 'replace', startSeq: original.seq, endSeq: original.seq },
       sourceEventSeqs: [original.seq],
     })
-    const transcript = await readSession(query, { sessionId: 'compacted' }, { signal: new AbortController().signal }, config, cursors)
+    const transcript = await readSession(query, { mode: 'details', sessionId: 'compacted' }, { signal: new AbortController().signal }, config, cursors)
     expect(transcript).toMatchObject({
       status: 'ok',
       trust: 'untrusted-background',
@@ -194,7 +194,7 @@ describe('session discovery', () => {
       items: [expect.objectContaining({ text: 'original words' })],
     })
     expect(String((transcript as { surfaceNote?: string }).surfaceNote)).toContain('human transcript')
-    const surface = await readSession(query, { sessionId: 'compacted', modelSurface: true }, { signal: new AbortController().signal }, config, cursors)
+    const surface = await readSession(query, { mode: 'details', sessionId: 'compacted', modelSurface: true }, { signal: new AbortController().signal }, config, cursors)
     expect(surface).toMatchObject({
       status: 'ok',
       view: 'surface',
@@ -232,7 +232,7 @@ describe('session discovery', () => {
         source: { kind: 'tool', callId: 'call-1' },
       },
     }, { surfaceOp: 'append' })
-    const summary = await readSession(query, { sessionId: 'tools' }, { signal: new AbortController().signal }, config, cursors)
+    const summary = await readSession(query, { mode: 'details', sessionId: 'tools', includeToolDetail: false }, { signal: new AbortController().signal }, config, cursors)
     expect(summary.status).toBe('ok')
     if (summary.status !== 'ok') return
     const items = summary.items as Array<{ role: string; text: string; toolName?: string }>
@@ -242,8 +242,8 @@ describe('session discovery', () => {
     expect(JSON.stringify(items)).not.toContain('hidden chain')
     expect(items.find(item => item.role === 'tool')).toMatchObject({ toolName: 'read_file' })
     expect(items.find(item => item.role === 'tool')!.text.endsWith('…')).toBe(true)
-    const detail = await readSession(query, { sessionId: 'tools', includeToolDetail: true }, { signal: new AbortController().signal }, config, cursors)
-    const detailed = (detail as { items: Array<{ role: string; text: string }> }).items.find(item => item.role === 'tool')
+    const detail = await readSession(query, { mode: 'details', sessionId: 'tools', includeToolDetail: true }, { signal: new AbortController().signal }, config, cursors)
+    const detailed = (detail as { items: Array<{ eventType: string; text: string }> }).items.find(item => item.eventType === 'tool/result')
     expect(detailed?.text).toBe('x'.repeat(180))
   })
 
@@ -252,22 +252,22 @@ describe('session discovery', () => {
     const session = live(ctx, 'cut', HERE_CWD, 1)
     say(session, 'one'.repeat(400))
     const signal = new AbortController().signal
-    const readable = await readSession(query, { sessionId: 'cut' }, { signal }, config, cursors)
+    const readable = await readSession(query, { mode: 'details', sessionId: 'cut' }, { signal }, config, cursors)
     const next = (readable as { nextCursor: string }).nextCursor
     expect(typeof next).toBe('string')
-    const malformed = await readSession(query, { sessionId: 'cut', cursor: 'not-a-cursor' }, { signal }, config, cursors)
+    const malformed = await readSession(query, { mode: 'details', sessionId: 'cut', cursor: 'not-a-cursor' }, { signal }, config, cursors)
     expect(malformed).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_INVALID_CURSOR' })
     const tampered = `${next.slice(0, -1)}${next.endsWith('a') ? 'b' : 'a'}`
-    const forged = await readSession(query, { sessionId: 'cut', cursor: tampered }, { signal }, config, cursors)
+    const forged = await readSession(query, { mode: 'details', sessionId: 'cut', cursor: tampered }, { signal }, config, cursors)
     expect(forged).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_INVALID_CURSOR' })
     say(session, 'two')
-    const continued = await readSession(query, { sessionId: 'cut', cursor: next }, { signal }, config, cursors)
+    const continued = await readSession(query, { mode: 'details', sessionId: 'cut', cursor: next }, { signal }, config, cursors)
     expect(continued.status).toBe('ok')
     if (continued.status !== 'ok') return
     const continuedText = (continued.items as Array<{ text: string }>).map(item => item.text).join('')
     expect(continuedText.length).toBeGreaterThan(0)
     expect(continuedText).not.toContain('two')
-    const fresh = await readSession(query, { sessionId: 'cut' }, { signal }, resolveConfig({ pageChars: 16_000 }), cursors)
+    const fresh = await readSession(query, { mode: 'details', sessionId: 'cut' }, { signal }, resolveConfig({ pageChars: 16_000 }), cursors)
     expect(JSON.stringify((fresh as { items: unknown }).items)).toContain('two')
     const originalObserve = query.observeSession.bind(query)
     query.observeSession = async (id, options) => {
@@ -277,7 +277,7 @@ describe('session discovery', () => {
       if (first !== undefined) events[0] = { ...first, data: { replaced: true } }
       return { ...observation, events, [Symbol.dispose]: () => observation[Symbol.dispose]() }
     }
-    const invalidated = await readSession(query, { sessionId: 'cut', cursor: next }, { signal }, config, cursors)
+    const invalidated = await readSession(query, { mode: 'details', sessionId: 'cut', cursor: next }, { signal }, config, cursors)
     expect(invalidated).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_STALE_CURSOR' })
     expect(invalidated).not.toHaveProperty('items')
   })
@@ -311,6 +311,98 @@ describe('session discovery', () => {
     const corrupt = await searchSessions(query, { query: 'shared-token' }, exec, config, cursors)
     expect(corrupt).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_CORRUPT_SESSION' })
     expect(corrupt).not.toHaveProperty('items')
+  })
+
+  it('searches current titles with exact matches first, across live and persisted sessions without full-text search', async () => {
+    const cold = new Map<string, ColdLog>()
+    const persisted = Session.create(SessionId('cold-title'))
+    ;(persisted.append as (type: string, data: unknown) => void)('session/title', { title: 'SESSION-MANAGER', messageSeqs: [], source: { kind: 'user' } })
+    cold.set('cold-title', { header: { ...persisted.header, cwd: OTHER_CWD, createdAt: 5 }, events: [...persisted.snapshotEvents()], inheritedEventCount: 0 })
+    const { ctx, query } = await mount(cold)
+    const caller = live(ctx, 'caller-title', HERE_CWD, 10, 'Other')
+    live(ctx, 'partial-here', HERE_CWD, 40, 'Fix session-manager menu')
+    live(ctx, 'partial-other', OTHER_CWD, 50, 'session-manager design')
+    const renamed = live(ctx, 'renamed', HERE_CWD, 20, 'session-manager old')
+    ;(renamed.append as (type: string, data: unknown) => void)('session/title', { title: 'New name', messageSeqs: [], source: { kind: 'user' } })
+    live(ctx, 'no-title', HERE_CWD, 30)
+    query.mode = 'disabled'
+    const exec = { agent: { session: caller } }
+    const found = await searchSessions(query, { query: 'session-manager', scope: 'title' }, exec, config, cursors)
+    expect(okItems(found).map(item => item.sessionId)).toEqual(['cold-title', 'partial-here', 'partial-other'])
+    expect(okItems(found)[0]).toMatchObject({ title: 'SESSION-MANAGER', matchedBy: 'title', titleMatch: 'exact', persisted: true, cwd: OTHER_CWD })
+    expect(okItems(found)[0]).not.toHaveProperty('seq')
+    expect(okItems(await searchSessions(query, { query: 'session-manager', scope: 'title', cwd: HERE_CWD }, exec, config, cursors)).map(item => item.sessionId)).toEqual(['partial-here'])
+    expect(okItems(await searchSessions(query, { query: 'New name', scope: 'title' }, exec, config, cursors))[0]).toMatchObject({ sessionId: 'renamed' })
+  })
+
+  it('paginates title and content modes together without duplicate sessions or missing later projects', async () => {
+    const { ctx, query } = await mount()
+    const caller = live(ctx, 'title-caller', HERE_CWD, 1)
+    const exact = live(ctx, 'exact-title', OTHER_CWD, 2, 'Design')
+    const partial = live(ctx, 'partial-title', HERE_CWD, 3, 'DESIGN notes')
+    say(exact, 'design text'); say(partial, 'design text')
+    say(live(ctx, 'body-here', HERE_CWD, 4, 'Other'), 'design body here')
+    say(live(ctx, 'body-other', OTHER_CWD, 5, 'Other'), 'design body elsewhere')
+    const exec = { agent: { session: caller } }
+    const matches: Record<string, unknown>[] = []
+    let cursor: string | undefined
+    for (let pages = 0; pages < 8; pages++) {
+      const result = await searchSessions(query, { query: 'design', scope: 'both', limit: 1, cursor }, exec, config, cursors)
+      expect(result.status).toBe('ok')
+      matches.push(...okItems(result))
+      cursor = (result as { nextCursor?: string }).nextCursor
+      if (!cursor) break
+    }
+    expect(cursor).toBeUndefined()
+    expect(matches.map(item => item.sessionId)).toEqual(['exact-title', 'partial-title', 'body-here', 'body-other'])
+    expect(matches.map(item => item.matchedBy)).toEqual(['title', 'title', 'content', 'content'])
+    const onePage = await searchSessions(query, { query: 'design', scope: 'both', limit: 3 }, exec, config, cursors)
+    expect(okItems(onePage).map(item => item.sessionId)).toEqual(['exact-title', 'partial-title', 'body-here'])
+  })
+
+  it('keeps provider cursor page size stable while titles and duplicate hits consume only part of a page', async () => {
+    const { ctx, query } = await mount()
+    const caller = live(ctx, 'stable-caller', HERE_CWD, 1)
+    say(live(ctx, 'stable-title', HERE_CWD, 2, 'design'), 'design')
+    say(live(ctx, 'stable-title-other', OTHER_CWD, 3, 'design notes'), 'design')
+    for (let i = 0; i < 5; i++) say(live(ctx, `stable-body-${i}`, i < 4 ? HERE_CWD : OTHER_CWD, 10 + i, 'Other'), 'design')
+    const search = query.searchSessions.bind(query)
+    query.searchSessions = async (request, exec) => {
+      const state = request.cursor ? JSON.parse(String(request.cursor)) : undefined
+      if (state && state.limit !== request.limit) throw new SessionQueryError('provider page size changed', 'SESSION_QUERY_INVALID_CURSOR')
+      const page = await search({ ...request, cursor: state ? SessionSearchCursor(state.offset) : undefined }, exec)
+      return { ...page, nextCursor: page.nextCursor ? SessionSearchCursor(JSON.stringify({ limit: request.limit, offset: String(page.nextCursor) })) : undefined }
+    }
+    const seen: string[] = []
+    let cursor: string | undefined
+    for (let pages = 0; pages < 6; pages++) {
+      const result = await searchSessions(query, { query: 'design', scope: 'both', limit: 3, cursor }, { agent: { session: caller } }, config, cursors)
+      expect(result.status).toBe('ok')
+      seen.push(...okItems(result).map(item => String(item.sessionId)))
+      cursor = (result as { nextCursor?: string }).nextCursor
+      if (!cursor) break
+    }
+    expect(cursor).toBeUndefined()
+    expect(seen).toEqual(['stable-title', 'stable-title-other', 'stable-body-3', 'stable-body-2', 'stable-body-1', 'stable-body-0', 'stable-body-4'])
+  })
+
+  it('binds title continuation to current names and mode, with literal text and explicit failures', async () => {
+    const { ctx, query } = await mount()
+    const one = live(ctx, 'title-one', HERE_CWD, 1, '[Design]')
+    live(ctx, 'title-two', OTHER_CWD, 2, '[Design] more')
+    const first = await searchSessions(query, { query: '[design]', scope: 'title', limit: 1 }, {}, config, cursors)
+    const cursor = (first as { nextCursor?: string }).nextCursor
+    expect(cursor).toBeTypeOf('string')
+    expect(await searchSessions(query, { query: '[design]', scope: 'both', limit: 1, cursor }, {}, config, cursors)).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_INVALID_CURSOR' })
+    ;(one.append as (type: string, data: unknown) => void)('session/title', { title: 'Renamed', messageSeqs: [], source: { kind: 'user' } })
+    expect(await searchSessions(query, { query: '[design]', scope: 'title', limit: 1, cursor }, {}, config, cursors)).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_STALE_CURSOR' })
+    const both = await searchSessions(query, { query: '[design]', scope: 'both', limit: 1 }, {}, config, cursors)
+    const bodyCursor = (both as { nextCursor?: string }).nextCursor
+    live(ctx, 'new-title', OTHER_CWD, 3, '[Design]')
+    expect(await searchSessions(query, { query: '[design]', scope: 'both', limit: 1, cursor: bodyCursor }, {}, config, cursors)).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_STALE_CURSOR' })
+    expect(await searchSessions(query, { query: 'x', scope: 'unknown' as never }, {}, config, cursors)).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_INVALID_QUERY' })
+    query.readTitleSnapshots = async () => [{ sessionId: SessionId('title-one'), status: 'rejected', reason: new Error('title read failed') }]
+    expect(await searchSessions(query, { query: 'x', scope: 'title' }, {}, config, cursors)).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_TOOL_FAILED', message: 'title read failed' })
   })
 
   it('bounds empty pages, keeps unicode tails, and rejects forged cursors', () => {
@@ -480,18 +572,18 @@ describe('session discovery', () => {
     }
     const controller = new AbortController()
     controller.abort()
-    await expect(readSession(query, { sessionId: 'lease' }, { signal: controller.signal }, config, cursors)).rejects.toThrow()
+    await expect(readSession(query, { mode: 'details', sessionId: 'lease' }, { signal: controller.signal }, config, cursors)).rejects.toThrow()
     expect(releases).toBe(0)
     const readTitles = query.readTitleSnapshots.bind(query)
     query.readTitleSnapshots = async () => { throw new Error('title read failed') }
-    expect(await readSession(query, { sessionId: 'lease' }, {}, config, cursors)).toMatchObject({
+    expect(await readSession(query, { mode: 'details', sessionId: 'lease' }, {}, config, cursors)).toMatchObject({
       status: 'failed', code: 'SESSION_QUERY_TOOL_FAILED', message: 'title read failed',
     })
     expect(releases).toBe(1)
     query.readTitleSnapshots = readTitles
-    await readSession(query, { sessionId: 'lease' }, { signal: new AbortController().signal }, config, cursors)
+    await readSession(query, { mode: 'details', sessionId: 'lease' }, { signal: new AbortController().signal }, config, cursors)
     expect(releases).toBe(2)
-    const missing = await readSession(query, { sessionId: 'absent' }, { signal: new AbortController().signal }, config, cursors)
+    const missing = await readSession(query, { mode: 'details', sessionId: 'absent' }, { signal: new AbortController().signal }, config, cursors)
     expect(missing).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_SESSION_NOT_FOUND' })
     expect(missing).not.toHaveProperty('items')
   })
@@ -522,14 +614,14 @@ describe('session discovery', () => {
       },
     }))
     const signal = new AbortController().signal
-    const transcript = await readSession(query, { sessionId: 'branch' }, { signal }, config, cursors)
+    const transcript = await readSession(query, { mode: 'details', sessionId: 'branch' }, { signal }, config, cursors)
     expect(transcript.status).toBe('ok')
     if (transcript.status !== 'ok') return
     const texts = (transcript.items as Array<{ text: string }>).map(item => item.text)
     expect(texts).toEqual(['edited prompt', 'kept answer'])
     expect(texts).not.toContain('old attempt')
     expect(texts).not.toContain('old prompt')
-    const surface = await readSession(query, { sessionId: 'branch', modelSurface: true }, { signal }, config, cursors)
+    const surface = await readSession(query, { mode: 'details', sessionId: 'branch', modelSurface: true }, { signal }, config, cursors)
     expect(surface).toMatchObject({
       status: 'ok',
       view: 'surface',
@@ -557,12 +649,12 @@ describe('session discovery', () => {
         return [{ seq: original.seq, message: message('model '.repeat(400)) }]
       },
     }))
-    const first = await readSession(query, { sessionId: 'revise', modelSurface: true }, { signal }, config, cursors)
+    const first = await readSession(query, { mode: 'details', sessionId: 'revise', modelSurface: true }, { signal }, config, cursors)
     const next = (first as { nextCursor?: string }).nextCursor
     expect(typeof next).toBe('string')
     const grown = { ...original, seq: original.seq + 1, data: message('appended later') }
     events = [original, grown]
-    const continued = await readSession(query, { sessionId: 'revise', modelSurface: true, cursor: next }, { signal }, config, cursors)
+    const continued = await readSession(query, { mode: 'details', sessionId: 'revise', modelSurface: true, cursor: next }, { signal }, config, cursors)
     expect(continued.status).toBe('ok')
     if (continued.status !== 'ok') return
     const continuedText = (continued.items as Array<{ text: string }>).map(item => item.text).join('')
@@ -572,7 +664,7 @@ describe('session discovery', () => {
     events = [original, branch]
     revision = 1
     expect(prefixDigest(events.filter(event => event.seq <= original.seq))).toBe(prefixDigest([original]))
-    const stale = await readSession(query, { sessionId: 'revise', modelSurface: true, cursor: next }, { signal }, config, cursors)
+    const stale = await readSession(query, { mode: 'details', sessionId: 'revise', modelSurface: true, cursor: next }, { signal }, config, cursors)
     expect(stale).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_STALE_CURSOR' })
     expect(stale).not.toHaveProperty('items')
   })
@@ -584,11 +676,11 @@ describe('session discovery', () => {
     const signal = new AbortController().signal
     let events: SessionEvent[] = [original]
     installFace(query, () => ({ events, cursor: original.seq, branchRevision: 0 }))
-    const first = await readSession(query, { sessionId: 'meta' }, { signal }, config, cursors)
+    const first = await readSession(query, { mode: 'details', sessionId: 'meta' }, { signal }, config, cursors)
     const next = (first as { nextCursor?: string }).nextCursor
     expect(typeof next).toBe('string')
     events = [{ ...original, meta: { changed: true } } as SessionEvent]
-    const changed = await readSession(query, { sessionId: 'meta', cursor: next }, { signal }, config, cursors)
+    const changed = await readSession(query, { mode: 'details', sessionId: 'meta', cursor: next }, { signal }, config, cursors)
     expect(changed).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_STALE_CURSOR' })
     expect(changed).not.toHaveProperty('items')
 
@@ -599,7 +691,7 @@ describe('session discovery', () => {
       events: [prompt, attempt, { ...attempt, seq: attempt.seq + 1, type: 'session/active-branch', data: { revision: 1 } } as SessionEvent],
       cursor: attempt.seq + 1,
     }))
-    const missing = await readSession(query, { sessionId: 'bare' }, { signal }, config, cursors)
+    const missing = await readSession(query, { mode: 'details', sessionId: 'bare' }, { signal }, config, cursors)
     expect(missing).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_INVALID_SURFACE' })
     expect(missing).not.toHaveProperty('items')
     expect(JSON.stringify(missing)).not.toContain('old attempt')
@@ -625,11 +717,11 @@ describe('session discovery', () => {
       },
     }))
     const signal = new AbortController().signal
-    const transcript = await readSession(query, { sessionId: 'receiver' }, { signal }, config, cursors)
+    const transcript = await readSession(query, { mode: 'details', sessionId: 'receiver' }, { signal }, config, cursors)
     expect(transcript.status).toBe('ok')
     expect(calls).toBe(1)
     expect((transcript as { items: Array<{ text: string }> }).items.map(item => item.text)).toEqual(['visible prompt'])
-    const surface = await readSession(query, { sessionId: 'receiver', modelSurface: true }, { signal }, config, cursors)
+    const surface = await readSession(query, { mode: 'details', sessionId: 'receiver', modelSurface: true }, { signal }, config, cursors)
     expect(surface).toMatchObject({
       status: 'ok',
       view: 'surface',
@@ -673,6 +765,12 @@ describe('session discovery', () => {
     }
     const caller = callerFromExecution({ agent: { session } })
     if (caller.cwd !== HERE_CWD) throw new Error(`cwd ${caller.cwd}`)
+    const named = live(ctx, 'named-tool', OTHER_CWD, 2, '线程标题检索')
+    say(named, '正文没有标题关键字')
+    const titleSearch = JSON.parse(await registered.get('search_sessions')!.execute(
+      { query: '线程标题', scope: 'title' }, { agent: { session } },
+    ))
+    expect(titleSearch).toMatchObject({ status: 'ok', items: [expect.objectContaining({ sessionId: 'named-tool', title: '线程标题检索', matchedBy: 'title' })] })
     await ctx.fiber.dispose()
     contexts.pop()
     if (registered.size !== 0) throw new Error(`still registered ${registered.size}`)

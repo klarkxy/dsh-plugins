@@ -1,3 +1,4 @@
+import '../tests/legacy-call-policy.ts'
 import { describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { apply as applyTools } from './tools.ts'

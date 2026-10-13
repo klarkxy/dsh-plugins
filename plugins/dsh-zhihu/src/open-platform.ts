@@ -4,11 +4,11 @@
  * This module has no DSH/UI dependencies; RPC and tools share these validators.
  */
 import { zhihuFetchJson, ZhihuSearchError, type ZhihuClientOptions } from './zhihu-client.ts'
-import { ZHIHU_QUOTA_IDS, type ZhihuQuotaId } from './contracts.ts'
+import { ZHIHU_QUOTA_IDS, normalizeZhihuQuotaId, type ZhihuQuotaId } from './contracts.ts'
 
 export const ZHIHU_OPEN_PLATFORM_APIS = {
-  'question.recommendations': { path: '/api/v1/user/question_recommendations', label: '适合回答的问题', quotaId: 'creator' },
-  'question.answers': { path: '/api/v1/content/question_answers', label: '问题回答摘要', quotaId: 'question_answers' },
+  'question.recommendations': { path: '/api/v1/user/question_recommendations', label: '适合回答的问题', quotaId: 'question_discovery' },
+  'question.answers': { path: '/api/v1/content/question_answers', label: '问题回答摘要', quotaId: 'question_discovery' },
   'content.detail': { path: '/api/v1/user/content_detail', label: '本人创作全文', quotaId: 'creator' },
   'content.comments': { path: '/api/v1/user/content_comments', label: '本人创作评论', quotaId: 'creator' },
   'creator.account.stats': { path: '/api/v1/user/creator_account_stats', label: '账号创作数据', quotaId: 'creator' },
@@ -68,7 +68,7 @@ function inputObject(input: unknown): Record<string, unknown> {
   for (const key of ['token', 'accessSecret', 'access_secret', 'accessToken', 'access_token', 'oauthToken', 'oauth_token', 'useConfiguredOauthUser', 'use_configured_oauth_user']) {
     if (Object.hasOwn(input, key)) invalid('这些接口仅使用当前 Access Secret，不接受 token 参数或 OAuth 身份切换。')
   }
-  return input
+  return { ...input }
 }
 function limit(value: unknown, fallback: number, maximum: number, name = 'limit'): string {
   const count = value === undefined ? fallback : value
@@ -134,6 +134,7 @@ function paramsFor(operation: ZhihuOpenPlatformOperation, input: Record<string, 
     if (typeof type !== 'string' || !['all', 'answer', 'article', 'pin', 'zvideo'].includes(type)) invalid('contentType 必须是 all、answer、article、pin 或 zvideo。')
     params.ContentType = type
   } else if (operation === 'quota' && input.apiIds !== undefined) {
+    if (Array.isArray(input.apiIds)) input.apiIds = input.apiIds.map(normalizeZhihuQuotaId)
     if (!Array.isArray(input.apiIds) || input.apiIds.some(id => typeof id !== 'string' || !(ZHIHU_QUOTA_IDS as readonly string[]).includes(id))) invalid('apiIds 包含未知官方额度项。')
     if (input.apiIds.length) params.APIIDs = [...new Set(input.apiIds)].join(',')
   }

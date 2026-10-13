@@ -87,6 +87,8 @@ describe('ChatGPT connection page', () => {
       expect(call.mock.calls.map(args => args[1])).toEqual(['settings', 'status'])
       await act(async () => { state.resolve(success(status)); settings.resolve(success({ settings: DEFAULT_SETTINGS, revision: 3 })) })
       expect(dom.window.document.body.textContent).toContain('Codex 1.0')
+      expect(dom.window.document.querySelector('input[placeholder="Leave blank to detect automatically"]')).toBeNull()
+      expect(dom.window.document.body.textContent).toContain('Advanced settings')
       expect(call).toHaveBeenCalledTimes(2)
       await act(async () => root.unmount())
       expect(signals.every(signal => signal.aborted)).toBe(true)

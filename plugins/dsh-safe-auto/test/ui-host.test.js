@@ -31,6 +31,7 @@ test('UI host mounts an authenticated route and disposes control without model c
   const disposers = []; const rows = new Map();
   let route, attached = false, closed = false, removed = false, rejections = 0;
   const ctx = {
+    on: () => () => {},
     safeAutoRuntime: { base: parseConfig(), attach(control) { attached = true; assert.equal(control.settingsView().revision, 0); return () => { attached = false; }; } },
     storageDomain: { async open(spec) {
       assert.equal(spec.name, 'dsh_safe_auto');
@@ -100,6 +101,7 @@ for (const saveOutcome of ['saved', 'failed']) {
     const specs = { 'workspace-write': { sandbox: 'workspace-write', approval: 'ask' },
       'danger-full-access': { sandbox: 'danger-full-access', approval: 'never' } };
     const ctx = {
+      on: () => () => {},
       safeAutoRuntime: {
         base: parseConfig({ provider: 'p', model: 'm' }),
         attach() { attached = true; return () => { attached = false; }; },

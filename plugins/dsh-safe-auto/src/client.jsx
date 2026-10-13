@@ -1,10 +1,11 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Button, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconShieldOutlineRegular, Menu, Modal,
   PermissionIconFullAccessRegular, PermissionIconReadOnlyRegular, PermissionIconWorkspaceWriteRegular, SegmentedTabs } from '@deepseek-ai/dsh-client-ui-primitives';
-import { modelMenuEffortOptions, parseModelMenuChoices } from '@klarkxy/dsh-model-route';
+import { modelMenuEffortLabel, modelMenuEffortOptions, parseModelMenuChoices } from '@klarkxy/dsh-model-route';
 import { ModelMenu, modelMenuCss } from '@klarkxy/dsh-model-route/ui';
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui';
 import { createPluginReadGate } from '@klarkxy/dsh-plugin-kit/client-utils';
+import { createModelSettingsSubscriber } from '@klarkxy/dsh-plugin-kit/model-settings-client';
 
 const h = React.createElement;
 export const name = 'dsh-safe-auto-client';
@@ -19,6 +20,30 @@ export const BUNDLE = '@klarkxy/dsh-safe-auto';
 const TEXT = {
   zh: {
     requestFailed: '请求失败',
+    confirmationUnavailable: '确认已不可用',
+    approvalInvalid: '确认请求无效',
+    approvalExpiredError: '确认已超时或不再等待处理',
+    invalidSession: '会话无效',
+    sessionInactive: '会话未激活，请打开后重试',
+    childSession: '子会话不能启用安全自动',
+    invalidRequest: '请求无效',
+    settingsChanged: '配置已更新，请刷新后重试',
+    reviewerOnly: '这里只能修改审核配置',
+    sessionChanged: '会话已更新，请刷新后重试',
+    profileDisabled: '配置文件中已停用安全自动',
+    workspaceUnavailable: '当前无法使用需原生审批的工作区写入权限',
+    unknownPreset: '权限预设无效',
+    controlUnloaded: '安全自动已停用',
+    browserRequired: '请在浏览器中确认这次调用',
+    unknownSetting: '审核模型设置无效',
+    invalidModel: '审核模型或提供方标识无效',
+    modelPair: '提供方和模型必须一起配置',
+    effortRequiresModel: '选择思考强度前需先指定审核模型',
+    invalidConfig: '配置无效',
+    invalidConfigField: field => `配置项无效：${field}`,
+    unknownConfigField: field => `未知配置项：${field}`,
+    externalChange: '配置已在别处修改。草稿已保留，请刷新并丢弃草稿后重新确认。',
+    syncUnavailable: '自动刷新不可用，请手动刷新配置。',
     follow: '跟随当前对话',
     searchModels: '搜索模型…',
     noModels: '没有匹配的模型',
@@ -47,7 +72,7 @@ const TEXT = {
     details: '安全说明',
     tabLimits: '预算边界',
     safetyDetail: '只处理原生 write/edit/bash/pwsh 的单次沙箱提权。审核会保留真人任务授权及后续限制，并按需读取工作区内的包配置和脚本；模型通过时自动放行。其余有效请求请你在 60 秒内确认，超时拒绝。确认只适用于这一次调用。',
-    unableLabel: '无法自动判断时',
+    unableLabel: '无法自动判断时：',
     unableValue: '请你在 60 秒内确认；超时拒绝',
     approvalTitle: '确认这一次调用',
     approvalPending: count => `${count} 个请求待确认`,
@@ -55,8 +80,6 @@ const TEXT = {
     approvalExpired: '确认已超时，已拒绝。',
     approvalAllow: '仅允许这一次',
     approvalDeny: '拒绝',
-    approvalPermission: '请求权限',
-    approvalScope: '仅此调用',
     approvalReview: '模型审核意见',
     approvalRefresh: message => `${message}。正在刷新请求；不会自动重试决定。`,
     approvalEffect: '完整调用内容',
@@ -74,6 +97,30 @@ const TEXT = {
   },
   en: {
     requestFailed: 'Request failed',
+    confirmationUnavailable: 'Confirmation is no longer available',
+    approvalInvalid: 'Invalid approval request',
+    approvalExpiredError: 'Approval expired or is no longer pending',
+    invalidSession: 'Invalid session',
+    sessionInactive: 'Session is not active; open it and retry',
+    childSession: 'Child sessions cannot select Safe Auto',
+    invalidRequest: 'Invalid request',
+    settingsChanged: 'Settings changed; reload and retry',
+    reviewerOnly: 'Only reviewer settings may be edited here',
+    sessionChanged: 'Session changed; refresh and retry',
+    profileDisabled: 'Safe Auto is disabled in the profile',
+    workspaceUnavailable: 'Workspace Write with native approval is unavailable',
+    unknownPreset: 'Unknown permission preset',
+    controlUnloaded: 'Safe Auto control unloaded',
+    browserRequired: 'Browser confirmation required',
+    unknownSetting: 'Invalid reviewer model setting',
+    invalidModel: 'Invalid reviewer provider/model identifier',
+    modelPair: 'Provider and model must be configured together',
+    effortRequiresModel: 'Reasoning effort requires a reviewer model',
+    invalidConfig: 'Invalid configuration',
+    invalidConfigField: field => `Invalid configuration field: ${field}`,
+    unknownConfigField: field => `Unknown configuration field: ${field}`,
+    externalChange: 'Settings changed elsewhere. Draft preserved; refresh and discard it before reviewing changes.',
+    syncUnavailable: 'Automatic refresh unavailable; refresh settings manually.',
     follow: 'Follow conversation',
     searchModels: 'Search models…',
     noModels: 'No matching models',
@@ -102,7 +149,7 @@ const TEXT = {
     details: 'Safety notes',
     tabLimits: 'Limits',
     safetyDetail: 'Reviews one native write/edit/bash/pwsh sandbox escalation at a time. Earlier human task authorization and later restrictions remain visible; workspace package definitions and scripts may supply evidence. A model pass auto-approves. Other valid requests ask you to confirm within 60 seconds and are denied on timeout. Confirmation grants this call only.',
-    unableLabel: 'When it cannot judge automatically',
+    unableLabel: 'When it cannot judge automatically: ',
     unableValue: 'Ask you to confirm within 60 seconds; deny on timeout',
     approvalTitle: 'Confirm this call',
     approvalPending: count => `${count} pending confirmation${count === 1 ? '' : 's'}`,
@@ -110,8 +157,6 @@ const TEXT = {
     approvalExpired: 'Confirmation expired and was denied.',
     approvalAllow: 'Allow this call only',
     approvalDeny: 'Reject',
-    approvalPermission: 'Requested permission',
-    approvalScope: 'This call only',
     approvalReview: 'Model review opinion',
     approvalRefresh: message => `${message}. Refreshing requests; your decision will not be retried automatically.`,
     approvalEffect: 'Complete call content',
@@ -139,13 +184,44 @@ export function translator(language) {
   return (key, ...args) => { const value = table[key]; return typeof value === 'function' ? value(...args) : value; };
 }
 function useText(locale) {
-  const [language, setLanguage] = useState(() => localeLanguage(locale));
-  useEffect(() => {
-    setLanguage(localeLanguage(locale));
-    if (typeof locale?.subscribe !== 'function') return undefined;
-    return locale.subscribe(() => setLanguage(localeLanguage(locale)));
-  }, [locale]);
+  const language = useSyncExternalStore(
+    listener => locale?.subscribe?.(listener) ?? (() => {}),
+    () => localeLanguage(locale),
+    () => localeLanguage(locale),
+  );
   return useMemo(() => translator(language), [language]);
+}
+
+// Translate only failures emitted by this plugin; provider/storage diagnostics remain data.
+const LOCAL_ERRORS = {
+  'Request failed': 'requestFailed', 'Request rejected': 'requestFailed',
+  'Confirmation is no longer available': 'confirmationUnavailable',
+  'Invalid approval response': 'approvalInvalid', 'Invalid approval payload': 'approvalInvalid',
+  'Approval expired or is no longer pending': 'approvalExpiredError', 'Approval expired or invalidated': 'approvalExpiredError',
+  'Invalid session': 'invalidSession', 'Session is not active; open it and retry': 'sessionInactive',
+  'Child sessions cannot select Safe Auto': 'childSession', 'Invalid request': 'invalidRequest',
+  'Settings changed; reload and retry': 'settingsChanged', 'Only reviewer settings may be edited here': 'reviewerOnly',
+  'Session changed; refresh the list and retry': 'sessionChanged', 'Unknown endpoint': 'invalidRequest',
+  'Safe Auto is disabled in the profile': 'profileDisabled', 'Workspace Write with native approval is unavailable': 'workspaceUnavailable',
+  'Unknown permission preset': 'unknownPreset', 'Safe Auto control unloaded': 'controlUnloaded',
+  'Browser confirmation required': 'browserRequired', 'Unknown Safe Auto model setting': 'unknownSetting',
+  'invalid reviewer provider/model identifier': 'invalidModel', 'provider and model must be configured together': 'modelPair',
+  'reasoningEffort requires a reviewer model': 'effortRequiresModel',
+};
+function errorMessage(error) {
+  return (typeof error === 'string' ? error : error?.message) || TEXT.en.requestFailed;
+}
+export function errorText(t, error) {
+  const message = typeof error === 'string' ? error : error?.message;
+  const key = Object.hasOwn(LOCAL_ERRORS, message) ? LOCAL_ERRORS[message] : undefined;
+  const unknownField = /^unknown config field: (.+)$/.exec(message || '');
+  const invalidField = /^(?:(enabled|staticReadonly) must be a boolean|(provider|model|reasoningEffort|reviewerPrompt) must be a string|invalid (timeoutMs|maxInputBytes|outputTokens|maxReviewsPerTask|consecutiveDenials|humanApprovalTimeoutMs))$/.exec(message || '');
+  const text = key ? t(key)
+    : unknownField ? t('unknownConfigField', unknownField[1])
+    : invalidField ? t('invalidConfigField', invalidField[1] || invalidField[2] || invalidField[3])
+    : ['config must be an object', 'invalid configuration'].includes(message) ? t('invalidConfig')
+    : message || t('requestFailed');
+  return error?.context ? t(error.context, text) : text;
 }
 
 export async function unwrapRpc(call, endpoint, payload, fallback = TEXT.en.requestFailed) {
@@ -212,7 +288,7 @@ export function createApprovalController({ api, sessionId, onState, now = monoto
         publish({ requests, error: '' });
       }
     } catch (error) {
-      if (active && ticket === generation) publish({ error: error.message });
+      if (active && ticket === generation) publish({ error: errorMessage(error) });
     } finally { if (readId === readSequence) { reading = false; arm(); } }
     return true;
   }
@@ -232,7 +308,7 @@ export function createApprovalController({ api, sessionId, onState, now = monoto
       } catch (error) {
         // A competing tab, timeout or lost response needs a fresh read, never a
         // repeated write. Remove the stale prompt until that read completes.
-        if (active) publish({ requests: state.requests.filter(item => item.id !== requestId), error: error.message });
+        if (active) publish({ requests: state.requests.filter(item => item.id !== requestId), error: errorMessage(error) });
       } finally {
         writing = false;
         if (active) { publish({ busy: false }); if (!reading) void refresh(); else arm(); }
@@ -304,6 +380,10 @@ const css = `${officialUiCss('dsh-safe-auto')}${modelMenuCss}
   max-height: 100%;
   max-width: 100%;
 }
+/* The host card sizes every modal to a 380px column; an approval shows whole
+ * commands and file contents, so it claims a wider one. The doubled class
+ * keeps this rule ahead of the card's own width regardless of style order. */
+.dsh-safe-auto.dsh-safe-auto-approval-dialog { width: min(640px, 100%); }
 .dsh-safe-auto-approval-content {
   flex: 1 1 auto;
   min-height: 0;
@@ -325,7 +405,7 @@ const css = `${officialUiCss('dsh-safe-auto')}${modelMenuCss}
 }
 `;
 function Style() { return h('style', null, css); }
-function ErrorText({ error }) { return error ? h('p', { role: 'alert', className: 'dsh-ui-error dsh-ui-wrap' }, error) : null; }
+function ErrorText({ error, t }) { return error ? h('p', { role: 'alert', className: 'dsh-ui-error dsh-ui-wrap' }, errorText(t, error)) : null; }
 
 /** Values are rendered as plain text, with no Markdown or HTML interpretation. */
 export function ApprovalDialog({ request, pendingCount = 1, remainingMs, busy = false, error = '', onAnswer, locale }) {
@@ -333,6 +413,9 @@ export function ApprovalDialog({ request, pendingCount = 1, remainingMs, busy = 
   if (!request) return null;
   const expired = remainingMs <= 0;
   const action = request.action || {};
+  /* action.permission stays in the payload but is not rendered: the assessment gate
+   * fixes from=workspace-write and scope=this-call-only, and a same-level escalation
+   * never reaches this dialog, so the block would always read the same values. */
   const fields = Object.entries({ tool: action.tool, cwd: action.cwd, ...action.arguments });
   return h(Modal, { open: true, title: t('approvalTitle'), closeLabel: t('approvalDeny'),
     onClose: () => { if (!busy && !expired) onAnswer(request.id, 'deny'); },
@@ -345,16 +428,13 @@ export function ApprovalDialog({ request, pendingCount = 1, remainingMs, busy = 
     h('div', { className: 'dsh-safe-auto dsh-ui-stack' }, h(Style),
       h('p', { className: 'dsh-ui-meta', role: 'status' }, t('approvalPending', pendingCount), ' · ',
         expired ? t('approvalExpired') : t('approvalCountdown', Math.ceil(remainingMs / 1000))),
-      h('div', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('approvalPermission')),
-        h('pre', { className: 'dsh-safe-auto-approval-pre' }, JSON.stringify({ ...action.permission, scope: action.permission?.scope }, null, 2)),
-        h('span', { className: 'dsh-ui-help' }, t('approvalScope'))),
       h('div', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('approvalEffect')),
         fields.map(([field, value]) => h('div', { key: field, className: 'dsh-ui-field' },
           h('span', { className: 'dsh-ui-meta' }, field), h('pre', { className: 'dsh-safe-auto-approval-pre' },
             typeof value === 'string' ? value : JSON.stringify(value, null, 2))))),
       h('div', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('approvalReview')),
         h('pre', { className: 'dsh-safe-auto-approval-pre' }, JSON.stringify(request.review || {}, null, 2))),
-      h(ErrorText, { error })));
+      h(ErrorText, { error, t })));
 }
 
 /** Composer permission control via the replacement slot: native presets plus Safe Auto. */
@@ -370,7 +450,7 @@ export function PermissionMenu({ sessionId, locked, api, locale, initialSnapshot
   const [approvals, setApprovals] = useState({ sessionId, requests: [], busy: false, error: '' });
   const [approvalNow, setApprovalNow] = useState(monotonicNow);
   const refresh = (automatic = false) => scopeRef.current?.run(() => api.getSession(sessionId), {
-    value: value => { setSnapshot(value); setError(''); }, error: e => setError(e.message),
+    value: value => { setSnapshot(value); setError(''); }, error: e => setError(errorMessage(e)),
   }, false, automatic);
   refreshRef.current = refresh;
   useEffect(() => {
@@ -411,7 +491,7 @@ export function PermissionMenu({ sessionId, locked, api, locale, initialSnapshot
     setBusy(true); setError('');
     scope?.run(() => api.selectSession({ sessionId, expectedRevision: snapshot.revision, value }), {
       value: next => { setSnapshot(next); setOpen(false); },
-      error: e => { setError(t('refreshRetry', e.message)); refreshRef.current(); },
+      error: e => { setError({ message: errorMessage(e), context: 'refreshRetry' }); refreshRef.current(); },
       settled: () => setBusy(false),
     }, true);
   };
@@ -438,8 +518,8 @@ export function PermissionMenu({ sessionId, locked, api, locale, initialSnapshot
         CurrentIcon && h(CurrentIcon), current ? permissionLabel(current.value, current.name, t) : (snapshot?.current || t('permission')),
         h(IconChevronUpOutlineRegular)),
     }),
-    h(ErrorText, { error }),
-    h(ErrorText, { error: approvals.error && t('approvalRefresh', approvals.error) }),
+    h(ErrorText, { error, t }),
+    h(ErrorText, { error: approvals.error && { message: approvals.error, context: 'approvalRefresh' }, t }),
     pending.length ? h(ApprovalDialog, { key: pending[0].id, request: pending[0], pendingCount: pending.length,
       remainingMs: approvalRemaining(pending[0], approvalNow), busy: approvals.busy,
       onAnswer: (id, outcome) => { void approvalsRef.current?.answer(id, outcome); }, locale }) : null);
@@ -451,7 +531,8 @@ export function ReviewerFields({ values, catalog, disabled, onChange, locale }) 
   const state = reviewerMenuState(values, catalog);
   const effort = values.reasoningEffort || '';
   const currentLabel = state.follow ? t('follow') : state.selected?.label || `${state.provider} / ${state.model}`;
-  const effortName = state.efforts.find(item => item.id === effort)?.name;
+  const effortOption = state.efforts.find(item => item.id === effort);
+  const effortName = effortOption && modelMenuEffortLabel(effortOption, localeLanguage(locale));
   const unknownEffort = Boolean(effort && !state.follow && state.selected && !state.selected.efforts.some(item => item.id === effort));
   const retained = effort && h('span', null, ' ', t('savedEffortRetained', effort));
   /* The reviewer route uses the contract's standard editor (dsh-model-route's
@@ -459,7 +540,7 @@ export function ReviewerFields({ values, catalog, disabled, onChange, locale }) 
   return h('fieldset', { disabled, className: 'dsh-ui-card' }, h('legend', { className: 'dsh-ui-heading' }, t('reviewer')),
     h('div', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('model')),
       h(ModelMenu, {
-        open, onOpenChange: setOpen, listClassName: 'dsh-safe-auto',
+        open, onOpenChange: setOpen, listClassName: 'dsh-safe-auto', locale: localeLanguage(locale),
         anchor: h('button', { type: 'button', className: 'dsh-model-menu-trigger', disabled: Boolean(disabled),
           'aria-haspopup': 'menu', 'aria-expanded': open },
           h('span', { className: 'dsh-model-menu-triggerLabel' }, currentLabel),
@@ -495,40 +576,75 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
   const [tab, setTab] = useState(initialTab);
   const tabsId = useId();
   const dirty = useRef(false);
+  const reading = useRef(false);
+  const pending = useRef(false);
+  const external = useRef(false);
+  const [externalChange, setExternalChange] = useState(false);
+  const [syncError, setSyncError] = useState('');
   const scopeRef = useRef(null);
   const refreshRef = useRef(null);
   /* An automatic refresh (mount, window focus) keeps the "saved" notice;
    * only an explicit refresh clears it. */
-  const refresh = (discardDraft = false, automatic = false) => scopeRef.current?.run(() => api.getSettings(), {
-    value: next => {
-      if (dirty.current && !discardDraft) return;
-      setSettings(next); setValues(next.values); dirty.current = false; setError('');
-      if (!automatic) setSaved(false);
-    },
-    error: e => setError(e.message),
-  }, false, automatic);
+  const refresh = (discardDraft = false, automatic = false) => {
+    const scope = scopeRef.current;
+    if (!scope) return;
+    if (reading.current || scope.writing) { pending.current = true; return; }
+    pending.current = false;
+    if (dirty.current && !discardDraft) {
+      if (external.current) setExternalChange(true);
+      return;
+    }
+    reading.current = true;
+    setBusy(true);
+    const request = scope.run(() => api.getSettings(), {
+      value: next => {
+        if (pending.current || (dirty.current && !discardDraft)) return;
+        setSettings(next); setValues(next.values); dirty.current = false; setError('');
+        external.current = false; setExternalChange(false);
+        if (!automatic) setSaved(false);
+      },
+      error: e => { if (!pending.current) setError(errorMessage(e)); },
+      settled: () => {
+        if (scopeRef.current !== scope) return;
+        reading.current = false;
+        setBusy(false);
+        if (pending.current) refreshRef.current(false, true);
+      },
+    }, false, automatic && !external.current);
+    void request.then(ran => { if (!ran && scopeRef.current === scope) { reading.current = false; setBusy(false); } });
+    return request;
+  };
   refreshRef.current = refresh;
   useEffect(() => {
     const scope = createRequestScope(); scopeRef.current = scope;
+    reading.current = false; pending.current = false; dirty.current = false; external.current = false;
+    setBusy(false); setExternalChange(false); setSyncError('');
     refreshRef.current(false, true);
     let alive = true;
-    Promise.resolve().then(() => api.modelCatalog()).then(value => { if (alive) setCatalog(value); }, e => { if (alive) setCatalogError(e.message); });
+    Promise.resolve().then(() => api.modelCatalog()).then(value => { if (alive) setCatalog(value); }, e => { if (alive) setCatalogError(errorMessage(e)); });
     const focus = () => { if (!dirty.current) refreshRef.current(false, true); };
     const stopConnection = api.subscribeGeneration?.(() => {
       scope.invalidate();
-      if (!dirty.current) refreshRef.current(false, true);
+      external.current = true;
+      refreshRef.current(false, true);
     });
+    const stopSettings = api.subscribeSettings?.(() => {
+      if (!alive) return;
+      setSyncError(''); external.current = true;
+      if (dirty.current && !scope.writing) setExternalChange(true);
+      refreshRef.current(false, true);
+    }, message => { if (alive) setSyncError(message); });
     globalThis.addEventListener?.('focus', focus);
-    return () => { alive = false; scope.dispose(); stopConnection?.(); globalThis.removeEventListener?.('focus', focus); };
+    return () => { alive = false; scope.dispose(); stopConnection?.(); stopSettings?.(); globalThis.removeEventListener?.('focus', focus); };
   }, [api]);
   const change = next => { dirty.current = true; setSaved(false); setValues(next); };
   const save = () => {
-    if (!settings || !values || scopeRef.current?.writing || (values.reviewerPrompt || '').length > 4096) return;
+    if (!settings || !values || reading.current || external.current || scopeRef.current?.writing || (values.reviewerPrompt || '').length > 4096) return;
     setBusy(true); setError(''); setSaved(false);
     scopeRef.current?.run(() => api.saveSettings({ expectedRevision: settings.revision, values }), {
       value: next => { setSettings(next); setValues(next.values); dirty.current = false; setSaved(true); },
-      error: e => setError(t('saveFailed', e.message)),
-      settled: () => setBusy(false),
+      error: e => setError({ message: errorMessage(e), context: 'saveFailed' }),
+      settled: () => { setBusy(false); if (pending.current) refreshRef.current(false, true); },
     }, true);
   };
   /* The limits tab exists only while the host reports policy limits; a stale
@@ -540,7 +656,7 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
     hidden: activeTab !== value, tabIndex: 0, className,
   }, children);
   if (view === 'summary') return h('div', { className: 'dsh-safe-auto' }, h(Style),
-    h('p', { className: 'dsh-ui-compact dsh-ui-wrap' }, t('summary')), h(ErrorText, { error }));
+    h('p', { className: 'dsh-ui-compact dsh-ui-wrap' }, t('summary')), h(ErrorText, { error, t }));
   return h('section', { className: 'dsh-safe-auto dsh-ui-stack', 'aria-label': t('panelLabel'), 'aria-busy': busy }, h(Style),
     h('p', { className: 'dsh-ui-compact dsh-ui-wrap' }, t('intro')),
     !values && h('p', { className: 'dsh-ui-loading' }, t('loading')),
@@ -557,22 +673,25 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
       tabPanel('details', 'dsh-ui-stack',
         h('div', { className: 'dsh-ui-help' },
           h('p', null, t('safetyDetail')),
-          h('p', null, h('span', { className: 'dsh-ui-label' }, t('unableLabel'), '：'), t('unableValue')))),
+          h('p', null, h('span', { className: 'dsh-ui-label' }, t('unableLabel')), t('unableValue')))),
       settings?.policyLimits && tabPanel('limits', 'dsh-ui-stack', [
         h('p', { key: 'line', className: 'dsh-ui-meta dsh-ui-wrap' }, t('limitsLine', settings.policyLimits)),
         h('p', { key: 'fuses', className: 'dsh-ui-meta dsh-ui-wrap' }, t('limitsFuses', settings.policyLimits)),
         h('p', { key: 'help', className: 'dsh-ui-help' }, t('limitsHelp'))]),
       h('div', { className: 'dsh-ui-actions' },
-        h(Button, { variant: 'primary', disabled: busy || !dirty.current || (values.reviewerPrompt || '').length > 4096, onClick: save }, t('save')),
+        h(Button, { variant: 'primary', disabled: busy || externalChange || !dirty.current || (values.reviewerPrompt || '').length > 4096, onClick: save }, t('save')),
         h(Button, { variant: 'ghost', disabled: busy, onClick: () => refresh(true) }, t('refreshDiscard')))),
-    h(ErrorText, { error }), h(ErrorText, { error: catalogError && t('catalogFailed', catalogError) }),
+    h(ErrorText, { error, t }), h(ErrorText, { error: catalogError && { message: catalogError, context: 'catalogFailed' }, t }),
+    externalChange && h('p', { role: 'alert', className: 'dsh-ui-error' }, t('externalChange')),
+    syncError && h('p', { role: 'status', className: 'dsh-ui-hint' }, t('syncUnavailable')),
     saved && h('p', { role: 'status', className: 'dsh-ui-notice' }, t('saved')));
 }
 
 export function apply(ctx) {
-  const call = (endpoint, payload) => unwrapRpc((...args) => ctx.connection.rpc.call(...args), endpoint, payload,
-    translator(localeLanguage(ctx.locale))('requestFailed'));
+  const settingsSubscriber = createModelSettingsSubscriber(ctx, BUNDLE);
+  const call = (endpoint, payload) => unwrapRpc((...args) => ctx.connection.rpc.call(...args), endpoint, payload);
   const api = Object.freeze({
+    subscribeSettings: (change, error) => settingsSubscriber.subscribe(change, error),
     subscribeGeneration: listener => ctx.connection.generation?.subscribe(listener) ?? (() => {}),
     getSettings: () => call('settings.get', {}),
     saveSettings: payload => call('settings.save', payload),

@@ -13,7 +13,7 @@ const ctx = {
   readmePath: "README.md",
   assetPages: { "docs/shot.png": "../../assets/packages/memory/docs/shot.png", "docs/logo.png": "../../assets/packages/memory/docs/logo.png" },
   readmePages: { "packages/dsh-memory/docs/README.zh-CN.md": "../../plugins/memory/", "packages/dsh-memory/README.md": "./" },
-  packagePages: { "@klarkxy/dsh-recap": "../recap/" },
+  packagePages: { "@klarkxy/dsh-zhihu": "../zhihu/" },
 };
 
 test("README rendering drops the title and language switch, and rewrites links", () => {
@@ -23,7 +23,7 @@ test("README rendering drops the title and language switch, and rewrites links",
       "",
       "[简体中文](docs/README.zh-CN.md)",
       "",
-      "Needs [Session Recap](https://www.npmjs.com/package/@klarkxy/dsh-recap) and [design](../../docs/design.md#limits).",
+      "Needs [Zhihu](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) and [design](../../docs/design.md#limits).",
       "",
       "![shot](docs/shot.png) ![outside](../../assets/x.png)",
       "",
@@ -38,7 +38,7 @@ test("README rendering drops the title and language switch, and rewrites links",
     ctx,
   );
   assert.doesNotMatch(html, /<h1|简体中文/);
-  assert.match(html, /href="\.\.\/recap\/"/);
+  assert.match(html, /href="\.\.\/zhihu\/"/);
   assert.match(html, /href="https:\/\/github\.com\/klarkxy\/dsh-editor\/blob\/HEAD\/docs\/design\.md#limits"/);
   assert.match(html, /src="\.\.\/\.\.\/assets\/packages\/memory\/docs\/shot\.png"/);
   assert.match(html, /src="https:\/\/raw\.githubusercontent\.com\/klarkxy\/dsh-editor\/HEAD\/assets\/x\.png"/);
@@ -77,7 +77,7 @@ test("catalog validation rejects duplicates and missing translations", () => {
 function fixture() {
   const data = {};
   for (const [i, p] of catalog.plugins.entries()) {
-    const deps = p.package === "@klarkxy/dsh-recap" ? { "@klarkxy/dsh-mood": "^0.1.0" } : {};
+    const deps = p.package === "@klarkxy/dsh-zhihu" ? { "@klarkxy/dsh-web-search-manager": "^0.1.0" } : {};
     data[p.package] = {
       name: p.package,
       version: `0.1.${i}`,
@@ -100,16 +100,30 @@ test("site has every page, install order follows dependencies, and internal link
     assert.ok(files.has(`en/plugins/${p.slug}/index.html`), p.slug);
     assert.ok(files.has(`assets/icons/${p.slug}.svg`), p.slug);
   }
-  const recap = files.get("plugins/recap/index.html");
-  const dep = recap.indexOf("add @klarkxy/dsh-mood");
-  assert.ok(dep > 0 && dep < recap.indexOf("add @klarkxy/dsh-recap"));
-  assert.match(recap, /这个包没有中文 README/);
-  assert.match(files.get("plugins/mood/index.html"), /被依赖/);
+  const zhihu = files.get("plugins/zhihu/index.html");
+  const dep = zhihu.indexOf("add @klarkxy/dsh-web-search-manager");
+  assert.ok(dep > 0 && dep < zhihu.indexOf("add @klarkxy/dsh-zhihu"));
+  assert.match(zhihu, /这个包没有中文 README/);
+  assert.match(files.get("plugins/web-search-manager/index.html"), /被依赖/);
 
   const json = JSON.parse(files.get("plugins.json"));
   assert.equal(json.plugins.length, catalog.plugins.length);
-  assert.deepEqual(json.plugins.find((p) => p.slug === "recap").dependsOn, ["@klarkxy/dsh-mood"]);
+  assert.deepEqual(json.plugins.find((p) => p.slug === "zhihu").dependsOn, ["@klarkxy/dsh-web-search-manager"]);
   assert.match(files.get("404.html"), /areas/);
+
+  // Home chrome: category nav with counts, stats, and a link to the timeline.
+  const home = files.get("index.html");
+  assert.match(home, /class="catnav"/);
+  assert.match(home, /data-category="workflow"/);
+  assert.match(home, /hero-stats/);
+  assert.match(home, /href="changelog\/"/);
+
+  // Changelog pages exist in both languages and list every fixture version.
+  for (const langPrefix of ["", "en/"]) {
+    const page = files.get(`${langPrefix}changelog/index.html`);
+    assert.ok(page, `${langPrefix}changelog`);
+    for (const [i, p] of catalog.plugins.entries()) assert.match(page, new RegExp(`>${p.title[langPrefix ? "en" : "zh"]}</a><span class="ver">0\\.1\\.${i}<`));
+  }
 
   // Assets written by build.mjs, not render.mjs.
   const known = new Set([...files.keys(), "assets/site.css", "assets/site.js"]);
@@ -128,21 +142,21 @@ test("site has every page, install order follows dependencies, and internal link
 
 test("both languages serve package images and licenses from relative local assets", () => {
   const data = fixture();
-  const item = catalog.plugins.find(plugin => plugin.slug === "recap");
+  const item = catalog.plugins.find(plugin => plugin.slug === "zhihu");
   const pkg = data[item.package];
   pkg.assets = { "docs/a b.png": Buffer.from([0, 255, 127]).toString("base64"), LICENSE: Buffer.from("Published license").toString("base64") };
-  pkg.readme.en = { path: "README.md", text: "# Recap\n\n## Usage\n\n![Example](docs/a%20b.png)\n\n[License](LICENSE#terms)" };
+  pkg.readme.en = { path: "README.md", text: "# Zhihu\n\n## Usage\n\n![Example](docs/a%20b.png)\n\n[License](LICENSE#terms)" };
   const options = { generatedAt: "2026-10-01T00:00:00.000Z" };
   const files = renderSite(catalog, data, options);
   for (const [lang, root] of [["", "../../"], ["en/", "../../../"]]) {
-    const html = files.get(`${lang}plugins/recap/index.html`);
-    assert.ok(html.includes(`src="${root}assets/packages/recap/docs/a%20b.png"`));
-    assert.ok(html.includes(`href="${root}assets/packages/recap/LICENSE#terms"`));
-    assert.ok(html.includes(`href="${root}assets/packages/recap/LICENSE"`));
+    const html = files.get(`${lang}plugins/zhihu/index.html`);
+    assert.ok(html.includes(`src="${root}assets/packages/zhihu/docs/a%20b.png"`));
+    assert.ok(html.includes(`href="${root}assets/packages/zhihu/LICENSE#terms"`));
+    assert.ok(html.includes(`href="${root}assets/packages/zhihu/LICENSE"`));
     assert.doesNotMatch(html, /jsdelivr/);
   }
-  assert.deepEqual(files.get("assets/packages/recap/docs/a b.png"), Buffer.from([0, 255, 127]));
-  assert.equal(files.get("assets/packages/recap/LICENSE").toString(), "Published license");
+  assert.deepEqual(files.get("assets/packages/zhihu/docs/a b.png"), Buffer.from([0, 255, 127]));
+  assert.equal(files.get("assets/packages/zhihu/LICENSE").toString(), "Published license");
   pkg.assets["../escape.png"] = "AA==";
   assert.throws(() => renderSite(catalog, data, options), /Unsafe package asset path/);
 });

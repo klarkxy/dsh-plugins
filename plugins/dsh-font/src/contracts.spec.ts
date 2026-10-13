@@ -153,6 +153,11 @@ describe('local store', () => {
     const store = createFontSettingsStore(undefined)
     expect(store.load()).toEqual(defaultFontSettings())
     expect(() => store.save({ uiFont: '"YaHei"', codeFont: '' })).not.toThrow()
+    expect(store.load()).toEqual({ uiFont: '"YaHei"', codeFont: '' })
+    store.save({ ...store.load(), codeFont: 'Consolas' })
+    expect(store.load()).toEqual({ uiFont: '"YaHei"', codeFont: 'Consolas' })
+    store.save(defaultFontSettings())
+    expect(store.load()).toEqual(defaultFontSettings())
   })
 
   it('round-trips through storage and drops the key when reset', () => {
@@ -163,6 +168,8 @@ describe('local store', () => {
     expect(storage.data.has(STORAGE_KEY)).toBe(true)
     store.save({ uiFont: '', codeFont: '' })
     expect(storage.data.has(STORAGE_KEY)).toBe(false)
+    expect(store.load()).toEqual(defaultFontSettings())
+    expect(createFontSettingsStore(storage).load()).toEqual(defaultFontSettings())
   })
 
   it('normalizes before writing and tolerates storage failures', () => {
@@ -176,5 +183,31 @@ describe('local store', () => {
     })
     expect(failing.load()).toEqual(defaultFontSettings())
     expect(() => failing.save({ uiFont: '"YaHei"', codeFont: '' })).not.toThrow()
+    expect(failing.load()).toEqual({ uiFont: '"YaHei"', codeFont: '' })
+  })
+
+  it('keeps normalized local writes and resets when stale storage cannot be updated', () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: '{"uiFont":"Old","codeFont":"Old code"}' })
+    let denied = true
+    const store = createFontSettingsStore({ ...storage,
+      setItem(key, value) { if (denied) throw new Error('quota'); storage.setItem(key, value) },
+      removeItem(key) { if (denied) throw new Error('denied'); storage.removeItem(key) },
+    })
+    expect(store.load().uiFont).toBe('Old')
+    store.save({ ...store.load(), uiFont: '  New;  ' })
+    const remounted = store.load()
+    expect(remounted.uiFont).toBe('New')
+    remounted.uiFont = 'accidental mutation'
+    store.save({ ...store.load(), codeFont: 'New code' })
+    expect(store.load()).toEqual({ uiFont: 'New', codeFont: 'New code' })
+    store.save(defaultFontSettings())
+    expect(store.load()).toEqual(defaultFontSettings())
+    denied = false
+    store.save({ uiFont: 'Persisted', codeFont: '' })
+    expect(createFontSettingsStore(storage).load().uiFont).toBe('Persisted')
+    storage.setItem(STORAGE_KEY, '{"uiFont":"External"}')
+    expect(store.load()).toEqual({ uiFont: 'External', codeFont: '' })
+    storage.removeItem(STORAGE_KEY)
+    expect(store.load()).toEqual(defaultFontSettings())
   })
 })

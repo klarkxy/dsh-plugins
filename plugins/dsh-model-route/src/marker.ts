@@ -19,11 +19,14 @@
 export const MODEL_ROUTE_MARKER = 'x-model-route'
 export const MODEL_ROUTE_ROLE = 'model-route'
 
+/** Display text for consumers following the host's active language. */
+export type ModelRouteText = string | { zh: string; en: string }
+
 export interface ModelRouteMarkerMeta {
   /** Stable purpose id, e.g. 'summary' or 'vision'. */
   purpose?: string
   /** Human label a hub can show, e.g. '总结模型'. */
-  label?: string
+  label?: ModelRouteText
   /** Set false to hide the reasoning-effort input for this field. */
   reasoningEffort?: boolean
 }

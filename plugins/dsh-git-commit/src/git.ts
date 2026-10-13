@@ -246,6 +246,20 @@ export interface ExecutedCommit {
   readonly skipped: boolean
 }
 
+/** Known commits or an uncertain current group must survive a rejected run. */
+export class PartialCommitError extends Error {
+  readonly commits: readonly ExecutedCommit[]
+  readonly cause: unknown
+  readonly uncertain?: { readonly message: string; readonly files: readonly string[] }
+  constructor(commits: readonly ExecutedCommit[], cause: unknown, uncertain?: { readonly message: string; readonly files: readonly string[] }) {
+    super(cause instanceof Error ? cause.message : String(cause))
+    this.name = 'PartialCommitError'
+    this.commits = commits
+    this.cause = cause
+    this.uncertain = uncertain
+  }
+}
+
 async function indexBytes(path: string): Promise<Buffer | undefined> {
   try { return await readFile(path) }
   catch (error) {
@@ -275,19 +289,28 @@ export async function commitGroups(
   verify?: (paths: readonly string[]) => Promise<void>,
 ): Promise<ExecutedCommit[]> {
   const commits: ExecutedCommit[] = []
+  let partialFailure: PartialCommitError | undefined
+  const fail = (error: unknown): never => {
+    if (error instanceof PartialCommitError) { partialFailure = error; throw error }
+    if (commits.length === 0) throw error
+    partialFailure = new PartialCommitError(commits, error)
+    throw partialFailure
+  }
   for (const group of groups) {
     if (group.files.length === 0) continue
     const paths = group.files.flatMap(path => {
       const file = selected.find(file => file.path === path)
       return file?.status === 'renamed' && file.origin ? [path, file.origin] : [path]
     })
-    await verify?.(paths)
-    const gitPath = (await run(['rev-parse', '--git-path', 'index'], { cwd: root, signal })).trim()
-    const indexPath = isAbsolute(gitPath) ? gitPath : resolve(root, gitPath)
-    const backupDir = await mkdtemp(join(tmpdir(), 'dsh-git-commit-'))
-    const backupPath = join(backupDir, 'index')
-    let hadIndex = true
+    let backupDir: string | undefined
     try {
+      signal?.throwIfAborted()
+      await verify?.(paths)
+      const gitPath = (await run(['rev-parse', '--git-path', 'index'], { cwd: root, signal })).trim()
+      const indexPath = isAbsolute(gitPath) ? gitPath : resolve(root, gitPath)
+      backupDir = await mkdtemp(join(tmpdir(), 'dsh-git-commit-'))
+      const backupPath = join(backupDir, 'index')
+      let hadIndex = true
       try {
         await copyFile(indexPath, backupPath)
       } catch (error) {
@@ -300,24 +323,63 @@ export async function commitGroups(
         throw new GitError('dsh-git-commit: index changed before committing; retry')
       }
       let stagedIndex = originalIndex
+      let committed = false
+      let commitInvoked = false
       try {
+        signal?.throwIfAborted()
         await run(['add', '-A', '--', ...group.files], { cwd: root, signal })
         stagedIndex = await indexBytes(indexPath)
+        signal?.throwIfAborted()
+        commitInvoked = true
         await run(['commit', '--quiet', '--only', '-m', group.message, '--', ...paths], { cwd: root, signal })
-        const hash = (await run(['rev-parse', '--short', 'HEAD'], { cwd: root, signal })).trim()
+        committed = true
+        let hash = ''
+        try {
+          // Result collection and index cleanup must survive request cancellation/unload.
+          hash = (await run(['rev-parse', '--short', 'HEAD'], { cwd: root })).trim()
+        } catch (error) {
+          // The commit object exists. A failed hash read must not look like "nothing was committed".
+          commits.push({ hash: '', skipped: false })
+          throw error
+        }
+        if (!hash) {
+          commits.push({ hash: '', skipped: false })
+          throw new GitError('dsh-git-commit: commit was created but its hash could not be read')
+        }
         commits.push({ hash, skipped: false })
       } catch (error) {
-        const currentHead = await headOid(run, root)
-        const currentIndex = await indexBytes(indexPath)
-        const indexUntouched = currentIndex === undefined ? stagedIndex === undefined : currentIndex.equals(stagedIndex ?? Buffer.alloc(0))
-        if (currentHead === head && indexUntouched) {
-          if (hadIndex) await copyFile(backupPath, indexPath)
-          else await rm(indexPath, { force: true })
+        if (!committed) {
+          let currentHead: string
+          try { currentHead = await headOid(run, root) }
+          catch {
+            // A failed inspection cannot prove the rejected commit left HEAD
+            // unchanged. Keep its original diagnostic and do not restore.
+            if (commitInvoked) throw new PartialCommitError(commits, error, { message: group.message, files: [...group.files] })
+            throw error
+          }
+          if (currentHead !== head) {
+            // The rejected command may have completed, or another owner may have
+            // advanced HEAD. Preserve both HEAD and index without attributing it.
+            if (commitInvoked) throw new PartialCommitError(commits, error, { message: group.message, files: [...group.files] })
+            throw error
+          }
+          const currentIndex = await indexBytes(indexPath)
+          const indexUntouched = currentIndex === undefined ? stagedIndex === undefined : currentIndex.equals(stagedIndex ?? Buffer.alloc(0))
+          if (currentHead === head && indexUntouched) {
+            if (hadIndex) await copyFile(backupPath, indexPath)
+            else await rm(indexPath, { force: true })
+          }
         }
+        // A created commit stays. Only this group's uncommitted index is eligible for restore.
         throw error
       }
+    } catch (error) {
+      fail(error)
     } finally {
-      await rm(backupDir, { recursive: true, force: true })
+      if (backupDir) {
+        try { await rm(backupDir, { recursive: true, force: true }) }
+        catch (error) { fail(partialFailure ?? error) }
+      }
     }
   }
   return commits

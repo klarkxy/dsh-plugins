@@ -101,13 +101,13 @@ export function Switch({ checked, onChange, label, disabled, title, className }:
 }
 
 /** The real Input is a wrapper span around a native input; keep that shape. */
-export function Input({ icon, className, ...rest }: {
+export const Input = React.forwardRef<HTMLInputElement, {
   icon?: React.ReactNode
   className?: string
-} & React.InputHTMLAttributes<HTMLInputElement>) {
+} & React.InputHTMLAttributes<HTMLInputElement>>(function Input({ icon, className, ...rest }, ref) {
   return h('span', { className: cx('dsh-stub-input', className) },
-    icon, h('input', { ...rest, className: 'dsh-stub-input__control' }))
-}
+    icon, h('input', { ...rest, ref, className: 'dsh-stub-input__control' }))
+})
 
 export function Pill({ active, className, children, onClick, ...rest }: {
   active?: boolean
@@ -315,11 +315,40 @@ function menuEntries(entries: readonly MenuEntry[], onSelect?: (id: string) => v
   })
 }
 
+/** Component-row double: the real MenuItemButton is one `role="menuitem"` button
+ * sharing the data-row markup; `separatorBefore` draws the same hairline a
+ * `{ type: 'separator' }` data entry draws, and activation fires `onSelect`. */
+export function MenuItemButton({ children, shortcut, icon, disabled, danger, separatorBefore, onSelect }: {
+  children?: React.ReactNode
+  shortcut?: { aria?: string; keys: readonly string[] }
+  icon?: React.ReactNode
+  disabled?: boolean
+  danger?: boolean
+  separatorBefore?: boolean
+  onSelect: () => void
+}) {
+  return h(React.Fragment, null,
+    separatorBefore ? h('hr', { 'aria-hidden': 'true' }) : null,
+    h('button', {
+      type: 'button',
+      role: 'menuitem',
+      disabled,
+      'data-danger': danger === true ? 'true' : undefined,
+      'aria-keyshortcuts': shortcut?.aria,
+      onClick: () => onSelect(),
+    }, icon, children, shortcut ? h('span', { 'aria-hidden': 'true' }, shortcut.keys.join(' ')) : null))
+}
+
+export function Toast({ text }: { text: string; tone?: 'success'; onDone: () => void }) {
+  return h('div', { role: 'status' }, text)
+}
+
 /** Anchored menu double: the trigger renders in place; rows render while open. */
-export function Menu({ open, anchor, items = [], children, onSelect, listClassName }: {
+export function Menu({ open, anchor, items = [], children, footer, onSelect, listClassName }: {
   open: boolean
   anchor: React.ReactNode
   items?: readonly MenuEntry[]
+  footer?: readonly MenuEntry[]
   children?: React.ReactNode
   selectedId?: string
   selectedIds?: readonly string[]
@@ -331,7 +360,8 @@ export function Menu({ open, anchor, items = [], children, onSelect, listClassNa
   listClassName?: string
 }) {
   return h('span', { className: 'dsh-stub-menu' }, anchor,
-    open ? h('div', { role: 'menu', className: listClassName }, menuEntries(items, onSelect), children) : null)
+    open ? h('div', { role: 'menu', className: listClassName }, menuEntries(items, onSelect), children,
+      footer ? h('div', { role: 'presentation' }, menuEntries(footer, onSelect)) : null) : null)
 }
 
 function icon(name: string) {
@@ -344,6 +374,8 @@ function icon(name: string) {
 }
 
 export const IconChecklistOutlineRegular = icon('checklist')
+export const IconFolderCloseRegular = icon('folder-close')
+export const IconPlusOutlineRegular = icon('plus')
 export const IconCheckOutlineRegular = icon('check')
 export const IconChevronDownOutlineMedium = icon('chevron-down-medium')
 export const IconChevronRightOutlineMedium = icon('chevron-right-medium')
@@ -351,6 +383,8 @@ export const IconChevronDownOutlineRegular = icon('chevron-down')
 export const IconChevronRightOutlineRegular = icon('chevron-right')
 export const IconCloseFillRegular = icon('close-fill')
 export const IconEditOutlineRegular = icon('edit')
+export const IconRefreshOutlineRegular = icon('refresh')
+export const IconSettingsOutlineRegular = icon('settings')
 export const IconShieldOutlineRegular = icon('shield')
 export const IconUserOutlineRegular = icon('user')
 export const IconUsersOutlineRegular = icon('users')
@@ -359,7 +393,7 @@ export const IconUsersOutlineRegular = icon('users')
  * to measure and no pointer to dismiss with, so these are inert but keep their
  * signatures and their return shapes. --- */
 
-export function useAnchoredPosition(_options: {
+export function useAnchoredPosition(options: {
   open: boolean
   anchorRef: React.RefObject<HTMLElement | null>
   panelRef: React.RefObject<HTMLElement | null>
@@ -368,17 +402,30 @@ export function useAnchoredPosition(_options: {
   gap: number
   margin: number
 }): React.CSSProperties | null {
-  return null
+  const [position, setPosition] = React.useState<React.CSSProperties | null>(null)
+  React.useLayoutEffect(() => {
+    if (!options.open) { setPosition(null); return }
+    const rect = options.anchorRef.current?.getBoundingClientRect()
+    if (rect) setPosition({ left: rect.left, top: rect.bottom + options.gap })
+  }, [options.open, options.anchorRef, options.panelRef, options.gap])
+  return position
 }
 
 export function useDismissOnOutsidePointer(
-  _root: React.RefObject<HTMLElement | null>,
+  root: React.RefObject<HTMLElement | null>,
   open: boolean,
   setOpen: (open: boolean) => void,
-  _portal?: React.RefObject<HTMLElement | null>,
+  portal?: React.RefObject<HTMLElement | null>,
 ): void {
-  if (!open) return
-  React.useEffect(() => () => setOpen(false), [setOpen])
+  React.useEffect(() => {
+    if (!open) return
+    const dismiss = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (!root.current?.contains(target) && !portal?.current?.contains(target)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', dismiss)
+    return () => document.removeEventListener('pointerdown', dismiss)
+  }, [root, open, setOpen, portal])
 }
 
 export function useModalLayer(
@@ -396,9 +443,9 @@ export function isBehindModal(_anchor: HTMLElement | null): boolean { return fal
 // that is not here would otherwise get `undefined` and fail far from the cause.
 const known = new Set([
   'Button', 'Tag', 'Checkbox', 'Switch', 'Input', 'Pill', 'SegmentedTabs', 'DisclosureRow',
-  'Modal', 'Menu', 'MenuSurface', 'MenuGroup', 'PathLabel', 'Tooltip', 'StateDot', 'IconChecklistOutlineRegular',
+  'Modal', 'Menu', 'MenuItemButton', 'MenuSurface', 'MenuGroup', 'PathLabel', 'Tooltip', 'StateDot', 'IconChecklistOutlineRegular',
   'IconCheckOutlineRegular', 'IconChevronDownOutlineMedium', 'IconChevronRightOutlineMedium', 'IconChevronDownOutlineRegular',
-  'IconChevronRightOutlineRegular', 'IconCloseFillRegular', 'IconEditOutlineRegular', 'IconShieldOutlineRegular',
+  'IconChevronRightOutlineRegular', 'IconCloseFillRegular', 'IconEditOutlineRegular', 'IconRefreshOutlineRegular', 'IconSettingsOutlineRegular', 'IconShieldOutlineRegular',
   'IconUserOutlineRegular', 'IconUsersOutlineRegular', 'useAnchoredPosition',
   'useDismissOnOutsidePointer', 'useModalLayer', 'modalSelector', 'closeTopModal', 'isBehindModal',
   'observeStickyMenuGroups', 'rankByName',

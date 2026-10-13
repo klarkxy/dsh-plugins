@@ -11,8 +11,11 @@ import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SqliteSessionQueryEngine from '@deepseek-ai/dsh-session-query-sqlite'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import Storage from '@deepseek-ai/dsh-storage'
+import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
+import { apply as applyStorageJson } from '@deepseek-ai/dsh-storage-json'
 import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
-import * as candidate from 'C:/Users/27837/.codex/worktrees/thread-management/dsh-plugins/plugins/dsh-session-manager/lib/index.js'
+import * as candidate from 'H:/Code/dsh-plugins/plugins/dsh-session-manager/lib/index.js'
 
 const roots: string[] = []
 const contexts: Context[] = []
@@ -33,6 +36,12 @@ it('loads the built plugin, searches real SQLite across cwd pages, reads cold lo
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(JsonlSessionPersistence, { root, compression: 'none' })
   await ctx.plugin(SqliteSessionQueryEngine, { path: join(root, 'search.db') })
+  // The admission barrier reads its lifecycle table through the storage domain.
+  await ctx.plugin(Storage)
+  applyStorageJson(ctx, { root: join(root, 'storages') })
+  const facility = new DomainFacility(ctx, { backend: 'json', routes: {} })
+  ctx.storage.mount('domain', facility)
+  ctx.provide('storageDomain', facility)
   const loader = Object.create(Loader.prototype) as Loader
   const unwrapped = loader.unwrapExports(candidate) as Parameters<Context['plugin']>[0]
   const mounted = await ctx.plugin(unwrapped, { pageChars: 1_000, listLimit: 1, searchLimit: 1 })
@@ -44,13 +53,23 @@ it('loads the built plugin, searches real SQLite across cwd pages, reads cold lo
     await writer.append([{ type: 'user/message', seq: SessionSeq(0), time, surfaceOp: 'append', data: createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }) }])
     await writer.close()
   }
-  const caller = ctx.sessions.create(SessionId('acceptance-caller'), { meta: { cwd: 'C:/acceptance/here', createdAt: 200 } })
+  // Detached caller: it never enters the live store, so the tool-effect
+  // records each execution appends stay in-memory and unindexed, keeping the
+  // search corpus stable across cursor pages (a store-owned caller's
+  // host/tool-effect appends would bump the corpus generation every call).
+  const caller = ctx.sessions.prepare(SessionId('acceptance-caller'), { meta: { cwd: 'C:/acceptance/here', createdAt: 200 } })
   const loadedBefore = ctx.sessions.list().map(session => session.id)
   let calls = 0
   async function execute(name: string, args: unknown) {
     const result = await ctx.tools.execute({ name, arguments: args, callId: ToolCallId(`acceptance-${++calls}`), signal: new AbortController().signal, agent: { id: caller.id, session: caller } as never })
     expect(result.isError).toBe(false)
     return JSON.parse(result.content.map(block => block.type === 'text' ? block.text : '').join(''))
+  }
+  // Wait out the asynchronous index flush from the cold writers above: the
+  // paging loop below asserts a stable corpus across cursor pages. listLimit
+  // is 1 in this fixture, so probe each writer through the id filter.
+  for (const id of ['same-cold', 'other-cold']) {
+    await expect.poll(async () => (await execute('list_sessions', { session_id: id })).items.map((item: { sessionId: string }) => item.sessionId), { timeout: 10_000 }).toContain(id)
   }
   const found: string[] = []
   let cursor: string | undefined

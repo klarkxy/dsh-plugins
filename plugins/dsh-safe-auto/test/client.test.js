@@ -18,7 +18,8 @@ const client = await import(`data:text/javascript;base64,${Buffer.from(source
   .replace("from '@klarkxy/dsh-model-route/ui'", `from '${new URL('./model-menu-stub.mjs', import.meta.url).href}'`)
   .replace("from '@klarkxy/dsh-model-route'", `from '${resolve('@klarkxy/dsh-model-route')}'`)
   .replace("from '@klarkxy/dsh-plugin-kit/official-ui'", `from '${resolve('@klarkxy/dsh-plugin-kit/official-ui')}'`)
-  .replace("from '@klarkxy/dsh-plugin-kit/client-utils'", `from '${resolve('@klarkxy/dsh-plugin-kit/client-utils')}'`)).toString('base64')}`);
+  .replace("from '@klarkxy/dsh-plugin-kit/client-utils'", `from '${resolve('@klarkxy/dsh-plugin-kit/client-utils')}'`)
+  .replace("from '@klarkxy/dsh-plugin-kit/model-settings-client'", `from '${resolve('@klarkxy/dsh-plugin-kit/model-settings-client')}'`)).toString('base64')}`);
 const render = (Component, props) => renderToStaticMarkup(React.createElement(Component, props));
 const values = { provider: 'retired', model: 'legacy', reasoningEffort: 'unlisted', reviewerPrompt: '' };
 const catalog = { groups: [{ id: 'provider', name: 'Provider', models: [{ id: 'reasoner', name: 'Reasoner', reasoning: { efforts: [{ id: 'medium', name: 'Medium' }] } }, { id: 'plain', name: 'Plain' }] }] };
@@ -301,15 +302,19 @@ const approval = (extra = {}) => ({ id: 'approval-1', action: { tool: 'bash', cw
   permission: { from: 'workspace-write', to: 'danger-full-access', scope: 'this-call-only' } },
   review: { code: 'denied', risk: 'high', authorization: 'insufficient', reason: '<b>Review opinion</b>' }, expiresAt: 61000, remainingMs: 60000, ...extra });
 
-test('confirmation displays full escaped native command, cwd, permission and model opinion in both languages', () => {
+test('confirmation displays full escaped native command, cwd and model opinion in both languages', () => {
   const request = approval();
   for (const locale of ['en', 'zh-CN']) {
     const html = render(client.ApprovalDialog, { request, remainingMs: 59001, pendingCount: 2, locale, onAnswer() {} });
     assert.match(html, /role="dialog" aria-modal="true"/);
+    // The widened card rule rides on the dialog element; both classes must be
+    // on the same node for the doubled-class override to beat the host width.
+    assert.match(html, /role="dialog"[^>]*class="[^"]*dsh-safe-auto dsh-safe-auto-approval-dialog/);
+    assert.match(html, /\.dsh-safe-auto\.dsh-safe-auto-approval-dialog \{ width: min\(640px, 100%\); \}/);
     assert.match(html, /data-modal-autofocus="true"/);
     assert.match(html, /printf &quot;&lt;script&gt;exact &amp; complete&lt;\/script&gt;&quot;\nnext command/);
     assert.match(html, /\/workspace\/subdir/);
-    assert.match(html, /this-call-only/);
+    assert.doesNotMatch(html, /this-call-only/);
     assert.match(html, /require_escalated/);
     assert.match(html, /&lt;b&gt;Review opinion&lt;\/b&gt;/);
     assert.doesNotMatch(html, /<script>|<b>Review opinion/);
