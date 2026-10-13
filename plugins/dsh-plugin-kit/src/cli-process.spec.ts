@@ -144,8 +144,9 @@ describe('runCli', () => {
     const pending = runCli(node, ['--input-type=module', '-e', childScript('await new Promise(() => {})'), treePath], {
       cwd, signal: new AbortController().signal, timeoutMs: 300,
     })
-    const tree = await treeOf(treePath)
+    // Observe rejection before polling the fixture: the child may already have stopped.
     await expect(pending).rejects.toMatchObject({ name: 'CliProcessError', code: 'timeout' })
+    const tree = await treeOf(treePath)
     await untilGone([tree.pid, tree.child])
   })
 
@@ -156,8 +157,8 @@ describe('runCli', () => {
       cwd, signal: new AbortController().signal, maxLineBytes: 8, timeoutMs: 60_000,
       onLine: () => {},
     })
-    const tree = await treeOf(treePath)
     await expect(pending).rejects.toMatchObject({ name: 'CliProcessError', code: 'output-limit' })
+    const tree = await treeOf(treePath)
     await untilGone([tree.pid, tree.child])
   })
 
@@ -167,8 +168,8 @@ describe('runCli', () => {
     const pending = runCli(node, ['--input-type=module', '-e', childScript("process.stdout.write('abcdefghij'); await new Promise(() => {})"), treePath], {
       cwd, signal: new AbortController().signal, maxOutputBytes: 4, timeoutMs: 60_000,
     })
-    const tree = await treeOf(treePath)
     await expect(pending).rejects.toMatchObject({ name: 'CliProcessError', code: 'output-limit' })
+    const tree = await treeOf(treePath)
     await untilGone([tree.pid, tree.child])
   })
 
@@ -179,8 +180,8 @@ describe('runCli', () => {
       cwd, signal: new AbortController().signal, timeoutMs: 60_000,
       onLine: () => { throw new Error('callback failed') },
     })
-    const tree = await treeOf(treePath)
     await expect(pending).rejects.toThrow('callback failed')
+    const tree = await treeOf(treePath)
     await untilGone([tree.pid, tree.child])
   })
 

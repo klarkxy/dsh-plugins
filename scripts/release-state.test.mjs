@@ -108,11 +108,19 @@ test('Git history checks working tree and the complete supplied push baseline', 
   git(['init']); git(['config','user.email','fixture@example.invalid']); git(['config','user.name','Fixture']);
   git(['add','.']); git(['commit','-m','Published baseline']); const base = git(['rev-parse','HEAD']);
   update(root, d => { stage(d.packages[0], 'testing'); });
-  assert.throws(() => checkLifecycleHistory(root, readReleaseStates(root)), /backwards/);
+  assert.throws(() => checkLifecycleHistory(root, readReleaseStates(root), 'HEAD'), /backwards/);
   git(['add','.']); git(['commit','-m','Invalid demotion']);
   writeFileSync(join(root, 'unrelated.txt'), 'another commit'); git(['add','.']); git(['commit','-m','Unrelated']);
   assert.throws(() => checkLifecycleHistory(root, readReleaseStates(root), base), /backwards/);
   assert.throws(() => checkLifecycleHistory(root, readReleaseStates(root), 'missing-baseline'));
+  // Scope the environment baseline to a child so the runner's CI baseline is untouched.
+  execFileSync(process.execPath, ['--input-type=module', '-e', `
+    import assert from 'node:assert/strict';
+    import { checkLifecycleHistory, readReleaseStates } from ${JSON.stringify(new URL('./release-state.mjs', import.meta.url).href)};
+    const root = process.cwd(), states = readReleaseStates(root);
+    assert.doesNotThrow(() => checkLifecycleHistory(root, states, 'HEAD'));
+    assert.throws(() => checkLifecycleHistory(root, states), /backwards/);
+  `], { cwd: root, env: { ...process.env, RELEASE_STATE_BASE: base }, stdio: 'pipe' });
 });
 
 test('ordinary source updates remain Published and can prepare a new version without re-acceptance', async t => {
