@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import Sessions, { SessionId } from '@deepseek-ai/dsh-session'
 import Query from '@deepseek-ai/dsh-session-query'
@@ -24,8 +25,8 @@ async function fixture() {
   await ctx.plugin(Sessions)
   await ctx.plugin(Query)
   ctx.effect(() => registerSessionTools(ctx, resolveConfig({ pageChars: 1_000 }), createCursorKey()))
-  const root = ctx.sessions.create(SessionId('root'), { meta: { cwd: 'H:/a' } })
-  const child = ctx.sessions.create(SessionId('child'), { meta: { cwd: 'H:/b', parentSession: root.id } })
+  const root = ctx.sessions.create(SessionId('root'), { meta: { cwd: resolve('a') } })
+  const child = ctx.sessions.create(SessionId('child'), { meta: { cwd: resolve('b'), parentSession: root.id } })
   for (const session of [root, child]) {
     session.append('turn/start', { turn: 1 })
     session.append('user/message', { id: 'u', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'alpha '.repeat(500) }] }, { surfaceOp: 'append' })
@@ -88,7 +89,7 @@ describe('registered session tools and nullable optional arguments', () => {
     const { call, nullable } = await fixture()
     for (const name of ['list_sessions', 'search_sessions']) {
       const base = { ...nullable(name), ...name === 'search_sessions' ? { query: 'alpha', scope: 'title' } : {} }
-      expect(ids(await call(name, { ...base, cwd: 'H:/b' }))).toEqual(['child'])
+      expect(ids(await call(name, { ...base, cwd: resolve('b') }))).toEqual(['child'])
       expect(ids(await call(name, { ...base, parent_session_id: 'root', include_roots: false }))).toEqual(['child'])
       expect(ids(await call(name, { ...base, parent_session_id: 'root', include_roots: true }))).toEqual(['child', 'root'])
       expect(ids(await call(name, { ...base, created_from: 0 }))).toEqual(['child', 'root'])

@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import Sessions, { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import Query from '@deepseek-ai/dsh-session-query'
@@ -13,7 +14,7 @@ afterEach(async () => { for (const ctx of contexts.splice(0)) await ctx.fiber.di
 async function fixture(pageChars = 4_000) {
   const ctx = new Context(); contexts.push(ctx)
   await ctx.plugin(Sessions); await ctx.plugin(Query)
-  const session = ctx.sessions.create(SessionId('reading'), { meta: { cwd: 'H:/fixture' } })
+  const session = ctx.sessions.create(SessionId('reading'), { meta: { cwd: resolve('fixture') } })
   const config = resolveConfig({ pageChars }), key = createCursorKey()
   const read = (request: Record<string, unknown> = {}) => readSession(ctx.sessionQuery as never, { sessionId: session.id, ...request }, {}, config, key)
   return { ctx, session, read, config, key }
