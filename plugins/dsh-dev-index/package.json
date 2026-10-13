@@ -38,6 +38,7 @@
   },
   "files": [
     "icon.svg",
+    "scripts/prepare.mjs",
     "client.js",
     "lib/**/*.js",
     "lib/**/*.d.ts",
@@ -49,7 +50,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "prepare": "pnpm build",
+    "prepare": "node scripts/prepare.mjs",
     "prepack": "pnpm build",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
