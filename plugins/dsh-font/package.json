@@ -95,5 +95,8 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
-  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/font/"
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/font/",
+  "dshRelease": {
+    "contentHash": "fc92c2888357fe8a2e91746e694834c09ef665653e721ff591c42594472ae7f0"
+  }
 }

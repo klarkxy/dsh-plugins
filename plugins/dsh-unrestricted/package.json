@@ -47,5 +47,8 @@
   },
   "devDependencies": {
     "@deepseek-ai/dsh": "0.2.0-rc.2"
+  },
+  "dshRelease": {
+    "contentHash": "60e6d85b83195b078136b519512fa6a14cb8017792eb93e0ff40fe61b1f4b574"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-plugin-kit",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Shared types, model-menu helpers, and host RPC registration. Does not call models.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -139,6 +139,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "f0d555b8f7f8ce7617868b3a33eb8e2b85fcfe3e10ebde4688fa8864cae6efa2"
+    "contentHash": "f069c84f4156bbfef9e5c0f4cecf06ef3407e04fb3e14a35354ce6bc9627e2ae"
   }
 }

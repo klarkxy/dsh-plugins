@@ -98,5 +98,8 @@
     "type": "git",
     "url": "git+https://github.com/klarkxy/dsh-plugins.git",
     "directory": "plugins/dsh-chatgpt"
+  },
+  "dshRelease": {
+    "contentHash": "c8dd79c1e21125231a6360dd4807b7f2183701b9278c75e490f9f2c86109bfad"
   }
 }

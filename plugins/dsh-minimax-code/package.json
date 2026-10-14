@@ -99,5 +99,8 @@
     "type": "git",
     "url": "git+https://github.com/klarkxy/dsh-plugins.git",
     "directory": "plugins/dsh-minimax-code"
+  },
+  "dshRelease": {
+    "contentHash": "452a40e5bd7a6bc43a4c82cf2cf16dec0c458ebac13e4334af241c3a64068df1"
   }
 }

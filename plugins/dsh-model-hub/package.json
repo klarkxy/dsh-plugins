@@ -104,5 +104,8 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
-  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/"
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/",
+  "dshRelease": {
+    "contentHash": "de2069c3c5b3a381572577abe536fb28d14b0973d8187e495f01aa5e7077c5a7"
+  }
 }

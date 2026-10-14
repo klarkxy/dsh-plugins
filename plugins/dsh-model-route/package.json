@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-route",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Model-route field contract for DSH plugins: shared ModelRoute value shape, schema marker, catalog helpers, and projected-schema detection.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -91,6 +91,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "f4a6f454105e6a50982f269f56465c61e3957455ea0c919df59f004672129a8b"
+    "contentHash": "752ac2820e2a141c796e2f8484185601aa616c9cbe09713e8eb4dfa1444b70af"
   }
 }

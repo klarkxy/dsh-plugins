@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-session-manager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Cross-session discovery and managed free conversations for DeepSeek Harness.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -129,6 +129,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/",
   "dshRelease": {
-    "contentHash": "1bd4108df555a62d5d7856c8865e28840203b69108aae2d411dd87dd5472b8d4"
+    "contentHash": "4c1dc666f79b760c868801514140246d4d1b6062d9aa8a52760652e65cc1d381"
   }
 }

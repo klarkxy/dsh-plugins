@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-safe-auto",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Safe Auto: an independent reviewer vets each native sandbox escalation; only a pass auto-approves that one call.",
   "icon": "./icon.svg",
   "type": "module",
@@ -87,6 +87,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "82e8f79730f15a39b180ac572531df3bef696467aa79ef7bcc76727252b3d09e"
+    "contentHash": "5309180f394b9b6b2d67eda6c3c44d46fee17030f6493def4a77e431334810f7"
   }
 }
