@@ -16,7 +16,7 @@ dsh plugin --profile web add @klarkxy/dsh-session-manager
 
 ## 使用
 
-- **智能体工具**：`list_sessions`、`search_sessions` 和 `read_session` 让智能体按标题或内容查找会话，并阅读对话、完整细节或交接摘要。
+- **智能体工具**：`list_sessions`、`search_sessions` 和 `read_session` 让智能体按标题或内容查找会话，并阅读对话、完整细节或交接摘要。阅读对话时按轮返回预览（最新在前），智能体可用返回的游标继续向前翻页，并通过细节模式查看完整原文。
 - **复制线程 ID**：在会话菜单中复制，或按 `Ctrl + Alt + C`（macOS 为 `⌘ + ⌥ + C`）复制当前会话的线程 ID。
 - **右键菜单**：在左侧列表右键点击会话或工作区分组，等同于点击它的「⋯」按钮。
 - **临时工作区**：在新会话的工作区选择器中选择它，即可在一个新的独立目录中开始对话。

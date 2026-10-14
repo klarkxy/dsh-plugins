@@ -363,8 +363,8 @@
         "en": "AutoEvo"
       },
       "summary": {
-        "zh": "发现、审查和安装可复用能力。",
-        "en": "Find, review, and install reusable capabilities."
+        "zh": "发现、审查和安装可复用能力。已废弃，停止维护。",
+        "en": "Find, review, and install reusable capabilities. Deprecated and unmaintained."
       },
       "readme": {
         "zh": "README.md",

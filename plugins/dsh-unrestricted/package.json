@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-unrestricted",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Unrestricted: a session preset that delivers complete results, only in sessions that pick it.",
   "icon": "./icon.svg",
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/unrestricted/",

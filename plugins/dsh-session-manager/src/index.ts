@@ -21,12 +21,12 @@ export const Config: Schema<Config> = Schema.object({
   searchLimit: Schema.number().default(20),
 }).i18n({
   zh: {
-    pageChars: '每页阅读内容的输出上限（UTF-8 字节）',
+    pageChars: '明细与交接模式每页内容的输出上限（UTF-8 字节）；对话预览按轮数分页，不受此限',
     listLimit: '每页会话列表的数量上限',
     searchLimit: '每页搜索结果的数量上限',
   },
   en: {
-    pageChars: 'Maximum reading content per page (UTF-8 bytes)',
+    pageChars: 'Maximum content per details/handoff page (UTF-8 bytes); conversation previews page by turn count instead',
     listLimit: 'Maximum sessions per list page',
     searchLimit: 'Maximum search results per page',
   },

@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-chatgpt",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Give DeepSeek Harness ChatGPT tools through the official local Codex runtime.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",

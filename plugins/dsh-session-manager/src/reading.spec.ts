@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { readSession } from './query.ts'
 import { resolveConfig } from './contracts.ts'
 import { createCursorKey } from './cursor.ts'
-import { projectTurns, pageTurns } from './turns.ts'
+import { projectTurns, pageTurns, pageTurnSummaries } from './turns.ts'
 import { extractHandoff, nativeHandoffSummarizer } from './handoff.ts'
 
 const contexts: Context[] = []
@@ -62,6 +62,13 @@ describe('three-layer session reading on the standard host', () => {
     expect(turn.partialResponse.text).toBe('Still working')
   })
 
+  it('pages an empty history cleanly with no continuation', async () => {
+    const { read } = await fixture()
+    const result = await read() as any
+    expect(result).toMatchObject({ status: 'ok', turns: [] })
+    expect(result.nextCursor).toBeUndefined()
+  })
+
   it('handles no-step, unknown legacy history and explicitly interrupted assistant messages', async () => {
     const { session, read } = await fixture()
     request(session, 'Legacy request'); response(session, 0, 'Legacy response')
@@ -93,7 +100,100 @@ describe('three-layer session reading on the standard host', () => {
     expect(cursor).toBeUndefined(); expect(JSON.parse(text).reason.error.message).toBe(message)
   })
 
-  it('pages whole messages before Unicode fragments and always exposes the response locator', async () => {
+  it('returns every turn on the first conversation page even when the newest turn is oversized', async () => {
+    const { session, read } = await fixture()
+    session.append('turn/start', { turn: 1 }); request(session, 'First request'); response(session, 1, 'First outcome'); finish(session, 1)
+    session.append('turn/start', { turn: 2 }); request(session, 'Second request'); response(session, 2, 'Second outcome'); finish(session, 2)
+    session.append('turn/start', { turn: 3 })
+    request(session, '很长的需求🙂'.repeat(400)); request(session, '注入的上下文🙂'.repeat(300), 'inject')
+    response(session, 3, '结论🙂'.repeat(600)); finish(session, 3)
+    const result = await read() as any
+    expect(result.status).toBe('ok')
+    expect(result.contentView).toBe('summary')
+    expect(result.nextCursor).toBeUndefined()
+    expect(result.coverage).toMatchObject({ returnedTurns: result.turns.map((turn: any) => turn.turnId), matchedTurns: 3, remainingTurns: 0, partial: true, hasMoreHistory: false })
+    expect(result.turns.map((turn: any) => turn.number)).toEqual([3, 2, 1])
+    const newest = result.turns[0]
+    expect(newest.requests[0].truncated).toBe(true)
+    expect(newest.context[0].truncated).toBe(true)
+    expect(newest.conclusion.truncated).toBe(true)
+    expect(newest.partial).toBe(true)
+    // Excerpts are exact verbatim prefixes: details reopens the same ranges.
+    const events = session.snapshotEvents()
+    for (const part of [...newest.requests, ...newest.context, newest.conclusion]) {
+      const source = events.find(event => event.seq === part.reference.seq) as any
+      const content = source.type === 'user/message' ? source.data.content : source.data.message.content
+      const full = Array.from(content.filter((block: any) => block.type === 'text').map((block: any) => String(block.text)).join('\n'))
+      expect(full.slice(part.reference.start, part.reference.end).join('')).toBe(part.text)
+    }
+    // A smaller pageChars budget cannot reduce the conversation turn count.
+    const tiny = await fixture(200)
+    for (let turn = 1; turn <= 3; turn++) {
+      tiny.session.append('turn/start', { turn }); tiny.session.append('user/message', { id: `u${turn}`, role: 'user', source: { kind: 'user' } as never, content: [{ type: 'text', text: '长'.repeat(500) }] }, { surfaceOp: 'append' })
+      tiny.session.append('turn/end', { turn, reason: { kind: 'completed' } } as never)
+    }
+    expect((await tiny.read() as any).turns).toHaveLength(3)
+  })
+
+  it('pages conversation summaries by turn count with a stable cursor through append growth', async () => {
+    const { session, read } = await fixture()
+    for (let turn = 1; turn <= 7; turn++) {
+      session.append('turn/start', { turn }); request(session, `Request ${turn}`); response(session, turn, `Outcome ${turn}`); finish(session, turn)
+    }
+    const first = await read() as any
+    expect(first.turns.map((turn: any) => turn.number)).toEqual([7, 6, 5, 4, 3])
+    expect(first.coverage).toMatchObject({ matchedTurns: 7, remainingTurns: 2, hasMoreHistory: true })
+    session.append('turn/start', { turn: 8 }); request(session, 'Appended'); finish(session, 8)
+    const second = await read({ cursor: first.nextCursor }) as any
+    expect(second.turns.map((turn: any) => turn.number)).toEqual([2, 1])
+    expect(second.coverage.hasMoreHistory).toBe(false)
+    expect(JSON.stringify(second)).not.toContain('Appended')
+    expect((await read({ limit: 1 }) as any).turns.map((turn: any) => turn.number)).toEqual([8])
+    const all = await read({ limit: 20 }) as any
+    expect(all.turns).toHaveLength(8)
+    expect(all.coverage).toMatchObject({ matchedTurns: 8, remainingTurns: 0, hasMoreHistory: false })
+    // Conversation continuations carry turn indexes only; offsets are invalid.
+    const summary = pageTurnSummaries(projectTurns(session.snapshotEvents(), session.id, 0), 0, 5)
+    expect(summary.nextIndex).toBe(5)
+  })
+
+  it('marks omitted requests and context instead of implying empty history', async () => {
+    const { session, read } = await fixture()
+    session.append('turn/start', { turn: 1 })
+    request(session, 'Original goal'); request(session, 'Correction: use the other entry'); request(session, 'Follow-up detail')
+    request(session, 'Diagnostics one', 'inject'); request(session, 'Diagnostics two', 'inject')
+    response(session, 1, 'Done'); finish(session, 1)
+    const turn = (await read() as any).turns[0]
+    expect(turn.requests.map((part: any) => part.text)).toEqual(['Original goal', 'Follow-up detail'])
+    expect(turn.omittedRequests).toBe(1)
+    expect(turn.context.map((part: any) => part.text)).toEqual(['Diagnostics two'])
+    expect(turn.omittedContext).toBe(1)
+    expect(turn.partial).toBe(true)
+    const detail = await read({ mode: 'details', turnId: turn.turnId, snapshot: (await read() as any).snapshot }) as any
+    expect(detail.items.filter((item: any) => item.role === 'user').map((item: any) => item.text)).toEqual(
+      expect.arrayContaining(['Original goal', 'Correction: use the other entry', 'Follow-up detail', 'Diagnostics one', 'Diagnostics two']))
+  })
+
+  it('rejects stale conversation cursors and projection-2 continuations explicitly', async () => {
+    const { session, read, key } = await fixture()
+    session.append('turn/start', { turn: 1 }); request(session, 'One'); response(session, 1, 'Done'); finish(session, 1)
+    session.append('turn/start', { turn: 2 }); request(session, 'Two'); response(session, 2, 'Done'); finish(session, 2)
+    const first = await read({ limit: 1 }) as any
+    expect(first.nextCursor).toBeTypeOf('string')
+    // Conversation cursors do not continue in another mode.
+    expect(await read({ mode: 'details', cursor: first.nextCursor })).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_INVALID_CURSOR' })
+    // A forged projection-2 conversation cursor must not be reinterpreted.
+    const { encodeCursor } = await import('./cursor.ts')
+    const legacy = encodeCursor({
+      kind: 'read', sessionId: session.id, cut: first.capturedThroughSeq, prefix: 'forged', branchRevision: 0,
+      inheritedEventCount: 0, createdAt: 0,
+      filter: JSON.stringify({ projection: 2, mode: 'conversation', includeToolDetail: true, includeReasoning: false, view: 'transcript', turnId: null, seq: null, turnLimit: 1, summarize: false }),
+      index: 1, offset: 0,
+    }, key)
+    expect(await read({ cursor: legacy })).toMatchObject({ status: 'failed' })
+  })
+
+  it('pages handoff turns by whole messages before Unicode fragments and always exposes the response locator', async () => {
     const { session } = await fixture()
     session.append('turn/start', { turn: 1 })
     const text = '很长的需求🙂'.repeat(600)
@@ -151,14 +251,14 @@ describe('three-layer session reading on the standard host', () => {
     expect(await readSession((await fixture()).ctx.sessionQuery as never, { sessionId: 'reading', mode: 'handoff', summarize: true }, { signal: new AbortController().signal }, resolveConfig({}), createCursorKey())).toMatchObject({ status: 'ok', handoff: { source: 'extractive', summaryStatus: 'unavailable' } })
   })
 
-  it('rejects incompatible modes and binds continuation to projection/options while excluding append growth', async () => {
+  it('rejects incompatible modes and binds handoff continuation to projection/options while excluding append growth', async () => {
     const { session, read } = await fixture(1_400)
     session.append('turn/start', { turn: 1 }); request(session, '长文本🙂'.repeat(400)); response(session, 1, 'Done'); finish(session, 1)
-    const first = await read() as any
+    const first = await read({ mode: 'handoff' }) as any
     expect(first.nextCursor).toBeTypeOf('string')
     expect(await read({ mode: 'details', cursor: first.nextCursor })).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_INVALID_CURSOR' })
     session.append('turn/start', { turn: 2 }); request(session, 'Appended'); finish(session, 2)
-    expect(JSON.stringify(await read({ cursor: first.nextCursor }))).not.toContain('Appended')
+    expect(JSON.stringify(await read({ mode: 'handoff', cursor: first.nextCursor }))).not.toContain('Appended')
     expect(await read({ includeToolDetail: true })).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_INVALID_FILTER', message: expect.stringContaining('include_tool_detail') })
     expect(await read({ mode: 'conversation', summarize: true })).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_INVALID_FILTER', message: expect.stringContaining('summarize') })
     expect(await read({ mode: 'handoff', modelSurface: true })).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_INVALID_FILTER', message: expect.stringContaining('model_surface') })

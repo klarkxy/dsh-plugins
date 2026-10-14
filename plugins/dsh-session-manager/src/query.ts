@@ -11,10 +11,10 @@ import {
 import type { CallerExecution } from './caller.ts'
 import { callerFromExecution } from './caller.ts'
 import { pageItems, surfaceNote, UNTRUSTED_BACKGROUND, type ConversationItem, type ConversationView, type ModelSurfaceRow } from './conversation.ts'
-import type { ResolvedConfig } from './contracts.ts'
+import { DEFAULT_TURN_LIMIT, MAX_TURN_LIMIT, type ResolvedConfig } from './contracts.ts'
 import { corpusStamp, decodeCursor, encodeCursor, prefixDigest, type CursorKey, type ListCursor, type ReadCursor, type SnapshotCursor, type SearchCursor } from './cursor.ts'
 import { findTitleMatches } from './title-search.ts'
-import { pageTurns, projectTurns } from './turns.ts'
+import { pageTurnSummaries, pageTurns, projectTurns } from './turns.ts'
 import { projectDetails } from './details.ts'
 import { extractHandoff, type HandoffSummarizer } from './handoff.ts'
 
@@ -242,12 +242,14 @@ export async function readSession(
     if (mode !== 'handoff' && request.summarize === true) invalidFilter('summarize=true requires mode="handoff".')
     if (request.seq !== undefined && (!Number.isSafeInteger(request.seq) || request.seq < 0)) invalidFilter('seq must be a non-negative safe integer from a returned source reference; omit it or pass null when unused.')
     if (request.turnId !== undefined && request.turnId.trim() === '') invalidFilter('turn_id must be a non-empty returned turn ID; omit it or pass null when unused.')
-    const turnLimit = request.limit ?? 5
-    assertLimit(turnLimit, 20)
+    const turnLimit = request.limit ?? DEFAULT_TURN_LIMIT
+    assertLimit(turnLimit, MAX_TURN_LIMIT)
     const includeToolDetail = request.includeToolDetail !== false
     const includeReasoning = request.includeReasoning === true
     const view: ConversationView = request.modelSurface === true ? 'surface' : 'transcript'
-    const filterKey = JSON.stringify({ projection: 2, mode, includeToolDetail, includeReasoning, view,
+    // Conversation cursors index turns (projection 3); details/handoff cursors
+    // index flattened message parts (projection 2). Never reinterpret across versions.
+    const filterKey = JSON.stringify({ projection: mode === 'conversation' ? 3 : 2, mode, includeToolDetail, includeReasoning, view,
       turnId: request.turnId ?? null, seq: request.seq ?? null, turnLimit, summarize: request.summarize === true })
     observation = await query.observeSession(sessionId, { signal, projectionMode: 'none' })
     try {
@@ -285,7 +287,10 @@ export async function readSession(
       const snapshotBase = { sessionId, cut, prefix: prefixDigest(observation.events.filter(event => event.seq <= cut)),
         branchRevision: face.revision, inheritedEventCount, createdAt }
       const snapshot = encodeCursor({ kind: 'snapshot', ...snapshotBase }, cursors)
-      let paged: { items?: readonly ConversationItem[]; turns?: ReturnType<typeof pageTurns>['turns']; nextIndex?: number; nextOffset?: number }
+      if (mode === 'conversation' && offset !== 0) {
+        throw new SessionQueryError('conversation continuation offsets are invalid; restart the read and page by turn with the returned cursor', 'SESSION_QUERY_INVALID_CURSOR')
+      }
+      let paged: { items?: readonly ConversationItem[]; turns?: ReturnType<typeof pageTurns>['turns'] | ReturnType<typeof pageTurnSummaries>['turns']; nextIndex?: number; nextOffset?: number }
       let projection: ReturnType<typeof projectDetails> | undefined
       try {
         if (mode === 'details') {
@@ -304,7 +309,12 @@ export async function readSession(
             } else invalidFilter('seq does not select a readable event in this session/snapshot/turn and projection. Use the matching source reference and snapshot; check turn_id and details options.')
           }
           paged = pageItems(items, index, offset, config.pageChars)
-        } else paged = pageTurns(turns, index, offset, config.pageChars, turnLimit)
+        } else if (mode === 'handoff') {
+          // Handoff extraction consumes the lossless projection; keep the byte/message pager here.
+          paged = pageTurns(turns, index, offset, config.pageChars, turnLimit)
+        } else {
+          paged = pageTurnSummaries(turns, index, turnLimit)
+        }
       } catch (error) {
         if (error instanceof SessionQueryError) throw error
         throw new SessionQueryError(error instanceof Error ? error.message : 'Invalid session history', 'SESSION_QUERY_INVALID_SURFACE')
@@ -323,12 +333,14 @@ export async function readSession(
       signal?.throwIfAborted()
       const titleRow = titles[0]
       if (titleRow?.status === 'rejected') throw titleRow.reason
+      const conversationTurns = mode === 'conversation' ? paged.turns as ReturnType<typeof pageTurnSummaries>['turns'] : undefined
       const metadata = {
         status: 'ok' as const,
         trust: UNTRUSTED_BACKGROUND,
         sessionId,
         source: observation.source,
         mode, view: mode === 'details' ? view : 'turns',
+        ...mode === 'conversation' ? { contentView: 'summary' as const } : {},
         snapshot, capturedThroughSeq: cut,
         cwd: observation.header.cwd ?? null,
         title: titleRow?.status === 'fulfilled' ? titleRow.value.title?.title ?? null : null,
@@ -336,16 +348,22 @@ export async function readSession(
         ...projection ? { surfaceDiffers: projection.surfaceDiffers, surfaceCount: projection.surfaceCount, transcriptCount: projection.transcriptCount } : {},
         ...note === undefined ? {} : { surfaceNote: note },
         ...mode === 'details' ? { items: paged.items } : { turns: paged.turns, turnCount: allTurns.length,
-          coverage: { returnedTurns: paged.turns?.map(turn => turn.turnId), partial: paged.turns?.some(turn => turn.partial), hasMoreHistory: next !== undefined } },
+          coverage: {
+            returnedTurns: paged.turns?.map(turn => turn.turnId),
+            ...conversationTurns ? { matchedTurns: turns.length, remainingTurns: turns.length - index - conversationTurns.length } : {},
+            partial: paged.turns?.some(turn => turn.partial),
+            hasMoreHistory: next !== undefined,
+          } },
         ...next === undefined ? {} : { nextCursor: next },
       }
       // A model call consumes the captured source material, not a live observation lease.
       observation[Symbol.dispose](); observation = undefined
       if (mode !== 'handoff') return metadata
-      let handoff = extractHandoff(paged.turns ?? [], next !== undefined)
+      const handoffTurns = paged.turns as ReturnType<typeof pageTurns>['turns']
+      let handoff = extractHandoff(handoffTurns ?? [], next !== undefined)
       if (request.summarize === true) {
         if (!signal) throw new SessionQueryError('Handoff summarization needs a host execution signal', 'SESSION_QUERY_INVALID_FILTER')
-        handoff = summarize ? await summarize(paged.turns ?? [], handoff, signal, config.pageChars)
+        handoff = summarize ? await summarize(handoffTurns ?? [], handoff, signal, config.pageChars)
           : { ...handoff, summaryStatus: 'unavailable', error: 'No host model is available; source excerpts are retained.' }
       }
       signal?.throwIfAborted()

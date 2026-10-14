@@ -21,7 +21,7 @@ klarkxy 的 DeepSeek Harness（DSH）插件。可以在[插件站点](https://kl
 | [`@klarkxy/dsh-font`](plugins/dsh-font/docs/README.zh-CN.md) | 字体：自定义 Web GUI 的界面字体、代码字体与会话字号。 |
 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.zh-CN.md) | 破限：直接交付完整成果的会话 Preset，只作用于选用它的会话。 |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | DSH 文档：在插件页阅读官方文档；创造模式可查文档和插件。 |
-| [`dsh-plugin-autoevo`](https://github.com/klarkxy/dsh-plugin-autoevo#readme) | AutoEvo：发现、审查和安装可复用能力（独立仓库）。 |
+| [`dsh-plugin-autoevo`](https://github.com/klarkxy/dsh-plugin-autoevo#readme) | AutoEvo（已废弃）：发现、审查和安装可复用能力，现已停止维护（独立仓库）。 |
 
 `@klarkxy/dsh-plugin-kit` 和 `@klarkxy/dsh-model-route` 是共享库，其他插件会自动安装它们。
 

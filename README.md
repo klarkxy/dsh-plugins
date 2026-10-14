@@ -21,7 +21,7 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse them on the [plugin site](http
 | [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface font, code font, and conversation font size of the Web GUI. |
 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | Unrestricted: a session preset that delivers complete results, only in sessions that pick it. |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: read the official DSH docs in the Plugins page; Creator mode can look up docs and plugins. |
-| [`dsh-plugin-autoevo`](https://github.com/klarkxy/dsh-plugin-autoevo#readme) | AutoEvo: find, review, and install reusable capabilities (separate repository). |
+| [`dsh-plugin-autoevo`](https://github.com/klarkxy/dsh-plugin-autoevo#readme) | AutoEvo (deprecated): find, review, and install reusable capabilities; no longer maintained (separate repository). |
 
 `@klarkxy/dsh-plugin-kit` and `@klarkxy/dsh-model-route` are shared libraries that other plugins install automatically.
 

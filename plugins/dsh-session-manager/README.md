@@ -16,7 +16,7 @@ Replace `web` with your profile name and restart the profile.
 
 ## Use
 
-- **Agent tools**: `list_sessions`, `search_sessions`, and `read_session` let the agent find sessions by title or content and read a conversation, its full details, or a handoff summary.
+- **Agent tools**: `list_sessions`, `search_sessions`, and `read_session` let the agent find sessions by title or content and read a conversation, its full details, or a handoff summary. Reading a conversation returns one preview per turn, newest first; the agent pages further back with the returned cursor and opens full original content through details mode.
 - **Copy thread ID**: from a session's menu, or press `Ctrl + Alt + C` (`⌘ + ⌥ + C` on macOS) for the open session.
 - **Right-click menu**: right-clicking a session or workspace group in the sidebar opens the same menu as its **⋯** button.
 - **Temporary workspace**: choose it in the new-session workspace picker to start a chat in its own new folder.

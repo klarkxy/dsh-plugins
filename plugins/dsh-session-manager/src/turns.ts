@@ -1,5 +1,6 @@
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
+import { PREVIEW_CONTEXT_CHARS, PREVIEW_REQUEST_CHARS, PREVIEW_RESPONSE_CHARS } from './contracts.ts'
 
 export interface SourceReference {
   sessionId: string
@@ -193,4 +194,97 @@ export function pageTurns(turns: readonly SessionTurn[], index: number, offset: 
     output.push(partial)
   }
   return { turns: output, ...index < units.length ? { nextIndex: index, nextOffset: offset } : {} }
+}
+
+/** One turn preview in a conversation summary page. */
+export interface TurnSummary {
+  turnId: string
+  number?: number
+  state: string
+  boundary: SessionTurn['boundary']
+  startSeq: number
+  endSeq: number
+  stateReference?: SourceReference
+  error?: SessionTurn['error']
+  errorTruncated?: boolean
+  inherited: boolean
+  toolCalls: number
+  /** First and latest request, deduplicated, each capped at PREVIEW_REQUEST_CHARS. */
+  requests: TurnText[]
+  /** Latest context message, capped at PREVIEW_CONTEXT_CHARS. */
+  context: TurnText[]
+  conclusion?: TurnText
+  partialResponse?: TurnText
+  responseLocator?: SourceReference
+  responsePreview?: string
+  responseKind?: 'conclusion' | 'partial-response'
+  omittedRequests: number
+  omittedContext: number
+  /** Set when any represented source content was shortened or omitted. */
+  partial: boolean
+}
+
+export interface TurnSummaryPage {
+  turns: TurnSummary[]
+  nextIndex?: number
+}
+
+/**
+ * Conversation-mode pager: one summary record for every selected turn,
+ * advancing by turn index only. Preview caps bound the payload; the selected
+ * turn count never shrinks to fit an output-size budget.
+ */
+export function pageTurnSummaries(turns: readonly SessionTurn[], index: number, limit: number): TurnSummaryPage {
+  if (!Number.isSafeInteger(index) || index < 0 || index > turns.length) {
+    throw new RangeError('turn page position is invalid')
+  }
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new RangeError('turn limit is invalid')
+  const selected = turns.slice(index, index + limit).map(summarizeTurn)
+  const next = index + selected.length
+  return { turns: selected, ...next < turns.length ? { nextIndex: next } : {} }
+}
+
+function summarizeTurn(turn: SessionTurn): TurnSummary {
+  const requests = turn.parts.filter(part => part.kind === 'request')
+  const contexts = turn.parts.filter(part => part.kind === 'context')
+  const response = turn.parts.find(part => part.kind === 'conclusion' || part.kind === 'partial-response')
+  const pickedRequests = dedupe([requests[0], requests.at(-1)])
+  const pickedContext = contexts.at(-1)
+  const excerptedResponse = response === undefined ? undefined : excerpt(response, PREVIEW_RESPONSE_CHARS)
+  const summary: TurnSummary = {
+    ...frame(turn),
+    requests: pickedRequests.map(part => excerpt(part, PREVIEW_REQUEST_CHARS)),
+    context: pickedContext === undefined ? [] : [excerpt(pickedContext, PREVIEW_CONTEXT_CHARS)],
+    ...excerptedResponse === undefined ? {} : excerptedResponse.kind === 'conclusion'
+      ? { conclusion: excerptedResponse }
+      : { partialResponse: excerptedResponse },
+    omittedRequests: requests.length - pickedRequests.length,
+    omittedContext: contexts.length - (pickedContext === undefined ? 0 : 1),
+    partial: false,
+  }
+  const shortened = [...summary.requests, ...summary.context, summary.conclusion, summary.partialResponse]
+    .some(part => part?.truncated === true)
+  summary.partial = shortened || summary.omittedRequests > 0 || summary.omittedContext > 0
+  return summary
+}
+
+function dedupe(parts: readonly (TurnText | undefined)[]): TurnText[] {
+  const seen = new Set<number>()
+  return parts.filter((part): part is TurnText => {
+    if (part === undefined || seen.has(part.reference.seq)) return false
+    seen.add(part.reference.seq)
+    return true
+  })
+}
+
+/** Verbatim prefix excerpt; `truncated` marks omitted text without altering the kept range. */
+function excerpt(part: TurnText, cap: number): TurnText {
+  const points = Array.from(part.text)
+  if (points.length <= cap) return { ...part, truncated: part.truncated === true }
+  return {
+    ...part,
+    text: points.slice(0, cap).join(''),
+    reference: { ...part.reference, start: 0, end: cap },
+    truncated: true,
+  }
 }

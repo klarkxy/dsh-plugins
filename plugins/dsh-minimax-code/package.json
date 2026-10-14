@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-minimax-code",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Search, create media, and understand audio and video through official MiniMax Code tools.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",

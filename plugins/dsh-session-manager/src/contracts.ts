@@ -26,8 +26,16 @@ export const DEFAULT_SEARCH_LIMIT = 20
 export const MAX_SEARCH_LIMIT = 50
 export const TOOL_SUMMARY_CHARS = 160
 
+/** Conversation reading pages by turn count, never by output size. */
+export const DEFAULT_TURN_LIMIT = 5
+export const MAX_TURN_LIMIT = 20
+/** Deterministic preview caps in Unicode code points; full text stays in details mode. */
+export const PREVIEW_REQUEST_CHARS = 256
+export const PREVIEW_CONTEXT_CHARS = 128
+export const PREVIEW_RESPONSE_CHARS = 512
+
 export interface Config {
-  /** Maximum serialized UTF-8 bytes of one read_session item page, including item metadata. */
+  /** Maximum serialized UTF-8 bytes of one read_session details/handoff page, including item metadata. Conversation turn previews do not use this budget. */
   pageChars?: number
   /** Maximum sessions returned by one list_sessions page. */
   listLimit?: number
