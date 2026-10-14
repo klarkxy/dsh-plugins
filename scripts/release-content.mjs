@@ -3,15 +3,19 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { packRelease } from './release-workspace.mjs';
 
+/** User-facing prose: it ships in the archive, but editing it must not force an npm release. */
+const documentationPattern = /(?:^|\/)(?:docs\/|README(?:\.[a-z-]+)?\.md|ACCEPTANCE\.md|NOTICE\.md|CHANGELOG(?:\.[a-z-]+)?\.md)$/i;
+
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
   return value;
 }
 
-export function contentHash(files, read) {
+export function contentHash(files, read, { excludeDocumentation = false } = {}) {
   const hash = createHash('sha256');
-  for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path, 'en'))) {
+  const selected = excludeDocumentation ? files.filter(file => !documentationPattern.test(file.path)) : files;
+  for (const file of [...selected].sort((a, b) => a.path.localeCompare(b.path, 'en'))) {
     let content = read(file.path);
     if (file.path === 'package.json' || file.path === 'dsh.plugin.json') {
       const manifest = JSON.parse(content.toString());
@@ -34,7 +38,9 @@ export function packSnapshot(root, pkg, packages, npm) {
   const result = packRelease(root, pkg, packages, npm, (files, read) => {
     sourceHash = contentHash(files, path => path === 'package.json'
       ? readFileSync(join(root, pkg.directory, path)) : read(path));
-    return contentHash(files, read);
+    // Publication fingerprint ignores documentation-only edits; the archive hash above
+    // still records them, and publish-time tarball integrity keeps checking the full archive.
+    return contentHash(files, read, { excludeDocumentation: true });
   });
   return { ...result, sourceHash };
 }

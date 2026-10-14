@@ -16,7 +16,7 @@ Bug fixes, README changes, new-feature testing and version updates keep a publis
 
 1. Edit source, configuration, dependencies or packed documentation while retaining `published`.
 2. Choose a version according to compatibility, then run relevant tests, builds, archive checks and target-host acceptance where needed. Maintenance requires no manual lifecycle re-promotion or refreshed acceptance fingerprint.
-3. The publisher compares current archive contents with npm, runs `pnpm check`, revalidates the saved plan, publishes, and verifies anonymous archive downloads. Failure never lowers the stage.
+3. The publisher compares current archive contents with npm, runs `pnpm check`, revalidates the saved plan, publishes, and verifies anonymous archive downloads. Failure never lowers the stage. Edits to `README*.md`, `ACCEPTANCE.md`, `NOTICE.md`, `CHANGELOG*.md` and `docs/` are still packed but do not force a new version; npm documentation refreshes with the next code release. Version, dependency and code changes publish as usual.
 
 Existing release holds still require their stated conditions to be resolved. Use `scripts/npm-release-holds.json` to pause an update when needed. Private packages never publish. Obsolete source can be removed. Set `retired: true` on its existing registry entry, retaining only its lifecycle and publication history; it no longer participates in builds, active tables or releases.
 

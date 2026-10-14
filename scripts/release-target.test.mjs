@@ -85,6 +85,25 @@ test('fingerprint ignores version/writeback formatting but includes file names a
   assert.notEqual(fingerprint({ ...files, 'new.js': '' }), hash);
   assert.notEqual(fingerprint({ 'package.json': files['package.json'] }), hash);
 });
+test('publication fingerprint ignores documentation but source hash keeps it', () => {
+  const files = { 'package.json': '{"name":"pkg","version":"1.0.0"}', 'lib/index.js': 'export const n = 1;',
+    'README.md': 'English readme', 'README.zh-CN.md': '中文说明', 'docs/README.zh-CN.md': '中文文档',
+    'ACCEPTANCE.md': 'acceptance notes', 'locale/en.json': '{"title":"One"}' };
+  const docsOnly = { ...files, 'README.md': 'English readme rewritten', 'docs/README.zh-CN.md': '重写',
+    'ACCEPTANCE.md': 'acceptance notes v2', 'README.zh-CN.md': '中文说明 v2' };
+  const documentation = list => contentHash(list.map(path => ({ path, mode: 420 })), path => Buffer.from(files[path]),
+    { excludeDocumentation: true });
+  const docsChanged = list => contentHash(list.map(path => ({ path, mode: 420 })), path => Buffer.from(docsOnly[path]),
+    { excludeDocumentation: true });
+  const names = Object.keys(files);
+  assert.equal(docsChanged(names), documentation(names));
+  assert.notEqual(contentHash(names.map(path => ({ path, mode: 420 })), path => Buffer.from(docsOnly[path])),
+    contentHash(names.map(path => ({ path, mode: 420 })), path => Buffer.from(files[path])));
+  const withNewDoc = { ...docsOnly, 'docs/ADR-0007.md': 'new adr' };
+  assert.notEqual(contentHash([...names, 'docs/ADR-0007.md'].map(path => ({ path, mode: 420 })),
+      path => Buffer.from(withNewDoc[path]), { excludeDocumentation: true }), documentation(names));
+  assert.notEqual(docsChanged(names.filter(path => path !== 'locale/en.json')), documentation(names));
+});
 test('writeback updates both manifests without changing plugin IDs and is idempotent', t => {
   const root = fixture(t);
   const path = join(root, pkg.directory, 'dsh.plugin.json');
