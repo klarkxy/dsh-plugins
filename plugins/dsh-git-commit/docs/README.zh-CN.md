@@ -1,7 +1,6 @@
-# @klarkxy/dsh-git-commit
+﻿# @klarkxy/dsh-git-commit
 
 <!-- release-state-note -->
-插件生命周期见[仓库状态清单](../../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../../RELEASING.zh-CN.md)。
 
 在对话里直接把工作区修改提交到 git。每个对话线程的右上角都有一个 **提交** 按钮：
 点一下打开弹层，确认分支、文件数量和将使用的模型，再点一下即可把会话工作目录
@@ -11,7 +10,7 @@
 
 ## 安装
 
-需要 Node.js ≥22。用 DSH 插件管理器把已发布包装进目标 profile，安装即启用
+需要 Node.js ≥22（已验证 26）。用 DSH 插件管理器把已发布包装进目标 profile，安装即启用
 `git-commit` 入口：
 
 ```sh
@@ -19,14 +18,6 @@ dsh plugin --profile web add @klarkxy/dsh-git-commit
 ```
 
 把 `web` 换成你的 profile 名。安装或卸载后宿主可能要求重启。
-
-要装本仓库的源码，先打包再添加归档：
-
-```sh
-cd plugins/dsh-git-commit
-npm pack --ignore-scripts
-dsh plugin --profile web add "<归档绝对路径>"
-```
 
 卸载：
 

@@ -1,11 +1,10 @@
-# DSH 文档
+﻿# DSH 文档
 
 <!-- release-state-note -->
-插件生命周期见[仓库状态清单](../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../RELEASING.zh-CN.md)。
 
 [简体中文](README.zh-CN.md) | [English](README.md)
 
-**运行环境**：Node `^22.19.0 || >=24.0.0`、DSH `>=0.1.7-rc.2`。文档阅读器是 DSH Web 客户端；四个只读工具和创造模式指引运行在宿主里。
+**运行环境**：Node `^22.19.0 || >=24.0.0`（已验证 26）、DSH `>=0.1.7-rc.2`。文档阅读器是 DSH Web 客户端；四个只读工具和创造模式指引运行在宿主里。
 
 不离开 DSH 就能读到官方文档：插件页内嵌官方文档站，创造模式另外拿到四个原生只读工具——`dsh_docs_search` 和 `dsh_docs_fetch` 检索文档，`dsh_plugins_search` 和 `dsh_plugins_fetch` 查核插件的 npm 元数据。安装和卸载插件始终由官方插件管理器负责，本插件不安装任何东西。
 
@@ -54,7 +53,7 @@ npm 包包含已构建的 `lib/`。
 dsh plugin --profile web add "github:klarkxy/dsh-plugins#path:/plugins/dsh-dev-index"
 ```
 
-Git 安装会运行 `prepare` 来构建 `lib/`。pnpm 在允许之前会拦住这个脚本，DSH 0.1.7-rc.2 的 CLI 会打印出要写进 `$DSH_HOME/profiles/web/pnpm-workspace.yaml` 里 `allowBuilds` 的确切包名：
+Git 安装会运行 `prepare` 来构建 `lib/`。pnpm 在允许之前会拦住这个脚本，DSH CLI 会打印出要写进 `$DSH_HOME/profiles/web/pnpm-workspace.yaml` 里 `allowBuilds` 的确切包名：
 
 ```yaml
 allowBuilds:
@@ -63,25 +62,7 @@ allowBuilds:
 
 然后再执行一次 add：该许可会在本机执行这个包的构建。需要固定插件来源时请钉住 commit。
 
-`@deepseek-ai/dsh-system-prompt` 和 `@deepseek-ai/dsh-agent-preset-registry` 的 peer 范围会对照正在运行的 `dsh` 版本检查。本包要求 DSH `>=0.1.7-rc.2`；加载器不强制 `engines.dsh`。
-
-## 从本仓库安装
-
-```bash
-pnpm install
-pnpm --filter @klarkxy/dsh-dev-index build
-dsh plugin --profile web add ./plugins/dsh-dev-index
-```
-
-安装后重启该 profile，或让 HMR 应用新 bundle。然后：
-
-```bash
-dsh --profile web --dump-config
-```
-
-组合结果里应有 `dsh-dev-index` 这一行。新建创造模式会话即可自动收到文档指引。
-
-没有配置项：补丁只插入插件，不设置任何键。
+`@deepseek-ai/dsh-system-prompt` 和 `@deepseek-ai/dsh-agent-preset-registry` 的 peer 范围会对照正在运行的 `dsh` 版本检查。加载器不强制 `engines.dsh`。
 
 ## 许可证
 

@@ -1,20 +1,15 @@
 # DSH ChatGPT
 
 <!-- release-state-note -->
-插件生命周期见[仓库状态清单](../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../RELEASING.zh-CN.md)。
 
 让 DSH 智能体直接调用 ChatGPT 搜索、生图、图片编辑、看图与文本分析。工具安装后直接注册到宿主，不需要用户点名 skill。
 
 所有请求通过本机官方 Codex 的 app-server 发出。插件不调用 OpenAI HTTP 接口，不读取或保存账户令牌，也不使用 API Key 回退。登录、凭据刷新及账户额度由 Codex 管理。
 
-## 本地安装
+## 安装
 
-本包目前用于本地验收，尚未发布到 npm。先在仓库运行：
-
-```powershell
-pnpm --filter @klarkxy/dsh-chatgpt build
-dsh plugin --profile web add "link:H:/Code/dsh-plugins/plugins/dsh-chatgpt"
-dsh web
+```sh
+dsh plugin --profile web add @klarkxy/dsh-chatgpt
 ```
 
 打开插件详情页的配置区，点击「刷新状态」。已有 Codex ChatGPT 登录时直接复用；未登录时可选择浏览器或设备码登录。远程 DSH 应使用设备码，并在自己的浏览器完成授权。
@@ -43,16 +38,6 @@ Codex 必须运行在 DSH 所在的机器上，版本至少为 `0.162.0-alpha.17
 
 调用消耗当前 ChatGPT 账户的 Codex 额度。连接成功只说明运行时和登录可用；模型及工具权限以实际调用结果为准。插件依赖 app-server 的实验性环境隔离字段，旧 Codex 不满足契约时会报兼容错误。
 
-## 开发与验收
-
-```powershell
-pnpm --filter @klarkxy/dsh-chatgpt typecheck
-pnpm --filter @klarkxy/dsh-chatgpt test
-pnpm --filter @klarkxy/dsh-chatgpt build
-node --test scripts/plugin-settings.test.mjs
-pnpm test:editor-build
-```
-
-目标 DSH 版本见 `engines.dsh`。构建和离线测试不能代替真实登录、模型调用及 DSH 宿主验收；当前证据见 `ACCEPTANCE.md`。
+目标 DSH 版本见 `engines.dsh`。当前验收证据见 [ACCEPTANCE.md](ACCEPTANCE.md)。
 
 接口依据：[Codex app-server](https://learn.chatgpt.com/docs/app-server)、[原生搜索](https://learn.chatgpt.com/docs/web-search)、[原生生图与编辑](https://learn.chatgpt.com/docs/image-generation)。

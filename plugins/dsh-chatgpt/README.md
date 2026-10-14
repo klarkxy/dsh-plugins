@@ -1,20 +1,15 @@
 # DSH ChatGPT
 
 <!-- release-state-note -->
-The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
 
 Give any DeepSeek Harness agent five directly registered tools: web search, image generation, image editing, vision, and bounded text analysis. Tool descriptions explain when to use them; users do not need to name a skill.
 
 All requests run through the official local Codex app-server. The plugin never calls OpenAI HTTP endpoints, reads account tokens, or falls back to an API key. Codex owns authentication and token refresh.
 
-## Local installation
+## Install
 
-This package is private while local acceptance is in progress and is not published on npm.
-
-```powershell
-pnpm --filter @klarkxy/dsh-chatgpt build
-dsh plugin --profile web add "link:H:/Code/dsh-plugins/plugins/dsh-chatgpt"
-dsh web
+```sh
+dsh plugin --profile web add @klarkxy/dsh-chatgpt
 ```
 
 Open the plugin's configuration page and click Refresh status. An existing Codex ChatGPT sign-in is reused. Otherwise choose browser or device-code sign-in; use device codes when the browser and DSH run on different machines.
@@ -37,16 +32,6 @@ Each request has its own Codex thread. Environment tools are disabled. Search su
 
 Cancellation and plugin unload terminate only plugin-owned processes. Login cancellation applies only to a login started by this plugin; there is no shared-account logout action. Calls consume the signed-in account's Codex allowance. Connection status does not prove model or tool entitlement.
 
-The plugin requires experimental app-server environment-isolation fields. Incompatible Codex runtimes fail explicitly. Target DSH compatibility is declared in `engines.dsh`; live acceptance evidence is recorded in `ACCEPTANCE.md`.
-
-## Development
-
-```powershell
-pnpm --filter @klarkxy/dsh-chatgpt typecheck
-pnpm --filter @klarkxy/dsh-chatgpt test
-pnpm --filter @klarkxy/dsh-chatgpt build
-node --test scripts/plugin-settings.test.mjs
-pnpm test:editor-build
-```
+The plugin requires experimental app-server environment-isolation fields. Incompatible Codex runtimes fail explicitly. Target DSH compatibility is declared in `engines.dsh`; live acceptance evidence is recorded in [ACCEPTANCE.md](ACCEPTANCE.md).
 
 Official references: [app-server](https://learn.chatgpt.com/docs/app-server), [web search](https://learn.chatgpt.com/docs/web-search), [image generation and editing](https://learn.chatgpt.com/docs/image-generation).

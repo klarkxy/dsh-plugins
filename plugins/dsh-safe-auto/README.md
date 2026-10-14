@@ -1,7 +1,6 @@
 # Safe Auto
 
 <!-- release-state-note -->
-The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
 
 Automatic review of native sandbox escalation requests. When a real `write`/`edit`/`bash`/`pwsh` call asks to widen its sandbox beyond Workspace Write, an independent reviewer model vets that one call. A narrow set of metadata-only or literal-output `bash` commands can pass static checks without a model. A pass continues automatically; other review results offer an exact-call confirmation in the current session, with 60 seconds to approve once or reject. No response means rejection. The plugin never switches the standing session to Full Access.
 
@@ -11,18 +10,8 @@ Automatic review of native sandbox escalation requests. When a real `write`/`edi
 
 ## Install and enable
 
-After 0.2.0 is published to npm:
-
 ```sh
-dsh plugin --profile <profile> add @klarkxy/dsh-safe-auto@0.2.0
-```
-
-From a checked source checkout instead:
-
-```sh
-pnpm install --frozen-lockfile
-pnpm --filter @klarkxy/dsh-safe-auto test
-dsh plugin --profile <profile> add ./plugins/dsh-safe-auto
+dsh plugin --profile <profile> add @klarkxy/dsh-safe-auto
 ```
 
 The bundle inserts the `dsh-safe-auto` and `dsh-safe-auto-ui` profile rows. Safe Auto then appears as a fourth option in the composer's permission menu, next to the native presets — pick **Safe Auto** there to enable it for the current session, and pick any native preset to disable it again. Nothing is automatic until you do: no session inherits activation, and restart, a permission change or uninstall revokes it. The plugin page only holds reviewer configuration, safety notes and the read-only budget limits, grouped into tabs.
@@ -109,16 +98,10 @@ Structured files are screened as complete sources up to 1 MiB; larger JSONL sess
 - **Git is not safe by subcommand name.** Content, history, remote URLs and configuration enumeration require review even when their flags prevent mutation. Metadata commands retain the original disabling controls required by the no-mutation grammar. Exact `git version` and `git --no-pager config --get user.name` / `user.email` are narrow static cases. The plugin never prepends controls or rewrites argv.
 - **Dedicated confirmation channel.** Pinned DSH 0.2.0-rc.2 approval and question waterfalls accept automatic answerers. Manual confirmation instead uses the plugin's authenticated browser HTTP endpoints and unpredictable single-use request IDs. Fetch metadata and host origin/authentication checks protect the browser channel against cross-site requests; they do not prove physical human action. Authenticated clients, their transport and same-process plugins remain trusted. No model tool is registered for approval.
 - **Server-owned expiry.** The window starts when a pending request is published. The server uses a monotonic deadline and atomically accepts the first valid answer; duplicate, late or cross-session answers fail. Disabling, changing settings, unloading or cancelling invalidates pending requests. Requests are in memory only, so restarts do not restore them. Both direct browser requests and the authenticated DSH desktop carrier are supported; incompatible request metadata is rejected.
-- **Foreign native approvals remain native.** Blueprint order and Classmates model approvals continue to downstream answerers when no Safe Auto-owned execution context exists. Requests in an owned context, including mismatches, stale/claimed requests, and unbound impersonation of `bash`/`pwsh`/`write`/`edit`, remain fail-closed.
+- **Foreign native approvals remain native.** Blueprint order and other plugins' model approvals continue to downstream answerers when no Safe Auto-owned execution context exists. Requests in an owned context, including mismatches, stale/claimed requests, and unbound impersonation of `bash`/`pwsh`/`write`/`edit`, remain fail-closed.
 - **Coverage stops at native single-call escalation.** Only `write`/`edit`/`bash`/`pwsh` widening from `workspace-write` is reviewed. Other tools, MCP, remote execution, subagent calls and standing permission changes stay outside the automatic envelope.
 - **Evidence is checked, execution is not atomic.** Evidence paths, versions and SHA-256 digests are revalidated before granting, but files can still change between approval and execution. Other same-process plugins remain trusted; unloading removes the guards. Keep external isolation with restricted credentials and egress.
 - **No guarantee is claimed.** There is no fail-open option, no durable audit database and no claim of absolute safety or savings.
-
-## Verification
-
-Run `npm test`, `npm run build` and `npm pack --dry-run` in this package, plus repository `pnpm check`. Tests cover routing, concurrent sessions, native streams, caps, stale decisions, model service removal, execution binding, and real Cordis/ToolRuntime/ApprovalService/LlmRuntime contracts. CI requires installed DSH dependencies; offline source-only runs may skip the native contracts. If the Windows sandbox blocks the test runner's subprocess pipes, run each test file separately with `node --test --test-isolation=none test/<file>.test.js`.
-
-The native contract tests use controlled adapters and fixture sessions/tools. They prove runtime integration, not live model accuracy, OS isolation or authenticated Web/Headless acceptance; those remain in [ADR-0002's checklist](docs/ADR-0002.md). Logs separate assessment, outcome and final result without raw commands, prompts or keys; host retention is operator-managed.
 
 ## License
 

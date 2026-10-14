@@ -20,17 +20,14 @@ Package names link to npm or the package README; the last column provides the ot
 | [`@klarkxy/dsh-zhihu`](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) | Zhihu: Zhihu search, agent tools, knowledge bases, and usage tracking. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu#readme) |
 | [`@klarkxy/dsh-git-commit`](https://www.npmjs.com/package/@klarkxy/dsh-git-commit) | Git Commit: commit workspace changes from the conversation header, with model-planned commit groups. | [Docs](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-git-commit#readme) |
 | [`dsh-plugin-autoevo`](https://www.npmjs.com/package/dsh-plugin-autoevo) | Discover, review, and install reusable capabilities. | [Docs](https://github.com/klarkxy/dsh-plugin-autoevo#readme) |
-
-## Preview packages (`next`)
-
-| Package | Purpose | Status |
-| --- | --- | --- |
-| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: an independent reviewer vets each sandbox escalation; only a pass auto-approves. | npm release candidate; the plugin site catalog lists stable releases only. |
-| [`@klarkxy/dsh-blueprint`](https://github.com/klarkxy/dsh-spaces/tree/main/packages/blueprint) | Share plugin compositions as blueprint codes. Independently usable on DSH 0.2. | Moved to dsh-spaces; source and release ownership live there. |
-| [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface font, code font, and conversation font size of the Web GUI. | Release candidate on `next`; excluded from the stable plugin catalog. |
-| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Model Hub: edit model fields exposed by installed plugin settings. | Release candidate on `next`. |
-| [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: find sessions and read conversations across working directories. | Release candidate on `next`; advanced thread actions need the supplied host patch. |
-| [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | Unrestricted: a session preset that answers under the unrestricted delivery contract, only in sessions that pick it. | Unreleased; on the release-hold list pending packed-content review and target-host acceptance. |
+| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: an independent reviewer vets each sandbox escalation; only a pass auto-approves. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-safe-auto) |
+| [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: find sessions and read conversations across working directories; advanced thread actions need the supplied host patch. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-session-manager) |
+| [`@klarkxy/dsh-chatgpt`](plugins/dsh-chatgpt/README.md) | ChatGPT tools: search, image generation/editing, and vision through the official local Codex runtime. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-chatgpt) |
+| [`@klarkxy/dsh-grok-build`](plugins/dsh-grok-build/README.md) | Grok Build: search, fetch, images, and video through the official local CLI. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-grok-build) |
+| [`@klarkxy/dsh-minimax-code`](plugins/dsh-minimax-code/README.md) | MiniMax Code: media creation, transcription, and understanding through official tools. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-minimax-code) |
+| [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface font, code font, and conversation font size of the Web GUI. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-font) |
+| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Model Hub: edit model fields exposed by installed plugin settings. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-model-hub) |
+| [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | Unrestricted: a session preset that answers under the unrestricted delivery contract, only in sessions that pick it. | [npm](https://www.npmjs.com/package/@klarkxy/dsh-unrestricted) |
 
 
 ## Install
@@ -60,7 +57,7 @@ pnpm site:test    # offline rendering tests, also part of pnpm check
 
 ## Development
 
-Requires Node.js 24 or newer and pnpm 10.
+Requires Node.js 24 or newer (26 verified; 26 is not yet LTS) and pnpm 10.
 
 ```bash
 pnpm install
@@ -71,7 +68,7 @@ Each package owns its assets, tests, and release version. Native presets need no
 
 ## Plugin lifecycle
 
-`scripts/plugin-release-states.json` records the irreversible lifecycle of plugins and shared libraries: Draft → Testing → Published. Maintenance, testing and version updates never demote a published package. Normal updates pass the existing release checks; first publication explicitly selects Testing packages and records Published after success. Holds, freezes and private status are separate.
+Packages move through an irreversible lifecycle: Draft → Testing → Published. See the [release guide](RELEASING.md) for the full rules.
 
 <!-- plugin-release-states:start -->
 | Package | Lifecycle | Notes |
@@ -93,23 +90,6 @@ Each package owns its assets, tests, and release version. Native presets need no
 | [@klarkxy/dsh-zhihu](plugins/dsh-zhihu/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 <!-- plugin-release-states:end -->
 
-Packages with npm publication history are Published; unpublished private development packages remain in Testing. See the [release guide](RELEASING.md). After editing the registry, run `pnpm release:docs` to sync both tables and `pnpm release:check` to validate forward-only lifecycle transitions and release behavior.
-
-## Automatic npm releases
-
-`scripts/npm-release-holds.json` records packages awaiting acceptance. Both planning and publishing enforce the list, including previously saved plans. Before removing a package, review its final archive, pass relevant checks, and accept new behavior in the target DSH host, including bundled workspace dependencies. Private development packages still participate in builds and tests.
-
-Every `plugins/dsh-xxx` package is named `@klarkxy/dsh-xxx`, and public packages select the public npm registry. Private development packages (`private: true`) join checks but stay out of automatic releases. `.github/workflows/npm-publish.yml` checks the packages on every `main` update and can be retried manually from Actions; release tags are not required.
-
-After building, CI selects Published packages (plus explicitly selected Testing packages for first publication) before comparing the files selected by `npm pack` with the published package, so only eligible changed packages or explicitly higher versions are published. Repository docs, the index website, and tests excluded from the archive never cause an npm release; version fields and CI's own `dshRelease.contentHash` stay out of the fingerprint to avoid release loops.
-
-First releases keep the source version, and an explicitly higher version takes precedence. Changed contents without a version increase get an automatic patch bump, or a prerelease counter bump for prereleases. CI updates `package.json` and any `dsh.plugin.json`, runs checks, publishes and verifies the archive, then commits the version back to `main`; stable releases use `latest` and prereleases use `next`. Choose minor/major versions explicitly for new features or breaking changes — automatic patching does not replace compatibility judgment.
-
-Publishing runs are serialized: superseded commits are skipped, and version writeback uses a normal fast-forward push that preserves concurrent commits. Bot commits do not recursively trigger workflows, and a release counts as successful only when the registry archive integrity matches the local archive. Retry a failure from the latest `main`; unchanged packages already published successfully are skipped.
-
-npm may scan packages before making them available. CI submits changed packages, then waits up to 20 minutes to verify anonymous archive downloads. A later submission failure still verifies earlier submissions, and each success is retained in the run artifacts. Retry first releases with the same explicit selection; identical accepted versions are not resubmitted.
-
-Use the repository Actions secret `NPM_TOKEN` for first publication. Then configure a [Trusted Publisher](https://docs.npmjs.com/trusted-publishers/) per package: owner `klarkxy`, repository `dsh-plugins`, workflow `npm-publish.yml`, no environment, and direct publishing allowed. The token can then be removed. Version writeback needs the workflow's `contents: write` permission and branch rules that allow the bot to push to `main`.
 
 ## License
 

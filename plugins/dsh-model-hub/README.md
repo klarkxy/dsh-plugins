@@ -1,9 +1,8 @@
 # @klarkxy/dsh-model-hub
 
 <!-- release-state-note -->
-The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
 
-Cross-plugin model settings hub for DeepSeek Harness — **development preview**.
+Cross-plugin model settings hub for DeepSeek Harness.
 Open Plugins → Model Hub to search by plugin, purpose or current model and edit
 models from one compact list. Changes save immediately through the owning plugin.
 Open plugin pages automatically reload saved model changes. Unsaved drafts stay
@@ -62,24 +61,17 @@ field returns to the plugin's inherited/default settings; clearing a direct
 array route preserves the element. Owner fields explain their own default mode.
 
 Both self-test fields remain in the diagnostic report and are hidden from the
-model selection page. Per-day usage metering is not included in this preview.
+model selection page. Per-day usage metering is not included.
 
 ## Install
 
-Requires DSH 0.2.0-rc.2 or later. Install the preview channel, restart the profile, then open Plugins → Model Hub:
+Requires DSH 0.2.0-rc.2 or later. Restart the profile, then open Plugins → Model Hub:
 
 ```sh
-dsh plugin --profile web add @klarkxy/dsh-model-hub@next
+dsh plugin --profile web add @klarkxy/dsh-model-hub
 ```
 
 ## License
 
 SEE LICENSE IN LICENSE
 
-## Verification
-
-`pnpm test:e2e:model-hub` checks the registered settings page in an isolated
-Chromium browser, including keyboard selection, conflict recovery, catalog
-separation and desktop/mobile layout. It uses the repository's UI primitive
-stub and a real Cordis contribution bus; it does not activate an installed
-Desktop profile. Adapter tests use the owning services and native SettingsForms.

@@ -10,3 +10,13 @@ _site/
 
 # Migrated browser test output
 e2e/out/
+
+# Build artifacts in src/
+plugins/*/src/*.js
+plugins/*/src/*.js.map
+plugins/*/src/*.d.ts
+
+# Local caches and logs
+.playwright-cli/
+debug.log
+outreach/

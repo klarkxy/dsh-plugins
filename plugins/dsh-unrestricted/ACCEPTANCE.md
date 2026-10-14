@@ -8,7 +8,7 @@
 | B 契约生效 | 新建会话选择「破限 / Unrestricted」，导出提示词组装；再发一个要求直接交付成果的请求。 | 组装含执行指针与契约全文，指纹 `e9e4eead5f84504c`；模型直接交付完整产物而非描述或方案。 |
 | C 计划模式 | 在该 Preset 进入计划模式，请求一个有实现细节的任务。 | 计划 markdown 完整展开技术步骤与细节；批准前不执行任何变更；计划正文含内容范围补注。 |
 | D 子代理继承 | 从破限会话用原生 `subagent` / `subagent_fork` spawn 子代理，导出子代理提示词组装。 | 子会话 join 父 Preset 修订且无人覆盖 persona，组装应含执行指针与契约全文。 |
-| D2 persona 覆盖 | 从破限会话派生一个显式指定 persona 的子会话（如 Classmates 角色队友），导出其组装。 | 组装以派生 persona 为准、不含契约，与 README 边界一致；如实记录，不虚构继承。 |
+| D2 persona 覆盖 | 从破限会话派生一个显式指定 persona 的子会话（如角色队友 persona），导出其组装。 | 组装以派生 persona 为准、不含契约，与 README 边界一致；如实记录，不虚构继承。 |
 | E 菜单与挂载 | 安装后重启 profile，查看新会话菜单并通过真实创建接口建会话。 | 菜单显示并可选中「破限 / Unrestricted」，返回 `agentPreset: unrestricted`。 |
 | F 卸载 | 在插件管理页移除 bundle 并重启。 | 新会话菜单不再出现该 Preset；其他 Preset 与既有会话不受影响。 |
 

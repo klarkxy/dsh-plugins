@@ -1,7 +1,6 @@
-# @klarkxy/dsh-current-title
+﻿# @klarkxy/dsh-current-title
 
 <!-- release-state-note -->
-The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
 
 Keeps a DSH session title on the task you are working on right now, and leaves a name you set by hand alone.
 
@@ -13,7 +12,7 @@ The bundle insert is enabled after installation. It does not permanently turn of
 
 ## Install
 
-Requires Node.js ≥22 and DSH `0.1.7-rc.2`. The **Auto Title** entry starts enabled and can be disabled in plugin settings. Native title storage and scheduling come from the host `sessionTitle`; generation uses the host `llm` service. Install the published package into the target profile:
+Requires Node.js ≥22 (26 verified) and DSH `0.1.7-rc.2` or later. The **Auto Title** entry starts enabled and can be disabled in plugin settings. Native title storage and scheduling come from the host `sessionTitle`; generation uses the host `llm` service. Install the published package into the target profile:
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-current-title

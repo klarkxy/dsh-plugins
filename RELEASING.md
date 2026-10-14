@@ -55,7 +55,7 @@ The registry uses `schemaVersion: 2`. A Published entry retains one immutable np
 
 Local checks compare the working tree with `HEAD`. Publishing CI sets `RELEASE_STATE_BASE` to the pre-push commit, covering the whole push; manual retries use `HEAD^`. Backwards stages, deleting historical entries (retain `retired: true` when removing source), skipping Testing and rewriting publication history fail. A missing historical registry is initialization; Git baseline errors are not swallowed.
 
-On 2026-10-13, public npm history restored 12 published packages. The unpublished private packages `dsh-chatgpt` and `dsh-unrestricted` remain Testing. Historical acceptance reports are retained; `acceptedContentHash` is no longer a lifecycle gate.
+On 2026-10-13, public npm history restored 12 published packages; `dsh-chatgpt`, `dsh-grok-build`, `dsh-minimax-code` and `dsh-unrestricted` were then first-published the same day. All 14 non-retired workspace packages are now Published. Historical acceptance reports are retained; `acceptedContentHash` is no longer a lifecycle gate.
 
 ## Per-plan content and dependencies
 

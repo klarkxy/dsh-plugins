@@ -1,7 +1,6 @@
 # 破限 / Unrestricted
 
 <!-- release-state-note -->
-The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
 
 [简体中文](README.zh-CN.md)
 
@@ -27,21 +26,16 @@ into a **per-session preset**:
   revision (`composeFrom`), and the native `subagent` / `subagent_fork` tools only read a
   persona from row config — which the standard roster does not set — so delegated threads
   carry the contract too. Only derivations that explicitly give the child a persona (for
-  example Classmates teammates built from role instructions) replace the persona slot, and
+  example role-teammate personas built from role instructions) replace the persona slot, and
   those children do not see the contract.
 
 ## Install and use
 
-Before the npm release, pack this package and add the archive:
-
 ```sh
-cd plugins/dsh-unrestricted
-npm pack --ignore-scripts
-dsh plugin --profile web add "D:/path/to/klarkxy-dsh-unrestricted-0.1.0-rc.1.tgz"
+dsh plugin --profile web add @klarkxy/dsh-unrestricted
 ```
 
-After release: `dsh plugin --profile web add @klarkxy/dsh-unrestricted`. Replace `web`
-with your profile name, restart the profile, and pick **破限 / Unrestricted** in the
+Replace `web` with your profile name, restart the profile, and pick **破限 / Unrestricted** in the
 preset selector of a new session. Sessions that already carry messages cannot switch
 presets.
 

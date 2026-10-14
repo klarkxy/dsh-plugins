@@ -1,13 +1,14 @@
-# @klarkxy/dsh-zhihu
+﻿# @klarkxy/dsh-zhihu
 
 <!-- release-state-note -->
-The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
+
+
 
 Hand Zhihu to the agent as a research source: in-site search, global web search, the hot list, 直答 AI answers and public knowledge bases, plus question discovery, creator statistics and usage tracking. Every call uses your own Zhihu Access Secret, and what comes back is reference material for the agent, not a settled verdict.
 
 [简体中文](docs/README.zh-CN.md)
 
-Requires Node.js ≥22 and DSH `0.1.7-rc.2`. No repository build is needed.
+Requires Node.js ≥22 (26 verified) and DSH `0.1.7-rc.2` or later. No repository build is needed.
 
 ## Install
 
@@ -81,20 +82,10 @@ When this profile provides `ctx.web`, the plugin registers **Zhihu global search
 - The client accepts structural host controls and has native HTML fallbacks. Building or using this package does not require application-private UI packages.
 - Existing agent tools, credentials, RPC contracts and storage identifiers are preserved; the additions above are additive.
 
-## Development
-
-Read [contracts](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/src/contracts.ts), [tools](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/src/tools.ts), and [open-platform client](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/src/open-platform.ts) for the API. The seven additions cover the six question/creator endpoints plus official quota.
-
-```sh
-pnpm --filter @klarkxy/dsh-zhihu typecheck
-pnpm --filter @klarkxy/dsh-zhihu test
-pnpm --filter @klarkxy/dsh-zhihu build
-```
-
-[Publishing](../PUBLISHING.md) · [License](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/LICENSE)
+[License](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/LICENSE)
 
 
-## Call and cost protection (2026-10-13)
+## Call and cost protection
 
 Free protection is the default. Every business request checks fresh official free allowance for its quota group. Missing/invalid allowance, failed checks, insufficient capacity or an unknown mapping block the business request. Quota reads bypass the guard and daily cap without recursive preflight. The old quota input `question_answers` maps to `question_discovery`; business names and paths stay unchanged.
 

@@ -1,7 +1,6 @@
-# @klarkxy/dsh-git-commit
+﻿# @klarkxy/dsh-git-commit
 
 <!-- release-state-note -->
-The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
 
 Commit workspace changes to git without leaving the chat. Every conversation
 thread gets a **Commit** action in its header: click it, check the branch, the
@@ -13,7 +12,7 @@ directory.
 
 ## Install
 
-Requires Node.js ≥22. Install the published package into the target profile
+Requires Node.js ≥22 (26 verified). Install the published package into the target profile
 with the DSH plugin manager; the install also enables the `git-commit` entry:
 
 ```sh
@@ -22,15 +21,6 @@ dsh plugin --profile web add @klarkxy/dsh-git-commit
 
 Replace `web` with your profile name. Installation or removal may require a
 restart when the host asks for one.
-
-To install a source checkout of this repository instead, pack it first and add
-the archive:
-
-```sh
-cd plugins/dsh-git-commit
-npm pack --ignore-scripts
-dsh plugin --profile web add "<absolute path to the .tgz>"
-```
 
 To uninstall:
 

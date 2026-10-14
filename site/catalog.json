@@ -152,6 +152,86 @@
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-dev-index"
+    },
+    {
+      "slug": "safe-auto",
+      "package": "@klarkxy/dsh-safe-auto",
+      "category": "workflow",
+      "kind": "plugin",
+      "title": {
+        "zh": "Safe Auto",
+        "en": "Safe Auto"
+      },
+      "summary": {
+        "zh": "沙箱提权由独立审核模型把关，通过才自动放行。",
+        "en": "An independent reviewer vets each sandbox escalation; only a pass auto-approves."
+      },
+      "readme": {
+        "zh": "README.zh-CN.md",
+        "en": "README.md"
+      },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-safe-auto"
+    },
+    {
+      "slug": "session-manager",
+      "package": "@klarkxy/dsh-session-manager",
+      "category": "sessions",
+      "kind": "plugin",
+      "title": {
+        "zh": "会话管理",
+        "en": "Session Manager"
+      },
+      "summary": {
+        "zh": "跨工作目录查找会话并读取对话；高级线程操作需要附带的宿主补丁。",
+        "en": "Find sessions and read conversations across working directories; advanced thread actions need the supplied host patch."
+      },
+      "readme": {
+        "zh": "README.zh-CN.md",
+        "en": "README.md"
+      },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-session-manager"
+    },
+    {
+      "slug": "plugin-kit",
+      "package": "@klarkxy/dsh-plugin-kit",
+      "category": "dev",
+      "kind": "service",
+      "title": {
+        "zh": "插件共享库",
+        "en": "Plugin Kit"
+      },
+      "summary": {
+        "zh": "共享类型、模型菜单助手与宿主 RPC 注册；不直接调用模型。",
+        "en": "Shared types, model-menu helpers, and host RPC registration; does not call models."
+      },
+      "readme": {
+        "zh": "docs/README.zh-CN.md",
+        "en": "README.md"
+      },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-plugin-kit"
+    },
+    {
+      "slug": "model-route",
+      "package": "@klarkxy/dsh-model-route",
+      "category": "dev",
+      "kind": "service",
+      "title": {
+        "zh": "模型路由字段契约",
+        "en": "Model Route"
+      },
+      "summary": {
+        "zh": "插件间共享的 ModelRoute 值结构、schema 标记与目录助手。",
+        "en": "Shared ModelRoute value shape, schema marker, and catalog helpers for plugins."
+      },
+      "readme": {
+        "zh": "docs/README.zh-CN.md",
+        "en": "README.md"
+      },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-model-route"
     }
   ]
 }

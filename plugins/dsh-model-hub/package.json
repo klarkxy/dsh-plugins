@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-hub",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0",
   "description": "View and edit model fields exposed by DSH plugin settings on one page.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -104,8 +104,5 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
-  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/",
-  "dshRelease": {
-    "contentHash": "d21882a3f434d8cc635f115a9efcbab16065aa284dc2ca2986c6bf2cfd7291e8"
-  }
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/"
 }

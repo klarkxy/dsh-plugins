@@ -1,25 +1,18 @@
 # Grok Build · DSH 插件
 
 <!-- release-state-note -->
-生命周期以[仓库状态清单](../../README.zh-CN.md#插件生命周期)为准：草稿 → 测试中 → 已发布。详见[发布规则](../../RELEASING.zh-CN.md)。
 
 通过本机官方 Grok Build CLI 搜索网页、抓取页面、生成及编辑图片、制作参考图视频。插件复用现有登录，不读取或复制登录令牌。
 
-当前为私有待测试包，尚未发布 npm。
-
 当前适配器仅接受已验证的 Grok Build 1.0.50；更新 CLI 后须先验证原生协议。
 
-## 配置
+## 安装
 
-本地开发可在仓库根目录运行以下命令，按需把 `web` 改为目标 DSH profile，随后重启该 profile。这是本地链接安装，须保留本仓库及其工作区依赖。
-
-```powershell
-pnpm --filter @klarkxy/dsh-plugin-kit build
-pnpm --filter @klarkxy/dsh-grok-build build
-dsh plugin --profile web add "link:$(Resolve-Path plugins/dsh-grok-build)"
+```sh
+dsh plugin --profile web add @klarkxy/dsh-grok-build
 ```
 
-安装并登录官方 Grok Build CLI，在 DSH 启用插件，进入「插件 → Grok Build」。若 CLI 不在 PATH 中，可填写可执行文件路径。状态检查只确认 CLI 与能力兼容，不证明模型调用已经登录成功；登录失败时请在 Grok 本身完成登录。
+同时安装并登录官方 Grok Build CLI。进入「插件 → Grok Build」，若 CLI 不在 PATH 中，可填写可执行文件路径。状态检查只确认 CLI 与能力兼容，不证明模型调用已经登录成功；登录失败时请在 Grok 本身完成登录。
 
 每次调用使用新的进程和临时配置，只把现有认证文件路径交给 Grok 自己读取。本次调用排除用户模型覆盖、项目说明、外部技能、插件及 MCP 工具，使用 CLI 内置默认模型。
 

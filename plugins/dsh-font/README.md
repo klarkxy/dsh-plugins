@@ -1,7 +1,6 @@
 # @klarkxy/dsh-font
 
 <!-- release-state-note -->
-The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
 
 Font: customize the **interface font**, **code font**, and **conversation font size** of the DeepSeek Harness Web GUI from one settings panel.
 
@@ -27,20 +26,14 @@ The host half is intentionally empty: no Host service, no RPC, no model calls.
 
 ## Install
 
-Install the preview channel (DSH 0.2.0-rc.2 or later):
+Requires DSH 0.2.0-rc.2 or later:
 
 ```bash
-dsh plugin --profile web add @klarkxy/dsh-font@next
+dsh plugin --profile web add @klarkxy/dsh-font
 ```
 
 Replace `web` with your profile name and restart the profile (or reload the page) after installing. Open **Plugins → Font** to change fonts.
 
-## Development
+## License
 
-```bash
-pnpm --filter @klarkxy/dsh-font build       # tsdown + client wrapper
-pnpm --filter @klarkxy/dsh-font typecheck
-pnpm --filter @klarkxy/dsh-font test
-```
-
-Preview releases use the npm `next` tag. The stable plugin-site catalog requires a `latest` release.
+[SATA License 2.1](LICENSE)

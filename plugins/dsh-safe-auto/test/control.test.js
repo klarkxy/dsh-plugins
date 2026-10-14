@@ -405,7 +405,7 @@ test('foreign native asks pass through only without an owned execution context',
   await f.select('safe-auto');
   let downstream = 0;
   const answer = async () => { downstream++; return 'allowed-once'; };
-  for (const toolName of ['blueprint_apply_order', 'classmates_spawn']) {
+  for (const toolName of ['blueprint_apply_order', 'external_model_approval']) {
     const foreign = { ...f.req(), toolName };
     assert.equal(await f.handlers['approval/request'](foreign, answer), 'allowed-once');
     await f.handlers['tools/execute'](f.exec, async () => {

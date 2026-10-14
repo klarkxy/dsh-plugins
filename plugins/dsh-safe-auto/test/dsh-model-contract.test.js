@@ -168,7 +168,7 @@ test('real Cordis, ToolRuntime, ApprovalService and LlmRuntime: conversation-fol
   });
 
 
-test('pinned native ApprovalService preserves foreign Blueprint and Classmates approvals, not owned impersonation',
+test('pinned native ApprovalService preserves foreign approvals, not owned impersonation',
   { skip: !host && 'DSH dependencies unavailable locally; mandatory in CI' }, async t => {
     const { Context, Service } = host.cordis;
     const ctx = new Context(), mounted = [], events = [], downstream = [];
@@ -199,8 +199,8 @@ test('pinned native ApprovalService preserves foreign Blueprint and Classmates a
     const agent = { id: 'foreign-agent', session };
     ctx.on('approval/request', async req => { downstream.push(req.toolName); return 'allowed-once'; });
     const request = toolName => ({ agent, toolName, callId: 'foreign-ask', signal: new AbortController().signal,
-      reason: toolName === 'classmates_spawn'
-        ? 'classmates:model-approval:' + JSON.stringify({ action: 'create', model: { provider: 'p', id: 'm' }, template: 'reader', task: 'inspect' })
+      reason: toolName === 'external_model_approval'
+        ? 'external:model-approval:' + JSON.stringify({ action: 'create', model: { provider: 'p', id: 'm' }, template: 'reader', task: 'inspect' })
         : 'escalate sandbox to danger-full-access: Blueprint order fixture' });
 
     // Blueprint consumes the real native approveEscalation helper. It only
@@ -218,21 +218,21 @@ test('pinned native ApprovalService preserves foreign Blueprint and Classmates a
       agent, signal: new AbortController().signal, arguments: {} });
     assert.equal(result.isError, false, JSON.stringify(result));
     assert.match(JSON.stringify(result.content), /danger-full-access/);
-    assert.equal(await ctx.approval.request(request('classmates_spawn')), 'allowed-once');
+    assert.equal(await ctx.approval.request(request('external_model_approval')), 'allowed-once');
 
     // Even a downstream automatic grant cannot authorize an unbound identity
     // in Safe Auto's owned bash/pwsh/write/edit envelope.
     for (const toolName of ['bash', 'pwsh', 'write', 'edit']) {
       assert.equal(await ctx.approval.request(request(toolName)), 'rejected');
     }
-    assert.deepEqual(downstream, ['blueprint_apply_order', 'classmates_spawn']);
+    assert.deepEqual(downstream, ['blueprint_apply_order', 'external_model_approval']);
     const asks = events.filter(event => event.type === 'approval/asked');
     const answers = events.filter(event => event.type === 'approval/decided');
     assert.equal(asks.length, 6); assert.equal(answers.length, 6);
     for (let index = 0; index < asks.length; index++) assert.equal(asks[index].data.id, answers[index].data.id);
     assert.deepEqual(answers.map(event => event.data.outcome), ['allowed-once', 'allowed-once', 'rejected', 'rejected', 'rejected', 'rejected']);
     host.approval.setApprovalPolicy(session, 'never');
-    assert.equal(await ctx.approval.request(request('classmates_spawn')), 'rejected', 'native never policy remains authoritative');
+    assert.equal(await ctx.approval.request(request('external_model_approval')), 'rejected', 'native never policy remains authoritative');
     assert.equal(downstream.length, 2);
     assert.equal(ctx.sandboxPolicy.resolve().mode, 'workspace-write');
   });

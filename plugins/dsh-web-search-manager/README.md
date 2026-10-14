@@ -1,13 +1,12 @@
-# @klarkxy/dsh-web-search-manager
+﻿# @klarkxy/dsh-web-search-manager
 
 <!-- release-state-note -->
-The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
 
 Choose which service answers the agent's web searches, set the limits every request runs under, and let the agent read public pages — all from one settings page.
 
 [简体中文](docs/README.zh-CN.md)
 
-Requires Node.js ≥22 and DSH `0.2.0-rc.2`. No repository build is needed.
+Requires Node.js ≥22 (26 verified) and DSH `0.2.0-rc.2` or later. No repository build is needed.
 
 ## Install
 
@@ -38,7 +37,7 @@ Built-in search backends:
 - **博查**: a Chinese web search API; requires `DSH_EDITOR_WEB_BOCHA_API_KEY`.
 - **Serper**: a Google results API; requires `DSH_EDITOR_WEB_SERPER_API_KEY`.
 - **Firecrawl**: a web search and extraction API; requires `DSH_EDITOR_WEB_FIRECRAWL_API_KEY`.
-- **Tavily**: a Search API fixed to basic search depth, never auto-upgraded; requires `DSH_EDITOR_WEB_TAVILY_API_KEY`. The adapter is built into this plugin; the former standalone `dsh-web-search-tavily` package is retired.
+- **Tavily**: a Search API fixed to basic search depth, never auto-upgraded; requires `DSH_EDITOR_WEB_TAVILY_API_KEY`. The adapter is built into this plugin.
 
 ## Read public pages
 
@@ -60,35 +59,11 @@ For agent access, add this entry to the plugin list in the `agent.cordis.yml` yo
 
 Once that entry is enabled, the agent receives the official `web_search` and `web_fetch` tools from `@deepseek-ai/dsh-tool-web`, mounted only while search and fetching are enabled.
 
-## Extend or develop
+## Provider integration
 
 Provider plugins call `ctx.web.registerSearchProvider(provider)` or `ctx.web.registerFetchProvider(provider)` directly, with no dependency on `webSearchManager`. Keep `available()` local, forward cancellation signals, and resolve configuration and credentials in the provider. Optional `dshWebManagement` display metadata on the provider can include `label`, `description`, `billing`, `configurationOwner`, `credentialHint`, `pricing`, an HTTPS `pricingUrl`, and an explicit `configurationUrl`. `configurationUrl` is the only settings link: HTTPS, a same-host `/…` path, or a `#…` hash. Do not expect this page to invent a route from `id` or `configurationOwner`. `credentialHint` is display text only. Providers without metadata are discovered under their id. Description and pricing from the provider win over any bundled notes with the same id; bundled adapters may still fall back to their known price list. Native services without pricing metadata show that none was provided. Metadata never contains credential values. The old manager factory methods remain as deprecated compatibility adapters; new plugins use native registration.
 
-```ts
-const provider = {
-  id: 'my-search',
-  dshWebManagement: {
-    id: 'my-search', label: 'My search', description: 'Custom search service',
-    billing: 'request', configurationOwner: '@example/my-plugin',
-    configurationUrl: '/plugins/my-plugin',
-  },
-  available: () => locallyConfigured(),
-  search: (request, signal) => searchWithOwnConfiguration(request, signal),
-}
-ctx.web.registerSearchProvider(provider)
-```
-
-DSH 0.2.0-rc.2 has no public registry enumeration or dynamic selection API. This package isolates a compatibility bridge in `web-registry.ts`: it observes the actual host Maps, manages availability and temporarily takes over selection, then restores provider instances and prior config/environment selection on unload. Unsupported host structures fail explicitly instead of omitting providers. Providers can announce local availability changes through the repository extension event `web/provider-availability-updated` (arguments: `search`/`fetch`, id); this is not an official DSH event. Status refreshes and execution also recheck `available()`. After saving migrated adapter ids, downgrading the manager requires reselecting the old routes; credential references and legacy endpoint keys remain stored.
-
-From the repository root:
-
-```sh
-pnpm --filter @klarkxy/dsh-web-search-manager typecheck
-pnpm --filter @klarkxy/dsh-web-search-manager test
-pnpm --filter @klarkxy/dsh-web-search-manager build
-```
-
-Tests use mock credentials and responses and incur no search charges.
+DSH has no public registry enumeration or dynamic selection API. This package isolates a compatibility bridge: it observes the actual host Maps, manages availability and temporarily takes over selection, then restores provider instances and prior config/environment selection on unload. Unsupported host structures fail explicitly instead of omitting providers. Providers can announce local availability changes through the extension event `web/provider-availability-updated` (arguments: `search`/`fetch`, id); this is not an official DSH event. Status refreshes and execution also recheck `available()`. After saving migrated adapter ids, downgrading the manager requires reselecting the old routes; credential references and legacy endpoint keys remain stored.
 
 ## Boundaries and limits
 
@@ -101,4 +76,4 @@ Tests use mock credentials and responses and incur no search charges.
 - While the manager is attached, saved manager selection applies; unloading restores the host’s original config/environment selection.
 - If saving the configuration fails, managed network access pauses until the settings are saved successfully.
 
-[Publishing](../PUBLISHING.md) · [License](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/LICENSE)
+[License](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-web-search-manager/LICENSE)

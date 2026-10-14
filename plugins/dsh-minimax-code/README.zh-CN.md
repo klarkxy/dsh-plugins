@@ -1,20 +1,13 @@
 # MiniMax Code · DSH 插件
 
 <!-- release-state-note -->
-生命周期以[仓库状态清单](../../README.zh-CN.md#插件生命周期)为准：草稿 → 测试中 → 已发布。详见[发布规则](../../RELEASING.zh-CN.md)。
 
 复用官方 MiniMax Code 登录，提供图片、视频和语音生成、图片搜索、音频转写及音视频理解。插件不要求填写 API Key。
 
-当前为私有待测试包，尚未发布 npm。
+## 安装
 
-## 配置
-
-本地开发可在仓库根目录运行以下命令，按需把 `web` 改为目标 DSH profile，随后重启该 profile。这是本地链接安装，须保留本仓库及其工作区依赖。
-
-```powershell
-pnpm --filter @klarkxy/dsh-plugin-kit build
-pnpm --filter @klarkxy/dsh-minimax-code build
-dsh plugin --profile web add "link:$(Resolve-Path plugins/dsh-minimax-code)"
+```sh
+dsh plugin --profile web add @klarkxy/dsh-minimax-code
 ```
 
 启动并登录官方 MiniMax Code 桌面端，在 DSH 启用插件，进入「插件 → MiniMax Code」。媒体调用使用官方生成的区域版 `mcode-tools` 启动器，使用时保持 MiniMax Code 运行。媒体路径留空可自动查找，也可选择官方启动器或 JavaScript 入口；同时安装中国和全球启动器时须明确选择区域。

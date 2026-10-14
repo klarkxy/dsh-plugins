@@ -1,20 +1,13 @@
 # MiniMax Code for DSH
 
 <!-- release-state-note -->
-Lifecycle is tracked in the [repository registry](../../README.md#plugin-lifecycle): Draft → Testing → Published. See the [release guide](../../RELEASING.md).
 
 Use the official MiniMax Code login for image, video and speech generation, image search, transcription and audio/video understanding. No API key is entered in this plugin.
 
-This package is private and under testing. It is not an npm release.
+## Install
 
-## Setup
-
-For local development, run these commands from the monorepo root. Choose the DSH profile you intend to change; restart that profile afterward. Keep the checkout and its workspace dependencies available because this installs a local link.
-
-```powershell
-pnpm --filter @klarkxy/dsh-plugin-kit build
-pnpm --filter @klarkxy/dsh-minimax-code build
-dsh plugin --profile web add "link:$(Resolve-Path plugins/dsh-minimax-code)"
+```sh
+dsh plugin --profile web add @klarkxy/dsh-minimax-code
 ```
 
 Open and sign in to the official MiniMax Code desktop app. Enable this plugin in DSH, then open **Plugins → MiniMax Code**. Media calls use the app's official regional `mcode-tools` launcher; keep the app running. Leave the media path empty for discovery, or select the official launcher or JavaScript entry. Choose China or Global if both regional launchers exist.

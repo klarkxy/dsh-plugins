@@ -1,7 +1,6 @@
 # @klarkxy/dsh-plugin-kit
 
 <!-- release-state-note -->
-插件生命周期见[仓库状态清单](../../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../../RELEASING.zh-CN.md)。
 
 本仓库功能插件共用的支撑包：共享记录类型、插件页模型菜单、宿主 RPC 注册、官方 UI 样式契约，以及一次原生 `llm` 文本调用。它是一个库，不是 DSH bundle——把它作为依赖装上，得到的是功能插件需要的零件，而不是一个新的用户可见功能。
 
@@ -54,9 +53,3 @@
 ## 开发
 
 模型设置贡献的提供方标题、字段名称与说明、跟随模式名称及目录错误支持 `ModelSettingsText`（`string | { zh: string; en: string }`）。内置展示文案提供中英文，用户数据和第三方字符串保留原文；模型设置页在渲染时跟随宿主语言解析。
-
-```sh
-pnpm --filter @klarkxy/dsh-plugin-kit typecheck
-pnpm --filter @klarkxy/dsh-plugin-kit test
-pnpm --filter @klarkxy/dsh-plugin-kit build
-```

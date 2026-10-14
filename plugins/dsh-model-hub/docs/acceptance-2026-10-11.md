@@ -1,8 +1,8 @@
-# 模型集中选择修复验收（2026-10-11）
+﻿# 模型集中选择修复验收（2026-10-11）
 
-> 历史验收记录：文中队友角色插件已于后续清理中移除；以下保留当时的测试事实，不代表当前工作区仍包含该插件。
+> 历史验收记录。
 
-本次修复补齐会话标题、Git 提交、安全审核、队友角色及模型用途预设、ChatGPT 的
+本次修复补齐会话标题、Git 提交、安全审核、模型用途预设、ChatGPT 的
 模型设置来源。各插件主动提供模型字段并复用自己的保存接口，不读取其他插件私有存储。
 第三方 volatile 模型字段继续使用原生设置投影发现。
 
@@ -63,9 +63,9 @@ ChatGPT 使用独立 Codex 目录；队友预设引用保留，在预设行修�
   Git symlink 权限测试仍跳过 1 项。日志：`.scratch/model-hub-sync-check.log`。
 - 真实 Cordis 和原生 Gateway 的共享订阅测试 7/7 通过，覆盖消费者未自行注入
   remote、服务挂载、卸载、重挂载、取消，以及通知监听器失败不影响已提交保存。
-- 已打包的八个本地包在隔离 DSH `0.2.0-rc.2` 中加载，使用宿主原生页面和官方组件，
+- 已打包的各本地包在隔离 DSH `0.2.0-rc.2` 中加载，使用宿主原生页面和官方组件，
   无组件替身。真实浏览器交互从枢纽恢复默认再修改，已打开的 Current Title、Git
-  Commit、Safe Auto、Classmates Researcher 页面均自动显示 `ocg / mimo-v2.6-flash`；
+  Commit、Safe Auto 页面均自动显示 `ocg / mimo-v2.6-flash`；
   ChatGPT 页面自动显示其独立 Codex 目录的 `gpt-6.1-sol`。
 - 同一真实交互验证标题未保存草稿保留、外部变更提示、明确丢弃后采用最新设置，
   以及 Git Commit 原插件页保存后已打开枢纽反向更新；页面错误为 0。
@@ -89,21 +89,15 @@ ChatGPT 使用独立 Codex 目录；队友预设引用保留，在预设行修�
 | Current Title | 从枢纽保存固定 MiMo 后，`currentTitle.regenerate` 完成原生标题刷新，结果 source 为 `@klarkxy/dsh-current-title`；对应 `session-title` 请求为 `ocg / mimo-v2.6-flash`，终态 `stop`。 |
 | Git Commit | `gitCommit.commit` 在独立测试仓库生成并提交 `c59777a`；返回 `fallback:false`，模型为 `ocg / mimo-v2.6-flash`，source 为 `page`，实际仓库干净。 |
 | Safe Auto | 通过正常认证的原生控制入口为顶层测试会话启用 Safe Auto；原生 `pwsh` 单次审批触发 MiMo 审核请求，终态 `stop`，随后审批决定与工具结果出现，无害命令返回 `DSH-SAFE-AUTO-OK`。没有直接调用 reviewer 函数代替审批链。 |
-| Classmates | 从枢纽重新保存 Researcher 固定 MiMo，再从所属页面启用角色；原生运行时确认 `subagent_researcher` 已挂载，通过该真实专属工具执行管线派发（不传 `model_profile`），子线程 `44c63be7-3ca2-4e96-851b-a30b6b852d74` 的实际 MiMo 请求终态 `stop`，专属工具结果 `isError:false` 并返回 `DSH-CLASSMATES-MIMO-OK 15`。 |
-
-队友角色默认停用；枢纽修改模型保留开关，不应自动启用。验收最初漏了这个准备
-步骤，后经原页面启用确认专属工具出现。主模型自行选择通用 subagent 或复述之前
-标记的轮次不计入专属角色验收；最终证据来自实际 DSH 原生工具执行管线和子线程请求。
 
 Safe Auto 初次测试使用斜杠形式的 Windows 路径，触发 `LOCAL_EXECUTION_UNVERIFIED`；
 按宿主 `fs-local.processPathFromHostPath` 的原生路径表示重建会话后通过，没有放宽
 插件身份校验。过程中 OCG 进程与监听端口发生变化，传输失败轮次不计作成功；
 隔离供应商地址按实际监听恢复，最终 OCG 日志也记录了 MiMo HTTP 200 / success。
 
-上述真实调用与此前真实页面验收的八个包内容哈希逐一一致。调用证据位于
+上述真实调用与此前真实页面验收的各包内容哈希逐一一致。调用证据位于
 `.scratch/model-hub-sync-20261011/`：`call-traces-first.json`、
-`safe-call-result.json`、`call-traces-safe-and-generic.json`、
-`classmates-native-call.json`、`classmates-call-traces.json`、`gateway-result.json`。
+`safe-call-result.json`、`call-traces-safe-and-generic.json`、`gateway-result.json`。
 其中 Gateway 证据仅保留模型、时间、状态及尝试次数，未保留账号、请求正文或请求头。
 
 ChatGPT 使用独立 Codex 调用域，本轮只验证其页面自动采用 Codex 设置；OCG MiMo

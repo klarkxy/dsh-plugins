@@ -1,7 +1,6 @@
 # @klarkxy/dsh-font
 
 <!-- release-state-note -->
-插件生命周期见[仓库状态清单](../../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../../RELEASING.zh-CN.md)。
 
 字体：在一个设置面板里自定义 DeepSeek Harness Web GUI 的**界面字体**、**代码字体**和**会话字号**。
 
@@ -27,20 +26,14 @@
 
 ## 安装
 
-安装预发布通道（需要 DSH 0.2.0-rc.2 或更高版本）：
+需要 DSH 0.2.0-rc.2 或更高版本：
 
 ```bash
-dsh plugin --profile web add @klarkxy/dsh-font@next
+dsh plugin --profile web add @klarkxy/dsh-font
 ```
 
 把 `web` 换成你的 profile 名，安装后重启 profile（或刷新页面），然后打开「插件 → 字体」调整。
 
-## 开发
+## 许可证
 
-```bash
-pnpm --filter @klarkxy/dsh-font build       # tsdown + client wrapper
-pnpm --filter @klarkxy/dsh-font typecheck
-pnpm --filter @klarkxy/dsh-font test
-```
-
-预发布使用 npm `next` 标签；有 `latest` 版本后再收录到稳定插件目录。
+[SATA License 2.1](../LICENSE)

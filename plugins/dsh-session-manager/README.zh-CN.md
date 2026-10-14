@@ -1,16 +1,13 @@
 # 会话管理
 
 <!-- release-state-note -->
-插件生命周期见[仓库状态清单](../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../RELEASING.zh-CN.md)。
 
 ## 安装
 
-需要 Node 24+、DSH 0.2.0-rc.2 或更高版本：
-
-0.1.0 发布到 npm 后：
+需要 Node 24+（已验证 26）、DSH 0.2.0-rc.2 或更高版本：
 
 ```sh
-dsh plugin --profile web add @klarkxy/dsh-session-manager@0.1.0
+dsh plugin --profile web add @klarkxy/dsh-session-manager
 ```
 
 安装后重启目标 profile。临时工作区创建、跨会话读取和复制线程 ID 可在标准宿主使用。真正删除及同会话重试需要附带的[线程管理宿主补丁](../../host-patches/thread-management/README.md)；只安装 npm 插件不会增加这些宿主能力。补丁宿主是独立构建的本地候选版，验收使用隔离配置和假模型。回退到 V4 宿主前需保留 V5 会话数据。

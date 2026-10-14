@@ -14,7 +14,7 @@
 `@klarkxy/dsh-model-route`（0.2.0，归档 23 个文件不变）：
 - 仅 devDependencies 钉版（react/react-dom 18.3.1），运行时代码与公共入口零变更。
 
-消费方同步（不改变库语义，作为使用方回归的一部分验证）：git-commit、current-title 删除私有归一化副本改用库函数；chatgpt 依赖挪正；model-hub、zhihu、web-search-manager、classmates、dev-index 改用共享常量。
+消费方同步（不改变库语义，作为使用方回归的一部分验证）：git-commit、current-title 删除私有归一化副本改用库函数；chatgpt 依赖挪正；model-hub、zhihu、web-search-manager、dev-index 改用共享常量。
 
 ## 最终包与指纹
 
@@ -29,7 +29,7 @@
 
 - 2026-10-12 整改后 `pnpm check` 退出码 0：两库及全部 12 个功能包的构建、类型检查、vitest 套件（含 model-settings 订阅、official-ui token 守卫、current-title/git-commit 归一化行为测试）与打包检查全部通过。
 - 库的宿主行为证据沿用 shared-libraries-2026-10-12.md：model-hub 的隔离宿主验收（acceptance-2026-10-11）与浏览器回归（test:e2e:model-hub）、session-manager 归档验收覆盖的打包 kit 代码路径。本次库侧运行时变更仅为官方 token 回落清理与纯新增导出，订阅/通知/调用链路代码未变；消费方全部重构建并重测通过即为使用方差异回归。
-- model-hub 与 classmates 的构建链（esbuild 装饰器降级）已在整改后重新构建成功，产物完整。
+- model-hub 的构建链（esbuild 装饰器降级）已在整改后重新构建成功，产物完整。
 
 ## 限制
 

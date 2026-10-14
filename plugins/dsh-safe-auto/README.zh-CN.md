@@ -1,7 +1,6 @@
-# 安全自动
+﻿# 安全自动
 
 <!-- release-state-note -->
-插件生命周期见[仓库状态清单](../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../RELEASING.zh-CN.md)。
 
 自动审核原生沙箱提权请求。当真实的 `write`/`edit`/`bash`/`pwsh` 调用要求把沙箱放宽到 Workspace Write 之外时，由独立审核模型把关这一次调用。少量只列元数据或输出字面量的 `bash` 命令，可通过静态检查而不调模型。通过就自动继续；其他审核结果会在当前会话显示完整操作，给你 60 秒选择“仅批准这一次”或拒绝。无人响应则到期拒绝。插件不会把整个会话切成 Full Access。
 
@@ -11,18 +10,8 @@
 
 ## 安装与启用
 
-0.2.0 发布到 npm 后：
-
 ```sh
-dsh plugin --profile <profile> add @klarkxy/dsh-safe-auto@0.2.0
-```
-
-使用源码检出安装：
-
-```sh
-pnpm install --frozen-lockfile
-pnpm --filter @klarkxy/dsh-safe-auto test
-dsh plugin --profile <profile> add ./plugins/dsh-safe-auto
+dsh plugin --profile <profile> add @klarkxy/dsh-safe-auto
 ```
 
 bundle 会插入 `dsh-safe-auto` 与 `dsh-safe-auto-ui` 两个 profile 条目。之后输入框的权限菜单里会在原生档位旁出现第四个选项——选择 **安全自动** 即为本会话启用，选回任意原生档位即停用。在此之前没有任何自动行为：会话不继承启用状态，重启、切换权限或卸载都会撤销它。插件页只保留审核配置、安全说明和只读的预算边界，按页签分区。
@@ -109,16 +98,10 @@ bundle 会插入 `dsh-safe-auto` 与 `dsh-safe-auto-ui` 两个 profile 条目。
 - **Git 的子命令名不能证明安全。** 内容、历史、远程 URL 和配置枚举即使带有防修改参数，也要经过审核。元数据命令仍须满足“不修改”语法要求的原始控制参数。精确的 `git version`、`git --no-pager config --get user.name`／`user.email` 可走窄范围静态通道。插件不会补参数或重写命令。
 - **独立确认通道。** 当前 DSH 0.2.0-rc.2 的审批和问答链允许自动应答器。人工确认改用插件已认证的浏览器 HTTP 入口和不可预测、单次使用的请求 ID。Fetch Metadata 与宿主的来源、认证检查用于防跨站请求，并不证明物理真人点击；已认证客户端、其传输层和同进程插件仍然可信。不向模型注册审批工具。
 - **服务端掌握时限。** 请求发布后开始计时，用单调时钟判定到期，只接受第一个有效答案。重复、迟到和跨会话回答均失败。停用、修改设置、卸载或取消会使待审批失效；请求仅存内存，重启不会恢复。兼容直接浏览器请求与已认证的 DSH 桌面传输；不符合要求的请求类型仍会被拒绝。
-- **其他插件的原生审批保持原生流程。** 没有 Safe Auto 自有执行上下文时，Blueprint 顺序审批、Classmates 模型审批会继续交给后续处理器。已有自有上下文中的不匹配、过期、已领取请求，以及无上下文却冒用 `bash`／`pwsh`／`write`／`edit` 的请求仍然关闭放行。
+- **其他插件的原生审批保持原生流程。** 没有 Safe Auto 自有执行上下文时，Blueprint 顺序审批、其他插件的模型审批会继续交给后续处理器。已有自有上下文中的不匹配、过期、已领取请求，以及无上下文却冒用 `bash`／`pwsh`／`write`／`edit` 的请求仍然关闭放行。
 - **覆盖范围止于原生单次提权。** 只审核从 `workspace-write` 放宽的 `write`/`edit`/`bash`/`pwsh`。其他工具、MCP、远程执行、子代理调用和常驻权限变更都在自动范围之外。
 - **证据会复核，执行并非原子操作。** 放行前复核证据路径、版本和 SHA-256 摘要，但审批与执行之间仍可能发生文件变化。同进程插件仍然可信，卸载会移除守卫；实际隔离仍依赖外部手段及受限的凭据与出站。
 - **不作任何保证。** 没有 fail-open 选项，没有持久审计数据库，也不承诺绝对安全或节省比例。
-
-## 验证
-
-在本包运行 `npm test`、`npm run build` 和 `npm pack --dry-run`，以及仓库级 `pnpm check`。测试覆盖路由、并发会话、原生流、上限、过期决定、模型服务移除、执行绑定，以及真实 Cordis/ToolRuntime/ApprovalService/LlmRuntime 契约。CI 要求安装 DSH 依赖；离线纯源码运行可跳过原生契约。如果 Windows 沙箱拦截测试运行器的子进程管道，用 `node --test --test-isolation=none test/<file>.test.js` 逐文件运行。
-
-原生契约测试使用受控适配器和夹具会话/工具，证明的是运行时集成，不是真实模型准确率、OS 隔离或已认证的 Web/Headless 验收；这些仍在 [ADR-0002 的清单](docs/ADR-0002.md)中。日志分离评估、结果和最终状态，不含原始命令、提示词或密钥；宿主留存由运维管理。
 
 ## 许可证
 

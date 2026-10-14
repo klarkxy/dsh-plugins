@@ -1,7 +1,6 @@
-# @klarkxy/dsh-current-title
+﻿# @klarkxy/dsh-current-title
 
 <!-- release-state-note -->
-插件生命周期见[仓库状态清单](../../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../../RELEASING.zh-CN.md)。
 
 让会话标题跟着你手头的任务走；你手动改过的名字不会被覆盖。
 
@@ -13,7 +12,7 @@
 
 ## 安装
 
-需要 Node.js ≥22 与 DSH `0.1.7-rc.2`。「自动标题」默认启用，可在插件设置中关闭。标题写入宿主 `sessionTitle`，由宿主调度；生成使用宿主 `llm` 服务。把已发布包装进目标 profile：
+需要 Node.js ≥22（已验证 26）与 DSH `0.1.7-rc.2` 或更高版本。「自动标题」默认启用，可在插件设置中关闭。标题写入宿主 `sessionTitle`，由宿主调度；生成使用宿主 `llm` 服务。把已发布包装进目标 profile：
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-current-title

@@ -1,6 +1,6 @@
 # Local acceptance — 2026-10-10
 
-Candidate: private `@klarkxy/dsh-chatgpt@0.1.0-alpha.1`. No npm publication, repository commit, or modification of the user's normal DSH profile was performed.
+Candidate: `@klarkxy/dsh-chatgpt@0.1.0`. Published to npm on 2026-10-13 on `latest`. No repository commit or modification of the user's normal DSH profile was performed during acceptance.
 
 ## Observed environment
 
@@ -37,4 +37,4 @@ The tools' native evidence requirements also correctly rejected the earlier conf
 
 Fresh browser/device sign-in completion was not exercised because an existing sign-in was available. Its protocol and cancellation paths have mocked tests. The isolated host had no DSH main-model credentials, so natural-language autonomous tool selection by a DSH main agent was not measured; direct schema visibility and real host dispatch were measured. Current-session attachment authorization is covered by event-shape and ownership regressions; the live vision check used a workspace file. The user's installed Desktop profile, other operating systems, older Codex versions and sustained multi-day operation were not tested.
 
-The declared target is DSH >=0.2.0-rc.2; the historical Web acceptance above used 0.2.1-alpha.2 and does not establish Desktop activation. This alpha requires experimental Codex isolation fields and reports incompatible runtimes explicitly. The plugin remains private and is delivered as a local installable package.
+The declared target is DSH >=0.2.0-rc.2; the historical Web acceptance above used 0.2.1-alpha.2 and does not establish Desktop activation. The plugin requires experimental Codex isolation fields and reports incompatible runtimes explicitly. It was delivered first as a local installable package, then published to npm as `0.1.0` on 2026-10-13.

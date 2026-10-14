@@ -55,7 +55,7 @@ pnpm release:fingerprint @klarkxy/dsh-example  # 诊断当前归档内容，不�
 
 本地检查比较工作区与 `HEAD`；发布 CI 的 `RELEASE_STATE_BASE` 使用本次推送前提交，覆盖整次推送，手动重跑使用 `HEAD^`。阶段倒退、删除历史条目（移除源码应保留 `retired: true` 条目）、跳过测试阶段或改写历史凭据都会失败。没有旧清单属于首次初始化；Git 基准读取错误不会被当成初始化吞掉。
 
-2026-10-13 已依据公开 npm 历史更正 12 个已发布包；`dsh-chatgpt` 和 `dsh-unrestricted` 尚未发布且仍为私有，保持测试中。历史验收文档保留，原有 `acceptedContentHash` 不再充当生命周期门禁。
+2026-10-13 已依据公开 npm 历史更正 12 个已发布包；同日 `dsh-chatgpt`、`dsh-grok-build`、`dsh-minimax-code` 和 `dsh-unrestricted` 完成首次发布。目前 14 个非退役工作区包全部为已发布。历史验收文档保留，原有 `acceptedContentHash` 不再充当生命周期门禁。
 
 ## 每次计划的内容与依赖检查
 

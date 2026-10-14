@@ -1,7 +1,6 @@
 # @klarkxy/dsh-plugin-kit
 
 <!-- release-state-note -->
-The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
 
 The shared support package for the feature plugins in this repository: shared record types, the plugin-page model menu, host RPC registration, the official-UI style contract, and one native `llm` text call. It is a library, not a DSH bundle — adding it as a dependency gives a feature plugin the pieces it needs, not a new user-visible feature of its own.
 
@@ -73,9 +72,3 @@ lineage; incomplete legacy parent metadata still identifies a child session.
 ## Development
 
 Model settings contributions accept `ModelSettingsText` (`string | { zh: string; en: string }`) for provider titles, field labels/descriptions, follow labels and catalog errors. Built-in display copy should include both languages; user data and third-party literal strings stay unchanged. Model Hub resolves the text at render time when the host locale changes.
-
-```sh
-pnpm --filter @klarkxy/dsh-plugin-kit typecheck
-pnpm --filter @klarkxy/dsh-plugin-kit test
-pnpm --filter @klarkxy/dsh-plugin-kit build
-```

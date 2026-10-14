@@ -1,25 +1,18 @@
 # Grok Build for DSH
 
 <!-- release-state-note -->
-Lifecycle is tracked in the [repository registry](../../README.md#plugin-lifecycle): Draft → Testing → Published. See the [release guide](../../RELEASING.md).
 
 Search the web, fetch pages, generate/edit images and create reference-based videos through the official local Grok Build CLI. The plugin reuses its existing login without reading or copying login tokens.
 
-This package is private and under testing. It is not an npm release.
-
 This adapter currently accepts the verified Grok Build 1.0.50 protocol only. New CLI versions require compatibility verification.
 
-## Setup
+## Install
 
-For local development, run these commands from the monorepo root. Choose the DSH profile you intend to change; restart that profile afterward. Keep the checkout and its workspace dependencies available because this installs a local link.
-
-```powershell
-pnpm --filter @klarkxy/dsh-plugin-kit build
-pnpm --filter @klarkxy/dsh-grok-build build
-dsh plugin --profile web add "link:$(Resolve-Path plugins/dsh-grok-build)"
+```sh
+dsh plugin --profile web add @klarkxy/dsh-grok-build
 ```
 
-Install and sign in to the official Grok Build CLI, then enable this plugin in DSH. Open **Plugins → Grok Build** to check the connection and set an executable path if it is not on PATH. A connection check verifies the CLI and supported capabilities; it does not prove an authenticated model call. Sign in through Grok itself if a request reports a login failure.
+Also install and sign in to the official Grok Build CLI. Open **Plugins → Grok Build** to check the connection and set an executable path if it is not on PATH. A connection check verifies the CLI and supported capabilities; it does not prove an authenticated model call. Sign in through Grok itself if a request reports a login failure.
 
 Each call uses a fresh process and temporary configuration. The existing authentication path is passed to Grok; user model overrides, project instructions, external skills, plugins and MCP tools are excluded from that request. The CLI's built-in default model is used.
 

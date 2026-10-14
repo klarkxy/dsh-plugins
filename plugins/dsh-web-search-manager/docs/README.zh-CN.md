@@ -1,13 +1,12 @@
-# @klarkxy/dsh-web-search-manager
+﻿# @klarkxy/dsh-web-search-manager
 
 <!-- release-state-note -->
-插件生命周期见[仓库状态清单](../../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../../RELEASING.zh-CN.md)。
 
 在一个设置页里挑选用哪个服务回答模型的网络搜索、设定每次请求的上限，并让模型读取公开网页。
 
 [English](../README.md)
 
-需要 Node.js ≥22、DSH `0.2.0-rc.2`，无需构建本仓库。
+需要 Node.js ≥22（已验证 26）、DSH `0.2.0-rc.2` 或更高版本，无需构建本仓库。
 
 ## 安装
 
@@ -38,7 +37,7 @@ dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 - **博查**：中文网页搜索 API，需要 `DSH_EDITOR_WEB_BOCHA_API_KEY`。
 - **Serper**：Google 结果 Search API，需要 `DSH_EDITOR_WEB_SERPER_API_KEY`。
 - **Firecrawl**：网页搜索与提取 API，需要 `DSH_EDITOR_WEB_FIRECRAWL_API_KEY`。
-- **Tavily**：Search API，固定 basic 检索深度，不自动升级；需要 `DSH_EDITOR_WEB_TAVILY_API_KEY`。适配器已并入本插件，原独立的 `dsh-web-search-tavily` 包已退役。
+- **Tavily**：Search API，固定 basic 检索深度，不自动升级；需要 `DSH_EDITOR_WEB_TAVILY_API_KEY`。适配器已并入本插件。
 
 ## 读取公开网页
 
@@ -60,35 +59,11 @@ dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 
 加入后，模型获得 `@deepseek-ai/dsh-tool-web` 的官方 `web_search` 与 `web_fetch` 工具，仅在搜索与网页读取开启时挂载。
 
-## 扩展与开发
+## 供应商接入
 
 供应商插件直接调用 `ctx.web.registerSearchProvider(provider)` 或 `ctx.web.registerFetchProvider(provider)`，无需依赖或调用 `webSearchManager`。`available()` 只检查本地状态；请求须传递取消信号，供应商自行读取自己的配置和凭据。可在供应商对象上添加可选的 `dshWebManagement` 展示元数据（`label`、`description`、`billing`、`configurationOwner`、`credentialHint`、`pricing`、HTTPS `pricingUrl`、显式 `configurationUrl` 等）。`configurationUrl` 是唯一的配置链接，允许 HTTPS、同宿主 `/…` 路径或 `#…` 片段；不要期待本页根据 `id` 或 `configurationOwner` 猜测路由。`credentialHint` 只作展示。不提供元数据也会被发现，列表使用供应商 id。供应商自己的介绍和费用优先；相同 id 的静态说明不会覆盖自定义/原生服务。无费用元数据时显示未提供，不会称为免费或已核对。元数据不携带凭据值。旧的管理器 factory 注册方法保留为兼容入口，新插件走原生注册。
 
-```ts
-const provider = {
-  id: 'my-search',
-  dshWebManagement: {
-    id: 'my-search', label: 'My search', description: 'Custom search service',
-    billing: 'request', configurationOwner: '@example/my-plugin',
-    configurationUrl: '/plugins/my-plugin',
-  },
-  available: () => locallyConfigured(),
-  search: (request, signal) => searchWithOwnConfiguration(request, signal),
-}
-ctx.web.registerSearchProvider(provider)
-```
-
-DSH 0.2.0-rc.2 尚无公开注册表枚举及动态选择接口，本包将兼容逻辑集中在 `web-registry.ts`：观察宿主实际 Map、管理可用性、临时接管选择，卸载时恢复实例和原有配置/环境选择。不匹配的宿主结构会明确报错，避免遗漏已注册服务。供应商的本地可用性变化可发出本仓库扩展事件 `web/provider-availability-updated`（参数：`search`/`fetch`、id）；它不是官方 DSH 事件。状态刷新和每次执行也会重新检查 `available()`。保存迁移后的适配器 id 后，降级管理器需要重新选择旧路由；凭据引用和旧端点键仍保留。
-
-在仓库根运行：
-
-```sh
-pnpm --filter @klarkxy/dsh-web-search-manager typecheck
-pnpm --filter @klarkxy/dsh-web-search-manager test
-pnpm --filter @klarkxy/dsh-web-search-manager build
-```
-
-测试使用模拟凭据和响应，不产生搜索费用。
+DSH 尚无公开注册表枚举及动态选择接口，本包将兼容逻辑集中在内部兼容层：观察宿主实际 Map、管理可用性、临时接管选择，卸载时恢复实例和原有配置/环境选择。不匹配的宿主结构会明确报错，避免遗漏已注册服务。供应商的本地可用性变化可发出本仓库扩展事件 `web/provider-availability-updated`（参数：`search`/`fetch`、id）；它不是官方 DSH 事件。状态刷新和每次执行也会重新检查 `available()`。保存迁移后的适配器 id 后，降级管理器需要重新选择旧路由；凭据引用和旧端点键仍保留。
 
 ## 边界与限制
 
@@ -101,4 +76,4 @@ pnpm --filter @klarkxy/dsh-web-search-manager build
 - 管理器运行期间使用已保存的选择；卸载后恢复宿主原有配置和环境变量的选择。
 - 设置保存失败时，受管联网会暂停，成功保存后恢复。
 
-[发布维护](../../PUBLISHING.md) · [许可证](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/LICENSE)
+[许可证](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-web-search-manager/LICENSE)

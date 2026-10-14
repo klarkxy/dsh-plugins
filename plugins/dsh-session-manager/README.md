@@ -1,16 +1,13 @@
 # Session manager
 
 <!-- release-state-note -->
-The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
 
 ## Install
 
-Requires Node 24+ and DSH 0.2.0-rc.2 or later:
-
-After 0.1.0 is published to npm:
+Requires Node 24+ (26 verified) and DSH 0.2.0-rc.2 or later:
 
 ```sh
-dsh plugin --profile web add @klarkxy/dsh-session-manager@0.1.0
+dsh plugin --profile web add @klarkxy/dsh-session-manager
 ```
 
 Restart the target profile after installation. Temporary workspace creation, cross-session reading and copying thread IDs work with the standard host. True deletion and same-session retry require the accompanying [thread-management host patch](../../host-patches/thread-management/README.md); installing the npm plugin alone does not add these host capabilities. The patched host is a separately built local candidate, tested with isolated profiles and fake models. Keep V5 session data before rolling back to a V4 runtime.

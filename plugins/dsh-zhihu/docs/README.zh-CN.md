@@ -1,13 +1,14 @@
-# @klarkxy/dsh-zhihu
+﻿# @klarkxy/dsh-zhihu
 
 <!-- release-state-note -->
-插件生命周期见[仓库状态清单](../../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../../RELEASING.zh-CN.md)。
+
+
 
 把知乎交给模型当调研信源：站内搜索、全网搜索、热榜、直答和公开知识库，外加问题发现、创作数据与用量统计。每次请求都只用你自己的知乎 Access Secret，取回的内容是给模型参考的资料，不是定论。
 
 [English](../README.md)
 
-需要 Node.js ≥22、DSH `0.1.7-rc.2`，无需构建本仓库。
+需要 Node.js ≥22（已验证 26）、DSH `0.1.7-rc.2` 或更高版本，无需构建本仓库。
 
 ## 安装
 
@@ -81,20 +82,10 @@ RPC 还接受主库风格的下划线别名：`question_recommendations`、`ques
 - 客户端接收宿主提供的结构化控件，缺失时使用原生 HTML 控件。构建和使用本包不依赖应用私有 UI 包。
 - 原有 Agent 工具、凭据、RPC 合同和存储标识保持兼容，上述能力为增量扩展。
 
-## 开发
-
-接口见 [contracts](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/src/contracts.ts)、[tools](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/src/tools.ts) 与 [开放平台客户端](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/src/open-platform.ts)。七个新增接口覆盖六个问题发现/创作端点及官方额度。
-
-```sh
-pnpm --filter @klarkxy/dsh-zhihu typecheck
-pnpm --filter @klarkxy/dsh-zhihu test
-pnpm --filter @klarkxy/dsh-zhihu build
-```
-
-[发布维护](../../PUBLISHING.md) · [许可证](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/LICENSE)
+[许可证](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/LICENSE)
 
 
-## 调用与费用保护（2026-10-13）
+## 调用与费用保护
 
 默认是免费保护模式：每个业务请求先即时查询对应的官方免费额度；查询失败、缺少有效额度、额度不足或映射未确认时，不发送业务请求。额度查询本身不递归预查、不消耗本地上限。工具名及业务路径保持原样；旧额度输入 `question_answers` 映射为 `question_discovery`，问题推荐和回答摘要共用该组。
 

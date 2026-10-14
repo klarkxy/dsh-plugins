@@ -1,11 +1,10 @@
 # DSH Docs
 
 <!-- release-state-note -->
-The [repository registry](../../README.md#plugin-lifecycle) tracks Draft → Testing → Published, moving forward only. Fixes, testing and version updates keep published packages Published; each update still passes release checks. First publication explicitly selects Testing packages and records Published only after npm archive verification. See the [release guide](../../RELEASING.md).
 
 [简体中文](README.zh-CN.md) | [English](README.md)
 
-Runtime: Node `^22.19.0 || >=24.0.0` and DSH `>=0.1.7-rc.2`. The documentation reader is a DSH Web client; the four read-only tools and the Creator-mode guidance run in the host.
+Runtime: Node `^22.19.0 || >=24.0.0` (26 verified) and DSH `>=0.1.7-rc.2`. The documentation reader is a DSH Web client; the four read-only tools and the Creator-mode guidance run in the host.
 
 Read the official DSH documentation without leaving DSH. The Plugins page embeds the official docs, and Creator mode also gets four native read-only tools: `dsh_docs_search` and `dsh_docs_fetch` to look up documentation, `dsh_plugins_search` and `dsh_plugins_fetch` to check a plugin's npm metadata. Installing and removing plugins stays with the official plugin manager; this plugin never installs anything.
 
@@ -54,7 +53,7 @@ The published npm package includes the built `lib/` files.
 dsh plugin --profile web add "github:klarkxy/dsh-plugins#path:/plugins/dsh-dev-index"
 ```
 
-A Git install runs `prepare`, which builds `lib/`. pnpm blocks that script until the profile allowlists it, and the DSH 0.1.7-rc.2 CLI prints the exact key to add under `allowBuilds` in `$DSH_HOME/profiles/web/pnpm-workspace.yaml`:
+A Git install runs `prepare`, which builds `lib/`. pnpm blocks that script until the profile allowlists it; the DSH CLI prints the exact key to add under `allowBuilds` in `$DSH_HOME/profiles/web/pnpm-workspace.yaml`:
 
 ```yaml
 allowBuilds:
@@ -63,25 +62,7 @@ allowBuilds:
 
 Run the add command again: that allowance executes this package's build on your machine. Pin a commit when the plugin source must not move.
 
-Peer ranges on `@deepseek-ai/dsh-system-prompt` and `@deepseek-ai/dsh-agent-preset-registry` are checked against the running `dsh` version. This package requires DSH `>=0.1.7-rc.2`, and the loader does not enforce `engines.dsh`.
-
-## Install from this checkout
-
-```bash
-pnpm install
-pnpm --filter @klarkxy/dsh-dev-index build
-dsh plugin --profile web add ./plugins/dsh-dev-index
-```
-
-Restart the profile, or let HMR apply the new bundle. Then:
-
-```bash
-dsh --profile web --dump-config
-```
-
-The composition should contain a `dsh-dev-index` row. Start a new Creator-mode session to pick up the documentation guidance automatically.
-
-There is no configuration: the patch inserts the plugin and sets no keys.
+Peer ranges on `@deepseek-ai/dsh-system-prompt` and `@deepseek-ai/dsh-agent-preset-registry` are checked against the running `dsh` version. The loader does not enforce `engines.dsh`.
 
 ## License
 

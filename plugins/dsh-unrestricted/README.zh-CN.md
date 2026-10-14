@@ -1,7 +1,6 @@
-# 破限 / Unrestricted
+﻿# 破限 / Unrestricted
 
 <!-- release-state-note -->
-插件生命周期见[仓库状态清单](../../README.zh-CN.md#插件生命周期)：草稿 → 测试中 → 已发布，只向前推进。已发布插件的修复、测试和升版保持已发布；每次更新仍须通过发布检查。首次发布须明确选择测试中的包，并在 npm 归档验证成功后登记。详见[发布规则](../../RELEASING.zh-CN.md)。
 
 [English](README.md)
 
@@ -13,19 +12,15 @@
 
 - 选用 **破限 / Unrestricted** 的新会话按契约回答；standard、Creator、PTC、minimal 等其他 Preset 的提示词一个字节都不动。
 - 没有开关：选中即生效，切回其他 Preset 即结束。不存在“忘记关掉、全局限制被放开”的状态。
-- 子代理自动继承：宿主让子会话加入父会话的 Preset 修订（`composeFrom`），原生 `subagent` / `subagent_fork` 只读行配置里的 persona，标准清单没有配置，所以委派出去的子代理线程同样携带契约。只有**显式给子会话指定 persona** 的派生（例如按角色指令生成的 Classmates 队友）会替换 persona 槽位，那种子会话看不到契约。
+- 子代理自动继承：宿主让子会话加入父会话的 Preset 修订（`composeFrom`），原生 `subagent` / `subagent_fork` 只读行配置里的 persona，标准清单没有配置，所以委派出去的子代理线程同样携带契约。只有**显式给子会话指定 persona** 的派生（例如按角色指令生成的 角色队友 persona）会替换 persona 槽位，那种子会话看不到契约。
 
 ## 安装与使用
 
-发布到 npm 前，从本包目录取包安装：
-
 ```sh
-cd plugins/dsh-unrestricted
-npm pack --ignore-scripts
-dsh plugin --profile web add "D:/path/to/klarkxy-dsh-unrestricted-0.1.0-rc.1.tgz"
+dsh plugin --profile web add @klarkxy/dsh-unrestricted
 ```
 
-发布后可直接 `dsh plugin --profile web add @klarkxy/dsh-unrestricted`。自定义 profile 把 `web` 换成其名称。安装后重启该 profile，在新会话的 Preset 选择器中选择 **破限 / Unrestricted**。已有消息的会话不能切换 Preset。
+把 `web` 换成你的 profile 名称，安装后重启该 profile，在新会话的 Preset 选择器中选择 **破限 / Unrestricted**。已有消息的会话不能切换 Preset。
 
 模型由你在会话中选择。Preset 元数据不绑定模型或推理强度，本包不改默认 Preset、模型、权限或其他 Preset。
 
