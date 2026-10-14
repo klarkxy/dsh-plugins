@@ -2,9 +2,9 @@
 
 <!-- release-state-note -->
 
-Give any DeepSeek Harness agent five directly registered tools: web search, image generation, image editing, vision, and bounded text analysis. Tool descriptions explain when to use them; users do not need to name a skill.
+[简体中文](README.zh-CN.md)
 
-All requests run through the official local Codex app-server. The plugin never calls OpenAI HTTP endpoints, reads account tokens, or falls back to an API key. Codex owns authentication and token refresh.
+Give any DeepSeek Harness agent ChatGPT web search, image generation, image editing, image understanding, and text analysis, using the Codex app already signed in on your computer. No API key is needed.
 
 ## Install
 
@@ -12,26 +12,26 @@ All requests run through the official local Codex app-server. The plugin never c
 dsh plugin --profile web add @klarkxy/dsh-chatgpt
 ```
 
-Open the plugin's configuration page and click Refresh status. An existing Codex ChatGPT sign-in is reused. Otherwise choose browser or device-code sign-in; use device codes when the browser and DSH run on different machines.
-
-Codex `0.162.0-alpha.17.2` or newer must be installed on the machine running DSH. Set an explicit executable path if discovery fails. Leave the model empty to use the runtime's default, or select a model and reasoning effort. Saving plugin settings does not change global Codex configuration.
+You also need the official Codex, version `0.162.0-alpha.17.2` or later, on the same computer as DSH. Open the plugin page and click **Refresh status**. An existing Codex ChatGPT sign-in is reused; otherwise sign in with the browser or a device code (use the device code for a remote DSH). If Codex is not found, enter its path. You can also pick the model and reasoning effort there.
 
 ## Tools
 
-| Tool | Purpose |
+| Tool | Use it to |
 | --- | --- |
-| `chatgpt_search` | Current public-web research with source links |
-| `chatgpt_generate_image` | Generate a real image, optionally with references |
-| `chatgpt_edit_image` | Edit explicitly selected images while preserving originals |
-| `chatgpt_view_image` | Read screenshots, inspect or compare images |
-| `chatgpt_ask` | Analyze, reason about, translate, or write supplied text |
+| `chatgpt_search` | Look up current information with source links |
+| `chatgpt_generate_image` | Create images, optionally from reference images |
+| `chatgpt_edit_image` | Edit a chosen image; the original is kept |
+| `chatgpt_view_image` | Describe images, read text in screenshots, compare images |
+| `chatgpt_ask` | Analyze, translate, or write about text you provide |
 
-Image inputs are workspace files or image attachment IDs already present in the calling session, up to five per call. Generated images are saved under `.dsh-chatgpt/` in that workspace and returned as session attachments. Generation and editing require workspace write permission.
+The agent picks these tools on its own; you do not need to name them.
 
-Each request has its own Codex thread. Environment tools are disabled. Search success requires native search evidence; image success requires a completed native image event and its actual attributed raster file. Unsupported capabilities fail explicitly.
+## Limits
 
-Cancellation and plugin unload terminate only plugin-owned processes. Login cancellation applies only to a login started by this plugin; there is no shared-account logout action. Calls consume the signed-in account's Codex allowance. Connection status does not prove model or tool entitlement.
+- Calls use your ChatGPT account's Codex allowance.
+- Images come from workspace files or images already in the session, up to five per call. Results are saved under `.dsh-chatgpt/` in the workspace, so creating or editing images needs write access.
+- Older Codex versions are refused with a compatibility error.
 
-The plugin requires experimental app-server environment-isolation fields. Incompatible Codex runtimes fail explicitly. Target DSH compatibility is declared in `engines.dsh`; live acceptance evidence is recorded in [ACCEPTANCE.md](ACCEPTANCE.md).
+## License
 
-Official references: [app-server](https://learn.chatgpt.com/docs/app-server), [web search](https://learn.chatgpt.com/docs/web-search), [image generation and editing](https://learn.chatgpt.com/docs/image-generation).
+[SATA License 2.1](LICENSE)

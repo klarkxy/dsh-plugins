@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Git 提交",
-    "description": "从会话顶栏提交工作区修改，并由 AI 服务拆成多次提交。"
+    "description": "从会话顶栏提交工作区改动，由模型分组。"
   }
 }

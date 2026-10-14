@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-unrestricted",
   "version": "0.1.0",
-  "description": "Unrestricted: a session preset that answers under the unrestricted delivery contract, instead of injecting that contract into every prompt.",
+  "description": "Unrestricted: a session preset that delivers complete results, only in sessions that pick it.",
   "icon": "./icon.svg",
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/unrestricted/",
   "type": "module",
@@ -29,7 +29,6 @@
     "locale/*.json",
     "cordis.patch.yml",
     "README*.md",
-    "ACCEPTANCE.md",
     "NOTICE.md",
     "LICENSE"
   ],

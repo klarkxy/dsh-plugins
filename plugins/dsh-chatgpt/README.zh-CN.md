@@ -2,9 +2,9 @@
 
 <!-- release-state-note -->
 
-让 DSH 智能体直接调用 ChatGPT 搜索、生图、图片编辑、看图与文本分析。工具安装后直接注册到宿主，不需要用户点名 skill。
+[English](README.md)
 
-所有请求通过本机官方 Codex 的 app-server 发出。插件不调用 OpenAI HTTP 接口，不读取或保存账户令牌，也不使用 API Key 回退。登录、凭据刷新及账户额度由 Codex 管理。
+借助本机已登录的 Codex，让 DeepSeek Harness 智能体使用 ChatGPT 联网搜索、生图、改图、看图和文本分析。不需要 API Key。
 
 ## 安装
 
@@ -12,32 +12,26 @@
 dsh plugin --profile web add @klarkxy/dsh-chatgpt
 ```
 
-打开插件详情页的配置区，点击「刷新状态」。已有 Codex ChatGPT 登录时直接复用；未登录时可选择浏览器或设备码登录。远程 DSH 应使用设备码，并在自己的浏览器完成授权。
-
-Codex 必须运行在 DSH 所在的机器上，版本至少为 `0.162.0-alpha.17.2`。自动发现失败时，在配置区填写官方 Codex 可执行文件路径。模型与推理强度可在插件页选择；留空时使用 Codex 返回的默认模型。配置不修改全局 Codex 设置。
+DSH 所在电脑上还需要安装官方 Codex，版本不低于 `0.162.0-alpha.17.2`。打开插件页点击「刷新状态」：已有 Codex ChatGPT 登录时直接复用，否则可选择浏览器或设备码登录（远程 DSH 请用设备码）。找不到 Codex 时，可手动填写其路径。模型和思考强度也在这里选择。
 
 ## 工具
 
-| 工具 | 使用场景 |
+| 工具 | 用途 |
 | --- | --- |
-| `chatgpt_search` | 查最新资料、联网核实、获取来源链接 |
-| `chatgpt_generate_image` | 创建插图、海报、素材，可指定参考图 |
-| `chatgpt_edit_image` | 修改明确选定的图片，保留原文件 |
-| `chatgpt_view_image` | 看图、读截图文字、比较图片 |
-| `chatgpt_ask` | 对提供的文本作独立分析、推理、翻译或写作 |
+| `chatgpt_search` | 查最新资料，返回来源链接 |
+| `chatgpt_generate_image` | 生成图片，可附参考图 |
+| `chatgpt_edit_image` | 修改指定图片，保留原图 |
+| `chatgpt_view_image` | 看图、识别截图文字、比较图片 |
+| `chatgpt_ask` | 对你提供的文本做分析、翻译或写作 |
 
-工具描述包含这些场景，供智能体自行选择；插件不在每个对话步骤自动发起请求。不同 DSH 主模型都可调用这些工具。
+智能体会自行选择这些工具，无需你点名。
 
-图片输入使用当前工作区内的文件路径，或当前会话已有的图片附件标识，每次最多五张。输出保存到工作区的 `.dsh-chatgpt/` 下，并作为会话图片返回。生图和编辑要求当前会话允许写入工作区。
+## 限制
 
-## 调用与取消
+- 调用消耗你 ChatGPT 账户的 Codex 额度。
+- 图片来自工作区文件或会话中已有的图片，每次最多五张。结果保存在工作区的 `.dsh-chatgpt/` 下，因此生图和改图需要工作区写权限。
+- 旧版 Codex 会报兼容错误。
 
-每次能力调用使用独立的 Codex 会话。插件关闭环境工具，搜索只使用原生网页搜索，生图和编辑只接受原生图片完成事件及其对应的实际图片文件。不存在的能力会明确报错，不以文字说明或自行绘制替代。
+## 许可证
 
-调用随 DSH 任务取消；卸载插件会停止其拥有的 Codex 子进程，不关闭其他 Codex 会话。配置页的取消登录仅针对插件发起的登录，不提供退出共享 Codex 账户的操作。
-
-调用消耗当前 ChatGPT 账户的 Codex 额度。连接成功只说明运行时和登录可用；模型及工具权限以实际调用结果为准。插件依赖 app-server 的实验性环境隔离字段，旧 Codex 不满足契约时会报兼容错误。
-
-目标 DSH 版本见 `engines.dsh`。当前验收证据见 [ACCEPTANCE.md](ACCEPTANCE.md)。
-
-接口依据：[Codex app-server](https://learn.chatgpt.com/docs/app-server)、[原生搜索](https://learn.chatgpt.com/docs/web-search)、[原生生图与编辑](https://learn.chatgpt.com/docs/image-generation)。
+[SATA License 2.1](LICENSE)

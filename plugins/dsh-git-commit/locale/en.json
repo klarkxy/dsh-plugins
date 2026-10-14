@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Git Commit",
-    "description": "Commit workspace changes from the conversation header, with AI-split commits via AI Services."
+    "description": "Commit workspace changes from the conversation header, with the model grouping the commits."
   }
 }

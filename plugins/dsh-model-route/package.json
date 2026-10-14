@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-model-route",
   "version": "0.2.1",
-  "description": "Model-route field contract for DSH plugins: shared ModelRoute value shape, schema marker, catalog helpers, and projected-schema detection.",
+  "description": "Shared library that lets DSH plugins describe model settings the same way.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {

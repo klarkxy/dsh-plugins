@@ -8,9 +8,6 @@
         "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
         "en": "Published on npm; subsequent versions follow the normal update workflow."
       },
-      "evidence": {
-        "targetHost": "plugins/dsh-chatgpt/ACCEPTANCE.md"
-      },
       "publication": {
         "version": "0.1.0-alpha.1",
         "publishedAt": "2026-10-13T15:52:23.464Z",
@@ -90,9 +87,6 @@
         "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
         "en": "Published on npm; subsequent versions follow the normal update workflow."
       },
-      "evidence": {
-        "targetHost": "plugins/dsh-grok-build/ACCEPTANCE.md"
-      },
       "publication": {
         "version": "0.1.0-alpha.1",
         "publishedAt": "2026-10-13T15:52:30.429Z",
@@ -105,9 +99,6 @@
       "reason": {
         "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
         "en": "Published on npm; subsequent versions follow the normal update workflow."
-      },
-      "evidence": {
-        "targetHost": "plugins/dsh-minimax-code/ACCEPTANCE.md"
       },
       "publication": {
         "version": "0.1.0-alpha.1",
@@ -122,9 +113,6 @@
         "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
         "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
       },
-      "evidence": {
-        "tests": "plugins/dsh-model-hub/docs/acceptance-2026-10-11.md"
-      },
       "publication": {
         "version": "0.0.0-stage",
         "publishedAt": "2026-10-11T01:40:22.34Z",
@@ -138,11 +126,6 @@
         "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
         "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
       },
-      "evidence": {
-        "packedContent": "scripts/acceptance/shared-libraries-remediation-2026-10-12.md",
-        "tests": "scripts/acceptance/shared-libraries-remediation-2026-10-12.md",
-        "targetHost": "scripts/acceptance/shared-libraries-remediation-2026-10-12.md"
-      },
       "publication": {
         "version": "0.0.0-stage",
         "publishedAt": "2026-10-11T01:39:41.696Z",
@@ -155,11 +138,6 @@
       "reason": {
         "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
         "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
-      },
-      "evidence": {
-        "packedContent": "scripts/acceptance/shared-libraries-remediation-2026-10-12.md",
-        "tests": "scripts/acceptance/shared-libraries-remediation-2026-10-12.md",
-        "targetHost": "scripts/acceptance/shared-libraries-remediation-2026-10-12.md"
       },
       "publication": {
         "version": "0.1.0",

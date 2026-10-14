@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-session-manager",
   "version": "0.1.1",
-  "description": "Cross-session discovery and managed free conversations for DeepSeek Harness.",
+  "description": "Find and read DeepSeek Harness sessions across working directories, copy thread IDs, and use temporary workspaces.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",

@@ -22,7 +22,6 @@
     "icon.svg",
     "locale/*.json",
     "README*.md",
-    "ACCEPTANCE.md",
     "LICENSE"
   ],
   "engines": {

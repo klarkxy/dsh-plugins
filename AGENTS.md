@@ -10,6 +10,59 @@
 - 排除本仓库原因后，再去对照 ZCode 源码、DSH 运行时和第三方插件找宿主侧原因。
 - 不要一上来就把问题归因为宿主 bug 或第三方插件缺陷；没有本仓库证据支撑时不写「官方的问题」式的结论。
 
+## 文档
+
+文档只写给用户看，代码本身就是开发文档。
+
+- **README 只回答四件事**：它做什么、怎么安装、怎么使用、主要限制。不写 RPC、内部 API、存储路径、schema、主题 token、缓存大小、兼容层、实现流程、错误码或迁移细节。共享库（plugin-kit、model-route）只写一段用途，并说明开发者请参考源码和类型声明。
+- **不新增开发者文档**：ADR、调研、迁移说明、任务计划、验收报告和截图说明都不进仓库。设计理由写在代码注释、提交信息或 PR 里；临时记录放 `.scratch/`，用完删除。
+- **只写用户实际用得到的能力**：先在代码里找到对应的工具注册、RPC 或界面入口再写。内部映射、预留路径和计划中的功能不算能力。例如知乎调用策略里有 PDF/PPT 路径映射，但没有任何工具或界面，就不能写成可用功能。依赖宿主能力的功能要写明条件，例如会话管理的自由聊天、删除和原会话重试需要宿主支持。
+- **不写会过时的数字和状态**：DSH 版本号、插件数量、日期、预发布通道和「已验证某版本」这类内容很快就会失效。最低版本以 `package.json` 的 `engines` 为准，文档里需要提到时必须与它一致。外部 CLI 的版本限制以代码里的检查为准。
+- **中英文成对维护**：两种语言结构一致、内容对应。中文 README 有的包在 `docs/README.zh-CN.md`，有的在 `README.zh-CN.md`，以包的 `files` 和 catalog 为准，不要随意搬位置。
+- **一处简介改了，其他几处一起改**：功能变化时，同步 `package.json` 的 `description`、`locale/zh.json` / `locale/en.json` 的 `meta`、`site/catalog.json` 的 `summary`、根目录两个 README 的插件表格，以及包内 README。
+- **测试固定的内容**：每个包的 `README.md` 必须保留 `<!-- release-state-note -->`。根 README 的生命周期表格只由 `pnpm release:docs` 生成，不要手改。`plugins/dsh-dev-index/tests/bundle.test.ts` 要求两种语言的 README 包含 GitHub 安装的 `allowBuilds` 示例、官方文档地址和 `cordis_inspect_list`。`dsh-unrestricted` 的 `NOTICE.md` 是署名与许可文件，必须随包发布。
+- **锁定的交付目录**：`host-patches/thread-management/` 里的文件（包括 README）由 `delivery-sha256.json` 锁定校验值。不要单独修改；确需更改时，同时更新校验记录。
+- 只改 README、`docs/` 等包内文档不会触发 npm 发布，npm 上的文档会在下次代码发布时一起更新。
+
+## 日常维护
+
+### 常见改动清单
+
+- **改插件功能**：同步更新该包的中英文 README；简介变化时按「文档」一节同步其他几处。新增或删除模型工具时，核对 README 里的工具表与代码中的注册一致。
+- **新增插件**：在 `scripts/plugin-release-states.json` 登记为 `draft`；准备中英文 README（带状态标记）、`LICENSE`、`locale/zh.json` / `locale/en.json`，并在 `files` 中列全；`homepage` 指向站点详情页。npm 有 `latest` 版本后，再加入 `site/catalog.json` 和根 README 的插件表格。
+- **移除插件源码**：清单条目改为 `retired: true`，保留阶段和发布凭据；从 catalog 和根 README 插件表格中移除。
+- **删除包内文件**：同时检查 `package.json` 的 `files`、测试里的文件清单，以及 `scripts/plugin-release-states.json` 中可选的 `evidence` 引用；校验器会检查引用的文件是否存在，不能改动 `publication`。
+
+### 定期核对
+
+- catalog 与 npm 是否一致：在 `klarkxy` 名下、带 `latest` 标签的 DSH 插件都应收录，包括其他仓库的 `dsh-plugin-autoevo`（独立仓库，README 中文为 `README.md`、英文为 `README.en.md`）。
+- README 描述与代码是否一致：工具名、页签、设置项、默认值和限制都以源码为准。
+- 有没有过时的版本号、数量、日期或通道说明，例如 `rg -n -g "README*.md" -e "-rc\." -e "-alpha\." -e "预发布" -e "已验证" README.md README.zh-CN.md plugins`。命中后人工判断：代码里检查的外部 CLI 最低版本（如 ChatGPT 插件要求的 Codex 版本）不算过时，`NOTICE.md` 里的版本属于署名来源，也不算过时。
+- 有没有死链，以及引用已删除文件的地方。
+
+### 验证
+
+按改动范围选择检查，不必每次全跑：
+
+```bash
+pnpm release:docs        # 改了生命周期清单或包列表后同步根 README
+pnpm release:check       # 生命周期、文档标记与发布脚本回归
+pnpm site:test           # 改了 catalog 或 site/
+pnpm --filter <包名> test  # 改了哪个包就测哪个包
+pnpm pack:check          # 改了 files 或包内文件
+git diff --check
+pnpm check               # 较大改动时全仓检查
+```
+
+### 已知坑
+
+- Windows 沙箱里出现 `EPERM`，或在临时目录里 `git init` 报 `Permission denied`，通常是沙箱权限问题，不是代码问题。先在沙箱外重跑，不要为此改测试。
+- `pnpm check` 并行跑全部测试时，`dsh-safe-auto` 的 `test/control.test.js`「unanswered confirmation expires…」偶尔因计时失败。先单独重跑该包；单独通过时，用 `pnpm --workspace-concurrency=1 --filter "{plugins/*}" test` 补跑剩余测试。
+- 脚本写文件时保持 LF 和 UTF-8（无 BOM）；仓库没有 `.gitattributes`，Git 显示的 CRLF 警告可以忽略。
+- PowerShell 输出开头的 `InitializeDefaultDrives` 报错只是环境噪声。
+
+提交、推送、npm 发布和站点部署都需要用户明确授权；本地清理和文档修改不等于获得了这些授权。
+
 ## 核心参考：ZCode 源码
 
 `H:\Refernece\ZCode`（本地镜像，写本节时为 v3.14.3）是 ZCode AI 编程工作台的完整源码，与 DSH 宿主同族。设计或调试插件行为时**先读它的源码再下结论**，不要凭记忆或想象编造宿主 API、事件语义和生命周期。
@@ -32,7 +85,7 @@
 
 ## 插件站点
 
-站点由 `site/` 生成，输出到 `_site/`（不提交）。`docs/` 旧开发索引已下线，不要恢复。
+站点由 `site/` 生成，输出到 `_site/`（不提交）。旧开发索引和根目录 `docs/` 已移除，不要恢复。
 
 | 文件 | 职责 |
 | --- | --- |

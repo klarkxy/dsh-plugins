@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-model-hub",
   "version": "0.1.0",
-  "description": "View and edit model fields exposed by DSH plugin settings on one page.",
+  "description": "Change the models used by DSH plugins and subagents from one page.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {

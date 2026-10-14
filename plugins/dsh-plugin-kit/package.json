@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-plugin-kit",
   "version": "0.3.1",
-  "description": "Shared types, model-menu helpers, and host RPC registration. Does not call models.",
+  "description": "Shared support library for klarkxy DSH plugins.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {

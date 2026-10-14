@@ -162,10 +162,10 @@ test("package manifest follows the repository release conventions", () => {
 
 test("package manifest packs every declared file and credits upstream in NOTICE.md", () => {
   for (const name of ["icon.svg", "cordis.patch.yml", "README.md", "README.zh-CN.md",
-    "ACCEPTANCE.md", "NOTICE.md", "LICENSE", "locale/en.json", "locale/zh.json"]) {
+    "NOTICE.md", "LICENSE", "locale/en.json", "locale/zh.json"]) {
     assert.ok(existsSync(`${pkgRoot}${name}`), name);
   }
-  for (const name of ["cordis.patch.yml", "icon.svg", "NOTICE.md", "LICENSE", "ACCEPTANCE.md"]) {
+  for (const name of ["cordis.patch.yml", "icon.svg", "NOTICE.md", "LICENSE"]) {
     assert.ok(manifest.files.includes(name), name);
   }
   const notice = readFileSync(new URL("../NOTICE.md", import.meta.url), "utf8");
