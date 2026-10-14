@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-grok-build",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Search and create images and videos through the official local Grok Build CLI.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -99,6 +99,6 @@
     "directory": "plugins/dsh-grok-build"
   },
   "dshRelease": {
-    "contentHash": "c9e10ef391207fe1a48cf47788a277c276416895cdc11630a7a3d4797e7c744c"
+    "contentHash": "6a2353901e96ecae588c4be3ed28837ec9f89a522f98afdd695216605793c6ad"
   }
 }

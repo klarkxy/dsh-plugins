@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-plugin-kit",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Shared support library for klarkxy DSH plugins.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -139,6 +139,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "f069c84f4156bbfef9e5c0f4cecf06ef3407e04fb3e14a35354ce6bc9627e2ae"
+    "contentHash": "448badcaa0d4d9ca07684d98948628b47662e5548817232735d8b32ca5d44e5b"
   }
 }

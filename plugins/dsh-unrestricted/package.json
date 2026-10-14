@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-unrestricted",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Unrestricted: a session preset that delivers complete results, only in sessions that pick it.",
   "icon": "./icon.svg",
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/unrestricted/",
@@ -48,6 +48,6 @@
     "@deepseek-ai/dsh": "0.2.0-rc.2"
   },
   "dshRelease": {
-    "contentHash": "60e6d85b83195b078136b519512fa6a14cb8017792eb93e0ff40fe61b1f4b574"
+    "contentHash": "645472f60965562bbf4c0ca1c2cbd7d1675c29dc0a5ba639f89acee9876ad956"
   }
 }
