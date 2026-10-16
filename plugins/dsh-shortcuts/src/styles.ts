@@ -313,4 +313,3 @@ export const SHORTCUTS_STYLES = `${officialUiCss(['shortcuts-root', 'shortcuts-f
   }
 }
 `
-
