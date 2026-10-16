@@ -3,24 +3,26 @@ import { validateModelConfig } from './model-route.js';
 const defaults = Object.freeze({
   enabled: true,
   provider: '', model: '', reasoningEffort: '', reviewerPrompt: '',
-  timeoutMs: 30000, maxInputBytes: 32768, outputTokens: 1024,
-  humanApprovalTimeoutMs: 60000,
-  maxReviewsPerTask: 20, consecutiveDenials: 3,
-  staticReadonly: true,
+  timeoutMs: 90000, outputTokens: 4096, maxTranscriptBytes: 48000,
 });
 const limits = {
-  timeoutMs: [100, 120000], maxInputBytes: [512, 32768], outputTokens: [64, 2048],
-  maxReviewsPerTask: [1, 100], consecutiveDenials: [1, 20],
-  humanApprovalTimeoutMs: [0, 300000],
+  timeoutMs: [1000, 300000], outputTokens: [256, 16384], maxTranscriptBytes: [4096, 200000],
 };
+// Fields from the 0.2 reviewer-only design. Profiles written by older releases
+// still carry them; they are accepted and ignored so an upgrade does not
+// unload the plugin.
+const RETIRED = new Set(['maxInputBytes', 'humanApprovalTimeoutMs', 'maxReviewsPerTask', 'consecutiveDenials', 'staticReadonly']);
 
 /** Immutable, load-time policy. Unknown keys fail rather than silently disabling a control. */
 export function parseConfig(raw = {}) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('config must be an object');
-  for (const key of Object.keys(raw)) if (!Object.hasOwn(defaults, key)) throw new Error(`unknown config field: ${key}`);
-  const c = { ...defaults, ...raw };
+  const c = { ...defaults };
+  for (const [key, value] of Object.entries(raw)) {
+    if (RETIRED.has(key)) continue;
+    if (!Object.hasOwn(defaults, key)) throw new Error(`unknown config field: ${key}`);
+    c[key] = value;
+  }
   if (typeof c.enabled !== 'boolean') throw new Error('enabled must be a boolean');
-  if (typeof c.staticReadonly !== 'boolean') throw new Error('staticReadonly must be a boolean');
   for (const key of ['provider', 'model', 'reasoningEffort', 'reviewerPrompt']) {
     if (typeof c[key] !== 'string' || c[key].length > 4096) throw new Error(`${key} must be a string`);
   }
@@ -32,7 +34,6 @@ export function parseConfig(raw = {}) {
 }
 
 // Cordis accepts StandardSchemaV1. No runtime schema dependency or provider SDK is needed.
-// This schema intentionally has no volatile form metadata; edits require a plugin reload.
 export const Config = Object.freeze({ '~standard': Object.freeze({
   version: 1, vendor: 'dsh-safe-auto',
   validate(value) {

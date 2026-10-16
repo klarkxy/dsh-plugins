@@ -5,6 +5,9 @@ export const CHANNEL = '/dsh-safe-auto';
 export const REVIEW_FIELDS = ['provider', 'model', 'reasoningEffort', 'reviewerPrompt'];
 export const SETTINGS_FIELDS = REVIEW_FIELDS;
 const modes = new Set(['read-only', 'workspace-write', 'danger-full-access']);
+/** The only events that can change a session's effective permission state. The optimistic-lock revision tracks these; ordinary turn activity (steps, tool calls, messages) must not invalidate the client's view. */
+const PERMISSION_EVENTS = new Set(['permission/preset', 'sandbox/mode', 'approval/policy']);
+export const isPermissionEvent = event => PERMISSION_EVENTS.has(event?.type);
 
 /** UI writes only reviewer preferences. The enable switch and budgets remain operator-owned profile config. */
 export function createControl(base, { table, presets, sandboxPolicy, sessions, platform = process.platform, onChange = () => {}, onSettingsChanged = () => {} }) {
@@ -12,6 +15,7 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
   let tail = Promise.resolve();
   const lifetime = new AbortController();
   const selections = new WeakMap();
+  const permissionMarks = new WeakMap();
   let generation = 0;
   const effective = () => parseConfig({ ...base, ...settings.values });
   function active(session) {
@@ -19,7 +23,7 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
     const selected = session && selections.get(session);
     if (!selected || selected.enabled === false) return false;
     const events = session.snapshotEvents();
-    const changed = events.slice(selected.fromSeq).some(e => ['permission/preset', 'sandbox/mode', 'approval/policy'].includes(e.type));
+    const changed = events.slice(selected.fromSeq).some(e => PERMISSION_EVENTS.has(e.type));
     let native;
     try { native = presets.resolve(presets.current(session)); } catch { native = {}; }
     if (changed || sessions.get(session.id) !== session || isSubagentSession(session) ||
@@ -47,13 +51,30 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
     const c = effective();
     return { available: base.enabled && Boolean(workspaceOption()), platform,
       policyLimits: { readonly: true, sandbox: 'workspace-write', approval: 'ask', rootSessionsOnly: true,
-        escalationScope: 'this-call-only', timeoutMs: c.timeoutMs, maxInputBytes: c.maxInputBytes,
-        outputTokens: c.outputTokens, maxReviewsPerTask: c.maxReviewsPerTask, consecutiveDenials: c.consecutiveDenials,
-        humanApprovalTimeoutMs: c.humanApprovalTimeoutMs } };
+        escalationScope: 'this-call-only', timeoutMs: c.timeoutMs, outputTokens: c.outputTokens,
+        maxTranscriptBytes: c.maxTranscriptBytes } };
   }
   function settingsView() {
     const c = effective();
     return { revision: settings.revision, values: Object.fromEntries(REVIEW_FIELDS.map(k => [k, c[k] ?? ''])), ...policyView() };
+  }
+  /** Optimistic-lock watermark: one past the last permission event. Mid-turn conversation activity leaves it untouched, so switching while a turn runs applies at once. */
+  function permissionMark(session) {
+    const seq = session.seq;
+    let cached = permissionMarks.get(session);
+    if (!cached || cached.scanned > seq) cached = { scanned: 0, mark: 0 };
+    if (cached.scanned < seq) {
+      const fresh = session.snapshotEvents(cached.scanned);
+      const base = seq - fresh.length;
+      for (let i = 0; i < fresh.length; i++) {
+        const at = base + i;
+        if (at < cached.scanned) continue;
+        if (PERMISSION_EVENTS.has(fresh[i]?.type)) cached.mark = at + 1;
+      }
+      cached.scanned = seq;
+      permissionMarks.set(session, cached);
+    }
+    return cached.mark;
   }
   function sessionView(session) {
     const catalog = presets.catalog();
@@ -61,8 +82,8 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
     const available = policy.available;
     const enabled = active(session);
     const current = enabled ? 'safe-auto' : presets.current(session);
-    return { revision: `${session.seq}:${selections.get(session)?.generation ?? 0}`, current, safeAuto: enabled, ...policy,
-      options: [...catalog.options.filter(o => o.value !== 'safe-auto'), ...(available ? [{ value: 'safe-auto', name: 'Safe Auto', description: 'Workspace Write with bounded per-call review' }] : [])] };
+    return { revision: `${permissionMark(session)}:${selections.get(session)?.generation ?? 0}`, current, safeAuto: enabled, ...policy,
+      options: [...catalog.options.filter(o => o.value !== 'safe-auto'), ...(available ? [{ value: 'safe-auto', name: 'Safe Auto', description: 'Workspace Write; a reviewer model answers approval requests' }] : [])] };
   }
   function getSession(id) {
     if (typeof id !== 'string' || !id || id.length > 200) throw new Error('Invalid session');

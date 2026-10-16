@@ -1,270 +1,252 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import { resolveReviewPaths } from './review-paths.js';
-import { createHostRuntimeRegistry } from './host-runtime.js';
 import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts';
 import { parseConfig } from './config.js';
-import { hardRisk, containsSecret } from './policy.js';
-import { analyzeShell, isReadonly, isSafeStaticExposure } from './shell-command.js';
-import { createCredentialReads } from './credential-reads.js';
-import { assessApproval, bindingOf, escalationReason } from './approval-review.js';
-import { createGate } from './gate.js';
-import { resolveReviewRoute, sameRoute } from './model-route.js';
-import { authority } from './review-context.js';
-import { collectExecutionEvidence } from './execution-evidence.js';
-import { createHumanApprovals } from './human-approval.js';
+import { isPermissionEvent } from './control.js';
+import { dangerousCommand } from './dangerous.js';
+import { buildTranscript } from './transcript.js';
+import { review, reviewInput } from './reviewer.js';
+import { resolveReviewRoute } from './model-route.js';
 export { Config } from './config.js';
-export { authority } from './review-context.js';
 
 export const name = 'dsh-safe-auto';
-export const inject = ['tools', 'sandboxPolicy'];
+export const inject = ['sandboxPolicy'];
 
-const REVIEW_TOOLS = new Set(['write', 'edit', 'pwsh', 'bash']);
-const ESCALATION = new Set(['workspace-write', 'danger-full-access']);
-/** Freshness window for one reviewed grant; not process lifetime, revocation or rollback. */
-const APPROVAL_TTL_MS = 30000;
+/*
+ * Safe Auto routes native approval requests to a reviewer model, following
+ * the Codex `approvals_reviewer = "auto_review"` design (openai/codex,
+ * Apache-2.0):
+ * - Ordinary tool calls are never touched; the native sandbox constrains them.
+ * - Shell commands on a small dangerous list are sent to review before they run.
+ * - Every approval request of an active session (sandbox escalations,
+ *   dangerous commands, other tools' asks) is answered by the reviewer:
+ *   allow -> allowed-once, deny or review failure -> rejected with guidance.
+ * - Repeated denials within one user turn open a circuit breaker.
+ */
 
-/** Public DSH seams only. Standing sandbox policy is NEVER written or temporarily switched. */
+const SHELL_TOOLS = new Set(['bash', 'pwsh']);
+export const MAX_ACTION_BYTES = 64 * 1024;
+const WIDER_MODES = {
+  'read-only': ['workspace-write', 'danger-full-access'],
+  'workspace-write': ['danger-full-access'],
+};
+const BREAKER_CONSECUTIVE = 3;
+const BREAKER_WINDOW = 50;
+const BREAKER_WINDOW_DENIALS = 10;
+
+export const MESSAGES = Object.freeze({
+  denied: rationale => 'safe-auto: This action was rejected due to unacceptable risk.\n'
+    + `Reason: ${rationale || 'The reviewer denied the action without a specific rationale.'}\n`
+    + 'The agent must not attempt to achieve the same outcome via workaround, indirect execution, or policy circumvention. '
+    + 'Proceed only with a materially safer alternative, or if the user explicitly approves the action after being informed of the risk. '
+    + 'Otherwise, stop and request user input.',
+  failed: detail => `safe-auto: Automatic approval review failed (${detail}). `
+    + 'This is a review failure, not a determination that the action is unsafe. '
+    + 'You may retry once, or ask the user for guidance or explicit approval. Do not bypass the approval boundary.',
+  breaker: 'safe-auto: Automatic approval is paused for this turn after repeated denials. '
+    + 'Stop and ask the user how to proceed; a new user message resumes automatic review.',
+});
+
+function serializeAction(exec, req) {
+  let serialized;
+  try {
+    serialized = JSON.stringify({ tool: exec.name, arguments: exec.arguments, approvalReason: req.reason ?? '' }, (_key, value) => {
+      if (['undefined', 'function', 'symbol', 'bigint'].includes(typeof value)
+        || (typeof value === 'number' && !Number.isFinite(value))) throw new Error('INVALID_REVIEW_ACTION');
+      return value;
+    });
+  } catch { throw new Error('INVALID_REVIEW_ACTION'); }
+  if (Buffer.byteLength(serialized) > MAX_ACTION_BYTES) throw new Error('REVIEW_INPUT_TOO_LARGE');
+  return serialized;
+}
+
+function permissionRevision(session) {
+  const events = session.snapshotEvents?.() ?? [];
+  for (let index = events.length - 1; index >= 0; index--) {
+    if (isPermissionEvent(events[index])) return events[index].seq ?? index;
+  }
+  return -1;
+}
+
+/** Latest direct human message position; one user turn shares a breaker window. */
+function humanTurn(session) {
+  const events = session?.snapshotEvents?.() ?? [];
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index];
+    if (event?.type === 'user/message' && event.data?.source?.kind === 'user') return event.seq ?? index;
+  }
+  return undefined;
+}
+
+export function createBreaker() {
+  const sessions = new WeakMap();
+  const state = (session, turn) => {
+    let s = sessions.get(session);
+    if (!s || s.turn !== turn) { s = { turn, consecutive: 0, window: [] }; sessions.set(session, s); }
+    return s;
+  };
+  return {
+    open(session, turn) {
+      const s = state(session, turn);
+      return s.consecutive >= BREAKER_CONSECUTIVE || s.window.filter(Boolean).length >= BREAKER_WINDOW_DENIALS;
+    },
+    record(session, turn, denied) {
+      const s = state(session, turn);
+      s.consecutive = denied ? s.consecutive + 1 : 0;
+      s.window.push(denied);
+      if (s.window.length > BREAKER_WINDOW) s.window.shift();
+    },
+  };
+}
+
 export function apply(ctx, raw = {}) {
-  const config = parseConfig(raw);
+  const base = parseConfig(raw);
   let control;
   let controlEpoch = 0;
-  const humanApprovals = createHumanApprovals();
-  ctx.provide?.('safeAutoRuntime', { base: config, attach(next) {
+  // With the UI row loaded, only sessions that selected Safe Auto are reviewed.
+  // A headless profile without that row applies the profile config to every
+  // top-level session; once the row has attached and gone, review stops.
+  let attachedOnce = false;
+  ctx.provide?.('safeAutoRuntime', { base, attach(next) {
     if (control) throw new Error('Safe Auto controls already attached');
-    control = next; controlEpoch++;
-    return () => { if (control === next) { control = undefined; controlEpoch++; humanApprovals.cancelAll(); } };
-  }, invalidateApprovals() { humanApprovals.invalidate(); },
-  listApprovals(sessionId) {
-    const session = control?.getSession(sessionId);
-    if (!session) throw new Error('Approval controls unavailable');
-    return humanApprovals.list(session);
-  },
-  answerApproval({ sessionId, requestId, outcome } = {}) {
-    const session = control?.getSession(sessionId);
-    if (!session || !control.config(session).enabled) throw new Error('Approval controls unavailable');
-    return humanApprovals.answer(session, requestId, outcome);
+    control = next; attachedOnce = true;
+    const epoch = ++controlEpoch;
+    return () => { if (control === next && controlEpoch === epoch) { control = undefined; ++controlEpoch; } };
   } });
-  const inactiveConfig = parseConfig({ ...config, enabled: false });
-  // UI activation owns review, independently of the native preset identity.
-  // Never register official Auto: its fixed FullAccess bundle is not our policy.
-  const configFor = exec => control?.config(exec.agent?.session) ?? (controlEpoch ? inactiveConfig : config);
-  const controlBinding = exec => JSON.stringify({ epoch: controlEpoch, state: control?.state(exec.agent?.session) });
-  if (!config.enabled) return;
-  if (typeof ctx.tools?.guard !== 'function' || typeof ctx.sandboxPolicy?.resolve !== 'function') throw new Error('DSH Safe Auto requires tools.guard and sandboxPolicy.resolve');
-  const decisions = new Map();
-  const execution = new AsyncLocalStorage();
-  const lifetime = new AbortController();
-  const hostRuntime = createHostRuntimeRegistry(ctx.tools);
-  const credentialReads = createCredentialReads(ctx, lifetime.signal);
+  if (!base.enabled) return;
+
   let llm;
-  // Optional dependency: losing the model service must NOT unload the safety guards.
+  // Optional dependency: losing the model service fails reviews closed instead of unloading the plugin.
   if (typeof ctx.inject === 'function') ctx.inject(['llm'], scope => {
     const active = scope.llm;
     llm = active;
     scope.effect(() => () => { if (llm === active) llm = undefined; });
   });
-  const gate = createGate(config, { getLlm: () => llm, audit: row => ctx.logger.info('safe-auto %s', JSON.stringify(row)) });
-  ctx.effect(() => () => { lifetime.abort(); hostRuntime.dispose(); humanApprovals.dispose(); gate.dispose(); decisions.clear(); execution.disable(); });
+  const lifetime = new AbortController();
+  const breaker = createBreaker();
+  // agent -> callId -> live execution. Approval requests carry only agent and
+  // callId, so the action's arguments are looked up here.
+  const executions = new WeakMap();
+  // execution token -> model-facing explanation for a non-granted review.
+  const feedback = new Map();
+  ctx.effect(() => () => { lifetime.abort(); feedback.clear(); });
 
-  const reviewable = exec => REVIEW_TOOLS.has(exec.name) && ESCALATION.has(exec.arguments?.sandbox_permissions);
-
-  function callOf(exec, includeAuthority = false) {
-    const session = exec.agent?.session;
-    const sandbox = ctx.sandboxPolicy.resolve({ session });
-    const info = includeAuthority ? authority(session) : {};
-    const call = { tool: exec.name, args: exec.arguments, callId: String(exec.callId), session, agent: exec.agent,
-      cwd: session?.header?.cwd, sandbox, signal: exec.signal,
-      subagent: isSubagentSession(session),
-      nested: exec.parent !== undefined, ...info };
-    if (REVIEW_TOOLS.has(exec.name)) {
-      // These are optional capability reads, not model assertions about its environment.
-      const fs = ctx.get?.('fs');
-      const shell = ctx.get?.('shell');
-      call.reviewPaths = resolveReviewPaths(call, fs);
-      call.localExecution = call.reviewPaths.localExecution;
-      if (call.localExecution && ['bash', 'pwsh'].includes(call.tool)) call.trustedRuntime = hostRuntime.get(exec);
-      call.jobsAvailable = typeof ctx.get !== 'function' || ctx.get('jobs') !== undefined;
-      call.shellConfined = ['read-only', 'workspace-write', 'danger-full-access'].includes(shell?.sandboxMode);
-    }
-    return call;
-  }
-
-  function sameReviewer(exec, decision) {
-    if (!decision.reviewRoute) return true;
+  const active = session => {
+    if (!session || isSubagentSession(session)) return undefined;
+    if (!control) return attachedOnce ? undefined : base;
     try {
-      return sameRoute(decision.reviewRoute, resolveReviewRoute(configFor(exec), callOf(exec))) && decision.reviewLlm === llm;
-    } catch { return false; }
-  }
-
-  ctx.tools.guard(exec => {
-    const config = configFor(exec);
-    const pending = decisions.get(exec.token);
-    if (pending?.controlBinding !== undefined && pending.controlBinding !== controlBinding(exec)) return 'safe-auto: SETTINGS_CHANGED';
-    if (!config.enabled) return undefined;
-    if (exec.signal.aborted || lifetime.signal.aborted) return 'safe-auto: CANCELLED';
-    try {
-      const hard = hardRisk(callOf(exec));
-      return hard ? `safe-auto: ${hard.code}` : undefined;
-    } catch { return 'safe-auto: POLICY_UNAVAILABLE'; }
-  });
+      const config = control.config(session);
+      return config.enabled ? config : undefined;
+    } catch { return undefined; }
+  };
+  const audit = row => { try { ctx.logger?.info?.('safe-auto %s', JSON.stringify(row)); } catch { /* audit is best-effort */ } };
 
   ctx.on('tools/pre-execute', async (exec, next) => {
-    hostRuntime.begin(exec);
-    const config = configFor(exec);
-    if (!config.enabled) return next();
-    if (exec.signal.aborted || lifetime.signal.aborted) return { kind: 'cancel' };
-    const hard = hardRisk(callOf(exec));
-    if (hard) return { kind: 'deny', reason: `safe-auto: ${hard.code}` };
-    // Native policy remains authoritative; this plugin never manufactures asks.
-    return next();
-  }, { prepend: true });
-
-  // Bind the approval to the active execution, never a process-wide visible callId cache.
-  ctx.on('tools/execute', async (exec, next) => {
-    const config = configFor(exec);
-    if (!config.enabled) return next();
-    const run = () => credentialReads.execute(exec, next);
-    if (!reviewable(exec)) return run();
-    const call = callOf(exec, true);
-    const saved = { kind: 'approval', binding: bindingOf(call, assessApproval(call, config)), signal: exec.signal, controlBinding: controlBinding(exec) };
-    if (decisions.size >= 1024) return run();
-    decisions.set(exec.token, saved);
-    const store = { exec, saved, active: true, claimed: false };
-    try {
-      const result = await execution.run(store, run);
-      // Around-dispatch may return result content; tools/result is a read-only
-      // observer in the pinned host. Expose recovery through the actual result.
-      if (result?.isError && saved.feedback) return { ...result,
-        content: [...(result.content ?? []), { type: 'text', text: saved.feedback }] };
-      return result;
+    const agent = exec.agent;
+    if (agent && typeof agent === 'object') {
+      let calls = executions.get(agent);
+      if (!calls) executions.set(agent, calls = new Map());
+      calls.set(String(exec.callId), exec);
     }
-    finally { store.active = false; }
+    const decision = await next();
+    if (decision.kind !== 'allow' || !SHELL_TOOLS.has(exec.name) || !active(agent?.session)) return decision;
+    // Only a strictly wider mode is guaranteed to ask through the native helper.
+    // A same-mode request returns immediately there and still needs this guard.
+    let mode;
+    try { mode = ctx.sandboxPolicy.resolve({ session: agent.session }).mode; } catch {}
+    if (WIDER_MODES[mode]?.includes(exec.arguments?.sandbox_permissions)) return decision;
+    const rule = dangerousCommand(exec.arguments?.command, exec.name);
+    if (!rule) return decision;
+    return { kind: 'ask', reason: `safe-auto: dangerous command (${rule}) requires review`,
+      displayReason: { en: `Safe Auto review: dangerous command (${rule})`, zh: `安全自动审核：危险命令（${rule}）` } };
   }, { prepend: true });
 
-  ctx.on('tools/result', (exec, result) => {
-    hostRuntime.observe(exec, result);
-    decisions.delete(exec.token);
-    ctx.logger.info('safe-auto %s', JSON.stringify({ phase: 'result', tool: exec.name,
-      callId: String(exec.callId), isError: result?.isError }));
+  ctx.on('tools/post-execute', async (exec, result, next) => {
+    const decision = await next();
+    const text = feedback.get(exec.token);
+    if (text === undefined) return decision;
+    feedback.delete(exec.token);
+    if (!result.isError || decision.kind !== 'accept' || Object.hasOwn(decision, 'value')) return decision;
+    return { ...decision, content: [{ type: 'text', text }] };
+  });
+
+  ctx.on('tools/result', exec => {
+    feedback.delete(exec.token);
+    const calls = exec.agent && executions.get(exec.agent);
+    if (calls?.get(String(exec.callId)) === exec) calls.delete(String(exec.callId));
   });
 
   ctx.on('approval/request', async (req, next) => {
-    const store = execution.getStore();
-    const config = configFor(store?.exec ?? { agent: req.agent });
-    if (store?.saved.controlBinding !== undefined && store.saved.controlBinding !== controlBinding(store.exec)) return 'rejected';
-    if (req.signal?.aborted || lifetime.signal.aborted) return 'cancelled';
-    if (!config.enabled) return store?.saved.kind === 'approval' ? 'rejected' : next();
-    // A foreign tool's native ask is not ours. An owned execution context,
-    // including an inactive or mismatched one, must never escape to another
-    // answerer. Likewise an unbound ask impersonating one of our tools fails
-    // closed. Human takeover for owned asks uses only the UI queue below.
-    if (!store) return REVIEW_TOOLS.has(req.toolName) ? 'rejected' : next();
-    if (store.saved.kind !== 'approval') return 'rejected';
-    const { exec, saved } = store;
-    const matches = () => req.agent === exec.agent && req.toolName === exec.name && req.callId === exec.callId &&
-      req.signal === exec.signal && req.reason === escalationReason(callOf(exec));
-    if (!matches()) return 'rejected';
-    if (!store.active || store.claimed) return 'rejected';
-    store.claimed = true;
-    const signal = AbortSignal.any([saved.signal, exec.signal, req.signal, lifetime.signal]);
-    const started = performance.now();
-    let reviewed;
-    const bound = () => {
-      if (signal.aborted || !store.active || decisions.get(exec.token) !== saved || saved.controlBinding !== controlBinding(exec) || !matches()) return false;
-      try {
-        const current = configFor(exec), call = callOf(exec, true);
-        return current.enabled && bindingOf(call, assessApproval(call, current)) === saved.binding && (!reviewed || sameReviewer(exec, reviewed));
-      } catch { return false; }
-    };
-    const finish = (outcome, source, decision) => {
-      if (signal.aborted) outcome = 'cancelled';
-      else if (!bound()) outcome = 'rejected';
-      if (outcome !== 'allowed-once') {
-        const code = !bound() ? 'GRANT_INVALIDATED' : decision?.code ?? 'APPROVAL_BINDING_INVALID';
-        const recovery = code === 'HUMAN_APPROVAL_EXPIRED'
-          ? 'The human confirmation window expired. No permission was granted; a fresh execution requires a new review and confirmation.'
-          : code === 'HUMAN_REJECTED'
-            ? 'The user rejected this operation. Do not retry it through another execution path.'
-            : code === 'MODEL_NOT_ALLOWED'
-          ? 'The reviewer denied this action. Do not retry it through wrappers or alternate execution; choose a materially safer action or ask the user with the concrete risk.'
-          : code === 'AUTHORITY_CONTEXT_INCOMPLETE'
-            ? 'Human authorization history is incomplete, sensitive or over its limit. No permission was granted; use a fresh conversation with the full task scope and restrictions.'
-            : code === 'REVIEW_NEEDS_CONFIRMATION'
-              ? 'The reviewer needs more evidence or explicit human authorization. No permission was granted; ask the user about the actual target and side effects, or supply a safer, verifiable action.'
-              : 'No permission was granted. This review failure is not proof that the action is unsafe. Resolve the reported evidence, service or budget problem before requesting review again; do not bypass the approval boundary.';
-        const rationale = typeof decision?.reason === 'string' && !containsSecret(decision.reason)
-          ? ` Reviewer rationale (untrusted): ${decision.reason.slice(0, 512)}` : '';
-        saved.feedback = `safe-auto: ${code}. ${recovery}${rationale}`;
-      }
-      try { ctx.logger.info('safe-auto %s', JSON.stringify({ phase: 'approval', tool: exec.name, callId: String(exec.callId),
-        decision: outcome, source, code: decision?.code, scope: 'this-call-only', durationMs: Math.round(performance.now() - started) })); }
-      catch { return 'rejected'; }
+    const session = req.agent?.session;
+    const config = active(session);
+    if (!config) return next();
+    const exec = req.callId === undefined ? undefined : executions.get(req.agent)?.get(String(req.callId));
+    // Without the concrete action there is nothing to review; keep the native flow.
+    if (!exec) return next();
+    const owner = control;
+    const epoch = controlEpoch;
+    const permissions = permissionRevision(session);
+    const signal = AbortSignal.any([req.signal, exec.signal, lifetime.signal, owner?.signal].filter(Boolean));
+    const turn = humanTurn(session);
+    const started = Date.now();
+    const finish = (outcome, row, text) => {
+      if (text !== undefined && outcome !== 'allowed-once') feedback.set(exec.token, text);
+      audit({ tool: exec.name, callId: String(exec.callId), outcome, durationMs: Date.now() - started, ...row });
       return outcome;
     };
-    if (!bound()) return finish('rejected', 'binding');
-    let decision;
-    let evidence;
-    const assessment = assessApproval(callOf(exec, true), config);
-    // A fresh exact-call UI answer supplies authority when historical text is
-    // incomplete. Waive only this review-input limitation, then revalidate all
-    // structural, secret and host constraints under the original live binding.
-    const manualAssessment = assessment.code === 'AUTHORITY_CONTEXT_INCOMPLETE'
-      ? assessApproval({ ...callOf(exec, true), authorityIncomplete: false }, config) : assessment;
-    // No mutation is only half the proof: content/environment dumps can expose
-    // credentials. Only metadata/literal output may skip evidence and review.
-    let staticAllow = false;
-    if (assessment.kind === 'review' && config.staticReadonly && exec.name === 'bash') {
-      try {
-        const analysis = analyzeShell(exec.arguments?.command);
-        staticAllow = isReadonly(analysis) && isSafeStaticExposure(analysis);
-      } catch { staticAllow = false; }
-    }
+    if (breaker.open(session, turn)) return finish('rejected', { code: 'CIRCUIT_OPEN' }, MESSAGES.breaker);
+    let route;
+    try { route = resolveReviewRoute(config, { agent: req.agent, session }); }
+    catch (error) { return finish('rejected', { code: error.message }, MESSAGES.failed('reviewer model unavailable')); }
+    const agent = req.agent, callId = String(req.callId), token = exec.token;
+    const environment = () => {
+      const sandbox = ctx.sandboxPolicy.resolve({ session });
+      return JSON.stringify({ platform: process.platform, cwd: session.header?.cwd,
+        workspaceRoot: sandbox?.workspaceRoot, sandbox: sandbox?.mode });
+    };
+    let rawAction, rawEnvironment, revision, input;
     try {
-      const call = callOf(exec, true);
-      if (staticAllow) decision = { kind: 'allow', code: 'STATIC_READONLY' };
-      else {
-        // Do not read files or ask a model for an ineligible execution.
-        if (assessment.kind === 'review') {
-          const evidenceSignal = AbortSignal.any([signal, AbortSignal.timeout(Math.min(config.timeoutMs, 30000))]);
-          evidence = await collectExecutionEvidence(call, ctx.get?.('fs'), evidenceSignal);
-        }
-        if (!bound()) return finish('unavailable', 'binding', { code: 'GRANT_INVALIDATED' });
-        decision = await gate.decide({ ...call, signal, executionEvidence: evidence?.data }, config);
-        if (decision.kind === 'allow' && evidence && !await evidence.verify(signal)) decision = { kind: 'ask', code: 'EVIDENCE_CHANGED' };
-      }
+      const state = owner?.state(session);
+      if (owner && state?.active !== true) return finish('cancelled', { code: 'REVIEW_INVALIDATED' });
+      revision = state?.revision;
+      rawAction = serializeAction(exec, req);
+      rawEnvironment = environment();
+      input = reviewInput({
+        transcript: buildTranscript(session.snapshotEvents?.() ?? [], config.maxTranscriptBytes),
+        environment: JSON.parse(rawEnvironment),
+        action: JSON.parse(rawAction),
+        reviewerPrompt: config.reviewerPrompt,
+      });
+    } catch (error) {
+      return finish('rejected', { code: error.message }, MESSAGES.failed(
+        error.message === 'REVIEW_INPUT_TOO_LARGE' ? 'the complete action exceeds the review input limit' : 'the complete action could not be captured'));
     }
-    catch (error) { decision = { kind: 'ask', code: ['EVIDENCE_CHANGED', 'EVIDENCE_PROVIDER_UNBOUNDED'].includes(error.message)
-      ? error.message : signal.aborted ? 'REVIEW_CANCELLED' : 'EVIDENCE_UNAVAILABLE' }; }
-    if (decision.kind === 'allow') reviewed = decision;
-    if (!bound()) return finish('rejected', 'binding', decision);
-    if (decision.kind === 'allow' && performance.now() - started > APPROVAL_TTL_MS) decision = { kind: 'ask', code: 'APPROVAL_LEASE_EXPIRED' };
-    if (decision.kind === 'allow') return finish('allowed-once', decision.code === 'STATIC_READONLY' ? 'static' : 'reviewer', decision);
-    if (decision.kind === 'cancel') return finish('cancelled', 'reviewer', decision);
-    // Structural refusals, changed operations and audit failures are terminal.
-    // Model refusal (including risk opinions) and review failures may be
-    // overridden only by an explicit response to this exact UI request.
-    const terminal = new Set(['AUDIT_UNAVAILABLE', 'STALE_REVIEW', 'EVIDENCE_CHANGED', 'EVIDENCE_PROVIDER_UNBOUNDED']);
-    if (manualAssessment.kind === 'review' && !terminal.has(decision.code) && config.humanApprovalTimeoutMs > 0 && control) {
-      reviewed = undefined; // Human authorization does not inherit a stale model lease.
-      const review = { code: decision.code,
-        ...(decision.risk ? { risk: decision.risk } : {}),
-        ...(decision.authorization ? { authorization: decision.authorization } : {}),
-        ...(typeof decision.reason === 'string' && !containsSecret(decision.reason) ? { reason: decision.reason.slice(0, 512) } : {}) };
-      const answer = await humanApprovals.request({ session: exec.agent.session, action: manualAssessment.action, review,
-        signal, timeoutMs: config.humanApprovalTimeoutMs, valid: bound });
-      if (answer.kind === 'allow') {
-        try {
-          const verificationSignal = AbortSignal.any([signal, AbortSignal.timeout(Math.min(config.timeoutMs, 30000))]);
-          if (evidence && !await evidence.verify(verificationSignal)) return finish('rejected', 'human', { code: 'EVIDENCE_CHANGED' });
-          if (!humanApprovals.beforeDeadline(answer)) return finish('rejected', 'human', { code: 'HUMAN_APPROVAL_EXPIRED' });
-          const outcome = finish('allowed-once', 'human', answer);
-          if (outcome === 'allowed-once') gate.humanAllowed(callOf(exec, true));
-          return outcome;
-        } catch { return finish(signal.aborted ? 'cancelled' : 'rejected', 'human', { code: 'EVIDENCE_UNAVAILABLE' }); }
-      }
-      return finish(answer.kind === 'cancel' ? 'cancelled' : 'rejected', 'human', answer);
+    // Raw identity stays local: redacted secrets must not make different actions equal.
+    const current = () => {
+      try {
+        if (signal.aborted || control !== owner || controlEpoch !== epoch || req.agent !== agent
+          || agent.session !== session || exec.agent !== agent || exec.token !== token
+          || String(exec.callId) !== callId || String(req.callId) !== callId
+          || permissionRevision(session) !== permissions
+          || executions.get(agent)?.get(callId) !== exec) return false;
+        const configNow = active(session);
+        if (!configNow || JSON.stringify(configNow) !== JSON.stringify(config)) return false;
+        const state = owner?.state(session);
+        return (!owner || (state.active === true && state.revision === revision))
+          && environment() === rawEnvironment && serializeAction(exec, req) === rawAction;
+      } catch { return false; }
+    };
+    if (!current()) return finish('cancelled', { code: 'REVIEW_INVALIDATED' });
+    let verdict;
+    try { verdict = await review({ llm, route, input, config, signal }); }
+    catch (error) {
+      if (!current()) return finish('cancelled', { code: 'REVIEW_CANCELLED' });
+      const detail = error.message === 'REVIEW_TIMEOUT' ? 'the reviewer timed out' : error.message === 'NATIVE_REVIEWER_UNAVAILABLE'
+        ? 'no reviewer model service' : error.message === 'INVALID_REVIEW_RESPONSE' ? 'the reviewer returned an invalid verdict'
+          : error.message === 'REVIEW_INPUT_TOO_LARGE' ? 'the complete input exceeds the review input limit' : 'the reviewer request failed';
+      return finish('rejected', { code: error.message }, MESSAGES.failed(detail));
     }
-    if (decision.kind === 'deny') return finish('rejected', 'reviewer', decision);
-    return finish('unavailable', 'policy', decision);
+    if (!current()) return finish('cancelled', { code: 'REVIEW_CANCELLED' });
+    const row = { code: verdict.outcome === 'allow' ? 'ALLOWED' : 'DENIED', risk: verdict.risk, authorization: verdict.authorization };
+    breaker.record(session, turn, verdict.outcome === 'deny');
+    return verdict.outcome === 'allow' ? finish('allowed-once', row) : finish('rejected', row, MESSAGES.denied(verdict.rationale));
   }, { prepend: true });
 }

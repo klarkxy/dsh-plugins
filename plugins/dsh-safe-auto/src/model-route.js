@@ -1,4 +1,8 @@
 /** Model selection is independent of the main agent's tools, transcript and sampling config. */
+// Reasoning models stream their thinking before the verdict; only the text
+// blocks carry the answer.
+const MAX_STREAM_BYTES = 512 * 1024;
+const MAX_TEXT_BYTES = 16 * 1024;
 const id = value => typeof value === 'string' && value.length > 0 && value.length <= 4096 &&
   value === value.trim() && !/[\x00-\x1f\x7f]/.test(value);
 
@@ -77,7 +81,7 @@ export async function nativeCompletion(llm, route, system, input, maxTokens, sig
       const block = blocks.get(chunk.index) ?? { type, text: '', ended: false, hasDelta: false };
       if (block.type !== type || block.ended) throw new Error('INVALID_NATIVE_BLOCK');
       size += Buffer.byteLength(chunk.text);
-      if (size > 32768) throw new Error('REVIEW_RESPONSE_TOO_LARGE');
+      if (size > MAX_STREAM_BYTES) throw new Error('REVIEW_RESPONSE_TOO_LARGE');
       block.text += chunk.text;
       block.hasDelta = true;
       blocks.set(chunk.index, block);
@@ -90,12 +94,12 @@ export async function nativeCompletion(llm, route, system, input, maxTokens, sig
     } else {
       throw new Error('UNEXPECTED_REVIEWER_CHUNK');
     }
-    if (size > 32768) throw new Error('REVIEW_RESPONSE_TOO_LARGE');
+    if (size > MAX_STREAM_BYTES) throw new Error('REVIEW_RESPONSE_TOO_LARGE');
   }
   signal.throwIfAborted();
   if (finish !== 'stop' || [...blocks.values()].some(block => !block.ended)) throw new Error('MISSING_COMPLETION');
   const text = [...blocks.entries()].sort(([a], [b]) => a - b)
     .filter(([, block]) => block.type === 'text').map(([, block]) => block.text).join('');
-  if (!text || Buffer.byteLength(text) > 2048) throw new Error('INVALID_COMPLETION');
+  if (!text || Buffer.byteLength(text) > MAX_TEXT_BYTES) throw new Error('INVALID_COMPLETION');
   return { text, totalTokens: usage };
 }

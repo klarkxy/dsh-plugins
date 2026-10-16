@@ -14,7 +14,7 @@ const replacements = {
   ...Object.fromEntries(['@klarkxy/dsh-model-route', '@klarkxy/dsh-plugin-kit/official-ui', '@klarkxy/dsh-plugin-kit/client-utils', '@klarkxy/dsh-plugin-kit/model-settings-client'].map(name => [name, import.meta.resolve(name)])),
 };
 const transformed = Object.entries(replacements).reduce((text, [name, url]) => text.replace(`from '${name}'`, `from '${url}'`), source);
-const { SettingsPanel, PermissionMenu, ApprovalDialog, translator, errorText } = await import(`data:text/javascript;base64,${Buffer.from(transformed).toString('base64')}`);
+const { SettingsPanel, PermissionMenu, translator, errorText } = await import(`data:text/javascript;base64,${Buffer.from(transformed).toString('base64')}`);
 
 async function mount(run) {
   const dom = new JSDOM('<div id="root"></div>'), previous = new Map(), listeners = new Set();
@@ -55,32 +55,47 @@ test('Safe Auto keeps a reviewer draft and translates an existing save failure o
   });
 });
 
-test('Safe Auto permission menu and approval dialog follow host locale without changing request data', async () => {
+test('Safe Auto permission menu follows host locale without re-reading the session', async () => {
   await mount(async (dom, root, locale, switchLocale) => {
     let reads = 0;
     const snapshot = { current: 'workspace-write', available: true, revision: '1', safeAuto: false, options: [
       { value: 'read-only', name: 'server Read' }, { value: 'workspace-write', name: 'server Write' }, { value: 'safe-auto', name: 'server Safe' },
     ] };
     const api = { getSession: async () => { reads++; return snapshot; } };
-    const request = { id: 'request-id', action: { tool: 'bash', cwd: '/user/path', arguments: { command: 'echo 用户内容' } }, review: { opinion: '模型原文' } };
-    const answer = () => { throw new Error('locale must not answer approvals'); };
-    await act(async () => root.render(React.createElement(React.Fragment, null,
-      React.createElement(PermissionMenu, { sessionId: 's', api, locale }),
-      React.createElement(ApprovalDialog, { request, locale, remainingMs: 1000, onAnswer: answer, error: 'Confirmation is no longer available' }))));
+    await act(async () => root.render(React.createElement(PermissionMenu, { sessionId: 's', api, locale })));
     await act(async () => dom.window.document.querySelector('[aria-haspopup="menu"]').click());
     const before = reads;
-    assert.match(dom.window.document.body.textContent, /Read Only|Allow this call only/);
+    assert.match(dom.window.document.body.textContent, /Workspace Write/);
     await switchLocale('zh');
     assert.equal(reads, before);
-    assert.equal(dom.window.document.querySelector('[role="dialog"]').getAttribute('aria-label'), '确认这一次调用');
-    assert.match(dom.window.document.body.textContent, /仅可查看|仅允许这一次|确认已不可用/);
-    assert.match(dom.window.document.body.textContent, /echo 用户内容|模型原文/);
-    assert.doesNotMatch(dom.window.document.body.textContent, /Confirmation is no longer available|Allow this call only/);
+    assert.match(dom.window.document.body.textContent, /工作区内修改/);
+    assert.doesNotMatch(dom.window.document.body.textContent, /Workspace Write/);
+  });
+});
+
+test('an unready session keeps the permission control quiet', async () => {
+  await mount(async (dom, root, locale) => {
+    let reads = 0;
+    const api = { getSession: async () => { reads++; throw new Error('Session is not active; open it and retry'); } };
+    await act(async () => root.render(React.createElement(PermissionMenu, { sessionId: 's', api, locale })));
+    assert.equal(reads, 1);
+    assert.equal(dom.window.document.querySelector('[role="alert"]'), null);
+    assert.match(dom.window.document.querySelector('[aria-haspopup="menu"]').textContent, /Permissions/);
+    assert.doesNotMatch(dom.window.document.body.textContent, /not active|未激活/);
+  });
+});
+
+test('a real permission read failure still shows', async () => {
+  await mount(async (dom, root, locale) => {
+    const api = { getSession: async () => { throw new Error('Request failed'); } };
+    await act(async () => root.render(React.createElement(PermissionMenu, { sessionId: 's', api, locale })));
+    assert.match(dom.window.document.querySelector('[role="alert"]').textContent, /Request failed/);
   });
 });
 
 test('Safe Auto local fallback/config errors translate, external diagnostics remain verbatim', () => {
-  for (const message of ['Request failed', 'Invalid approval response', 'invalid reviewer provider/model identifier', 'provider and model must be configured together', 'reviewerPrompt must be a string', 'Approval expired or invalidated']) {
+  for (const message of ['Request failed', 'invalid reviewer provider/model identifier', 'provider and model must be configured together',
+    'reviewerPrompt must be a string', 'invalid maxTranscriptBytes', 'unknown config field: legacy']) {
     assert.match(errorText(translator('zh'), message), /[\u4e00-\u9fff]/);
     assert.doesNotMatch(errorText(translator('en'), message), /[\u4e00-\u9fff]/);
   }

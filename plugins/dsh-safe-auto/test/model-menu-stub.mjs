@@ -8,6 +8,19 @@
  * host browser.
  */
 import React from 'react';
+import { readFile } from 'node:fs/promises';
+import ts from 'typescript';
+
+// Exercise the real shared catalog hook/status while keeping the model menu
+// focused on this consumer's props. Transpile in-process for the Node harness.
+const catalogSource = await readFile(new URL('../../dsh-model-route/src/catalog-ui.tsx', import.meta.url), 'utf8');
+const catalogCode = ts.transpileModule(catalogSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
+  .replaceAll('"react"', JSON.stringify(import.meta.resolve('react')))
+  .replaceAll("'react'", JSON.stringify(import.meta.resolve('react')))
+  .replaceAll('"react/jsx-runtime"', JSON.stringify(import.meta.resolve('react/jsx-runtime')))
+  .replaceAll("'@deepseek-ai/dsh-client-ui-primitives'", JSON.stringify(new URL('./client-primitives-stub.mjs', import.meta.url).href))
+  .replaceAll("'./catalog.ts'", JSON.stringify(import.meta.resolve('@klarkxy/dsh-model-route')));
+export const { useModelCatalog, ModelCatalogStatus } = await import(`data:text/javascript;base64,${Buffer.from(catalogCode).toString('base64')}`);
 
 const h = React.createElement;
 export const modelMenuCss = '';

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Safe Auto",
-    "description": "An independent reviewer vets each sandbox escalation; only a pass auto-approves that one call."
+    "description": "A reviewer model answers approval requests; only calls that pass go ahead, one call at a time."
   }
 }

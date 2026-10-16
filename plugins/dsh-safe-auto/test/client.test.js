@@ -69,21 +69,6 @@ test('catalog parsing delegates the remote envelope to dsh-model-route', () => {
   }
 });
 
-test('approval API uses session-scoped read and explicit one-shot answer RPCs', async () => {
-  const waiting = [], registered = [], calls = [];
-  client.apply({ slots: { inject: (name, fn) => waiting.push(fn), register: (options, component) => registered.push({ options, component }) },
-    connection: { rpc: { call: async (...args) => { calls.push(args); return { ok: true, value: { accepted: true } }; } } },
-    remote: { session: { modelCatalog: () => catalog } } });
-  waiting.forEach(fn => fn());
-  const { api } = registered.find(item => item.component === client.PermissionMenu).options.inject();
-  await api.getApprovals('session-A');
-  await api.answerApproval({ sessionId: 'session-A', requestId: 'request-A', outcome: 'allow' });
-  assert.deepEqual(calls, [
-    ['/dsh-safe-auto', 'approval.list', { sessionId: 'session-A' }],
-    ['/dsh-safe-auto', 'approval.answer', { sessionId: 'session-A', requestId: 'request-A', outcome: 'allow' }],
-  ]);
-});
-
 test('reviewer menu state lists exact catalog ids and retains an absent saved route', () => {
   const state = client.reviewerMenuState(values, catalog);
   assert.equal(state.follow, false);
@@ -137,7 +122,7 @@ test('permission menu zh anchor uses the localized labels', () => {
 });
 
 test('settings render as a tablist: reviewer tab selected, other panels hidden', () => {
-  const policyLimits = { timeoutMs: 1, maxInputBytes: 2, outputTokens: 3, maxReviewsPerTask: 4, consecutiveDenials: 5 };
+  const policyLimits = { timeoutMs: 90000, outputTokens: 4096, maxTranscriptBytes: 48000 };
   const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values, policyLimits }, initialCatalog: catalog });
   assert.equal((html.match(/role="tab"/g) || []).length, 3);
   assert.equal((html.match(/role="tabpanel"/g) || []).length, 3);
@@ -191,17 +176,32 @@ test('prompt counter describes the textarea', () => {
   assert.match(html, /id="sa-prompt-hint"[^>]*>0\/4096/);
 });
 
-test('the timed confirmation policy and evidence disclosure appear in the safety tab', () => {
+test('the safety tab explains scope, reviewer input and the circuit breaker', () => {
   const props = { view: 'page', api: {}, initialSettings: { revision: 1, values }, initialCatalog: catalog, locale: zhLocale };
   const closed = render(client.SettingsPanel, props);
   assert.match(closed, /安全说明/);
   assert.match(closed, /id="[^"]*-details-panel" aria-labelledby="[^"]*-details-tab" hidden=""/, 'the safety panel stays hidden until its tab is selected');
   const open = render(client.SettingsPanel, { ...props, initialTab: 'details' });
   assert.match(open, /id="[^"]*-details-panel" aria-labelledby="[^"]*-details-tab" tabindex="0"/);
-  assert.match(open, /无法自动判断时/);
-  assert.match(source, /请你在 60 秒内确认；超时拒绝/);
-  assert.match(source, /真人指令和有界的本地脚本证据/);
-  assert.doesNotMatch(source, /change\(\{[^\n]*(?:human|fallbackPolicy)/);
+  assert.match(open, /普通调用照常在工作区沙箱内运行，插件不拦截/);
+  assert.match(open, /发给审核模型的内容：对话记录/);
+  assert.match(open, /连续拒绝 3 次，或最近 50 次审核拒绝 10 次/);
+  const en = render(client.SettingsPanel, { ...props, locale: undefined, initialTab: 'details' });
+  assert.match(en, /Ordinary calls run inside the workspace sandbox as usual/);
+  assert.match(en, /Sent to the reviewer: the conversation/);
+  assert.match(en, /After 3 consecutive denials/);
+  // The retired timed human confirmation is gone from the client.
+  assert.doesNotMatch(source, /60 秒|ApprovalDialog|approval\.list|approval\.answer/);
+});
+
+test('the limits tab shows one line built from the reported limits', () => {
+  const policyLimits = { timeoutMs: 90000, outputTokens: 4096, maxTranscriptBytes: 48000 };
+  const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values, policyLimits }, initialCatalog: catalog, initialTab: 'limits' });
+  assert.match(html, /Review timeout 90 s · Output cap 4096 tokens · Transcript cap 48000 bytes/);
+  assert.match(html, /configured in the profile/);
+  assert.doesNotMatch(source, /limitsFuses/);
+  const zh = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values, policyLimits }, initialCatalog: catalog, initialTab: 'limits', locale: zhLocale });
+  assert.match(zh, /单次审核超时 90 秒 · 输出上限 4096 tokens · 对话记录上限 48000 bytes/);
 });
 
 test('follow-conversation picks the leading row and keeps a saved nondefault effort warned', () => {
@@ -230,7 +230,7 @@ test('summary view contains no editing form', () => {
   const summary = render(client.SettingsPanel, { view: 'summary', api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog });
   assert.ok(!summary.includes('<select'));
   assert.ok(!summary.includes('<textarea'));
-  assert.match(summary, /independent reviewer/);
+  assert.match(summary, /a reviewer model answers approval requests/);
 });
 
 test('request scope drops stale reads, closed view responses and unmounted responses', async () => {
@@ -295,147 +295,4 @@ test('reconnected scope ignores an old read rejection and preserves recovered st
   await scope.run(async () => 'still readable', { value: value => seen.push(value) }, false, true);
   assert.deepEqual(seen, ['recovered', 'still readable']); assert.deepEqual(errors, []);
   scope.dispose();
-});
-
-const approval = (extra = {}) => ({ id: 'approval-1', action: { tool: 'bash', cwd: '/workspace',
-  arguments: { command: 'printf "<script>exact & complete</script>"\nnext command', workdir: '/workspace/subdir', sandbox_permissions: 'require_escalated', justification: 'Need <access>' },
-  permission: { from: 'workspace-write', to: 'danger-full-access', scope: 'this-call-only' } },
-  review: { code: 'denied', risk: 'high', authorization: 'insufficient', reason: '<b>Review opinion</b>' }, expiresAt: 61000, remainingMs: 60000, ...extra });
-
-test('confirmation displays full escaped native command, cwd and model opinion in both languages', () => {
-  const request = approval();
-  for (const locale of ['en', 'zh-CN']) {
-    const html = render(client.ApprovalDialog, { request, remainingMs: 59001, pendingCount: 2, locale, onAnswer() {} });
-    assert.match(html, /role="dialog" aria-modal="true"/);
-    // The widened card rule rides on the dialog element; both classes must be
-    // on the same node for the doubled-class override to beat the host width.
-    assert.match(html, /role="dialog"[^>]*class="[^"]*dsh-safe-auto dsh-safe-auto-approval-dialog/);
-    assert.match(html, /\.dsh-safe-auto\.dsh-safe-auto-approval-dialog \{ width: min\(640px, 100%\); \}/);
-    assert.match(html, /data-modal-autofocus="true"/);
-    assert.match(html, /printf &quot;&lt;script&gt;exact &amp; complete&lt;\/script&gt;&quot;\nnext command/);
-    assert.match(html, /\/workspace\/subdir/);
-    assert.doesNotMatch(html, /this-call-only/);
-    assert.match(html, /require_escalated/);
-    assert.match(html, /&lt;b&gt;Review opinion&lt;\/b&gt;/);
-    assert.doesNotMatch(html, /<script>|<b>Review opinion/);
-    assert.doesNotMatch(html, /disabled=""/);
-    assert.match(html, locale === 'en' ? /2 pending confirmations/ : /2 个请求待确认/);
-    assert.match(html, locale === 'en' ? /Allow this call only/ : /仅允许这一次/);
-    assert.match(html, locale === 'en' ? /60 seconds left/ : /剩余 60 秒/);
-  }
-});
-
-test('write and edit confirmation preserves complete content, replacement fields and false flags', () => {
-  const full = `${'many lines\n'.repeat(500)}<end marker>`;
-  for (const tool of ['write', 'edit']) {
-    const html = render(client.ApprovalDialog, { request: approval({ action: { tool, cwd: 'H:\\workspace',
-      arguments: { file_path: 'file.txt', content: full, old_string: '<old>', new_string: full, replace_all: false },
-      permission: { from: 'read-only', to: 'workspace-write', scope: 'this-call-only' } } }), remainingMs: 1, onAnswer() {} });
-    assert.match(html, /&lt;end marker&gt;/);
-    assert.match(html, /&lt;old&gt;/);
-    assert.match(html, />false<\/pre>/);
-    assert.equal((html.match(/many lines\n/g) || []).length, 1000);
-  }
-});
-
-test('expired and submitting confirmations disable both decision buttons', () => {
-  for (const props of [{ remainingMs: 0 }, { remainingMs: 1, busy: true }]) {
-    const html = render(client.ApprovalDialog, { request: approval(), onAnswer() {}, ...props });
-    assert.equal((html.match(/disabled=""/g) || []).length, 2);
-  }
-  assert.equal(render(client.ApprovalDialog, { request: null }), '');
-});
-
-function approvalHarness(api) {
-  let clock = 0;
-  const states = [], timers = new Map(); let nextTimer = 0;
-  const controller = client.createApprovalController({ api, sessionId: 'session-A',
-    now: () => clock, onState: state => states.push(state),
-    schedule: fn => { const id = ++nextTimer; timers.set(id, fn); return id; }, cancel: id => timers.delete(id) });
-  return { controller, states, timers, advance: ms => { clock += ms; } };
-}
-
-test('approval polling pauses request and error dispatches, reconnects, and never replays answers', async () => {
-  let reads = 0, writes = 0, failing = true;
-  const harness = approvalHarness({ getApprovals: async () => {
-    reads++; if (failing) throw new Error('transport failure for /dsh-safe-auto/approval.list: HTTP 503');
-    return { requests: [approval()] };
-  }, answerApproval: async () => { writes++; throw new Error('transport failure for /dsh-safe-auto/approval.answer: HTTP 503'); } });
-  await harness.controller.refresh();
-  const states = harness.states.length;
-  for (let index = 0; index < 100; index++) await harness.controller.refresh();
-  assert.equal(reads, 1); assert.equal(harness.states.length, states);
-  failing = false; harness.controller.reconnect();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(reads, 2); assert.equal(harness.states.at(-1).error, '');
-  await harness.controller.answer('approval-1', 'deny');
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(writes, 1);
-  harness.controller.dispose(); assert.equal(harness.timers.size, 0);
-});
-
-test('approval polling discovers new requests before one is pending and never overlaps or writes', async () => {
-  const reads = [], waiting = deferred(); let calls = 0, writes = 0;
-  const harness = approvalHarness({ getApprovals: sessionId => { reads.push(sessionId); return ++calls === 1 ? waiting.promise : Promise.resolve({ requests: [approval()] }); },
-    answerApproval: () => { writes++; } });
-  const first = harness.controller.refresh();
-  assert.equal(await harness.controller.refresh(), false);
-  waiting.resolve({ requests: [] }); await first;
-  assert.equal(harness.states.at(-1).requests.length, 0);
-  assert.equal(harness.timers.size, 1);
-  const poll = [...harness.timers.values()][0]; poll();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(harness.states.at(-1).requests[0].id, 'approval-1');
-  assert.deepEqual(reads, ['session-A', 'session-A']);
-  assert.equal(writes, 0);
-  harness.controller.dispose(); assert.equal(harness.timers.size, 0);
-});
-
-test('server countdown subtracts network time, never extends a request and prevents expired answers', async () => {
-  const waiting = deferred(); let reads = 0, writes = 0;
-  const harness = approvalHarness({ getApprovals: () => ++reads === 1 ? waiting.promise : Promise.resolve({ requests: [approval()] }),
-    answerApproval: () => { writes++; return { accepted: true }; } });
-  const first = harness.controller.refresh(); harness.advance(2000); waiting.resolve({ requests: [approval()] }); await first;
-  const request = harness.states.at(-1).requests[0];
-  assert.equal(client.approvalRemaining(request, 2000), 58000);
-  await harness.controller.refresh();
-  assert.equal(harness.states.at(-1).requests[0].deadline, request.deadline);
-  harness.advance(58000);
-  assert.equal(await harness.controller.answer(request.id, 'allow'), false);
-  assert.equal(writes, 0);
-  await harness.controller.refresh();
-  assert.deepEqual(harness.states.at(-1).requests, []);
-  harness.controller.dispose();
-});
-
-test('answers are explicit, session-bound, single writes and reject stale competing responses', async () => {
-  const writes = [], pendingWrite = deferred(), pendingRead = deferred(); let reads = 0;
-  const harness = approvalHarness({ getApprovals: () => ++reads === 1 ? Promise.resolve({ requests: [approval()] }) : pendingRead.promise,
-    answerApproval: payload => { writes.push(payload); return pendingWrite.promise; } });
-  await harness.controller.refresh();
-  const stale = harness.controller.refresh();
-  const answer = harness.controller.answer('approval-1', 'deny');
-  assert.equal(await harness.controller.answer('approval-1', 'allow'), false);
-  pendingWrite.resolve({ accepted: true }); await answer;
-  pendingRead.resolve({ requests: [approval()] }); await stale;
-  assert.deepEqual(writes, [{ sessionId: 'session-A', requestId: 'approval-1', outcome: 'deny' }]);
-  assert.deepEqual(harness.states.at(-1).requests, []);
-  assert.equal(harness.states.at(-1).busy, false);
-  harness.controller.dispose();
-});
-
-test('failed answers refresh without retrying writes and disposed sessions ignore late responses', async () => {
-  let reads = 0, writes = 0;
-  const refresh = deferred();
-  const harness = approvalHarness({ getApprovals: () => ++reads === 1 ? Promise.resolve({ requests: [approval()] }) : refresh.promise,
-    answerApproval: async () => { writes++; throw new Error('expired or answered elsewhere'); } });
-  await harness.controller.refresh();
-  await harness.controller.answer('approval-1', 'allow');
-  assert.equal(writes, 1); assert.equal(reads, 2);
-  assert.deepEqual(harness.states.at(-1).requests, []);
-  assert.match(harness.states.at(-1).error, /answered elsewhere/);
-  const count = harness.states.length;
-  harness.controller.dispose(); refresh.resolve({ requests: [approval({ id: 'old-session' })] });
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(harness.states.length, count); assert.equal(harness.timers.size, 0);
 });

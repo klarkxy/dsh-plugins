@@ -1,18 +1,15 @@
-import React, { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Button, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconShieldOutlineRegular, Menu, Modal,
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Button, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconShieldOutlineRegular, Menu,
   PermissionIconFullAccessRegular, PermissionIconReadOnlyRegular, PermissionIconWorkspaceWriteRegular, SegmentedTabs } from '@deepseek-ai/dsh-client-ui-primitives';
-import { modelMenuEffortLabel, modelMenuEffortOptions, parseModelMenuChoices } from '@klarkxy/dsh-model-route';
-import { ModelMenu, modelMenuCss } from '@klarkxy/dsh-model-route/ui';
+import { MODEL_CATALOG_INJECT, readModelCatalog, modelMenuEffortLabel, modelMenuEffortOptions, parseModelMenuChoices } from '@klarkxy/dsh-model-route';
+import { ModelCatalogStatus, ModelMenu, modelMenuCss, useModelCatalog } from '@klarkxy/dsh-model-route/ui';
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui';
 import { createPluginReadGate } from '@klarkxy/dsh-plugin-kit/client-utils';
 import { createModelSettingsSubscriber } from '@klarkxy/dsh-plugin-kit/model-settings-client';
 
 const h = React.createElement;
 export const name = 'dsh-safe-auto-client';
-/* `remote.session` is a nested service of the injected `remote` face: cordis
- * checks the dotted path against this list, so the parent `remote` entry alone
- * is not enough — omitting it throws "cannot get property without inject". */
-export const inject = ['slots', 'connection', 'remote', 'remote.session', 'locale'];
+export const inject = ['slots', 'connection', ...MODEL_CATALOG_INJECT, 'locale'];
 export const CHANNEL = '/dsh-safe-auto';
 export const BUNDLE = '@klarkxy/dsh-safe-auto';
 
@@ -20,11 +17,7 @@ export const BUNDLE = '@klarkxy/dsh-safe-auto';
 const TEXT = {
   zh: {
     requestFailed: '请求失败',
-    confirmationUnavailable: '确认已不可用',
-    approvalInvalid: '确认请求无效',
-    approvalExpiredError: '确认已超时或不再等待处理',
     invalidSession: '会话无效',
-    sessionInactive: '会话未激活，请打开后重试',
     childSession: '子会话不能启用安全自动',
     invalidRequest: '请求无效',
     settingsChanged: '配置已更新，请刷新后重试',
@@ -34,7 +27,6 @@ const TEXT = {
     workspaceUnavailable: '当前无法使用需原生审批的工作区写入权限',
     unknownPreset: '权限预设无效',
     controlUnloaded: '安全自动已停用',
-    browserRequired: '请在浏览器中确认这次调用',
     unknownSetting: '审核模型设置无效',
     invalidModel: '审核模型或提供方标识无效',
     modelPair: '提供方和模型必须一起配置',
@@ -71,37 +63,22 @@ const TEXT = {
     tabReviewer: '审核配置',
     details: '安全说明',
     tabLimits: '预算边界',
-    safetyDetail: '只处理原生 write/edit/bash/pwsh 的单次沙箱提权。审核会保留真人任务授权及后续限制，并按需读取工作区内的包配置和脚本；模型通过时自动放行。其余有效请求请你在 60 秒内确认，超时拒绝。确认只适用于这一次调用。',
-    unableLabel: '无法自动判断时：',
-    unableValue: '请你在 60 秒内确认；超时拒绝',
-    approvalTitle: '确认这一次调用',
-    approvalPending: count => `${count} 个请求待确认`,
-    approvalCountdown: seconds => `剩余 ${seconds} 秒 · 超时拒绝`,
-    approvalExpired: '确认已超时，已拒绝。',
-    approvalAllow: '仅允许这一次',
-    approvalDeny: '拒绝',
-    approvalReview: '模型审核意见',
-    approvalRefresh: message => `${message}。正在刷新请求；不会自动重试决定。`,
-    approvalEffect: '完整调用内容',
+    safetyDetail: '普通调用照常在工作区沙箱内运行，插件不拦截。需要审批的请求（沙箱提权、少量危险命令，以及其他工具的审批）交给审核模型：通过就只放行这一次，拒绝或审核失败就把原因告诉智能体。',
+    reviewInput: '发给审核模型的内容：对话记录（你的消息标为可信，其余只作参考，超长时截断）、工作目录和这次操作的完整参数。',
+    breakerDetail: '同一轮对话里连续拒绝 3 次，或最近 50 次审核拒绝 10 次，本轮暂停自动审批，等你发新消息。',
     prompt: '额外审核提示词',
     promptHint: count => `${count}/4096 · 只可补充审核约束，不可扩大授权或覆盖安全规则。`,
-    limitsLine: l => `单次审查超时 ${l.timeoutMs} ms · 输入上限 ${l.maxInputBytes} bytes · 输出上限 ${l.outputTokens} tokens`,
-    limitsFuses: l => `每个任务最多审查 ${l.maxReviewsPerTask} 次 · 连续拒绝 ${l.consecutiveDenials} 次后熔断`,
-    limitsHelp: '预算在 profile 中配置，保存设置或重新启用不会补充；动作、真人指令和有界的本地脚本证据会发送给审核模型。',
+    limitsLine: l => `单次审核超时 ${Math.round(l.timeoutMs / 1000)} 秒 · 输出上限 ${l.outputTokens} tokens · 对话记录上限 ${l.maxTranscriptBytes} bytes`,
+    limitsHelp: '这些上限在 profile 中配置。',
     save: '保存',
     refreshDiscard: '刷新（丢弃草稿）',
     saveFailed: message => `${message}。草稿已保留，刷新后重新编辑，不会自动重试。`,
-    catalogFailed: message => `模型目录读取失败，已保存值保持不变：${message}`,
     saved: '已保存',
-    summary: '安全自动：沙箱提权时由独立审核模型把关，通过才自动放行。',
+    summary: '安全自动：需要审批的请求交给审核模型判断，通过才放行这一次。',
   },
   en: {
     requestFailed: 'Request failed',
-    confirmationUnavailable: 'Confirmation is no longer available',
-    approvalInvalid: 'Invalid approval request',
-    approvalExpiredError: 'Approval expired or is no longer pending',
     invalidSession: 'Invalid session',
-    sessionInactive: 'Session is not active; open it and retry',
     childSession: 'Child sessions cannot select Safe Auto',
     invalidRequest: 'Invalid request',
     settingsChanged: 'Settings changed; reload and retry',
@@ -111,7 +88,6 @@ const TEXT = {
     workspaceUnavailable: 'Workspace Write with native approval is unavailable',
     unknownPreset: 'Unknown permission preset',
     controlUnloaded: 'Safe Auto control unloaded',
-    browserRequired: 'Browser confirmation required',
     unknownSetting: 'Invalid reviewer model setting',
     invalidModel: 'Invalid reviewer provider/model identifier',
     modelPair: 'Provider and model must be configured together',
@@ -148,29 +124,18 @@ const TEXT = {
     tabReviewer: 'Reviewer',
     details: 'Safety notes',
     tabLimits: 'Limits',
-    safetyDetail: 'Reviews one native write/edit/bash/pwsh sandbox escalation at a time. Earlier human task authorization and later restrictions remain visible; workspace package definitions and scripts may supply evidence. A model pass auto-approves. Other valid requests ask you to confirm within 60 seconds and are denied on timeout. Confirmation grants this call only.',
-    unableLabel: 'When it cannot judge automatically: ',
-    unableValue: 'Ask you to confirm within 60 seconds; deny on timeout',
-    approvalTitle: 'Confirm this call',
-    approvalPending: count => `${count} pending confirmation${count === 1 ? '' : 's'}`,
-    approvalCountdown: seconds => `${seconds} seconds left · Deny on timeout`,
-    approvalExpired: 'Confirmation expired and was denied.',
-    approvalAllow: 'Allow this call only',
-    approvalDeny: 'Reject',
-    approvalReview: 'Model review opinion',
-    approvalRefresh: message => `${message}. Refreshing requests; your decision will not be retried automatically.`,
-    approvalEffect: 'Complete call content',
+    safetyDetail: 'Ordinary calls run inside the workspace sandbox as usual; the plugin does not intercept them. Requests that need approval (sandbox escalations, a short list of dangerous commands, and approval prompts from other tools) go to the reviewer model: a pass approves that one call; a denial or review failure is explained to the agent.',
+    reviewInput: 'Sent to the reviewer: the conversation (your messages marked trusted, everything else as evidence, truncated when long), the working directory, and the complete arguments of the action.',
+    breakerDetail: 'After 3 consecutive denials, or 10 denials among the last 50 reviews in one turn, automatic approval pauses until your next message.',
     prompt: 'Additional reviewer prompt',
     promptHint: count => `${count}/4096 · May add review constraints, never expand authorization or override safety rules.`,
-    limitsLine: l => `Review timeout ${l.timeoutMs} ms · Input cap ${l.maxInputBytes} bytes · Output cap ${l.outputTokens} tokens`,
-    limitsFuses: l => `At most ${l.maxReviewsPerTask} reviews per task · Breaker opens after ${l.consecutiveDenials} consecutive denials`,
-    limitsHelp: 'Budgets live in the profile and are not refilled by saving or re-enabling. Actions, human instructions and bounded local script evidence are sent to the reviewer model.',
+    limitsLine: l => `Review timeout ${Math.round(l.timeoutMs / 1000)} s · Output cap ${l.outputTokens} tokens · Transcript cap ${l.maxTranscriptBytes} bytes`,
+    limitsHelp: 'These limits are configured in the profile.',
     save: 'Save',
     refreshDiscard: 'Refresh (discard draft)',
     saveFailed: message => `${message}. Draft retained; refresh before editing again. No automatic retry.`,
-    catalogFailed: message => `Model catalog failed; saved values retained: ${message}`,
     saved: 'Saved',
-    summary: 'Safe Auto: an independent reviewer vets each sandbox escalation and only a pass auto-approves.',
+    summary: 'Safe Auto: a reviewer model answers approval requests and approves only the calls that pass.',
   },
 };
 
@@ -195,27 +160,31 @@ function useText(locale) {
 // Translate only failures emitted by this plugin; provider/storage diagnostics remain data.
 const LOCAL_ERRORS = {
   'Request failed': 'requestFailed', 'Request rejected': 'requestFailed',
-  'Confirmation is no longer available': 'confirmationUnavailable',
-  'Invalid approval response': 'approvalInvalid', 'Invalid approval payload': 'approvalInvalid',
-  'Approval expired or is no longer pending': 'approvalExpiredError', 'Approval expired or invalidated': 'approvalExpiredError',
-  'Invalid session': 'invalidSession', 'Session is not active; open it and retry': 'sessionInactive',
+  'Invalid session': 'invalidSession',
   'Child sessions cannot select Safe Auto': 'childSession', 'Invalid request': 'invalidRequest',
   'Settings changed; reload and retry': 'settingsChanged', 'Only reviewer settings may be edited here': 'reviewerOnly',
   'Session changed; refresh the list and retry': 'sessionChanged', 'Unknown endpoint': 'invalidRequest',
   'Safe Auto is disabled in the profile': 'profileDisabled', 'Workspace Write with native approval is unavailable': 'workspaceUnavailable',
   'Unknown permission preset': 'unknownPreset', 'Safe Auto control unloaded': 'controlUnloaded',
-  'Browser confirmation required': 'browserRequired', 'Unknown Safe Auto model setting': 'unknownSetting',
+  'Unknown Safe Auto model setting': 'unknownSetting',
   'invalid reviewer provider/model identifier': 'invalidModel', 'provider and model must be configured together': 'modelPair',
   'reasoningEffort requires a reviewer model': 'effortRequiresModel',
 };
 function errorMessage(error) {
   return (typeof error === 'string' ? error : error?.message) || TEXT.en.requestFailed;
 }
+/* The composer mounts before the host publishes a live session. That miss is not
+ * something the user can fix, so the permission control stays quiet and retries. */
+const INACTIVE_SESSION = 'Session is not active; open it and retry';
+function shownPermissionError(error) {
+  const message = errorMessage(error);
+  return message === INACTIVE_SESSION ? '' : message;
+}
 export function errorText(t, error) {
   const message = typeof error === 'string' ? error : error?.message;
   const key = Object.hasOwn(LOCAL_ERRORS, message) ? LOCAL_ERRORS[message] : undefined;
   const unknownField = /^unknown config field: (.+)$/.exec(message || '');
-  const invalidField = /^(?:(enabled|staticReadonly) must be a boolean|(provider|model|reasoningEffort|reviewerPrompt) must be a string|invalid (timeoutMs|maxInputBytes|outputTokens|maxReviewsPerTask|consecutiveDenials|humanApprovalTimeoutMs))$/.exec(message || '');
+  const invalidField = /^(?:(enabled) must be a boolean|(provider|model|reasoningEffort|reviewerPrompt) must be a string|invalid (timeoutMs|outputTokens|maxTranscriptBytes))$/.exec(message || '');
   const text = key ? t(key)
     : unknownField ? t('unknownConfigField', unknownField[1])
     : invalidField ? t('invalidConfigField', invalidField[1] || invalidField[2] || invalidField[3])
@@ -258,66 +227,6 @@ export function createRequestScope() {
   };
 }
 
-const monotonicNow = () => globalThis.performance?.now?.() ?? Date.now();
-export function approvalRemaining(request, now = monotonicNow()) {
-  return Math.max(0, request.deadline - now);
-}
-
-/** Per-session serial reads and one-shot writes. A response's server remainder
- * is anchored before the round trip so network delay cannot extend the prompt. */
-export function createApprovalController({ api, sessionId, onState, now = monotonicNow,
-  schedule = setTimeout, cancel = clearTimeout, intervalMs = 1000, readGate = createPluginReadGate() }) {
-  let active = true, reading = false, writing = false, generation = 0, readSequence = 0, timer;
-  let state = { requests: [], busy: false, error: '' };
-  const publish = next => { state = { ...state, ...next }; if (active) onState(state); };
-  const arm = () => { if (active) { cancel(timer); timer = schedule(() => { void refresh(); }, intervalMs); } };
-  async function refresh(manual = false) {
-    if (!active || reading || writing) return false;
-    if (manual) { generation++; readGate.reset(); }
-    if (!readGate.canRead()) { arm(); return false; }
-    cancel(timer); reading = true;
-    const ticket = generation, readId = ++readSequence, started = now();
-    try {
-      const value = await readGate.run(() => api.getApprovals(sessionId));
-      if (active && ticket === generation) {
-        const previous = new Map(state.requests.map(request => [request.id, request.deadline]));
-        const requests = (value?.requests || []).map(request => ({ ...request,
-          deadline: Math.min(previous.get(request.id) ?? Infinity,
-            started + Math.max(0, Number(request.remainingMs) || 0)),
-        })).filter(request => approvalRemaining(request, now()) > 0);
-        publish({ requests, error: '' });
-      }
-    } catch (error) {
-      if (active && ticket === generation) publish({ error: errorMessage(error) });
-    } finally { if (readId === readSequence) { reading = false; arm(); } }
-    return true;
-  }
-  return {
-    refresh,
-    reconnect() { generation++; readSequence++; readGate.reset(); reading = false; if (!writing) void refresh(); },
-    dispose() { active = false; generation++; readGate.reset(); cancel(timer); },
-    async answer(requestId, outcome) {
-      const request = state.requests.find(item => item.id === requestId);
-      if (!active || writing || !request || approvalRemaining(request, now()) <= 0) return false;
-      writing = true; generation++; cancel(timer); publish({ busy: true, error: '' });
-      readGate.reset();
-      try {
-        const value = await api.answerApproval({ sessionId, requestId, outcome });
-        if (value?.accepted !== true) throw new Error('Confirmation is no longer available');
-        if (active) publish({ requests: state.requests.filter(item => item.id !== requestId) });
-      } catch (error) {
-        // A competing tab, timeout or lost response needs a fresh read, never a
-        // repeated write. Remove the stale prompt until that read completes.
-        if (active) publish({ requests: state.requests.filter(item => item.id !== requestId), error: errorMessage(error) });
-      } finally {
-        writing = false;
-        if (active) { publish({ busy: false }); if (!reading) void refresh(); else arm(); }
-      }
-      return true;
-    },
-  };
-}
-
 /* The standard editor's state for the reviewer route: catalog choices with a
  * saved-but-unlisted route retained, the follow-mode flag and the effort rows.
  * Catalog parsing — remote envelope included — lives in dsh-model-route. */
@@ -351,91 +260,15 @@ export function permissionLabel(value, name, t = translator('en')) {
 
 // The shared contract is scoped under the plugin root, so its rules only match
 // descendants: every `dsh-ui-*` class below sits inside `.dsh-safe-auto`.
-// Only this plugin's own geometry, and the platform element the primitives do
-// not ship, are styled here.
+// Only this plugin's own geometry is styled here. The prompt textarea uses the
+// shared dsh-ui-textarea shell.
 const css = `${officialUiCss('dsh-safe-auto')}${modelMenuCss}
 /* A fieldset is the settings group and takes the contract's card surface; its
  * legend keeps the UA inline padding from indenting the group title. */
 .dsh-safe-auto legend { padding: 0; }
-/* The primitives ship no textarea, so it keeps the platform element at the
- * official field geometry, exactly as dsh-ui-select does for a native select. */
-.dsh-safe-auto-input {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  padding: 8px 12px;
-  border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-3);
-  font: inherit;
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--dsw-alias-label-primary);
-  resize: vertical;
-}
-.dsh-safe-auto-input:disabled { opacity: 0.4; cursor: not-allowed; }
-.dsh-safe-auto-approval-dialog {
-  display: flex;
-  flex-direction: column;
-  max-height: 100%;
-  max-width: 100%;
-}
-/* The host card sizes every modal to a 380px column; an approval shows whole
- * commands and file contents, so it claims a wider one. The doubled class
- * keeps this rule ahead of the card's own width regardless of style order. */
-.dsh-safe-auto.dsh-safe-auto-approval-dialog { width: min(640px, 100%); }
-.dsh-safe-auto-approval-content {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-}
-.dsh-safe-auto-approval-pre {
-  max-height: 35vh;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  margin: 0;
-  padding: 8px 12px;
-  border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-3);
-  color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-}
 `;
 function Style() { return h('style', null, css); }
 function ErrorText({ error, t }) { return error ? h('p', { role: 'alert', className: 'dsh-ui-error dsh-ui-wrap' }, errorText(t, error)) : null; }
-
-/** Values are rendered as plain text, with no Markdown or HTML interpretation. */
-export function ApprovalDialog({ request, pendingCount = 1, remainingMs, busy = false, error = '', onAnswer, locale }) {
-  const t = useText(locale);
-  if (!request) return null;
-  const expired = remainingMs <= 0;
-  const action = request.action || {};
-  /* action.permission stays in the payload but is not rendered: the assessment gate
-   * fixes from=workspace-write and scope=this-call-only, and a same-level escalation
-   * never reaches this dialog, so the block would always read the same values. */
-  const fields = Object.entries({ tool: action.tool, cwd: action.cwd, ...action.arguments });
-  return h(Modal, { open: true, title: t('approvalTitle'), closeLabel: t('approvalDeny'),
-    onClose: () => { if (!busy && !expired) onAnswer(request.id, 'deny'); },
-    className: 'dsh-safe-auto dsh-safe-auto-approval-dialog', contentClassName: 'dsh-safe-auto-approval-content',
-    footer: h('div', { className: 'dsh-safe-auto dsh-ui-actions' }, h(Style),
-      h(Button, { variant: 'ghost', disabled: busy || expired, 'data-modal-autofocus': true,
-        onClick: () => onAnswer(request.id, 'deny') }, t('approvalDeny')),
-      h(Button, { variant: 'primary', disabled: busy || expired,
-        onClick: () => onAnswer(request.id, 'allow') }, t('approvalAllow'))) },
-    h('div', { className: 'dsh-safe-auto dsh-ui-stack' }, h(Style),
-      h('p', { className: 'dsh-ui-meta', role: 'status' }, t('approvalPending', pendingCount), ' · ',
-        expired ? t('approvalExpired') : t('approvalCountdown', Math.ceil(remainingMs / 1000))),
-      h('div', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('approvalEffect')),
-        fields.map(([field, value]) => h('div', { key: field, className: 'dsh-ui-field' },
-          h('span', { className: 'dsh-ui-meta' }, field), h('pre', { className: 'dsh-safe-auto-approval-pre' },
-            typeof value === 'string' ? value : JSON.stringify(value, null, 2))))),
-      h('div', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('approvalReview')),
-        h('pre', { className: 'dsh-safe-auto-approval-pre' }, JSON.stringify(request.review || {}, null, 2))),
-      h(ErrorText, { error, t })));
-}
 
 /** Composer permission control via the replacement slot: native presets plus Safe Auto. */
 export function PermissionMenu({ sessionId, locked, api, locale, initialSnapshot = null }) {
@@ -446,11 +279,9 @@ export function PermissionMenu({ sessionId, locked, api, locale, initialSnapshot
   const [busy, setBusy] = useState(false);
   const scopeRef = useRef(null);
   const refreshRef = useRef(null);
-  const approvalsRef = useRef(null);
-  const [approvals, setApprovals] = useState({ sessionId, requests: [], busy: false, error: '' });
-  const [approvalNow, setApprovalNow] = useState(monotonicNow);
   const refresh = (automatic = false) => scopeRef.current?.run(() => api.getSession(sessionId), {
-    value: value => { setSnapshot(value); setError(''); }, error: e => setError(errorMessage(e)),
+    value: value => { setSnapshot(value); setError(''); },
+    error: e => { const message = shownPermissionError(e); if (message) setError(message); },
   }, false, automatic);
   refreshRef.current = refresh;
   useEffect(() => {
@@ -462,27 +293,6 @@ export function PermissionMenu({ sessionId, locked, api, locale, initialSnapshot
     globalThis.addEventListener?.('focus', focus);
     return () => { scope.dispose(); stopConnection?.(); globalThis.removeEventListener?.('focus', focus); };
   }, [api, sessionId]);
-  const approvalsEnabled = Boolean(snapshot?.safeAuto);
-  useEffect(() => {
-    setApprovals({ sessionId, requests: [], busy: false, error: '' });
-    if (!approvalsEnabled) return undefined;
-    const controller = createApprovalController({ api, sessionId, onState: value => {
-      setApprovalNow(monotonicNow()); setApprovals({ ...value, sessionId });
-    } });
-    approvalsRef.current = controller;
-    void controller.refresh();
-    const stopConnection = api.subscribeGeneration?.(() => controller.reconnect());
-    const focus = () => { void controller.refresh(); };
-    globalThis.addEventListener?.('focus', focus);
-    return () => { controller.dispose(); stopConnection?.(); approvalsRef.current = null; globalThis.removeEventListener?.('focus', focus); };
-  }, [api, sessionId, approvalsEnabled]);
-  const pending = approvalsEnabled && approvals.sessionId === sessionId
-    ? approvals.requests.filter(request => approvalRemaining(request, approvalNow) > 0) : [];
-  useEffect(() => {
-    if (!pending.length) return undefined;
-    const timer = setInterval(() => setApprovalNow(monotonicNow()), 250);
-    return () => clearInterval(timer);
-  }, [pending.length]);
   const choose = value => {
     const scope = scopeRef.current;
     if (!snapshot || scope?.writing) return;
@@ -491,7 +301,11 @@ export function PermissionMenu({ sessionId, locked, api, locale, initialSnapshot
     setBusy(true); setError('');
     scope?.run(() => api.selectSession({ sessionId, expectedRevision: snapshot.revision, value }), {
       value: next => { setSnapshot(next); setOpen(false); },
-      error: e => { setError({ message: errorMessage(e), context: 'refreshRetry' }); refreshRef.current(); },
+      error: e => {
+        const message = shownPermissionError(e);
+        if (message) setError({ message, context: 'refreshRetry' });
+        refreshRef.current();
+      },
       settled: () => setBusy(false),
     }, true);
   };
@@ -518,11 +332,7 @@ export function PermissionMenu({ sessionId, locked, api, locale, initialSnapshot
         CurrentIcon && h(CurrentIcon), current ? permissionLabel(current.value, current.name, t) : (snapshot?.current || t('permission')),
         h(IconChevronUpOutlineRegular)),
     }),
-    h(ErrorText, { error, t }),
-    h(ErrorText, { error: approvals.error && { message: approvals.error, context: 'approvalRefresh' }, t }),
-    pending.length ? h(ApprovalDialog, { key: pending[0].id, request: pending[0], pendingCount: pending.length,
-      remainingMs: approvalRemaining(pending[0], approvalNow), busy: approvals.busy,
-      onAnswer: (id, outcome) => { void approvalsRef.current?.answer(id, outcome); }, locale }) : null);
+    h(ErrorText, { error, t }));
 }
 
 export function ReviewerFields({ values, catalog, disabled, onChange, locale }) {
@@ -568,9 +378,10 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
   const t = useText(locale);
   const [settings, setSettings] = useState(initialSettings);
   const [values, setValues] = useState(initialSettings?.values || null);
-  const [catalog, setCatalog] = useState(initialCatalog);
+  const loadCatalog = useCallback(() => api.modelCatalog(), [api]);
+  const catalogState = useModelCatalog(loadCatalog, { initialCatalog: initialCatalog ?? undefined, subscribe: api.subscribeGeneration });
+  const { catalog, refresh: refreshCatalog } = catalogState;
   const [error, setError] = useState('');
-  const [catalogError, setCatalogError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState(initialTab);
@@ -621,7 +432,6 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
     setBusy(false); setExternalChange(false); setSyncError('');
     refreshRef.current(false, true);
     let alive = true;
-    Promise.resolve().then(() => api.modelCatalog()).then(value => { if (alive) setCatalog(value); }, e => { if (alive) setCatalogError(errorMessage(e)); });
     const focus = () => { if (!dirty.current) refreshRef.current(false, true); };
     const stopConnection = api.subscribeGeneration?.(() => {
       scope.invalidate();
@@ -631,12 +441,13 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
     const stopSettings = api.subscribeSettings?.(() => {
       if (!alive) return;
       setSyncError(''); external.current = true;
+      refreshCatalog();
       if (dirty.current && !scope.writing) setExternalChange(true);
       refreshRef.current(false, true);
     }, message => { if (alive) setSyncError(message); });
     globalThis.addEventListener?.('focus', focus);
     return () => { alive = false; scope.dispose(); stopConnection?.(); stopSettings?.(); globalThis.removeEventListener?.('focus', focus); };
-  }, [api]);
+  }, [api, refreshCatalog]);
   const change = next => { dirty.current = true; setSaved(false); setValues(next); };
   const save = () => {
     if (!settings || !values || reading.current || external.current || scopeRef.current?.writing || (values.reviewerPrompt || '').length > 4096) return;
@@ -668,20 +479,20 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
       ] }),
       tabPanel('reviewer', 'dsh-ui-stack', [
         h(ReviewerFields, { key: 'fields', values, catalog, disabled: busy, onChange: change, locale }),
-        h('label', { key: 'prompt', className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('prompt')), h('textarea', { className: 'dsh-safe-auto-input', rows: 6, maxLength: 4096, disabled: busy, 'aria-describedby': 'sa-prompt-hint', value: values.reviewerPrompt || '', onChange: e => change({ ...values, reviewerPrompt: e.target.value }) })),
+        h('label', { key: 'prompt', className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('prompt')), h('textarea', { className: 'dsh-ui-textarea', rows: 6, maxLength: 4096, disabled: busy, 'aria-describedby': 'sa-prompt-hint', value: values.reviewerPrompt || '', onChange: e => change({ ...values, reviewerPrompt: e.target.value }) })),
         h('p', { key: 'hint', id: 'sa-prompt-hint', className: 'dsh-ui-help' }, t('promptHint', (values.reviewerPrompt || '').length))]),
       tabPanel('details', 'dsh-ui-stack',
         h('div', { className: 'dsh-ui-help' },
           h('p', null, t('safetyDetail')),
-          h('p', null, h('span', { className: 'dsh-ui-label' }, t('unableLabel')), t('unableValue')))),
+          h('p', null, t('reviewInput')),
+          h('p', null, t('breakerDetail')))),
       settings?.policyLimits && tabPanel('limits', 'dsh-ui-stack', [
         h('p', { key: 'line', className: 'dsh-ui-meta dsh-ui-wrap' }, t('limitsLine', settings.policyLimits)),
-        h('p', { key: 'fuses', className: 'dsh-ui-meta dsh-ui-wrap' }, t('limitsFuses', settings.policyLimits)),
         h('p', { key: 'help', className: 'dsh-ui-help' }, t('limitsHelp'))]),
       h('div', { className: 'dsh-ui-actions' },
         h(Button, { variant: 'primary', disabled: busy || externalChange || !dirty.current || (values.reviewerPrompt || '').length > 4096, onClick: save }, t('save')),
         h(Button, { variant: 'ghost', disabled: busy, onClick: () => refresh(true) }, t('refreshDiscard')))),
-    h(ErrorText, { error, t }), h(ErrorText, { error: catalogError && { message: catalogError, context: 'catalogFailed' }, t }),
+    h(ErrorText, { error, t }), h(ModelCatalogStatus, { state: catalogState, locale: localeLanguage(locale) }),
     externalChange && h('p', { role: 'alert', className: 'dsh-ui-error' }, t('externalChange')),
     syncError && h('p', { role: 'status', className: 'dsh-ui-hint' }, t('syncUnavailable')),
     saved && h('p', { role: 'status', className: 'dsh-ui-notice' }, t('saved')));
@@ -695,11 +506,9 @@ export function apply(ctx) {
     subscribeGeneration: listener => ctx.connection.generation?.subscribe(listener) ?? (() => {}),
     getSettings: () => call('settings.get', {}),
     saveSettings: payload => call('settings.save', payload),
-    modelCatalog: () => ctx.remote.session.modelCatalog(),
+    modelCatalog: () => readModelCatalog(ctx),
     getSession: sessionId => call('session.get', { sessionId }),
     selectSession: payload => call('session.select', payload),
-    getApprovals: sessionId => call('approval.list', { sessionId }),
-    answerApproval: payload => call('approval.answer', payload),
   });
   // Replacement slot: this renders the whole composer permission control,
   // native presets included, so Safe Auto appears next to them.

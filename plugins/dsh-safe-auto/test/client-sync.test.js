@@ -25,6 +25,37 @@ async function mount(run) {
   finally { await act(async () => root.unmount()); dom.window.close(); for (const [key, value] of previous) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value }); }
 }
 const button = (dom, label) => [...dom.window.document.querySelectorAll('button')].find(item => item.textContent === label);
+test('Safe Auto retries catalogs and refreshes during draft edits without saving or discarding', async () => {
+  let catalogs = 0, reads = 0, saves = 0;
+  const generations = new Set();
+  const api = {
+    getSettings: async () => { reads++; return settings(1, 'retired'); },
+    saveSettings: async () => { saves++; return settings(2); },
+    subscribeGeneration: listener => { generations.add(listener); return () => { generations.delete(listener); }; },
+    modelCatalog: async () => {
+      catalogs++;
+      if (catalogs === 1) throw new Error('Catalog offline');
+      return { groups: [{ id: 'p', models: [{ id: 'new', name: 'New model' }] }], failures: catalogs === 2 ? [{ id: 'other', name: 'Other', message: 'Provider offline' }] : [] };
+    },
+  };
+  await mount(async (dom, render, notify) => {
+    await render(api);
+    assert.match(dom.window.document.body.textContent, /Catalog offline/);
+    assert.match(dom.window.document.body.textContent, /p \/ retired/);
+    const textarea = dom.window.document.querySelector('textarea');
+    await act(async () => Simulate.change(textarea, { target: { value: 'Keep draft' } }));
+    await act(async () => button(dom, 'Retry').click());
+    assert.match(dom.window.document.body.textContent, /Provider offline/);
+    assert.equal(textarea.value, 'Keep draft'); assert.equal(reads, 1); assert.equal(saves, 0);
+    await notify();
+    assert.equal(catalogs, 3); assert.equal(textarea.value, 'Keep draft'); assert.equal(reads, 1);
+    assert.doesNotMatch(dom.window.document.body.textContent, /Provider offline/);
+    assert.match(dom.window.document.body.textContent, /p \/ retired/);
+    await act(async () => { for (const listener of generations) listener(); });
+    assert.equal(catalogs, 4); assert.equal(textarea.value, 'Keep draft'); assert.equal(saves, 0);
+  });
+});
+
 test('Safe Auto clean refresh preserves model/effort, dirty refresh preserves prompt and blocks save until discard', async () => {
   let current = settings(1), reads = 0, saves = 0;
   const api = { getSettings: async () => { reads++; return current; }, saveSettings: async () => { saves++; return current; }, modelCatalog: async () => ({ groups: [] }) };

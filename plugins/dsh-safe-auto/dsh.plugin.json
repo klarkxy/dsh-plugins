@@ -1,8 +1,8 @@
 {
   "id": "@klarkxy/dsh-safe-auto",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "main": "src/index.js",
-  "description": "Safe Auto: an independent reviewer vets each native sandbox escalation; only a pass auto-approves that one call.",
+  "description": "Safe Auto: a reviewer model answers native approval requests, Codex auto-review style; only a pass approves that one call.",
   "engines": {
     "dsh": ">=0.2.0-rc.2"
   },

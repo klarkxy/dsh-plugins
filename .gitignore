@@ -15,6 +15,7 @@ e2e/out/
 plugins/*/src/*.js
 plugins/*/src/*.js.map
 plugins/*/src/*.d.ts
+!plugins/dsh-safe-auto/src/*.js
 
 # Local caches and logs
 .playwright-cli/
