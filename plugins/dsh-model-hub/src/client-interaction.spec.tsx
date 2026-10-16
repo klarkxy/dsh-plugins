@@ -118,9 +118,26 @@ describe('mounted model hub', () => {
     expect(dom.window.document.body.textContent).toContain('network gone')
   }))
 
+  it('rejects malformed refreshes, retains choices and retries both coordinated reads without writing', async () => mounted(async (dom, root) => {
+    const modelCatalog = vi.fn(async (): Promise<unknown> => ({ ok: true, value: catalog }))
+      .mockResolvedValueOnce(catalog).mockResolvedValueOnce({ ok: true, value: { groups: 'broken' } })
+    const client = api({ modelCatalog })
+    await render(root, client)
+    await act(async () => refreshButton(dom).click())
+    expect(dom.window.document.body.textContent).toContain('Invalid model catalog')
+    expect(triggers(dom)[0]!.textContent).toContain('Provider / One')
+    const retry = Array.from(dom.window.document.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === 'Retry')!
+    expect(retry).toBeDefined()
+    await act(async () => retry.click())
+    expect(dom.window.document.querySelector('[role="alert"]')).toBeNull()
+    expect(client.list).toHaveBeenCalledTimes(3)
+    expect(modelCatalog).toHaveBeenCalledTimes(3)
+    expect(client.setField).not.toHaveBeenCalled()
+  }))
+
   it('shows isolated catalog provider failures while retaining available choices', async () => mounted(async (dom, root) => {
     await render(root, api({ modelCatalog: async () => ({ ok: true, value: { ...catalog, failures: [{ id: 'broken', name: 'Broken provider', message: 'Sign in required' }] } }) }))
-    expect(dom.window.document.querySelector('[role="alert"]')!.textContent).toContain('Broken provider: Sign in required')
+    expect(dom.window.document.querySelector('.dsh-model-catalog-status [role="status"]')!.textContent).toContain('Broken provider: Sign in required')
     expect(triggers(dom)[0]!.textContent).toContain('Provider / One')
   }))
 

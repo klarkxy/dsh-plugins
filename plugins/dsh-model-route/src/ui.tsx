@@ -22,6 +22,8 @@ import {
   IconCheckOutlineRegular, IconChevronRightOutlineRegular, IconCloseFillRegular, Input, MenuGroup, MenuSurface,
   observeStickyMenuGroups, rankByName,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+export { useModelCatalog, ModelCatalogStatus } from './catalog-ui.tsx'
+export type { UseModelCatalogOptions, ModelCatalogState, ModelCatalogStatusProps } from './catalog-ui.tsx'
 import type { ModelMenuChoice } from './catalog.ts'
 import { groupModelMenuChoices, modelMenuEffortLabel, modelMenuShortName } from './menu.ts'
 

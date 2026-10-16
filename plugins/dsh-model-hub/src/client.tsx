@@ -9,9 +9,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Button, Input, SegmentedTabs } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
-  normalizeModelRoute, parseModelMenuChoices, type ModelRoute,
+  MODEL_CATALOG_INJECT, modelCatalogFailures, normalizeModelRoute, parseModelMenuChoices, readModelCatalog, type ModelRoute,
 } from '@klarkxy/dsh-model-route'
-import { modelMenuCss } from '@klarkxy/dsh-model-route/ui'
+import { ModelCatalogStatus, modelMenuCss } from '@klarkxy/dsh-model-route/ui'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { createModelSettingsSubscriber, modelSettingsChangesRemote, type ModelSettingsSubscriberContext } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import type { ModelSettingsText } from '@klarkxy/dsh-plugin-kit/model-settings'
@@ -22,10 +22,7 @@ import { hubMessage, hubText } from './client-copy.ts'
 import { CastPage, type CastApi } from './client-cast.tsx'
 
 export const name = 'dsh-model-hub-client'
-/* `remote.session` is a nested service of the injected `remote` face: cordis
- * checks the dotted path against this list, so the parent `remote` entry alone
- * is not enough — omitting it throws "cannot get property without inject". */
-export const inject = ['slots', 'connection', 'remote', 'remote.session', 'locale']
+export const inject = ['slots', 'connection', ...MODEL_CATALOG_INJECT, 'locale']
 export const CHANNEL = '/dsh-model-hub'
 export const BUNDLE = '@klarkxy/dsh-model-hub'
 
@@ -276,7 +273,18 @@ export function HubPage({ view, api, locale, initialEntries = null, initialCatal
       .some(text => text?.toLocaleLowerCase().includes(needle))
   }) })).filter(entry => entry.fields.length > 0 || ((entry.error || entry.catalogError) && (!needle || [entry.ns, pluginTitle(entry, t)].some(text => text.toLocaleLowerCase().includes(needle)))))
   const disabled = writing !== '' || refreshing || writeError !== '' || (saved && listError !== '')
-  const failures = catalogFailures(catalog)
+  const refreshNow = async () => {
+    const scope = scopeRef.current
+    // A status retry uses the same coordinated read and cannot queue behind a
+    // write or rebase a descriptor until the current operation has settled.
+    if (scope?.api === api && !scope.busy) await refresh(scope)
+  }
+  const catalogStatus = {
+    loading: refreshing,
+    error: catalogError ? hubMessage(catalogError, t.language) : '',
+    failures: modelCatalogFailures(catalog),
+    refresh: refreshNow,
+  }
   return <section className="dsh-model-hub dsh-ui-stack" lang={t.language} aria-label={t('title')} aria-busy={writing !== '' || refreshing}>
     <Style />
     <SegmentedTabs<'fields' | 'cast'>
@@ -292,15 +300,11 @@ export function HubPage({ view, api, locale, initialEntries = null, initialCatal
     <div role="tabpanel" id="dsh-model-hub-panel-fields" aria-labelledby="dsh-model-hub-tab-fields" hidden={tab !== 'fields'} className="dsh-ui-stack">
     <div className="hub-toolbar">
       <Input className="hub-search" type="search" aria-label={t('search')} placeholder={t('search')} value={query} onChange={event => setQuery(event.target.value)} />
-      <Button variant="ghost" disabled={writing !== '' || refreshing} onClick={() => {
-        const scope = scopeRef.current
-        if (scope?.api === api) void refresh(scope)
-      }}>{refreshing ? t('refreshing') : t('refresh')}</Button>
+      <Button variant="ghost" disabled={writing !== '' || refreshing} onClick={refreshNow}>{refreshing ? t('refreshing') : t('refresh')}</Button>
     </div>
     {listError ? <p role="alert" className="dsh-ui-error dsh-ui-wrap">{t(saved ? 'savedRefreshFailed' : 'failed', hubMessage(listError, t.language))}</p> : null}
     {syncError ? <p role="alert" className="dsh-ui-error dsh-ui-wrap">{t('syncFailed', hubMessage(syncError, t.language))}</p> : null}
-    {catalogError ? <p role="alert" className="dsh-ui-error dsh-ui-wrap">{t('catalogFailed', hubMessage(catalogError, t.language))}</p> : null}
-    {failures.map((failure, index) => <p key={index} role="alert" className="dsh-ui-error dsh-ui-wrap">{t('catalogFailed', hubMessage(failure, t.language))}</p>)}
+    <ModelCatalogStatus state={catalogStatus} locale={t.language} />
     {writeError ? <p role="alert" className="dsh-ui-error dsh-ui-wrap">{t('writeFailed', hubMessage(writeError, t.language))}</p> : null}
     {writing ? <p role="status" className="dsh-ui-help">{t('saving')}</p> : null}
     {saved && !listError ? <p role="status" className="dsh-ui-help">{t('saved')}</p> : null}
@@ -363,7 +367,7 @@ export async function apply(ctx: unknown): Promise<void> {
   const api: HubApi = Object.freeze({
     list: () => call('fields.list', {}),
     setField: (payload: { ns: string; path: string[]; route: unknown; expectedRevision: number; ownerId?: string }) => call('fields.set', payload),
-    modelCatalog: () => client.remote.session.modelCatalog(),
+    modelCatalog: () => readModelCatalog(client),
     subscribeChanges: changes.subscribe,
     getCast: () => call('cast.get', {}),
     setCastEnabled: (payload: { enabled: boolean; expectedRevision: number }) => call('cast.setEnabled', payload),
@@ -371,6 +375,7 @@ export async function apply(ctx: unknown): Promise<void> {
     setCastRoute: (payload: { index: number; route: unknown; expectedRevision: number }) => call('cast.setRoute', payload),
     removeCastRoute: (payload: { index: number; expectedRevision: number }) => call('cast.removeRoute', payload),
     setCastTendency: (payload: { provider: string; model: string; tendency: string; expectedRevision: number }) => call('cast.setTendency', payload),
+    listRunning: () => call('cast.running', {}),
   })
   client.slots.inject('plugins.bundle.config', () => client.slots.register({
     name: 'plugins.bundle.config', key: BUNDLE, inject: () => ({ api, locale: (ctx as { locale?: LocaleLike }).locale }),

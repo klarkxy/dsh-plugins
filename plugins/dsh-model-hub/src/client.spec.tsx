@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { apply, HubPage, type HubEntry } from './client.tsx'
+import { apply, HubPage, inject, type HubApi, type HubEntry } from './client.tsx'
 
 const CATALOG = {
   groups: [{
@@ -98,13 +98,15 @@ describe('hub settings page', () => {
 
   it('registers the bundle config seat with the package key', async () => {
     const waiting: Array<() => void> = []
-    const registered: Array<{ options: { key?: string }; component: unknown }> = []
+    const registered: Array<{ options: { key?: string; inject?: () => { api: HubApi } }; component: unknown }> = []
     const cleanup: Array<() => void | Promise<void>> = []
     let mounts = 0, unmounts = 0
+    const session = { async modelCatalog() { expect(this).toBe(session); return { ok: true, value: CATALOG } } }
+    expect(inject).toEqual(expect.arrayContaining(['remote', 'remote.session']))
     await apply({
       slots: { inject: (_name: string, fn: () => void) => waiting.push(fn), register: (options: { key?: string }, component: unknown) => registered.push({ options, component }) },
       connection: { rpc: { call: async () => ({ ok: true, value: [] }) } },
-      remote: { session: { modelCatalog: async () => CATALOG }, $mount: async () => { mounts++; return async () => { unmounts++ } } },
+      remote: { session, $mount: async () => { mounts++; return async () => { unmounts++ } } },
       effect: (callback: () => () => void | Promise<void>) => cleanup.push(callback()),
       inject: () => ({ dispose() {} }),
       locale: 'en',
@@ -113,6 +115,7 @@ describe('hub settings page', () => {
     waiting.forEach(fn => fn())
     expect(registered.length).toBe(1)
     expect(registered[0]!.options.key).toBe('@klarkxy/dsh-model-hub')
+    expect(await registered[0]!.options.inject!().api.modelCatalog()).toBe(CATALOG)
     expect(mounts).toBe(1)
     for (const dispose of cleanup.reverse()) await dispose()
     expect(unmounts).toBe(1)

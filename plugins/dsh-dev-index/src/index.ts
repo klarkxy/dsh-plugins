@@ -6,6 +6,8 @@ import { CREATOR_PRESET_ID } from "@klarkxy/dsh-plugin-kit/contracts";
 import { CREATOR_GUIDANCE } from "./creator-guidance.js";
 import { DocsClient } from "./docs.js";
 import { docsTools } from "./docs-tools.js";
+import { GitHubClient } from "./github.js";
+import { githubFetchTool } from "./github-tools.js";
 import { PluginRegistry } from "./registry.js";
 import { registryTools } from "./registry-tools.js";
 
@@ -47,7 +49,10 @@ export function apply(ctx: Context & CreatorPromptHost, config: Config): void {
   for (const tool of docsTools(client)) ctx.tools.register(tool);
   const registry = new PluginRegistry();
   ctx.effect(() => () => registry.dispose(), "dsh-dev-index.plugin-registry");
-  for (const tool of registryTools(registry)) ctx.tools.register(tool);
+  const github = new GitHubClient();
+  ctx.effect(() => () => github.dispose(), "dsh-dev-index.github-client");
+  for (const tool of registryTools(registry, github)) ctx.tools.register(tool);
+  ctx.tools.register(githubFetchTool(github));
   ctx.effect(() => ctx.systemPrompt.section({
     name: "dsh-dev-index.creator-docs",
     order: 100,

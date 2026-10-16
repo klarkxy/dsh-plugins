@@ -72,11 +72,11 @@ describe('live host locale across model settings panels', () => {
     expect(call).toHaveBeenCalledTimes(2)
   }))
 
-  it('switches ChatGPT status, efforts and save notices while retaining a draft and in-flight action', async () => mounted(async (dom, root) => {
+  it('switches ChatGPT status and save notices while retaining a draft and in-flight action', async () => mounted(async (dom, root) => {
     const locale = localeStore(), saved = deferred<unknown>()
-    const settings = { ...DEFAULT_SETTINGS, model: 'codex-model-id', effort: 'high' }
+    const settings = { ...DEFAULT_SETTINGS }
     const call = vi.fn(async (_channel, endpoint) => endpoint === 'settings.update' ? saved.promise : ok(endpoint === 'settings' ? { settings, revision: 1 }
-      : { available: false, signedIn: false, error: '未找到官方 Codex 运行时，请在配置中指定路径。', models: [{ id: 'codex-model-id', label: 'Model 保留', efforts: ['high'], isDefault: true }] }))
+      : { available: false, signedIn: false, error: '未找到官方 Codex 运行时，请在配置中指定路径。' }))
     const rpc = { call }
     await act(async () => root.render(<ChatGptPanel rpc={rpc} locale={locale} />))
     // The executable field lives behind the collapsed-by-default advanced disclosure.
@@ -85,7 +85,8 @@ describe('live host locale across model settings panels', () => {
     await act(async () => Simulate.change(executable, { target: { value: 'C:/Codex 原样/codex.exe' } } as never))
     await locale.change('zh-CN')
     expect(executable.value).toBe('C:/Codex 原样/codex.exe')
-    expect(dom.window.document.querySelectorAll('select')[1]!.selectedOptions[0]!.textContent).toBe('高')
+    expect(dom.window.document.querySelectorAll('select')).toHaveLength(0)
+    expect(dom.window.document.body.textContent).toContain('图片分析')
     expect(dom.window.document.body.textContent).toContain('未找到官方 Codex 运行时')
     expect(call).toHaveBeenCalledTimes(2)
     await click(dom, '保存配置'); await locale.change('en')

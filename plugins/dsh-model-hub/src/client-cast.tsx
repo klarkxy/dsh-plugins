@@ -8,10 +8,13 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Button, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
-import { normalizeModelRoute, type ModelRoute } from '@klarkxy/dsh-model-route'
+import { modelCatalogFailures, normalizeModelRoute, type ModelRoute } from '@klarkxy/dsh-model-route'
+import { ModelCatalogStatus } from '@klarkxy/dsh-model-route/ui'
 import { hubMessage } from './client-copy.ts'
-import { FieldMenu, catalogFailures, checkedCatalog, messageOf } from './client-model-menu.tsx'
+import { FieldMenu, checkedCatalog, messageOf } from './client-model-menu.tsx'
 import type { CastCommit } from './cast.ts'
+import type { RunningSubagentEntry, RunningSubagentsState } from './running.ts'
+export type { RunningSubagentEntry, RunningSubagentsState } from './running.ts'
 
 /** One cast entry as served by the host: a concrete route plus its tendency. */
 export interface CastRoute {
@@ -42,6 +45,7 @@ export interface CastApi {
   setCastRoute(payload: { index: number; route: CastRouteInput; expectedRevision: number }): Promise<CastCommit>
   removeCastRoute(payload: { index: number; expectedRevision: number }): Promise<CastCommit>
   setCastTendency(payload: { provider: string; model: string; tendency: string; expectedRevision: number }): Promise<CastState>
+  listRunning(): Promise<RunningSubagentsState>
   modelCatalog(): Promise<unknown>
   subscribeChanges?(onChange: () => void, onError?: (message: string) => void): () => void
 }
@@ -55,7 +59,6 @@ const TEXT = {
     loading: '正在读取…',
     failed: (message: string) => `读取失败：${message}`,
     syncFailed: (message: string) => `自动同步不可用：${message}`,
-    catalogFailed: (message: string) => `模型列表读取失败：${message}`,
     writeFailed: (message: string) => `未保存：${message}。请刷新后重试。`,
     saved: '已保存，正在刷新…',
     savedRefreshFailed: (message: string) => `已保存；阵容刷新失败：${message}。请刷新以读取最新设置。`,
@@ -79,6 +82,12 @@ const TEXT = {
     searchModels: '搜索模型…',
     noModels: '没有匹配的模型',
     clearSearch: '清除搜索',
+    runningTitle: '运行中的子代理',
+    runningEmpty: '当前没有运行中的子代理。',
+    runningPending: '尚未发起模型请求',
+    runningRemote: '远程子代理，无法读取路由',
+    runningFailed: (message: string) => `运行状态读取失败：${message}`,
+    effortAdapterDefault: (effort: string) => `${effort}（适配器默认）`,
   },
   en: {
     title: 'Subagent Cast',
@@ -87,7 +96,6 @@ const TEXT = {
     loading: 'Loading…',
     failed: (message: string) => `Load failed: ${message}`,
     syncFailed: (message: string) => `Live sync unavailable: ${message}`,
-    catalogFailed: (message: string) => `Model list failed: ${message}`,
     writeFailed: (message: string) => `Not saved: ${message}. Refresh, then try again.`,
     saved: 'Saved; refreshing…',
     savedRefreshFailed: (message: string) => `Saved; cast refresh failed: ${message}. Refresh to read the latest settings.`,
@@ -111,6 +119,12 @@ const TEXT = {
     searchModels: 'Search models…',
     noModels: 'No matching models',
     clearSearch: 'Clear search',
+    runningTitle: 'Running subagents',
+    runningEmpty: 'No subagents are running.',
+    runningPending: 'No model request yet',
+    runningRemote: 'Remote subagent; route unavailable',
+    runningFailed: (message: string) => `Running state failed: ${message}`,
+    effortAdapterDefault: (effort: string) => `${effort} (adapter default)`,
   },
 }
 /* Exported so the i18n spec can check zh/en key alignment. */
@@ -139,6 +153,11 @@ const castCss = `
 .dsh-model-hub .cast-banner{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .dsh-model-hub .cast-add{display:flex}
 .dsh-model-hub .cast-add .dsh-model-menu-root{max-width:100%}
+.dsh-model-hub .cast-running{margin-top:16px}
+.dsh-model-hub .cast-running-title{font-size:14px;line-height:22px;font-weight:600;margin:0 0 4px;color:var(--dsw-alias-label-primary)}
+.dsh-model-hub .cast-running-row{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;padding:6px 0;border-bottom:.5px solid var(--dsw-alias-border-l1)}
+.dsh-model-hub .cast-running-label{font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);overflow-wrap:anywhere;min-width:0}
+.dsh-model-hub .cast-running-route{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere;min-width:0}
 @media(max-width:520px){.dsh-model-hub .cast-row{grid-template-columns:minmax(0,1fr);gap:8px}}
 `
 
@@ -162,6 +181,17 @@ function routeInput(route: ModelRoute): CastRouteInput {
 }
 
 interface RequestScope { api: CastApi; active: boolean; busy: boolean; queued: boolean }
+
+/** One live subagent row: label (or short id) plus its effective route. */
+function runningRouteText(entry: RunningSubagentEntry, t: ReturnType<typeof useText>): string {
+  if (!entry.local) return t('runningRemote')
+  const route = entry.route
+  if (!route) return t('runningPending')
+  const effort = route.reasoningEffort
+    ? entry.effortIsAdapterDefault ? t('effortAdapterDefault', route.reasoningEffort) : route.reasoningEffort
+    : ''
+  return `${route.provider} / ${route.model}${effort ? ` · ${effort}` : ''}`
+}
 
 /** One cast entry: model picker, tendency input saved on blur, remove button. */
 function CastRow({ t, catalog, route, tendencyRevision, draftReview, disabled, tendencyDisabled, menuDisabled, onSetRoute, onSetTendency, onRemove }: {
@@ -210,6 +240,8 @@ export function CastPage({ api, locale }: { api: CastApi; locale: LocaleLike }) 
   const t = useText(locale)
   const [cast, setCast] = useState<CastState | null>(null)
   const [catalog, setCatalog] = useState<unknown>(null)
+  const [running, setRunning] = useState<RunningSubagentsState | null>(null)
+  const [runningError, setRunningError] = useState('')
   const [loadError, setLoadError] = useState('')
   const [catalogError, setCatalogError] = useState('')
   const [syncError, setSyncError] = useState('')
@@ -226,11 +258,12 @@ export function CastPage({ api, locale }: { api: CastApi; locale: LocaleLike }) 
     scope.queued = false
     scope.busy = true
     setRefreshing(true)
-    // These independent reads both run even when one fails. Retain each last
+    // These independent reads all run even when one fails. Retain each last
     // successful result, and never replay a rejected write after refreshing.
-    const [castResult, models] = await Promise.allSettled([
+    const [castResult, models, live] = await Promise.allSettled([
       Promise.resolve().then(() => scope.api.getCast()),
       Promise.resolve().then(() => scope.api.modelCatalog()).then(checkedCatalog),
+      Promise.resolve().then(() => scope.api.listRunning()),
     ])
     if (!scope.active) return
     if (castResult.status === 'fulfilled') {
@@ -240,6 +273,8 @@ export function CastPage({ api, locale }: { api: CastApi; locale: LocaleLike }) 
     else setLoadError(messageOf(castResult.reason))
     if (models.status === 'fulfilled') { setCatalog(models.value); setCatalogError('') }
     else setCatalogError(messageOf(models.reason))
+    if (live.status === 'fulfilled') { setRunning(live.value); setRunningError('') }
+    else setRunningError(messageOf(live.reason))
     scope.busy = false
     setRefreshing(false)
     if (scope.queued) void refresh(scope)
@@ -256,6 +291,8 @@ export function CastPage({ api, locale }: { api: CastApi; locale: LocaleLike }) 
     setSyncError('')
     setCast(null)
     setCatalog(null)
+    setRunning(null)
+    setRunningError('')
     void refresh(scope)
     const unsubscribe = api.subscribeChanges?.(() => {
       if (!scope.active) return
@@ -287,12 +324,17 @@ export function CastPage({ api, locale }: { api: CastApi; locale: LocaleLike }) 
         }
       })
   }
-  const refreshNow = () => {
+  const refreshNow = async () => {
     const scope = scopeRef.current
-    if (scope?.api === api) void refresh(scope, true)
+    if (scope?.api === api && !scope.busy) await refresh(scope, true)
   }
   const disabled = saving !== '' || refreshing || writeError !== '' || (saved && loadError !== '')
-  const failures = catalogFailures(catalog)
+  const catalogStatus = {
+    loading: refreshing,
+    error: catalogError ? hubMessage(catalogError, t.language) : '',
+    failures: modelCatalogFailures(catalog),
+    refresh: refreshNow,
+  }
   return <div className="cast-root dsh-ui-stack" aria-label={t('title')} aria-busy={saving !== '' || refreshing}>
     <style>{castCss}</style>
     <div className="cast-head">
@@ -304,8 +346,7 @@ export function CastPage({ api, locale }: { api: CastApi; locale: LocaleLike }) 
     {loadError ? <p role="alert" className="dsh-ui-error dsh-ui-wrap">{t(saved ? 'savedRefreshFailed' : 'failed', hubMessage(loadError, t.language))}</p> : null}
     {cast?.tendencyError ? <p role="alert" className="dsh-ui-error dsh-ui-wrap">{t('tendencyFailed', hubMessage(cast.tendencyError, t.language))}</p> : null}
     {syncError ? <p role="alert" className="dsh-ui-error dsh-ui-wrap">{t('syncFailed', hubMessage(syncError, t.language))}</p> : null}
-    {catalogError ? <p role="alert" className="dsh-ui-error dsh-ui-wrap">{t('catalogFailed', hubMessage(catalogError, t.language))}</p> : null}
-    {failures.map((failure, index) => <p key={index} role="alert" className="dsh-ui-error dsh-ui-wrap">{t('catalogFailed', hubMessage(failure, t.language))}</p>)}
+    <ModelCatalogStatus state={catalogStatus} locale={t.language} />
     {writeError ? <div className="dsh-ui-banner dsh-ui-banner--danger cast-banner" role="alert">
       <span className="dsh-ui-wrap">{conflict ? t('conflict') : t('writeFailed', localizeCastError(writeError, t))}</span>
       <Button variant="outline" size="sm" disabled={saving !== '' || refreshing} onClick={refreshNow}>{refreshing ? t('refreshing') : t('refresh')}</Button>
@@ -333,5 +374,15 @@ export function CastPage({ api, locale }: { api: CastApi; locale: LocaleLike }) 
         reasoningEffort={false} disabled={disabled || catalog === null}
         onSet={picked => mutate('add', scope => scope.api.addCastRoute({ route: routeInput(picked), expectedRevision: cast.revision }))} />
     </div> : null}
+    <section className="cast-running" aria-label={t('runningTitle')}>
+      <h3 className="cast-running-title">{t('runningTitle')}</h3>
+      {runningError ? <p role="alert" className="dsh-ui-error dsh-ui-wrap">{t('runningFailed', hubMessage(runningError, t.language))}</p> : null}
+      {running === null && !runningError ? <p className="dsh-ui-loading">{t('loading')}</p> : null}
+      {running !== null && running.entries.length === 0 ? <p className="dsh-ui-help">{t('runningEmpty')}</p> : null}
+      {running?.entries.map(entry => <div key={entry.id} className="cast-running-row">
+        <span className="cast-running-label">{entry.label || entry.id}</span>
+        <span className="cast-running-route">{runningRouteText(entry, t)}</span>
+      </div>)}
+    </section>
   </div>
-}
+}

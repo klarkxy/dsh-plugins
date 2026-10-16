@@ -68,21 +68,7 @@ export function messageOf(error: unknown): string {
   return String(error)
 }
 
-export function checkedCatalog(value: unknown): unknown {
-  if (value && typeof value === 'object' && 'ok' in value && value.ok === false) {
-    throw new Error('error' in value ? messageOf(value.error) : 'Request failed')
-  }
-  return value
-}
-
-export function catalogFailures(value: unknown): string[] {
-  if (!value || typeof value !== 'object') return []
-  const root = 'ok' in value && value.ok === true && 'value' in value ? value.value : value
-  if (!root || typeof root !== 'object' || !('failures' in root) || !Array.isArray(root.failures)) return []
-  return root.failures.map(failure => {
-    if (!failure || typeof failure !== 'object') return messageOf(failure)
-    const provider = 'name' in failure ? failure.name : 'id' in failure ? failure.id : 'provider' in failure ? failure.provider : ''
-    return provider ? `${provider}: ${messageOf(failure)}` : messageOf(failure)
-  })
-}
+// Preserve the hub's helper exports while keeping catalog validation and failure
+// decoding in the shared route contract used by both pages.
+export { checkedModelCatalog as checkedCatalog, catalogFailures } from '@klarkxy/dsh-model-route'
 

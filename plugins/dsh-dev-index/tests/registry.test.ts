@@ -64,6 +64,26 @@ describe("plugin registry", () => {
     await expect(client.versions({ package: name, version: "9.0.0" })).rejects.toThrow(/not published/);
   });
 
+  it("versions surfaces a normalized repository link", async () => {
+    const withRepo = (repository: unknown) => {
+      const data = metadata();
+      (data.versions["1.0.0"] as Record<string, unknown>).repository = repository;
+      return data;
+    };
+    const cases: [unknown, unknown][] = [
+      [{ type: "git", url: "git+https://github.com/sample/dsh-example.git", directory: "plugins/example" }, { url: "https://github.com/sample/dsh-example", directory: "plugins/example" }],
+      ["git@github.com:sample/dsh-example.git", { url: "https://github.com/sample/dsh-example", directory: null }],
+      ["https://github.com/sample/dsh-example", { url: "https://github.com/sample/dsh-example", directory: null }],
+      ["javascript:bad", null],
+      [42, null],
+    ];
+    for (const [raw, expected] of cases) {
+      const client = new PluginRegistry({ fetcher: (async () => reply(withRepo(raw))) as typeof fetch });
+      const result = await client.versions({ package: name, version: "1.0.0" });
+      expect(result.selected.repository).toEqual(expected);
+    }
+  });
+
   it("invalid names, ranges and pagination fail before network access", async () => {
     const client = new PluginRegistry({
       fetcher: (() => { throw new Error("unexpected network"); }) as typeof fetch,
@@ -214,5 +234,28 @@ describe("plugin registry tools", () => {
     await expect(searchPending).rejects.toThrow();
     await expect(fetchPending).rejects.toThrow();
     expect(calls).toEqual([]);
+  });
+
+  it("routes GitHub sources to the GitHub client and validates the source list", async () => {
+    const calls: string[] = [];
+    const github = {
+      searchRepos: async (args: { query: string }) => { calls.push(`repos:${args.query}`); return { transport: "gh" }; },
+      searchCode: async (args: { query: string }) => { calls.push(`code:${args.query}`); return { transport: "gh" }; },
+    };
+    const client = new PluginRegistry({
+      fetcher: (() => { throw new Error("unexpected network"); }) as typeof fetch,
+    });
+    const tools = registryTools(client, github as never);
+    const search = tools[0];
+    const signal = new AbortController().signal;
+    expect(await search.execute({ query: "x", source: "github" } as never, { signal } as never)).toEqual({ transport: "gh" });
+    expect(await search.execute({ query: "y", source: "github-code" } as never, { signal } as never)).toEqual({ transport: "gh" });
+    expect(calls).toEqual(["repos:x", "code:y"]);
+    // defineTool's enum schema rejects unknown sources before execute runs.
+    await expect(search.execute({ query: "x", source: "other" } as never, { signal } as never))
+      .rejects.toThrow(/one of \["catalog","npm","github","github-code"\]/);
+    const solo = registryTools(client);
+    await expect(solo[0].execute({ query: "x", source: "github" } as never, { signal } as never))
+      .rejects.toThrow(/not available/);
   });
 });

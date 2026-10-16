@@ -252,7 +252,9 @@ describe('tendency store', () => {
       expect(cast.getCast().tendencyRevision).toBeUndefined()
       expect(() => cast.setTendency('a', 'one', 'new', 0)).toThrow(message)
       expect(readFileSync(file, 'utf8')).toBe(contents)
-      expect(cast.promptText()).toBe('')
+      expect(cast.promptText()).toContain('list_subagent_models')
+      expect(cast.promptText()).not.toContain('User-provided task tendencies')
+      expect(readFileSync(file, 'utf8')).toBe(contents)
       writeFileSync(file, JSON.stringify({ schemaVersion: 1, tendencies: { [tendencyKey('a', 'one')]: 'restored' } }))
       expect(cast.getCast()).toMatchObject({ tendencyRevision: 0, routes: [{ tendency: 'restored' }] })
       expect(cast.setTendency('a', 'one', 'new', 0).tendencyRevision).toBe(1)
@@ -349,10 +351,23 @@ describe('buildCastPrompt', () => {
     { index: 2, provider: 'c', model: 'three', tendency: 'fast drafts' },
   ]
 
-  it('stays empty when disabled, routeless or tendency-free', () => {
+  it('stays empty when disabled or routeless', () => {
     expect(buildCastPrompt(false, routes)).toBe('')
     expect(buildCastPrompt(true, [])).toBe('')
-    expect(buildCastPrompt(true, [{ index: 0, provider: 'a', model: 'one' }])).toBe('')
+  })
+
+  it('guides explicit selection without inventing per-model tendencies', () => {
+    const text = buildCastPrompt(true, [{ index: 0, provider: 'a', model: 'one' }])
+    expect(text).toContain('list_subagent_models')
+    expect(text).toContain('supply provider and model together explicitly')
+    expect(text).toContain('prefer a model different from your own')
+    expect(text).toContain('using the same model is appropriate')
+    expect(text).toContain('Do not create extra subtasks solely for model diversity')
+    expect(text).toContain('discovery results and tool schema are authoritative')
+    expect(text).toContain('do not invent routes or pass unsupported fields')
+    expect(text).not.toContain('User-provided task tendencies')
+    expect(text).not.toContain('a/one')
+    expect(buildCastPrompt(true, [{ index: 0, provider: 'a', model: 'one', tendency: '   ' }])).toBe(text)
   })
 
   it('renders the guidance and one line per annotated route', () => {
@@ -366,6 +381,20 @@ describe('buildCastPrompt', () => {
 })
 
 describe('promptText', () => {
+  it('keeps generic guidance when the tendency file is absent or the last note is cleared', () => {
+    const profileDir = tempProfile()
+    const target = host({ enabled: true, allowedModels: [{ provider: 'a', model: 'one' }] })
+    const cast = createCast(castDeps(target, profileDir).deps)
+    const generic = cast.promptText()
+    expect(generic).toContain('supply provider and model together explicitly')
+    expect(() => readFileSync(join(profileDir, 'data', 'model-hub', 'cast.json'))).toThrow()
+    setTendency(cast, 'a', 'one', 'careful reviews')
+    expect(cast.promptText()).toContain('- a/one: careful reviews')
+    setTendency(cast, 'a', 'one', '')
+    expect(cast.promptText()).toBe(generic)
+    expect(target.mutate).not.toHaveBeenCalled()
+  })
+
   it('prefers the native service snapshot and merges stored tendencies', () => {
     const profileDir = tempProfile()
     const target = host({ enabled: false, allowedModels: [] })

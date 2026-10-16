@@ -125,13 +125,21 @@ function validateIndex(value: unknown): number {
  */
 export function buildCastPrompt(enabled: boolean, routes: readonly CastRoute[]): string {
   if (!enabled || !routes.length) return ''
-  const annotated = routes.filter(route => typeof route.tendency === 'string' && route.tendency)
-  if (!annotated.length) return ''
-  return [
-    'Subagent cast: the user has annotated the models available for subagent delegation with task tendencies. When delegating to a subagent, prefer a model whose tendency matches the task at hand; treat models without a tendency as general-purpose. These tendencies are advisory — the final model choice is always yours.',
+  const annotated = routes.filter(route => typeof route.tendency === 'string' && route.tendency.trim())
+  // Global settings can differ from a Session's saved route policy. Discovery
+  // and the actual tool schema, not this section, determine what it can select.
+  const guidance = [
+    'Subagent model selection:',
+    'When delegating an independent task, actively choose a suitable model instead of silently inheriting your own. If list_subagent_models and a delegation tool with provider/model fields are available, inspect the available routes before the first model-selectable delegation in this task, reuse those results for later delegations, and supply provider and model together explicitly.',
+    'For independent reviews, alternative approaches, or disputed conclusions, prefer a model different from your own when a suitable candidate is available. Choose for task fit and the user\'s constraints; using the same model is appropriate when it fits better or no suitable alternative is available. Do not create extra subtasks solely for model diversity.',
+    'The current Session\'s discovery results and tool schema are authoritative. Configured model notes may refer to routes unavailable in this Session. If discovery or model-selection fields are unavailable, use the supported delegation behavior; do not invent routes or pass unsupported fields to tools such as subagent_fork. When changing models, omit reasoning_effort unless you have verified a supported value.',
+  ]
+  if (annotated.length) guidance.push(
+    'User-provided task tendencies (advisory): prefer a matching tendency among available models. Models without a tendency remain general-purpose candidates; no model-specific strengths are assumed.',
     ...annotated.map(route =>
       `- ${route.provider}/${route.model}${route.reasoningEffort ? ` (reasoning effort: ${route.reasoningEffort})` : ''}: ${route.tendency}`),
-  ].join('\n')
+  )
+  return guidance.join('\n')
 }
 
 export function createCast(deps: CastDeps) {
@@ -328,7 +336,8 @@ export function createCast(deps: CastDeps) {
       return buildCastPrompt(snapshot.enabled, mergeTendencies(snapshot.routes, readTendencies().tendencies))
     } catch (error) {
       deps.logger?.warn('model-hub: cast tendencies unavailable: %s', (error as Error).message)
-      return ''
+      // Optional user notes must not suppress the generic selection guidance.
+      return buildCastPrompt(snapshot.enabled, snapshot.routes)
     }
   }
 

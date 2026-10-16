@@ -24,6 +24,7 @@ function api(overrides: Partial<CastApi> = {}): CastApi {
     setCastRoute: vi.fn(async () => ({ committed: true as const })),
     removeCastRoute: vi.fn(async () => ({ committed: true as const })),
     setCastTendency: vi.fn(async () => state),
+    listRunning: vi.fn(async () => ({ revision: 0, entries: [] })),
     modelCatalog: vi.fn(async () => catalog),
     ...overrides,
   }
@@ -212,6 +213,34 @@ describe('subagent cast tab', () => {
     expect(castSwitch(dom).disabled).toBe(false)
   }))
 
+  it('rejects malformed catalogs and recovers through localized retry without mutating the cast', async () => mounted(async (dom, root) => {
+    const modelCatalog = vi.fn(async (): Promise<unknown> => ({ ok: true, value: catalog }))
+      .mockResolvedValueOnce({ groups: [{ id: 'p', models: null }] })
+    const client = api({ modelCatalog })
+    await render(root, client, 'zh-CN')
+    expect(dom.window.document.body.textContent).toContain('Invalid model catalog')
+    expect(triggers(dom).every(button => button.disabled)).toBe(true)
+    const retry = Array.from(dom.window.document.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === '重试')!
+    expect(retry).toBeDefined()
+    await act(async () => retry.click())
+    expect(dom.window.document.querySelector('[role="alert"]')).toBeNull()
+    expect(triggers(dom)[0]!.textContent).toContain('Provider / One')
+    expect(triggers(dom).every(button => !button.disabled)).toBe(true)
+    expect(client.getCast).toHaveBeenCalledTimes(2)
+    expect(client.listRunning).toHaveBeenCalledTimes(2)
+    expect(client.setCastRoute).not.toHaveBeenCalled()
+    expect(client.setCastEnabled).not.toHaveBeenCalled()
+  }))
+
+  it('retains available cast choices and identifies a partial provider failure', async () => mounted(async (dom, root) => {
+    await render(root, api({ modelCatalog: async () => ({ ok: true, value: {
+      ...catalog, failures: [{ id: 'offline', name: 'Offline provider', message: 'Sign in required' }],
+    } }) }))
+    expect(dom.window.document.querySelector('.dsh-model-catalog-status [role="status"]')!.textContent).toContain('Offline provider: Sign in required')
+    expect(triggers(dom)[0]!.textContent).toContain('Provider / One')
+    expect(triggers(dom).every(button => !button.disabled)).toBe(true)
+  }))
+
   it('toggles the enabled switch with the CAS revision', async () => mounted(async (dom, root) => {
     const client = api()
     await render(root, client)
@@ -317,6 +346,51 @@ describe('subagent cast tab', () => {
     await act(async () => write.resolve({ ...state, routes: [{ ...state.routes[0]!, tendency: 'triage' }, state.routes[1]!] }))
     expect(castSwitch(dom).disabled).toBe(false)
     expect(tendencies(dom)[0]!.value).toBe('triage')
+  }))
+
+  it('renders running subagents with routes, adapter-default efforts, pending and remote rows', async () => mounted(async (dom, root) => {
+    const client = api({
+      listRunning: vi.fn(async () => ({ revision: 3, entries: [
+        { id: 'child-one', label: 'reviewer', parentSessionId: 'parent', local: true, startedAt: 10,
+          route: { provider: 'deepseek', model: 'chat', reasoningEffort: 'high' } },
+        { id: 'child-two', local: true, startedAt: 20,
+          route: { provider: 'openai', model: 'gpt-5', reasoningEffort: 'medium' }, effortIsAdapterDefault: true },
+        { id: 'child-three', label: 'queued', local: true, startedAt: 30 },
+        { id: 'child-four', label: 'remote-run', local: false, startedAt: 40 },
+      ] })),
+    })
+    await render(root, client)
+    const body = dom.window.document.body.textContent || ''
+    expect(body).toContain('Running subagents')
+    expect(body).toContain('reviewer')
+    expect(body).toContain('deepseek / chat · high')
+    expect(body).toContain('child-two')
+    expect(body).toContain('openai / gpt-5 · medium (adapter default)')
+    expect(body).toContain('No model request yet')
+    expect(body).toContain('Remote subagent; route unavailable')
+    expect(body).not.toContain('No subagents are running.')
+  }))
+
+  it('renders the empty running state and surfaces a running read failure in zh', async () => mounted(async (dom, root) => {
+    await render(root, api(), 'zh-CN')
+    expect(dom.window.document.body.textContent).toContain('运行中的子代理')
+    expect(dom.window.document.body.textContent).toContain('当前没有运行中的子代理。')
+  }))
+
+  it('surfaces a running read failure without blocking the cast controls', async () => mounted(async (dom, root) => {
+    const client = api({ listRunning: vi.fn(async () => { throw new Error('registry gone') }) })
+    await render(root, client)
+    expect(dom.window.document.body.textContent).toContain('Running state failed: registry gone')
+    expect(castSwitch(dom).disabled).toBe(false)
+  }))
+
+  it('refetches the running list on change notifications', async () => mounted(async (dom, root) => {
+    let changed!: () => void
+    const client = api({ subscribeChanges: onChange => { changed = onChange; return () => {} } })
+    await render(root, client)
+    expect(client.listRunning).toHaveBeenCalledTimes(1)
+    await act(async () => changed())
+    expect(client.listRunning).toHaveBeenCalledTimes(2)
   }))
 
   it('refreshes on a change notification and reports sync failures', async () => mounted(async (dom, root) => {

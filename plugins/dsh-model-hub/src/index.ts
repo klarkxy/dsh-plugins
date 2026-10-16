@@ -23,6 +23,7 @@ import { createHubSettings } from './owners.ts'
 import { notifyModelSettingsChanged, type ModelSettingsDiscovery } from '@klarkxy/dsh-plugin-kit/model-settings'
 import { ModelSettingsChangesController } from './changes.ts'
 import { CAST_TENDENCIES_NAMESPACE, createCast } from './cast.ts'
+import { createRunningTracker, RUNNING_NAMESPACE, type RunningAgentsLike, type RunningSubagentsServiceLike } from './running.ts'
 
 export const name = '@klarkxy/dsh-model-hub'
 export const inject = ['settings', 'webServer', 'connection', 'systemPrompt'] as const
@@ -58,6 +59,15 @@ export function apply(ctx: Context): void {
     describe, mutate: (ns, ops, revision) => settings.mutate(ns, ops, revision),
     profileDir: profile?.dir, logger: ctx.logger,
     notifyTendenciesChanged: revision => notifyModelSettingsChanged(ctx, CAST_TENDENCIES_NAMESPACE, revision),
+  })
+
+  /* Live subagent routes: read-only session data. The registry and catalog
+   * are optional services; without them the view degrades to an empty list. */
+  const running = createRunningTracker({
+    events: ctx,
+    agents: ctx.get('agents') as RunningAgentsLike | undefined,
+    subagents: ctx.get('subagents') as RunningSubagentsServiceLike | undefined,
+    notify: revision => notifyModelSettingsChanged(ctx, RUNNING_NAMESPACE, revision),
   })
 
   /* Subagent cast guidance: read-only advisory text evaluated at each prompt
@@ -116,6 +126,7 @@ export function apply(ctx: Context): void {
         if (endpoint === 'cast.setRoute') return { ok: true, value: await cast.setRoute(row.index, row.route, row.expectedRevision) }
         if (endpoint === 'cast.removeRoute') return { ok: true, value: await cast.removeRoute(row.index, row.expectedRevision) }
         if (endpoint === 'cast.setTendency') return { ok: true, value: cast.setTendency(row.provider, row.model, row.tendency, row.expectedRevision, signal) }
+        if (endpoint === 'cast.running') return { ok: true, value: await running.list(signal) }
       }
       throw new Error(`Unknown endpoint: ${endpoint}`)
     } catch (error) {

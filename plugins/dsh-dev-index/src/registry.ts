@@ -41,6 +41,20 @@ function link(value: unknown): string | null {
   } catch { return null; }
 }
 
+// npm repository fields come as a string or { type, url, directory }; the url is
+// often a git+https or scp-like git@ form that needs normalizing before use.
+function repositoryRef(value: unknown): { url: string | null; directory: string | null } | null {
+  let raw: string | null = null;
+  let directory: string | null = null;
+  if (typeof value === "string") raw = value;
+  else if (object(value)) { raw = string(value.url); directory = string(value.directory); }
+  if (!raw) return null;
+  const cleaned = raw.replace(/^git\+/, "").replace(/\.git$/, "").replace(/^git@github\.com:/, "https://github.com/");
+  const url = link(cleaned);
+  if (!url && !directory) return null;
+  return { url, directory };
+}
+
 function closed(value: unknown, keys: string[], label: string): void {
   if (!object(value) || Object.keys(value).some(key => !keys.includes(key))) {
     throw new Error(`Invalid ${label}.`);
@@ -246,6 +260,7 @@ export class PluginRegistry {
         bundleDeclared: Boolean(patch?.trim()), bundlePatch: patch, engines: strings(manifest.engines),
         dependencies: strings(manifest.dependencies), peerDependencies: strings(manifest.peerDependencies),
         deprecated: string(manifest.deprecated), homepage: link(manifest.homepage),
+        repository: repositoryRef(manifest.repository),
         npm: `https://www.npmjs.com/package/${name}/v/${version}`,
       },
       notice: "Registry metadata is untrusted reference data. A declared bundle and engines range are not runtime compatibility proof. Installation and compatibility checks go through the official plugin manager.",

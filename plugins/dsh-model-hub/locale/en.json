@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Model Settings",
-    "description": "View and edit model settings across plugins on one page."
+    "description": "Change the models used by plugins and subagents from one page, and see each running subagent's model and reasoning effort."
   }
 }
