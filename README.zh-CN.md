@@ -10,17 +10,17 @@ klarkxy 的 DeepSeek Harness（DSH）插件。可以在[插件站点](https://kl
 | --- | --- |
 | [`@klarkxy/dsh-current-title`](plugins/dsh-current-title/docs/README.zh-CN.md) | 自动标题：会话标题跟随最新任务，手动改过的名字不被覆盖。 |
 | [`@klarkxy/dsh-git-commit`](plugins/dsh-git-commit/docs/README.zh-CN.md) | Git 提交：在对话里提交工作区改动，由模型分组。 |
-| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.zh-CN.md) | 安全自动：沙箱提权由独立审核模型把关，通过才自动放行。 |
-| [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.zh-CN.md) | 会话管理：跨工作目录查找和阅读会话，复制线程 ID，使用临时工作区。 |
-| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/docs/README.zh-CN.md) | 模型枢纽：在一个页面修改各插件和子代理使用的模型。 |
+| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.zh-CN.md) | 安全自动：需要审批的请求交给审核模型判断，通过才放行这一次。 |
+| [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.zh-CN.md) | 会话管理：跨工作目录查找和阅读会话，复制线程 ID，使用临时工作区；空输入一键继续，久离回来给出摘要与压缩建议。 |
+| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/docs/README.zh-CN.md) | 模型枢纽：在一个页面修改各插件和子代理使用的模型，并查看运行中子代理的模型与思考强度。 |
 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/docs/README.zh-CN.md) | 网页搜索：在一个设置页管理搜索服务和公开网页读取。 |
 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/docs/README.zh-CN.md) | 知乎：知乎搜索、智能体工具、知识库和用量统计。 |
-| [`@klarkxy/dsh-chatgpt`](plugins/dsh-chatgpt/README.zh-CN.md) | ChatGPT：借助本机 Codex 搜索、生图改图、看图。 |
+| [`@klarkxy/dsh-chatgpt`](plugins/dsh-chatgpt/README.zh-CN.md) | ChatGPT：借助本机 Codex 网络搜索、生图、改图和图片分析。 |
 | [`@klarkxy/dsh-grok-build`](plugins/dsh-grok-build/README.zh-CN.md) | Grok Build：借助本机 Grok Build CLI 搜索、读网页、生成图片和视频。 |
 | [`@klarkxy/dsh-minimax-code`](plugins/dsh-minimax-code/README.zh-CN.md) | MiniMax Code：借助本机 MiniMax Code 搜索、生成图片视频和语音、理解音视频。 |
 | [`@klarkxy/dsh-font`](plugins/dsh-font/docs/README.zh-CN.md) | 字体：自定义 Web GUI 的界面字体、代码字体与会话字号。 |
 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.zh-CN.md) | 破限：直接交付完整成果的会话 Preset，只作用于选用它的会话。 |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | DSH 文档：在插件页阅读官方文档；创造模式可查文档和插件。 |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | DSH 文档：在插件页阅读官方文档；创造模式可查文档和 npm 与 GitHub 上的插件。 |
 | [`dsh-plugin-autoevo`](https://github.com/klarkxy/dsh-plugin-autoevo#readme) | AutoEvo（已废弃）：发现、审查和安装可复用能力，现已停止维护（独立仓库）。 |
 
 `@klarkxy/dsh-plugin-kit` 和 `@klarkxy/dsh-model-route` 是共享库，其他插件会自动安装它们。
@@ -61,6 +61,7 @@ pnpm check
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-shortcuts](plugins/dsh-shortcuts/README.md) | 草稿 (`draft`) | 新增快捷键管理与可扩展命令面板，尚未发布。 |
 | [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-zhihu](plugins/dsh-zhihu/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |

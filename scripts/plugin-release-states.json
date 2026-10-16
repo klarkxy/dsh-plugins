@@ -172,6 +172,14 @@
       }
     },
     {
+      "name": "@klarkxy/dsh-shortcuts",
+      "state": "draft",
+      "reason": {
+        "zh": "新增快捷键管理与可扩展命令面板，尚未发布。",
+        "en": "New shortcut manager and extensible command palette; not yet published."
+      }
+    },
+    {
       "name": "@klarkxy/dsh-unrestricted",
       "state": "published",
       "reason": {

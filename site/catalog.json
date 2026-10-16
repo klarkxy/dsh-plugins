@@ -143,8 +143,8 @@
         "en": "DSH Docs"
       },
       "summary": {
-        "zh": "在插件页阅读 DSH 官方文档；创造模式用原生工具搜索文档、查核插件 npm 元数据。",
-        "en": "Read the official DSH docs in the Plugins page; Creator mode searches docs and checks plugin npm metadata with native tools."
+        "zh": "在插件页阅读 DSH 官方文档；创造模式用原生工具搜索文档、查核 npm 与 GitHub 上的插件信息。",
+        "en": "Read the official DSH docs in the Plugins page; Creator mode searches docs and checks plugins on npm and GitHub with native tools."
       },
       "readme": {
         "zh": "README.zh-CN.md",
@@ -163,8 +163,8 @@
         "en": "Safe Auto"
       },
       "summary": {
-        "zh": "沙箱提权由独立审核模型把关，通过才自动放行。",
-        "en": "An independent reviewer vets each sandbox escalation; only a pass auto-approves."
+        "zh": "需要审批的请求交给审核模型判断，通过才放行这一次。",
+        "en": "A reviewer model answers approval requests; only calls that pass go ahead."
       },
       "readme": {
         "zh": "README.zh-CN.md",
@@ -183,8 +183,8 @@
         "en": "Session Manager"
       },
       "summary": {
-        "zh": "跨工作目录查找和阅读会话，复制线程 ID，使用临时工作区。",
-        "en": "Find and read sessions across working directories, copy thread IDs, and use temporary workspaces."
+        "zh": "跨工作目录查找和阅读会话，复制线程 ID，使用临时工作区；空输入一键继续，久离回来给出摘要与压缩建议。",
+        "en": "Find and read sessions across working directories, copy thread IDs, use temporary workspaces, continue with one tap on an empty composer, and get a welcome-back recap after time away."
       },
       "readme": {
         "zh": "README.zh-CN.md",
@@ -243,8 +243,8 @@
         "en": "ChatGPT"
       },
       "summary": {
-        "zh": "借助本机 Codex 使用 ChatGPT 搜索、生图改图和看图。",
-        "en": "Use ChatGPT search, image creation and editing, and vision through your local Codex."
+        "zh": "借助本机 Codex 使用 ChatGPT 网络搜索、生图、改图和图片分析。",
+        "en": "Use ChatGPT web search, image generation, editing, and image analysis through local Codex."
       },
       "readme": {
         "zh": "README.zh-CN.md",
@@ -303,8 +303,8 @@
         "en": "Model Hub"
       },
       "summary": {
-        "zh": "在一个页面修改各插件和子代理使用的模型。",
-        "en": "Change the models used by your plugins and subagents from one page."
+        "zh": "在一个页面修改各插件和子代理使用的模型，并查看运行中子代理的模型与思考强度。",
+        "en": "Change the models used by your plugins and subagents from one page, and see each running subagent's model and reasoning effort."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
