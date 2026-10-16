@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "会话",
-    "description": "查找和阅读会话，复制线程 ID，使用临时工作区。"
+    "description": "查找和阅读会话，复制线程 ID，使用临时工作区；空输入一键继续，久离回来给出摘要与压缩建议。"
   },
   "copyThreadId": "复制线程 ID",
   "copyThreadFailed": "无法复制线程 ID"

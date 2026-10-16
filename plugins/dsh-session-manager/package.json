@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-session-manager",
   "version": "0.2.0",
-  "description": "Find and read DeepSeek Harness sessions across working directories, copy thread IDs, and use temporary workspaces.",
+  "description": "Find and read DeepSeek Harness sessions across working directories, copy thread IDs, use temporary workspaces, continue with one tap on an empty composer, and get a welcome-back recap after time away.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -55,6 +55,11 @@
       ]
     }
   },
+  "dependencies": {
+    "@klarkxy/dsh-model-route": "workspace:*",
+    "@klarkxy/dsh-plugin-kit": "workspace:*",
+    "zod": "^4.1.5"
+  },
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -67,6 +72,7 @@
     "@deepseek-ai/dsh-session-query": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-api-session-controller": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2",
     "@deepseek-ai/cordis": ">=4.0.4",
     "@deepseek-ai/schemastery": ">=3.18.4"
   },
@@ -89,6 +95,9 @@
     "@deepseek-ai/dsh-api-session-controller": {
       "optional": true
     },
+    "@deepseek-ai/dsh-storage-domain": {
+      "optional": true
+    },
     "@deepseek-ai/cordis": {
       "optional": true
     },
@@ -103,6 +112,7 @@
     "@deepseek-ai/dsh-session-query": "0.2.0-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
     "@deepseek-ai/dsh-api-session-controller": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-domain": "0.2.0-rc.2",
     "@deepseek-ai/dsh-api-remotes": "0.2.0-rc.2",
     "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2",
     "@deepseek-ai/dsh-client-ui-workspace": "0.2.0-rc.2",
@@ -115,8 +125,7 @@
     "@types/react": "18.3.31",
     "@types/react-dom": "^18.3.1",
     "jsdom": "29.1.1",
-    "@types/jsdom": "^28.0.3",
-    "@klarkxy/dsh-plugin-kit": "workspace:*"
+    "@types/jsdom": "^28.0.3"
   },
   "repository": {
     "type": "git",

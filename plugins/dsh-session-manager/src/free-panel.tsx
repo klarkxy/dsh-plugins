@@ -62,11 +62,10 @@ export function DeleteChatDialog(props: { model: FreeChatModel; locale: CopyLoca
       onClose={() => { props.model.cancelDelete() }}
       footer={(
         <>
-          <Button variant="ghost" disabled={request.busy} onClick={() => { props.model.cancelDelete() }}>{copy('cancel')}</Button>
+          <Button variant="ghost" data-modal-autofocus disabled={request.busy} onClick={() => { props.model.cancelDelete() }}>{copy('cancel')}</Button>
           <Button
             ref={confirmRef}
             variant="primary"
-            data-modal-autofocus
             disabled={request.busy}
             onClick={() => { void props.model.confirmDelete() }}
           >

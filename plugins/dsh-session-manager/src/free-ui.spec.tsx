@@ -72,6 +72,8 @@ describe('delete chat dialog', () => {
         expect(text()).not.toContain('Project files remain')
         await act(async () => { model.requestDelete('project') })
         expect(text()).toContain('Project files remain')
+        const focused = [...dom.window.document.querySelectorAll<HTMLElement>('[data-modal-autofocus]')]
+        expect(focused.map(item => item.textContent)).toEqual(['Cancel'])
         await act(async () => { model.confirmDelete() })
         expect(text()).toContain(failureText('en', { code: 'session/delete-pending' }))
         await act(async () => { render('zh') })
@@ -124,6 +126,8 @@ describe('user message actions', () => {
         await act(async () => { button('Edit and resend')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
         const draft = dom.window.document.querySelector('textarea')
         expect(draft?.value).toBe('original plain')
+        expect(draft?.hasAttribute('data-modal-autofocus')).toBe(true)
+        expect(dom.window.document.querySelector('button[data-modal-autofocus]')?.textContent).not.toBe('Send')
         await act(async () => { button('Send')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
         expect(retry.mock.calls[0]?.[0]).toMatchObject({ text: 'original plain', expectedRevision: 4, expectedInputRevision: 'input-4' })
         expect(Object.hasOwn(retry.mock.calls[0]?.[0] as object, 'text')).toBe(true)

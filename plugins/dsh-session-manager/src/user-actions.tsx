@@ -63,7 +63,6 @@ export function UserMessageActions(props: {
             <Button variant="ghost" disabled={snapshot.busy} onClick={() => { props.model.cancelEdit() }}>{copy('cancel')}</Button>
             <Button
               variant="primary"
-              data-modal-autofocus
               disabled={snapshot.busy}
               onClick={() => { void props.model.sendEdit(props.sessionId, props.messageId, signal.current.signal) }}
             >
@@ -73,7 +72,8 @@ export function UserMessageActions(props: {
         )}
       >
         <textarea
-          className="dsh-free-draft"
+          className="dsh-ui-textarea dsh-free-draft"
+          data-modal-autofocus
           aria-label={copy('draft')}
           value={draft}
           onChange={event => { props.model.setDraft(event.target.value) }}

@@ -61,7 +61,7 @@ async function withHost(run: (host: any) => Promise<void>, platform = 'Win32') {
   const root = createRoot(dom.window.document.getElementById('root')!)
   try {
     await act(async () => {
-      apply({ effect(fn: () => () => void) { unload = fn() }, shortcuts, sessions: { list },
+      apply({ inject: () => ({ dispose() {} }), effect(fn: () => () => void) { unload = fn() }, shortcuts, sessions: { list },
         locale: { getSnapshot: () => ({ active: locale }), subscribe(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn) } } },
         slots: { entriesOfSlot: () => [], spec: () => undefined, subscribe: () => () => {},
           inject(_key: string, fn: () => () => void) { return fn() }, register(spec: any, render: any) { renderers.set(spec.id, render); return () => {} } },

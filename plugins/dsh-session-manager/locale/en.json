@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Sessions",
-    "description": "Find and read sessions, copy thread IDs, and use temporary workspaces."
+    "description": "Find and read sessions, copy thread IDs, and use temporary workspaces; continue with one tap on an empty composer and get a welcome-back recap after time away."
   },
   "copyThreadId": "Copy thread ID",
   "copyThreadFailed": "Could not copy the thread ID"

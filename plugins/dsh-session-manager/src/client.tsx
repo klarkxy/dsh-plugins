@@ -10,24 +10,34 @@ import {
   type CopyLocale,
 } from './copy-action.ts'
 import {
+  CONTINUE_GHOST_ID,
+  PLUGIN_NAME,
+  CONTINUE_GHOST_SLOT,
   COPY_THREAD_MENU_ID,
   COPY_THREAD_MENU_ORDER,
   COPY_THREAD_SHORTCUT_ID,
   DELETE_DIALOG_ID,
   USER_ACTIONS_ID,
   USER_ACTIONS_SLOT,
+  WELCOME_BACK_CARD_ID,
+  WELCOME_BACK_CARD_SLOT,
 } from './contracts.ts'
 import { installContextMenuForwarding } from './context-menu.ts'
 import { CreateNoticeDialog, DeleteChatDialog } from './free-panel.tsx'
 import { installTemporaryWorkspacePicker, TemporaryWorkspaceNotice, type PickerRegistry } from './temporary-picker.tsx'
 import { bindTemporaryWorkspaceHost, createTemporaryWorkspaceModel } from './temporary-workspace.ts'
 import { bindHost, createFreeChatModel, createRetryModel, type FreeChatModel, type RetryModel } from './session-actions.ts'
+import { bindPresenceHost, createContinueModel, createPresenceConfigModel, createWelcomeBackModel } from './presence-model.ts'
+import { createModelSettingsSubscriber } from '@klarkxy/dsh-plugin-kit/model-settings-client'
+import { MODEL_CATALOG_INJECT, readModelCatalog } from '@klarkxy/dsh-model-route'
+import { ContinueGhost, WelcomeBackCard, type WelcomeBackTurn } from './presence-panel.tsx'
+import { SessionManagerSettings } from './settings-panel.tsx'
 import { freeChatCss } from './styles.ts'
 import { UserMessageActions } from './user-actions.tsx'
 import { uiText } from './ui-copy.ts'
 
 export const name = 'dsh-session-manager-client'
-export const inject = ['slots', 'locale', 'sessions', 'uiWorkspace', 'shortcuts', 'connection', 'workspaces', 'layout'] as const
+export const inject = ['slots', 'locale', 'sessions', 'uiWorkspace', 'shortcuts', 'connection', 'workspaces', 'layout', 'conversation', ...MODEL_CATALOG_INJECT] as const
 
 interface LocaleService {
   getSnapshot(): { active: string }
@@ -51,6 +61,8 @@ type Client = Context & {
   sessions?: Parameters<typeof bindHost>[0]['sessions']
   uiWorkspace?: Parameters<typeof bindHost>[0]['uiWorkspace']
   shortcuts?: HostShortcuts
+  remote?: { session?: { modelCatalog?: () => Promise<unknown> } }
+  connection?: { generation?: { subscribe(listener: () => void): () => void } }
   on?(name: string, listener: () => void): () => void
 }
 
@@ -88,6 +100,16 @@ export function apply(ctx: Context): void {
   const temporary = createTemporaryWorkspaceModel(temporaryHost, undefined,
     () => uiText(copyLocale(client.locale?.getSnapshot().active), 'tempWorkspace'))
   const currentLocale = () => client.locale?.getSnapshot().active
+  const presenceHost = bindPresenceHost(client)
+  const continues = createContinueModel(presenceHost)
+  const welcomeBack = createWelcomeBackModel(presenceHost)
+  const presenceConfig = createPresenceConfigModel(presenceHost)
+  // Model catalog access uses the same dependency contract as every model menu.
+  const settingsSubscriber = createModelSettingsSubscriber(client as unknown as Parameters<typeof createModelSettingsSubscriber>[0], PLUGIN_NAME)
+  const subscribeSettings = (onChange: () => void, onError?: (message: string) => void) =>
+    settingsSubscriber.subscribe(onChange, onError)
+  const modelCatalog = () => readModelCatalog(client)
+  const subscribeCatalog = (onChange: () => void) => client.connection?.generation?.subscribe(onChange)
   client.effect(() => {
     const stops: Array<() => void> = []
     // The relay needs no host slot and no service; a non-browser host simply skips it.
@@ -124,6 +146,54 @@ export function apply(ctx: Context): void {
         />
       ))
     )))
+    stops.push(client.slots.inject(CONTINUE_GHOST_SLOT, () => (
+      client.slots.register({
+        name: CONTINUE_GHOST_SLOT,
+        id: CONTINUE_GHOST_ID,
+        order: 10,
+      }, props => (
+        <ContinueGhost
+          sessionId={(props as { sessionId?: string }).sessionId}
+          useInput={(props as { useInput?: never }).useInput}
+          useSession={(props as { useSession?: never }).useSession}
+          useSessionStatus={(props as { useSessionStatus?: never }).useSessionStatus}
+          inputActions={(props as { inputActions?: never }).inputActions}
+          locale={useLiveLocale(client.locale)}
+          model={continues}
+        />
+      ))
+    )))
+    // Recap card lives in the chat flow at the latest completed turn's tail,
+    // after the shipped deliverables/plan/schedule entries (orders 0/0/20).
+    stops.push(client.slots.inject(WELCOME_BACK_CARD_SLOT, () => (
+      client.slots.register({
+        name: WELCOME_BACK_CARD_SLOT,
+        id: WELCOME_BACK_CARD_ID,
+        order: 30,
+      }, props => (
+        <WelcomeBackCard
+          sessionId={(props as { sessionId?: string }).sessionId}
+          turn={(props as { turn?: WelcomeBackTurn }).turn}
+          useChat={(props as { useChat?: never }).useChat}
+          useInput={(props as { useInput?: never }).useInput}
+          locale={useLiveLocale(client.locale)}
+          model={welcomeBack}
+        />
+      ))
+    )))
+    stops.push(client.slots.inject('plugins.bundle.config', () => (
+      client.slots.register({
+        name: 'plugins.bundle.config',
+        key: '@klarkxy/dsh-session-manager',
+      }, () => (
+        <SessionManagerSettings
+          model={presenceConfig}
+          locale={useLiveLocale(client.locale)}
+          modelCatalog={modelCatalog}
+          subscribeCatalog={subscribeCatalog}
+        />
+      ))
+    )))
     stops.push(client.slots.inject('shell.overlay', () => (
       client.slots.register({
         name: 'shell.overlay',
@@ -142,9 +212,66 @@ export function apply(ctx: Context): void {
         )
       })
     )))
+    // Return triggers: window refocus, tab visibility, current-session switch, first mount.
+    const findCurrent = () => Object.values(client.sessions?.list.getSnapshot().byId ?? {})
+      .find(row => (row?.retainedBy?.mainView ?? 0) > 0)?.id ?? ''
+    let current = findCurrent()
+    const onReturn = () => {
+      const id = findCurrent()
+      if (id !== '') void welcomeBack.check(id)
+    }
+    let lastThresholds: string | undefined
+    let lastContinuation: string | undefined
+    stops.push(presenceConfig.subscribe(() => {
+      const config = presenceConfig.getSnapshot()
+      if (config.phase !== 'ready' || config.saving || config.values === undefined) return
+      const continuation = JSON.stringify([config.values.continueMode, config.values.continueText, config.values.ghostModel])
+      if (continuation !== lastContinuation) {
+        lastContinuation = continuation
+        continues.invalidateAll()
+      }
+      const thresholds = `${config.values.recapMinutes}:${config.values.compactMinutes}`
+      if (thresholds !== lastThresholds) {
+        lastThresholds = thresholds
+        welcomeBack.invalidate()
+        onReturn()
+      }
+    }))
+    // Keep synchronization alive even when the settings page is never opened.
+    stops.push(subscribeSettings(() => { void presenceConfig.load() }))
+    const refreshConfig = () => { void presenceConfig.load().then(onReturn) }
+    const watchGeneration = client.connection?.generation?.subscribe(refreshConfig)
+    if (watchGeneration) stops.push(watchGeneration)
+    if (typeof window !== 'undefined') {
+      const refreshOnReturn = refreshConfig
+      const onVisibility = () => { if (!document.hidden) refreshOnReturn() }
+      window.addEventListener('focus', refreshOnReturn)
+      document.addEventListener('visibilitychange', onVisibility)
+      const timer = setTimeout(refreshOnReturn, 1_500)
+      // A continuously visible conversation must also cross an idle threshold
+      // without requiring the user to blur the window or switch sessions.
+      const idleTimer = setInterval(() => {
+        if (!document.hidden) onReturn()
+      }, 30_000)
+      stops.push(() => {
+        window.removeEventListener('focus', refreshOnReturn)
+        document.removeEventListener('visibilitychange', onVisibility)
+        clearTimeout(timer)
+        clearInterval(idleTimer)
+      })
+    }
+    const watchList = client.sessions?.list.subscribe(() => {
+      const id = findCurrent()
+      if (id !== current) {
+        current = id
+        if (id !== '') void welcomeBack.check(id)
+      }
+    })
+    if (typeof watchList === 'function') stops.push(watchList)
     const reset = client.on?.('connection/reset', () => {
       void chats.reloadCapabilities()
       void retries.load()
+      refreshConfig()
     })
     if (typeof reset === 'function') stops.push(reset)
     void chats.reloadCapabilities()
@@ -153,6 +280,9 @@ export function apply(ctx: Context): void {
       chats.cancel()
       retries.cancel()
       temporary.cancel()
+      continues.cancel()
+      welcomeBack.cancel()
+      presenceConfig.cancel()
       for (const stop of stops) stop()
     }
   })
@@ -177,7 +307,7 @@ function DeleteMenuItem(props: MenuProps & { locale?: LocaleService; model: Free
   const [, setMenuOpen] = props.useMenuOpenState()
   if (!snapshot.controls.delete) return null
   return (
-    <MenuItemButton onSelect={() => {
+    <MenuItemButton danger onSelect={() => {
       props.model.requestDelete(props.sessionId)
       setMenuOpen(false)
     }}>

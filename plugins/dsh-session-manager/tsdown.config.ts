@@ -24,7 +24,14 @@ export default defineConfig([
     sourcemap: true,
     hash: false,
     deps: {
-      alwaysBundle: ['@klarkxy/dsh-plugin-kit/host-rpc', '@klarkxy/dsh-plugin-kit/llm-call'],
+      alwaysBundle: [
+        '@klarkxy/dsh-plugin-kit/host-rpc',
+        '@klarkxy/dsh-plugin-kit/llm-call',
+        '@klarkxy/dsh-plugin-kit/contracts',
+        '@klarkxy/dsh-plugin-kit/domain',
+        '@klarkxy/dsh-plugin-kit/model-settings',
+        '@klarkxy/dsh-model-route',
+      ],
       neverBundle: [
         '@deepseek-ai/cordis',
         '@deepseek-ai/schemastery',
@@ -32,6 +39,8 @@ export default defineConfig([
         '@deepseek-ai/dsh-session-query',
         '@deepseek-ai/dsh-tools',
         '@deepseek-ai/dsh-llm',
+        '@deepseek-ai/dsh-storage-domain',
+        'zod',
       ],
     },
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
@@ -48,8 +57,14 @@ export default defineConfig([
     hash: false,
     plugins: [wrapClient],
     deps: {
-      neverBundle: ['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-ui-primitives'],
-      alwaysBundle: ['@klarkxy/dsh-plugin-kit/official-ui', '@klarkxy/dsh-plugin-kit/client-utils'],
+      neverBundle: ['react', 'react/jsx-runtime', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
+      alwaysBundle: [
+        '@klarkxy/dsh-plugin-kit/official-ui',
+        '@klarkxy/dsh-plugin-kit/client-utils',
+        '@klarkxy/dsh-plugin-kit/model-settings-client',
+        '@klarkxy/dsh-model-route',
+        '@klarkxy/dsh-model-route/ui',
+      ],
     },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },

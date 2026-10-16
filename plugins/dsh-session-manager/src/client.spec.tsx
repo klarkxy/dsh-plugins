@@ -56,6 +56,7 @@ describe('copy thread id', () => {
     let unload = () => {}
     const specs: Array<Record<string, unknown>> = []
     const ctx = {
+      inject: () => ({ dispose() {} }),
       effect(callback: () => () => void) { unload = callback() },
       slots: {
         entriesOfSlot: () => [], spec: () => undefined, subscribe: () => () => {},
@@ -82,10 +83,13 @@ describe('copy thread id', () => {
       'sidebar.workspaces.session.menu.item',
       'conversation.hero.workspace',
       USER_ACTIONS_SLOT,
+      'conversation.input.overlay',
+      'conversation.chat.turnTail',
+      'plugins.bundle.config',
       'shell.overlay',
     ])
     unload()
-    expect(disposed.filter(item => item === 'inject')).toHaveLength(5)
+    expect(disposed.filter(item => item === 'inject')).toHaveLength(8)
     expect(disposed).toContain(COPY_THREAD_MENU_ID)
   })
 })
