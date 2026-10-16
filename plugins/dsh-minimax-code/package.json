@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-minimax-code",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Search, create media, and understand audio and video through official MiniMax Code tools.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -100,6 +100,6 @@
     "directory": "plugins/dsh-minimax-code"
   },
   "dshRelease": {
-    "contentHash": "a39528a043067a8cbd224074ff18baad75f599ec3bb1d8148e681533b5025677"
+    "contentHash": "405213434275e9f428529d8183c773c3e9bd4315f2f69f930eb7172af6276546"
   }
 }

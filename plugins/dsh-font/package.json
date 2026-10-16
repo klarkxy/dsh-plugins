@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-font",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Font: customize the interface font, code font, and conversation font size of the DeepSeek Harness Web GUI.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -97,6 +97,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/font/",
   "dshRelease": {
-    "contentHash": "75460281ad5fe1393ffee18ae1739b195ca3a08ceaa76970ba0f6c739b7860ba"
+    "contentHash": "51ff2603dc94f4b459fdf55c07869cb82ea50fc38e3a56d8d599bcd2ddd1e740"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-chatgpt",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Use ChatGPT web search, image generation, editing, and image analysis through local Codex.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -99,6 +99,6 @@
     "directory": "plugins/dsh-chatgpt"
   },
   "dshRelease": {
-    "contentHash": "019f78c078d69db3c7489d06958e55d55daba4fbbbec99b27067707d7cd1fe78"
+    "contentHash": "6397970e2d741e5da4ab8d1d4f25b948c6000f0b817d4bf4e749f45a5187c85f"
   }
 }

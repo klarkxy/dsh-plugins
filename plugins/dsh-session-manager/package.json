@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-session-manager",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Find and read DeepSeek Harness sessions across working directories, copy thread IDs, use temporary workspaces, continue with one tap on an empty composer, and get a welcome-back recap after time away.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -138,6 +138,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/",
   "dshRelease": {
-    "contentHash": "0bc5b91eefb057d897753206dc018dd94482661ce3748a1a320c9b8ac255ca8d"
+    "contentHash": "6dfbec264a393bada66ba8db14fe860384d2133c9f9098697e4ab8bf073de08d"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-zhihu",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Zhihu search, agent tools, knowledge bases, and usage tracking for DeepSeek Harness.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -153,6 +153,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "a199b3487864cc4abb4892192df0016d444c87be0a59319c29255b20e2ecc63c"
+    "contentHash": "819033b9306a67d8915959da7c1f64291d8e1f92aa6a0fe5134a213493a6546e"
   }
 }
