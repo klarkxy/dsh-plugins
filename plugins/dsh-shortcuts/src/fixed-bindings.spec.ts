@@ -1,0 +1,221 @@
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from 'vitest'
+import type { ShortcutCatalogEntry, ShortcutFixedCatalogEntry, Shortcuts } from '@deepseek-ai/dsh-client-shortcuts/client'
+import type { ShortcutBinding, ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/protocol'
+import { FIXED_BINDINGS_KEY, FixedBindingsModel, fixedBindingsOverlap, fixedScope, normalizeFixedBinding } from './fixed-bindings.ts'
+
+function source<T>(initial: T) {
+  let value = initial
+  const listeners = new Set<() => void>()
+  return { getSnapshot: () => value, subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } }, set(next: T) { value = next; listeners.forEach(listener => listener()) } }
+}
+const binding = (code: string, modifiers: ShortcutBinding['modifiers'] = []): ShortcutBinding => ({ code, modifiers })
+const fixed = (id: string, bindings: ShortcutBinding[], group: ShortcutFixedCatalogEntry['group'] = 'input', keys = ['Enter']) => ({ id: id as ShortcutCommandId, bindings, group, keys, label: id }) as ShortcutFixedCatalogEntry
+const row = (id: string, value: ShortcutBinding) => ({ id: id as ShortcutCommandId, label: id, binding: value, keys: [], aliases: [], aria: undefined, conflicts: [], modified: false, issue: null }) as ShortcutCatalogEntry
+const storageKey = `${FIXED_BINDINGS_KEY}.windows`
+function fixture(rows = [fixed('fixed.send', [binding('Enter')])], data = new Map<string, string>()) {
+  const catalog = source<readonly ShortcutCatalogEntry[]>([])
+  const fixedCatalog = source<readonly ShortcutFixedCatalogEntry[]>(rows)
+  const storage = { getItem: (key: string) => data.get(key) ?? null, setItem: vi.fn((key: string, value: string) => { data.set(key, value) }) }
+  const shortcuts = { platform: 'windows' as const, catalog, fixedCatalog, describeBinding: vi.fn((value: ShortcutBinding | null) => ({ binding: value && normalizeFixedBinding(value, 'windows'), keys: [], issue: null, conflicts: [] })) } satisfies Pick<Shortcuts, 'platform' | 'catalog' | 'fixedCatalog' | 'describeBinding'>
+  const model = new FixedBindingsModel({ shortcuts, storage, storageEvents: window })
+  const revision = () => model.state.getSnapshot().revision
+  return { model, storage, data, shortcuts, catalog, fixedCatalog, revision }
+}
+
+describe('fixed binding compatibility model', () => {
+  it('keeps native defaults, original identity, multiple slots, and sequence presentation', () => {
+    const rows = [fixed('fixed.move', [binding('ArrowUp'), binding('ArrowDown')], 'menus', ['↑', '↓']), fixed('response.stop', [binding('Escape')], 'application', ['Esc', 'Esc'])]
+    const { model, revision } = fixture(rows)
+    expect(model.state.getSnapshot().rows[0]?.original).toBe(rows[0])
+    expect(model.state.getSnapshot().rows[1]?.keys).toEqual(['Esc', 'Esc'])
+    expect(model.setSlot('fixed.move', 0, binding('KeyU', ['primary']), revision()).ok).toBe(true)
+    expect(model.state.getSnapshot().rows[0]?.bindings).toEqual([binding('KeyU', ['control']), binding('ArrowDown')])
+    expect(model.state.getSnapshot().rows[0]?.override?.[0]).toEqual(binding('KeyU', ['primary']))
+    expect(model.setSlot('fixed.move', 1, null, revision()).ok).toBe(true)
+    expect(model.state.getSnapshot().rows[0]?.bindings[1]).toBeNull()
+    model.dispose()
+  })
+  it('persists before notifying and preserves accepted bindings on write failure', () => {
+    const { model, storage, data, revision } = fixture()
+    const observe = vi.fn(() => { expect(JSON.parse(data.get(storageKey)!).revision).toBe(model.state.getSnapshot().revision.split(':')[0]) })
+    const release = model.state.subscribe(observe)
+    expect(model.setSlot('fixed.send', 0, binding('F8'), revision()).ok).toBe(true)
+    expect(observe).toHaveBeenCalledTimes(1)
+    release()
+    const accepted = model.state.getSnapshot().rows[0]?.bindings
+    const rev = revision()
+    storage.setItem.mockImplementation(() => { throw Error('quota') })
+    const result = model.clear('fixed.send', rev)
+    expect(result.status).toBe('storage-error')
+    expect(result.message).toContain('quota')
+    expect(model.state.getSnapshot().error).toBeNull()
+    expect(revision()).toBe(rev)
+    expect(model.state.getSnapshot().rows[0]?.bindings).toEqual(accepted)
+    model.dispose()
+  })
+  it.each(['{broken', '{"schemaVersion":2,"revision":"future","overrides":{}}', '{"schemaVersion":1,"revision":"x","overrides":{"fixed.send":[{"code":"Home","modifiers":[]}]}}', '{"schemaVersion":1,"revision":"x","overrides":{"fixed.send":[]}}'])('exposes invalid storage and never overwrites it: %s', raw => {
+    const { model, storage, data, revision } = fixture(undefined, new Map([[storageKey, raw]]))
+    expect(model.state.getSnapshot().error).toBeTruthy()
+    expect(model.resetAll(revision()).status).toBe('storage-error')
+    expect(storage.setItem).not.toHaveBeenCalled()
+    expect(data.get(storageKey)).toBe(raw)
+    model.dispose()
+  })
+  it('reports unavailable storage without publishing an unsaved override', () => {
+    const { shortcuts, model } = fixture()
+    const unavailable = new FixedBindingsModel({ shortcuts })
+    expect(unavailable.state.getSnapshot().error).toContain('unavailable')
+    expect(unavailable.clear('fixed.send', unavailable.state.getSnapshot().revision).status).toBe('storage-error')
+    expect(unavailable.state.getSnapshot().rows[0]?.modified).toBe(false)
+    unavailable.dispose(); model.dispose()
+  })
+  it('rejects stale drafts both after local edits and unobserved cross-tab writes', () => {
+    const data = new Map<string, string>()
+    const a = fixture(undefined, data); const b = fixture(undefined, data)
+    const stale = a.revision()
+    a.model.setSlot('fixed.send', 0, binding('F8'), stale)
+    expect(a.model.clear('fixed.send', stale).status).toBe('stale')
+    expect(b.model.setSlot('fixed.send', 0, binding('F9'), b.revision()).status).toBe('stale')
+    expect(b.model.state.getSnapshot().rows[0]?.bindings[0]?.code).toBe('F8')
+    expect(b.model.state.getSnapshot().error).toBeNull()
+    expect(b.model.setSlot('fixed.send', 0, binding('F9'), b.revision()).ok).toBe(true)
+    a.model.dispose(); b.model.dispose()
+  })
+  it('accepts storage events and resets, then stops observing after disposal', () => {
+    const data = new Map<string, string>()
+    const a = fixture(undefined, data); const b = fixture(undefined, data)
+    a.model.clear('fixed.send', a.revision())
+    window.dispatchEvent(new StorageEvent('storage', { key: storageKey }))
+    expect(b.model.state.getSnapshot().rows[0]?.bindings).toEqual([null])
+    a.model.reset('fixed.send', a.revision())
+    window.dispatchEvent(new StorageEvent('storage', { key: storageKey }))
+    expect(b.model.state.getSnapshot().rows[0]?.modified).toBe(false)
+    b.model.dispose()
+    a.model.clear('fixed.send', a.revision())
+    window.dispatchEvent(new StorageEvent('storage', { key: storageKey }))
+    expect(b.model.state.getSnapshot().rows[0]?.modified).toBe(false)
+    expect(b.model.resetAll(b.revision()).status).toBe('disposed')
+    a.model.dispose()
+  })
+  it('retains dormant preferences through dynamic unregister, remount, append, and reload', () => {
+    const f = fixture([fixed('fixed.dynamic', [binding('F8')])])
+    f.model.setSlot('fixed.dynamic', 0, binding('F9'), f.revision())
+    const stale = f.revision()
+    f.fixedCatalog.set([])
+    expect(f.model.state.getSnapshot().rows).toEqual([])
+    expect(f.model.resetAll(stale).status).toBe('stale')
+    f.fixedCatalog.set([fixed('fixed.dynamic', [binding('F7'), binding('F6')])])
+    expect(f.model.state.getSnapshot().rows[0]?.bindings).toEqual([binding('F9'), binding('F6')])
+    f.model.reload()
+    expect(f.model.state.getSnapshot().rows[0]?.bindings[0]?.code).toBe('F9')
+    f.model.resetAll(f.revision())
+    expect(f.model.state.getSnapshot().rows[0]?.bindings).toEqual([binding('F7'), binding('F6')])
+    f.model.dispose()
+  })
+  it('allows disjoint local Enter/Esc contexts and rejects overlapping native application commands', () => {
+    const f = fixture([fixed('fixed.send', [binding('Enter')]), fixed('approval.allow', [binding('Enter')], 'approval'), fixed('fixed.select', [binding('Enter')], 'menus'), fixed('fixed.dismiss', [binding('Escape')], 'menus'), fixed('response.stop', [binding('Escape')], 'application')])
+    expect(f.model.state.getSnapshot().rows.every(row => row.conflicts.length === 0)).toBe(true)
+    f.catalog.set([row('native.test', binding('KeyK', ['control']))])
+    expect(f.model.describeSlot('fixed.send', 0, binding('KeyK', ['primary'])).conflicts).toEqual(['native.test'])
+    expect(f.model.setSlot('fixed.send', 0, binding('KeyK', ['primary']), f.revision()).status).toBe('conflict')
+    expect(f.model.state.getSnapshot().error).toBeNull()
+    expect(f.model.setSlot('fixed.send', 0, binding('F8'), f.revision()).ok).toBe(true)
+    f.catalog.set([row('native.test', binding('F8'))])
+    expect(f.model.state.getSnapshot().rows[0]?.conflicts).toEqual(['native.test'])
+    f.model.dispose()
+  })
+  it('rejects shared stop/composer keys in either edit direction while allowing overlay owners', () => {
+    const f = fixture([fixed('fixed.send', [binding('Enter')]), fixed('response.stop', [binding('Escape')], 'application'), fixed('fixed.select', [binding('Enter')], 'menus'), fixed('approval.allow', [binding('Enter')], 'approval')])
+    expect(f.model.setSlot('fixed.send', 0, binding('F8'), f.revision()).ok).toBe(true)
+    expect(f.model.describeSlot('response.stop', 0, binding('F8')).conflicts).toEqual(['fixed.send'])
+    expect(f.model.setSlot('response.stop', 0, binding('F8'), f.revision()).status).toBe('conflict')
+    f.model.reset('fixed.send', f.revision())
+    expect(f.model.setSlot('response.stop', 0, binding('F8'), f.revision()).ok).toBe(true)
+    expect(f.model.describeSlot('fixed.send', 0, binding('F8')).conflicts).toEqual(['response.stop'])
+    expect(f.model.setSlot('fixed.send', 0, binding('F8'), f.revision()).status).toBe('conflict')
+    expect(f.model.setSlot('fixed.select', 0, binding('F8'), f.revision()).ok).toBe(true)
+    expect(f.model.setSlot('approval.allow', 0, binding('F8'), f.revision()).ok).toBe(true)
+    expect(f.model.state.getSnapshot().rows.every(row => row.conflicts.length === 0)).toBe(true)
+    f.model.dispose()
+  })
+  it('rejects same-scope and distinct slot collisions while preserving duplicate native sequence steps', () => {
+    const f = fixture([fixed('fixed.send', [binding('Enter')]), fixed('fixed.newline', [binding('Enter', ['shift'])]), fixed('fixed.move', [binding('ArrowUp'), binding('ArrowDown')], 'menus')])
+    expect(f.model.setSlot('fixed.send', 0, binding('Enter', ['shift']), f.revision()).status).toBe('conflict')
+    expect(f.model.setSlot('fixed.move', 0, binding('ArrowDown'), f.revision()).status).toBe('conflict')
+    f.model.dispose()
+  })
+  it('allows browser-local bindings but rejects unsupported physical chords from native describeBinding', () => {
+    const f = fixture()
+    f.shortcuts.describeBinding.mockReturnValue({ binding: binding('F8') as never, keys: ['F8'], issue: 'unsupported-browser' as never, conflicts: [] })
+    expect(f.model.setSlot('fixed.send', 0, binding('F8'), f.revision()).ok).toBe(true)
+    f.shortcuts.describeBinding.mockReturnValue({ binding: null, keys: [], issue: 'unsupported-key' as never, conflicts: [] })
+    expect(f.model.setSlot('fixed.send', 0, { code: 'KeyA', secondCode: 'KeyB', modifiers: [] }, f.revision()).status).toBe('invalid')
+    expect(f.model.setSlot('fixed.send', 0, binding('Home'), f.revision()).status).toBe('invalid')
+    f.model.dispose()
+  })
+  it('requires an unmodified single key for native stop double-press sequences', () => {
+    const f = fixture([fixed('response.stop', [binding('Escape')], 'application', ['Esc', 'Esc'])])
+    const invalid = [binding('KeyQ', ['alt']), binding('KeyQ', ['primary']), { code: 'KeyQ', secondCode: 'KeyW', modifiers: [] } satisfies ShortcutBinding]
+    const reviewed = f.revision()
+    for (const candidate of invalid) {
+      expect(f.model.describeSlot('response.stop', 0, candidate).issue).toBe('stop-single-key-required')
+      expect(f.model.setSlot('response.stop', 0, candidate, reviewed)).toMatchObject({ ok: false, status: 'invalid', message: 'stop-single-key-required' })
+    }
+    expect(f.storage.setItem).not.toHaveBeenCalled()
+    expect(f.revision()).toBe(reviewed)
+    expect(f.model.state.getSnapshot().rows[0]?.bindings).toEqual([binding('Escape')])
+    expect(f.model.setSlot('response.stop', 0, binding('F8'), reviewed).ok).toBe(true)
+    expect(f.model.state.getSnapshot().rows[0]?.bindings).toEqual([binding('F8')])
+    expect(f.model.state.getSnapshot().rows[0]?.keys).toEqual(['Esc', 'Esc'])
+    expect(f.model.setSlot('response.stop', 0, null, f.revision()).ok).toBe(true)
+    expect(f.model.resetSlot('response.stop', 0, f.revision()).ok).toBe(true)
+    expect(f.model.state.getSnapshot().rows[0]?.modified).toBe(false)
+    f.model.dispose()
+  })
+  it('validates exact physical protocol and normalizes primary and unordered chords', () => {
+    expect(normalizeFixedBinding(binding('KeyK', ['primary', 'meta']), 'macos')).toEqual(binding('KeyK', ['meta']))
+    expect(fixedBindingsOverlap({ code: 'KeyB', secondCode: 'KeyA', modifiers: ['primary'] }, binding('KeyA', ['control']), 'windows')).toBe(true)
+    expect(() => normalizeFixedBinding(binding('KeyA', ['bogus'] as never), 'windows')).toThrow()
+    expect(() => normalizeFixedBinding({ code: 'KeyA', secondCode: 'KeyA', modifiers: [] }, 'windows')).toThrow()
+    expect(fixedScope('approval.reject')).toBe('approval')
+    expect(fixedScope('fixed.complementary')).toBe('composer')
+    expect(fixedScope('fixed.slash')).toBe('composer')
+    expect(fixedScope('fixed.dynamic')).toBe('global')
+  })
+  it('restores slots independently and drops the override once all defaults return', () => {
+    const f = fixture([fixed('fixed.move', [binding('ArrowUp'), binding('ArrowDown')], 'menus')])
+    f.model.clear('fixed.move', f.revision())
+    f.model.resetSlot('fixed.move', 0, f.revision())
+    expect(f.model.state.getSnapshot().rows[0]?.bindings).toEqual([binding('ArrowUp'), null])
+    f.model.resetSlot('fixed.move', 1, f.revision())
+    expect(f.model.state.getSnapshot().rows[0]?.modified).toBe(false)
+    expect(f.model.setSlot('fixed.move', 2, binding('F8'), f.revision()).status).toBe('invalid')
+    expect(f.model.describeSlot('missing', 0, null).issue).toBe('invalid-slot')
+    f.model.dispose()
+  })
+  it('permits retry after a transient storage write failure', () => {
+    const f = fixture()
+    f.storage.setItem.mockImplementationOnce(() => { throw Error('quota') })
+    expect(f.model.clear('fixed.send', f.revision()).ok).toBe(false)
+    expect(f.model.state.getSnapshot().error).toBeNull()
+    expect(f.model.clear('fixed.send', f.revision()).ok).toBe(true)
+    f.model.dispose()
+  })
+  it('invalidates previews when the native catalog changes', () => {
+    const f = fixture()
+    const reviewed = f.revision()
+    f.catalog.set([row('native.test', binding('F8'))])
+    expect(f.model.setSlot('fixed.send', 0, binding('F8'), reviewed).status).toBe('stale')
+    expect(f.model.setSlot('fixed.send', 0, binding('F8'), f.revision()).status).toBe('conflict')
+    f.model.dispose()
+  })
+  it('keeps profile storage isolated', () => {
+    const f = fixture()
+    const profile = new FixedBindingsModel({ shortcuts: f.shortcuts, storage: f.storage, storageEvents: window, storageKey: `${FIXED_BINDINGS_KEY}.desktop.windows` })
+    f.model.clear('fixed.send', f.revision())
+    window.dispatchEvent(new StorageEvent('storage', { key: storageKey }))
+    expect(profile.state.getSnapshot().rows[0]?.modified).toBe(false)
+    profile.dispose(); f.model.dispose()
+  })
+})

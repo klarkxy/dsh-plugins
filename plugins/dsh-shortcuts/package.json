@@ -1,0 +1,117 @@
+{
+  "name": "@klarkxy/dsh-shortcuts",
+  "version": "0.1.0",
+  "description": "Customize application and recognized local shortcuts, and run participating plugins' commands from a command palette.",
+  "icon": "./icon.svg",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2.0-rc.2"
+  },
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./contracts": {
+      "types": "./lib/contracts.d.ts",
+      "import": "./lib/contracts.js",
+      "default": "./lib/contracts.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "icon.svg",
+    "locale/*.json",
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "docs/README.zh-CN.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-shortcuts",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-primitives"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-shortcuts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-shortcuts/src"
+  },
+  "dependencies": {
+    "@klarkxy/dsh-plugin-kit": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.4",
+    "@deepseek-ai/dsh-client-shortcuts": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-locale": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.0-rc.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-shortcuts": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-locale": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-slots": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-client-shortcuts": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-locale": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "react": "^18.2.0",
+    "@types/react": "18.3.31",
+    "react-dom": "^18.2.0",
+    "@types/react-dom": "^18.3.1",
+    "jsdom": "29.1.1",
+    "@types/jsdom": "28.0.3"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-plugins",
+    "deepseek-harness",
+    "shortcuts",
+    "keyboard",
+    "command-palette"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klarkxy/dsh-plugins.git",
+    "directory": "plugins/dsh-shortcuts"
+  },
+  "bugs": {
+    "url": "https://github.com/klarkxy/dsh-plugins/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/shortcuts/"
+}
