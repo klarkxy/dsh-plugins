@@ -104,6 +104,7 @@ describe('official UI contract', () => {
     expect(css).toContain('&.dsh-ui-card, & .dsh-ui-card {')
     expect(css).toContain('&.dsh-ui-surface, & .dsh-ui-surface {')
     expect(css).toContain('&.dsh-ui-field, & .dsh-ui-field {')
+    expect(css).toContain('&.dsh-ui-textarea, & .dsh-ui-textarea {')
     // A sibling rule is a different thing and must keep its own shape.
     expect(css).toContain('& .dsh-ui-field + .dsh-ui-field {')
     // Every recipe the sheet defines must be reachable from the root.
@@ -119,6 +120,28 @@ describe('official UI contract', () => {
     const css = officialUiCss('dsh-fixture')
     expect(css).toContain(':focus-visible')
     expect(css).toContain('box-shadow: var(--dsw-elevation-stroke)')
+  })
+
+  it('styles a native textarea with the select shell and only official tokens', () => {
+    const css = officialUiCss('dsh-fixture')
+    const block = css.slice(css.indexOf('&.dsh-ui-textarea, & .dsh-ui-textarea {'))
+    const rule = block.slice(0, block.indexOf('}'))
+    expect(rule).toContain('box-sizing: border-box')
+    expect(rule).toContain('width: 100%')
+    expect(rule).toContain('min-width: 0')
+    expect(rule).toContain('resize: vertical')
+    expect(rule).toContain('border: 0.5px solid var(--dsw-alias-border-l4)')
+    expect(rule).toContain('border-radius: var(--dsw-radius-md)')
+    expect(rule).toContain('background: var(--dsw-alias-bg-layer-3)')
+    expect(rule).toContain('font-size: 13px')
+    expect(rule).toContain('line-height: 1.5')
+    expect(rule).toContain('color: var(--dsw-alias-label-primary)')
+    expect(css).toContain('& .dsh-ui-textarea:focus-visible { outline: none; border-color: var(--dsw-alias-state-business-primary); }')
+    expect(css).toContain('& .dsh-ui-textarea:disabled { color: var(--dsw-alias-label-tertiary); cursor: default; }')
+    expect(css).toContain('& .dsh-ui-textarea::placeholder { color: var(--dsw-alias-label-dimmed); }')
+    const textareaCss = css.slice(css.indexOf('&.dsh-ui-textarea'), css.indexOf('/* Long panels'))
+    for (const token of new Set(customProperties(textareaCss))) expect(ALLOWED.has(token), token).toBe(true)
+    expect(textareaCss).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/)
   })
 
   it('never carries a literal colour fallback behind a theme token', () => {

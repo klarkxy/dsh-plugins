@@ -11,7 +11,7 @@
  * `@klarkxy/dsh-model-route/ui`.
  */
 import { useEffect, useState } from 'react'
-import { parseModelMenuChoices, type ModelCatalogClient, type ModelMenuChoice, type ModelRoute } from '@klarkxy/dsh-model-route'
+import { parseModelMenuChoices, readModelCatalog, type ModelCatalogClient, type ModelMenuChoice, type ModelRoute } from '@klarkxy/dsh-model-route'
 
 export type { ModelCatalogClient, ModelMenuChoice, ModelMenuGroup } from '@klarkxy/dsh-model-route'
 export {
@@ -30,15 +30,15 @@ export {
 /** The stored selection. Empty provider/model means "follow the default". */
 export type ModelMenuRoute = ModelRoute
 
-/** Load the host catalog once per mount and republish whenever it answers. */
+/** @deprecated Use useModelCatalog and ModelCatalogStatus from model-route/ui for errors and retries. */
 export function useModelMenuChoices(client: ModelCatalogClient, bound?: ModelMenuRoute): ModelMenuChoice[] {
   const [choices, setChoices] = useState<ModelMenuChoice[]>([])
   useEffect(() => {
     if (typeof document === 'undefined') return
     let live = true
     const load = () => {
-      void client.remote?.session?.modelCatalog?.()
-        ?.then(value => { if (live) setChoices(parseModelMenuChoices(value, bound)) })
+      void readModelCatalog(client)
+        .then(value => { if (live) setChoices(parseModelMenuChoices(value, bound)) })
         .catch(() => { if (live) setChoices([]) })
     }
     load()

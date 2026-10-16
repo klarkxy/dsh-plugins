@@ -4,7 +4,7 @@
 
 [English](README.md)
 
-借助本机已登录的 Codex，让 DeepSeek Harness 智能体使用 ChatGPT 联网搜索、生图、改图、看图和文本分析。不需要 API Key。
+借助本机已登录的 Codex，让 DeepSeek Harness 智能体使用 ChatGPT 联网搜索、生图、改图和图片分析。不需要 API Key。
 
 ## 安装
 
@@ -12,7 +12,7 @@
 dsh plugin --profile web add @klarkxy/dsh-chatgpt
 ```
 
-DSH 所在电脑上还需要安装官方 Codex，版本不低于 `0.162.0-alpha.17.2`。打开插件页点击「刷新状态」：已有 Codex ChatGPT 登录时直接复用，否则可选择浏览器或设备码登录（远程 DSH 请用设备码）。找不到 Codex 时，可手动填写其路径。模型和思考强度也在这里选择。
+DSH 所在电脑上还需要安装官方 Codex，版本不低于 `0.162.0-alpha.17.2`。打开插件页点击「刷新状态」：已有 Codex ChatGPT 登录时直接复用，否则可选择浏览器或设备码登录（远程 DSH 请用设备码）。找不到 Codex 时，可手动填写其路径。调用使用 Codex 默认模型。插件保留登录、路径和超时设置，不再提供文本问答工具或模型选择入口。
 
 ## 工具
 
@@ -22,7 +22,6 @@ DSH 所在电脑上还需要安装官方 Codex，版本不低于 `0.162.0-alpha.
 | `chatgpt_generate_image` | 生成图片，可附参考图 |
 | `chatgpt_edit_image` | 修改指定图片，保留原图 |
 | `chatgpt_view_image` | 看图、识别截图文字、比较图片 |
-| `chatgpt_ask` | 对你提供的文本做分析、翻译或写作 |
 
 智能体会自行选择这些工具，无需你点名。
 

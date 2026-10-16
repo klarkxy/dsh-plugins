@@ -4,7 +4,7 @@ import { Button, DisclosureRow, IconSettingsOutlineRegular, Input, Tag } from '@
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { createModelSettingsSubscriber } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import { DEFAULT_SETTINGS, PLUGIN_NAME, RPC_CHANNEL, type Login, type RpcResult, type Settings, type Status } from './contracts.ts'
-import { chatGptEffortLabel, chatGptMessage } from './client-copy.ts'
+import { chatGptMessage } from './client-copy.ts'
 
 export const name = 'dsh-chatgpt-client'
 export const inject = ['slots', 'connection', 'locale'] as const
@@ -54,7 +54,7 @@ export function ChatGptPanel({ rpc, locale, subscribeSettings }: { rpc: Rpc; loc
   const [conflict, setConflict] = useState(false)
   const [note, setNote] = useState('')
   // Executable and timeout are overrides of reliable auto defaults; keep them
-  // behind a disclosure row so the page stays focused on model and sign-in.
+  // behind a disclosure row so the page stays focused on sign-in.
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const toggleAdvanced = useCallback(() => setAdvancedOpen(open => !open), [])
   const lifetime = useRef<AbortController | null>(null)
@@ -197,12 +197,11 @@ export function ChatGptPanel({ rpc, locale, subscribeSettings }: { rpc: Rpc; loc
     ownedLogin.current = undefined; setLogin(undefined); await refreshStatus()
   })
   const edit = (next: Partial<Settings>) => { dirty.current = true; ++settingsSequence.current; setDraft(current => ({ ...current, ...next })); setNote('') }
-  const model = status?.models.find(item => draft.model ? item.id === draft.model : item.isDefault)
   const locked = loading || busy !== null
   const statusLabel = !status ? t('检查中', 'Checking') : !status.available ? t('未找到 Codex', 'Codex unavailable')
     : status.signedIn ? t('已登录', 'Signed in') : t('未登录', 'Signed out')
   return <section className="chatgpt-panel dsh-ui-stack-lg" lang={english ? 'en' : 'zh'} aria-label="ChatGPT">
-    <p className="dsh-ui-hint">{t('使用本机官方 Codex 和 ChatGPT 账户额度。功能是否可用，以实际调用结果为准。', 'Uses official local Codex and your ChatGPT account quota. Capability access is confirmed by an actual call.')}</p>
+    <p className="dsh-ui-hint">{t('使用本机官方 Codex 和 ChatGPT 账户额度，提供图片生成、图片编辑、图片分析和网络搜索。功能是否可用，以实际调用结果为准。', 'Uses official local Codex and your ChatGPT account quota for image generation, image editing, image analysis, and web search. Capability access is confirmed by an actual call.')}</p>
     <div className="dsh-ui-stack">
       <div className="dsh-ui-row-wrap"><Tag tone={status?.signedIn ? 'success' : 'neutral'}>{statusLabel}</Tag>
         {status?.version ? <span className="dsh-ui-meta">Codex {status.version}</span> : null}
@@ -218,18 +217,6 @@ export function ChatGptPanel({ rpc, locale, subscribeSettings }: { rpc: Rpc; loc
       {login ? <LoginDetails login={login} english={english} /> : null}
     </div>
     <div className="dsh-ui-stack">
-      <label className="dsh-ui-field"><span className="dsh-ui-label">{t('模型', 'Model')}</span>
-        <select className="dsh-ui-select" disabled={locked} value={draft.model} onChange={event => edit({ model: event.target.value, effort: '' })}>
-          <option value="">{t('Codex 默认模型', 'Codex default model')}</option>
-          {draft.model && !model ? <option value={draft.model}>{draft.model}</option> : null}
-          {status?.models.map(item => <option key={item.id} value={item.id}>{item.label}{item.isDefault ? t('（默认）', ' (default)') : ''}</option>)}
-        </select></label>
-      <label className="dsh-ui-field"><span className="dsh-ui-label">{t('思考强度', 'Reasoning effort')}</span>
-        <select className="dsh-ui-select" disabled={locked} value={draft.effort} onChange={event => edit({ effort: event.target.value })}>
-          <option value="">{t('模型默认', 'Model default')}</option>
-          {draft.effort && !model?.efforts.includes(draft.effort) ? <option value={draft.effort}>{chatGptEffortLabel(draft.effort, english)}</option> : null}
-          {model?.efforts.map(effort => <option key={effort} value={effort}>{chatGptEffortLabel(effort, english)}</option>)}
-        </select></label>
       <DisclosureRow icon={<IconSettingsOutlineRegular />} title={t('高级设置', 'Advanced settings')} open={advancedOpen} expandable expandOnRowClick onToggle={toggleAdvanced} className="chatgpt-advanced">
         <div className="dsh-ui-stack">
           <label className="dsh-ui-field"><span className="dsh-ui-label">{t('超时（秒）', 'Timeout (seconds)')}</span>

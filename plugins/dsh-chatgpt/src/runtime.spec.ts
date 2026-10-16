@@ -20,11 +20,17 @@ class FakeRpc implements RpcProcess {
   listeners = new Set<(notice: Notice) => void>()
   closed = false
   accountType = 'chatgpt'
-  userAgent = 'Codex Desktop/0.162.0-alpha.17.2 (Windows 10; x86_64) dumb (dsh-chatgpt; 0.1.0-alpha.1)'
+  // Real npm CLI shape: the app-server adopts the clientInfo.name we send as its UA product.
+  userAgent = 'dsh-chatgpt/0.162.1 (Windows 10; x86_64) unknown (dsh-chatgpt; 0.1.0-alpha.1)'
   sandbox = { type: 'readOnly', networkAccess: false }
   approval = 'never'
   servers: Record<string, unknown> = {}
-  onTurn: (params: any) => void = () => { this.item({ type: 'agentMessage', id: 'answer', text: 'A useful answer.' }); this.complete() }
+  onTurn: (params: any) => void = () => {
+    if (this.calls.find(call => call.method === 'thread/start')?.params.config.web_search === 'live') {
+      this.item({ type: 'webSearch', id: 'web', results: [{ url: 'https://example.test/source' }] })
+    }
+    this.item({ type: 'agentMessage', id: 'answer', text: 'A useful answer.' }); this.complete()
+  }
   onLogin?: () => void
   constructor(public home: string) {}
   emit(method: string, params: Record<string, unknown>) { for (const listener of this.listeners) listener({ method, params }) }
@@ -55,17 +61,36 @@ async function setup(prepare?: (rpc: FakeRpc) => void, overrides = {}) {
 }
 
 describe('isolated capability runtime', () => {
+  it('rejects the removed text-chat mode before launching Codex', async () => {
+    const { runtime, root, processes } = await setup()
+    await expect(runtime.run({ mode: 'ask' as Capability, prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'bad-request' })
+    expect(processes).toHaveLength(0)
+  })
+  it('uses the default model even if legacy overrides are supplied and never forwards an effort', async () => {
+    const { runtime, root, processes } = await setup(undefined, { model: 'removed-model', effort: 'unsupported' })
+    await runtime.run({ mode: 'search', prompt: 'find sources' }, root, signal())
+    const thread = processes[0].calls.find(call => call.method === 'thread/start')!.params
+    const turn = processes[0].calls.find(call => call.method === 'turn/start')!.params
+    expect(thread.model).toBe('current-default')
+    expect(turn.model).toBe('current-default')
+    expect(turn).not.toHaveProperty('effort')
+  })
+  it('checks account status without requesting or exposing a model catalog', async () => {
+    const { runtime, processes } = await setup()
+    expect(await runtime.status(signal())).not.toHaveProperty('models')
+    expect(processes[0].calls.some(call => call.method === 'model/list')).toBe(false)
+  })
   it('uses catalog default and both empty environments; captures events before turn/start responds', async () => {
     const { runtime, root, processes } = await setup()
-    expect((await runtime.run({ mode: 'ask', prompt: 'hello' }, root, signal())).answer).toBe('A useful answer.')
+    expect((await runtime.run({ mode: 'search', prompt: 'hello' }, root, signal())).answer).toBe('A useful answer.')
     const rpc = processes[0], thread = rpc.calls.find(call => call.method === 'thread/start')!.params, turn = rpc.calls.find(call => call.method === 'turn/start')!.params
     expect(thread).toMatchObject({ model: 'current-default', modelProvider: 'openai', ephemeral: true, environments: [], sandbox: 'read-only', approvalPolicy: 'never' })
     expect(turn).toMatchObject({ environments: [], approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly', networkAccess: false } })
-    expect(thread.config).toMatchObject({ 'features.shell_tool': false, 'features.stable_environment_tools': false, 'features.code_mode': { enabled: false, direct_only_tool_namespaces: ['web', 'image_gen'] }, 'features.multi_agent': false, 'features.apps': false, 'features.plugins': false, mcp_servers: {}, web_search: 'disabled' })
+    expect(thread.config).toMatchObject({ 'features.shell_tool': false, 'features.stable_environment_tools': false, 'features.code_mode': { enabled: false, direct_only_tool_namespaces: ['web', 'image_gen'] }, 'features.multi_agent': false, 'features.apps': false, 'features.plugins': false, mcp_servers: {}, web_search: 'live' })
     expect(rpc.closed).toBe(true)
     expect(await readdir(root)).toEqual([])
   })
-  it.each(['ask', 'vision', 'search', 'image', 'edit'] as Capability[])('enables only requested native tool gates for %s', mode => {
+  it.each(['vision', 'search', 'image', 'edit'] as Capability[])('enables only requested native tool gates for %s', mode => {
     expect(safeConfig(mode)['features.image_generation']).toBe(mode === 'image' || mode === 'edit')
     expect(safeConfig(mode).web_search).toBe(mode === 'search' ? 'live' : 'disabled')
     expect(appServerArgs(mode)).not.toContain('--ignore-user-config')
@@ -75,22 +100,32 @@ describe('isolated capability runtime', () => {
   })
   it('requires managed ChatGPT auth and refuses an API-key account', async () => {
     const { runtime, root, processes } = await setup(rpc => { rpc.accountType = 'apiKey' })
-    await expect(runtime.run({ mode: 'ask', prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'login-required' })
+    await expect(runtime.run({ mode: 'search', prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'login-required' })
     expect(processes[0].calls.some(call => call.method === 'thread/start')).toBe(false)
   })
-  it.each(['Codex Desktop/0.161.0', 'an unrelated process'])('fails unsupported safety protocol %s', async userAgent => {
+  // The UA product token varies by runtime: Codex Desktop reports itself, the npm CLI
+  // echoes our clientInfo.name, and codex_cli_rs is the CLI default originator.
+  it.each([
+    'Codex Desktop/0.162.0-alpha.17.2 (Windows 10; x86_64) dumb (dsh-chatgpt; 0.1.0-alpha.1)',
+    'dsh-chatgpt/0.162.1 (Windows 10; x86_64) unknown (dsh-chatgpt; 0.1.0-alpha.1)',
+    'codex_cli_rs/0.162.1 (Windows 10; x86_64) unknown (dsh-chatgpt; 0.1.0-alpha.1)',
+  ])('accepts verified safety protocol %s', async userAgent => {
+    const { runtime, root } = await setup(rpc => { rpc.userAgent = userAgent })
+    expect((await runtime.run({ mode: 'search', prompt: 'hello' }, root, signal())).answer).toBe('A useful answer.')
+  })
+  it.each(['Codex Desktop/0.161.0', 'dsh-chatgpt/0.162.0-alpha.17.1 (Windows 10; x86_64)', 'an unrelated process'])('fails unsupported safety protocol %s', async userAgent => {
     const { runtime, root, processes } = await setup(rpc => { rpc.userAgent = userAgent })
-    await expect(runtime.run({ mode: 'ask', prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'unsupported-runtime' })
+    await expect(runtime.run({ mode: 'search', prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'unsupported-runtime' })
     expect(processes[0].closed).toBe(true)
   })
   it('requires sandbox and approval response, stopping before turn/start on unsafe settings', async () => {
     const { runtime, root, processes } = await setup(rpc => { rpc.approval = 'on-request' })
-    await expect(runtime.run({ mode: 'ask', prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'unsupported-runtime' })
+    await expect(runtime.run({ mode: 'search', prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'unsupported-runtime' })
     expect(processes[0].calls.some(call => call.method === 'turn/start')).toBe(false)
   })
   it('explicitly disables each inherited MCP server through thread overrides', async () => {
     const { runtime, root, processes } = await setup(rpc => { rpc.servers = { inherited: { command: 'do not launch', env: { SECRET: 'not retained' } }, 'name.with.dots': { url: 'https://example.test/mcp' } } })
-    await runtime.run({ mode: 'ask', prompt: 'hello' }, root, signal())
+    await runtime.run({ mode: 'search', prompt: 'hello' }, root, signal())
     expect(processes[0].calls.find(call => call.method === 'thread/start')!.params.config.mcp_servers).toEqual({ inherited: { command: 'do not launch', enabled: false }, 'name.with.dots': { url: 'https://example.test/mcp', enabled: false } })
     expect(processes[0].calls.findIndex(call => call.method === 'config/read')).toBeLessThan(processes[0].calls.findIndex(call => call.method === 'thread/start'))
   })
@@ -112,7 +147,7 @@ describe('isolated capability runtime', () => {
       rpc.complete('completed', 'turn-1', 'other-thread')
       rpc.item({ type: 'agentMessage', id: 'right', text: 'partial' }); rpc.complete('failed', 'turn-1', 'thread-1', { message: 'a raw token must never escape' })
     } })
-    await expect(runtime.run({ mode: 'ask', prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'turn-failed', message: 'ChatGPT 未成功完成本次调用。' })
+    await expect(runtime.run({ mode: 'search', prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'turn-failed', message: 'ChatGPT 未成功完成本次调用。' })
   })
   it('copies only the exact native savedPath and infers MIME from media magic', async () => {
     const { runtime, root, home } = await setup(rpc => { rpc.onTurn = () => {
@@ -133,10 +168,10 @@ describe('isolated capability runtime', () => {
     await expect(runtime.run({ mode: 'image', prompt: 'draw' }, root, signal())).rejects.toMatchObject({ code: 'tool-unavailable' })
   })
   it('rejects empty successful turns and unrelated native tools', async () => {
-    const { runtime, root } = await setup(rpc => { rpc.onTurn = () => rpc.complete() })
-    await expect(runtime.run({ mode: 'ask', prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'empty-answer' })
+    const { runtime, root } = await setup(rpc => { rpc.onTurn = () => { rpc.item({ type: 'webSearch', id: 'web', results: [{ url: 'https://example.test/source' }] }); rpc.complete() } })
+    await expect(runtime.run({ mode: 'search', prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'empty-answer' })
     const unsafe = await setup(rpc => { rpc.onTurn = () => { rpc.item({ type: 'commandExecution', id: 'command' }); rpc.complete() } })
-    await expect(unsafe.runtime.run({ mode: 'ask', prompt: 'hello' }, unsafe.root, signal())).rejects.toMatchObject({ code: 'unsafe-tool' })
+    await expect(unsafe.runtime.run({ mode: 'search', prompt: 'hello' }, unsafe.root, signal())).rejects.toMatchObject({ code: 'unsafe-tool' })
   })
   it('rejects native savedPath outside request and generated_images directories', async () => {
     const outside = await temp(); await writeFile(join(outside, 'stolen.png'), png)
@@ -160,7 +195,7 @@ describe('isolated capability runtime', () => {
   it('cancellation prevents late publication and closes only its invocation', async () => {
     let ready!: () => void; const started = new Promise<void>(resolve => { ready = resolve })
     const { runtime, root, processes } = await setup(rpc => { rpc.onTurn = () => ready() })
-    const controller = new AbortController(), result = runtime.run({ mode: 'ask', prompt: 'hello' }, root, controller.signal)
+    const controller = new AbortController(), result = runtime.run({ mode: 'search', prompt: 'hello' }, root, controller.signal)
     await started; controller.abort()
     await expect(result).rejects.toMatchObject({ code: 'cancelled' })
     processes[0].item({ type: 'agentMessage', id: 'late', text: 'late' }); processes[0].complete()
@@ -168,7 +203,7 @@ describe('isolated capability runtime', () => {
   })
   it('timeout and unload stop unfinished turns', async () => {
     const { runtime, root, processes } = await setup(rpc => { rpc.onTurn = () => {} }, { timeoutMs: 50 })
-    await expect(runtime.run({ mode: 'ask', prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'timeout' })
+    await expect(runtime.run({ mode: 'search', prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'timeout' })
     expect(processes[0].closed).toBe(true)
     await runtime.dispose()
     await expect(runtime.status(signal())).rejects.toMatchObject({ code: 'disposed' })
@@ -176,7 +211,7 @@ describe('isolated capability runtime', () => {
   it('unload cancels an active turn, waits for its process, and leaves no late artifact', async () => {
     let ready!: () => void; const started = new Promise<void>(resolve => { ready = resolve })
     const { runtime, root, processes } = await setup(rpc => { rpc.onTurn = () => ready() })
-    const pending = runtime.run({ mode: 'ask', prompt: 'hello' }, root, signal())
+    const pending = runtime.run({ mode: 'search', prompt: 'hello' }, root, signal())
     void pending.catch(() => {})
     await started; await runtime.dispose()
     await expect(pending).rejects.toMatchObject({ code: 'cancelled' })

@@ -15,6 +15,7 @@ vi.mock('react', async original => {
     },
     useRef(initial: unknown) { const index = hooks.cursor++; if (!(index in hooks.cells)) hooks.cells[index] = { current: initial }; return hooks.cells[index] },
     useCallback(callback: unknown) { return callback },
+    useMemo(compute: () => unknown) { return compute() },
     useEffect(effect: () => void | (() => void)) { hooks.effects.push(effect) },
   }
 })
@@ -51,22 +52,23 @@ describe('title background read recovery', () => {
     const marker = createTitleClientMarker()
     const render = () => { hooks.cursor = 0; hooks.effects = []; return TitleSettings({ client: client as never, marker }) }
     render(); const cleanup = hooks.effects.map(effect => effect()); await flush()
-    // Reload the catalog with the restored route, which is absent from the current catalog.
-    render(); hooks.effects[2]!(); await flush()
+    // Binding the restored route is derived without fetching the catalog again.
     let tree = descendants(render())
-    const selects = tree.filter(element => element.type === 'select')
-    expect(selects).toHaveLength(2)
-    const model = selects[0]!
-    expect(model.props.value).toBe('legacy\u001fsaved-model')
-    expect(descendants(model).filter(element => element.type === 'option').map(element => element.props.children))
-      .toEqual(['Use the session model', 'Available provider / New model', 'legacy / saved-model'])
-    expect(tree.some(element => element.props.children === 'Reasoning effort')).toBe(false)
+    const cadence = tree.find(element => element.type === 'select')!
+    const menu = tree.find(element => element.props.choices !== undefined)!
+    expect(menu.props.modelValue).toBe('legacy / saved-model')
+    expect((menu.props.choices as Array<{ label: string }>).map(choice => choice.label))
+      .toEqual(['Available provider / New model', 'legacy / saved-model'])
+    expect((menu.props.leading as Array<{ label: string; selected?: boolean }>).map(item => [item.label, item.selected === true]))
+      .toEqual([['Use the session model', false]])
+    expect((menu.props.efforts as Array<{ id: string }>).map(effort => effort.id)).toEqual(['high'])
+    expect(tree.some(element => element.type === 'select' && descendants(element).some(child => child.props.children === 'Reasoning effort'))).toBe(false)
     // An unrelated edit leaves the legacy route under server ownership.
-    ;(selects[1]!.props.onChange as (event: unknown) => void)({ target: { value: 'first-prompt' } })
+    ;(cadence.props.onChange as (event: unknown) => void)({ target: { value: 'first-prompt' } })
     await flush()
     expect(writes[0]).toEqual({ cadence: 'first-prompt', expectedRevision: 1 })
     tree = descendants(render())
-    ;(tree.find(element => element.type === 'select')!.props.onChange as (event: unknown) => void)({ target: { value: 'available\u001fnew-model' } })
+    ;(tree.find(element => element.props.onPick !== undefined)!.props.onPick as (route: unknown) => void)({ provider: 'available', model: 'new-model' })
     await flush()
     expect(writes[1]).toEqual({ model: { provider: 'available', model: 'new-model' }, expectedRevision: 1 })
     cleanup.forEach(dispose => dispose?.())

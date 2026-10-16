@@ -94,12 +94,6 @@ function winner(rules: readonly Rule[], target: Target, property: string): { val
 }
 
 describe('git commit client', () => {
-  it('keys the catalog effect on route strings, not the settings object', () => {
-    // Depending on `settings?.model` refetched after every save and looped.
-    expect(source).not.toContain('settings?.model, text.failed]')
-    expect(source).toContain('[props.client, boundProvider, boundModel]')
-  })
-
   it('injects its stylesheet once from apply, not inside the header button', () => {
     expect(source).not.toContain('<style>{css}</style>')
     expect(source).toContain("'git-commit.styles'")

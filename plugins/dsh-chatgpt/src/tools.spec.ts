@@ -25,12 +25,15 @@ function host(root: string, mode = 'workspace-write') {
 function exec(signal = new AbortController().signal) { return { signal } as ToolRunContext }
 
 describe('DSH capability tools', () => {
-  it('registers five eager model-visible tools with clear image/search triggers', async () => {
+  it('registers four eager model-visible tools with clear image/search triggers', async () => {
     const { value, registered } = host(await workspace())
     registerTools(value, vi.fn())
-    expect(registered.map(tool => tool.name)).toEqual(['chatgpt_search', 'chatgpt_generate_image', 'chatgpt_edit_image', 'chatgpt_view_image', 'chatgpt_ask'])
+    expect(registered.map(tool => tool.name)).toEqual(['chatgpt_search', 'chatgpt_generate_image', 'chatgpt_edit_image', 'chatgpt_view_image'])
     expect(registered.every(tool => !tool.deferLoading)).toBe(true)
     expect(registered[1].description).toContain('用户要求画图或生图')
+    expect(registered[0].parameters.properties).not.toHaveProperty('images')
+    expect(registered[0].parameters.properties).not.toHaveProperty('attachmentIds')
+    expect(registered[3].parameters.properties).toHaveProperty('images')
   })
   it('rejects writes in a read-only session before dispatch', async () => {
     const root = await workspace(), { value } = host(root, 'read-only'), run = vi.fn()

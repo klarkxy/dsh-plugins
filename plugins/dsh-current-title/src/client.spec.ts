@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { TITLE_CLIENT_SERVICE, type RpcResult, type TitleStatus } from './contracts.ts'
+import { inject } from './client.tsx'
 import { applyMarkerFromStatus, createTitleClientMarker, disposeTitleClientMarker } from './marker.ts'
 import {
   createTitleClientWork, promptFieldValue, promptToSave, runTitleRegenerateFlow, runTitleSettingsSave, runTitleStatusLoad,
@@ -52,13 +53,17 @@ describe('current title UI', () => {
   it('injects native session and locale for the title marker', () => {
     expect(clientSource).toContain("from '@klarkxy/dsh-plugin-kit/client-utils'")
     expect(clientSource).toContain('type Client = NativeSurfaceClient &')
-    expect(clientSource).toContain("export const inject = ['slots', 'connection', 'remote', 'remote.session', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const")
+    expect(inject).toEqual(['slots', 'connection', 'remote', 'remote.session', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
     expect(clientSource).toContain("client.slots.inject('plugins.bundle.config'")
     expect(clientSource).toContain("ctx.provide(TITLE_CLIENT_SERVICE, marker)")
     expect(clientSource).not.toContain('settings.section')
     expect(settingsCopy('zh').regenerate).toBe('重新生成')
     expect(settingsCopy('en').regenerate).toBe('Regenerate')
     expect(settingsCopy('zh').label).toBe('自动标题')
+    expect(settingsCopy('zh').session).toBe('当前会话')
+    expect(settingsCopy('en').session).toBe('Current session')
+    expect(settingsCopy('zh').defaults).toBe('默认设置')
+    expect(settingsCopy('en').noSession).toContain('No session is open')
     expect(shouldSkipTitleRefresh({ busy: true })).toBe(true)
     expect(shouldSkipTitleRefresh({ busy: false })).toBe(false)
   })

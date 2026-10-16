@@ -1,9 +1,13 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { NativeSurfaceClient } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { createPluginReadGate, useFeatureRefresh, useNativeSeat } from '@klarkxy/dsh-plugin-kit/client-utils'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronDownOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { createModelSettingsSubscriber } from '@klarkxy/dsh-plugin-kit/model-settings-client'
+import {
+  MODEL_CATALOG_INJECT, readModelCatalog, modelMenuEffortLabel, modelMenuEffortOptions, parseModelMenuChoices,
+} from '@klarkxy/dsh-model-route'
+import { ModelCatalogStatus, ModelMenu, modelMenuCss, useModelCatalog } from '@klarkxy/dsh-model-route/ui'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RPC_CHANNEL, TITLE_CLIENT_SERVICE, type RpcResult, type TitleCadence, type TitleModelRoute, type TitleStatus } from './contracts.ts'
 import {
@@ -13,7 +17,7 @@ import {
 import { applyMarkerFromStatus, createTitleClientMarker, disposeTitleClientMarker } from './marker.ts'
 
 export const name = 'dsh-current-title-client'
-export const inject = ['slots', 'connection', 'remote', 'remote.session', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
+export const inject = ['slots', 'connection', ...MODEL_CATALOG_INJECT, 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 export { createTitleClientMarker, disposeTitleClientMarker, applyMarkerFromStatus }
 
 type Client = NativeSurfaceClient & {
@@ -25,41 +29,6 @@ type Client = NativeSurfaceClient & {
     inject(key: string, callback: () => unknown): () => void
     register(spec: { name: string; key: string }, render: unknown): () => void
   }
-}
-
-interface CatalogChoice {
-  provider: string
-  model: string
-  label: string
-}
-
-function catalogChoices(value: unknown, selected: TitleModelRoute): CatalogChoice[] {
-  const envelope = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
-  // Host remote calls resolve to a result envelope ({ ok, value }); accept the bare catalog too.
-  const root = (envelope?.ok === true && envelope.value && typeof envelope.value === 'object' && !Array.isArray(envelope.value)
-    ? envelope.value as Record<string, unknown>
-    : undefined) ?? envelope ?? {}
-  const groups = Array.isArray(root.groups) ? root.groups : []
-  const choices: CatalogChoice[] = []
-  for (const group of groups) {
-    if (!group || typeof group !== 'object') continue
-    const row = group as Record<string, unknown>
-    const provider = typeof row.id === 'string' ? row.id : ''
-    const providerName = typeof row.name === 'string' && row.name ? row.name : provider
-    if (!provider || !Array.isArray(row.models)) continue
-    for (const model of row.models) {
-      if (!model || typeof model !== 'object') continue
-      const item = model as Record<string, unknown>
-      const id = typeof item.id === 'string' ? item.id : ''
-      if (!id) continue
-      const name = typeof item.name === 'string' && item.name ? item.name : id
-      choices.push({ provider, model: id, label: `${providerName} / ${name}` })
-    }
-  }
-  if (selected.provider && selected.model && !choices.some(item => item.provider === selected.provider && item.model === selected.model)) {
-    choices.push({ provider: selected.provider, model: selected.model, label: `${selected.provider} / ${selected.model}` })
-  }
-  return choices
 }
 
 export function TitleSettings(props: {
@@ -78,7 +47,12 @@ export function TitleSettings(props: {
   const [error, setError] = useState('')
   // undefined = not edited; '' is a deliberate clear (built-in instruction).
   const [prompt, setPrompt] = useState<string | undefined>(undefined)
-  const [choices, setChoices] = useState<CatalogChoice[]>([])
+  const loadCatalog = useCallback(() => readModelCatalog(props.client), [props.client])
+  const subscribeCatalog = useCallback((change: () => void) => props.client.connection.generation?.subscribe(change), [props.client])
+  const catalogState = useModelCatalog(loadCatalog, { subscribe: subscribeCatalog })
+  const { refresh: refreshCatalog } = catalogState
+  const choices = parseModelMenuChoices(catalogState.catalog, status?.settings?.model)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [externalChange, setExternalChange] = useState(false)
   const [syncError, setSyncError] = useState('')
   const [loadingSettings, setLoadingSettings] = useState(true)
@@ -118,16 +92,6 @@ export function TitleSettings(props: {
     busyRef.current = false
     setBusy(false)
   }), [props.client, work, readGate])
-
-  useEffect(() => {
-    const catalog = props.client.remote?.session?.modelCatalog
-    if (!catalog) return undefined
-    let live = true
-    void catalog().then(value => {
-      if (live) setChoices(catalogChoices(value, status?.settings.model ?? { provider: '', model: '' }))
-    }).catch(() => { if (live) setChoices([]) })
-    return () => { live = false }
-  }, [props.client, status?.settings.model.provider, status?.settings.model.model])
 
   useEffect(() => {
     const generation = work.beginLoad()
@@ -205,20 +169,24 @@ export function TitleSettings(props: {
     const stop = props.subscribeSettings?.(() => {
       if (!live) return
       setSyncError('')
+      refreshCatalog()
       if (dirty.current && !busyRef.current) { external.current = true; setExternalChange(true) }
       syncRef.current()
     }, message => { if (live) setSyncError(message) })
     return () => { live = false; stop?.() }
-  }, [props.subscribeSettings, props.client])
+  }, [props.subscribeSettings, props.client, refreshCatalog])
 
-  const savedPrompt = status?.settings.prompt ?? ''
-  const savedModel = status?.settings.model ?? { provider: '', model: '' }
-  const selectableChoices = choices.some(choice => choice.provider === savedModel.provider && choice.model === savedModel.model)
-    ? choices : [...choices, ...catalogChoices({}, savedModel)]
-  const modelKey = savedModel.provider && savedModel.model ? `${savedModel.provider}\u001f${savedModel.model}` : ''
+  const savedPrompt = status?.settings?.prompt ?? ''
+  const savedModel = status?.settings?.model ?? { provider: '', model: '' }
+  const follow = !savedModel.provider || !savedModel.model
+  const selectedModel = follow ? undefined : choices.find(choice => choice.provider === savedModel.provider && choice.model === savedModel.model)
+  const efforts = follow ? [] : modelMenuEffortOptions(selectedModel, savedModel.reasoningEffort)
+  const currentLabel = follow ? text.modelDefault : selectedModel?.label ?? `${savedModel.provider} / ${savedModel.model}`
+  const selectedEffort = efforts.find(item => item.id === (savedModel.reasoningEffort || ''))
+  const effortName = selectedEffort ? modelMenuEffortLabel(selectedEffort, seat.locale) : undefined
   const title = status?.session?.title
   const pinned = status?.session?.pinned === true
-  const weOwn = status?.support.weOwn === true
+  const weOwn = status?.support?.weOwn === true
   const canRegenerate = Boolean(sessionId) && weOwn && !busy && !loadingSettings
 
   function saveSettings(patch: { model?: TitleModelRoute; cadence?: TitleCadence }) {
@@ -243,47 +211,54 @@ export function TitleSettings(props: {
 
   return <section className="current-title-settings ct-root dsh-ui-panel" lang={seat.locale} data-testid="current-title-settings">
     {!status && !error ? <p role="status" className="dsh-ui-hint">{text.loading}</p> : null}
-    {title ? <p translate="no" className="dsh-ui-title dsh-ui-wrap">{title}</p> : null}
-    {pinned ? <p className="dsh-ui-meta">{text.pinned}</p> : null}
-    {status?.session?.generating ? <p role="status" className="dsh-ui-hint">{text.generating}</p> : null}
-    {status && !weOwn ? <p role="status" className="dsh-ui-hint">{text.inactive}{status.support.limitation ? ` ${titleMessage(status.support.limitation, seat.locale)}` : ''}</p> : null}
-    {error ? <>
-      <p role="alert" className="dsh-ui-error dsh-ui-wrap">{titleMessage(error, seat.locale)}</p>
-      <Button variant="outline" size="sm" disabled={busy} onClick={() => { readGate.reset(); refreshStatus() }}>
-        {text.retry}
-      </Button>
-    </> : null}
-    {note ? <p role="status" className="dsh-ui-notice">{titleMessage(note, seat.locale)}</p> : null}
-    {externalChange ? <p role="alert" className="dsh-ui-error">{text.externalChange}</p> : null}
-    {syncError ? <p role="status" className="dsh-ui-hint">{text.syncUnavailable}</p> : null}
-    <div className="dsh-ui-actions">
-      <Button variant="ghost" size="sm" disabled={busy || loadingSettings} onClick={() => {
-        setPrompt(undefined); dirty.current = false; external.current = false; setExternalChange(false)
-        readGate.reset(); syncRef.current()
-      }}>{text.reload}</Button>
-      {sessionId ? <Button variant="outline" size="md" disabled={!canRegenerate}
-        onClick={() => {
-          if (!sessionId) return
-          readGate.reset()
-          const token = work.beginRequest()
-          setError('')
-          setNote('')
-          void runTitleRegenerateFlow({
-            call,
-            sessionId,
-            isCurrent: () => work.isRequest(token),
-            failedMessage: messages.failed,
-            onBusy: changeBusy,
-            onStatus: setStatus,
-            onError: setError,
-            onMarker: commitMarker,
-          })
-        }}>{text.regenerate}</Button> : null}
-    </div>
-    <label className="dsh-ui-field">
+    <article className="dsh-ui-card" data-testid="current-title-session">
+      <h3 className="dsh-ui-heading">{text.session}</h3>
+      {title
+        ? <p translate="no" className="dsh-ui-title dsh-ui-wrap">{title}</p>
+        : <p className="dsh-ui-hint">{text.noSession}</p>}
+      {pinned ? <p className="dsh-ui-meta">{text.pinned}</p> : null}
+      {status?.session?.generating ? <p role="status" className="dsh-ui-hint">{text.generating}</p> : null}
+      {status && !weOwn ? <p role="status" className="dsh-ui-hint">{text.inactive}{status.support?.limitation ? ` ${titleMessage(status.support.limitation, seat.locale)}` : ''}</p> : null}
+      {error ? <>
+        <p role="alert" className="dsh-ui-error dsh-ui-wrap">{titleMessage(error, seat.locale)}</p>
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => { readGate.reset(); refreshStatus() }}>
+          {text.retry}
+        </Button>
+      </> : null}
+      {note ? <p role="status" className="dsh-ui-notice">{titleMessage(note, seat.locale)}</p> : null}
+      {externalChange ? <p role="alert" className="dsh-ui-error">{text.externalChange}</p> : null}
+      {syncError ? <p role="status" className="dsh-ui-hint">{text.syncUnavailable}</p> : null}
+      <div className="dsh-ui-actions">
+        <Button variant="ghost" size="sm" disabled={busy || loadingSettings} onClick={() => {
+          setPrompt(undefined); dirty.current = false; external.current = false; setExternalChange(false)
+          readGate.reset(); syncRef.current()
+        }}>{text.reload}</Button>
+        {sessionId ? <Button variant="outline" size="md" disabled={!canRegenerate}
+          onClick={() => {
+            if (!sessionId) return
+            readGate.reset()
+            const token = work.beginRequest()
+            setError('')
+            setNote('')
+            void runTitleRegenerateFlow({
+              call,
+              sessionId,
+              isCurrent: () => work.isRequest(token),
+              failedMessage: messages.failed,
+              onBusy: changeBusy,
+              onStatus: setStatus,
+              onError: setError,
+              onMarker: commitMarker,
+            })
+          }}>{text.regenerate}</Button> : null}
+      </div>
+    </article>
+    <section className="dsh-ui-section" data-testid="current-title-defaults">
+      <h3 className="dsh-ui-heading">{text.defaults}</h3>
+      <label className="dsh-ui-field">
       <span className="dsh-ui-label">{text.prompt}</span>
       <textarea
-        className="ct-prompt"
+        className="dsh-ui-textarea ct-prompt"
         value={status ? promptFieldValue(prompt, savedPrompt) : ''}
         maxLength={4000}
         rows={5}
@@ -312,31 +287,39 @@ export function TitleSettings(props: {
       />
       <span className="dsh-ui-help">{text.promptHint}</span>
     </label>
-    <label className="dsh-ui-field">
+    <div className="dsh-ui-field">
       <span className="dsh-ui-label">{text.model}</span>
-      <select
-        className="dsh-ui-select"
-        value={modelKey}
-        disabled={busy || loadingSettings || !status}
-        onChange={event => {
-          const value = event.target.value
-          const choice = selectableChoices.find(item => `${item.provider}\u001f${item.model}` === value)
-          saveSettings({
-            model: choice ? { provider: choice.provider, model: choice.model } : { provider: '', model: '' },
-          })
-        }}
-      >
-        <option value="">{text.modelDefault}</option>
-        {selectableChoices.map(choice => (
-          <option key={`${choice.provider}\u001f${choice.model}`} value={`${choice.provider}\u001f${choice.model}`}>{choice.label}</option>
-        ))}
-      </select>
-    </label>
+      <ModelCatalogStatus state={catalogState} locale={seat.locale} />
+      <ModelMenu
+        locale={seat.locale}
+        open={menuOpen && Boolean(status) && !busy && !loadingSettings}
+        onOpenChange={next => setMenuOpen(next && Boolean(status) && !busy && !loadingSettings)}
+        listClassName="ct-root"
+        anchor={<button type="button" className="dsh-model-menu-trigger" disabled={busy || loadingSettings || !status} aria-label={`${text.model}: ${currentLabel}`}>
+          <span className="dsh-model-menu-triggerLabel">{currentLabel}</span>
+          {!follow && efforts.length ? <span className="dsh-model-menu-triggerEffort">{effortName ?? text.modelDefault}</span> : null}
+          <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${menuOpen ? ' dsh-model-menu-chevronOpen' : ''}`} />
+        </button>}
+        choices={choices}
+        selected={follow ? undefined : { provider: savedModel.provider, model: savedModel.model }}
+        onPick={picked => saveSettings({ model: { provider: picked.provider, model: picked.model } })}
+        leading={[{ id: 'default', label: text.modelDefault, selected: follow }]}
+        onPickLeading={() => saveSettings({ model: { provider: '', model: '' } })}
+        efforts={efforts}
+        selectedEffort={savedModel.reasoningEffort || ''}
+        onPickEffort={effort => saveSettings({ model: follow
+          ? { provider: '', model: '' }
+          : { provider: savedModel.provider, model: savedModel.model, ...(effort ? { reasoningEffort: effort } : {}) } })}
+        modelLabel={text.model}
+        modelValue={currentLabel}
+        defaultEffortLabel={text.modelDefault}
+      />
+    </div>
     <label className="dsh-ui-field">
       <span className="dsh-ui-label">{text.cadence}</span>
       <select
         className="dsh-ui-select"
-        value={status?.settings.cadence ?? 'all-prompts'}
+        value={status?.settings?.cadence ?? 'all-prompts'}
         disabled={busy || loadingSettings || !status}
         onChange={event => {
           saveSettings({ cadence: event.target.value === 'first-prompt' ? 'first-prompt' : 'all-prompts' })
@@ -345,33 +328,17 @@ export function TitleSettings(props: {
         <option value="all-prompts">{text.cadenceAll}</option>
         <option value="first-prompt">{text.cadenceFirst}</option>
       </select>
-    </label>
+      </label>
+    </section>
   </section>
 }
 
-/* The contract owns every type tier, the field rhythm, the focus ring and the
- * select shell. The only geometry left here is this panel's own: its reading
- * width, and the prompt box — the one control the primitives do not ship, which
- * borrows the select's 34px / 0.5px l4 / radius-md shell at a taller size. */
-const styles = `${officialUiCss('ct-root')}
+/* The contract owns every type tier, the field rhythm, the focus ring, the
+ * select shell and the textarea shell. The only geometry left here is this
+ * panel's own: its reading width, and a taller prompt box. */
+const styles = `${officialUiCss('ct-root')}${modelMenuCss}
 .ct-root { max-width: 760px; }
-.ct-prompt {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  min-height: 96px;
-  resize: vertical;
-  padding: 8px 12px;
-  border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-3);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--dsw-alias-label-primary);
-}
-.ct-prompt:disabled { color: var(--dsw-alias-label-tertiary); cursor: default; }
-.ct-prompt::placeholder { color: var(--dsw-alias-label-dimmed); }
+.ct-prompt { min-height: 96px; }
 `
 
 declare module '@deepseek-ai/cordis' {

@@ -42,8 +42,7 @@ export const chatGptMessages = [
   ['每次最多提供五张图片。', 'Provide at most five images per request.'],
   ['此操作需要输入图片。', 'This operation requires input images.'],
   ['请先通过官方 Codex 登录 ChatGPT 账号。', 'Sign in to your ChatGPT account through official Codex first.'],
-  ['所选模型不可用，或 Codex 未提供默认模型。', 'The selected model is unavailable, or Codex did not provide a default model.'],
-  ['所选模型不支持此推理强度。', 'The selected model does not support this reasoning effort.'],
+  ['Codex 未提供默认模型。', 'Codex did not provide a default model.'],
   ['Codex 未提供可验证的有效配置。', 'Codex did not provide a verifiable effective configuration.'],
   ['Codex MCP 配置格式不兼容。', 'The Codex MCP configuration format is incompatible.'],
   ['Codex MCP 配置超过安全上限。', 'Codex MCP configuration exceeded the safety limit.'],
@@ -75,10 +74,3 @@ export function chatGptDiagnostic(message: string): string | { zh: string; en: s
   const pair = chatGptMessages.find(pair => (pair as readonly string[]).includes(message))
   return pair ? { zh: pair[0], en: pair[1] } : message
 }
-
-const effortLabels: Record<string, [string, string]> = {
-  none: ['无', 'None'], minimal: ['最低', 'Minimal'], low: ['低', 'Low'],
-  medium: ['中', 'Medium'], high: ['高', 'High'], xhigh: ['极高', 'Extra high'],
-  max: ['最高', 'Maximum'], ultra: ['超高', 'Ultra'],
-}
-export const chatGptEffortLabel = (value: string, english: boolean): string => effortLabels[value]?.[english ? 1 : 0] ?? value

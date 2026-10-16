@@ -409,6 +409,29 @@ ${scope} {
 & .dsh-ui-select:disabled { color: var(--dsw-alias-label-tertiary); cursor: default; }
 & .dsh-ui-select[aria-invalid='true'] { border-color: var(--dsw-alias-state-error-primary); }
 
+/* --- Native textarea. The primitives ship no textarea either, so a settings
+ * prompt keeps the platform element and the same field shell as the select:
+ * 0.5px l4, radius-md, layer-3, 13/1.5 type. It grows vertically instead of
+ * locking to the select's 34px row. --- */
+& .dsh-ui-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  padding: 8px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-3);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-primary);
+}
+& .dsh-ui-textarea:focus-visible { outline: none; border-color: var(--dsw-alias-state-business-primary); }
+& .dsh-ui-textarea:disabled { color: var(--dsw-alias-label-tertiary); cursor: default; }
+& .dsh-ui-textarea::placeholder { color: var(--dsw-alias-label-dimmed); }
+& .dsh-ui-textarea[aria-invalid='true'] { border-color: var(--dsw-alias-state-error-primary); }
+
 /* Long panels scroll inside themselves instead of growing the host page. */
 & .dsh-ui-panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 & .dsh-ui-panel-wide { max-width: 100%; }

@@ -4,7 +4,7 @@
 
 [简体中文](README.zh-CN.md)
 
-Give any DeepSeek Harness agent ChatGPT web search, image generation, image editing, image understanding, and text analysis, using the Codex app already signed in on your computer. No API key is needed.
+Give any DeepSeek Harness agent ChatGPT web search, image generation, image editing, and image understanding, using the Codex app already signed in on your computer. No API key is needed.
 
 ## Install
 
@@ -12,7 +12,7 @@ Give any DeepSeek Harness agent ChatGPT web search, image generation, image edit
 dsh plugin --profile web add @klarkxy/dsh-chatgpt
 ```
 
-You also need the official Codex, version `0.162.0-alpha.17.2` or later, on the same computer as DSH. Open the plugin page and click **Refresh status**. An existing Codex ChatGPT sign-in is reused; otherwise sign in with the browser or a device code (use the device code for a remote DSH). If Codex is not found, enter its path. You can also pick the model and reasoning effort there.
+You also need the official Codex, version `0.162.0-alpha.17.2` or later, on the same computer as DSH. Open the plugin page and click **Refresh status**. An existing Codex ChatGPT sign-in is reused; otherwise sign in with the browser or a device code (use the device code for a remote DSH). If Codex is not found, enter its path. Calls use the Codex default model. The plugin keeps sign-in, executable path, and timeout settings; it does not provide a text-chat tool or a model selector.
 
 ## Tools
 
@@ -22,7 +22,6 @@ You also need the official Codex, version `0.162.0-alpha.17.2` or later, on the 
 | `chatgpt_generate_image` | Create images, optionally from reference images |
 | `chatgpt_edit_image` | Edit a chosen image; the original is kept |
 | `chatgpt_view_image` | Describe images, read text in screenshots, compare images |
-| `chatgpt_ask` | Analyze, translate, or write about text you provide |
 
 The agent picks these tools on its own; you do not need to name them.
 

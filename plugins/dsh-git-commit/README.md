@@ -23,6 +23,8 @@ Replace `web` with your profile name and restart it if DSH asks.
 
 Under **Plugins → Git Commit** you can choose the **Commit planning model** (empty follows the current session model) and turn on **Commit even without a model plan**, which makes one commit when the model is unavailable.
 
+If the model list cannot load, or some providers fail, use **Retry** beside the model picker. Your saved model stays selected.
+
 ## Good to know
 
 - All uncommitted changes in the repository are included, including new files.

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "ChatGPT",
-    "description": "Use ChatGPT tools through the official local Codex runtime."
+    "description": "Use ChatGPT web search, image generation, editing, and image analysis through local Codex."
   }
 }

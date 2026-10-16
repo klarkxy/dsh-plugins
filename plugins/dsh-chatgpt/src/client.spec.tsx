@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { Simulate } from 'react-dom/test-utils'
 import { JSDOM } from 'jsdom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply, ChatGptPanel, LoginDetails, safeAuthorizationUrl } from './client.tsx'
@@ -9,7 +10,6 @@ import { DEFAULT_SETTINGS, PLUGIN_NAME, RPC_CHANNEL, type Settings, type Status 
 
 const status: Status = {
   available: true, executable: '/codex', version: '1.0', signedIn: false, authMode: null,
-  models: [{ id: 'model-1', label: 'Model One', isDefault: true, efforts: ['low', 'high'] }],
 }
 const english = { getSnapshot: () => ({ active: 'en' }), subscribe: () => () => {} }
 const deferred = <T,>() => {
@@ -47,6 +47,10 @@ const click = async (dom: JSDOM, text: string) => {
   expect(button, text).toBeDefined()
   await act(async () => button!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })))
 }
+const executableInput = (dom: JSDOM) => dom.window.document.querySelector<HTMLInputElement>('input[placeholder="Leave blank to detect automatically"]')!
+/** React decides whether it may listen to input events while react-dom is imported, before this
+ * JSDOM exists, so a dispatched event never reaches onChange. Simulate does. */
+const type = async (target: HTMLInputElement, value: string) => { await act(async () => Simulate.change(target, { target: { value } } as never)) }
 const success = <T,>(value: T) => ({ ok: true, value })
 afterEach(() => vi.useRealTimers())
 
@@ -87,6 +91,9 @@ describe('ChatGPT connection page', () => {
       expect(call.mock.calls.map(args => args[1])).toEqual(['settings', 'status'])
       await act(async () => { state.resolve(success(status)); settings.resolve(success({ settings: DEFAULT_SETTINGS, revision: 3 })) })
       expect(dom.window.document.body.textContent).toContain('Codex 1.0')
+      expect(dom.window.document.body.textContent).toContain('image generation, image editing, image analysis, and web search')
+      // Advanced settings stay collapsed and the page offers no model or effort control.
+      expect(dom.window.document.querySelectorAll('select')).toHaveLength(0)
       expect(dom.window.document.querySelector('input[placeholder="Leave blank to detect automatically"]')).toBeNull()
       expect(dom.window.document.body.textContent).toContain('Advanced settings')
       expect(call).toHaveBeenCalledTimes(2)
@@ -115,26 +122,36 @@ describe('ChatGPT connection page', () => {
     })
   })
 
-  it('offers default model efforts and saves a user selection only on request', async () => {
+  it('reveals advanced settings on request and saves an edited executable only on request', async () => {
     const call = vi.fn<Call>(async (_channel, endpoint, payload) => {
       if (endpoint === 'status') return success(status)
       if (endpoint === 'settings') return success({ settings: DEFAULT_SETTINGS, revision: 5 })
       return success({ settings: (payload as { settings: Settings }).settings, revision: 6 })
     })
     await mount(call, async dom => {
-      const effort = dom.window.document.querySelectorAll('select')[1]
-      expect([...effort.options].map(item => item.value)).toEqual(['', 'low', 'high'])
-      await act(async () => {
-        effort.value = 'high'
-        effort.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
-      })
+      await click(dom, 'Advanced settings')
+      const executable = executableInput(dom)
+      await type(executable, '/opt/codex')
       expect(call.mock.calls.some(args => args[1] === 'settings.update')).toBe(false)
       await click(dom, 'Save settings')
       expect(call.mock.calls.find(args => args[1] === 'settings.update')?.[2]).toEqual({
-        settings: { ...DEFAULT_SETTINGS, effort: 'high' }, expectedRevision: 5,
+        settings: { ...DEFAULT_SETTINGS, executable: '/opt/codex' }, expectedRevision: 5,
       })
       expect(dom.window.document.body.textContent).toContain('Saved.')
-      expect(effort.value).toBe('high')
+      expect(executableInput(dom).value).toBe('/opt/codex')
+    })
+  })
+
+  it('rejects a timeout outside the supported range before sending settings', async () => {
+    const call = vi.fn<Call>(async (_channel, endpoint) => endpoint === 'status'
+      ? success(status)
+      : success({ settings: DEFAULT_SETTINGS, revision: 2 }))
+    await mount(call, async dom => {
+      await click(dom, 'Advanced settings')
+      await type(dom.window.document.querySelector<HTMLInputElement>('input[type="number"]')!, '5')
+      await click(dom, 'Save settings')
+      expect(call.mock.calls.some(args => args[1] === 'settings.update')).toBe(false)
+      expect(dom.window.document.body.textContent).toContain('Timeout must be between 10 and 1800 seconds.')
     })
   })
 
@@ -162,15 +179,16 @@ describe('ChatGPT connection page', () => {
   })
 
   it('does not cancel a login started elsewhere or overwrite a saved draft with status', async () => {
-    const settings: Settings = { ...DEFAULT_SETTINGS, model: 'model-1', effort: 'high' }
+    const settings: Settings = { ...DEFAULT_SETTINGS, executable: 'saved-codex' }
     const call = vi.fn<Call>(async (_channel, endpoint) => endpoint === 'settings'
       ? success({ settings, revision: 9 })
       : success({ ...status, login: { id: 'external', kind: 'browser', url: 'https://auth.openai.com/a' } }))
     await mount(call, async dom => {
       expect([...dom.window.document.querySelectorAll('button')].some(item => item.textContent === 'Cancel sign-in')).toBe(false)
-      expect([...dom.window.document.querySelectorAll('select')].map(item => item.value)).toEqual(['model-1', 'high'])
+      await click(dom, 'Advanced settings')
+      expect(executableInput(dom).value).toBe('saved-codex')
       await click(dom, 'Refresh status')
-      expect([...dom.window.document.querySelectorAll('select')].map(item => item.value)).toEqual(['model-1', 'high'])
+      expect(executableInput(dom).value).toBe('saved-codex')
     })
     expect(call.mock.calls.some(args => args[1] === 'login.cancel')).toBe(false)
   })

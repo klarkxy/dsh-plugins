@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { copyFile, lstat, mkdir, mkdtemp, open, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { ChatGptError, type Capability, type ImageResult, type Login, type ModelOption, type Request, type Result, type Settings, type Source, type Status } from './contracts.ts'
+import { ChatGptError, MODES, type Capability, type ImageResult, type Login, type Request, type Result, type Settings, type Source, type Status } from './contracts.ts'
 import { discoverExecutable, JsonRpcProcess, type Executable, type Notice, type RpcProcess } from './process.ts'
 
 type Deps = {
@@ -47,16 +47,21 @@ function safeUrl(value: unknown): string | undefined {
 function text(value: unknown, max = 200): string | undefined { return typeof value === 'string' ? value.replace(/[\x00-\x1f\x7f]/g, '').slice(0, max) : undefined }
 function checkProtocol(init: any): string {
   const agent: string = typeof init?.userAgent === 'string' ? init.userAgent : ''
-  const version = agent.match(/(?:Codex Desktop|codex(?:_app_server)?)[/ ](\d+\.\d+\.\d+(?:-[\w.]+)?)/i)?.[1]
+  // The app-server builds its UA as "<product>/<codex version> (<os>; <arch>) …",
+  // where <product> is its own originator (Codex Desktop, codex_cli_rs, …) or even
+  // the clientInfo.name we send (npm CLI), so only the version position is stable.
+  const version = agent.match(/^(?:.+?)[/ ](\d+\.\d+\.\d+(?:-[\w.]+)?)(?:\s|$)/)?.[1]
   const parts = version?.match(/^(\d+)\.(\d+)\.(\d+)(?:-alpha\.(\d+)\.(\d+))?/)
   if (!parts) throw error('unsupported-runtime', '此 Codex 运行时不支持已验证的隔离协议；需要 0.162.0-alpha.17.2 或更新版本。')
   const numbers = parts.slice(1).map(v => Number(v ?? 9999)), minimum = [0, 162, 0, 17, 2]
   for (let i = 0; i < minimum.length; i++) { if (numbers[i] > minimum[i]) return version!; if (numbers[i] < minimum[i]) break; if (i === minimum.length - 1) return version! }
   throw error('unsupported-runtime', '此 Codex 运行时不支持已验证的隔离协议；需要 0.162.0-alpha.17.2 或更新版本。')
 }
-function modelsFrom(response: any): ModelOption[] {
+function defaultModel(response: any): string {
   if (!Array.isArray(response?.data)) throw error('protocol', 'Codex 模型列表格式不兼容。')
-  return response.data.filter((m: any) => typeof m?.id === 'string' && !m.hidden).map((m: any) => ({ id: m.id, label: text(m.displayName) || m.id, isDefault: m.isDefault === true, efforts: Array.isArray(m.supportedReasoningEfforts) ? m.supportedReasoningEfforts.map((e: any) => text(e?.reasoningEffort, 40)).filter(Boolean) : [] }))
+  const selected = response.data.find((model: any) => typeof model?.id === 'string' && model.id && !model.hidden && model.isDefault === true)
+  if (!selected) throw error('model-unavailable', 'Codex 未提供默认模型。')
+  return selected.id
 }
 async function raster(path: string, roots: string[]): Promise<{ path: string; mediaType: string; extension: string }> {
   const absolute = resolve(path), root = roots.find(root => within(root, absolute))
@@ -124,13 +129,12 @@ export class CodexRuntime {
     try {
       const { rpc, exe, version } = await this.authProcess(); combined.throwIfAborted()
       const account = await rpc.request('account/read', { refreshToken: false }, combined)
-      const models = modelsFrom(await rpc.request('model/list', {}, combined))
       combined.throwIfAborted()
       const managed = account?.account?.type === 'chatgpt'
-      return { available: true, executable: exe.path, version, signedIn: managed, authMode: managed ? 'chatgpt' : account?.account?.type === 'apiKey' ? 'apiKey' : null, ...(managed ? { accountLabel: text(account.account.email), plan: text(account.account.planType, 40) } : {}), login: this.pendingLogin, models }
+      return { available: true, executable: exe.path, version, signedIn: managed, authMode: managed ? 'chatgpt' : account?.account?.type === 'apiKey' ? 'apiKey' : null, ...(managed ? { accountLabel: text(account.account.email), plan: text(account.account.planType, 40) } : {}), login: this.pendingLogin }
     } catch (cause) {
       if (combined.aborted) throw error('cancelled', '操作已取消。')
-      return { available: false, executable: '', version: '', signedIn: false, authMode: null, models: [], error: cause instanceof ChatGptError ? cause.message : 'Codex 状态读取失败。' }
+      return { available: false, executable: '', version: '', signedIn: false, authMode: null, error: cause instanceof ChatGptError ? cause.message : 'Codex 状态读取失败。' }
     }
   }
   async login(kind: 'browser' | 'device', signal: AbortSignal): Promise<Login> {
@@ -174,7 +178,7 @@ export class CodexRuntime {
     let rpc: RpcProcess | undefined, runDir: string | undefined, outputDir: string | undefined, unsubscribe: (() => void) | undefined, published = false, outputOwned = false
     try {
       combined.throwIfAborted()
-      if (!['search', 'image', 'edit', 'vision', 'ask'].includes(request.mode) || typeof request.prompt !== 'string' || !request.prompt.trim() || request.prompt.length > 100_000) throw error('bad-request', '请求模式或提示词无效。')
+      if (!MODES.includes(request.mode) || typeof request.prompt !== 'string' || !request.prompt.trim() || request.prompt.length > 100_000) throw error('bad-request', '请求模式或提示词无效。')
       const root = await realpath(workspace)
       if (!(await lstat(root)).isDirectory()) throw error('bad-request', '请求目录无效。')
       if ((request.images?.length || 0) > 5) throw error('invalid-image', '每次最多提供五张图片。')
@@ -185,10 +189,7 @@ export class CodexRuntime {
       const connection = await this.start(runDir, combined, request.mode); rpc = connection.rpc
       const account = await rpc.request('account/read', { refreshToken: false }, combined)
       if (account?.account?.type !== 'chatgpt') throw error('login-required', '请先通过官方 Codex 登录 ChatGPT 账号。')
-      const models = modelsFrom(await rpc.request('model/list', {}, combined))
-      const selected = settings.model ? models.find(model => model.id === settings.model) : models.find(model => model.isDefault)
-      if (!selected) throw error('model-unavailable', '所选模型不可用，或 Codex 未提供默认模型。')
-      if (settings.effort && !selected.efforts.includes(settings.effort)) throw error('bad-effort', '所选模型不支持此推理强度。')
+      const selected = defaultModel(await rpc.request('model/list', {}, combined))
       // Empty tables merge with inherited TOML; discover names through the official RPC,
       // then disable every inherited server explicitly. Never log or retain raw config.
       const effective = await rpc.request('config/read', { includeLayers: false, cwd: runDir }, combined)
@@ -209,7 +210,7 @@ export class CodexRuntime {
         return [name, { ...transport, enabled: false }]
       }))
       const config = { ...safeConfig(request.mode), mcp_servers: disabledServers }
-      const thread = await rpc.request('thread/start', { model: selected.id, modelProvider: 'openai', cwd: runDir, ephemeral: true, environments: [], sandbox: 'read-only', approvalPolicy: 'never', config, baseInstructions: instructions(request.mode), developerInstructions: '' }, combined)
+      const thread = await rpc.request('thread/start', { model: selected, modelProvider: 'openai', cwd: runDir, ephemeral: true, environments: [], sandbox: 'read-only', approvalPolicy: 'never', config, baseInstructions: instructions(request.mode), developerInstructions: '' }, combined)
       if (typeof thread?.thread?.id !== 'string' || thread?.sandbox?.type !== 'readOnly' || thread.sandbox.networkAccess !== false || thread.approvalPolicy !== 'never') throw error('unsupported-runtime', 'Codex 未确认只读沙箱与禁止审批，已停止调用。')
       const threadId = thread.thread.id
       let turnId: string | undefined, settled = false, resolveTurn!: (value: any) => void, rejectTurn!: (reason: Error) => void
@@ -240,7 +241,7 @@ export class CodexRuntime {
       let turn: any
       try {
         if (combined.aborted) abort()
-        const response = await rpc.request('turn/start', { threadId, cwd: runDir, environments: [], approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly', networkAccess: false }, model: selected.id, ...(settings.effort ? { effort: settings.effort } : {}), input: [{ type: 'text', text: request.prompt, text_elements: [] }, ...inputs.map(path => ({ type: 'localImage', path }))] }, combined)
+        const response = await rpc.request('turn/start', { threadId, cwd: runDir, environments: [], approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly', networkAccess: false }, model: selected, input: [{ type: 'text', text: request.prompt, text_elements: [] }, ...inputs.map(path => ({ type: 'localImage', path }))] }, combined)
         if (typeof response?.turn?.id !== 'string') throw error('protocol', 'Codex 未返回调用标识。')
         turnId = response.turn.id
         for (const notice of notices.splice(0)) consume(notice)

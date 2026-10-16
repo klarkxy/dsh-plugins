@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { defineTool, type ToolDefinition, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
-import { ChatGptError, type Capability, type Request, type Result } from './contracts.ts'
+import { ChatGptError, MODES, type Capability, type Request, type Result } from './contracts.ts'
 
 export type ToolHost = {
   tools: { register(tool: ToolDefinition): unknown }
@@ -61,10 +61,11 @@ export async function executeCapability(host: ToolHost, run: Run, mode: Capabili
   args: { prompt: string; images?: string[]; attachmentIds?: string[] }, exec: ToolRunContext): Promise<PublishedResult> {
   const signal = exec.signal
   signal.throwIfAborted()
+  if (!MODES.includes(mode)) throw new ChatGptError('bad-request', '不支持此请求模式。')
   if (!args.prompt.trim() || args.prompt.length > 100_000) throw new ChatGptError('bad-request', '请求内容不能为空或超过 100,000 字符。')
   const images = args.images ?? [], ids = args.attachmentIds ?? []
   if (images.length + ids.length > 5) throw new ChatGptError('bad-request', '每次最多使用五张图片。')
-  if (['ask', 'search'].includes(mode) && images.length + ids.length) throw new ChatGptError('bad-request', '此工具不接受图片。')
+  if (mode === 'search' && images.length + ids.length) throw new ChatGptError('bad-request', '此工具不接受图片。')
   if (['edit', 'vision'].includes(mode) && !images.length && !ids.length) throw new ChatGptError('bad-request', '请指定要使用的图片。')
   const policy = host.sandboxPolicy.resolve({ session: exec.agent?.session })
   const root = await realpath(policy.workspaceRoot)
@@ -131,15 +132,16 @@ const DEFINITIONS: { mode: Capability; name: string; description: string }[] = [
   { mode: 'image', name: 'chatgpt_generate_image', description: '实际生成并保存图片（插图、海报、素材等），可使用参考图片。用户要求画图或生图时使用，返回可预览的会话图片；通过本机官方 Codex 执行。' },
   { mode: 'edit', name: 'chatgpt_edit_image', description: '实际编辑指定图片，例如改背景、改文字或调整风格。必须明确目标图片及修改要求，保留源文件；通过本机官方 Codex 执行。' },
   { mode: 'vision', name: 'chatgpt_view_image', description: '查看和分析工作区图片或当前会话附件。识别图片内容、读取截图文字、比较参考图时使用；通过本机官方 Codex 执行。' },
-  { mode: 'ask', name: 'chatgpt_ask', description: '让 ChatGPT 对提供的文本作独立分析、推理、翻译或写作。需要 GPT 观点或复杂文本分析时使用；只处理提供的文本，不执行命令或修改项目。' },
 ]
 export function registerTools(host: ToolHost, run: Run, lifetime?: AbortSignal): void {
   for (const spec of DEFINITIONS) host.tools.register(defineTool({
     name: spec.name, description: spec.description,
     parameters: {
       prompt: { type: 'string', required: true, description: '任务内容。生图和编辑时说明画面、文字、风格及需要保留的内容。' },
-      images: { type: 'array', items: { type: 'string' }, description: '当前工作区内的图片路径，最多五张。' },
-      attachmentIds: { type: 'array', items: { type: 'string' }, description: '当前会话中图片附件的标识；只能使用会话已有的真实标识。' },
+      ...(spec.mode === 'search' ? {} : {
+        images: { type: 'array' as const, items: { type: 'string' as const }, description: '当前工作区内的图片路径，最多五张。' },
+        attachmentIds: { type: 'array' as const, items: { type: 'string' as const }, description: '当前会话中图片附件的标识；只能使用会话已有的真实标识。' },
+      }),
     },
     output: {
       schema: { type: 'object', additionalProperties: true },

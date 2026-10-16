@@ -1,8 +1,12 @@
 import { Context } from '@deepseek-ai/cordis'
 import { useNativeSeat } from '@klarkxy/dsh-plugin-kit/client-utils'
+import { act } from 'react'
+import { createRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
+import { JSDOM } from 'jsdom'
 import { describe, expect, it } from 'vitest'
 import { TitleSettings } from './client.tsx'
+import { settingsCopy } from './client-work.ts'
 import { createTitleClientMarker } from './marker.ts'
 
 /*
@@ -83,6 +87,78 @@ describe('current title settings seat', () => {
     // resolves to its inert values; reaching this line at all is the assertion.
     const html = renderToString(<SeatProbe owner={ctx} />)
     expect(html).toContain('<p data-seat="">en</p>')
+  })
+
+  it('puts the open session in a labeled card and the defaults beside it', async () => {
+    const copy = settingsCopy('zh')
+    const status = {
+      settings: { revision: 1, prompt: '', model: { provider: '', model: '' }, cadence: 'all-prompts' },
+      support: { weOwn: true, nativeOwner: '@klarkxy/dsh-current-title' },
+      session: { sessionId: 'session-under-test', title: '登录回调失败', generating: false, pinned: true },
+    }
+    const dom = new JSDOM('<div id="root"></div>')
+    const previous = new Map<string, unknown>()
+    for (const [key, value] of Object.entries({
+      window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement,
+      Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true,
+    })) {
+      previous.set(key, (globalThis as Record<string, unknown>)[key])
+      Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+    }
+    const root = createRoot(dom.window.document.getElementById('root')!)
+    try {
+      const client = fakeClient()
+      client.connection.rpc.call = async () => ({ ok: true, value: status })
+      await act(async () => { root.render(<TitleSettings client={client as never} marker={createTitleClientMarker()} />) })
+      await act(async () => { await Promise.resolve() })
+      const session = dom.window.document.querySelector('[data-testid="current-title-session"]')!
+      const defaults = dom.window.document.querySelector('[data-testid="current-title-defaults"]')!
+      expect(session.className).toContain('dsh-ui-card')
+      expect(session.querySelector('h3')!.textContent).toBe(copy.session)
+      expect(session.querySelector('.dsh-ui-title')!.textContent).toBe('登录回调失败')
+      expect(session.textContent).toContain(copy.pinned)
+      expect(session.querySelector('button')).not.toBeNull()
+      expect(session.textContent).toContain(copy.reload)
+      expect(defaults.querySelector('h3')!.textContent).toBe(copy.defaults)
+      expect(defaults.contains(session)).toBe(false)
+      expect(defaults.querySelector('textarea')!.className).toBe('dsh-ui-textarea ct-prompt')
+      expect(defaults.textContent).toContain(copy.promptHint)
+      expect(copy.promptHint).toContain('离开输入框')
+      expect(settingsCopy('en').promptHint).toContain('Saves on blur')
+      expect(defaults.querySelector('textarea')).not.toBeNull()
+      expect(defaults.querySelector('.dsh-model-menu-trigger, select')).not.toBeNull()
+      expect(defaults.querySelector('select')).not.toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      dom.window.close()
+      for (const [key, value] of previous) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+    }
+  })
+
+  it('explains a missing session instead of rendering a blank title', async () => {
+    const dom = new JSDOM('<div id="root"></div>')
+    const previous = new Map<string, unknown>()
+    for (const [key, value] of Object.entries({
+      window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement,
+      Node: dom.window.Node, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true,
+    })) {
+      previous.set(key, (globalThis as Record<string, unknown>)[key])
+      Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+    }
+    const root = createRoot(dom.window.document.getElementById('root')!)
+    try {
+      await act(async () => { root.render(<TitleSettings client={fakeClient() as never} marker={createTitleClientMarker()} />) })
+      await act(async () => { await Promise.resolve() })
+      const html = dom.window.document.body.innerHTML
+      expect(html).toContain(settingsCopy('zh').session)
+      expect(html).toContain(settingsCopy('zh').noSession)
+      expect(html).not.toContain('class="dsh-ui-title')
+      expect(html).toContain(settingsCopy('zh').defaults)
+    } finally {
+      await act(async () => root.unmount())
+      dom.window.close()
+      for (const [key, value] of previous) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+    }
   })
 
   it('never hands the plugin context to the component', async () => {

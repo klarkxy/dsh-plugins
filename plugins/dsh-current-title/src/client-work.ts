@@ -3,6 +3,8 @@ import type { RpcResult, TitleCadence, TitleModelRoute, TitleStatus } from './co
 export const titleCopy = {
   zh: {
     label: '自动标题',
+    session: '当前会话',
+    noSession: '没有打开的会话。打开一个会话后，可以在这里查看并重新生成标题。',
     pinned: '已手动命名',
     generating: '正在生成标题…',
     regenerate: '重新生成',
@@ -23,9 +25,12 @@ export const titleCopy = {
     externalChange: '设置已在别处修改。提示词草稿已保留，请重新加载后确认。',
     syncUnavailable: '自动刷新不可用，请手动重新加载设置。',
     reload: '重新加载（丢弃草稿）',
+    defaults: '默认设置',
   },
   en: {
     label: 'Auto Title',
+    session: 'Current session',
+    noSession: 'No session is open. Open one to see its title and regenerate it here.',
     pinned: 'Renamed manually',
     generating: 'Generating title…',
     regenerate: 'Regenerate',
@@ -46,6 +51,7 @@ export const titleCopy = {
     externalChange: 'Settings changed elsewhere. Prompt draft preserved; reload and review.',
     syncUnavailable: 'Automatic refresh unavailable; reload settings manually.',
     reload: 'Reload (discard draft)',
+    defaults: 'Default settings',
   },
 } as const
 

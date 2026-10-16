@@ -1,5 +1,6 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
+import { Simulate } from 'react-dom/test-utils'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
 import { ChatGptPanel } from './client.tsx'
@@ -24,37 +25,47 @@ async function mount(run: (dom: JSDOM, render: (rpc: { call: ReturnType<typeof v
     for (const [key, value] of previous) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
   }
 }
-const status = { available: true, models: [{ id: 'a', label: 'A', efforts: ['low', 'high'] }, { id: 'b', label: 'B', efforts: ['low', 'high'] }] }
+const status = { available: true, executable: '/codex', version: '1.0', signedIn: false, authMode: null }
 const click = async (dom: JSDOM, label: string) => { await act(async () => [...dom.window.document.querySelectorAll('button')].find(button => button.textContent === label)!.click()) }
+/** Advanced settings are collapsed by default; open them before touching an input. */
+const openAdvanced = async (dom: JSDOM) => {
+  expect(dom.window.document.querySelector('input[placeholder="Leave blank to detect automatically"]')).toBeNull()
+  await click(dom, 'Advanced settings')
+}
+const executableInput = (dom: JSDOM) => dom.window.document.querySelector<HTMLInputElement>('input[placeholder="Leave blank to detect automatically"]')!
+/** React decides whether it may listen to input events while react-dom is imported, before this
+ * JSDOM exists, so a dispatched event never reaches onChange. Simulate does. */
+const type = async (target: HTMLInputElement, value: string) => { await act(async () => Simulate.change(target, { target: { value } } as never)) }
 
 describe('ChatGPT settings invalidation', () => {
-  it('refreshes clean model and effort without status calls, preserves drafts and exposes fallback', async () => {
-    let revision = 1, settings = { ...DEFAULT_SETTINGS, model: 'a', effort: 'low' }
+  it('refreshes clean settings without status calls, preserves drafts and exposes fallback', async () => {
+    let revision = 1, settings = { ...DEFAULT_SETTINGS, executable: 'codex-a' }
     const call = vi.fn(async (_channel, endpoint) => ok(endpoint === 'settings' ? { settings, revision } : status))
     await mount(async (dom, render, notify, fail) => {
-      await render({ call }); const selects = dom.window.document.querySelectorAll('select')
-      settings = { ...settings, model: 'b', effort: 'high' }; revision++
-      await notify(); expect([...selects].map(select => select.value)).toEqual(['b', 'high'])
+      await render({ call }); await openAdvanced(dom)
+      settings = { ...settings, executable: 'codex-b' }; revision++
+      await notify(); expect(executableInput(dom).value).toBe('codex-b')
       expect(call.mock.calls.filter(args => args[1] === 'status')).toHaveLength(1)
-      await act(async () => { selects[1]!.value = 'low'; selects[1]!.dispatchEvent(new dom.window.Event('change', { bubbles: true })) })
-      settings = { ...settings, effort: 'high' }; revision++
-      await notify(); expect(selects[1]!.value).toBe('low'); expect(dom.window.document.body.textContent).toContain('Settings changed elsewhere')
+      await type(executableInput(dom), 'codex-c')
+      settings = { ...settings, executable: 'codex-d' }; revision++
+      await notify(); expect(executableInput(dom).value).toBe('codex-c')
+      expect(dom.window.document.body.textContent).toContain('Settings changed elsewhere')
       expect(call.mock.calls.filter(args => args[1] === 'settings')).toHaveLength(2)
-      await click(dom, 'Reload settings'); expect(selects[1]!.value).toBe('high')
+      await click(dom, 'Reload settings'); expect(executableInput(dom).value).toBe('codex-d')
       expect(call.mock.calls.some(args => args[1] === 'settings.update')).toBe(false)
       await fail(); expect(dom.window.document.body.textContent).toContain('Automatic refresh unavailable')
     })
   })
   it('queues one reread during a save and fences an old save error after RPC replacement', async () => {
     const save = deferred(); let revision = 1
-    const call = vi.fn(async (_channel, endpoint) => endpoint === 'settings.update' ? save.promise : ok(endpoint === 'settings' ? { settings: { ...DEFAULT_SETTINGS, effort: revision === 1 ? 'low' : 'high' }, revision } : status))
+    const call = vi.fn(async (_channel, endpoint) => endpoint === 'settings.update' ? save.promise : ok(endpoint === 'settings' ? { settings: { ...DEFAULT_SETTINGS, executable: revision === 1 ? 'codex-a' : 'codex-b' }, revision } : status))
     await mount(async (dom, render, notify) => {
-      const rpc = { call }; await render(rpc)
+      const rpc = { call }; await render(rpc); await openAdvanced(dom)
       await click(dom, 'Save settings'); revision = 3; await notify(); await notify()
       expect(call.mock.calls.filter(args => args[1] === 'settings')).toHaveLength(1)
       await act(async () => save.resolve(ok({ settings: DEFAULT_SETTINGS, revision: 2 })))
       expect(call.mock.calls.filter(args => args[1] === 'settings')).toHaveLength(2)
-      expect(dom.window.document.querySelectorAll('select')[1]!.value).toBe('high')
+      expect(executableInput(dom).value).toBe('codex-b')
       const old = deferred(); call.mockImplementation(async (_channel, endpoint) => endpoint === 'settings.update' ? old.promise : ok(status))
       await click(dom, 'Save settings')
       await render({ call: vi.fn(async (_channel, endpoint) => ok(endpoint === 'settings' ? { settings: DEFAULT_SETTINGS, revision: 9 } : status)) })
@@ -64,11 +75,12 @@ describe('ChatGPT settings invalidation', () => {
   })
   it('coalesces invalidations during an in-flight read and accepts only the latest snapshot', async () => {
     const first = deferred(); let reads = 0
-    const call = vi.fn(async (_channel, endpoint) => endpoint === 'status' ? ok(status) : ++reads === 1 ? first.promise : ok({ settings: { ...DEFAULT_SETTINGS, model: 'b', effort: 'high' }, revision: 2 }))
+    const call = vi.fn(async (_channel, endpoint) => endpoint === 'status' ? ok(status) : ++reads === 1 ? first.promise : ok({ settings: { ...DEFAULT_SETTINGS, executable: 'codex-b' }, revision: 2 }))
     await mount(async (dom, render, notify) => {
-      await render({ call }); await notify(); await notify(); expect(reads).toBe(1)
+      await render({ call }); await openAdvanced(dom)
+      await notify(); await notify(); expect(reads).toBe(1)
       await act(async () => first.resolve(ok({ settings: DEFAULT_SETTINGS, revision: 1 })))
-      expect(reads).toBe(2); expect(dom.window.document.querySelectorAll('select')[0]!.value).toBe('b')
+      expect(reads).toBe(2); expect(executableInput(dom).value).toBe('codex-b')
     })
   })
 })

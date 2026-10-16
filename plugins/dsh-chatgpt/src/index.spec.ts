@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   call: undefined as undefined | ((endpoint: string, payload: unknown, signal: AbortSignal) => Promise<any>),
-  run: vi.fn(), status: vi.fn(async () => ({ signedIn: true, models: [] })),
+  run: vi.fn(), status: vi.fn(async () => ({ signedIn: true })),
   login: vi.fn(async () => ({ id: 'owned', kind: 'browser', url: 'https://auth.openai.com/authorize' })),
   cancel: vi.fn(async () => {}), dispose: vi.fn(async () => {}),
 }))
@@ -35,7 +35,7 @@ describe('ChatGPT host integration', () => {
   it('registers all model tools and does not infer merely from opening settings', async () => {
     mocks.run.mockClear(); mocks.login.mockClear()
     const app = mount()
-    expect(app.tools).toHaveLength(5)
+    expect(app.tools.map(tool => tool.name)).toEqual(['chatgpt_search', 'chatgpt_generate_image', 'chatgpt_edit_image', 'chatgpt_view_image'])
     expect((await app.call('settings')).value).toEqual({ settings: DEFAULT_SETTINGS, revision: 0 })
     expect(mocks.run).not.toHaveBeenCalled(); expect(mocks.login).not.toHaveBeenCalled()
     await app.off.at(-1)!()
@@ -51,7 +51,7 @@ describe('ChatGPT host integration', () => {
   })
   it('persists settings once and refuses stale revisions and malformed updates', async () => {
     const app = mount()
-    const settings = { ...DEFAULT_SETTINGS, model: 'chosen-model' }
+    const settings = { ...DEFAULT_SETTINGS, executable: 'chosen-codex' }
     expect(await app.call('settings.update', { settings, expectedRevision: 0 })).toMatchObject({ ok: true, value: { settings, revision: 1 } })
     expect(await app.call('settings.update', { settings, expectedRevision: 0 })).toMatchObject({ ok: false, error: { code: 'conflict' } })
     expect(await app.call('settings.update', { settings: { ...settings, timeoutMs: 1 }, expectedRevision: 1 })).toMatchObject({ ok: false, error: { code: 'bad-request' } })

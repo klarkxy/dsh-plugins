@@ -1,12 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
 import {
-  modelMenuChoiceKey, modelMenuEffortOptions, parseModelMenuChoiceKey, parseModelMenuChoices,
-  type ModelMenuChoice,
-} from '@klarkxy/dsh-plugin-kit/model-menu'
+  MODEL_CATALOG_INJECT, readModelCatalog, modelMenuEffortLabel, modelMenuEffortOptions, parseModelMenuChoices,
+} from '@klarkxy/dsh-model-route'
+import { ModelCatalogStatus, ModelMenu, modelMenuCss, useModelCatalog } from '@klarkxy/dsh-model-route/ui'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Button, IconRefreshOutlineRegular, Switch, Tag, Tooltip, useAnchoredPosition, useDismissOnOutsidePointer,
+  Button, IconChevronDownOutlineRegular, IconRefreshOutlineRegular, Switch, Tag, Tooltip, useAnchoredPosition, useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { createModelSettingsSubscriber } from '@klarkxy/dsh-plugin-kit/model-settings-client'
@@ -16,7 +16,7 @@ import {
 } from './contracts.ts'
 
 export const name = 'dsh-git-commit-client'
-export const inject = ['slots', 'connection', 'remote', 'remote.session', 'locale'] as const
+export const inject = ['slots', 'connection', ...MODEL_CATALOG_INJECT, 'locale'] as const
 
 const NS = 'dsh-git-commit.action'
 
@@ -106,6 +106,7 @@ type Key = keyof typeof zh
 type Translate = (key: Key) => string
 
 interface ConnectionLike {
+  generation?: { subscribe(listener: () => void): () => void }
   rpc: { call(channel: string, endpoint: string, payload: unknown): Promise<unknown> }
 }
 
@@ -401,7 +402,7 @@ export function GitCommitAction({ sessionId, useSession, call, t }: GitCommitAct
   )
 }
 
-export const clientCss = `${officialUiCss('gcm-root')}
+export const clientCss = `${officialUiCss('gcm-root')}${modelMenuCss}
 /* Only the floating panel's geometry is this plugin's own: the material, the
  * rounded edge and the scrollbar tokens all come from the shared contract.
  *
@@ -453,7 +454,6 @@ const settingsZh = {
   pageTitle: 'Git 提交',
   model: '提交规划模型',
   modelDefault: '默认模型',
-  modelEffort: '思考强度',
   modelHint: '留空则使用当前会话模型，再回落到宿主默认对话模型。',
   fallback: '模型不可用时仍然提交',
   fallbackHint: '默认关闭：模型规划失败会取消本次提交，工作区不变。开启后全部改动会合并成一个提交，由插件代写提交信息。',
@@ -470,7 +470,6 @@ const settingsEn: Record<keyof typeof settingsZh, string> = {
   pageTitle: 'Git Commit',
   model: 'Commit planning model',
   modelDefault: 'Default model',
-  modelEffort: 'Reasoning effort',
   modelHint: 'Leave empty to use the current session model, then the host default chat model.',
   fallback: 'Commit even without a model plan',
   fallbackHint: 'Off by default: a failed plan cancels the run and leaves the workspace untouched. When on, every change lands in one commit with a plugin-written message.',
@@ -491,8 +490,14 @@ function settingsCopy(locale: string): Record<keyof typeof settingsZh, string> {
 export function GitCommitSettingsPanel(props: { client: Client; locale?: string; subscribeSettings?: (change: () => void, error?: (message: string) => void) => () => void }) {
   const hostLocale = useHostLocale(props.client)
   const text = settingsCopy(props.locale ?? hostLocale)
+  const language = String(props.locale ?? hostLocale).toLowerCase().startsWith('zh') ? 'zh' : 'en'
   const [settings, setSettings] = useState<GitCommitSettings | undefined>(undefined)
-  const [choices, setChoices] = useState<ModelMenuChoice[]>([])
+  const loadCatalog = useCallback(() => readModelCatalog(props.client), [props.client])
+  const subscribeCatalog = useCallback((change: () => void) => props.client.connection.generation?.subscribe(change), [props.client])
+  const catalogState = useModelCatalog(loadCatalog, { subscribe: subscribeCatalog })
+  const { refresh: refreshCatalog } = catalogState
+  const choices = parseModelMenuChoices(catalogState.catalog, settings?.model)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [error, setError] = useState<'' | 'failed' | 'stale'>('')
   const [note, setNote] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -532,20 +537,9 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string;
   useEffect(() => {
     setSyncError('')
     let live = true
-    const stop = props.subscribeSettings?.(() => { if (live) { setSyncError(''); refreshRef.current() } }, message => { if (live) setSyncError(message) })
+    const stop = props.subscribeSettings?.(() => { if (live) { setSyncError(''); refreshCatalog(); refreshRef.current() } }, message => { if (live) setSyncError(message) })
     return () => { live = false; stop?.() }
-  }, [props.subscribeSettings, props.client])
-
-  const boundProvider = settings?.model.provider ?? ''
-  const boundModel = settings?.model.model ?? ''
-  useEffect(() => {
-    let live = true
-    const bound = boundProvider && boundModel ? { provider: boundProvider, model: boundModel } : undefined
-    void props.client.remote?.session?.modelCatalog?.()
-      ?.then(value => { if (live) setChoices(parseModelMenuChoices(value, bound)) })
-      .catch(() => { if (live) setChoices([]) })
-    return () => { live = false }
-  }, [props.client, boundProvider, boundModel])
+  }, [props.subscribeSettings, props.client, refreshCatalog])
 
   // One patch shape for both rows: the service replaces the whole row, so an
   // update to the toggle must carry the model it is not changing.
@@ -585,8 +579,12 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string;
   }
 
   const current = settings.model
-  const selected = choices.find(item => item.provider === current.provider && item.model === current.model)
-  const efforts = modelMenuEffortOptions(selected, current.reasoningEffort)
+  const follow = !current.provider || !current.model
+  const selected = follow ? undefined : choices.find(item => item.provider === current.provider && item.model === current.model)
+  const efforts = follow ? [] : modelMenuEffortOptions(selected, current.reasoningEffort)
+  const currentLabel = follow ? text.modelDefault : selected?.label ?? `${current.provider} / ${current.model}`
+  const selectedEffort = efforts.find(item => item.id === (current.reasoningEffort || ''))
+  const effortName = selectedEffort ? modelMenuEffortLabel(selectedEffort, language) : undefined
 
   return (
     <section className="gcm-root gcm-settings" data-testid="git-commit-settings">
@@ -596,41 +594,34 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string;
         {error && <p role="alert" className="dsh-ui-error">{text[error]}</p>}
         {note && <p role="status" className="dsh-ui-notice">{text.saved}</p>}
       </div>
-      <label className="dsh-ui-field">
+      <div className="dsh-ui-field">
         <span className="dsh-ui-label">{text.model}</span>
-        <select
-          className="dsh-ui-select"
-          value={modelMenuChoiceKey(current.provider, current.model)}
-          disabled={busy}
-          onChange={event => {
-            const key = event.target.value
-            if (!key) { save({ model: { provider: '', model: '' } }); return }
-            const parsed = parseModelMenuChoiceKey(key)
-            if (parsed) save({ model: parsed })
-          }}
-        >
-          <option value="">{text.modelDefault}</option>
-          {choices.map(choice => (
-            <option key={modelMenuChoiceKey(choice.provider, choice.model)} value={modelMenuChoiceKey(choice.provider, choice.model)}>
-              {choice.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {selected && efforts.length > 0 && (
-        <label className="dsh-ui-field">
-          <span className="dsh-ui-label">{text.modelEffort}</span>
-          <select
-            className="dsh-ui-select"
-            value={current.reasoningEffort ?? ''}
-            disabled={busy}
-            onChange={event => save({ model: { ...current, reasoningEffort: event.target.value || undefined } })}
-          >
-            <option value="">{text.modelDefault}</option>
-            {efforts.map(effort => <option key={effort.id} value={effort.id}>{effort.name}</option>)}
-          </select>
-        </label>
-      )}
+        <ModelCatalogStatus state={catalogState} locale={language} />
+        <ModelMenu
+          locale={language}
+          open={menuOpen && !busy}
+          onOpenChange={next => setMenuOpen(next && !busy)}
+          listClassName="gcm-root"
+          anchor={<button type="button" className="dsh-model-menu-trigger" disabled={busy} aria-label={`${text.model}: ${currentLabel}`}>
+            <span className="dsh-model-menu-triggerLabel">{currentLabel}</span>
+            {!follow && efforts.length ? <span className="dsh-model-menu-triggerEffort">{effortName ?? text.modelDefault}</span> : null}
+            <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${menuOpen && !busy ? ' dsh-model-menu-chevronOpen' : ''}`} />
+          </button>}
+          choices={choices}
+          selected={follow ? undefined : { provider: current.provider, model: current.model }}
+          onPick={picked => save({ model: { provider: picked.provider, model: picked.model } })}
+          leading={[{ id: 'default', label: text.modelDefault, selected: follow }]}
+          onPickLeading={() => save({ model: { provider: '', model: '' } })}
+          efforts={efforts}
+          selectedEffort={current.reasoningEffort || ''}
+          onPickEffort={effort => save({ model: follow
+            ? { provider: '', model: '' }
+            : { provider: current.provider, model: current.model, ...(effort ? { reasoningEffort: effort } : {}) } })}
+          modelLabel={text.model}
+          modelValue={currentLabel}
+          defaultEffortLabel={text.modelDefault}
+        />
+      </div>
       <p className="dsh-ui-meta">{text.modelHint}</p>
       <article className="gcm-root dsh-ui-card">
         <header className="dsh-ui-toggle-row">

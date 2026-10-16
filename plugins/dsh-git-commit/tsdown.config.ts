@@ -11,7 +11,7 @@ export default defineConfig([
     platform: 'browser', target: 'es2022', sourcemap: true, hash: false,
     deps: {
       neverBundle: ['react', 'react/jsx-runtime', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
-      alwaysBundle: ['@klarkxy/dsh-plugin-kit/model-settings-client', '@klarkxy/dsh-model-route', '@klarkxy/dsh-plugin-kit/model-menu', '@klarkxy/dsh-plugin-kit/contracts', '@klarkxy/dsh-plugin-kit/official-ui'],
+      alwaysBundle: ['@klarkxy/dsh-plugin-kit/model-settings-client', '@klarkxy/dsh-model-route', '@klarkxy/dsh-model-route/ui', '@klarkxy/dsh-plugin-kit/model-menu', '@klarkxy/dsh-plugin-kit/contracts', '@klarkxy/dsh-plugin-kit/official-ui'],
     },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },

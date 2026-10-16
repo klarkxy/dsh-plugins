@@ -27,6 +27,8 @@ Titles update automatically. Under **Plugins → Auto Title** you can:
 - pick a title model (empty follows the current session model);
 - regenerate the title of the open session.
 
+If the model list cannot load, or some providers fail, use **Retry** beside the model picker. Retrying keeps your saved model and prompt draft.
+
 ## Limits
 
 - Each title costs one model call; failed generations keep the existing title.
