@@ -29,9 +29,10 @@ const snapshot = (extra = {}) => ({ revision: '1:0', current: 'workspace-write',
     { value: 'danger-full-access', name: 'danger-full-access' }, { value: 'safe-auto', name: 'Safe Auto' }], ...extra });
 
 test('exact slot registrations use injection, replacement priority and bundle key; registration does not write', () => {
-  const waiting = [], registered = [], calls = [];
-  client.apply({ slots: { inject: (name, fn) => waiting.push([name, fn]), register: (options, component) => registered.push({ options, component }) }, connection: { rpc: { call: (...args) => { calls.push(args); return Promise.resolve({ ok: true, value: {} }); } } }, remote: { session: { modelCatalog: () => catalog } } });
+  const waiting = [], registered = [], calls = [], dependencies = [];
+  client.apply({ slots: { inject: (name, fn) => waiting.push([name, fn]), register: (options, component) => registered.push({ options, component }) }, connection: { rpc: { call: (...args) => { calls.push(args); return Promise.resolve({ ok: true, value: {} }); } } }, remote: { session: { modelCatalog: () => catalog } }, inject: (names, callback) => { dependencies.push(names); callback({ remote: { $mount: async () => async () => {} }, effect: () => {} }); } });
   assert.deepEqual(client.inject, ['slots', 'connection', 'remote', 'remote.session', 'locale']);
+  assert.deepEqual(dependencies, [['remote']]);
   assert.deepEqual(waiting.map(([name]) => name), ['conversation.input.permission', 'plugins.bundle.config']);
   assert.equal(registered.length, 0);
   waiting.forEach(([, fn]) => fn());

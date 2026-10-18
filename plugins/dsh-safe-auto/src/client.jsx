@@ -5,7 +5,7 @@ import { MODEL_CATALOG_INJECT, readModelCatalog, modelMenuEffortLabel, modelMenu
 import { ModelCatalogStatus, ModelMenu, modelMenuCss, useModelCatalog } from '@klarkxy/dsh-model-route/ui';
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui';
 import { createPluginReadGate } from '@klarkxy/dsh-plugin-kit/client-utils';
-import { createModelSettingsSubscriber } from '@klarkxy/dsh-plugin-kit/model-settings-client';
+import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client';
 
 const h = React.createElement;
 export const name = 'dsh-safe-auto-client';
@@ -499,6 +499,7 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
 }
 
 export function apply(ctx) {
+  mountModelSettingsChanges(ctx, BUNDLE);
   const settingsSubscriber = createModelSettingsSubscriber(ctx, BUNDLE);
   const call = (endpoint, payload) => unwrapRpc((...args) => ctx.connection.rpc.call(...args), endpoint, payload);
   const api = Object.freeze({

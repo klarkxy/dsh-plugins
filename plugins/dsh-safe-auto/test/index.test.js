@@ -35,6 +35,7 @@ function fixture({ config = { provider: 'p', model: 'm' }, header = {}, llm: wit
     inject(deps, fn) { assert.deepEqual(deps, ['llm']); if (withLlm) fn({ llm, effect: fn2 => fn2() }); },
     effect(fn) { fn(); },
     on(event, fn) { handlers[event] = fn; },
+    workingDirectory: { get: () => reviewer.cwd ?? '/w' },
     sandboxPolicy: { resolve: () => ({ mode: 'workspace-write', workspaceRoot: '/w' }) },
     logger: { info: (...args) => logs.push(args) },
   };
@@ -368,6 +369,25 @@ async function pendingReview(f, e) {
   await entered.promise;
   return { result, release: released.resolve };
 }
+
+test('review uses effective cwd while keeping the sandbox workspace boundary', async () => {
+  const f = fixture();
+  f.reviewer.cwd = '/other';
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  assert.equal(await f.ask(e), 'allowed-once');
+  const input = f.seen[0].messages[0].content[0].text;
+  assert.match(input, /"cwd":"\/other","workspaceRoot":"\/w"/);
+});
+
+test('a cwd change invalidates a pending approval without changing workspaceRoot', async () => {
+  const f = fixture();
+  const e = f.exec('bash', escalated);
+  const pending = await pendingReview(f, e);
+  f.reviewer.cwd = '/other';
+  pending.release();
+  assert.equal(await pending.result, 'cancelled');
+});
 
 test('pending verdicts cannot outlive activation, permission, settings or control lifecycle changes', async t => {
   for (const change of ['disable', 'disable-enable', 'settings', 'dispose', 'detach-reattach']) {

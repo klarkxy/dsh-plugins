@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Context } from '@deepseek-ai/cordis';
 import { apply, inject, registerControlRoute } from '../src/ui-host.js';
 import { parseConfig } from '../src/config.js';
 
@@ -30,7 +31,8 @@ function envelope(method, payload) {
 test('UI host mounts an authenticated route and disposes control without model calls', async () => {
   const disposers = []; const rows = new Map();
   let route, attached = false, closed = false, removed = false, rejections = 0;
-  const ctx = {
+  const ctx = new Context();
+  Object.assign(ctx, {
     on: () => () => {},
     safeAutoRuntime: { base: parseConfig(), attach(control) { attached = true; assert.equal(control.settingsView().revision, 0); return () => { attached = false; }; } },
     storageDomain: { async open(spec) {
@@ -47,7 +49,8 @@ test('UI host mounts an authenticated route and disposes control without model c
     webServer: { register(value) { route = value; return () => { removed = true; }; } },
     permissionPresets: { catalog: () => ({ options: [] }) }, sandboxPolicy: {}, sessions: {},
     effect(fn) { disposers.push(fn()); },
-  };
+    inject(_dependencies, callback) { callback({ remote: { $mount: async () => async () => {} }, effect(fn) { disposers.push(fn()); } }); },
+  });
   await apply(ctx);
   assert.ok(inject.includes('webServer'));
   assert.equal(route.kind, 'prefix');
@@ -100,7 +103,8 @@ for (const saveOutcome of ['saved', 'failed']) {
     const session = { id: 's', seq: 0, header: { id: 's' }, snapshotEvents: () => [] };
     const specs = { 'workspace-write': { sandbox: 'workspace-write', approval: 'ask' },
       'danger-full-access': { sandbox: 'danger-full-access', approval: 'never' } };
-    const ctx = {
+    const ctx = new Context();
+    Object.assign(ctx, {
       on: () => () => {},
       safeAutoRuntime: {
         base: parseConfig({ provider: 'p', model: 'm' }),
@@ -122,7 +126,8 @@ for (const saveOutcome of ['saved', 'failed']) {
       connection: { requestRejection: () => undefined },
       webServer: { register(value) { route = value; return () => { removed = true; }; } },
       effect(fn) { disposers.push(fn()); },
-    };
+      inject(_dependencies, callback) { callback({ remote: { $mount: async () => async () => {} }, effect(fn) { disposers.push(fn()); } }); },
+    });
     await apply(ctx);
     const call = (endpoint, payload) => roundTrip(route.handler, request('POST', `/dsh-safe-auto/${endpoint}`,
       envelope(endpoint, payload), { 'content-type': 'application/json', 'sec-fetch-mode': 'cors' }));

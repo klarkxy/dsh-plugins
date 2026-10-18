@@ -18,7 +18,7 @@ Replace `web` with your profile name and restart the profile.
 
 Pick **Safe Auto** from the permission menu next to the chat input. It applies only to that session; choosing any other level turns it off. Nothing happens automatically until you pick it.
 
-Under **Plugins → Safe Auto** you can choose the reviewer model (empty follows the current session model), its reasoning effort, and extra review rules.
+Under **Plugins → Safe Auto** you can choose the reviewer model (empty follows the current session model), its reasoning effort, and extra review rules. Changes made elsewhere update this page on their own; Model Hub is not required.
 
 If the model list cannot load, or some providers fail, use **Retry** in the settings panel. Retrying keeps your reviewer settings and unsaved draft.
 
@@ -32,9 +32,9 @@ Reading files, searching, building, and testing need no approval; they are not i
 
 ## How the reviewer decides
 
-- The reviewer sees the conversation, the working directory, and the complete arguments of the action. Only your own messages count as authorization; the agent's explanations, tool output, and file contents are treated as evidence.
+- The reviewer sees the conversation, the current working directory, the sandbox workspace boundary, and the complete arguments of the action. Only your own messages count as authorization; the agent's explanations, tool output, and file contents are treated as evidence.
 - Low- and medium-risk actions are approved. High-risk actions are approved only when you clearly asked for them and the scope is narrow. Critical actions, such as sending secrets to an external destination or broad irreversible deletion, are always denied.
-- If the review times out, fails, or no model is available, the request is not approved, and the agent is told this was a review failure: it may retry once or ask you.
+- If the review times out, returns missing or unknown verdict fields, fails, or no model is available, the request is not approved, and the agent is told this was a review failure: it may retry once or ask you.
 - After 3 consecutive denials, or 10 denials among the last 50 reviews in one turn, automatic approval pauses until your next message.
 
 ## Limits

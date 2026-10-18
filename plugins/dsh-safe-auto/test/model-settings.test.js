@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Context } from '@deepseek-ai/cordis';
 import { apply } from '../src/ui-host.js';
 import { parseConfig } from '../src/config.js';
 
@@ -7,13 +8,15 @@ test('reviewer contributor preserves prompt, uses CAS and unloads', async () => 
   let row = { revision: 4, values: { provider: 'p', model: 'old', reasoningEffort: 'low', reviewerPrompt: 'Only inspect files.' } };
   let collect;
   const off = [];
-  const ctx = {
+  const ctx = new Context();
+  Object.assign(ctx, {
     safeAutoRuntime: { base: parseConfig(), attach: () => () => {} },
     storageDomain: { open: async () => ({ table: () => ({ get: () => row, put: async (_key, value) => { row = value; } }), close: async () => {} }) },
     permissionPresets: { catalog: () => ({ options: [] }) }, sandboxPolicy: {}, sessions: {},
     connection: { requestRejection: () => undefined }, webServer: { register: () => () => {} },
     effect(fn) { off.push(fn()); }, on(_event, callback) { collect = callback; return () => { collect = undefined; }; },
-  };
+    inject(_dependencies, callback) { callback({ remote: { $mount: async () => async () => {} }, effect(fn) { off.push(fn()); } }); },
+  });
   await apply(ctx);
   let owner;
   collect(value => { owner = value; });

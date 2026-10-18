@@ -17,23 +17,39 @@ const run = (llm, extra = {}, signal = new AbortController().signal) => review({
 test('parseVerdict accepts a bare object, prose around it and code fences', () => {
   assert.deepEqual({ ...parseVerdict(ok) }, { outcome: 'allow', risk: 'low', authorization: 'high', rationale: 'Routine test run.' });
   assert.equal(parseVerdict(`Here is my verdict:\n${ok}\nThanks.`).outcome, 'allow');
-  assert.equal(parseVerdict('```json\n{"outcome":"deny","rationale":"  Deletes the home directory.  "}\n```').rationale, 'Deletes the home directory.');
+  assert.equal(parseVerdict('```json\n{"risk_level":"high","user_authorization":"low","outcome":"deny","rationale":"  Deletes the home directory.  "}\n```').rationale, 'Deletes the home directory.');
   assert.ok(Object.isFrozen(parseVerdict(ok)));
 });
 
-test('parseVerdict needs only outcome; unknown risk and authorization labels are dropped', () => {
-  assert.deepEqual({ ...parseVerdict('{"outcome":"allow"}') }, { outcome: 'allow', risk: undefined, authorization: undefined, rationale: '' });
-  const odd = parseVerdict('{"outcome":"allow","risk_level":"extreme","user_authorization":"total","rationale":5}');
-  assert.equal(odd.risk, undefined); assert.equal(odd.authorization, undefined); assert.equal(odd.rationale, '');
-  assert.equal(parseVerdict(`{"outcome":"deny","rationale":"${'r'.repeat(900)}"}`).rationale.length, 600);
+test('verdict requires known risk, authorization, outcome and a rationale', () => {
+  const valid = JSON.parse(ok);
+  for (const field of Object.keys(valid)) {
+    const missing = { ...valid }; delete missing[field];
+    assert.throws(() => parseVerdict(JSON.stringify(missing)), /INVALID_REVIEW_RESPONSE/);
+    assert.throws(() => parseVerdict(JSON.stringify({ ...valid, [field]: null })), /INVALID_REVIEW_RESPONSE/);
+  }
+  for (const patch of [{ risk_level: 'extreme' }, { user_authorization: 'total' }, { outcome: 'maybe' }, { rationale: ' ' }]) {
+    assert.throws(() => parseVerdict(JSON.stringify({ ...valid, ...patch })), /INVALID_REVIEW_RESPONSE/);
+  }
+  assert.equal(parseVerdict(JSON.stringify({ ...valid, rationale: 'r'.repeat(900) })).rationale.length, 600);
+});
+
+test('authorization floor is enforced without adding confirmation to low and medium risks', () => {
+  for (const risk_level of ['low', 'medium', 'high', 'critical']) {
+    for (const user_authorization of ['unknown', 'low', 'medium', 'high']) {
+      const verdict = parseVerdict(JSON.stringify({ risk_level, user_authorization, outcome: 'allow', rationale: 'Bounded action.' }));
+      const denied = risk_level === 'critical' || (risk_level === 'high' && ['unknown', 'low'].includes(user_authorization));
+      assert.equal(verdict.outcome, denied ? 'deny' : 'allow', `${risk_level}/${user_authorization}`);
+    }
+  }
+  assert.equal(parseVerdict(JSON.stringify({ ...JSON.parse(ok), outcome: 'deny' })).outcome, 'deny');
 });
 
 test('critical risk always denies regardless of the stated outcome', () => {
   const verdict = parseVerdict('{"risk_level":"critical","user_authorization":"high","outcome":"allow","rationale":"Uploads credentials."}');
   assert.equal(verdict.outcome, 'deny');
   assert.equal(verdict.risk, 'critical');
-  // High risk keeps the model's own outcome; the policy is in the prompt.
-  assert.equal(parseVerdict('{"risk_level":"high","user_authorization":"high","outcome":"allow"}').outcome, 'allow');
+  assert.equal(parseVerdict('{"risk_level":"high","user_authorization":"high","outcome":"allow","rationale":"Narrow authorized action."}').outcome, 'allow');
 });
 
 test('invalid responses map to INVALID_REVIEW_RESPONSE', () => {

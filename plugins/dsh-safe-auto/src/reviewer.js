@@ -65,12 +65,17 @@ export function parseVerdict(text) {
   if (end <= start) throw new Error('INVALID_REVIEW_RESPONSE');
   let value;
   try { value = JSON.parse(text.slice(start, end + 1)); } catch { throw new Error('INVALID_REVIEW_RESPONSE'); }
-  if (!value || typeof value !== 'object' || !['allow', 'deny'].includes(value.outcome)) throw new Error('INVALID_REVIEW_RESPONSE');
-  const risk = RISKS.includes(value.risk_level) ? value.risk_level : undefined;
-  const authorization = AUTHORIZATIONS.includes(value.user_authorization) ? value.user_authorization : undefined;
-  const rationale = typeof value.rationale === 'string' ? value.rationale.trim().slice(0, 600) : '';
-  // `critical` never auto-approves, whatever the stated outcome.
-  const outcome = risk === 'critical' ? 'deny' : value.outcome;
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || !['allow', 'deny'].includes(value.outcome)
+    || !RISKS.includes(value.risk_level) || !AUTHORIZATIONS.includes(value.user_authorization)
+    || typeof value.rationale !== 'string' || !value.rationale.trim()) throw new Error('INVALID_REVIEW_RESPONSE');
+  const risk = value.risk_level;
+  const authorization = value.user_authorization;
+  const rationale = value.rationale.trim().slice(0, 600);
+  // Retain model denials (including malicious injection and broad scope), but
+  // enforce the policy's authorization floor even if the model says allow.
+  const outcome = risk === 'critical' || (risk === 'high' && !['medium', 'high'].includes(authorization))
+    ? 'deny' : value.outcome;
   return Object.freeze({ outcome, risk, authorization, rationale });
 }
 

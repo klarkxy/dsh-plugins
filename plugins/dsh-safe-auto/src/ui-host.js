@@ -1,5 +1,7 @@
 import { createControl, CHANNEL, REVIEW_FIELDS } from './control.js';
 import { registerHostRpc } from '@klarkxy/dsh-plugin-kit/host-rpc';
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts';
+import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes';
 import { registerModelSettings, notifyModelSettingsChanged } from '@klarkxy/dsh-plugin-kit/model-settings';
 
 export const name = 'dsh-safe-auto-ui-host';
@@ -21,6 +23,7 @@ export function registerControlRoute(ctx, call) {
 }
 
 export async function apply(ctx) {
+  createModelSettingsChanges(ctx, modelSettingsChangesIdentity('@klarkxy/dsh-safe-auto'), '@klarkxy/dsh-safe-auto');
   // Loaded only by the separate UI row; the review plugin keeps its minimal dependencies.
   const [{ defineDomain, domainTable }, { z }] = await Promise.all([import('@deepseek-ai/dsh-storage-domain'), import('zod')]);
   // No strict(): rows saved by 0.1.x carry retired keys (fastProvider, approvalReview, …),

@@ -47,6 +47,11 @@ async function harness(t, { config = {} } = {}) {
   mounted.push(await ctx.plugin(host.prompt.default, {}));
   mounted.push(await ctx.plugin(host.tools.default));
   mounted.push(await ctx.plugin(SandboxFixture));
+  class WorkingDirectoryFixture extends Service {
+    constructor(scope) { super(scope, 'workingDirectory'); }
+    get() { return root; }
+  }
+  mounted.push(await ctx.plugin(WorkingDirectoryFixture));
   mounted.push(await ctx.plugin(host.approval.default, { policy: 'ask' }));
   const modelFiber = await ctx.plugin(host.llm.default); mounted.push(modelFiber);
   class Reviewer extends host.llm.LlmAdapter {

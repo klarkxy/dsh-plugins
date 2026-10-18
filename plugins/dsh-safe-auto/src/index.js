@@ -8,7 +8,7 @@ import { resolveReviewRoute } from './model-route.js';
 export { Config } from './config.js';
 
 export const name = 'dsh-safe-auto';
-export const inject = ['sandboxPolicy'];
+export const inject = ['sandboxPolicy', 'workingDirectory'];
 
 /*
  * Safe Auto routes native approval requests to a reviewer model, following
@@ -199,7 +199,7 @@ export function apply(ctx, raw = {}) {
     const agent = req.agent, callId = String(req.callId), token = exec.token;
     const environment = () => {
       const sandbox = ctx.sandboxPolicy.resolve({ session });
-      return JSON.stringify({ platform: process.platform, cwd: session.header?.cwd,
+      return JSON.stringify({ platform: process.platform, cwd: ctx.workingDirectory.get(session),
         workspaceRoot: sandbox?.workspaceRoot, sandbox: sandbox?.mode });
     };
     let rawAction, rawEnvironment, revision, input;
