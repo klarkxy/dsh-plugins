@@ -7,10 +7,6 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [24, 26]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -18,7 +14,8 @@ jobs:
           version: 10.29.2
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          # The Node that DSH Desktop ships, from resources/runtime/versions.json.
+          node-version: 24.21.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
