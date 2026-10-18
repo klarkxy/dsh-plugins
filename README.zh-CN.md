@@ -34,7 +34,7 @@ dsh plugin --profile web add @klarkxy/dsh-current-title
 
 ## 开发
 
-需要 Node.js 22+ 与 pnpm 10。
+需要 Node.js 24+ 与 pnpm 10。
 
 ```bash
 pnpm install

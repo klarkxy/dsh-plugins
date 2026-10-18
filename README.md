@@ -34,7 +34,7 @@ Replace `web` with your profile name and restart the profile after installing. T
 
 ## Development
 
-Requires Node.js 22+ and pnpm 10.
+Requires Node.js 24+ and pnpm 10.
 
 ```bash
 pnpm install
