@@ -1,62 +1,20 @@
-import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
-import { COPY_THREAD_LABEL, copyThreadId } from './copy-action.ts'
-import { COPY_THREAD_MENU_ID, COPY_THREAD_MENU_ORDER, USER_ACTIONS_SLOT } from './contracts.ts'
-import { CopyThreadMenuItem, apply } from './client.tsx'
+import { describe, expect, it } from 'vitest'
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { DELETE_DIALOG_ID, PLUGIN_NAME, USER_ACTIONS_SLOT } from './contracts.ts'
+import { apply } from './client.tsx'
 
-const captured = vi.hoisted(() => ({ onSelect: undefined as undefined | (() => Promise<void> | void) }))
-
-vi.mock('@deepseek-ai/dsh-client-ui-primitives', async () => {
-  const actual = await vi.importActual<Record<string, unknown>>('@deepseek-ai/dsh-client-ui-primitives')
-  const React = await import('react')
-  return {
-    ...actual,
-    MenuItemButton({ children, onSelect }: { children: React.ReactNode; onSelect: () => Promise<void> | void }) {
-      captured.onSelect = onSelect
-      return React.createElement('button', { type: 'button', role: 'menuitem', onClick: onSelect }, children)
-    },
-  }
-})
-
-describe('copy thread id', () => {
-  it('copies the session id from the menu row and keeps a visible failure open', async () => {
-    const writes: string[] = []
-    const close = vi.fn()
-    const html = renderToStaticMarkup(
-      <CopyThreadMenuItem
-        sessionId="session-7"
-        locale="en"
-        writeText={async value => { writes.push(value) }}
-        useMenuOpenState={() => [true, close]}
-      />,
-    )
-    expect(html).toContain('role="menuitem"')
-    expect(html).toContain(COPY_THREAD_LABEL.en)
-    await captured.onSelect?.()
-    expect(writes).toEqual(['session-7'])
-    expect(close).toHaveBeenCalledWith(false)
-
-    close.mockClear()
-    const failed = renderToStaticMarkup(
-      <CopyThreadMenuItem
-        sessionId="session-7"
-        locale="zh"
-        writeText={async () => { throw new Error('denied') }}
-        useMenuOpenState={() => [true, close]}
-      />,
-    )
-    expect(failed).toContain(COPY_THREAD_LABEL.zh)
-    await captured.onSelect?.()
-    expect(close).not.toHaveBeenCalled()
-    await expect(copyThreadId('session-7', async () => { throw new Error('denied') })).rejects.toThrow('denied')
-  })
-
-  it('removes the menu row when the client unloads', () => {
+describe('session menu registration', () => {
+  it('removes the delete row when the client unloads and does not add a copy-id row', () => {
     const disposed: string[] = []
     let unload = () => {}
     const specs: Array<Record<string, unknown>> = []
+    const order: string[] = []
     const ctx = {
-      inject: () => ({ dispose() {} }),
+      inject(deps: string[], callback?: (scope: unknown) => void) {
+        order.push(deps.length === 1 && deps[0] === 'remote' ? 'mount' : deps.join(','))
+        if (deps.length === 1 && deps[0] === 'remote') callback?.({ remote: { $mount: async () => async () => {} }, effect() {} })
+        return { dispose() {} }
+      },
       effect(callback: () => () => void) { unload = callback() },
       slots: {
         entriesOfSlot: () => [], spec: () => undefined, subscribe: () => () => {},
@@ -72,14 +30,16 @@ describe('copy thread id', () => {
       locale: { getSnapshot: () => ({ active: 'zh-CN' }), subscribe: () => () => {} },
     }
     apply(ctx as never)
+    expect(order[0]).toBe('mount')
+    expect(order[1]).toBe(`remote,remote.${modelSettingsChangesIdentity(PLUGIN_NAME).namespace}`)
     expect(disposed).toEqual([])
     expect(specs).toContainEqual({
       name: 'sidebar.workspaces.session.menu.item',
-      id: COPY_THREAD_MENU_ID,
-      order: COPY_THREAD_MENU_ORDER,
+      id: DELETE_DIALOG_ID,
+      order: 510,
     })
+    expect(specs.some(spec => String(spec['id'] ?? '').includes('copy'))).toBe(false)
     expect(specs.map(spec => spec['name'])).toEqual([
-      'sidebar.workspaces.session.menu.item',
       'sidebar.workspaces.session.menu.item',
       'conversation.hero.workspace',
       USER_ACTIONS_SLOT,
@@ -89,7 +49,7 @@ describe('copy thread id', () => {
       'shell.overlay',
     ])
     unload()
-    expect(disposed.filter(item => item === 'inject')).toHaveLength(8)
-    expect(disposed).toContain(COPY_THREAD_MENU_ID)
+    expect(disposed.filter(item => item === 'inject')).toHaveLength(7)
+    expect(disposed).toContain(DELETE_DIALOG_ID)
   })
 })

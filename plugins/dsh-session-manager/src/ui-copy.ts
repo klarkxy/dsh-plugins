@@ -1,9 +1,11 @@
-import { copyLocale, type CopyLocale } from './copy-action.ts'
-
-export type { CopyLocale }
-export { copyLocale }
-
 /** Failure identity stored by the UI. The sentence is derived from the active locale. */
+
+export type CopyLocale = 'zh' | 'en'
+
+export function copyLocale(active: string | undefined): CopyLocale {
+  return active?.toLowerCase().startsWith('zh') ? 'zh' : 'en'
+}
+
 export interface OperationFailure {
   readonly code: string
   readonly reason?: string

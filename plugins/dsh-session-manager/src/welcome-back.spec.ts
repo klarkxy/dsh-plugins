@@ -114,7 +114,7 @@ describe('welcome-back preparation', () => {
     expect(value).toMatchObject({ show: true, recap: { summary: 's' } })
     expect(stub.prepareCall).toHaveBeenCalledWith(
       expect.objectContaining({ provider: 'saved-provider', model: 'saved-model', reasoningEffort: expect.anything() }),
-      expect.anything())
+      expect.anything(), undefined)
   })
 
   it('hides the dialog when the recap model fails and no compact suggestion applies', async () => {

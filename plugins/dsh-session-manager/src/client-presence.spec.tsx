@@ -7,6 +7,7 @@ import { CONFIG_READ_ENDPOINT, CONTINUE_GHOST_SLOT, CONTINUE_SUGGEST_ENDPOINT, W
 
 const settingsChanges = vi.hoisted(() => ({ listeners: new Set<() => void>() }))
 vi.mock('@klarkxy/dsh-plugin-kit/model-settings-client', () => ({
+  mountModelSettingsChanges: () => {},
   createModelSettingsSubscriber: () => ({
     subscribe(listener: () => void) {
       settingsChanges.listeners.add(listener)
@@ -151,7 +152,10 @@ describe('presence triggers', () => {
     let minutes = 60
     const prepared: number[] = []
     const ctx = {
-      inject: () => ({ dispose() {} }),
+      inject(deps: string[], callback?: (scope: unknown) => void) {
+        if (deps[0] === 'remote') callback?.({ remote: { $mount: async () => async () => {} }, effect() {} })
+        return { dispose() {} }
+      },
       effect(callback: () => () => void) { unload = callback() },
       slots: { inject: (_key: string, callback: () => () => void) => callback(), register: () => () => {} },
       locale: { getSnapshot: () => ({ active: 'en' }), subscribe: () => () => {} },
@@ -201,7 +205,10 @@ describe('presence triggers', () => {
       const sessions = sessionList('alpha')
       let unload = () => {}
       const ctx = {
-        inject: () => ({ dispose() {} }),
+        inject(deps: string[], callback?: (scope: unknown) => void) {
+          if (deps[0] === 'remote') callback?.({ remote: { $mount: async () => async () => {} }, effect() {} })
+          return { dispose() {} }
+        },
         effect(callback: () => () => void) { unload = callback() },
         slots: {
           inject: (_key: string, callback: () => () => void) => callback(),

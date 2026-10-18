@@ -1,6 +1,6 @@
 import { JSDOM } from 'jsdom'
 import { describe, expect, it } from 'vitest'
-import { findRowMenuTrigger, forwardContextMenu, installContextMenuForwarding } from './context-menu.ts'
+import { findSessionRow, forwardContextMenu, installContextMenuForwarding } from './context-menu.ts'
 
 const FIXTURE = `<!doctype html><html><body>
 <div role="tree" aria-label="browser">
@@ -10,6 +10,9 @@ const FIXTURE = `<!doctype html><html><body>
       <button type="button" class="YDXeBa_iconButton" aria-label="Session actions for Thread one">…</button>
       <button type="button" class="YDXeBa_iconButton" aria-label="Pin">📌</button>
     </span>
+  </div>
+  <div role="treeitem" data-row-key="session:s-2">
+    <span class="YDXeBa_title">Thread two</span>
   </div>
   <div role="treeitem" data-row-key="workspace:w-1">
     <span class="YDXeBa_title">Workspace one</span>
@@ -44,43 +47,52 @@ function setup() {
   return { dom, doc, clicks, rightClick, uninstall }
 }
 
-describe('sidebar context menu forwarding', () => {
-  it('clicks the session row trigger when its title is right-clicked', () => {
+describe('sidebar right-click open', () => {
+  it('clicks the session row when its title is right-clicked', () => {
     const { doc, clicks, rightClick } = setup()
-    const title = doc.querySelector('[data-row-key="session:s-1"] .YDXeBa_title')
+    const row = doc.querySelector('[data-row-key="session:s-1"]') as HTMLElement
+    row.addEventListener('click', () => { clicks.push('row') })
+    const title = row.querySelector('.YDXeBa_title')
     const event = rightClick(title)
     expect(event.defaultPrevented).toBe(true)
-    expect(clicks).toEqual(['…'])
+    expect(clicks).toEqual(['row'])
   })
 
-  it('clicks the trigger itself once when it is right-clicked', () => {
+  it('leaves the action buttons to the native menu when they are right-clicked', () => {
     const { doc, clicks, rightClick } = setup()
-    const trigger = doc.querySelector('[data-row-key="session:s-1"] .YDXeBa_rowActions button')
+    const row = doc.querySelector('[data-row-key="session:s-1"]') as HTMLElement
+    row.addEventListener('click', () => { clicks.push('row') })
+    const trigger = row.querySelector('.YDXeBa_rowActions button')
     const event = rightClick(trigger)
-    expect(event.defaultPrevented).toBe(true)
-    expect(clicks).toEqual(['…'])
+    expect(event.defaultPrevented).toBe(false)
+    expect(clicks).toEqual([])
   })
 
-  it('forwards right-clicks on workspace group rows', () => {
+  it('does not open a workspace group on right-click', () => {
     const { doc, clicks, rightClick } = setup()
-    const title = doc.querySelector('[data-row-key="workspace:w-1"] .YDXeBa_title')
+    const row = doc.querySelector('[data-row-key="workspace:w-1"]') as HTMLElement
+    row.addEventListener('click', () => { clicks.push('workspace') })
+    const title = row.querySelector('.YDXeBa_title')
     const event = rightClick(title)
-    expect(event.defaultPrevented).toBe(true)
-    expect(clicks).toEqual(['…'])
+    expect(event.defaultPrevented).toBe(false)
+    expect(clicks).toEqual([])
   })
 
-  it('ignores the ungrouped bucket, overflow rows, search rows, and blank rows', () => {
+  it('ignores the ungrouped bucket, overflow rows, and search rows, and opens a blank session row', () => {
     const { doc, clicks, rightClick } = setup()
+    const blank = doc.querySelector('[data-row-key="session:blank"]') as HTMLElement
+    blank.addEventListener('click', () => { clicks.push('blank') })
     for (const selector of [
       '[data-row-key="workspace:"] span',
       '[data-row-key^="overflow:"] span',
       '[role="tree"] > [role="treeitem"]:not([data-row-key]) span',
-      '[data-row-key="session:blank"] span',
     ]) {
       const event = rightClick(doc.querySelector(selector))
       expect(event.defaultPrevented).toBe(false)
     }
-    expect(clicks).toEqual([])
+    const blankEvent = rightClick(blank.querySelector('span'))
+    expect(blankEvent.defaultPrevented).toBe(true)
+    expect(clicks).toEqual(['blank'])
   })
 
   it('ignores keyed rows outside the browser tree', () => {
@@ -92,12 +104,14 @@ describe('sidebar context menu forwarding', () => {
 
   it('stops forwarding after the disposer runs', () => {
     const { doc, clicks, rightClick, uninstall } = setup()
-    rightClick(doc.querySelector('[data-row-key="session:s-1"] .YDXeBa_title'))
-    expect(clicks).toEqual(['…'])
+    const row = doc.querySelector('[data-row-key="session:s-2"]') as HTMLElement
+    row.addEventListener('click', () => { clicks.push('row') })
+    rightClick(row.querySelector('.YDXeBa_title'))
+    expect(clicks).toEqual(['row'])
     uninstall()
-    const event = rightClick(doc.querySelector('[data-row-key="session:s-1"] .YDXeBa_title'))
+    const event = rightClick(row.querySelector('.YDXeBa_title'))
     expect(event.defaultPrevented).toBe(false)
-    expect(clicks).toEqual(['…'])
+    expect(clicks).toEqual(['row'])
   })
 
   it('tolerates events without an element target', () => {
@@ -107,11 +121,12 @@ describe('sidebar context menu forwarding', () => {
     expect(event.defaultPrevented).toBe(false)
   })
 
-  it('resolves the trigger through findRowMenuTrigger', () => {
+  it('resolves the session row through findSessionRow', () => {
     const { doc } = setup()
-    const title = doc.querySelector('[data-row-key="session:s-1"] .YDXeBa_title')
-    const trigger = findRowMenuTrigger(title as Element)
-    expect(trigger?.getAttribute('aria-label')).toBe('Session actions for Thread one')
-    expect(findRowMenuTrigger(doc.querySelector('[data-row-key^="overflow:"] span') as Element)).toBeNull()
+    const title = doc.querySelector('[data-row-key="session:s-2"] .YDXeBa_title')
+    expect(findSessionRow(title as Element)?.getAttribute('data-row-key')).toBe('session:s-2')
+    expect(findSessionRow(doc.querySelector('[data-row-key="session:s-1"] .YDXeBa_rowActions button') as Element)).toBeNull()
+    expect(findSessionRow(doc.querySelector('[data-row-key^="overflow:"] span') as Element)).toBeNull()
+    expect(findSessionRow(doc.querySelector('[data-row-key="workspace:w-1"] .YDXeBa_title') as Element)).toBeNull()
   })
 })

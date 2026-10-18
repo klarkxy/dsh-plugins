@@ -1,21 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useState, useSyncExternalStore, type ComponentProps } from 'react'
-import { CopyThreadShortcutNotice, writeClipboard, type HostShortcuts } from './copy-shortcut.tsx'
-import {
-  COPY_THREAD_FAILED,
-  COPY_THREAD_LABEL,
-  copyLocale,
-  copyThreadId,
-  type CopyLocale,
-} from './copy-action.ts'
+import { useSyncExternalStore } from 'react'
+import { copyLocale, type CopyLocale } from './ui-copy.ts'
 import {
   CONTINUE_GHOST_ID,
   PLUGIN_NAME,
   CONTINUE_GHOST_SLOT,
-  COPY_THREAD_MENU_ID,
-  COPY_THREAD_MENU_ORDER,
-  COPY_THREAD_SHORTCUT_ID,
   DELETE_DIALOG_ID,
   USER_ACTIONS_ID,
   USER_ACTIONS_SLOT,
@@ -28,7 +18,8 @@ import { installTemporaryWorkspacePicker, TemporaryWorkspaceNotice, type PickerR
 import { bindTemporaryWorkspaceHost, createTemporaryWorkspaceModel } from './temporary-workspace.ts'
 import { bindHost, createFreeChatModel, createRetryModel, type FreeChatModel, type RetryModel } from './session-actions.ts'
 import { bindPresenceHost, createContinueModel, createPresenceConfigModel, createWelcomeBackModel } from './presence-model.ts'
-import { createModelSettingsSubscriber } from '@klarkxy/dsh-plugin-kit/model-settings-client'
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import { MODEL_CATALOG_INJECT, readModelCatalog } from '@klarkxy/dsh-model-route'
 import { ContinueGhost, WelcomeBackCard, type WelcomeBackTurn } from './presence-panel.tsx'
 import { SessionManagerSettings } from './settings-panel.tsx'
@@ -37,7 +28,7 @@ import { UserMessageActions } from './user-actions.tsx'
 import { uiText } from './ui-copy.ts'
 
 export const name = 'dsh-session-manager-client'
-export const inject = ['slots', 'locale', 'sessions', 'uiWorkspace', 'shortcuts', 'connection', 'workspaces', 'layout', 'conversation', ...MODEL_CATALOG_INJECT] as const
+export const inject = ['slots', 'locale', 'sessions', 'uiWorkspace', 'connection', 'workspaces', 'layout', 'conversation', ...MODEL_CATALOG_INJECT] as const
 
 interface LocaleService {
   getSnapshot(): { active: string }
@@ -60,52 +51,26 @@ type Client = Context & {
   locale?: LocaleService
   sessions?: Parameters<typeof bindHost>[0]['sessions']
   uiWorkspace?: Parameters<typeof bindHost>[0]['uiWorkspace']
-  shortcuts?: HostShortcuts
   remote?: { session?: { modelCatalog?: () => Promise<unknown> } }
   connection?: { generation?: { subscribe(listener: () => void): () => void } }
   on?(name: string, listener: () => void): () => void
 }
 
-export function CopyThreadMenuItem(props: MenuProps & {
-  locale: CopyLocale
-  writeText?: (value: string) => Promise<void>
-  shortcut?: ComponentProps<typeof MenuItemButton>['shortcut']
-}) {
-  const [failed, setFailed] = useState(false)
-  const [, setMenuOpen] = props.useMenuOpenState()
-  const label = failed ? COPY_THREAD_FAILED[props.locale] : COPY_THREAD_LABEL[props.locale]
-  const onSelect = () => copyThreadId(props.sessionId, props.writeText ?? writeClipboard).then(() => {
-    setFailed(false)
-    setMenuOpen(false)
-  }, () => {
-    setFailed(true)
-  })
-  // MenuItemButton activates through the button click. A keydown wrapper here
-  // would run before ui-primitives Menu.tsx applies its composition, modifier,
-  // and repeat guards (packages/client/ui-primitives/src/Menu.tsx).
-  return (
-    <MenuItemButton separatorBefore shortcut={props.shortcut} onSelect={onSelect}>
-      {label}
-    </MenuItemButton>
-  )
-}
-
-
 export function apply(ctx: Context): void {
   const client = ctx as Client
+  mountModelSettingsChanges(client, PLUGIN_NAME)
   const host = bindHost(client)
   const chats = createFreeChatModel(host)
   const retries = createRetryModel(host)
   const temporaryHost = bindTemporaryWorkspaceHost(client as unknown as Parameters<typeof bindTemporaryWorkspaceHost>[0])
   const temporary = createTemporaryWorkspaceModel(temporaryHost, undefined,
     () => uiText(copyLocale(client.locale?.getSnapshot().active), 'tempWorkspace'))
-  const currentLocale = () => client.locale?.getSnapshot().active
   const presenceHost = bindPresenceHost(client)
   const continues = createContinueModel(presenceHost)
   const welcomeBack = createWelcomeBackModel(presenceHost)
   const presenceConfig = createPresenceConfigModel(presenceHost)
   // Model catalog access uses the same dependency contract as every model menu.
-  const settingsSubscriber = createModelSettingsSubscriber(client as unknown as Parameters<typeof createModelSettingsSubscriber>[0], PLUGIN_NAME)
+  const settingsSubscriber = createModelSettingsSubscriber(client as unknown as Parameters<typeof createModelSettingsSubscriber>[0], PLUGIN_NAME, modelSettingsChangesIdentity(PLUGIN_NAME))
   const subscribeSettings = (onChange: () => void, onError?: (message: string) => void) =>
     settingsSubscriber.subscribe(onChange, onError)
   const modelCatalog = () => readModelCatalog(client)
@@ -117,15 +82,8 @@ export function apply(ctx: Context): void {
     stops.push(client.slots.inject('sidebar.workspaces.session.menu.item', () => (
       client.slots.register({
         name: 'sidebar.workspaces.session.menu.item',
-        id: COPY_THREAD_MENU_ID,
-        order: COPY_THREAD_MENU_ORDER,
-      }, props => <CopyThreadSlot locale={client.locale} shortcuts={client.shortcuts} {...props as MenuProps} />)
-    )))
-    stops.push(client.slots.inject('sidebar.workspaces.session.menu.item', () => (
-      client.slots.register({
-        name: 'sidebar.workspaces.session.menu.item',
         id: DELETE_DIALOG_ID,
-        order: COPY_THREAD_MENU_ORDER + 10,
+        order: 510,
       }, props => <DeleteMenuItem locale={client.locale} model={chats} {...props as MenuProps} />)
     )))
     stops.push(installTemporaryWorkspacePicker(client.slots as unknown as PickerRegistry, temporary,
@@ -204,7 +162,6 @@ export function apply(ctx: Context): void {
         return (
           <>
             <style>{freeChatCss}</style>
-            <CopyThreadShortcutNotice shortcuts={client.shortcuts} list={client.sessions?.list} locale={locale} currentLocale={currentLocale} />
             <TemporaryWorkspaceNotice model={temporary} locale={locale} />
             <DeleteChatDialog model={chats} locale={locale} />
             <CreateNoticeDialog model={chats} locale={locale} />
@@ -286,19 +243,6 @@ export function apply(ctx: Context): void {
       for (const stop of stops) stop()
     }
   })
-}
-
-const EMPTY_SHORTCUTS: ReturnType<HostShortcuts['catalog']['getSnapshot']> = []
-
-function CopyThreadSlot(props: MenuProps & { locale?: LocaleService; shortcuts?: HostShortcuts }) {
-  const locale = useLiveLocale(props.locale)
-  const shortcuts = useSyncExternalStore(
-    listener => props.shortcuts?.catalog.subscribe(listener) ?? (() => {}),
-    () => props.shortcuts?.catalog.getSnapshot() ?? EMPTY_SHORTCUTS,
-    () => EMPTY_SHORTCUTS,
-  )
-  return <CopyThreadMenuItem sessionId={props.sessionId} useMenuOpenState={props.useMenuOpenState} locale={locale}
-    shortcut={shortcuts.find(row => row.id === COPY_THREAD_SHORTCUT_ID)} />
 }
 
 function DeleteMenuItem(props: MenuProps & { locale?: LocaleService; model: FreeChatModel }): React.ReactElement | null {

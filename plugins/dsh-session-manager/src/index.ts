@@ -13,6 +13,8 @@ import { registerSessionManagerRpc } from './rpc.ts'
 import type { PresenceModelHost } from './welcome-back.ts'
 import type { HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { openCompatibleDomain } from '@klarkxy/dsh-plugin-kit/domain'
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
 import {
   notifyModelSettingsChanged,
   registerModelSettings,
@@ -65,6 +67,7 @@ export const Config: Schema<Config> = Schema.object({
 })
 
 export function apply(ctx: Context, config: PluginConfig = {}): void {
+  createModelSettingsChanges(ctx, modelSettingsChangesIdentity(PLUGIN_NAME), PLUGIN_NAME)
   const resolved = resolveConfig(config)
   const cursors = createCursorKey()
   ctx.effect(() => registerSessionTools(ctx, resolved, cursors))

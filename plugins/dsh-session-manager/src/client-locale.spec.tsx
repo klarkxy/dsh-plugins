@@ -21,7 +21,10 @@ describe('session manager live locale', () => {
     const renderers = new Map<string, ComponentType<any>>(), specs: any[] = []
     const allocate = vi.fn(() => new Promise(done => { resolve = done }))
     const ctx = {
-      inject: () => ({ dispose() {} }),
+      inject(deps: string[], callback?: (scope: unknown) => void) {
+        if (deps[0] === 'remote') callback?.({ remote: { $mount: async () => async () => {} }, effect() {} })
+        return { dispose() {} }
+      },
       effect(fn: () => () => void) { unload = fn() },
       locale: { getSnapshot: () => ({ active }), subscribe(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn) } } },
       layout: { beginNavigation: () => new AbortController().signal },

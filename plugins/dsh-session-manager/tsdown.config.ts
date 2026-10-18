@@ -34,6 +34,7 @@ export default defineConfig([
       ],
       neverBundle: [
         '@deepseek-ai/cordis',
+        '@deepseek-ai/dsh-typert-protocol',
         '@deepseek-ai/schemastery',
         '@deepseek-ai/dsh-session',
         '@deepseek-ai/dsh-session-query',
@@ -62,6 +63,7 @@ export default defineConfig([
         '@klarkxy/dsh-plugin-kit/official-ui',
         '@klarkxy/dsh-plugin-kit/client-utils',
         '@klarkxy/dsh-plugin-kit/model-settings-client',
+        '@klarkxy/dsh-plugin-kit/contracts',
         '@klarkxy/dsh-model-route',
         '@klarkxy/dsh-model-route/ui',
       ],

@@ -1,8 +1,17 @@
-import { expect, it, vi } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
+import { afterEach, expect, it, vi } from 'vitest'
 import type { ModelSettingsProvider } from '@klarkxy/dsh-plugin-kit/model-settings'
 import type { ModelRoute } from '@klarkxy/dsh-model-route'
 vi.mock('@klarkxy/dsh-plugin-kit/host-rpc', () => ({ registerHostRpc: () => () => {} }))
 import { apply } from './index.ts'
+
+const roots: FakeCtx[] = []
+afterEach(async () => {
+  for (const ctx of roots.splice(0)) {
+    for (const dispose of ctx.disposers.splice(0).reverse()) await dispose()
+    await ctx.rootContext.fiber.dispose()
+  }
+})
 
 const MODEL_EVENTS = {
   llm: {},
@@ -18,7 +27,7 @@ const MODEL_EVENTS = {
  * with the requested services plus effect(), and calls the callback eagerly.
  */
 interface FakeCtx {
-  parallel: ReturnType<typeof vi.fn>
+  notifications: ReturnType<typeof vi.fn>
   disposers: (() => unknown)[]
   storageDomain: { open(spec: unknown): Promise<unknown> }
   tools: { register(): () => void }
@@ -27,6 +36,7 @@ interface FakeCtx {
   inject(services: string[], callback: (child: FakeCtx) => unknown): () => void
   on(event: string, callback: (arg: unknown) => void): () => void
   provide(): void
+  rootContext: Context
   modelSettingsCollect(emit: (provider: ModelSettingsProvider) => void): void
 }
 
@@ -43,8 +53,10 @@ function makeCtx(rowRef: { row: unknown }): FakeCtx {
     },
   })
   const listeners = new Map<string, Set<(arg: unknown) => void>>()
-  const ctx: FakeCtx = {
+  const rootContext = new Context()
+  const ctx = Object.assign(rootContext, {
     parallel,
+    notifications: parallel,
     disposers,
     storageDomain: {
       open: async () => ({
@@ -77,12 +89,13 @@ function makeCtx(rowRef: { row: unknown }): FakeCtx {
       set.add(callback)
       return () => { set.delete(callback) }
     },
-    provide() {},
+    rootContext,
     /** Replay 'model-settings/collect' listeners the way the host's parallel() would. */
     modelSettingsCollect(emit: (provider: ModelSettingsProvider) => void) {
       for (const callback of listeners.get('model-settings/collect') ?? []) callback(emit)
     },
-  } as const
+  } as unknown as FakeCtx)
+  roots.push(ctx)
   return ctx
 }
 
@@ -116,8 +129,8 @@ it('serves the stored model route, locks on revision and unloads cleanly', async
   // A write bumps the revision, stores the route and notifies the hub.
   expect(await owner.write(['model'], { provider: 'q', model: 'new', reasoningEffort: 'high' }, 3, signal)).toBe(4)
   expect(rowRef.row).toMatchObject({ revision: 4, model: { provider: 'q', model: 'new', reasoningEffort: 'high' } })
-  expect(ctx.parallel).toHaveBeenCalled()
-  expect(ctx.parallel.mock.calls.at(-1)?.[1]).toEqual({ ns: '@klarkxy/dsh-session-manager', revision: 4 })
+  expect(ctx.notifications).toHaveBeenCalled()
+  expect(ctx.notifications.mock.calls.at(-1)?.[1]).toEqual({ ns: '@klarkxy/dsh-session-manager', revision: 4 })
   // Stale revision and unknown paths fail without touching the row.
   await expect(owner.write(['model'], {} as ModelRoute, 3, signal)).rejects.toThrow(/changed/)
   await expect(owner.write(['prompt'], {} as ModelRoute, 4, signal)).rejects.toThrow(/Unknown/)
@@ -127,7 +140,7 @@ it('serves the stored model route, locks on revision and unloads cleanly', async
   expect(rowRef.row).toMatchObject({ revision: 5, model: null })
   expect(await owner.read(signal)).toMatchObject({ revision: 5, fields: [{ current: undefined }] })
   // Unloading tears down the owner instead of answering further writes.
-  for (const dispose of ctx.disposers.reverse()) await dispose()
+  for (const dispose of ctx.disposers.splice(0).reverse()) await dispose()
   await expect(owner.write(['model'], { provider: 'q', model: 'late' }, 5, signal)).rejects.toThrow(/unloaded/)
 })
 
@@ -147,13 +160,10 @@ it('degrades silently without the storageDomain service', async () => {
   const rowRef: { row: unknown } = { row: undefined }
   const ctx = makeCtx(rowRef)
   const inject = ctx.inject
-  const noDomain = {
-    ...ctx,
-    inject(services: string[], callback: (child: unknown) => unknown) {
-      return services.includes('storageDomain') ? () => {} : inject(services, callback)
-    },
-  }
-  apply(noDomain as never)
+  ctx.inject = (services: string[], callback: (child: unknown) => unknown) => (
+    services.includes('storageDomain') ? () => {} : inject(services, callback)
+  )
+  apply(ctx as never)
   await Promise.resolve()
   let emitted: ModelSettingsProvider | undefined
   ctx.modelSettingsCollect((value: ModelSettingsProvider) => { emitted = value })
@@ -189,6 +199,6 @@ it('checks concurrent Model Hub CAS inside the store queue and reports an admitt
   await rejected
   expect(put).toHaveBeenCalledOnce()
   expect(rowRef.row).toMatchObject({ revision: 1, model: { model: 'first' } })
-  expect(ctx.parallel.mock.calls.at(-1)?.[1]).toEqual({ ns: '@klarkxy/dsh-session-manager', revision: 1 })
-  for (const dispose of ctx.disposers.reverse()) await dispose()
+  expect(ctx.notifications.mock.calls.at(-1)?.[1]).toEqual({ ns: '@klarkxy/dsh-session-manager', revision: 1 })
+  for (const dispose of ctx.disposers.splice(0).reverse()) await dispose()
 })

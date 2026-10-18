@@ -1,10 +1,6 @@
 /** Shared names and bounds for cross-session discovery. */
 
 export const PLUGIN_NAME = '@klarkxy/dsh-session-manager'
-export const COPY_THREAD_MENU_ID = '@klarkxy/dsh-session-manager.copy-thread-id'
-export const COPY_THREAD_SHORTCUT_ID = 'session-manager.copy-thread-id'
-/** After the shipped pin/rename/fork/archive rows (100–400). */
-export const COPY_THREAD_MENU_ORDER = 500
 /** Temporary-workspace row inside the New Session workspace picker (host list slot). */
 export const TEMP_WORKSPACE_ITEM_ID = '@klarkxy/dsh-session-manager.temp-workspace'
 export const TEMP_WORKSPACE_CHANNEL = '/dsh-session-manager'

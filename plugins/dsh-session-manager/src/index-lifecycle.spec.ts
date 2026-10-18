@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PresenceDomainHandle } from './presence-settings.ts'
 import type { PresenceModelStore } from './config-editor.ts'
 import type { PresenceModelHost } from './welcome-back.ts'
@@ -7,6 +8,14 @@ const rpc = vi.hoisted(() => ({ capture: vi.fn() }))
 vi.mock('./tools.ts', () => ({ registerSessionTools: () => () => {} }))
 vi.mock('./rpc.ts', () => ({ registerSessionManagerRpc: (...args: unknown[]) => { rpc.capture(...args); return () => {} } }))
 import { apply } from './index.ts'
+
+const roots: Array<{ ctx: Context; disposers: Array<() => unknown> }> = []
+afterEach(async () => {
+  for (const fixture of roots.splice(0)) {
+    for (const dispose of fixture.disposers.splice(0).reverse()) await dispose()
+    await fixture.ctx.fiber.dispose()
+  }
+})
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -23,14 +32,16 @@ function domain() {
 
 function fixture(failRegistration = false) {
   let mount!: (scope: unknown) => void
-  const ctx = {
-    effect: (fn: () => unknown) => fn(),
+  const disposers: Array<() => unknown> = []
+  const ctx = Object.assign(new Context(), {
+    effect: (fn: () => unknown) => { const dispose = fn(); if (typeof dispose === 'function') disposers.push(dispose) },
     on: () => { if (failRegistration) throw new Error('registration failed'); return () => {} },
     inject(services: string[], callback: (scope: unknown) => void) {
       if (services.includes('storageDomain')) mount = callback
       else callback({ effect: (fn: () => unknown) => fn() })
     },
-  }
+  })
+  roots.push({ ctx, disposers })
   apply(ctx as never)
   const args = rpc.capture.mock.calls.at(-1)!
   const models = args[3] as () => PresenceModelHost
