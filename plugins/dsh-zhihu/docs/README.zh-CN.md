@@ -27,13 +27,7 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 
 ## 让模型使用
 
-在所用 `agent.cordis.yml` 的插件列表中加入：
-
-```yaml
-- name: '@klarkxy/dsh-zhihu/tools'
-```
-
-模型会获得以下工具：
+插件默认启用以下模型工具，无需修改 Agent 预设：
 
 | 工具 | 用途 |
 | --- | --- |

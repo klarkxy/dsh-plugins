@@ -1,3 +1,5 @@
 - insert:
     - id: zhihu
       name: '@klarkxy/dsh-zhihu'
+    - id: zhihu-tools
+      name: '@klarkxy/dsh-zhihu/tools'

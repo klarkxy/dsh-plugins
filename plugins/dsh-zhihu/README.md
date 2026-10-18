@@ -27,13 +27,7 @@ With the Web Search plugin installed, Zhihu web search also appears in its provi
 
 ## Give the tools to the model
 
-Add this to the plugin list of the `agent.cordis.yml` you use:
-
-```yaml
-- name: '@klarkxy/dsh-zhihu/tools'
-```
-
-The model then gets these tools:
+The plugin enables these model tools by default. No agent preset changes are needed:
 
 | Tool | Purpose |
 | --- | --- |
