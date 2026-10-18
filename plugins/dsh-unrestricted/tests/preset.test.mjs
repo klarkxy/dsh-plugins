@@ -8,6 +8,30 @@ const patchUrl = new URL("../cordis.patch.yml", import.meta.url);
 const pkgRoot = fileURLToPath(new URL("..", import.meta.url));
 const patch = readFileSync(patchUrl, "utf8");
 const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+const contracts = readFileSync(new URL("../src/contracts.ts", import.meta.url), "utf8");
+
+/** The string literals of one exported TS constant, however the declaration wraps them. */
+function tsStrings(source, name) {
+  const start = source.indexOf(`export const ${name} =`);
+  assert.notEqual(start, -1, `missing ${name}`);
+  const rest = source.slice(start);
+  const end = rest.indexOf("\n\n");
+  const declaration = end === -1 ? rest : rest.slice(0, end);
+  const literals = [...declaration.matchAll(/'([^']*)'/g)].map((match) => match[1]);
+  assert.notEqual(literals.length, 0, `${name} carries no string literal`);
+  return literals;
+}
+
+/** The bundle publishes the Chinese copy; the browser half swaps in the English one. */
+const NAMES = {
+  zh: tsStrings(contracts, "PRESET_NAME_ZH").join(""),
+  en: tsStrings(contracts, "PRESET_NAME_EN").join(""),
+};
+const DESCRIPTIONS = {
+  zh: tsStrings(contracts, "PRESET_DESCRIPTION_ZH").join(""),
+  en: tsStrings(contracts, "PRESET_DESCRIPTION_EN").join(""),
+};
+const WARNINGS = tsStrings(contracts, "WARNING_MARKS");
 
 /** Contract text constants, byte-identical to yexi-by/dsh-unrestricted 0.2.2 `src/rules.js`. */
 const PERSONA_SENTENCE = "You are a coding agent powered by the {{model}} model.";
@@ -23,15 +47,17 @@ const PLAN_PREFIX = "You are in plan mode. Stay in plan mode until ";
 /** First 16 hex digits of SHA-256 over upstream EXECUTION_MODE_BLOCK. */
 const CONTRACT_FINGERPRINT = "e9e4eead5f84504c";
 
-/** The host `standard` roster (DSH 0.2.0-rc.2 `@deepseek-ai/dsh-web-app/presets/standard.patch.yml`), in document order. */
+/** Expected roster including retained disabled delegation entries. */
 const STANDARD_ROSTER = [
   ["persona", "@deepseek-ai/dsh-persona"],
   ["agent-instructions", "@deepseek-ai/dsh-agent-instructions"],
+  ["time-context", "@deepseek-ai/dsh-time-context"],
   ["tool-bash", "@deepseek-ai/dsh-tool-bash"],
   ["tool-pwsh", "@deepseek-ai/dsh-tool-pwsh"],
   ["tool-fs", "@deepseek-ai/dsh-tool-fs"],
   ["tool-fs-search", "@deepseek-ai/dsh-tool-fs-search"],
   ["tool-jobs", "@deepseek-ai/dsh-tool-jobs"],
+  ["tool-schedule", "@deepseek-ai/dsh-tool-schedule"],
   ["skill-filesystem", "@deepseek-ai/dsh-skill-filesystem"],
   ["tool-skill", "@deepseek-ai/dsh-tool-skill"],
   ["command-goal", "@deepseek-ai/dsh-command-goal"],
@@ -57,6 +83,7 @@ const STANDARD_ROSTER = [
   ["tool-web", "@deepseek-ai/dsh-tool-web"],
   ["present", "@deepseek-ai/dsh-tool-present"],
   ["tool-plugin-manager", "@deepseek-ai/dsh-plugin-manager/tools"],
+  ["tool-plugin-market", "@deepseek-ai/dsh-plugin-market/tools"],
 ];
 
 /** Read one `key: |-` block scalar with its indentation removed. */
@@ -84,23 +111,41 @@ function roster(source) {
   return rows;
 }
 
-test("bundle declaration inserts exactly one agent-preset row and nothing else", () => {
+test("bundle declaration inserts the preset row and the browser-half row, and nothing else", () => {
   assert.equal(patch.match(/^- insert:$/gm)?.length, 1);
   assert.doesNotMatch(patch, /^- (patch|remove):/m);
   assert.equal(patch.match(/name: '@deepseek-ai\/dsh-agent-preset'/g)?.length, 1);
+  assert.equal(patch.match(/^ {4}- id: /gm)?.length, 2);
+  assert.match(patch, /^ {4}- id: unrestricted-ui\n {6}name: '@klarkxy\/dsh-unrestricted'\n/m);
 });
 
 test("bundle declaration keeps the unrestricted preset display metadata", () => {
   assert.match(patch, / {4}- id: preset-unrestricted\n/);
   assert.match(patch, /\n {8}id: unrestricted\n/);
-  assert.match(patch, /\n {8}name: 破限 \/ Unrestricted\n/);
+  assert.match(patch, /\n {8}name: 破限模式\n/);
   assert.match(patch, /\n {8}description: \S/);
   assert.match(patch, /\n {8}order: 30\n/);
 });
 
-test("bundle declaration resolves no template variable beyond {{model}} and {{cwd}}", () => {
+test("preset copy published by the bundle is the copy the browser half localizes", () => {
+  const published = patch.match(/\n {8}description: (.+)\n/)?.[1];
+  assert.equal(published, DESCRIPTIONS.zh);
+  assert.equal(patch.match(/\n {8}name: (.+)\n/)?.[1], NAMES.zh);
+  // One language per string: the host renders user-authored copy as published,
+  // so a bilingual line would show both languages at once.
+  assert.doesNotMatch(DESCRIPTIONS.zh, / \/ |Delivers|Unrestricted/);
+  assert.doesNotMatch(NAMES.zh, / /);
+  assert.match(NAMES.zh, /^破限模式$/);
+  assert.equal(WARNINGS.length, 2);
+  assert.ok(DESCRIPTIONS.zh.includes(WARNINGS[0]), WARNINGS[0]);
+  assert.ok(DESCRIPTIONS.en.includes(WARNINGS[1]), WARNINGS[1]);
+  assert.match(DESCRIPTIONS.en, /^Removes the limits on what the model answers/);
+  assert.equal(NAMES.en, "Unrestricted mode");
+});
+
+test("bundle declaration leaves current directory context to the host", () => {
   const slots = new Set([...patch.matchAll(/\{\{[^}]+\}\}/g)].map((match) => match[0]));
-  assert.deepEqual([...slots].sort(), ["{{cwd}}", "{{model}}"]);
+  assert.deepEqual([...slots].sort(), ["{{model}}"]);
 });
 
 test("persona keeps the standard sentence and appends the execution pointer", () => {
@@ -120,8 +165,8 @@ test("persona carries the contract byte-identical to upstream", () => {
   );
 });
 
-test("persona ends with the standard cwd suffix", () => {
-  assert.match(patch, /\n {14}suffix: Your working directory is \{\{cwd\}\}\.\n/);
+test("preset does not carry removed delegation configuration", () => {
+  assert.doesNotMatch(patch, /backgroundMode:/);
 });
 
 test("plan mode keeps the official text and appends the content-scope note once", () => {
@@ -131,8 +176,16 @@ test("plan mode keeps the official text and appends the content-scope note once"
   assert.equal(patch.match(/Plan mode restricts delivery and mutation, not content/g)?.length, 1);
 });
 
-test("tool roster mirrors the host standard roster in order", () => {
+test("tool roster retains the expected native capabilities", () => {
   assert.deepEqual(roster(patch), STANDARD_ROSTER);
+});
+
+test("tool roster matches the installed target host apart from retained disabled entries", () => {
+  const hostManifest = import.meta.resolve('@deepseek-ai/dsh-web-app/package.json');
+  const host = readFileSync(new URL('./presets/standard.patch.yml', hostManifest), 'utf8');
+  const retained = new Set(['tool-subagent-codex', 'tool-subagent-claude-code', 'tool-ralph']);
+  assert.deepEqual(roster(patch).filter(([id]) => !retained.has(id)), roster(host));
+  assert.equal(JSON.parse(readFileSync(new URL(hostManifest), 'utf8')).version, manifest.devDependencies['@deepseek-ai/dsh']);
 });
 
 test("tool roster keeps the standard platform and disabled flags", () => {
@@ -156,8 +209,23 @@ test("package manifest follows the repository release conventions", () => {
     access: "public",
     registry: "https://registry.npmjs.org/",
   });
-  assert.equal(manifest.engines.dsh, ">=0.2.0-rc.2");
-  assert.deepEqual(manifest.dsh, { bundle: { patch: "./cordis.patch.yml" } });
+  assert.equal(manifest.engines.dsh, `>=${manifest.devDependencies['@deepseek-ai/dsh']}`);
+  assert.deepEqual(manifest.dsh, {
+    bundle: { patch: "./cordis.patch.yml" },
+    client: { platform: "web", inject: ["@deepseek-ai/dsh-client-locale"] },
+  });
+});
+
+test("package manifest declares the browser half the bundle row loads", () => {
+  assert.equal(manifest.exports["./client"].default, "./lib/client.js");
+  assert.equal(manifest.main, "./lib/index.js");
+  assert.ok(manifest.files.includes("lib"));
+  assert.deepEqual(manifest.dsh.client.inject, ["@deepseek-ai/dsh-client-locale"]);
+  assert.equal(manifest.peerDependencies["@deepseek-ai/cordis"], ">=4.0.4");
+  assert.deepEqual(manifest.peerDependenciesMeta["@deepseek-ai/cordis"], { optional: true });
+  assert.equal(manifest.devDependencies["@deepseek-ai/cordis"], "4.0.5");
+  assert.equal(manifest.scripts.build,
+    "tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-unrestricted");
 });
 
 test("package manifest packs every declared file and credits upstream in NOTICE.md", () => {

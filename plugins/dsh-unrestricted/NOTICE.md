@@ -81,12 +81,12 @@ SOFTWARE.
 ## DeepSeek Harness
 
 工具组合、persona 起始句与计划模式正文改写自 DeepSeek Harness
-`@deepseek-ai/dsh-web-app/presets/standard.patch.yml`（本机 DSH `0.2.0-rc.2` 随附的
+`@deepseek-ai/dsh-web-app/presets/standard.patch.yml`（本机 DSH `0.2.1-rc.1` 随附的
 `standard` Agent Preset 声明）。
 
 The tool roster, the persona opening sentence, and the plan-mode body are adapted from
 DeepSeek Harness `@deepseek-ai/dsh-web-app/presets/standard.patch.yml` (the `standard`
-agent-preset declaration shipped with DSH `0.2.0-rc.2`).
+agent-preset declaration shipped with DSH `0.2.1-rc.1`).
 
 ```text
 MIT License
