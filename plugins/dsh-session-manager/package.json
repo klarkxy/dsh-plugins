@@ -141,5 +141,8 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
-  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/"
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/",
+  "dshRelease": {
+    "contentHash": "6dfbec264a393bada66ba8db14fe860384d2133c9f9098697e4ab8bf073de08d"
+  }
 }
