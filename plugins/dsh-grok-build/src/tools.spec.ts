@@ -11,7 +11,13 @@ async function setup() {
   const root = await mkdtemp(join(tmpdir(), 'grok-tools-')); roots.push(root)
   const rows = new Map<string, MediaJob>(), events: string[] = [], tools: any[] = []
   const store: JobStore = { get: async id => rows.get(id), put: vi.fn(async job => { rows.set(job.id, structuredClone(job)); events.push(job.state) }), list: async workspace => [...rows.values()].filter(job => job.workspace === workspace) }
-  const host: any = { sandboxPolicy: { resolve: () => ({ workspaceRoot: root, mode: 'workspace-write' }) }, tools: { register: (tool: any) => tools.push(tool) }, attachments: { validateImage: vi.fn(async () => {}), saveImages: vi.fn(async () => [{ attachmentId: 'generated-image', mediaType: 'image/png', name: 'output.png' }]), readImage: vi.fn(async () => ({ data: png })) }, get: () => ({ readSession: async () => ({ events: [{ type: 'user/message', data: { content: [{ type: 'image', attachment: { attachmentId: 'current-image', mediaType: 'image/png', name: 'ref.png' } }] } }] }) }) }
+  const release = vi.fn()
+  const observeSession = vi.fn(async (id: unknown, options: { signal: AbortSignal; projectionMode: string }) => {
+    expect(id).toBe('current'); expect(options.projectionMode).toBe('none'); expect(options.signal).toBeInstanceOf(AbortSignal)
+    options.signal.throwIfAborted()
+    return { events: [{ type: 'user/message', data: { content: [{ type: 'image', attachment: { attachmentId: 'current-image', mediaType: 'image/png', name: 'ref.png' } }] } }], [Symbol.dispose]: release }
+  })
+  const host: any = { sandboxPolicy: { resolve: () => ({ workspaceRoot: root, mode: 'workspace-write' }) }, tools: { register: (tool: any) => tools.push(tool) }, attachments: { validateImage: vi.fn(async () => {}), saveImages: vi.fn(async () => [{ attachmentId: 'generated-image', mediaType: 'image/png', name: 'output.png' }]), readImage: vi.fn(async () => ({ data: png })) }, get: () => ({ observeSession }) }
   const runtime = { run: vi.fn(async (request: any) => {
     events.push('invocation'); await request.onPrepared({ home: join(tmpdir(), `dsh-grok-home-${randomUUID()}`), sessionId: randomUUID() }); await request.onStarted()
     events.push('paid'); const path = join(request.jobDirectory, 'output.png'); await writeFile(path, png)
@@ -20,7 +26,7 @@ async function setup() {
   }) }
   const operations = new GrokOperations(host, () => runtime as any, store, () => ({ allowNativeMediaFiles: true }))
   const exec: any = { signal: new AbortController().signal, agent: { session: { id: 'current' } } }
-  return { root, rows, store, host, runtime, operations, events, exec, tools }
+  return { root, rows, store, host, runtime, operations, events, exec, tools, observeSession, release }
 }
 describe('protected Grok jobs and attachments', () => {
   it('persists before paid work, emits native attachments, and recovers after recreation without invoking the CLI again', async () => {
@@ -63,10 +69,12 @@ describe('protected Grok jobs and attachments', () => {
   it('accepts current-session images and rejects foreign attachments or workspace paths before invoking Grok', async () => {
     const f = await setup()
     await expect(f.operations.execute('edit_image', { prompt: 'edit', attachmentIds: ['foreign'] }, f.exec)).rejects.toMatchObject({ code: 'unknown-attachment' })
+    expect(f.observeSession).toHaveBeenCalledOnce(); expect(f.release).toHaveBeenCalledOnce()
     await expect(f.operations.execute('edit_image', { prompt: 'edit', paths: ['../outside.png'] }, f.exec)).rejects.toMatchObject({ code: 'outside-workspace' })
     expect(f.runtime.run).not.toHaveBeenCalled()
     await f.operations.execute('edit_image', { prompt: 'edit', attachmentIds: ['current-image'] }, f.exec)
     expect(f.host.attachments.readImage).toHaveBeenCalledOnce()
+    expect(f.observeSession).toHaveBeenCalledTimes(2); expect(f.release).toHaveBeenCalledTimes(2)
     expect(f.runtime.run.mock.calls[0][0].inputs[0].path).toContain('inputs')
     await expect(readFile(f.runtime.run.mock.calls[0][0].inputs[0].path)).rejects.toThrow()
   })
@@ -96,6 +104,7 @@ describe('protected Grok jobs and attachments', () => {
     const request = f.runtime.run.mock.calls[0][0], paths = request.inputs.map((input: any) => input.path)
     expect(request.nativeInput).toEqual({ images: [paths[0]], first_frame: paths[1], last_frame: paths[2], keyframes: [{ image: paths[3], timestamp_s: 2 }], voices: ['ara', 'eve'], duration: 10, resolution_name: '720p', aspect_ratio: '9:16' })
     expect(f.host.attachments.readImage).toHaveBeenCalledTimes(4)
+    expect(f.observeSession).toHaveBeenCalledOnce(); expect(f.release).toHaveBeenCalledOnce()
   })
   it('supports voice-only references and exact image generation/image-to-video options', async () => {
     const f = await setup()
@@ -103,8 +112,10 @@ describe('protected Grok jobs and attachments', () => {
     expect(f.runtime.run.mock.calls[0][0]).toMatchObject({ inputs: [], nativeInput: { voices: ['rex'], duration: 1, images: [], keyframes: [], aspect_ratio: '16:9' } })
     await f.operations.execute('generate_image', { prompt: 'portrait', aspectRatio: '2:3' }, f.exec)
     expect(f.runtime.run.mock.calls[1][0].nativeInput).toEqual({ aspect_ratio: '2:3' })
+    expect(f.observeSession).not.toHaveBeenCalled(); expect(f.release).not.toHaveBeenCalled()
     await f.operations.execute('image_to_video', { prompt: 'animate', image: { attachmentId: 'current-image' }, duration: 10, resolutionName: '720p' }, f.exec)
     expect(f.runtime.run.mock.calls[2][0].nativeInput).toMatchObject({ image: expect.any(String), duration: 10, resolution_name: '720p' })
+    expect(f.observeSession).toHaveBeenCalledOnce(); expect(f.release).toHaveBeenCalledOnce()
   })
   it('rejects invalid video bounds, frame times, aspect ratios and file-like voices before any media reads or CLI submission', async () => {
     const f = await setup(), ref = { attachmentId: 'current-image' }

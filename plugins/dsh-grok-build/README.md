@@ -26,11 +26,13 @@ Also install and sign in to the official Grok Build CLI. Only version 1.0.50 is 
 | `grok_reference_to_video` | Make a video from reference images, a voice preset, or keyframes |
 | `grok_media_jobs`, `grok_recover_media` | Find earlier results and fetch them again |
 
+When the host provides web search and page retrieval, choose **Grok Build** as their provider in the web settings. The dedicated tools above remain available. Local CLI discovery indicates availability; sign-in, account access, and CLI compatibility are checked when a request runs. Calls use your Grok account and may incur its model and tool charges.
+
 ## Limits
 
 - Image editing and video need **Allow Grok native tools to read media files** (off by default). This is an extra check, not a sandbox: Grok can read files as your local CLI normally can.
 - Results are saved in the workspace, so a read-only workspace cannot create media.
-- Cancelling stops the local process but may not stop generation on Grok's side; nothing is regenerated automatically.
+- Cancelling stops the local process but may not stop generation on Grok's side; nothing is regenerated automatically. Find the job in the same workspace and recover saved results before starting another generation.
 - Not included: image understanding, X search, audio, or music.
 
 ## License

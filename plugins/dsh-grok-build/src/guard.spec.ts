@@ -32,6 +32,12 @@ it('installs a native hook config only after its benign rejection smoke passes',
   const f = await setup(), hook = await prepareGuard(f.root, { tool: 'image_edit', inputs: [f.input], sessionId: 'session', media: true }, new AbortController().signal)
   expect(JSON.parse(await readFile(hook.hookPath, 'utf8'))).toMatchObject({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', timeout: 5 }] }] } })
 })
+it('locks a web fetch to exactly the requested URL before the native call', () => {
+  const policy = { tool: 'web_fetch', inputs: [], sessionId: 'session', media: false, nativeInput: { url: 'https://allowed.test/' } }
+  expect(guardInputMatches(policy, { url: 'https://allowed.test/' })).toBe(true)
+  expect(guardInputMatches(policy, { url: 'https://changed.test/' })).toBe(false)
+  expect(guardInputMatches(policy, { url: 'https://allowed.test/', extra: true })).toBe(false)
+})
 it('preserves exact reference roles/options and rejects a replaced frame or preset voice', () => {
   const nativeInput = { images: ['image'], first_frame: 'first', last_frame: 'last', keyframes: [{ image: 'middle', timestamp_s: 2 }], voices: ['ara'], duration: 10, resolution_name: '720p', aspect_ratio: '9:16' }
   const policy = { tool: 'reference_to_video', inputs: ['image', 'first', 'last', 'middle'], sessionId: 'session', media: true, nativeInput }

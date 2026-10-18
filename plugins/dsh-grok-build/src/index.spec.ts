@@ -1,3 +1,4 @@
+import { Context } from '@deepseek-ai/cordis'
 import { randomUUID } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from './contracts.ts'
@@ -25,10 +26,11 @@ function domain() {
   return { settings, jobs, close, put, storage }
 }
 function mount(data = domain()) {
-  const cleanup: (() => void | Promise<void>)[] = [], open = vi.fn(async () => data.storage)
-  const host = { storageDomain: { open }, effect(factory: () => () => void | Promise<void>) { cleanup.push(factory()) } }
+  const open = vi.fn(async () => data.storage)
+  const host = new Context()
+  Object.assign(host, { storageDomain: { open } })
   apply(host as any)
-  return { ...data, host, open, tools: captured.tools.at(-1), operations: captured.operations.at(-1), runtime: captured.runtimes.at(-1), rpc: captured.rpc.at(-1).call, dispose: async () => { for (const fn of cleanup.reverse()) await fn() } }
+  return { ...data, host, open, tools: captured.tools.at(-1), operations: captured.operations.at(-1), runtime: captured.runtimes.at(-1), rpc: captured.rpc.at(-1).call, dispose: () => host.fiber.dispose() }
 }
 function job() { return { id: randomUUID(), workspace: 'workspace', directory: 'workspace/job', capability: 'generate_image', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), state: 'uncertain', files: [] } }
 const signal = () => new AbortController().signal

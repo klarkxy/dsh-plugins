@@ -61,6 +61,21 @@ describe('CLI isolation and native protocol', () => {
     expect(args[args.indexOf('--tools') + 1]).toBe('web_search')
     await f.runtime.dispose()
   })
+  it.each([200, 404, 503])('preserves native fetch status %s and untrimmed body', async status => {
+    const f = await fixture('fetch'); f.request.nativeInput = { url: 'https://source.test/' }
+    f.run.mockImplementation(async (_exe, args, _env, _cwd, _signal, onLine) => {
+      if (args.includes('--version')) return { stdout: 'grok 1.0.50', stderr: '', exitCode: 0 }
+      const id = args[args.indexOf('--session-id') + 1]
+      const prompt = JSON.parse(args[args.indexOf('--prompt-json') + 1])[0].text
+      expect(JSON.parse(prompt).arguments).toEqual({ url: 'https://source.test/' })
+      await onLine(JSON.stringify({ type: 'tool_call', toolCallId: 'fetch', toolName: 'web_fetch', rawInput: { url: 'https://source.test/' } }))
+      await onLine(JSON.stringify({ type: 'tool_call_update', toolCallId: 'fetch', status: 'completed', rawOutput: { type: 'WebFetch', Content: { url: 'https://source.test/final', content: '  native body\n ', status_code: status } } }))
+      await onLine(JSON.stringify({ type: 'end', stopReason: 'end_turn', sessionId: id }))
+      return { stdout: '', stderr: '', exitCode: 0 }
+    })
+    expect(await f.runtime.run(f.request, signal())).toMatchObject({ state: 'completed', fetch: { statusCode: status, url: 'https://source.test/final', body: { kind: 'text', content: '  native body\n ' }, truncated: false } })
+    await f.runtime.dispose()
+  })
   it('keeps capabilities separate when native file access has not been allowed', async () => {
     const f = await fixture(); const runtime = new GrokRuntime(() => DEFAULT_SETTINGS, { discover: f.discover, run: f.run, inspect: f.inspect })
     const status = await runtime.status(signal())

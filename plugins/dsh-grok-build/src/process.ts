@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
-import { lstat } from 'node:fs/promises'
+import { lstat, readFile, realpath, access } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { insideDirectory } from '@klarkxy/dsh-plugin-kit/cli-media'
-import { runCli, type CliExecutable } from '@klarkxy/dsh-plugin-kit/cli-process'
+import { cliEnvironment, runCli, type CliExecutable } from '@klarkxy/dsh-plugin-kit/cli-process'
 import { GrokBuildError, type Capability } from './contracts.ts'
 
 export const NATIVE_TOOLS = {
@@ -74,12 +74,7 @@ export function originalAuthPath(env: NodeJS.ProcessEnv = process.env): string {
   return resolve(env.GROK_HOME?.trim() || join(homedir(), '.grok'), 'auth.json')
 }
 export function childEnvironment(home: string, authPath: string, parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {}
-  for (const [key, value] of Object.entries(parent)) {
-    if (key === 'GROK_HOME' || key === 'GROK_AUTH_PATH' || key === 'GROK_CONFIG' || key === 'GROK_CONFIG_PATH') continue
-    if (key.startsWith('GROK_') || key === 'XAI_API_KEY' || key.endsWith('_API_KEY') || key.endsWith('_BASE_URL')) continue
-    env[key] = value
-  }
+  const env = cliEnvironment(parent)
   const flags: Record<string, string> = {
     GROK_HOME: home, GROK_AUTH_PATH: authPath, GROK_MEMORY: '0', GROK_SUBAGENTS: '0', GROK_WORKFLOWS: '0',
     GROK_DISABLE_AUTOUPDATER: '1', GROK_AGENT_DASHBOARD: '0', GROK_FOLDER_TRUST: '1', GROK_BACKEND_SEARCH: '0',
@@ -119,13 +114,30 @@ export function isolationHolds(report: InspectReport, home: string): string | un
   return
 }
 
+/** Resolve the npm-generated launcher as data; argv is always passed without a shell. */
+export async function grokExecutable(candidate: string): Promise<CliExecutable> {
+  const path = await realpath(candidate)
+  if (!(await lstat(path)).isFile()) throw new GrokBuildError('unavailable', 'Grok Build 路径不是文件。')
+  if (/\.(?:cmd|ps1)$/i.test(path)) {
+    const launcher = await readFile(path, 'utf8')
+    if (launcher.length > 32_768) throw new GrokBuildError('unsupported-launcher', 'Grok npm launcher 无效。')
+    const match = launcher.match(/(?:%dp0%|\$basedir)[\\/]?(node_modules[\\/][^"\r\n]+?\.[cm]?js)/i)
+    if (!match || /[%$!]/.test(match[1]) || match[1].split(/[\\/]/).includes('..')) throw new GrokBuildError('unsupported-launcher', '请选择官方 Grok Node 入口或原生可执行文件。')
+    const script = await realpath(join(dirname(path), ...match[1].split(/[\\/]/)))
+    if (!insideDirectory(join(dirname(path), 'node_modules'), script) || !(await lstat(script)).isFile()) throw new GrokBuildError('unsupported-launcher', 'Grok npm 入口无效。')
+    await access(script)
+    return { command: process.execPath, args: [script], displayPath: path }
+  }
+  if (/\.[cm]?js$/i.test(path)) return { command: process.execPath, args: [path], displayPath: path }
+  return { command: path, displayPath: path }
+}
 export async function discoverGrok(setting: string, env: NodeJS.ProcessEnv = process.env): Promise<CliExecutable> {
   const requested = setting.trim() || env.GROK_EXECUTABLE?.trim() || ''
   const names = process.platform === 'win32' ? ['grok.exe', 'grok.cmd'] : ['grok']
   const candidates = requested ? [requested] : (env.PATH ?? '').split(delimiter).flatMap(dir => names.map(name => join(dir, name)))
   for (const candidate of candidates) {
     try {
-      if ((await lstat(candidate)).isFile()) return { command: resolve(candidate), displayPath: resolve(candidate) }
+      return await grokExecutable(candidate)
     } catch { /* try the next PATH entry */ }
   }
   throw new GrokBuildError('unavailable', requested ? '配置的 Grok Build 可执行文件不存在。' : '未在 PATH 中找到 Grok Build。')

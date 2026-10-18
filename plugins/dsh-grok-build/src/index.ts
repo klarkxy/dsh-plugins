@@ -1,8 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { DEFAULT_SETTINGS, GrokBuildError, PLUGIN_NAME, RPC_CHANNEL, parseSettings, type RpcResult, type Settings } from './contracts.ts'
+import { connectGrokWeb } from './connect-web.ts'
 import { GrokRuntime } from './runtime.ts'
 import { GrokOperations, jobSchema, registerTools, type JobStore, type ToolHost } from './tools.ts'
 
@@ -16,6 +19,7 @@ type Domain = { table(name: string): Table; close(): Promise<void> }
 type Host = Context & HostRpcContext & ToolHost & { storageDomain: { open(value: typeof spec): Promise<Domain> } }
 
 export function apply(ctx: Context): void {
+  createModelSettingsChanges(ctx, modelSettingsChangesIdentity(PLUGIN_NAME), PLUGIN_NAME)
   const host = ctx as Host, lifetime = new AbortController(), domain = host.storageDomain.open(spec)
   let settings: Settings = { ...DEFAULT_SETTINGS }, revision = 0, changing = false, closed = false
   let writes = Promise.resolve()
@@ -40,6 +44,7 @@ export function apply(ctx: Context): void {
     try { return await pending } finally { active.delete(pending) }
   }
   registerTools(host, { execute: (operation, args, exec) => run(exec.signal, signal => operations.execute(operation, args, { ...exec, signal })) }, ready, lifetime.signal)
+  const refreshWeb = connectGrokWeb(ctx as unknown as Parameters<typeof connectGrokWeb>[0], { run, runtime: () => runtime }, () => settings, ready, lifetime.signal)
   const rpc = async (endpoint: string, payload: unknown, signal: AbortSignal): Promise<RpcResult> => {
     try {
       signal.throwIfAborted(); lifetime.signal.throwIfAborted(); await ready; signal.throwIfAborted(); lifetime.signal.throwIfAborted()
@@ -57,6 +62,7 @@ export function apply(ctx: Context): void {
           await (await domain).table('settings').put('config', next)
           settings = next.settings; revision = next.revision
           await runtime.dispose(); runtime = new GrokRuntime(() => settings)
+          void refreshWeb()
           return next
         } finally { changing = false }
       })

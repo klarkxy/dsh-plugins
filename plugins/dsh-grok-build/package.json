@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-grok-build",
-  "version": "0.1.2",
-  "description": "Search and create images and videos through the official local Grok Build CLI.",
+  "version": "0.2.0",
+  "description": "Search, read pages, and create images and videos through local Grok Build; search also joins the unified provider order.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "icon": "./icon.svg",

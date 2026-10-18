@@ -5,6 +5,7 @@ import { GrokBuildError } from './contracts.ts'
 
 export type GuardPolicy = { tool: string; inputs: string[]; sessionId: string; media: boolean; nativeInput?: Record<string, unknown> }
 export function guardInputMatches(policy: GuardPolicy, input: Record<string, unknown>): boolean {
+  if (policy.tool === 'web_fetch' && policy.nativeInput) return Object.keys(input).length === 1 && input.url === policy.nativeInput.url
   const keys = ['image', 'images', 'first_frame', 'last_frame', 'keyframes', 'voices', 'duration', 'resolution_name', 'aspect_ratio']
   const expected = policy.nativeInput ?? (policy.tool === 'image_to_video' ? { image: policy.inputs[0] } : policy.tool === 'reference_to_video' ? { images: policy.inputs } : policy.tool === 'image_edit' ? { image: policy.inputs } : {})
   function equal(a: unknown, b: unknown): boolean {
