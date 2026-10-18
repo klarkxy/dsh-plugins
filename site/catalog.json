@@ -103,8 +103,8 @@
         "en": "Web Search"
       },
       "summary": {
-        "zh": "在一个设置页里管理网页搜索服务商和公开页面抓取。",
-        "en": "Manage web search providers and public-page fetching from one settings page."
+        "zh": "在一个设置页管理和排序多家搜索与网页读取服务，包括已安装插件提供的能力。",
+        "en": "Manage and rank search and page-reading services, including providers from installed plugins, in one settings page."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
@@ -183,8 +183,8 @@
         "en": "Session Manager"
       },
       "summary": {
-        "zh": "跨工作目录查找和阅读会话，复制线程 ID，使用临时工作区；空输入一键继续，久离回来给出摘要与压缩建议。",
-        "en": "Find and read sessions across working directories, copy thread IDs, use temporary workspaces, continue with one tap on an empty composer, and get a welcome-back recap after time away."
+        "zh": "跨工作目录查找和阅读会话，使用临时工作区；空输入一键继续，久离回来给出摘要与压缩建议。",
+        "en": "Find and read sessions across working directories, use temporary workspaces, continue with one tap on an empty composer, and get a welcome-back recap after time away."
       },
       "readme": {
         "zh": "README.zh-CN.md",
@@ -243,8 +243,8 @@
         "en": "ChatGPT"
       },
       "summary": {
-        "zh": "借助本机 Codex 使用 ChatGPT 网络搜索、生图、改图和图片分析。",
-        "en": "Use ChatGPT web search, image generation, editing, and image analysis through local Codex."
+        "zh": "借助本机 Codex 搜索、生图、改图和分析图片；搜索可加入统一排序。",
+        "en": "Search, generate and edit images, and analyze images through local Codex; search also joins the unified provider order."
       },
       "readme": {
         "zh": "README.zh-CN.md",
@@ -263,8 +263,8 @@
         "en": "Grok Build"
       },
       "summary": {
-        "zh": "借助本机 Grok Build CLI 搜索、读网页、生成图片和视频。",
-        "en": "Search, read pages, and create images and videos through your local Grok Build CLI."
+        "zh": "借助本机 Grok Build 搜索、读网页和生成图片视频；搜索可加入统一排序。",
+        "en": "Search, read pages, and create images and videos through local Grok Build; search also joins the unified provider order."
       },
       "readme": {
         "zh": "README.zh-CN.md",
@@ -283,8 +283,8 @@
         "en": "MiniMax Code"
       },
       "summary": {
-        "zh": "借助本机 MiniMax Code 搜索、生成图片视频和语音、理解音视频。",
-        "en": "Search, create images, video and speech, and understand audio and video through your local MiniMax Code."
+        "zh": "借助本机 MiniMax Code 搜索、生成媒体和理解音视频；搜索可加入统一排序。",
+        "en": "Search, create media, and understand audio and video through local MiniMax Code; search also joins the unified provider order."
       },
       "readme": {
         "zh": "README.zh-CN.md",
@@ -343,8 +343,8 @@
         "en": "Unrestricted"
       },
       "summary": {
-        "zh": "直接交付完整成果的会话 Preset，只作用于选用它的会话。",
-        "en": "A session preset that delivers complete results, only in sessions that pick it."
+        "zh": "解除模型的回答限制、交付完整成果的会话 Preset，只作用于选用它的会话；可能导致账号被封禁。",
+        "en": "A session preset that removes the limits on what the model answers and delivers complete results, only in sessions that pick it; may get your account banned."
       },
       "readme": {
         "zh": "README.zh-CN.md",
@@ -352,26 +352,6 @@
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-unrestricted"
-    },
-    {
-      "slug": "autoevo",
-      "package": "dsh-plugin-autoevo",
-      "category": "workflow",
-      "kind": "plugin",
-      "title": {
-        "zh": "AutoEvo",
-        "en": "AutoEvo"
-      },
-      "summary": {
-        "zh": "发现、审查和安装可复用能力。已废弃，停止维护。",
-        "en": "Find, review, and install reusable capabilities. Deprecated and unmaintained."
-      },
-      "readme": {
-        "zh": "README.md",
-        "en": "README.en.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugin-autoevo",
-      "directory": ""
     }
   ]
 }

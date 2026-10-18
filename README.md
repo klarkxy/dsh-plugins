@@ -11,17 +11,16 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse them on the [plugin site](http
 | [`@klarkxy/dsh-current-title`](plugins/dsh-current-title/README.md) | Auto Title: session titles follow the latest task; names you set by hand stay put. |
 | [`@klarkxy/dsh-git-commit`](plugins/dsh-git-commit/README.md) | Git Commit: commit workspace changes from the conversation, with the model grouping the commits. |
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: a reviewer model answers approval requests; only calls that pass go ahead. |
-| [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: find and read sessions across working directories, copy thread IDs, use temporary workspaces, continue with one tap on an empty composer, and get a welcome-back recap after time away. |
+| [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: find and read sessions across working directories, use temporary workspaces, continue with one tap on an empty composer, and get a welcome-back recap after time away. |
 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Model Hub: change the models used by your plugins and subagents from one page, and see each running subagent's model and reasoning effort. |
-| [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/README.md) | Web Search: manage web search providers and public-page reading from one settings page. |
+| [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/README.md) | Web Search: Manage and rank search and page-reading services, including providers from installed plugins, in one settings page. |
 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | Zhihu: Zhihu search, agent tools, knowledge bases, and usage tracking. |
-| [`@klarkxy/dsh-chatgpt`](plugins/dsh-chatgpt/README.md) | ChatGPT: web search, image generation, editing, and image analysis through local Codex. |
-| [`@klarkxy/dsh-grok-build`](plugins/dsh-grok-build/README.md) | Grok Build: search, page reading, images, and video through your local Grok Build CLI. |
-| [`@klarkxy/dsh-minimax-code`](plugins/dsh-minimax-code/README.md) | MiniMax Code: search, images, video, speech, and audio/video understanding through your local MiniMax Code. |
+| [`@klarkxy/dsh-chatgpt`](plugins/dsh-chatgpt/README.md) | ChatGPT: Search, generate and edit images, and analyze images through local Codex; search also joins the unified provider order. |
+| [`@klarkxy/dsh-grok-build`](plugins/dsh-grok-build/README.md) | Grok Build: Search, read pages, and create images and videos through local Grok Build; search also joins the unified provider order. |
+| [`@klarkxy/dsh-minimax-code`](plugins/dsh-minimax-code/README.md) | MiniMax Code: Search, create media, and understand audio and video through local MiniMax Code; search also joins the unified provider order. |
 | [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface font, code font, and conversation font size of the Web GUI. |
-| [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | Unrestricted: a session preset that delivers complete results, only in sessions that pick it. |
+| [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | Unrestricted: a session preset that removes the limits on what the model answers, only in sessions that pick it; may get your account banned. |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: read the official DSH docs in the Plugins page; Creator mode can look up docs and plugins on npm and GitHub. |
-| [`dsh-plugin-autoevo`](https://github.com/klarkxy/dsh-plugin-autoevo#readme) | AutoEvo (deprecated): find, review, and install reusable capabilities; no longer maintained (separate repository). |
 
 `@klarkxy/dsh-plugin-kit` and `@klarkxy/dsh-model-route` are shared libraries that other plugins install automatically.
 
@@ -31,7 +30,7 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse them on the [plugin site](http
 dsh plugin --profile web add @klarkxy/dsh-current-title
 ```
 
-Replace `web` with your profile name and restart the profile after installing. Plugins that depend on others list the full install order on their site page.
+Replace `web` with your profile name and restart the profile after installing. The shared libraries a plugin depends on are installed along with it.
 
 ## Development
 

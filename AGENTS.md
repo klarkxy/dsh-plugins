@@ -35,7 +35,7 @@
 
 ### 定期核对
 
-- catalog 与 npm 是否一致：在 `klarkxy` 名下、带 `latest` 标签的 DSH 插件都应收录，包括其他仓库的 `dsh-plugin-autoevo`（独立仓库，README 中文为 `README.md`、英文为 `README.en.md`）。
+- catalog 与 npm 是否一致：在 `klarkxy` 名下、带 `latest` 标签且仍维护的 DSH 插件都应收录。`dsh-plugin-autoevo` 已封存，不再收录；插件发现与信息核对使用 `dsh-dev-index`。
 - README 描述与代码是否一致：工具名、页签、设置项、默认值和限制都以源码为准。
 - 有没有过时的版本号、数量、日期或通道说明，例如 `rg -n -g "README*.md" -e "-rc\." -e "-alpha\." -e "预发布" -e "已验证" README.md README.zh-CN.md plugins`。命中后人工判断：代码里检查的外部 CLI 最低版本（如 ChatGPT 插件要求的 Codex 版本）不算过时，`NOTICE.md` 里的版本属于署名来源，也不算过时。
 - 有没有死链，以及引用已删除文件的地方。
@@ -106,7 +106,7 @@ pnpm check               # 较大改动时全仓检查
 - `title`、`summary` 必须同时有 `zh` 和 `en`。简介一句话，从用户角度说它做什么，不写实现细节或宣传语。
 - `readme.zh` / `readme.en` 写包内实际存在的路径（相对包根目录）。某个语言没有 README 时仍填预期路径，构建会警告并回退到另一种语言。
 - `repository` 为 `https://github.com/<owner>/<repo>`；`directory` 是包在仓库中的子目录，仓库根目录即包时填 `""`。
-- 不要把版本、日期、依赖、图标写进 catalog，这些在构建时从 npm 读取。插件依赖根据 `dependencies` / `peerDependencies` 中同样在 catalog 里的包自动推导。
+- 不要把版本、日期、依赖、图标写进 catalog，这些在构建时从 npm 读取。插件依赖根据 `dependencies` / `peerDependencies` 中同样在 catalog 里的包自动推导。详情页的安装命令只包含插件本身，加上 catalog 内未标 `optional` 的必需 `peerDependencies`：`dsh plugin add` 就是转发给 pnpm，`dependencies` 会随插件一起装上，profile 又设了 `autoInstallPeers: false`，所以只有必需 peer 需要显式补装。给依赖加安装命令前，先确认它真的不会被自动安装。
 
 ### 修改渲染
 
