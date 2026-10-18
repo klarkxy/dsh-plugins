@@ -1,6 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
 import { registerModelSettings, notifyModelSettingsChanged, type ModelSettingsEvents } from '@klarkxy/dsh-plugin-kit/model-settings'
 import { isTitleLocaleMode, PLUGIN_NAME, RPC_CHANNEL, SETTINGS_KEY, type TitleLocaleMode } from './contracts.ts'
 import { CurrentTitleService, handleRpc, hostLocalePreference } from './service.ts'
@@ -35,6 +37,7 @@ type Host = Context & HostRpcContext & {
 }
 
 export async function apply(ctx: Context, config: { locale?: TitleLocaleMode } = {}): Promise<void> {
+  createModelSettingsChanges(ctx, modelSettingsChangesIdentity(PLUGIN_NAME), PLUGIN_NAME)
   const host = ctx as Host
   const domain = await host.storageDomain.open(titleDomain)
   const table = domain.table('settings')

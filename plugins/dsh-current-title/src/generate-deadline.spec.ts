@@ -32,27 +32,37 @@ async function* normalStream(): AsyncIterable<StreamChunk> {
 afterEach(() => vi.useRealTimers())
 
 describe('title generation deadline through the native caller', () => {
-  it('releases the caller on deadline even if preparation ignores its abort signal', async () => {
+  it('waits for an abort-ignoring preparation to settle before reporting deadline', async () => {
     vi.useFakeTimers()
     const llm = caller(normalStream)
-    llm.prepareCall = async () => new Promise(() => {})
+    let release!: () => void
+    const stalled = new Promise<void>(resolve => { release = resolve })
+    const original = llm.prepareCall
+    llm.prepareCall = async (...args) => { await stalled; return original(...args) }
     const pending = generate(llm)
+    let settled = false
+    void pending.then(() => { settled = true }, () => { settled = true })
     const rejection = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' })
     await vi.advanceTimersByTimeAsync(50)
+    expect(settled).toBe(false)
+    release()
     await rejection
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('releases a stalled stream that ignores abort and discards its late completion', async () => {
+  it('waits for a stalled stream that ignores abort and discards its late completion', async () => {
     vi.useFakeTimers()
     let release = () => {}
     const stalled = new Promise<void>(resolve => { release = resolve })
     const llm = caller(async function* () { await stalled; yield* normalStream() })
     const pending = generate(llm)
     const rejection = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' })
+    let settled = false
+    void pending.then(() => { settled = true }, () => { settled = true })
     await vi.advanceTimersByTimeAsync(50)
-    await rejection
+    expect(settled).toBe(false)
     release()
+    await rejection
     await vi.advanceTimersByTimeAsync(0)
     await expect(pending).rejects.toMatchObject({ name: 'TimeoutError' })
     expect(vi.getTimerCount()).toBe(0)

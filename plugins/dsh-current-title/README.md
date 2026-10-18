@@ -31,7 +31,8 @@ If the model list cannot load, or some providers fail, use **Retry** beside the 
 
 ## Limits
 
-- Each title costs one model call; failed generations keep the existing title.
+- Each title costs one model call, using the model's lowest supported reasoning effort; failed generations keep the existing title.
+- Cancellation and timeouts wait for the model call to stop. A provider that does not honor cancellation can delay completion.
 - Turning the plugin off hands titles back to the built-in DSH title feature.
 
 ## License

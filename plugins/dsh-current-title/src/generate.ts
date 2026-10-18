@@ -65,9 +65,8 @@ export async function generateCurrentTitle(options: {
   if (selected.length === 0) throw new Error('dsh-current-title: at least one source message is required')
   const route = resolveFeatureModel(options.host, titleModelRoute(options.model), options.sessionId)
   if (!route) throw new Error('dsh-current-title: 请在插件页选择模型，或设置宿主默认对话模型。')
-  // Titles never think: reasoning effort is never forwarded (matching the
-  // bundled dsh-session-title-llm policy), so a thinking model cannot burn the
-  // small token cap on hidden reasoning and leave an empty reply.
+  // Like the bundled title provider, select the first (least) advertised
+  // effort inside prepareCall, before adapter defaults are materialized.
   const callRoute = { provider: route.provider, model: route.model }
 
   const framedInput = frameMessages(selected)
@@ -82,25 +81,23 @@ export async function generateCurrentTitle(options: {
     ? options.config.timeoutMs : DEFAULT_TIMEOUT_MS
   const timer = setTimeout(() => deadline.abort(new DOMException('Title generation timed out.', 'TimeoutError')), timeoutMs)
   const signal = AbortSignal.any([options.signal, deadline.signal])
-  let abort = () => {}
-  const cancelled = new Promise<never>((_resolve, reject) => {
-    abort = () => reject(signal.reason)
-    if (signal.aborted) abort()
-    else signal.addEventListener('abort', abort, { once: true })
-  })
   let result
   try {
-    result = await Promise.race([callLlmText(options.llm, {
+    result = await callLlmText(options.llm, {
       plugin: PLUGIN_NAME,
       route: callRoute,
       system: systemPrompt(options.config, options.prompt),
       text: framedInput,
       maxTokens: options.config.maxOutputTokens,
       purpose: 'session-title',
+      configure: (controls, model) => {
+        const effort = model.reasoning?.efforts[0]?.id
+        return { ...controls, ...(effort === undefined ? {} : { reasoningEffort: effort }) }
+      },
       signal,
       sessionId: options.sessionId,
       isCurrent: options.isCurrent,
-    }), cancelled])
+    })
     signal.throwIfAborted()
   } catch (error) {
     // The shared caller translates stream cancellation to AbortError. Retain
@@ -109,7 +106,6 @@ export async function generateCurrentTitle(options: {
     throw error
   } finally {
     clearTimeout(timer)
-    signal.removeEventListener('abort', abort)
   }
   options.signal.throwIfAborted()
   if (!options.isCurrent()) {

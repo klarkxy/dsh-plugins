@@ -93,10 +93,16 @@ describe('generateCurrentTitle', () => {
       sessionId: 's1',
       messages: [{ seq: 1, text: '修复登录' }],
     })
-    // Inherited reasoning effort would let thinking consume the token cap and
-    // leave an empty reply; title calls never think (bundled provider policy).
+    // Discard inherited effort; choose the least advertised level in prepareCall.
     expect(seen[0]?.route).toEqual({ provider: 'g', model: 'm' })
     expect(seen[0]?.purpose).toBe('session-title')
+    const configure = seen[0]!.configure!
+    const controls = { maxTokens: 200 }
+    // Adapter order is meaningful; opaque effort ids must never be sorted.
+    expect(configure(controls, { provider: 'g', id: 'm', name: 'm', reasoning: {
+      efforts: [{ id: 'z-min' as never, name: 'Minimum' }, { id: 'a-max' as never, name: 'Maximum' }], defaultEffort: 'a-max' as never,
+    } })).toEqual({ maxTokens: 200, reasoningEffort: 'z-min' })
+    expect(configure(controls, { provider: 'g', id: 'm', name: 'm' })).toEqual(controls)
 
     seen.length = 0
     await generateWith(async request => {

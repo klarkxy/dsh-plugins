@@ -30,6 +30,7 @@ export class CurrentTitleService {
   private settingsPending: Promise<void> = Promise.resolve()
   private disposed = false
   private readonly inFlight = new Map<string, AbortController>()
+  private readonly generations = new Set<Promise<unknown>>()
   readonly support: TitleSupport
 
   constructor(private readonly options: {
@@ -81,6 +82,7 @@ export class CurrentTitleService {
     this.generation += 1
     for (const controller of this.inFlight.values()) controller.abort(new Error('current-title disabled'))
     this.inFlight.clear()
+    await Promise.allSettled([...this.generations])
     await this.settingsPending
     const snapshot = this.nativeSlot?.displacement
     const outcome = await releaseTitleSlot(this.nativeSlot ?? { owner: () => undefined, occupy: async () => () => {} }, this.claim)
@@ -193,7 +195,15 @@ export class CurrentTitleService {
     }
   }
 
-  private async nativeGenerate(request: {
+  private nativeGenerate(request: Parameters<CurrentTitleService['runNativeGenerate']>[0]) {
+    if (this.disposed) return Promise.reject(new Error('dsh-current-title: plugin disabled'))
+    const pending = this.runNativeGenerate(request)
+    this.generations.add(pending)
+    void pending.then(() => this.generations.delete(pending), () => this.generations.delete(pending))
+    return pending
+  }
+
+  private async runNativeGenerate(request: {
     session: { id: string; snapshotEvents(): readonly unknown[] }
     messages: ReadonlyArray<{ seq: number; text: string }>
     signal: AbortSignal

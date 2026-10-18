@@ -3,7 +3,8 @@ import type { NativeSurfaceClient } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { createPluginReadGate, useFeatureRefresh, useNativeSeat } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { Button, IconChevronDownOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
-import { createModelSettingsSubscriber } from '@klarkxy/dsh-plugin-kit/model-settings-client'
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import {
   MODEL_CATALOG_INJECT, readModelCatalog, modelMenuEffortLabel, modelMenuEffortOptions, parseModelMenuChoices,
 } from '@klarkxy/dsh-model-route'
@@ -347,7 +348,9 @@ declare module '@deepseek-ai/cordis' {
 
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
-  const settingsSubscriber = createModelSettingsSubscriber(ctx, '@klarkxy/dsh-current-title')
+  const packageName = '@klarkxy/dsh-current-title'
+  mountModelSettingsChanges(ctx, packageName)
+  const settingsSubscriber = createModelSettingsSubscriber(ctx, packageName, modelSettingsChangesIdentity(packageName))
   const subscribeSettings = (change: () => void, error?: (message: string) => void) => settingsSubscriber.subscribe(change, error)
   const marker = createTitleClientMarker()
   ctx.provide(TITLE_CLIENT_SERVICE, marker)

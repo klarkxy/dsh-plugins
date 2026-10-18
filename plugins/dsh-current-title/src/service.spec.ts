@@ -81,6 +81,36 @@ function store(initial?: TitleSettings) {
 }
 
 describe('CurrentTitleService', () => {
+  it('waits for cancelled generation cleanup before completing disposal', async () => {
+    const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>()
+    let generate!: Parameters<SessionTitleServiceLike['register']>[0]['generate']
+    const kit = await import('@klarkxy/dsh-plugin-kit')
+    const spy = vi.spyOn(kit, 'callLlmText').mockImplementation(async (_llm, request) => {
+      entered.resolve()
+      await release.promise
+      request.signal.throwIfAborted()
+      return { text: '', provider: 'p', model: 'm' }
+    })
+    const service = new CurrentTitleService({ plugin: PLUGIN_NAME, llm: llm(),
+      host: { agentDefaultModel: { currentSelection: () => ({ provider: 'p', model: 'm' }) } },
+      sessionTitle: { register(provider) { generate = provider.generate; return async () => {} } } as SessionTitleServiceLike,
+      sessions: { get: () => undefined }, loader: loader([]) })
+    try {
+      await service.start()
+      const work = generate({ session: { id: 's', snapshotEvents: () => [] }, messages: [{ seq: 1, text: 'Fix login' }], signal: new AbortController().signal } as never)
+      const rejected = expect(work).rejects.toThrow(/disabled/)
+      await entered.promise
+      let disposed = false
+      const cleanup = service.dispose().then(() => { disposed = true })
+      await Promise.resolve()
+      expect(disposed).toBe(false)
+      release.resolve()
+      await rejected
+      await cleanup
+      expect(disposed).toBe(true)
+    } finally { release.resolve(); spy.mockRestore() }
+  })
+
   it('stays inert when required host services are missing', async () => {
     const services = llm()
     const update = vi.fn()
