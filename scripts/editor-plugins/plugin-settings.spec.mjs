@@ -17,12 +17,40 @@ function host(initial = []) {
   const injected = []
   const effects = []
   const calls = []
+  const mounted = []
+  const unmounts = []
   const credentials = { describe: async () => ({ ok: true, value: {} }), set: async () => { throw new Error('Unexpected credential write') }, unset: async () => { throw new Error('Unexpected credential delete') } }
   const ctx = {
-    effect(run) { const dispose = run(); if (typeof dispose === 'function') effects.push(dispose) },
+    inject(deps, callback) {
+      injected.push(deps.join(','))
+      const cleanups = []
+      callback({
+        remote: ctx.remote,
+        effect(run) {
+          const dispose = run()
+          if (typeof dispose === 'function') cleanups.push(dispose)
+          return dispose
+        },
+      })
+      const dispose = async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup() }
+      effects.push(dispose)
+      return { dispose }
+    },
+    effect(run) {
+      const dispose = run()
+      if (typeof dispose === 'function') effects.push(dispose)
+      else if (dispose && typeof dispose.then === 'function') effects.push(() => dispose)
+    },
     provide(name, value) { ctx[name] = value },
     connection: { rpc: { call: async (channel, endpoint) => { calls.push([channel, endpoint]); return { ok: true, value: { enabled: true } } } } },
-    remote: { credentials, llm: {}, settings: {}, session: {} },
+    remote: {
+      credentials, llm: {}, settings: {}, session: {},
+      async $mount(contribution) {
+        mounted.push(contribution)
+        const unmount = async () => { unmounts.push(contribution) }
+        return unmount
+      },
+    },
     sessions: {}, uiWorkspace: {},
     uiSession: { adapter: { current: { getSnapshot: () => ({}), subscribe: () => () => {} } } },
     locale: { getSnapshot: () => ({ active: 'en' }), subscribe: () => () => {} },
@@ -47,11 +75,11 @@ function host(initial = []) {
     },
   }
   return {
-    ctx, registered, injected, calls,
+    ctx, registered, injected, calls, mounted, unmounts,
     declare(name) { declared.add(name); for (const watcher of watchers.get(name) ?? []) watcher.attach() },
     undeclare(name) { declared.delete(name); for (const watcher of watchers.get(name) ?? []) watcher.detach() },
-    dispose() {
-      for (const dispose of effects.splice(0).reverse()) dispose()
+    async dispose() {
+      for (const dispose of effects.splice(0).reverse()) await dispose()
       // Cordis also disposes direct slots.inject() registrations owned by this context.
       for (const listeners of watchers.values()) { for (const watcher of listeners) watcher.detach(); listeners.clear() }
     },
@@ -93,15 +121,19 @@ describe('plugin settings page registrations', () => {
       expect(configs()).toEqual([])
       h.declare(slot); h.declare(slot)
       expect(configs()).toHaveLength(1)
-      h.dispose(); h.dispose(); h.declare(slot)
+      await h.dispose(); await h.dispose(); h.declare(slot)
       expect(h.registered).toEqual([])
+      if (pkg === '@klarkxy/dsh-current-title') {
+        expect(h.mounted.map(contribution => contribution.package)).toEqual([pkg])
+        expect(h.unmounts).toEqual(h.mounted)
+      }
     })
 
     it(`${pkg} cancels a pending registration on unload`, async () => {
       const h = host()
       apply(h.ctx)
       await settle()
-      h.dispose()
+      await h.dispose()
       h.declare(slot)
       expect(h.registered).toEqual([])
     })

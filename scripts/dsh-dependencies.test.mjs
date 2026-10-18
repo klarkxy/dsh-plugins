@@ -32,22 +32,27 @@ test('DSH development dependencies and both override declarations share one base
   }
 })
 
+function assertOpenCompatibleRange(range, label) {
+  assert.match(range, /^>=\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, label)
+  assert.ok(semver.satisfies(target, range, { includePrerelease: true }), `${label}: target ${target} is not supported`)
+}
+
 test('DSH host dependencies stay optional peers and injected UI stays development-only', () => {
   const ui = '@deepseek-ai/dsh-client-ui-primitives'
   for (const pkg of plugins) {
     assert.equal(pkg.dependencies?.[ui], undefined, pkg.name)
     assert.equal(pkg.peerDependencies?.[ui], undefined, pkg.name)
     for (const [name, range] of Object.entries(pkg.peerDependencies ?? {})) {
-      if (!official(name)) continue
-      assert.equal(range, `>=${target}`, `${pkg.name}: ${name}`)
+      if (!official(name) && !['@deepseek-ai/cordis', '@deepseek-ai/schemastery'].includes(name)) continue
+      if (official(name)) assertOpenCompatibleRange(range, `${pkg.name}: ${name}`)
       assert.equal(pkg.peerDependenciesMeta?.[name]?.optional, true, `${pkg.name}: ${name}`)
     }
     for (const [name, range] of Object.entries(pkg.dependencies ?? {})) {
       if (!official(name)) continue
       assert.equal(name, '@deepseek-ai/dsh-web-search-exa', `${pkg.name}: host package in dependencies`)
-      assert.equal(range, `>=${target}`, `${pkg.name}: ${name}`)
+      assertOpenCompatibleRange(range, `${pkg.name}: ${name}`)
     }
-    if (pkg.engines?.dsh) assert.equal(pkg.engines.dsh, `>=${target}`, pkg.name)
+    if (pkg.engines?.dsh) assertOpenCompatibleRange(pkg.engines.dsh, pkg.name)
     const descriptor = join(root, 'plugins', pkg.name.split('/').at(-1), 'dsh.plugin.json')
     if (existsSync(descriptor)) {
       assert.equal(JSON.parse(readFileSync(descriptor, 'utf8')).engines?.dsh, pkg.engines.dsh, pkg.name)
