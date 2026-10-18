@@ -1,6 +1,12 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { StringDecoder } from 'node:string_decoder'
 
+/** Only OS/runtime discovery facts cross the default CLI boundary. CLI-specific login configuration must opt in. */
+export function cliEnvironment(parent: NodeJS.ProcessEnv = process.env, extra: readonly string[] = []): NodeJS.ProcessEnv {
+  const allowed = new Set(['PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)', 'TEMP', 'TMP', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'SSL_CERT_FILE', 'SSL_CERT_DIR', ...extra.map(key => key.toUpperCase())])
+  return Object.fromEntries(Object.entries(parent).filter(([key, value]) => value !== undefined && !key.toUpperCase().startsWith('DSH_') && allowed.has(key.toUpperCase())))
+}
+
 /** A resolved executable, never a shell command or an argument string. */
 export type CliExecutable = { command: string; args?: string[]; env?: NodeJS.ProcessEnv; displayPath: string }
 export type CliOutput = { stdout: string; stderr: string; exitCode: number }
@@ -24,7 +30,7 @@ export async function runCli(executable: CliExecutable, args: string[], options:
   let child: ChildProcessWithoutNullStreams
   try {
     child = (options.spawnChild ?? spawn)(executable.command, [...(executable.args ?? []), ...args], {
-      cwd: options.cwd, env: executable.env ?? process.env, shell: false,
+      cwd: options.cwd, env: executable.env ?? cliEnvironment(), shell: false,
       windowsHide: true, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'],
     }) as ChildProcessWithoutNullStreams
   } catch { throw new CliProcessError('unavailable', 'Unable to start the official CLI.') }
@@ -40,7 +46,7 @@ export async function runCli(executable: CliExecutable, args: string[], options:
     const pid = child.pid
     if (pid && process.platform === 'win32') {
       await new Promise<void>(resolve => {
-        const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, shell: false, stdio: 'ignore' })
+        const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { env: cliEnvironment(), windowsHide: true, shell: false, stdio: 'ignore' })
         let timer: ReturnType<typeof setTimeout>
         const done = () => { clearTimeout(timer); resolve() }
         killer.once('error', () => { child.kill(); done() })

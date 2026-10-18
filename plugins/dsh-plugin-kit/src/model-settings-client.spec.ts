@@ -3,7 +3,8 @@ import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { createModelSettingsSubscriber, modelSettingsChangesRemote, parseModelSettingsChangeFrame,
+import { modelSettingsChangesIdentity } from './contracts.ts'
+import { createModelSettingsSubscriber, modelSettingsChangesRemote, mountModelSettingsChanges, parseModelSettingsChangeFrame,
   type ModelSettingsSubscriberContext, type ModelSettingsSubscriberScope } from './model-settings-client.ts'
 import { notifyModelSettingsChanged } from './model-settings.ts'
 
@@ -38,14 +39,16 @@ function channel(signal: AbortSignal) {
   }
 }
 async function settle() { for (let i = 0; i < 12; i++) await Promise.resolve() }
-function harness(namespace = 'owner') {
+const OWNER = '@klarkxy/dsh-git-commit'
+function harness(packageName = OWNER, accept?: (ns: string) => boolean) {
   const generations: ReturnType<typeof channel>[] = []
   const cleanups: (() => void | Promise<void>)[] = []
   let scopeCallback: ((scope: ModelSettingsSubscriberScope) => void) | undefined
   const nativeStreams: InstanceType<typeof RemoteStream>[] = []
+  const endpoint = modelSettingsChangesIdentity(packageName)
   const scope: ModelSettingsSubscriberScope = {
     remote: {
-      modelSettingsChanges: { watch(signal) { const stream = channel(signal); generations.push(stream); return stream } },
+      [endpoint.namespace]: { watch(signal) { const stream = channel(signal); generations.push(stream); return stream } },
       $stream(options) {
         const stream = new RemoteStream({ generation: { getSnapshot: () => 1, subscribe: () => () => {} } }, options)
         nativeStreams.push(stream)
@@ -60,7 +63,7 @@ function harness(namespace = 'owner') {
     callback(scope)
     return { dispose: disposeScope }
   })
-  const subscriber = createModelSettingsSubscriber({ inject }, namespace)
+  const subscriber = createModelSettingsSubscriber({ inject }, packageName, endpoint, accept)
   return { subscriber, inject, generations, nativeStreams, unload: disposeScope, remount: () => scopeCallback!(scope) }
 }
 
@@ -76,7 +79,7 @@ describe('model settings native stream subscriber', () => {
     expect(first).toHaveBeenCalledTimes(1)
     expect(second).toHaveBeenCalledTimes(1)
     h.generations[0]!.push({ kind: 'changed', ns: 'other', revision: 4 })
-    h.generations[0]!.push({ kind: 'changed', ns: 'owner', revision: 5 })
+    h.generations[0]!.push({ kind: 'changed', ns: OWNER, revision: 5 })
     await settle()
     expect(first).toHaveBeenCalledTimes(2)
     off1()
@@ -87,7 +90,8 @@ describe('model settings native stream subscriber', () => {
   })
 
   it('uses authentic native carrier recovery and invalidates all listeners on the replacement ready', async () => {
-    const h = harness('*'), change = vi.fn(), error = vi.fn()
+    const hub = '@klarkxy/dsh-model-hub'
+    const h = harness(hub, () => true), change = vi.fn(), error = vi.fn()
     const off = h.subscriber.subscribe(change, error)
     h.generations[0]!.push({ kind: 'ready' })
     await settle()
@@ -113,11 +117,11 @@ describe('model settings native stream subscriber', () => {
     expect(h.generations).toHaveLength(1)
     off()
     const next = h.subscriber.subscribe(change, error)
-    h.generations[1]!.push({ kind: 'changed', ns: 'owner', revision: 1 })
+    h.generations[1]!.push({ kind: 'changed', ns: OWNER, revision: 1 })
     await settle()
     expect(error.mock.calls.at(-1)![0]).toContain('before ready')
     next()
-    const missing = createModelSettingsSubscriber({ inject: () => ({ dispose() {} }) } as ModelSettingsSubscriberContext, 'owner')
+    const missing = createModelSettingsSubscriber({ inject: () => ({ dispose() {} }) } as ModelSettingsSubscriberContext, OWNER)
     const stop = missing.subscribe(change, error)
     await settle()
     expect(error.mock.calls.at(-1)![0]).toContain('unavailable')
@@ -140,11 +144,14 @@ describe('model settings native stream subscriber', () => {
   })
 
   it('uses a strict no-argument cancellation-aware stream descriptor', () => {
-    const descriptor = modelSettingsChangesRemote.descriptors[0]!
+    const descriptor = modelSettingsChangesRemote(OWNER).descriptors[0]!
+    expect(modelSettingsChangesIdentity(OWNER)).toEqual({ service: 'KlarkxyDshGitCommitModelSettingsChanges', namespace: 'KlarkxyDshGitCommitModelSettingsChanges' })
+    expect(descriptor.service).toBe('KlarkxyDshGitCommitModelSettingsChanges')
+    expect(descriptor.namespace).toBe('KlarkxyDshGitCommitModelSettingsChanges')
     expect(descriptor.mode).toBe('stream')
     expect(descriptor.parameters).toEqual([])
     expect(descriptor.cancellation).toEqual({ parameter: 'signal' })
-    expect(parseModelSettingsChangeFrame({ kind: 'changed', ns: 'owner', revision: 0 })).toEqual({ kind: 'changed', ns: 'owner', revision: 0 })
+    expect(parseModelSettingsChangeFrame({ kind: 'changed', ns: OWNER, revision: 0 })).toEqual({ kind: 'changed', ns: OWNER, revision: 0 })
     for (const value of [{ kind: 'ready', revision: 1 }, { kind: 'changed', ns: '', revision: 1 }, { kind: 'changed', ns: 'x', revision: -1 }]) {
       expect(() => descriptor.result.create().parse(value)).toThrow('Invalid')
     }
@@ -176,7 +183,7 @@ describe('model settings native stream subscriber', () => {
       // optional child must declare both the container and its namespace.
       // This assignment proves the public structural Context accepts native
       // Cordis without application-specific casts at each caller.
-      const subscriber = createModelSettingsSubscriber(ctx, 'owner')
+      const subscriber = createModelSettingsSubscriber(ctx, OWNER)
       off = subscriber.subscribe(() => { status = ''; changes++ }, message => { status = message })
       ctx.effect(() => off)
     } })
@@ -184,7 +191,7 @@ describe('model settings native stream subscriber', () => {
     await settle()
     expect(status).toContain('unavailable')
     const remote = ownerScope.get('remote')
-    const unmount = await remote.$mount(modelSettingsChangesRemote)
+    const unmount = await remote.$mount(modelSettingsChangesRemote(OWNER))
     await settle()
     expect(generations).toHaveLength(1)
     generations[0]!.push({ kind: 'ready' })
@@ -194,7 +201,7 @@ describe('model settings native stream subscriber', () => {
     await unmount()
     await settle()
     expect(status).toContain('unavailable')
-    const remounted = await remote.$mount(modelSettingsChangesRemote)
+    const remounted = await remote.$mount(modelSettingsChangesRemote(OWNER))
     await settle()
     expect(generations).toHaveLength(2)
     generations[1]!.push({ kind: 'ready' })
@@ -202,11 +209,68 @@ describe('model settings native stream subscriber', () => {
     expect(status).toBe('')
     expect(changes).toBe(2)
     await consumer.dispose()
-    generations[1]!.push({ kind: 'changed', ns: 'owner', revision: 8 })
+    generations[1]!.push({ kind: 'changed', ns: OWNER, revision: 8 })
     await settle()
     expect(changes).toBe(2)
     await remounted()
     } finally { await root.fiber.dispose() }
+  })
+
+  it('mounts one contribution per owner and withdraws a mount that is still in flight', async () => {
+    const root = new Context()
+    const mounted: string[] = []
+    let release: ((unmount: () => Promise<void>) => void) | undefined
+    const pending = new Promise<() => Promise<void>>(resolve => { release = resolve })
+    root.provide('remote', { $mount: async (contribution: { package: string }) => {
+      mounted.push(contribution.package)
+      if (contribution.package === '@klarkxy/dsh-current-title') return pending
+      return async () => {
+        const index = mounted.indexOf(contribution.package)
+        if (index >= 0) mounted.splice(index, 1)
+      }
+    } })
+    const first = root.plugin({ apply: ctx => { mountModelSettingsChanges(ctx, OWNER) } })
+    const second = root.plugin({ apply: ctx => { mountModelSettingsChanges(ctx, '@klarkxy/dsh-current-title') } })
+    await first; await second
+    await settle()
+    expect(mounted).toEqual([OWNER, '@klarkxy/dsh-current-title'])
+    let withdrawn = false
+    const unloading = second.dispose()
+    release!(async () => {
+      withdrawn = true
+      const index = mounted.indexOf('@klarkxy/dsh-current-title')
+      if (index >= 0) mounted.splice(index, 1)
+    })
+    await unloading
+    expect(withdrawn).toBe(true)
+    await first.dispose()
+    expect(mounted).toEqual([])
+    await root.fiber.dispose()
+  })
+
+  it('withdraws an in-flight mount exactly once', async () => {
+    const root = new Context()
+    let release: ((unmount: () => Promise<void>) => void) | undefined
+    const pending = new Promise<() => Promise<void>>(resolve => { release = resolve })
+    const unmount = vi.fn(async () => {})
+    root.provide('remote', { $mount: async () => pending })
+    const plugin = root.plugin({ apply: ctx => { mountModelSettingsChanges(ctx, OWNER) } })
+    await plugin
+    const unloading = plugin.dispose()
+    release!(unmount)
+    await unloading
+    expect(unmount).toHaveBeenCalledTimes(1)
+    await root.fiber.dispose()
+  })
+
+  it('settles disposal when the mount is rejected', async () => {
+    const root = new Context()
+    const rejection = Promise.reject(new Error('mount failed'))
+    root.provide('remote', { $mount: async () => rejection })
+    const plugin = root.plugin({ apply: ctx => { mountModelSettingsChanges(ctx, OWNER) } })
+    await plugin
+    await expect(plugin.dispose()).resolves.toBeUndefined()
+    await root.fiber.dispose()
   })
 
   it('never fails an already committed save because a notification observer fails', async () => {

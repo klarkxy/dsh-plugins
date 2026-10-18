@@ -17,6 +17,9 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
+      "@klarkxy/dsh-plugin-kit/model-settings-changes": [
+        "plugins/dsh-plugin-kit/src/model-settings-changes.ts"
+      ],
       "@klarkxy/dsh-plugin-kit/model-settings-client": [
         "plugins/dsh-plugin-kit/src/model-settings-client.ts"
       ],

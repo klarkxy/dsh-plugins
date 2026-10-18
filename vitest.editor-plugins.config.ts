@@ -27,6 +27,7 @@ export default defineConfig({
       "@klarkxy/dsh-plugin-kit/host-rpc": root + "plugins/dsh-plugin-kit/src/host-rpc.ts",
       "@klarkxy/dsh-plugin-kit/domain": root + "plugins/dsh-plugin-kit/src/domain.ts",
       "@klarkxy/dsh-plugin-kit/model-settings": root + "plugins/dsh-plugin-kit/src/model-settings.ts",
+      "@klarkxy/dsh-plugin-kit/model-settings-changes": root + "plugins/dsh-plugin-kit/src/model-settings-changes.ts",
       "@klarkxy/dsh-plugin-kit/model-settings-client": root + "plugins/dsh-plugin-kit/src/model-settings-client.ts",
       "@klarkxy/dsh-plugin-kit/client-utils": root + "plugins/dsh-plugin-kit/src/client-utils.ts",
       "@klarkxy/dsh-plugin-kit/model-menu": root + "plugins/dsh-plugin-kit/src/model-menu.ts",

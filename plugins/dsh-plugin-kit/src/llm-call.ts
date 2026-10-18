@@ -23,6 +23,8 @@ export interface LlmTextRequest {
   sessionId?: string
   /** Auxiliary-call marker adapters may special-case (e.g. disable thinking for titles). */
   purpose?: GenerateOptions['purpose']
+  /** Pure control selection using the exact model captured for this call. */
+  configure?: Parameters<LlmRuntime['prepareCall']>[2]
   /** Rechecked before the call returns text. A false result discards the output. */
   isCurrent?: () => boolean
 }
@@ -99,7 +101,9 @@ async function readStream(stream: AsyncIterable<StreamChunk>, signal: AbortSigna
       assembler.push(item.value)
     }
   } finally {
-    try { const closing = iterator.return?.(); if (closing) void closing.catch(() => {}) } catch { /* producer ignored abort */ }
+    // Settlement includes producer cleanup; never leave a detached return()
+    // running after the caller has released its lifecycle ownership.
+    await iterator.return?.()
   }
   return assembler
 }
@@ -115,7 +119,7 @@ export async function callLlmText(llm: LlmTextCaller, request: LlmTextRequest): 
     model: request.route.model,
     ...(effort ? { reasoningEffort: ReasoningEffortId(effort) } : {}),
     maxTokens: request.maxTokens,
-  }, request.signal)
+  }, request.signal, request.configure)
   if (!live()) throw Object.assign(new Error('调用已取消。'), { name: 'AbortError' })
   const options: GenerateOptions = {
     provider: prepared.config.provider,

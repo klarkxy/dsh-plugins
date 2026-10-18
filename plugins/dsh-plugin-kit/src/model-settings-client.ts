@@ -1,5 +1,5 @@
 import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
-import { MODEL_SETTINGS_CHANGES_REMOTE } from './contracts.ts'
+import { modelSettingsChangesIdentity, type ModelSettingsChangesIdentity } from './contracts.ts'
 
 export type ModelSettingsChangeFrame = { kind: 'ready' } | { kind: 'changed'; ns: string; revision: number }
 
@@ -15,13 +15,45 @@ export function parseModelSettingsChangeFrame(value: unknown): ModelSettingsChan
   throw new Error('Invalid model settings change frame')
 }
 
-/** One contribution mounted by Model Hub; consumers only inject its service. */
-export const modelSettingsChangesRemote: TypertRemoteContribution = {
-  package: MODEL_SETTINGS_CHANGES_REMOTE.package,
-  descriptors: MODEL_SETTINGS_CHANGES_REMOTE.descriptors.map(descriptor => ({
-    ...descriptor,
-    result: { mode: 'strict' as const, typeSymbol: 'ModelSettings.ChangeFrame', create: () => ({ parse: parseModelSettingsChangeFrame }) },
-  })),
+/** One owner's contribution. Each package mounts only its own endpoint. */
+export function modelSettingsChangesRemote(packageName: string, identity: ModelSettingsChangesIdentity = modelSettingsChangesIdentity(packageName)): TypertRemoteContribution {
+  return {
+    package: packageName,
+    descriptors: [{
+      id: `${identity.namespace}/watch`,
+      service: identity.service,
+      namespace: identity.namespace,
+      method: 'watch',
+      mode: 'stream' as const,
+      invocation: { kind: 'direct' as const },
+      parameters: [],
+      cancellation: { parameter: 'signal' as const },
+      result: { mode: 'strict' as const, typeSymbol: 'ModelSettings.ChangeFrame', create: () => ({ parse: parseModelSettingsChangeFrame }) },
+    }],
+  }
+}
+
+interface RemoteMountScope {
+  remote: { $mount(contribution: TypertRemoteContribution): Promise<() => Promise<void>> }
+  effect(callback: () => () => void | Promise<void>): unknown
+}
+interface RemoteMountContext {
+  inject(dependencies: string[], callback: (scope: unknown) => void): unknown
+}
+
+/** Mount from a synchronous apply. Disposal waits for an in-flight mount and
+ * then withdraws it, so the contribution cannot outlive the plugin. */
+export function mountModelSettingsChanges(ctx: RemoteMountContext, packageName: string): void {
+  const contribution = modelSettingsChangesRemote(packageName)
+  ctx.inject(['remote'], injected => {
+    const scope = injected as RemoteMountScope
+    const mounting = scope.remote.$mount(contribution)
+    void mounting.catch(() => {})
+    scope.effect(() => async () => {
+      const unmount = await mounting.catch(() => undefined)
+      await unmount?.()
+    })
+  })
 }
 
 interface StreamItem {
@@ -31,15 +63,13 @@ interface StreamItem {
   accept(): void
 }
 interface ChangeStream extends AsyncIterable<StreamItem> { dispose(): Promise<void> }
+type OpenChangeStream = (options: {
+  name: string
+  open(signal: AbortSignal): AsyncIterable<unknown>
+  ended(accepted: boolean): Error
+}) => ChangeStream
 export interface ModelSettingsSubscriberScope {
-  remote: {
-    modelSettingsChanges: { watch(signal: AbortSignal): AsyncIterable<unknown> }
-    $stream(options: {
-      name: string
-      open(signal: AbortSignal): AsyncIterable<unknown>
-      ended(accepted: boolean): Error
-    }): ChangeStream
-  }
+  remote: { $stream: OpenChangeStream } & Record<string, { watch?(signal: AbortSignal): AsyncIterable<unknown> } | OpenChangeStream | undefined>
   effect(callback: () => () => void | Promise<void>): unknown
 }
 export interface ModelSettingsSubscriberContext {
@@ -51,7 +81,13 @@ export interface ModelSettingsSubscriber {
 
 /** Native RemoteStream owns carrier reconnects; no timers or browser transport.
  * A factory shares one logical stream while at least one subscriber remains. */
-export function createModelSettingsSubscriber(ctx: ModelSettingsSubscriberContext, namespace: string): ModelSettingsSubscriber {
+export function createModelSettingsSubscriber(
+  ctx: ModelSettingsSubscriberContext,
+  packageName: string,
+  identity: ModelSettingsChangesIdentity = modelSettingsChangesIdentity(packageName),
+  accept: (ns: string) => boolean = ns => ns === packageName,
+): ModelSettingsSubscriber {
+  const endpoint = identity
   const listeners = new Set<{ change: () => void; error?: (message: string) => void }>()
   let injection: { dispose(): void | Promise<void> } | undefined
   let current: { stream: ChangeStream; active: boolean } | undefined
@@ -73,12 +109,15 @@ export function createModelSettingsSubscriber(ctx: ModelSettingsSubscriberContex
   }
   const start = () => {
     const life = ++lifecycle
-    injection = ctx.inject(['remote', 'remote.modelSettingsChanges'], injected => {
+    injection = ctx.inject(['remote', `remote.${endpoint.namespace}`], injected => {
       if (life !== lifecycle || !listeners.size) return
       const scope = injected as ModelSettingsSubscriberScope
+      const service = scope.remote[endpoint.namespace]
+      if (!service || !('watch' in service) || !service.watch) { report('Model settings sync service unavailable'); return }
+      const watch = service.watch
       const stream = scope.remote.$stream({
         name: 'Model settings sync',
-        open: signal => scope.remote.modelSettingsChanges.watch(signal),
+        open: signal => watch(signal),
         ended: accepted => new Error(`Model settings sync stream ended ${accepted ? 'after' : 'before'} ready; refresh or reopen the page`),
       })
       const session = { stream, active: true }
@@ -109,7 +148,7 @@ export function createModelSettingsSubscriber(ctx: ModelSettingsSubscriberContex
               invalidate()
             } else {
               if (!ready) throw new Error('Model settings sync change arrived before ready')
-              if (namespace === '*' || frame.ns === namespace) invalidate()
+              if (accept(frame.ns)) invalidate()
             }
           }
         } catch (error) {

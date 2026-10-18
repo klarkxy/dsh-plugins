@@ -82,7 +82,7 @@ function host(root: string, mode = 'workspace-write', events: Event[] = []): Med
   const value: MediaHost & { reads: string[] } = {
     sandboxPolicy: { resolve: () => ({ workspaceRoot: root, mode }) },
     attachments: attachments as unknown as MediaHost['attachments'],
-    get: () => ({ readSession: async () => ({ events }) }),
+    get: () => ({ observeSession: async () => ({ events, [Symbol.dispose]() {} }) }),
     reads,
   }
   return Object.assign(value, {
@@ -167,6 +167,17 @@ describe('workspace preflight and path confinement', () => {
 })
 
 describe('current-session attachment authorization', () => {
+  it('passes cancellation to the raw observation and disposes its lease even when cancelled after acquisition', async () => {
+    const root = await directory('dsh-cli-media-'), value = host(root), controller = new AbortController(), dispose = vi.fn()
+    value.get = () => ({ observeSession: async (id: unknown, options: any) => {
+      expect(id).toBe('current'); expect(options).toEqual({ signal: controller.signal, projectionMode: 'none' })
+      controller.abort()
+      return { events: [], [Symbol.dispose]: dispose }
+    } })
+    await expect(stageMedia(value, exec(controller.signal), root, root, [{ attachmentId: 'old', kind: 'image' }])).rejects.toThrow()
+    expect(dispose).toHaveBeenCalledOnce()
+    expect(value.reads).toEqual([])
+  })
   it('stages a user image and a tool-result file without reading a foreign id', async () => {
     const root = await directory('dsh-cli-media-')
     const value = host(root, 'workspace-write', [

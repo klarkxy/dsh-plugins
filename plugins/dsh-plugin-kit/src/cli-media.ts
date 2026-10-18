@@ -4,12 +4,14 @@ import { pipeline } from 'node:stream/promises'
 import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { AttachmentStore, ImageAttachmentRef, FileAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
+import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 
 export type MediaKind = 'image' | 'audio' | 'video'
 export type MediaInput = { path?: string; attachmentId?: string; kind: MediaKind }
-export type MediaExec = { signal: AbortSignal; agent?: { session: { id: unknown } } }
+type MediaSession = NonNullable<ToolRunContext['agent']>['session']
+export type MediaExec = { signal: AbortSignal; agent?: { session: MediaSession } }
 export type MediaHost = {
-  sandboxPolicy: { resolve(input: { session?: unknown }): { workspaceRoot: string; mode: string } };
+  sandboxPolicy: { resolve(input: { session?: MediaSession }): { workspaceRoot: string; mode: string } };
   attachments: AttachmentStore;
   get?(name: string): unknown;
 }
@@ -70,21 +72,23 @@ export async function inspectMedia(path: string, kind: MediaKind): Promise<{ med
 }
 async function sessionAttachments(host: MediaHost, exec: MediaExec): Promise<Map<string, { type: 'image' | 'file'; attachment: ImageAttachmentRef | FileAttachmentRef }>> {
   if (!exec.agent) throw fail('no-session', 'Session attachments need an active session.')
-  const query = host.get?.('sessionQuery') as { readSession(id: unknown): Promise<{ events: unknown[] }> } | undefined
+  const query = host.get?.('sessionQuery') as { observeSession(id: unknown, options: { signal: AbortSignal; projectionMode: 'none' }): Promise<{ events: readonly unknown[]; [Symbol.dispose](): void }> } | undefined
   if (!query) throw fail('no-session-query', 'The host cannot read current-session attachments.')
-  const snapshot = await query.readSession(exec.agent.session.id)
-  exec.signal.throwIfAborted()
-  const result = new Map<string, { type: 'image' | 'file'; attachment: ImageAttachmentRef | FileAttachmentRef }>()
-  for (const raw of snapshot.events) {
-    const event = raw as { type?: string; data?: { content?: unknown; message?: { content?: unknown } } }
-    if (event.type !== 'user/message' && event.type !== 'tool/result') continue
-    const content = event.data?.content ?? event.data?.message?.content
-    if (!Array.isArray(content)) continue
-    for (const block of content) {
-      if ((block?.type === 'image' || block?.type === 'file') && typeof block.attachment?.attachmentId === 'string') result.set(block.attachment.attachmentId, block)
+  const snapshot = await query.observeSession(exec.agent.session.id, { signal: exec.signal, projectionMode: 'none' })
+  try {
+    exec.signal.throwIfAborted()
+    const result = new Map<string, { type: 'image' | 'file'; attachment: ImageAttachmentRef | FileAttachmentRef }>()
+    for (const raw of snapshot.events) {
+      const event = raw as { type?: string; data?: { content?: unknown; message?: { content?: unknown } } }
+      if (event.type !== 'user/message' && event.type !== 'tool/result') continue
+      const content = event.data?.content ?? event.data?.message?.content
+      if (!Array.isArray(content)) continue
+      for (const block of content) {
+        if ((block?.type === 'image' || block?.type === 'file') && typeof block.attachment?.attachmentId === 'string') result.set(block.attachment.attachmentId, block)
+      }
     }
-  }
-  return result
+    return result
+  } finally { snapshot[Symbol.dispose]() }
 }
 async function* bounded(chunks: AsyncIterable<Uint8Array>, max: number, signal: AbortSignal): AsyncIterable<Uint8Array> {
   let bytes = 0

@@ -163,23 +163,24 @@ export function projectIdFromCwd(cwd: string | undefined): string | undefined {
 }
 
 /**
- * Remote contribution for model-settings change notifications.
- * Provided by `@klarkxy/dsh-model-hub` (`ModelSettingsChangesController`);
- * subscribers degrade silently when that package is not installed.
- * The stream carries invalidations only — `ready` is never a settings snapshot.
+ * One settings owner's Remote stream. Typert accepts either case in an RPC
+ * segment, so the Cordis service key and the wire namespace use the same
+ * Pascal segment. The scope's first letter stays uppercase.
  */
-export const MODEL_SETTINGS_CHANGES_REMOTE = {
-  package: '@klarkxy/dsh-model-hub',
-  descriptors: [{
-    id: 'modelSettingsChanges/watch',
-    service: 'modelSettingsChangesController',
-    namespace: 'modelSettingsChanges',
-    method: 'watch',
-    mode: 'stream' as const,
-    invocation: { kind: 'direct' as const },
-    parameters: [] as const,
-    cancellation: { parameter: 'signal' as const },
-  }],
+export interface ModelSettingsChangesIdentity {
+  readonly service: string
+  readonly namespace: string
+}
+
+/** `@klarkxy/dsh-git-commit` becomes `KlarkxyDshGitCommitModelSettingsChanges`. */
+export function modelSettingsChangesIdentity(packageName: string): ModelSettingsChangesIdentity {
+  const scoped = /^@([^/]+)\/(.+)$/.exec(packageName)
+  const body = scoped ? `${scoped[1]}/${scoped[2]}` : packageName
+  const parts = body.split(/[^A-Za-z0-9]+/).filter(Boolean)
+  if (!parts.length) throw new Error('Model settings package name has no RPC segment')
+  const segment = `${parts.map(part => part.charAt(0).toUpperCase() + part.slice(1)).join('')}ModelSettingsChanges`
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(segment)) throw new Error(`Model settings sync name is not an RPC segment: ${segment}`)
+  return { service: segment, namespace: segment }
 }
 
 /**
