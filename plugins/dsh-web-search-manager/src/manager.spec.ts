@@ -4,6 +4,7 @@ import { WebRuntime, WebError } from '@deepseek-ai/dsh-web'
 import { WebSearchManager } from './manager.ts'
 import { defaultSettings, type WebSettings } from './contracts.ts'
 import { searchProviderInfo } from './provider-info.ts'
+import { BraveSearchProvider } from './rest-search.ts'
 
 const fixtures: WebSearchManager[] = []
 afterEach(async () => { await Promise.all(fixtures.splice(0).map(manager => manager.dispose())); vi.unstubAllEnvs() })
@@ -134,15 +135,52 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
     expect(manager.status().providers).toHaveLength(0)
     await expect(web.search({ query: 'hello' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
   })
-  it('cancels an in-flight adapter even if that adapter ignores cancellation', async () => {
+  it('waits for real provider cleanup after cancellation and through disposal', async () => {
     const { manager, web, search } = setup()
-    search.mockImplementationOnce(() => new Promise(() => {}))
+    let release!: () => void
+    search.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve({ sources: [], truncated: false }) }))
     await update(manager, { searchEnabled: true, searchProvider: 'exa', searchOrder: ['exa'] })
-    const pending = web.search({ query: 'slow' }).catch(error => error)
+    let settled = false
+    const pending = web.search({ query: 'slow' }).catch(error => error).finally(() => { settled = true })
     await vi.waitFor(() => expect(search).toHaveBeenCalledOnce())
     await update(manager, { searchEnabled: false })
+    let disposed = false
+    const disposal = manager.dispose().then(() => { disposed = true })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    expect(disposed).toBe(false)
+    release()
     expect(await pending).toMatchObject({ code: 'WEB_ABORTED' })
+    await disposal
+    expect(disposed).toBe(true)
   })
+  it('forwards the deadline to a builtin fetch and waits for transport cleanup', async () => {
+    const { manager, web } = setup()
+    let transportSignal!: AbortSignal
+    let cleanup!: () => void
+    const transport = vi.fn((_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      transportSignal = init!.signal!
+      return new Promise((_resolve, reject) => {
+        transportSignal.addEventListener('abort', () => { cleanup = () => reject(transportSignal.reason) }, { once: true })
+      })
+    })
+    manager.registerSearchProvider({ id: 'brave', label: 'Brave', description: '', billing: 'request' },
+      () => new BraveSearchProvider({ apiKey: 'fixture', fetch: transport }))
+    await update(manager, { searchEnabled: true, searchOrder: ['brave'], timeoutMs: 1000 })
+    vi.useFakeTimers()
+    try {
+      let settled = false
+      const request = web.search({ query: 'deadline' }).catch(error => error).finally(() => { settled = true })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(transport).toHaveBeenCalledOnce()
+      expect(transportSignal.aborted).toBe(true)
+      expect(settled).toBe(false)
+      cleanup()
+      expect(await request).toMatchObject({ code: 'WEB_ABORTED' })
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { vi.useRealTimers() }
+  })
+
   it('does not start a request whose caller was already cancelled', async () => {
     const { manager, web, search } = setup()
     await update(manager, { searchEnabled: true, searchProvider: 'exa', searchOrder: ['exa'] })

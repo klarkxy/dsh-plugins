@@ -17,6 +17,20 @@ describe('secret-free settings contract', () => {
     expect(storedSettingsSchema.parse(rest).searchOrder).toEqual(['ddg'])
     expect(storedSettingsSchema.parse({ ...defaultSettings(), searchOrder: [] }).searchOrder).toEqual([])
   })
+  it('migrates legacy fetch selection and preserves an explicit empty order', () => {
+    const { fetchOrder: _fetchOrder, ...legacy } = defaultSettings()
+    expect(storedSettingsSchema.parse({ ...legacy, fetchProvider: 'custom' }).fetchOrder).toEqual(['custom'])
+    expect(storedSettingsSchema.parse({ ...legacy, fetchProvider: '' }).fetchOrder).toEqual([])
+    expect(storedSettingsSchema.parse({ ...legacy, fetchOrder: [] }).fetchOrder).toEqual([])
+    expect(settingsSchema.safeParse(legacy).success).toBe(false)
+  })
+  it('accepts old RPC clients without inventing fetchOrder before manager compatibility handling', () => {
+    const { revision: _revision, fetchOrder: _fetchOrder, ...settings } = defaultSettings()
+    const parsed = updateSchema.parse({ settings, expectedRevision: 0 })
+    expect(parsed.settings.fetchOrder).toBeUndefined()
+    expect(updateSchema.safeParse({ settings: { ...settings, fetchOrder: [''] }, expectedRevision: 0 }).success).toBe(false)
+    expect(updateSchema.safeParse({ settings: { ...settings, fetchOrder: Array(33).fill('http') }, expectedRevision: 0 }).success).toBe(false)
+  })
   it('rejects updates that omit searchOrder', () => {
     const { revision: _revision, searchOrder: _searchOrder, ...settings } = defaultSettings()
     expect(updateSchema.safeParse({ settings, expectedRevision: 0 }).success).toBe(false)

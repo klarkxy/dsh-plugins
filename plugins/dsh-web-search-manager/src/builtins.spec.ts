@@ -27,9 +27,9 @@ describe('builtin web providers', () => {
     await manager.refresh()
     const providers = manager.status().providers
     expect(providers.map(row => `${row.kind}:${row.id}`).sort()).toEqual([
-      'fetch:http-managed',
+      'fetch:firecrawl', 'fetch:http-managed',
       'search:bocha', 'search:brave', 'search:ddg', 'search:deepseek-managed',
-      'search:exa', 'search:firecrawl', 'search:serper', 'search:tavily',
+      'search:exa', 'search:firecrawl', 'search:perplexity', 'search:serper', 'search:tavily', 'search:you',
     ])
     expect(providers.find(row => row.id === 'ddg')).toMatchObject({
       kind: 'search', billing: 'none', configured: true, label: 'DuckDuckGo',
@@ -41,6 +41,12 @@ describe('builtin web providers', () => {
     expect(providers.find(row => row.id === 'http-managed')).toMatchObject({
       kind: 'fetch', configured: true, billing: 'none',
     })
+    expect(manager.status().settings).toMatchObject({ searchOrder: ['ddg'], fetchOrder: ['http-managed'] })
+    for (const id of ['perplexity', 'you', 'firecrawl']) {
+      expect(providers.filter(row => row.id === id).every(row => !row.configured && row.billing === 'request')).toBe(true)
+    }
+    expect(providers.filter(row => row.id === 'firecrawl')).toHaveLength(2)
+    expect(providers.filter(row => row.id === 'firecrawl').every(row => row.credentialShared && row.credentialRef === 'DSH_EDITOR_WEB_FIRECRAWL_API_KEY')).toBe(true)
     off()
     expect(manager.status().providers).toHaveLength(0)
   })
@@ -67,7 +73,7 @@ describe('integrated Tavily configuration compatibility', () => {
     expect(manager.status().providers.find(row => row.id === 'tavily')).toMatchObject({
       configured: true, credentialRef: 'DSH_EDITOR_WEB_TAVILY_API_KEY', baseURL: initial.endpoints['search:tavily'],
     })
-    expect(manager.status().settings).toEqual({ ...original, fetchProvider: 'http-managed' })
+    expect(manager.status().settings).toEqual({ ...original, fetchProvider: 'http-managed', fetchOrder: ['http-managed'] })
     expect(initial).toEqual(original)
     expect(save).not.toHaveBeenCalled()
     if (searchEnabled) {

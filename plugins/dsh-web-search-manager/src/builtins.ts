@@ -10,7 +10,8 @@ import { ExaSearchProvider } from '@deepseek-ai/dsh-web-search-exa'
 import { HttpFetchProvider } from '@deepseek-ai/dsh-web-fetch-http'
 import { JinaFirstFetchProvider } from './jina-fetch.ts'
 import { SEARCH_ENGINE_ID, SearchEngineProvider } from './search-engine.ts'
-import { BochaSearchProvider, BraveSearchProvider, FirecrawlSearchProvider, SerperSearchProvider } from './rest-search.ts'
+import { BochaSearchProvider, BraveSearchProvider, FirecrawlSearchProvider, PerplexitySearchProvider, YouSearchProvider, SerperSearchProvider } from './rest-search.ts'
+import { FirecrawlFetchProvider } from './firecrawl-fetch.ts'
 import { TavilySearchProvider } from './tavily.ts'
 import { registerNativeSearch, registerNativeFetch, type ProviderConfiguration } from './native-providers.ts'
 import { hasWebProvider, type WebRegistry } from './web-registry.ts'
@@ -74,7 +75,7 @@ export function registerBuiltins(web: WebRegistry, configuration: ProviderConfig
     registerSearch({
       id: 'firecrawl', label: 'Firecrawl', description: '网页搜索与提取 API。',
       defaultBaseURL: 'https://api.firecrawl.dev', credentialRef: 'DSH_EDITOR_WEB_FIRECRAWL_API_KEY', billing: 'request',
-      signupUrl: 'https://www.firecrawl.dev',
+      credentialShared: true, credentialHint: '与 Firecrawl 网页读取共用 Key', signupUrl: 'https://www.firecrawl.dev',
     }, options => new FirecrawlSearchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL }))
     registerSearch({
       id: 'tavily', label: 'Tavily', defaultBaseURL: 'https://api.tavily.com',
@@ -82,6 +83,16 @@ export function registerBuiltins(web: WebRegistry, configuration: ProviderConfig
       credentialRef: 'DSH_EDITOR_WEB_TAVILY_API_KEY', billing: 'request',
       signupUrl: 'https://app.tavily.com',
     }, options => new TavilySearchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL }))
+    registerSearch({
+      id: 'perplexity', label: 'Perplexity', description: 'Search API；返回网页来源，不生成回答。',
+      defaultBaseURL: 'https://api.perplexity.ai', credentialRef: 'DSH_EDITOR_WEB_PERPLEXITY_API_KEY', billing: 'request',
+      signupUrl: 'https://console.perplexity.ai',
+    }, options => new PerplexitySearchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL }))
+    registerSearch({
+      id: 'you', label: 'You.com', description: '网页与新闻搜索；不额外提取全文。',
+      defaultBaseURL: 'https://ydc-index.io', credentialRef: 'DSH_EDITOR_WEB_YOU_API_KEY', billing: 'request',
+      signupUrl: 'https://you.com/platform',
+    }, options => new YouSearchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL }))
     registerFetch({
       id: 'http-managed', legacyId: 'http', label: '网页读取', billing: 'none',
       description: '优先匿名 Jina Reader 读取，失败后本机 HTTP 直连；无需 Key。',
@@ -98,6 +109,11 @@ export function registerBuiltins(web: WebRegistry, configuration: ProviderConfig
         readerTimeoutMs,
       })
     })
+    registerFetch({
+      id: 'firecrawl', label: 'Firecrawl', description: '读取网页 Markdown；与 Firecrawl 搜索共用 Key。',
+      defaultBaseURL: 'https://api.firecrawl.dev', credentialRef: 'DSH_EDITOR_WEB_FIRECRAWL_API_KEY', billing: 'request',
+      credentialShared: true, credentialHint: '与 Firecrawl 搜索共用 Key', signupUrl: 'https://www.firecrawl.dev',
+    }, options => new FirecrawlFetchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL, maxFetchChars: options.maxFetchChars }))
   } catch (error) { for (const off of registered.reverse()) off(); throw error }
   return () => { for (const off of registered.splice(0).reverse()) off() }
 }

@@ -28,6 +28,7 @@ export interface WebSettings {
   searchProvider: string
   fetchProvider: string
   searchOrder: string[]
+  fetchOrder: string[]
   maxResults: number
   maxQueries: number
   timeoutMs: number
@@ -38,7 +39,7 @@ export const DEFAULT_SEARCH_ORDER = ['ddg'] as const
 
 export const defaultSettings = (): WebSettings => ({
   revision: 0, searchEnabled: true, fetchEnabled: true,
-  searchProvider: 'ddg', fetchProvider: 'http', searchOrder: [...DEFAULT_SEARCH_ORDER],
+  searchProvider: 'ddg', fetchProvider: 'http', searchOrder: [...DEFAULT_SEARCH_ORDER], fetchOrder: ['http'],
   maxResults: 5, maxQueries: 1,
   timeoutMs: 30_000, maxFetchChars: 100_000, endpoints: {},
 })
@@ -50,6 +51,11 @@ export function defaultSearchOrder(ids: readonly string[], keyed: (id: string) =
 
 export function migrateSearchOrder(settings: { searchOrder?: string[]; searchProvider?: string }): string[] {
   return settings.searchOrder ?? (settings.searchProvider ? [settings.searchProvider] : [...DEFAULT_SEARCH_ORDER])
+}
+
+/** Missing order is a legacy single selection; an empty selection never opts in. */
+export function migrateFetchOrder(settings: { fetchOrder?: string[]; fetchProvider?: string }): string[] {
+  return settings.fetchOrder ?? (settings.fetchProvider ? [settings.fetchProvider] : [])
 }
 
 export function resolveSearchOrder(

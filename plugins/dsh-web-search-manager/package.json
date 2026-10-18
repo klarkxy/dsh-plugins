@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-web-search-manager",
-  "version": "0.2.4",
-  "description": "Web Search: manage web search providers and public-page fetching from one settings page.",
+  "version": "0.3.0",
+  "description": "Manage and rank search and page-reading services, including providers from installed plugins, in one settings page.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",

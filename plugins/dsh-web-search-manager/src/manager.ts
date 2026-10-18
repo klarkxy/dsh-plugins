@@ -3,7 +3,7 @@ import { providerError } from './provider-error.ts'
 import { observeWebRegistry, type WebRegistry, type NativeProvider } from './web-registry.ts'
 import { registerNativeSearch, registerNativeFetch, type ProviderConfiguration } from './native-providers.ts'
 import {
-  defaultSettings, migrateSearchOrder, pickActiveSearch, providerKey, resolveSearchOrder, validateBaseURL, safeConfigurationUrl,
+  defaultSettings, migrateFetchOrder, migrateSearchOrder, pickActiveSearch, providerKey, resolveSearchOrder, validateBaseURL, safeConfigurationUrl,
   type FetchProviderFactory, type ProviderDescriptor, type ProviderKind, type ProviderOptions,
   WEB_MANAGER_OWNER, type SearchProviderFactory, type WebSettings, type WebStatus,
 } from './contracts.ts'
@@ -11,7 +11,7 @@ import {
 export type { WebRegistry } from './web-registry.ts'
 export interface ManagerOptions {
   web: WebRegistry
-  initial?: Omit<WebSettings, 'searchOrder'> & { searchOrder?: string[] }
+  initial?: Omit<WebSettings, 'searchOrder' | 'fetchOrder'> & { searchOrder?: string[]; fetchOrder?: string[] }
   resolveCredential(ref: string): Promise<string | undefined>
   save(settings: WebSettings): Promise<void>
 }
@@ -24,20 +24,6 @@ function bounded(value: number, min: number, max: number, label: string): number
   if (!Number.isInteger(value) || value < min || value > max) fail('WEB_INVALID_CONFIG', `${label}须为 ${min} 至 ${max} 的整数。`)
   return value
 }
-/** Enforce cancellation even when an extension ignores its cooperative signal. */
-async function abortable<T>(work: () => Promise<T>, signal: AbortSignal): Promise<T> {
-  signal.throwIfAborted()
-  let off = () => {}
-  const aborted = new Promise<never>((_, reject) => {
-    const onAbort = () => reject(new WebError('网络请求已取消或超时。', 'WEB_ABORTED'))
-    signal.addEventListener('abort', onAbort, { once: true })
-    off = () => signal.removeEventListener('abort', onAbort)
-  })
-  try {
-    return await Promise.race([Promise.resolve().then(() => { signal.throwIfAborted(); return work() }), aborted])
-  } finally { off() }
-}
-
 /** Manages consent and provider lifecycle. Selection and execution stay in ctx.web. */
 export class WebSearchManager {
   private settings: WebSettings
@@ -51,10 +37,13 @@ export class WebSearchManager {
   private refreshRevision = 0
   private detach: () => void
   private legacyRegistrations = new Set<() => void>()
+  // Keep calls even after their provider is removed from entries.
+  private work = new Map<Promise<unknown>, AbortController>()
 
   constructor(private readonly options: ManagerOptions) {
     const initial = structuredClone(options.initial ?? defaultSettings())
-    this.settings = { ...defaultSettings(), ...initial, searchOrder: migrateSearchOrder(initial) }
+    this.settings = { ...defaultSettings(), ...initial,
+      searchOrder: migrateSearchOrder(initial), fetchOrder: migrateFetchOrder(initial) }
     this.detach = observeWebRegistry(options.web, {
       add: (kind, provider) => this.discover(kind, provider),
       remove: (kind, id) => {
@@ -93,20 +82,25 @@ export class WebSearchManager {
   private activeSearchId(settings: WebSettings = this.settings): string {
     return pickActiveSearch(this.searchOrder(settings), id => this.configured(id))
   }
+  private activeFetchId(settings: WebSettings = this.settings): string {
+    return settings.fetchOrder.find(id => {
+      const entry = this.entries.get(providerKey('fetch', id))
+      return entry !== undefined && this.ready(entry)
+    }) ?? ''
+  }
   private selected(entry: Entry): boolean {
     if (this.disposed || this.suspended || !this.ready(entry)) return false
     if (this.entries.get(providerKey(entry.kind, entry.descriptor.id)) !== entry) return false
     if (entry.kind === 'fetch') {
       return this.settings.fetchEnabled
-        && this.settings.fetchProvider === entry.descriptor.id
-        && this.entries.get(providerKey('fetch', entry.descriptor.id)) === entry
+        && this.activeFetchId() === entry.descriptor.id
     }
     return this.settings.searchEnabled && this.activeSearchId() === entry.descriptor.id
   }
   status(): WebStatus {
     const entries = [...this.entries.values()]
     return {
-      settings: structuredClone(this.settings), storageFailed: this.storageFailed,
+      settings: { ...structuredClone(this.settings), fetchProvider: this.activeFetchId() }, storageFailed: this.storageFailed,
       searchActive: entries.some(entry => entry.kind === 'search' && this.selected(entry)),
       fetchActive: entries.some(entry => entry.kind === 'fetch' && this.selected(entry)),
       providers: entries.map(entry => ({
@@ -138,6 +132,7 @@ export class WebSearchManager {
     return this.status()
   }
   private abort(entry?: Entry): void {
+    if (!entry) for (const controller of this.work.values()) controller.abort()
     for (const target of entry ? [entry] : this.entries.values()) {
       for (const controller of target.active) controller.abort()
     }
@@ -180,7 +175,10 @@ export class WebSearchManager {
       if (kind === 'search') {
         this.settings.searchOrder = this.settings.searchOrder.map(id => id === legacy ? provider.id : id)
         if (this.settings.searchProvider === legacy) this.settings.searchProvider = provider.id
-      } else if (this.settings.fetchProvider === legacy) this.settings.fetchProvider = provider.id
+      } else {
+        this.settings.fetchOrder = this.settings.fetchOrder.map(id => id === legacy ? provider.id : id)
+        if (this.settings.fetchProvider === legacy) this.settings.fetchProvider = provider.id
+      }
       const legacyKey = providerKey(kind, legacy)
       if (this.settings.endpoints[legacyKey] && !this.settings.endpoints[key]) this.settings.endpoints[key] = this.settings.endpoints[legacyKey]
     }
@@ -235,6 +233,7 @@ export class WebSearchManager {
     const epoch = this.epoch
     entry.active.add(controller)
     let started = false
+    let work: Promise<T> | undefined
     try {
       if (epoch !== this.epoch || !this.selected(entry)) fail('WEB_DISABLED', '网络访问设置已改变，请重新发起请求。')
       const options = {
@@ -243,8 +242,12 @@ export class WebSearchManager {
       }
       started = true
       entry.calls += 1
-      const result = await abortable(() => run(options, combined), combined)
-      if (epoch !== this.epoch || !this.selected(entry)) fail('WEB_ABORTED', '网络请求已取消。')
+      // Cancellation is cooperative. Await the actual provider, including its
+      // transport/process cleanup; a race would only hide work still running.
+      work = Promise.resolve().then(() => { combined.throwIfAborted(); return run(options, combined) })
+      this.work.set(work, controller)
+      const result = await work
+      if (combined.aborted || epoch !== this.epoch || !this.selected(entry)) fail('WEB_ABORTED', '网络请求已取消。')
       return result
     } catch (error) {
       if (started) entry.failures += 1
@@ -260,13 +263,19 @@ export class WebSearchManager {
     } finally {
       clearTimeout(timeout)
       entry.active.delete(controller)
+      if (work) this.work.delete(work)
     }
   }
-  update(next: Omit<WebSettings, 'revision'>, expectedRevision: number): Promise<WebStatus> {
+  update(next: Omit<WebSettings, 'revision' | 'fetchOrder'> & { fetchOrder?: string[] }, expectedRevision: number): Promise<WebStatus> {
     const task = this.pending.then(async () => {
       if (this.disposed) fail('WEB_DISABLED', '网络搜索插件已停止。')
       if (expectedRevision !== this.settings.revision) fail('WEB_CONFIG_CONFLICT', '设置已被其他页面修改，请刷新后重试。')
-      const proposed: WebSettings = { ...structuredClone(next), revision: expectedRevision + 1 }
+      const input = structuredClone(next)
+      // Old clients echo the derived single selection on unrelated edits. Preserve the
+      // full opt-in list unless they actually change that legacy selection.
+      const fetchOrder = input.fetchOrder ?? (input.fetchProvider === this.activeFetchId()
+        ? [...this.settings.fetchOrder] : migrateFetchOrder(input))
+      const proposed: WebSettings = { ...input, fetchOrder, revision: expectedRevision + 1 }
       bounded(proposed.maxResults, 1, 20, '结果上限')
       bounded(proposed.maxQueries, 1, 5, '查询上限')
       bounded(proposed.timeoutMs, 1000, 120_000, '超时毫秒数')
@@ -286,10 +295,12 @@ export class WebSearchManager {
       if (proposed.searchEnabled && !proposed.searchProvider && activatingSearch) {
         fail('WEB_CREDENTIAL_MISSING', '需选择已安装的供应商并填写有效凭据。')
       }
-      if (proposed.fetchEnabled) {
-        const entry = this.entries.get(providerKey('fetch', proposed.fetchProvider))
-        const activatingFetch = !this.settings.fetchEnabled || proposed.fetchProvider !== this.settings.fetchProvider
-        if (activatingFetch && (!entry || !this.ready(entry))) fail('WEB_CREDENTIAL_MISSING', '需选择已安装的供应商并填写有效凭据。')
+      proposed.fetchOrder = [...new Set(proposed.fetchOrder)]
+      proposed.fetchProvider = this.activeFetchId(proposed)
+      const activatingFetch = !this.settings.fetchEnabled
+        || JSON.stringify(proposed.fetchOrder) !== JSON.stringify(this.settings.fetchOrder)
+      if (proposed.fetchEnabled && !proposed.fetchProvider && activatingFetch) {
+        fail('WEB_CREDENTIAL_MISSING', '需选择已安装的供应商并填写有效凭据。')
       }
       this.suspended = true
       this.epoch += 1
@@ -315,8 +326,9 @@ export class WebSearchManager {
     this.epoch += 1
     this.abort()
     this.notify()
-    for (const off of [...this.legacyRegistrations]) off()
     await this.pending
+    await Promise.allSettled([...this.work.keys()])
+    for (const off of [...this.legacyRegistrations]) off()
     this.detach()
     this.entries.clear()
     this.listeners.clear()

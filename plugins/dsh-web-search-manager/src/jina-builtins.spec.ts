@@ -35,8 +35,8 @@ describe('Jina-first builtin wiring through the DSH runtime', () => {
     const transport = vi.spyOn(HttpFetchProvider.prototype, 'fetch').mockImplementation(async request =>
       response(request.url, JSON.stringify({ code: 200, data: { content: 'x'.repeat(1200) } })))
     const { web, manager, save, initial } = await setup()
-    expect(manager.status().settings).toEqual({ ...initial, fetchProvider: 'http-managed' })
-    expect(manager.status().providers.find(row => row.kind === 'fetch')).toMatchObject({
+    expect(manager.status().settings).toEqual({ ...initial, fetchProvider: 'http-managed', fetchOrder: ['http-managed'] })
+    expect(manager.status().providers.find(row => row.kind === 'fetch' && row.id === 'http-managed')).toMatchObject({
       id: 'http-managed', configured: true, billing: 'none',
     })
     expect(save).not.toHaveBeenCalled()
@@ -60,7 +60,9 @@ describe('Jina-first builtin wiring through the DSH runtime', () => {
   })
 
   it('cancels without direct fallback when the manager disables network access', async () => {
-    const transport = vi.spyOn(HttpFetchProvider.prototype, 'fetch').mockImplementation(() => new Promise(() => {}))
+    const transport = vi.spyOn(HttpFetchProvider.prototype, 'fetch').mockImplementation((_request, signal) => new Promise((_resolve, reject) => {
+      signal!.addEventListener('abort', () => reject(signal!.reason), { once: true })
+    }))
     const { web, manager } = await setup()
     const pending = web.fetch({ url: target }).catch(error => error)
     await vi.waitFor(() => expect(transport).toHaveBeenCalledOnce())

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Web Search",
-    "description": "Manage web search providers and public-page fetching from one settings page."
+    "description": "Manage and rank search and page-reading services, including providers from installed plugins, in one settings page."
   }
 }

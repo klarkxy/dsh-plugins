@@ -21,7 +21,13 @@ export async function apply(ctx: Context): Promise<void> {
   const domain = await ctx.storageDomain.open(webSettingsDomain)
   // Own storage before a compatibility check can throw during startup.
   let managed: WebSearchManager | undefined
-  ctx.effect(() => async () => { await managed?.dispose(); await domain.close() }, 'web-search-manager.dispose')
+  let unregisterBuiltins: (() => void) | undefined
+  // Keep explicit teardown ordered; Cordis starts separate async effects concurrently.
+  ctx.effect(() => async () => {
+    await managed?.dispose()
+    unregisterBuiltins?.()
+    await domain.close()
+  }, 'web-search-manager.dispose')
   const table = domain.table('settings')
   const manager = managed = new WebSearchManager({
     web: ctx.web, initial: table.get('global'),
@@ -31,10 +37,10 @@ export async function apply(ctx: Context): Promise<void> {
   ctx.provide('webSearchManager', manager)
   ctx.on('credentials/reference-updated', () => { void manager.refresh() })
   ctx.on(WEB_PROVIDER_AVAILABILITY_EVENT, () => { void manager.refresh() })
-  ctx.effect(() => registerBuiltins(ctx.web, {
+  unregisterBuiltins = registerBuiltins(ctx.web, {
     settings: () => manager.status().settings,
     resolveCredential: async ref => (await host.credentials.resolve(credentialRef(ref)))?.value,
-  }), 'web-search-manager.providers')
+  })
   ctx.effect(() => registerHostRpc(host, WEB_SEARCH_RPC_CHANNEL, async (endpoint, payload, signal): Promise<RpcResult> => {
     try {
       signal.throwIfAborted()

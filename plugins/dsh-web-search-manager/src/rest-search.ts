@@ -83,6 +83,40 @@ export const SerperSearchProvider = createRestSearch({
   },
 })
 
+// Official Search APIs return sources directly; no model-generated answer or paid extraction is requested.
+// https://docs.perplexity.ai/api-reference/search-post
+export const PerplexitySearchProvider = createRestSearch({
+  id: 'perplexity', fallback: 'https://api.perplexity.ai', path: '/search', method: 'POST',
+  headers: apiKey => ({ authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }),
+  body: ({ query, count }) => ({ query, max_results: count, search_type: 'web' }),
+  parse(payload) {
+    const results = record(payload)?.results
+    if (!Array.isArray(results)) throw new Error('Perplexity returned no results array.')
+    return results.flatMap(row => sourceFrom(row, 'url', 'title', 'snippet') ?? [])
+  },
+})
+
+// https://you.com/docs/api-reference/search/v1-search
+export const YouSearchProvider = createRestSearch({
+  id: 'you', fallback: 'https://ydc-index.io', path: '/v1/search', method: 'POST',
+  headers: apiKey => ({ 'x-api-key': apiKey, 'content-type': 'application/json' }),
+  body: ({ query, count }) => ({ query, count }),
+  parse(payload) {
+    const results = record(record(payload)?.results)
+    if (!results || (!Array.isArray(results.web) && !Array.isArray(results.news))) throw new Error('You.com returned no search results arrays.')
+    const rows = [...(Array.isArray(results.web) ? results.web : []), ...(Array.isArray(results.news) ? results.news : [])]
+    const seen = new Set<string>()
+    return rows.flatMap(raw => {
+      const row = record(raw)
+      const snippets = Array.isArray(row?.snippets) ? row.snippets.filter((value): value is string => typeof value === 'string').join('\n') : ''
+      const source = sourceFrom({ ...row, snippet: snippets || row?.description }, 'url', 'title', 'snippet')
+      if (!source || seen.has(source.url)) return []
+      seen.add(source.url)
+      return [source]
+    })
+  },
+})
+
 export const FirecrawlSearchProvider = createRestSearch({
   id: 'firecrawl', fallback: 'https://api.firecrawl.dev', path: '/v1/search', method: 'POST',
   headers: apiKey => ({ authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }),

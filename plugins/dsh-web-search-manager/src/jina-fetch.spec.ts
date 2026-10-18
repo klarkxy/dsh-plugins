@@ -106,13 +106,16 @@ describe('anonymous Jina-first page fetch', () => {
     expect(direct).toHaveBeenCalledOnce()
   })
 
-  it('reserves time for direct fetch even when Reader ignores its abort signal', async () => {
+  it('waits for Reader cleanup after its deadline before starting direct fetch', async () => {
     vi.useFakeTimers()
     const { provider, read, direct } = setup(15)
-    read.mockImplementationOnce(() => new Promise(() => {}))
+    let release!: () => void
+    read.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(result(markdown)) }))
     const signal = new AbortController().signal
     const pending = provider.fetch({ url: target }, signal)
     await vi.advanceTimersByTimeAsync(15)
+    expect(direct).not.toHaveBeenCalled()
+    release()
     expect(await pending).toEqual(result('Direct body'))
     expect(read.mock.calls[0]?.[1]?.aborted).toBe(true)
     expect(signal.aborted).toBe(false)
@@ -128,13 +131,18 @@ describe('anonymous Jina-first page fetch', () => {
     expect(direct).not.toHaveBeenCalled()
   })
 
-  it('cancels in-flight Reader without falling back, even when Reader ignores cancellation', async () => {
+  it('waits for in-flight Reader after caller cancellation without falling back', async () => {
     const { provider, read, direct } = setup()
     const controller = new AbortController()
-    read.mockImplementationOnce(() => new Promise(() => {}))
-    const pending = provider.fetch({ url: target }, controller.signal).catch(error => error)
+    let release!: () => void
+    read.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(result(markdown)) }))
+    let settled = false
+    const pending = provider.fetch({ url: target }, controller.signal).catch(error => error).finally(() => { settled = true })
     await vi.waitFor(() => expect(read).toHaveBeenCalledOnce())
     controller.abort()
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    release()
     expect(await pending).toMatchObject({ name: 'AbortError' })
     expect(direct).not.toHaveBeenCalled()
   })

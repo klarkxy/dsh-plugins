@@ -42,7 +42,7 @@ function readerContent(result: WebFetchResult): string | undefined {
   return content.slice(marker.index + marker[0].length).trim() ? content : undefined
 }
 
-/** Bound the Reader stage even if a provider fails to honour its cooperative signal. */
+/** Abort the Reader deadline and wait for its transport to release resources before fallback. */
 async function readWithTimeout(
   read: (signal: AbortSignal) => Promise<WebFetchResult>, timeoutMs: number, parent?: AbortSignal,
 ): Promise<WebFetchResult> {
@@ -50,20 +50,13 @@ async function readWithTimeout(
   const controller = new AbortController()
   const signal = parent ? AbortSignal.any([parent, controller.signal]) : controller.signal
   const timer = setTimeout(() => controller.abort(), timeoutMs)
-  let off = () => {}
-  const aborted = new Promise<never>((_, reject) => {
-    const onAbort = () => reject(signal.reason)
-    signal.addEventListener('abort', onAbort, { once: true })
-    off = () => signal.removeEventListener('abort', onAbort)
-  })
   try {
-    return await Promise.race([
-      Promise.resolve().then(() => { signal.throwIfAborted(); return read(signal) }),
-      aborted,
-    ])
+    signal.throwIfAborted()
+    const result = await read(signal)
+    signal.throwIfAborted()
+    return result
   } finally {
     clearTimeout(timer)
-    off()
   }
 }
 

@@ -16,13 +16,19 @@ Replace `web` with your profile name, restart DSH Web, and open **Plugins → We
 
 ## Set up search
 
-DuckDuckGo works out of the box with no key. You can also enable DeepSeek Search, Exa, Brave, Bocha, Serper, Firecrawl, or Tavily by entering their API keys. Drag the list to set the order; each search uses the first ready service. Search services added by other plugins, such as Zhihu, appear in the same list.
+DuckDuckGo works out of the box with no key. You can also enable DeepSeek Search, Exa, Brave, Bocha, Serper, Firecrawl, Tavily, Perplexity, or You.com by entering their API keys. Drag the list to set the order; each search uses the first ready service. Search services added by other plugins, such as Zhihu, appear in the same list.
+
+Installed ChatGPT, Grok Build, and MiniMax plugins can also supply search services here; Grok Build can supply page reads. Configure CLI paths and sign-in in each plugin's own settings, then enable and order its services here. New services are not enabled automatically. Local CLI availability does not verify account health. Each plugin's standalone tools remain available.
 
 **Request limits** sets the number of results, queries per call, the total timeout, and the maximum page length.
 
 ## Read web pages
 
-Turn on **Web fetch** to let the model read public pages. By default pages are read through the free Jina Reader, falling back to a direct request if that fails.
+Turn on **Read web pages**, enable the services you want to use, and drag them or use the up/down arrow keys to set their priority. Each fetch uses the first configured, available service. Fetch services connected by other plugins also appear in the list; new services need to be enabled manually. Services that are temporarily unloaded keep their selection and position.
+
+Your previously selected fetch service is kept as the first entry. The bundled **Read web pages** service uses the free Jina Reader, falling back to one direct request if that fails. Services supplied by the host or other plugins use their own fetching method.
+
+You can also enable **Firecrawl** to read Markdown pages with the same API key as Firecrawl search. Search and page reads are billed separately. Newly added services stay outside your priority lists until you enable them. Perplexity uses its Search API without generating answers; You.com returns web and news snippets without requesting extra full-page extraction.
 
 ## Give the tools to the model
 
@@ -36,9 +42,11 @@ The model then gets `web_search` and `web_fetch` while search and fetch are turn
 
 ## Limits
 
-- Paid services may charge for searches; the plugin's counts are not a bill.
-- Fetched page addresses are sent to Jina; do not fetch URLs containing private tokens.
-- Failed searches do not switch to another service automatically.
+- Paid services may charge for search or fetch requests; the plugin's counts are not a bill.
+- When using the bundled Jina Reader, page addresses are sent to Jina; do not fetch URLs containing private tokens.
+- Firecrawl page reads require a page status code and final URL in the service response; missing metadata produces an error. Its page content may come from the service's cache. URLs are sent to the selected fetch service.
+- Failed search or fetch requests do not switch to another service in the list automatically.
+- Cancellation and timeouts ask the active service to stop and wait for it to finish cleaning up. A third-party service that ignores cancellation can delay the result and plugin unloading; the plugin cannot forcibly stop code running inside DSH.
 
 ## License
 

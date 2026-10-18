@@ -172,6 +172,8 @@ function createHost({ WebSearchManager, BraveSearchProvider, WebRuntime, Context
     state.releaseDescribe = null
     const initial = { ...defaultSettings(), ...(options.settings ?? {}) }
     if (Array.isArray(options.settings?.searchOrder)) initial.searchOrder = [...options.settings.searchOrder]
+    // Exercise the legacy single-selection migration when the fixture supplies only fetchProvider.
+    if (Object.hasOwn(options.settings ?? {}, 'fetchProvider') && !Object.hasOwn(options.settings, 'fetchOrder')) delete initial.fetchOrder
     state.web = new WebRuntime(new Context())
     const registry = state.web
     state.manager = new WebSearchManager({
@@ -387,6 +389,27 @@ function createHost({ WebSearchManager, BraveSearchProvider, WebRuntime, Context
         state.setLog.push({ ref: request.ref, value: null, unset: true })
         state.events.push({ type: 'unset', ref: request.ref })
         return { ok: true, value: null }
+      }
+      if (kind === 'fixture.registerFetch') {
+        const payload = request.payload
+        const key = `fetch:${payload.id}`
+        state.available.set(key, payload.available !== false)
+        const off = state.web.registerFetchProvider({
+          id: payload.id,
+          dshWebManagement: { label: payload.label ?? payload.id, billing: 'none', configurationUrl: '/plugins/fetch-fixture' },
+          available: () => state.available.get(key) !== false,
+          async fetch({ url }) { return { url, statusCode: 200, body: { kind: 'text', content: payload.id }, truncated: false } },
+        })
+        state.nativeOff.set(key, off)
+        await state.manager.refresh()
+        return snapshot()
+      }
+      if (kind === 'fixture.unregisterFetch') {
+        const key = `fetch:${request.id}`
+        state.nativeOff.get(key)?.()
+        state.nativeOff.delete(key)
+        await state.manager.refresh()
+        return snapshot()
       }
       if (kind === 'fixture.registerSearch') {
         registerLiveSearch(request.payload ?? request)
@@ -967,7 +990,12 @@ try {
     assert.deepEqual(host.snapshot().status.settings.searchOrder, ['temporarily-absent', 'ddg'])
     await searchSwitch.click()
     await settle(page)
-    await page.getByRole('combobox', { name: '读取服务' }).selectOption('custom-fetch')
+    await page.getByTestId('web-fetch-rank-custom-fetch').getByRole('switch').click()
+    await settle(page)
+    assert.deepEqual(host.snapshot().status.settings.fetchOrder, ['http', 'custom-fetch'])
+    await page.getByTestId('web-fetch-rank-custom-fetch').getByRole('button', { name: '拖动排序 custom-fetch' }).focus()
+    await page.keyboard.press('ArrowUp')
+    await waitSnapshot('fetch keyboard priority saved', snap => snap.status.settings.fetchOrder[0] === 'custom-fetch')
     await settle(page)
     assert.equal(host.snapshot().status.settings.fetchProvider, 'custom-fetch')
     await page.getByRole('button', { name: '保存', exact: true }).click()
@@ -991,6 +1019,49 @@ try {
     assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '拖动排序 DuckDuckGo')
     await shot(page, 'native-mobile.png')
     await page.setViewportSize({ width: 960, height: 1100 })
+  })
+  await test('fetch discovery, drag priority, availability, and dormant restore preserve search and drafts', async () => {
+    await host.reset({ native: true, settings: { searchOrder: ['ddg'], fetchOrder: ['http'] } })
+    await remount(page)
+    await page.getByRole('tab', { name: '请求限制', exact: true }).click()
+    await page.getByLabel('每条查询结果上限').fill('11')
+    await page.getByRole('tab', { name: '搜索服务', exact: true }).click()
+    await host.rpc({ kind: 'fixture.registerFetch', payload: { id: 'ddg', label: 'Fetch DDG' } })
+    const fetchRow = page.getByTestId('web-fetch-rank-ddg')
+    await fetchRow.waitFor()
+    assert.deepEqual(host.snapshot().status.settings.fetchOrder, ['http'])
+    assert.equal(await fetchRow.getByRole('link', { name: '打开配置' }).getAttribute('href'), '/plugins/fetch-fixture')
+    await fetchRow.getByRole('switch').click()
+    await settle(page)
+    const source = fetchRow.getByRole('button', { name: '拖动排序 Fetch DDG' })
+    const target = page.getByTestId('web-fetch-rank-http').getByRole('button', { name: '拖动排序 http' })
+    await source.dragTo(target)
+    await waitSnapshot('fetch drag priority saved', snap => snap.status.settings.fetchOrder[0] === 'ddg')
+    await settle(page)
+    assert.deepEqual(host.snapshot().status.settings.searchOrder, ['ddg'])
+    assert.equal(host.snapshot().status.settings.fetchProvider, 'ddg')
+    assert.equal(await page.getByTestId('web-search-rank-ddg').getAttribute('data-in-use'), 'true')
+    await host.rpc({ kind: 'fixture.setAvailable', id: 'fetch:ddg', available: false })
+    await page.waitForFunction(() => document.querySelector('[data-testid="web-fetch-rank-http"]')?.getAttribute('data-in-use') === 'true')
+    assert.equal(host.snapshot().status.settings.fetchProvider, 'http')
+    await host.rpc({ kind: 'fixture.unregisterFetch', id: 'ddg' })
+    await page.waitForFunction(() => document.querySelector('[data-testid="web-fetch-rank-ddg"]')?.getAttribute('data-availability') === 'dormant')
+    assert.deepEqual(host.snapshot().status.settings.fetchOrder, ['ddg', 'http'])
+    await host.rpc({ kind: 'fixture.registerFetch', payload: { id: 'ddg', label: 'Fetch DDG' } })
+    await page.waitForFunction(() => document.querySelector('[data-testid="web-fetch-rank-ddg"]')?.getAttribute('data-in-use') === 'true')
+    await page.setViewportSize({ width: 390, height: 844 })
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+    await shot(page, 'fetch-priority-mobile.png')
+    await host.rpc({ kind: 'fixture.unregisterFetch', id: 'ddg' })
+    await page.waitForFunction(() => document.querySelector('[data-testid="web-fetch-rank-ddg"]')?.getAttribute('data-availability') === 'dormant')
+    await fetchRow.getByRole('switch').click()
+    await settle(page)
+    assert.deepEqual(host.snapshot().status.settings.fetchOrder, ['http'])
+    assert.equal(await fetchRow.count(), 0)
+    await page.getByRole('tab', { name: '请求限制', exact: true }).click()
+    assert.equal(await page.getByLabel('每条查询结果上限').inputValue(), '11')
+    assert.notEqual(host.snapshot().status.settings.maxResults, 11)
+    await page.setViewportSize({ width: 960, height: 1400 })
   })
   await test('live registration, dormant restore, explicit remove, and drafts survive status refresh', async () => {
     await host.reset({ settings: { searchEnabled: true, searchOrder: ['ddg', 'brave'] } })
@@ -1080,13 +1151,13 @@ try {
     assert.match(await nativeBrave.innerText(), /Live native description/)
     assert.match(await nativeBrave.innerText(), /未提供费用信息/)
     assert.doesNotMatch(await nativeBrave.innerText(), /每月赠/)
-    const fetch = page.getByTestId('web-search-fetch')
+    const fetch = page.getByTestId('web-fetch-rank-missing-fetch')
     assert.equal(await fetch.getAttribute('data-availability'), 'dormant')
     assert.match(await fetch.innerText(), /未加载，保留选择/)
-    assert.equal(await page.getByRole('combobox', { name: '读取服务' }).inputValue(), 'missing-fetch')
+    assert.deepEqual(host.snapshot().status.settings.fetchOrder, ['missing-fetch'])
     await page.getByRole('switch', { name: '联网搜索', exact: true }).click()
     await settle(page)
-    assert.equal(host.snapshot().status.settings.fetchProvider, 'missing-fetch')
+    assert.deepEqual(host.snapshot().status.settings.fetchOrder, ['missing-fetch'])
     await page.evaluate(() => { window.settingsLocale = 'en' })
     await remount(page)
     assert.match(await page.getByTestId('web-search-rank-unknown-owner').innerText(), /Configure this service in its plugin/)
@@ -1262,7 +1333,7 @@ try {
   await test('all provider introductions and prices remain readable when disabled', async () => {
     await host.reset({ catalog: true })
     await remount(page)
-    const rows = page.locator('.web-search-rank > li')
+    const rows = page.getByTestId('web-search-tool').locator('.web-search-rank > li')
     assert.equal(await rows.count(), 9)
     for (const row of await rows.all()) {
       const info = row.locator('.web-search-provider-info')

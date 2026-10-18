@@ -11,6 +11,21 @@ interface ProviderInfo {
 }
 
 const providerInfo: Record<string, ProviderInfo> = {
+  perplexity: {
+    description: '通过 Perplexity Search API 获取网页来源，不生成回答。',
+    pricing: '按 Search API 请求计费；实际价格与额度以官方账户为准。',
+    pricingUrl: 'https://docs.perplexity.ai/docs/getting-started/pricing',
+  },
+  you: {
+    description: '通过 You.com 获取网页与新闻结果，不请求额外全文提取。',
+    pricing: '按 Web Search API 请求计费；实际价格与额度以官方账户为准。',
+    pricingUrl: 'https://you.com/docs/administration/billing',
+  },
+  'firecrawl-fetch': {
+    description: '读取网页 Markdown；与 Firecrawl 搜索共用 Key。',
+    pricing: '网页读取使用 Firecrawl 积分，与搜索分别计费；实际消耗以官方账户为准。',
+    pricingUrl: 'https://www.firecrawl.dev/pricing',
+  },
   ddg: {
     description: '搜索 DuckDuckGo 公开网页，无需注册或 API Key。',
     pricing: '免费使用，不产生搜索 API 费用。',
@@ -55,6 +70,9 @@ const providerInfo: Record<string, ProviderInfo> = {
 
 // The prices are the same dated notes in both languages; translation is not a price refresh.
 const englishInfo: Record<string, Pick<ProviderInfo, 'description' | 'pricing'>> = {
+  perplexity: { description: 'Get web sources through the Perplexity Search API without generating an answer.', pricing: 'Charged per Search API request; current prices and credits depend on your official account.' },
+  you: { description: 'Get web and news results through You.com without requesting extra full-page extraction.', pricing: 'Charged per Web Search API request; current prices and credits depend on your official account.' },
+  'firecrawl-fetch': { description: 'Read page Markdown using the same key as Firecrawl search.', pricing: 'Page reads use Firecrawl credits and are charged separately from search; your official account determines usage.' },
   ddg: { description: 'Search public DuckDuckGo pages without registration or an API key.', pricing: 'Free to use; no search API fees.' },
   bocha: { description: 'Search Chinese web content, returning titles, links and summaries.', pricing: 'Charged per request: listed price ¥0.036/request; trial credits depend on official offers.' },
   brave: { description: 'Search web pages, news and more with Brave’s independent index.', pricing: '$5 in monthly credits (about 1,000 requests); then $5/1,000 requests. A payment card is required to activate.' },
@@ -66,6 +84,9 @@ const englishInfo: Record<string, Pick<ProviderInfo, 'description' | 'pricing'>>
 }
 
 const bundledDescriptions: Record<string, readonly [string, string]> = {
+  perplexity: ['Search API；返回网页来源，不生成回答。', 'Search API returning web sources without generating an answer.'],
+  you: ['网页与新闻搜索；不额外提取全文。', 'Web and news search without extra full-page extraction.'],
+  'firecrawl-fetch': ['读取网页 Markdown；与 Firecrawl 搜索共用 Key。', 'Read page Markdown using the same key as Firecrawl search.'],
   ddg: ['无需注册。默认后端。', 'No registration required. Default backend.'],
   'deepseek-official': ['使用已配置的 DeepSeek API Key，可能产生额外搜索费用。', 'Uses the configured DeepSeek API key; additional search fees may apply.'],
   exa: ['独立 Search API。', 'Independent Search API.'],
@@ -90,6 +111,7 @@ function bundledCatalogId(provider: ProviderView): string | undefined {
     ? provider.configurationOwned
     : !provider.configurationOwner || provider.configurationOwner === WEB_MANAGER_OWNER
   if (!owned) return
+  if (provider.kind === 'fetch' && provider.id === 'firecrawl') return 'firecrawl-fetch'
   return provider.id === 'deepseek-managed' ? 'deepseek-official' : provider.id
 }
 
@@ -100,7 +122,7 @@ function missingPricing(locale: 'zh' | 'en'): string {
 export function usesBundledPricing(provider: ProviderView): boolean {
   if (provider.pricing?.trim()) return false
   const catalogId = bundledCatalogId(provider)
-  return Boolean(catalogId && Object.hasOwn(providerInfo, catalogId))
+  return Boolean(catalogId && !['perplexity', 'you', 'firecrawl-fetch'].includes(catalogId) && Object.hasOwn(providerInfo, catalogId))
 }
 
 export function searchProviderInfo(provider: ProviderView, locale: 'zh' | 'en' = 'zh'): ProviderInfo {

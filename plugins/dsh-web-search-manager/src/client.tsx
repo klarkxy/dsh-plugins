@@ -6,8 +6,8 @@ import { createPluginReadGate } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { PROVIDER_PRICING_CHECKED, providerDisplayLabel, searchProviderInfo, usesBundledPricing } from './provider-info.ts'
 import {
-  WEB_SEARCH_RPC_CHANNEL, WEB_MANAGER_OWNER, pickActiveSearch, safeConfigurationUrl,
-  type ProviderView, type RpcResult, type WebSettings, type WebStatus,
+  WEB_SEARCH_RPC_CHANNEL, WEB_MANAGER_OWNER, safeConfigurationUrl,
+  providerKey, type ProviderKind, type ProviderView, type RpcResult, type WebSettings, type WebStatus,
 } from './contracts.ts'
 
 export const name = 'dsh-web-search-manager-client'
@@ -115,57 +115,45 @@ export function bindStatusRefresh(options: {
 
 export function isProviderOn(status: WebStatus, provider: ProviderView): boolean {
   if (provider.kind === 'fetch') {
-    return status.fetchActive && status.settings.fetchProvider === provider.id && provider.configured
+    return status.fetchActive && selectedBackend(status, 'fetch')?.id === provider.id
   }
   return status.searchActive && selectedSearchBackend(status)?.id === provider.id
 }
 
-export function dormantSearchPlaceholder(id: string): ProviderView {
-  return {
-    id, label: id, description: '', billing: 'unknown',
-    kind: 'search', configured: false, calls: 0, failures: 0,
-    configurationOwned: false,
-  }
+export function dormantSearchPlaceholder(id: string): ProviderView { return dormantPlaceholder(id, 'search') }
+function dormantPlaceholder(id: string, kind: ProviderKind): ProviderView {
+  return { id, label: id, description: '', billing: 'unknown', kind, configured: false, calls: 0, failures: 0, configurationOwned: false }
 }
-
-export function isRegisteredSearch(status: WebStatus, id: string): boolean {
-  return status.providers.some(provider => provider.kind === 'search' && provider.id === id)
+function isRegistered(status: WebStatus, id: string, kind: ProviderKind): boolean {
+  return status.providers.some(provider => provider.kind === kind && provider.id === id)
 }
-
-export function catalogSearchBackends(status: WebStatus): ProviderView[] {
-  const byId = new Map(status.providers.filter(provider => provider.kind === 'search').map(provider => [provider.id, provider]))
+export function isRegisteredSearch(status: WebStatus, id: string): boolean { return isRegistered(status, id, 'search') }
+function providerOrder(settings: WebSettings, kind: ProviderKind): string[] {
+  return kind === 'search' ? settings.searchOrder : settings.fetchOrder
+}
+function catalogBackends(status: WebStatus, kind: ProviderKind): ProviderView[] {
+  const byId = new Map(status.providers.filter(provider => provider.kind === kind).map(provider => [provider.id, provider]))
   const rows: ProviderView[] = []
   const seen = new Set<string>()
-  for (const id of status.settings.searchOrder) {
+  for (const id of providerOrder(status.settings, kind)) {
     if (!id || seen.has(id)) continue
     seen.add(id)
-    rows.push(byId.get(id) ?? dormantSearchPlaceholder(id))
+    rows.push(byId.get(id) ?? dormantPlaceholder(id, kind))
   }
-  for (const provider of status.providers) {
-    if (provider.kind !== 'search' || seen.has(provider.id)) continue
-    rows.push(provider)
-  }
+  for (const provider of byId.values()) if (!seen.has(provider.id)) rows.push(provider)
   return rows
 }
-
+export function catalogSearchBackends(status: WebStatus): ProviderView[] { return catalogBackends(status, 'search') }
 export function searchBackends(status: WebStatus): ProviderView[] {
-  const participating = new Set(status.settings.searchOrder)
-  return catalogSearchBackends(status).filter(provider => participating.has(provider.id))
+  return catalogSearchBackends(status).filter(provider => status.settings.searchOrder.includes(provider.id))
 }
-
-export function selectedSearchBackend(status: WebStatus): ProviderView | undefined {
-  const backends = searchBackends(status).filter(provider => isRegisteredSearch(status, provider.id))
-  const id = pickActiveSearch(backends.map(provider => provider.id), id => Boolean(backends.find(provider => provider.id === id)?.configured))
-  return backends.find(provider => provider.id === id)
+function selectedBackend(status: WebStatus, kind: ProviderKind): ProviderView | undefined {
+  return providerOrder(status.settings, kind).flatMap(id => status.providers.find(provider => provider.kind === kind && provider.id === id) ?? []).find(provider => provider.configured)
 }
-
-export function droppedDormantIds(
-  settings: WebSettings,
-  order: readonly string[],
-  providers: readonly ProviderView[],
-): string[] {
-  const known = new Set(providers.filter(provider => provider.kind === 'search').map(provider => provider.id))
-  return [...new Set(settings.searchOrder.filter(id => id && !known.has(id) && !order.includes(id)))]
+export function selectedSearchBackend(status: WebStatus): ProviderView | undefined { return selectedBackend(status, 'search') }
+export function droppedDormantIds(settings: WebSettings, order: readonly string[], providers: readonly ProviderView[], kind: ProviderKind = 'search'): string[] {
+  const known = new Set(providers.filter(provider => provider.kind === kind).map(provider => provider.id))
+  return [...new Set(providerOrder(settings, kind).filter(id => id && !known.has(id) && !order.includes(id)))]
 }
 
 export type ConfigurationAccess =
@@ -264,7 +252,7 @@ const copy = {
     saveHint: '开关与排序立即生效；Key 与限制需保存。',
     maxResults: '每条查询结果上限', maxQueries: '每次调用查询上限',
     timeoutMs: '请求超时（毫秒）', maxFetchChars: '正文字符上限',
-    fetchTitle: '网页读取', fetchProvider: '读取服务', ownerSettings: '配置入口：',
+    fetchTitle: '网页读取', fetchProvider: '读取服务', fetchBackends: '读取后端', needFetchBackend: '需选择并配置读取服务。', ownerSettings: '配置入口：',
     unknownOwner: '请在服务所属插件中配置',
   },
   en: {
@@ -284,7 +272,7 @@ const copy = {
     saveHint: 'Switches and order apply now; keys and limits need saving.',
     maxResults: 'Max results/query', maxQueries: 'Max queries/call',
     timeoutMs: 'Request timeout (ms)', maxFetchChars: 'Max text chars',
-    fetchTitle: 'Read web pages', fetchProvider: 'Fetch service', ownerSettings: 'Configure in: ',
+    fetchTitle: 'Read web pages', fetchProvider: 'Fetch service', fetchBackends: 'Fetch backends', needFetchBackend: 'Choose and configure a fetch service.', ownerSettings: 'Configure in: ',
     unknownOwner: 'Configure this service in its plugin',
   },
 } as const
@@ -292,7 +280,7 @@ const copy = {
 type Copy = (typeof copy)['zh'] | (typeof copy)['en']
 
 // Keep action outcomes as data so a language switch also updates existing notices.
-type UiMessage = string | { key: keyof Copy } | { sources: number } | { moved: string; position: number } | { invalid: LimitKey[] }
+type UiMessage = string | { key: keyof Copy } | { sources: number } | { moved: string; kind: ProviderKind; position: number } | { invalid: LimitKey[] }
 class UiError extends Error {
   constructor(readonly key: keyof Copy) { super(key) }
 }
@@ -302,7 +290,7 @@ function uiMessage(message: UiMessage, locale: 'zh' | 'en', providers: ProviderV
   if ('key' in message) return copy[locale][message.key]
   if ('sources' in message) return testOkText(locale, message.sources)
   if ('moved' in message) {
-    const provider = providers.find(item => item.id === message.moved)
+    const provider = providers.find(item => item.id === message.moved && item.kind === message.kind)
     return movedText(locale, provider ? providerDisplayLabel(provider, locale) : message.moved, message.position)
   }
   return message.invalid.map(key => {
@@ -352,22 +340,23 @@ export function immediateUpdate(
   order: string[],
   providers?: readonly ProviderView[],
   remove: readonly string[] = [],
+  kind: ProviderKind = 'search',
 ): Omit<WebSettings, 'revision'> {
   let searchOrder = order
   if (providers) {
-    const known = new Set(providers.filter(provider => provider.kind === 'search').map(provider => provider.id))
+    const known = new Set(providers.filter(provider => provider.kind === kind).map(provider => provider.id))
     const removed = new Set(remove)
     const following = order.filter(id => !removed.has(id))
     if (following.some(id => !known.has(id))) searchOrder = following
     else {
-      searchOrder = settings.searchOrder.flatMap(id => {
+      searchOrder = providerOrder(settings, kind).flatMap(id => {
         if (removed.has(id)) return []
         return known.has(id) ? following.splice(0, 1) : [id]
       })
       searchOrder.push(...following)
     }
   }
-  return { ...editable(settings), searchOrder, searchEnabled: on }
+  return { ...editable(settings), ...(kind === 'search' ? { searchOrder, searchEnabled: on } : { fetchOrder: searchOrder, fetchEnabled: on }) }
 }
 
 function limitTexts(settings: WebSettings): Record<LimitKey, string> {
@@ -385,6 +374,7 @@ function useHostLocale(client: Client): 'zh' | 'en' {
 
 /** Keyboard reorders are batched: persist once the arrows stop for this long. */
 const REORDER_DEBOUNCE_MS = 500
+type PendingOrder = { kind: ProviderKind; order: string[] }
 
 export function NetworkSearchSettings({ client, hidden }: { client: Client; hidden?: boolean }) {
   const locale = useHostLocale(client)
@@ -396,7 +386,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   const [invalid, setInvalid] = useState<Partial<Record<LimitKey, boolean>>>({})
   const [keys, setKeys] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
-  const [pendingOrder, setPendingOrder] = useState<string[] | null>(null)
+  const [pendingOrder, setPendingOrder] = useState<PendingOrder | null>(null)
   const [dragSource, setDragSource] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
   const [sortAnnouncement, setSortAnnouncement] = useState<UiMessage>('')
@@ -406,7 +396,8 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   const [writable, setWritable] = useState<Record<string, boolean>>({})
   const statusRef = useRef(status)
   statusRef.current = status
-  const pendingRef = useRef<string[] | null>(null)
+  const pendingRef = useRef<PendingOrder | null>(null)
+  const dragRef = useRef<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const handleRefs = useRef(new Map<string, HTMLButtonElement>())
   const refocusRef = useRef<string | null>(null)
@@ -445,7 +436,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
       mounted: mountedRef.current,
       hidden: isPageHidden(hiddenRef.current),
       busy: busyRef.current,
-      reordering: pendingRef.current !== null,
+      reordering: pendingRef.current !== null || dragRef.current !== null,
       reading: readingRef.current,
     })
   }
@@ -475,7 +466,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
       if (!mountedRef.current || mine !== requestSeq.current) return next
       if (source === 'poll' && !shouldApplyPolledStatus({
         requestId: mine, latestRequestId: requestSeq.current,
-        busy: busyRef.current, reordering: pendingRef.current !== null,
+        busy: busyRef.current, reordering: pendingRef.current !== null || dragRef.current !== null,
         hidden: isPageHidden(hiddenRef.current),
         currentRevision: statusRef.current?.settings.revision,
         incomingRevision: next.settings.revision,
@@ -523,7 +514,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
       const current = statusRef.current
       const next = pendingRef.current
       if (current && next) {
-        void call('update', { settings: immediateUpdate(current.settings, current.settings.searchEnabled, next, current.providers), expectedRevision: current.settings.revision }).catch(() => {})
+        void call('update', { settings: immediateUpdate(current.settings, next.kind === 'search' ? current.settings.searchEnabled : current.settings.fetchEnabled, next.order, current.providers, [], next.kind), expectedRevision: current.settings.revision }).catch(() => {})
       }
     }
   }, [client])
@@ -544,6 +535,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   })
 
   async function action(run: () => Promise<void>) {
+    if (busyRef.current) return
     readGate.reset()
     requestSeq.current += 1
     busyRef.current = true
@@ -554,17 +546,17 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   }
 
   /** Switches and reorders: settings only, applied at once. */
-  function runImmediate(on: boolean, order: string[], remove: readonly string[] = []) {
+  function runImmediate(on: boolean, order: string[], remove: readonly string[] = [], kind: ProviderKind = 'search') {
     clearTimeout(timerRef.current); timerRef.current = undefined
     pendingRef.current = null
     void action(async () => {
       const current = statusRef.current
       if (!current) return
       const next = await call<WebStatus>('update', {
-        settings: immediateUpdate(current.settings, on, order, current.providers, remove),
+        settings: immediateUpdate(current.settings, on, order, current.providers, remove, kind),
         expectedRevision: current.settings.revision,
       })
-      setStatus(next)
+      adopt(next)
       await load()
     }).then(() => { if (pendingRef.current === null) setPendingOrder(null) })
   }
@@ -573,20 +565,24 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   async function saveKeys(only?: ProviderView) {
     if (!status) return
     for (const provider of status.providers) {
-      if (provider.kind !== 'search' || (only && provider.id !== only.id)) continue
-      const snapshot = keys[provider.id] ?? ''
+      if (only && providerKey(provider.kind, provider.id) !== providerKey(only.kind, only.id)) continue
+      const snapshot = keys[providerKey(provider.kind, provider.id)] ?? ''
       const typed = snapshot.trim()
       if (!ownsProviderConfiguration(provider) || !provider.credentialRef || !typed) continue
       if (writable[provider.credentialRef] === false) throw new UiError('readOnly')
       unwrap(await client.remote.credentials.set(provider.credentialRef, typed))
-      setKeys(current => current[provider.id] === snapshot ? { ...current, [provider.id]: '' } : current)
+      setKeys(current => current[providerKey(provider.kind, provider.id)] === snapshot ? { ...current, [providerKey(provider.kind, provider.id)]: '' } : current)
     }
+  }
+
+  async function saveKeysForKind(kind: ProviderKind) {
+    for (const provider of statusRef.current?.providers ?? []) if (provider.kind === kind) await saveKeys(provider)
   }
 
   async function removeKey(provider: ProviderView) {
     if (!ownsProviderConfiguration(provider) || !provider.credentialRef || provider.credentialShared || !status) return
     unwrap(await client.remote.credentials.unset(provider.credentialRef))
-    setKeys(current => ({ ...current, [provider.id]: '' }))
+    setKeys(current => ({ ...current, [providerKey(provider.kind, provider.id)]: '' }))
     await load()
     setNote({ key: 'keyDeleted' })
   }
@@ -602,43 +598,35 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   }
 
   const saved = status
-  const savedOrder = searchBackends(saved).map(provider => provider.id)
-  const order = pendingOrder ?? savedOrder
-  const catalog = catalogSearchBackends(saved)
-  const backends = [
-    ...order.flatMap(id => catalog.find(provider => provider.id === id) ?? []),
-    ...catalog.filter(provider => !order.includes(provider.id)),
-  ]
-  const selected = selectedSearchBackend(saved)
-  const on = saved.settings.searchEnabled
-  // Immediate switches never write typed keys, so only saved keys count here.
-  const canEnable = canEnableSearch(order, saved.providers, {}, writable)
   const savedLimits = limitTexts(saved.settings)
   const limitsDirty = LIMITS.some(([key]) => limitDraft[key] !== savedLimits[key])
   const keysDirty = Object.values(keys).some(value => value.trim())
-  const reordering = pendingOrder !== null
+  const reordering = pendingOrder !== null || dragSource !== null
 
-  function move(id: string, nextIndex: number, keyboard = false) {
+  function move(kind: ProviderKind, id: string, nextIndex: number, keyboard = false) {
+    if (pendingRef.current && pendingRef.current.kind !== kind) return
+    const order = pendingRef.current?.order ?? providerOrder(statusRef.current!.settings, kind)
     const index = order.indexOf(id)
     if (busy || index < 0 || nextIndex < 0 || nextIndex >= order.length || index === nextIndex) return
     const next = [...order]
     const [item] = next.splice(index, 1)
     next.splice(nextIndex, 0, item)
-    pendingRef.current = next
-    setPendingOrder(next)
-    if (keyboard) refocusRef.current = id
-    setSortAnnouncement({ moved: id, position: nextIndex + 1 })
+    pendingRef.current = { kind, order: next }
+    setPendingOrder({ kind, order: next })
+    if (keyboard) refocusRef.current = providerKey(kind, id)
+    setSortAnnouncement({ moved: id, kind, position: nextIndex + 1 })
     clearTimeout(timerRef.current)
     const delay = keyboard ? REORDER_DEBOUNCE_MS : 0
     timerRef.current = setTimeout(() => {
       timerRef.current = undefined
       const batched = pendingRef.current
       const current = statusRef.current
-      if (batched && current) runImmediate(current.settings.searchEnabled, batched)
+      if (batched && current) runImmediate(batched.kind === 'search' ? current.settings.searchEnabled : current.settings.fetchEnabled, batched.order, [], batched.kind)
     }, delay)
   }
 
   function endDrag() {
+    dragRef.current = null
     setDragSource(null)
     setDropTarget(null)
   }
@@ -687,29 +675,44 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
     {saved.storageFailed && <p role="alert" className="dsh-ui-banner dsh-ui-banner--danger">{text.storageFailed}</p>}
     <div role="tabpanel" id={tabsId + '-providers-panel'} aria-labelledby={tabsId + '-providers-tab'}
       hidden={tab !== 'providers'} tabIndex={0}>
-      {backends.length === 0 ? <p className="dsh-ui-empty">{text.empty}</p> : <article
+      {(['search', 'fetch'] as const).map(kind => {
+        const order = pendingOrder?.kind === kind ? pendingOrder.order : providerOrder(saved.settings, kind)
+        const catalog = catalogBackends(saved, kind)
+        const backends = [...order.flatMap(id => catalog.find(provider => provider.id === id) ?? []), ...catalog.filter(provider => !order.includes(provider.id))]
+        const selected = selectedBackend(saved, kind)
+        const on = kind === 'search' ? saved.settings.searchEnabled : saved.settings.fetchEnabled
+        const canEnable = order.some(id => saved.providers.some(provider => provider.kind === kind && provider.id === id && provider.configured))
+        const sortingOther = pendingOrder !== null && pendingOrder.kind !== kind
+        const locked = busy || sortingOther || Boolean(dragSource && !dragSource.startsWith(kind + ':'))
+        const title = kind === 'search' ? text.toolTitle : text.fetchTitle
+        return backends.length === 0 ? (kind === 'search' ? <p key={kind} className="dsh-ui-empty">{text.empty}</p> : null) : <article key={kind}
         className="web-search-card dsh-ui-card dsh-ui-card--flat"
-        data-testid="web-search-tool"
+        data-testid={kind === 'search' ? 'web-search-tool' : 'web-search-fetch'}
         data-on={on ? 'true' : 'false'}>
         <header className="ws-card-head">
           <div>
-            <h3 className="dsh-ui-title">{text.toolTitle}</h3>
-            {!canEnable && <p className="dsh-ui-hint">{text.needBackend}</p>}
+            <h3 className="dsh-ui-title">{title}</h3>
+            {!canEnable && <p className="dsh-ui-hint">{kind === 'search' ? text.needBackend : text.needFetchBackend}</p>}
           </div>
           <Switch
             checked={on}
-            label={text.toolTitle}
-            disabled={busy || (!on && !canEnable)}
-            onChange={next => runImmediate(next, order)}
+            label={title}
+            disabled={locked || dragSource !== null || (!on && !canEnable)}
+            onChange={next => runImmediate(next, order, [], kind)}
           />
         </header>
-        <ol className="web-search-rank" aria-label={text.backends}>
+        <ol className="web-search-rank" aria-label={kind === 'search' ? text.backends : text.fetchBackends}>
           {backends.map(provider => {
             const participating = order.includes(provider.id)
             const rank = order.indexOf(provider.id)
-            const dormant = !isRegisteredSearch(saved, provider.id)
-            const active = !dormant && saved.searchActive && selected?.id === provider.id
-            const info = searchProviderInfo(provider, locale)
+            const dormant = !isRegistered(saved, provider.id, kind)
+            const active = !dormant && (kind === 'search' ? saved.searchActive : saved.fetchActive) && selected?.id === provider.id
+            const info = kind === 'search' || (ownsProviderConfiguration(provider) && provider.id === 'firecrawl') ? searchProviderInfo(provider, locale) : {
+              description: ownsProviderConfiguration(provider) && provider.id === 'http-managed'
+                && provider.description === '优先匿名 Jina Reader 读取，失败后本机 HTTP 直连；无需 Key。' && locale === 'en'
+                ? 'Reads with anonymous Jina Reader first, then direct HTTP if needed; no key required.' : provider.description,
+              pricing: provider.pricing ?? '', pricingUrl: provider.pricingUrl,
+            }
             const owned = ownsProviderConfiguration(provider)
             const access = configurationAccess(provider)
             const needsKey = owned && Boolean(provider.credentialRef)
@@ -717,55 +720,57 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
             const showKey = !dormant && needsKey && participating && (!shared || !provider.configured)
             const canSort = participating && order.length > 1
             const readOnly = writable[provider.credentialRef ?? ''] === false
-            const typedKey = (keys[provider.id] ?? '').trim()
+            const typedKey = (keys[providerKey(provider.kind, provider.id)] ?? '').trim()
             const availability = dormant ? 'dormant' : provider.configured ? 'available' : 'unavailable'
-            return <li key={provider.id} className={active ? 'is-active' : undefined} data-testid={`web-search-rank-${provider.id}`}
+            return <li key={provider.id} className={active ? 'is-active' : undefined} data-testid={`web-${kind}-rank-${provider.id}`}
               data-availability={availability}
               data-in-use={active || undefined}
-              data-dragging={dragSource === provider.id || undefined}
-              data-drop={dropTarget === provider.id && dragSource ? (order.indexOf(dragSource) < rank ? 'after' : 'before') : undefined}
+              data-dragging={dragSource === providerKey(kind, provider.id) || undefined}
+              data-drop={dropTarget === providerKey(kind, provider.id) && dragSource ? (order.indexOf(dragSource.slice(kind.length + 1)) < rank ? 'after' : 'before') : undefined}
               onDragOver={event => {
-                if (busy || !canSort || !dragSource || dragSource === provider.id) return
+                if (locked || !canSort || !dragSource?.startsWith(kind + ':') || dragSource === providerKey(kind, provider.id)) return
                 event.preventDefault()
                 event.dataTransfer.dropEffect = 'move'
-                setDropTarget(provider.id)
+                setDropTarget(providerKey(kind, provider.id))
               }}
               onDragLeave={event => {
                 if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(null)
               }}
               onDrop={event => {
-                if (busy || !canSort || !dragSource) return
+                if (locked || !canSort || !dragSource?.startsWith(kind + ':')) return
                 event.preventDefault()
-                move(dragSource, rank)
+                move(kind, dragSource.slice(kind.length + 1), rank)
                 endDrag()
               }}>
               {canSort ? <Button variant="ghost" size="sm" className="web-search-drag-handle"
                 ref={(element: HTMLButtonElement | null) => {
-                  if (element) handleRefs.current.set(provider.id, element)
-                  else handleRefs.current.delete(provider.id)
+                  if (element) handleRefs.current.set(providerKey(kind, provider.id), element)
+                  else handleRefs.current.delete(providerKey(kind, provider.id))
                 }}
                 icon={<svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor" aria-hidden="true">
                   <circle cx="5" cy="5" r="1.5" /><circle cx="11" cy="5" r="1.5" />
                   <circle cx="5" cy="10" r="1.5" /><circle cx="11" cy="10" r="1.5" />
                   <circle cx="5" cy="15" r="1.5" /><circle cx="11" cy="15" r="1.5" />
                 </svg>}
-                draggable={!busy} aria-disabled={busy}
+                draggable={!locked} aria-disabled={locked}
                 aria-label={text.dragPrefix + providerDisplayLabel(provider, locale)}
                 title={text.dragHint}
                 onDragStart={event => {
-                  if (busy) { event.preventDefault(); return }
+                  if (locked || (pendingRef.current && pendingRef.current.kind !== kind)) { event.preventDefault(); return }
                   event.dataTransfer.effectAllowed = 'move'
-                  event.dataTransfer.setData('application/x-dsh-search-provider', provider.id)
+                  event.dataTransfer.setData(`application/x-dsh-${kind}-provider`, provider.id)
                   const row = event.currentTarget.closest('li')
                   if (row) event.dataTransfer.setDragImage(row, 16, 16)
-                  setDragSource(provider.id)
+                  dragRef.current = providerKey(kind, provider.id)
+                  requestSeq.current += 1
+                  setDragSource(providerKey(kind, provider.id))
                   setSortAnnouncement('')
                 }}
                 onDragEnd={endDrag}
                 onKeyDown={event => {
                   if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
                   event.preventDefault()
-                  move(provider.id, rank + (event.key === 'ArrowUp' ? -1 : 1), true)
+                  move(kind, provider.id, rank + (event.key === 'ArrowUp' ? -1 : 1), true)
                 }} /> : <span className="web-search-rank-index">{participating ? rank + 1 : '—'}</span>}
               <div className="web-search-provider">
                 <div className="web-search-provider-heading">
@@ -779,8 +784,8 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
                 </div>
                 <div className="web-search-provider-info">
                   {info.description ? <p>{info.description}</p> : null}
-                  <p>{info.pricing}{info.pricingUrl && <> <AppLink url={info.pricingUrl}
-                    label={providerDisplayLabel(provider, locale) + ' ' + text.pricing}>{provider.id === 'ddg' ? text.website : text.pricing}</AppLink></>}</p>
+                  {info.pricing || info.pricingUrl ? <p>{info.pricing}{info.pricingUrl && <> <AppLink url={info.pricingUrl}
+                    label={providerDisplayLabel(provider, locale) + ' ' + text.pricing}>{provider.id === 'ddg' ? text.website : text.pricing}</AppLink></>}</p> : null}
                 </div>
                 {access.kind === 'link' ? <p className="dsh-ui-hint"><AppLink url={access.url} label={text.openConfig}>{text.openConfig}</AppLink></p>
                   : access.kind === 'owner' ? <p className="dsh-ui-hint">{text.ownerSettings}{access.name}</p>
@@ -788,21 +793,22 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
                       : null}
                 {shared && participating && owned ? <small className="dsh-ui-meta">{provider.credentialHint === '与模型设置共用 Key'
                   ? locale === 'zh' ? provider.credentialHint : 'Shares a key with model settings'
-                  : provider.credentialHint ?? text.sharedKey}</small> : null}
+                  : owned && provider.id === 'firecrawl' && locale === 'en' ? 'Search and page reads share a Firecrawl key'
+                    : provider.credentialHint ?? text.sharedKey}</small> : null}
                 {showKey ? <label className="dsh-ui-field">
                   <span className="dsh-ui-label">API Key</span>
                   <Input className="ws-input" type="password" autoComplete="off" spellCheck={false}
-                    disabled={busy || readOnly}
-                    value={keys[provider.id] ?? ''}
+                    disabled={busy || reordering || readOnly}
+                    value={keys[providerKey(provider.kind, provider.id)] ?? ''}
                     placeholder={provider.configured ? text.keyConfigured : text.keyPlaceholder}
-                    onChange={event => setKeys(current => ({ ...current, [provider.id]: event.target.value }))} />
+                    onChange={event => setKeys(current => ({ ...current, [providerKey(provider.kind, provider.id)]: event.target.value }))} />
                 </label> : null}
                 {showKey || (needsKey && !shared && provider.configured) ? <div className="dsh-ui-actions">
-                  {showKey ? <Button variant="outline" size="sm" disabled={busy || readOnly || !typedKey}
+                  {showKey ? <Button variant="outline" size="sm" disabled={busy || reordering || readOnly || !typedKey}
                     onClick={() => void action(async () => { await saveKeys(provider); await load(); setNote({ key: 'keySaved' }) })}>
                     {text.saveKey}</Button> : null}
                   {needsKey && !shared && provider.configured ? <ConfirmButton
-                    disabled={busy || readOnly}
+                    disabled={busy || reordering || readOnly}
                     label={text.deleteKey} confirmLabel={text.confirmDelete}
                     onConfirm={() => void action(() => removeKey(provider))} /> : null}
                 </div> : null}
@@ -811,77 +817,33 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
                 <Switch
                   checked={participating}
                   label={providerDisplayLabel(provider, locale)}
-                  disabled={busy}
+                  disabled={locked || dragSource !== null}
                   onChange={next => {
                     const following = next ? [...order, provider.id] : order.filter(id => id !== provider.id)
                     runImmediate(
-                      nextSearchEnabled(saved.settings.searchEnabled, following, saved.providers, {}, writable),
+                      on && following.some(id => saved.providers.some(item => item.kind === kind && item.id === id && item.configured)),
                       following,
-                      droppedDormantIds(saved.settings, following, saved.providers),
+                      droppedDormantIds(saved.settings, following, saved.providers, kind),
+                      kind,
                     )
                   }} />
               </div>
             </li>
           })}
         </ol>
-        {backends.some(usesBundledPricing) ? <p className="dsh-ui-hint">{pricingCheckedText(locale, PROVIDER_PRICING_CHECKED)}</p> : null}
-        {on ? <div className="dsh-ui-actions">
+        {kind === 'search' && backends.some(usesBundledPricing) ? <p className="dsh-ui-hint">{pricingCheckedText(locale, PROVIDER_PRICING_CHECKED)}</p> : null}
+        {on && kind === 'search' ? <div className="dsh-ui-actions">
           <Button variant="outline" size="md" disabled={busy || reordering} onClick={() => void action(async () => {
             // Testing is explicit, so typed keys are saved first and the request uses them.
-            await saveKeys()
+            await saveKeysForKind('search')
             const result = await call<{ sources: number }>('test')
             await load()
             setNote({ sources: result.sources })
           })}>{text.test}</Button>
         </div> : null}
-      </article>}
-      {(saved.providers.some(provider => provider.kind === 'fetch') || saved.settings.fetchProvider) && (() => {
-        const fetchId = saved.settings.fetchProvider
-        const fetchSelected = saved.providers.find(provider => provider.kind === 'fetch' && provider.id === fetchId)
-        const fetchDormant = Boolean(fetchId) && !fetchSelected
-        const fetchActive = Boolean(fetchSelected && saved.fetchActive && fetchSelected.configured)
-        const fetchAccess = fetchSelected ? configurationAccess(fetchSelected) : fetchDormant ? { kind: 'unknown' as const } : undefined
-        return <article className="dsh-ui-card dsh-ui-card--flat" data-testid="web-search-fetch"
-          data-availability={fetchDormant ? 'dormant' : fetchSelected?.configured ? 'available' : 'unavailable'}
-          data-in-use={fetchActive || undefined}>
-          <header className="ws-card-head">
-            <div>
-              <h3 className="dsh-ui-title">{text.fetchTitle}</h3>
-              <p className="ws-provider-note">
-                <StateDot state={fetchDormant ? 'idle' : fetchSelected?.configured ? 'done' : 'warning'} />
-                <span>{fetchDormant ? text.dormant : fetchSelected?.configured ? text.available : text.unavailable}</span>
-                {fetchActive ? <Tag tone="success">{text.inUse}</Tag> : null}
-              </p>
-            </div>
-            <Switch checked={saved.settings.fetchEnabled} label={text.fetchTitle} disabled={busy || reordering}
-              onChange={next => void action(async () => {
-                const current = statusRef.current!
-                const value = await call<WebStatus>('update', { settings: { ...editable(current.settings), fetchEnabled: next }, expectedRevision: current.settings.revision })
-                adopt(value); await load()
-              })} />
-          </header>
-          <label className="dsh-ui-field">
-            <span className="dsh-ui-label">{text.fetchProvider}</span>
-            <select className="dsh-ui-select" aria-label={text.fetchProvider} value={fetchId} disabled={busy || reordering}
-              onChange={event => {
-                const id = event.target.value
-                void action(async () => {
-                  const current = statusRef.current!
-                  const value = await call<WebStatus>('update', { settings: { ...editable(current.settings), fetchProvider: id }, expectedRevision: current.settings.revision })
-                  adopt(value); await load()
-                })
-              }}>
-              {fetchDormant && <option value={fetchId}>{fetchId} · {text.dormant}</option>}
-              {saved.providers.filter(provider => provider.kind === 'fetch').map(provider =>
-                <option key={provider.id} value={provider.id}>{providerDisplayLabel(provider, locale)}{provider.configured ? '' : ' · ' + text.unavailable}</option>)}
-            </select>
-          </label>
-          {fetchAccess?.kind === 'link' ? <p className="dsh-ui-hint"><AppLink url={fetchAccess.url} label={text.openConfig}>{text.openConfig}</AppLink></p>
-            : fetchAccess?.kind === 'owner' ? <p className="dsh-ui-hint">{text.ownerSettings}{fetchAccess.name}</p>
-              : fetchAccess?.kind === 'unknown' ? <p className="dsh-ui-hint">{text.unknownOwner}</p>
-                : null}
-        </article>
-      })()}
+      </article>
+      })}
+
     </div>
     <div role="tabpanel" id={tabsId + '-limits-panel'} aria-labelledby={tabsId + '-limits-tab'}
       hidden={tab !== 'limits'} tabIndex={0}>
