@@ -13,7 +13,8 @@ import {
 } from '@klarkxy/dsh-model-route'
 import { ModelCatalogStatus, modelMenuCss } from '@klarkxy/dsh-model-route/ui'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
-import { createModelSettingsSubscriber, modelSettingsChangesRemote, type ModelSettingsSubscriberContext } from '@klarkxy/dsh-plugin-kit/model-settings-client'
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { createModelSettingsSubscriber, mountModelSettingsChanges, type ModelSettingsSubscriberContext } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import type { ModelSettingsText } from '@klarkxy/dsh-plugin-kit/model-settings'
 import { FieldMenu, catalogFailures, checkedCatalog, messageOf } from './client-model-menu.tsx'
 export { FieldMenu, catalogFailures } from './client-model-menu.tsx'
@@ -349,16 +350,15 @@ interface HubClientContext {
     register(options: unknown, component: unknown): unknown
   }
   connection: { rpc: { call(channel: string, endpoint: string, payload: unknown): Promise<{ ok: boolean; value?: unknown; error?: { message?: string } }> } }
-  remote: { session: { modelCatalog(): Promise<unknown> }; $mount(contribution: typeof modelSettingsChangesRemote): Promise<() => Promise<void>> }
+  remote: { session: { modelCatalog(): Promise<unknown> } }
   effect(callback: () => () => void | Promise<void>): unknown
   locale: LocaleLike
 }
 
-export async function apply(ctx: unknown): Promise<void> {
+export function apply(ctx: unknown): void {
   const client = ctx as unknown as HubClientContext
-  const disposeRemote = await client.remote.$mount(modelSettingsChangesRemote)
-  client.effect(() => disposeRemote)
-  const changes = createModelSettingsSubscriber(ctx as ModelSettingsSubscriberContext, '*')
+  mountModelSettingsChanges(ctx as ModelSettingsSubscriberContext, BUNDLE)
+  const changes = createModelSettingsSubscriber(ctx as ModelSettingsSubscriberContext, BUNDLE, modelSettingsChangesIdentity(BUNDLE), () => true)
   const call = async (endpoint: string, payload: unknown): Promise<never> => {
     const result = await client.connection.rpc.call(CHANNEL, endpoint, payload)
     if (!result?.ok) throw new Error(result?.error?.message || 'Request failed')

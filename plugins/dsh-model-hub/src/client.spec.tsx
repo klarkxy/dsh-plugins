@@ -108,7 +108,10 @@ describe('hub settings page', () => {
       connection: { rpc: { call: async () => ({ ok: true, value: [] }) } },
       remote: { session, $mount: async () => { mounts++; return async () => { unmounts++ } } },
       effect: (callback: () => () => void | Promise<void>) => cleanup.push(callback()),
-      inject: () => ({ dispose() {} }),
+      inject(deps: string[], callback?: (scope: unknown) => void) {
+        if (deps.length === 1 && deps[0] === 'remote') callback?.({ remote: { $mount: async () => { mounts++; return async () => { unmounts++ } } }, effect(run: () => () => void | Promise<void>) { cleanup.push(run()) } })
+        return { dispose() {} }
+      },
       locale: 'en',
     })
     expect(waiting.length).toBe(1)

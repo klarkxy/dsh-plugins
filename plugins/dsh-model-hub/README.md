@@ -24,7 +24,7 @@ Open **Plugins → Model Hub**.
 ## Limits
 
 - Only plugins that expose model settings appear.
-- If a setting changed elsewhere, refresh and choose again.
+- Changes made elsewhere update the page automatically. If an edit conflicts with a newer change, refresh and choose again.
 - If the model list cannot load, use **Retry**. The last available list stays visible; warnings identify providers that could not be loaded while other providers remain usable.
 - Model selection guidance requires host tools that support choosing a subagent model. Existing conversations retain their saved model lists; start a new conversation to use an updated list.
 - Guidance does not force a model choice or add extra subtasks solely for variety.

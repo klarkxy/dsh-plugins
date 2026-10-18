@@ -1,6 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import { ModelSettingsChangesController, watchModelSettingsChanges } from './changes.ts'
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { createModelSettingsChanges, watchModelSettingsChanges } from './changes.ts'
 
 function events() {
   const listeners = new Map<string, Set<(...args: any[]) => void>>()
@@ -55,7 +56,7 @@ describe('host model settings invalidation service', () => {
 
   it('owns every request through actual Cordis disposal and refuses post-unload work', async () => {
     const ctx = new Context()
-    const service = new ModelSettingsChangesController(ctx)
+    const service = createModelSettingsChanges(ctx, modelSettingsChangesIdentity('@klarkxy/dsh-model-hub'))
     const first = service.watch(new AbortController().signal)[Symbol.asyncIterator]()
     await first.next()
     const waiting = first.next()
@@ -64,6 +65,16 @@ describe('host model settings invalidation service', () => {
     await failure
     const after = service.watch(new AbortController().signal)[Symbol.asyncIterator]()
     await expect(after.next()).rejects.toThrow('owner unloaded')
+  })
+
+  it('drops another owner before the frame reaches a feature plugin stream', async () => {
+    const bus = events(), abort = new AbortController()
+    const iterator = watchModelSettingsChanges(bus, abort.signal, '@klarkxy/dsh-git-commit')
+    await iterator.next()
+    bus.emit('model-settings/changed', { ns: '@klarkxy/dsh-current-title', revision: 4 })
+    bus.emit('settings/document-updated', '@klarkxy/dsh-git-commit', 5)
+    expect((await iterator.next()).value).toEqual({ kind: 'changed', ns: '@klarkxy/dsh-git-commit', revision: 5 })
+    await iterator.return()
   })
 
   it('removes the first listener if attaching the second fails', async () => {

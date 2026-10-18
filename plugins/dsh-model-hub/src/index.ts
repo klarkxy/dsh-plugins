@@ -10,7 +10,8 @@
  * cast (cast.ts) edits the native subagent model-selection settings the same
  * way and injects per-route task tendencies into the system prompt.
  */
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { createProbeDiagnostics } from './diagnostics.ts'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
@@ -21,7 +22,7 @@ import { modelRouteRoleSchemastery, modelRouteSchemastery } from '@klarkxy/dsh-m
 import { buildProbeReport, planFieldWrite, type ProbeDescriptorLike } from './probe.ts'
 import { createHubSettings } from './owners.ts'
 import { notifyModelSettingsChanged, type ModelSettingsDiscovery } from '@klarkxy/dsh-plugin-kit/model-settings'
-import { ModelSettingsChangesController } from './changes.ts'
+import { registerHubModelSettingsChanges } from './changes.ts'
 import { CAST_TENDENCIES_NAMESPACE, createCast } from './cast.ts'
 import { createRunningTracker, RUNNING_NAMESPACE, type RunningAgentsLike, type RunningSubagentsServiceLike } from './running.ts'
 
@@ -45,7 +46,7 @@ interface SettingsLike {
 }
 
 export function apply(ctx: Context): void {
-  new ModelSettingsChangesController(ctx)
+  registerHubModelSettingsChanges(ctx)
   const profile = ctx.get('profileContext') as ProfileContextLike | undefined
   const settings = ctx.settings as unknown as SettingsLike
   const describe = () => settings.describe({ redactSecrets: true }) as unknown as ProbeDescriptorLike[]
@@ -83,7 +84,8 @@ export function apply(ctx: Context): void {
     text: () => cast.promptText(() => (ctx.get('subagentModelSelection') as { current(): unknown } | undefined)?.current()),
   })
 
-  const run = (reason: string) => {
+  const run = async () => {
+    const reason = 'requested'
     let report
     try {
       report = buildProbeReport(describe())
@@ -98,23 +100,34 @@ export function apply(ctx: Context): void {
     if (profile?.dir) {
       try {
         const dir = join(profile.dir, 'data', 'model-hub')
-        mkdirSync(dir, { recursive: true })
-        writeFileSync(join(dir, 'probe-report.json'), JSON.stringify(report, null, 2))
+        await mkdir(dir, { recursive: true })
+        await writeFile(join(dir, 'probe-report.json'), JSON.stringify(report, null, 2))
       } catch (error) {
         ctx.logger.warn('model-hub: could not write probe report: %s', error instanceof Error ? error.message : String(error))
       }
     }
   }
 
-  run('boot')
-  ctx.on('settings/document-updated', () => run('document-updated'))
+  const diagnostics = createProbeDiagnostics(run, error => {
+    ctx.logger.warn('model-hub: diagnostics failed: %s', String(error))
+  })
+  ctx.effect(() => {
+    const off = ctx.on('settings/document-updated', () => diagnostics.invalidate())
+    diagnostics.request()
+    // Stop notifications before draining the in-flight asynchronous write.
+    return async () => { off(); await diagnostics.dispose() }
+  })
 
   /* Browser-facing field matrix: list detected fields, write one field back.
    * registerHostRpc keeps the host's origin/auth policy authoritative and
    * fails closed when it is absent. */
   ctx.effect(() => registerHostRpc(ctx as unknown as HostRpcContext, CHANNEL, async (endpoint, payload, signal) => {
     try {
-      if (endpoint === 'fields.list') return { ok: true, value: await hub.list(signal) }
+      if (endpoint === 'fields.list') {
+        const value = await hub.list(signal)
+        diagnostics.request()
+        return { ok: true, value }
+      }
       if (endpoint === 'fields.set') {
         return { ok: true, value: await hub.set(payload, signal) }
       }
