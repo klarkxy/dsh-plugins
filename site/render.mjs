@@ -30,7 +30,7 @@ const T = {
     empty: "没有匹配的插件，换个关键词试试。",
     copyInstall: "复制安装命令",
     copy: "复制",
-    needs: (list) => `需先装 ${list}`,
+    needs: (list) => `依赖 ${list}`,
     recent: "最近发布",
     changelog: "版本动态",
     changelogLead: "所有插件的完整版本时间线，数据来自 npm。",
@@ -41,7 +41,8 @@ const T = {
     officialDocs: "DSH 官方文档",
     back: "全部插件",
     install: "安装",
-    installDeps: (list) => `这个插件依赖 ${list}，命令会按顺序一起装上。`,
+    installFirst: (list) => `这个插件需要先装 ${list}，命令会按顺序一起装上。`,
+    installAuto: (list) => `这个插件依赖 ${list}，安装时会自动一起装上。`,
     about: "说明",
     readmeFrom: (path, version) => `以下内容来自 ${path}（${version}）。`,
     readmeFallback: "这个包没有中文 README，下面是英文原文。",
@@ -90,7 +91,7 @@ const T = {
     empty: "No plugins match. Try another word.",
     copyInstall: "Copy install command",
     copy: "Copy",
-    needs: (list) => `Needs ${list}`,
+    needs: (list) => `Depends on ${list}`,
     recent: "Recent releases",
     changelog: "Release timeline",
     changelogLead: "The complete version timeline across all plugins, straight from npm.",
@@ -101,7 +102,8 @@ const T = {
     officialDocs: "Official DSH docs",
     back: "All plugins",
     install: "Install",
-    installDeps: (list) => `This plugin depends on ${list}; the commands install them in order.`,
+    installFirst: (list) => `This plugin needs ${list} installed first; the commands install them in order.`,
+    installAuto: (list) => `This plugin depends on ${list}; they are installed with it automatically.`,
     about: "About",
     readmeFrom: (path, version) => `From ${path} in ${version}.`,
     readmeFallback: "This package has no English README; the Chinese original follows.",
@@ -332,15 +334,20 @@ const peerDsh = (manifest) =>
 
 export function derive(catalog, data) {
   const byPackage = new Map(catalog.plugins.map((p) => [p.package, p]));
-  const deps = new Map();
+  const refs = new Map();
   for (const p of catalog.plugins) {
     const m = data[p.package].manifest;
-    const names = Object.keys({ ...m.dependencies, ...m.peerDependencies }).filter((n) => byPackage.has(n) && n !== p.package);
-    deps.set(p.package, names.sort());
+    const known = (source) => Object.keys(source ?? {}).filter((n) => byPackage.has(n) && n !== p.package);
+    // `dependencies` ship with the plugin (the plugin manager runs `pnpm add`, and profiles set
+    // autoInstallPeers: false), so only a required peer listed in this catalog needs its own command.
+    refs.set(p.package, {
+      deps: [...new Set([...known(m.dependencies), ...known(m.peerDependencies)])].sort(),
+      peers: known(m.peerDependencies).filter((n) => m.peerDependenciesMeta?.[n]?.optional !== true).sort(),
+    });
   }
   const chain = (name, seen = new Set()) => {
     const out = [];
-    for (const d of deps.get(name)) {
+    for (const d of refs.get(name).peers) {
       if (seen.has(d)) continue;
       seen.add(d);
       out.push(...chain(d, seen), d);
@@ -353,8 +360,8 @@ export function derive(catalog, data) {
     return {
       ...p,
       npm: d,
-      deps: deps.get(p.package).map((n) => byPackage.get(n)),
-      dependents: catalog.plugins.filter((o) => deps.get(o.package).includes(p.package)),
+      deps: refs.get(p.package).deps.map((n) => byPackage.get(n)),
+      dependents: catalog.plugins.filter((o) => refs.get(o.package).deps.includes(p.package)),
       installPackages: install.map((n) => byPackage.get(n)),
       commands: install.map((n) => `dsh plugin --profile web add ${n}`),
       requires: { dsh: d.manifest.engines?.dsh ?? peerDsh(d.manifest), node: d.manifest.engines?.node },
@@ -625,6 +632,14 @@ function detailPage(ctx, plugin, lang) {
   const readmeNote = !readme ? "" : own ? t.readmeFrom(readme.path, npm.version) : t.readmeFallback;
 
   const list = (items) => items.map((p) => `<a href="${pageFor(p)}">${esc(p.title[lang])}</a>`).join("、");
+  const manualDeps = plugin.installPackages.filter((p) => p.slug !== plugin.slug);
+  const dependencyNames = new Set(Object.keys(plugin.npm.manifest.dependencies ?? {}));
+  const autoDeps = plugin.deps.filter((p) => dependencyNames.has(p.package));
+  const depsNote = manualDeps.length
+    ? `<p class="small">${t.installFirst(list(manualDeps))}</p>`
+    : autoDeps.length
+      ? `<p class="small">${t.installAuto(list(autoDeps))}</p>`
+      : "";
   const license =
     npm.manifest.license === "SEE LICENSE IN LICENSE" && npm.files.includes("/LICENSE")
       ? `<a href="${assetPages.LICENSE ?? `${plugin.repository}/blob/HEAD/${dir}LICENSE`}">${t.licenseFile}</a>`
@@ -693,7 +708,7 @@ ${plugin.webUi ? `<span class="tag">${esc(t.webUi)}</span>` : ""}
 <pre class="terminal">${plugin.commands.map((c) => `<span class="prompt" aria-hidden="true">$</span> ${esc(c)}`).join("\n")}</pre>
 ${copyButton(lang, plugin.commands, t.copyInstall, "primary")}
 </div>
-${plugin.deps.length ? `<p class="small">${t.installDeps(list(plugin.installPackages.filter((p) => p.slug !== plugin.slug)))}</p>` : ""}
+${depsNote}
 <p class="small">${esc(t.heroNote)}</p>
 </section>
 <div class="plugin-body">
@@ -744,6 +759,45 @@ function notFoundPage(ctx) {
   );
 }
 
+/** Format 1 of the DSH plugin market index. Only bundles can be installed from Discover. */
+export function marketIndex(ctx) {
+  const { catalog, plugins } = ctx;
+  const bundles = plugins.filter((p) => p.npm.manifest.dsh?.bundle);
+  const categories = Object.fromEntries(
+    catalog.categories
+      .filter((c) => bundles.some((p) => p.category === c.id))
+      .map((c) => [c.id, { title: c.title }]),
+  );
+  return `${JSON.stringify(
+    {
+      format: 1,
+      title: { en: "klarkxy's DSH plugins", zh: "klarkxy 的 DSH 插件" },
+      description: {
+        en: "Installable DeepSeek Harness bundles published by klarkxy.",
+        zh: "klarkxy 发布的可安装 DeepSeek Harness 组合包。",
+      },
+      metadata: { categories },
+      plugins: bundles.map((p) => ({
+        name: p.package,
+        title: p.title,
+        description: p.summary,
+        author: catalog.owner.name,
+        homepage: `${catalog.siteUrl}plugins/${p.slug}/`,
+        repository: { url: p.repository, ...(p.directory ? { directory: p.directory } : {}) },
+        metadata: { category: p.category, keywords: p.npm.manifest.keywords ?? [] },
+        versions: [{
+          version: p.npm.version,
+          publishTimestamp: Math.floor(Date.parse(p.npm.modified) / 1000),
+          source: { type: "npm" },
+          ...(p.requires.dsh ? { engines: { dsh: p.requires.dsh } } : {}),
+        }].filter((v) => Number.isInteger(v.publishTimestamp) && v.publishTimestamp >= 0),
+      })),
+    },
+    null,
+    2,
+  )}\n`;
+}
+
 function pluginsJson(ctx) {
   const { catalog, plugins, generatedAt } = ctx;
   return `${JSON.stringify(
@@ -784,6 +838,7 @@ function llmsTxt(ctx) {
     "> DeepSeek Harness plugins by klarkxy, published on npm. Install with `dsh plugin --profile <profile> add <package>`; install listed dependencies first.",
     "",
     `Machine-readable catalog: ${catalog.siteUrl}plugins.json`,
+    `DSH Discover index: ${catalog.siteUrl}index.json`,
     "",
   ];
   for (const c of catalog.categories) {
@@ -817,6 +872,7 @@ export function renderSite(catalog, data, { generatedAt, assetVersion = "0" }) {
   out.set("assets/mark.svg", MARK);
   out.set("404.html", notFoundPage(ctx));
   out.set("plugins.json", pluginsJson(ctx));
+  out.set("index.json", marketIndex(ctx));
   out.set("llms.txt", llmsTxt(ctx));
   out.set(".nojekyll", "");
   return out;

@@ -10,7 +10,7 @@ const MAX_UNPACKED = 128 * 1024 * 1024;
 const MAX_TEXT = 2 * 1024 * 1024;
 const MAX_ASSET = 5 * 1024 * 1024;
 const IMAGE = /\.(?:svg|png|jpe?g|gif|webp|avif|ico)$/i;
-const MANIFEST_FIELDS = ["description", "license", "engines", "dependencies", "peerDependencies", "keywords", "repository", "homepage", "bugs", "dsh", "icon"];
+const MANIFEST_FIELDS = ["description", "license", "engines", "dependencies", "peerDependencies", "peerDependenciesMeta", "keywords", "repository", "homepage", "bugs", "dsh", "icon"];
 
 async function get(url, type, { fetcher, sleep }) {
   for (let attempt = 1; ; attempt++) {

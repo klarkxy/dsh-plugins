@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { posix } from "node:path";
 import { test } from "node:test";
 
-import { renderReadme, renderSite, validateCatalog } from "./render.mjs";
+import { derive, marketIndex, renderReadme, renderSite, validateCatalog } from "./render.mjs";
 
 const catalog = JSON.parse(readFileSync(new URL("./catalog.json", import.meta.url), "utf8"));
 
@@ -78,13 +78,21 @@ function fixture() {
   const data = {};
   for (const [i, p] of catalog.plugins.entries()) {
     const deps = p.package === "@klarkxy/dsh-zhihu" ? { "@klarkxy/dsh-web-search-manager": "^0.1.0" } : {};
+    const runtimeDeps = p.package === "@klarkxy/dsh-dev-index" ? { "@klarkxy/dsh-plugin-kit": "0.3.4" } : {};
     data[p.package] = {
       name: p.package,
       version: `0.1.${i}`,
       created: "2026-01-01T00:00:00.000Z",
       modified: `2026-02-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`,
       versions: [{ version: `0.1.${i}`, date: `2026-02-${String(i + 1).padStart(2, "0")}T00:00:00.000Z` }],
-      manifest: { license: "SEE LICENSE IN LICENSE", engines: { dsh: "0.1.7-rc.2" }, peerDependencies: deps },
+      manifest: {
+        license: "SEE LICENSE IN LICENSE",
+        engines: { dsh: "0.1.7-rc.2" },
+        dependencies: runtimeDeps,
+        peerDependencies: deps,
+        keywords: [p.slug],
+        ...(p.kind === "service" ? {} : { dsh: { bundle: { patch: "./cordis.patch.yml" } } }),
+      },
       files: ["/LICENSE", "/README.md"],
       readme: { en: { path: p.readme.en, text: `# ${p.package}\n\nSee [zh](${p.readme.zh}).\n\n## Usage\n\nText.` } },
       icon: i === 0 ? '<svg xmlns="http://www.w3.org/2000/svg"/>' : undefined,
@@ -93,23 +101,69 @@ function fixture() {
   return data;
 }
 
-test("site has every page, install order follows dependencies, and internal links resolve", () => {
-  const files = renderSite(catalog, fixture(), { generatedAt: "2026-03-01T00:00:00.000Z" });
+test("install commands cover the plugin and its required peers; dependencies come along", () => {
+  const data = fixture();
+  const files = renderSite(catalog, data, { generatedAt: "2026-03-01T00:00:00.000Z" });
   for (const p of catalog.plugins) {
     assert.ok(files.has(`plugins/${p.slug}/index.html`), p.slug);
     assert.ok(files.has(`en/plugins/${p.slug}/index.html`), p.slug);
     assert.ok(files.has(`assets/icons/${p.slug}.svg`), p.slug);
   }
+  // A required peer from the catalog is not installed for us, so it keeps its own command.
   const zhihu = files.get("plugins/zhihu/index.html");
   const dep = zhihu.indexOf("add @klarkxy/dsh-web-search-manager");
   assert.ok(dep > 0 && dep < zhihu.indexOf("add @klarkxy/dsh-zhihu"));
+  assert.match(zhihu, /这个插件需要先装/);
   assert.match(zhihu, /这个包没有中文 README/);
   assert.match(files.get("plugins/web-search-manager/index.html"), /被依赖/);
 
+  // A plain dependency is installed by `pnpm add`, so only the plugin itself is spelled out.
+  const docs = files.get("plugins/dev-index/index.html");
+  assert.match(docs, /dsh plugin --profile web add @klarkxy\/dsh-dev-index/);
+  assert.doesNotMatch(docs, /add @klarkxy\/dsh-plugin-kit/);
+  assert.match(docs, /这个插件依赖 <a href="[^"]*">插件共享库<\/a>，安装时会自动一起装上/);
+  assert.match(files.get("en/plugins/dev-index/index.html"), /they are installed with it automatically/);
+
+  const optionalPeer = "@klarkxy/dsh-plugin-kit";
+  data["@klarkxy/dsh-dev-index"].manifest = {
+    ...data["@klarkxy/dsh-dev-index"].manifest,
+    dependencies: {},
+    peerDependencies: { [optionalPeer]: ">=0.1.0" },
+    peerDependenciesMeta: { [optionalPeer]: { optional: true } },
+  };
+  const optionalPage = renderSite(catalog, data, { generatedAt: "2026-03-01T00:00:00.000Z" }).get("plugins/dev-index/index.html");
+  assert.doesNotMatch(optionalPage, /add @klarkxy\/dsh-plugin-kit/);
+  assert.doesNotMatch(optionalPage, /自动一起装上/);
+
   const json = JSON.parse(files.get("plugins.json"));
   assert.equal(json.plugins.length, catalog.plugins.length);
+  const market = JSON.parse(files.get("index.json"));
+  assert.equal(market.format, 1);
+  assert.equal(market.title.en, "klarkxy's DSH plugins");
+  assert.deepEqual(market.plugins.map((p) => p.name), catalog.plugins.filter((p) => p.kind !== "service").map((p) => p.package));
+  const zhihuMarket = market.plugins.find((p) => p.name === "@klarkxy/dsh-zhihu");
+  assert.equal(zhihuMarket.metadata.category, "models");
+  assert.deepEqual(zhihuMarket.metadata.keywords, ["zhihu"]);
+  assert.equal(zhihuMarket.versions[0].publishTimestamp, Math.floor(Date.parse(data["@klarkxy/dsh-zhihu"].modified) / 1000));
+  assert.equal(zhihuMarket.versions[0].engines.dsh, "0.1.7-rc.2");
+  assert.equal(zhihuMarket.repository.directory, "plugins/dsh-zhihu");
+  assert.deepEqual(Object.keys(market.metadata.categories).sort(), [...new Set(market.plugins.map((p) => p.metadata.category))].sort());
+  data["@klarkxy/dsh-zhihu"].versions.push({ version: "0.0.1", date: "not-a-date" });
+  assert.deepEqual(
+    JSON.parse(marketIndex({ catalog, plugins: derive(catalog, data) }))
+      .plugins.find((p) => p.name === "@klarkxy/dsh-zhihu").versions.map((v) => v.version),
+    [zhihuMarket.versions[0].version],
+  );
+  data["@klarkxy/dsh-zhihu"].versions.unshift({ version: "9.9.9", date: "2026-03-01T00:00:00.000Z" });
+  const historical = JSON.parse(marketIndex({ catalog, plugins: derive(catalog, data) }))
+    .plugins.find((p) => p.name === "@klarkxy/dsh-zhihu");
+  assert.deepEqual(historical.versions.map((v) => v.version), [zhihuMarket.versions[0].version]);
+  assert.equal(historical.versions.some((v) => v.version === "9.9.9"), false);
   assert.deepEqual(json.plugins.find((p) => p.slug === "zhihu").dependsOn, ["@klarkxy/dsh-web-search-manager"]);
+  assert.deepEqual(json.plugins.find((p) => p.slug === "dev-index").dependsOn, ["@klarkxy/dsh-plugin-kit"]);
+  assert.deepEqual(json.plugins.find((p) => p.slug === "dev-index").install, ["dsh plugin --profile web add @klarkxy/dsh-dev-index"]);
   assert.match(files.get("404.html"), /areas/);
+  assert.match(files.get("llms.txt"), /index\.json/);
 
   // Home chrome: category nav with counts, stats, and a link to the timeline.
   const home = files.get("index.html");

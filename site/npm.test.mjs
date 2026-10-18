@@ -80,6 +80,18 @@ test("missing latest metadata and foreign archive URLs fail explicitly", async (
   await assert.rejects(fetchPackage(plugin, input), /invalid npm archive URL/);
 });
 
+test("optional peer metadata in the published archive is preserved", async () => {
+  const peer = "@klarkxy/dsh-web-search-manager";
+  const input = await fixture([], {
+    name: plugin.package, version, license: "SEE LICENSE IN LICENSE",
+    peerDependencies: { [peer]: ">=0.1.0" },
+    peerDependenciesMeta: { [peer]: { optional: true } },
+  });
+  const result = await fetchPackage(plugin, input);
+  assert.equal(result.manifest.peerDependencies[peer], ">=0.1.0");
+  assert.equal(result.manifest.peerDependenciesMeta[peer].optional, true);
+});
+
 test("a missing README language warns and retains the shipped language", async () => {
   const input = await fixture();
   const warnings = [];
