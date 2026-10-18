@@ -87,6 +87,7 @@ export class CodexRuntime {
   private auth?: Promise<{ rpc: RpcProcess; exe: Executable; init: any; version: string }>
   private authRpc?: RpcProcess
   private processes = new Set<RpcProcess>()
+  private recoveries = new Set<Promise<Result>>()
   private pendingLogin?: Login
   private loginStarting = false
   private completedLogins = new Set<string>()
@@ -267,6 +268,9 @@ export class CodexRuntime {
         if (!generated.length || generated.some(item => item.status !== 'completed' || item.failure || typeof item.savedPath !== 'string')) throw error('tool-unavailable', '本次调用没有成功生成原生图片。')
         if (typeof connection.init.codexHome !== 'string' || !isAbsolute(connection.init.codexHome)) throw error('unsupported-runtime', 'Codex 未提供图片生成目录的可信路径。')
         const generatedRoot = join(connection.init.codexHome, 'generated_images')
+        const nativeImages = []
+        for (const item of generated) { const image = await raster(item.savedPath, [generatedRoot]); nativeImages.push({ path: image.path, mediaType: image.mediaType }) }
+        await request.onGenerated?.(nativeImages)
         // Do not follow a pre-existing user-controlled output directory link.
         const parent = join(root, '.dsh-chatgpt')
         await mkdir(parent, { recursive: true })
@@ -300,10 +304,33 @@ export class CodexRuntime {
       if (!published && outputDir && outputOwned) await rm(outputDir, { recursive: true, force: true })
     }
   }
+  /** Re-read only previously generated files under the signed-in runtime's generated-images root. */
+  recoverImages(images: { path: string; mediaType: string }[], directory: string, signal: AbortSignal): Promise<Result> {
+    const pending = this.copyRecoveredImages(images, directory, signal)
+    this.recoveries.add(pending)
+    void pending.finally(() => this.recoveries.delete(pending)).catch(() => {})
+    return pending
+  }
+  private async copyRecoveredImages(images: { path: string; mediaType: string }[], directory: string, signal: AbortSignal): Promise<Result> {
+    const combined = this.signal(signal), { init } = await this.authProcess()
+    combined.throwIfAborted()
+    if (!isAbsolute(init.codexHome ?? '') || images.length > 20) throw error('invalid-image', '图片恢复目录无效。')
+    const root = await realpath(directory), output = []
+    for (const [index, item] of images.entries()) {
+      combined.throwIfAborted()
+      const image = await raster(item.path, [join(init.codexHome, 'generated_images')])
+      const target = join(root, `recovered-${index}-${randomUUID()}.${image.extension}`)
+      await copyFile(image.path, target)
+      combined.throwIfAborted()
+      output.push({ path: relative(root, target).split(sep).join('/'), mediaType: image.mediaType })
+    }
+    return { id: randomUUID(), mode: 'image', answer: '已恢复此前生成的图片。', images: output, sources: [], searchCount: 0, elapsedMs: 0 }
+  }
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true; this.lifetime.abort(); this.pendingLogin = undefined
     await Promise.allSettled([...this.processes].map(process => process.close()))
+    await Promise.allSettled([...this.recoveries])
     this.processes.clear()
   }
 }

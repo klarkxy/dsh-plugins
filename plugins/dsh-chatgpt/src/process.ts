@@ -4,6 +4,7 @@ import { constants } from 'node:fs'
 import { delimiter, dirname, extname, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
 import { ChatGptError } from './contracts.ts'
+import { cliEnvironment } from '@klarkxy/dsh-plugin-kit/cli-process'
 
 export type Notice = { method: string; params: Record<string, unknown> }
 export interface RpcProcess {
@@ -68,7 +69,7 @@ export class JsonRpcProcess implements RpcProcess {
   private exited: Promise<void>
   constructor(exe: Executable, args: string[], cwd: string, signal: AbortSignal, spawnChild: typeof spawn = spawn) {
     signal.throwIfAborted()
-    this.child = spawnChild(exe.command, [...exe.args, ...args], { cwd, shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' }) as ChildProcessWithoutNullStreams
+    this.child = spawnChild(exe.command, [...exe.args, ...args], { cwd, env: cliEnvironment(process.env, ['CODEX_HOME']), shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' }) as ChildProcessWithoutNullStreams
     this.exited = new Promise(resolveExit => this.child.once('close', () => {
       this.ended = true; this.fail(failure('process-exited', 'Codex 进程已结束。')); resolveExit()
     }))
@@ -153,7 +154,7 @@ export class JsonRpcProcess implements RpcProcess {
       // Kill only this owned child and its owned process tree, never by image name.
       if (pid && process.platform === 'win32') {
         await new Promise<void>(resolveKill => {
-          const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { shell: false, windowsHide: true, stdio: 'ignore' })
+          const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { env: cliEnvironment(), shell: false, windowsHide: true, stdio: 'ignore' })
           killer.once('error', () => { this.child.kill(); resolveKill() }); killer.once('close', () => resolveKill())
         })
       } else if (pid) { try { process.kill(-pid, 'SIGTERM') } catch { this.child.kill() } }

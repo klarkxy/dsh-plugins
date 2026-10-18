@@ -1,3 +1,4 @@
+import { Context } from '@deepseek-ai/cordis'
 import { expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   status: vi.fn(), dispose: vi.fn(async () => {}),
@@ -13,12 +14,14 @@ it('removes the model catalog while reading legacy settings without a runtime ca
   let row: unknown = legacy
   const put = vi.fn(async (_key: string, value: unknown) => { row = value })
   const on = vi.fn(() => () => {})
-  const off: (() => unknown)[] = []
-  const ctx = {
+  const ctx = new Context()
+  Object.assign(ctx, {
     storageDomain: { open: async () => ({ table: () => ({ get: () => row, put }), close: async () => {} }) },
-    tools: { register() {} }, effect(fn: () => () => unknown) { off.push(fn()) },
-    on, parallel: vi.fn(async () => {}),
-  }
+    tools: { register() {} },
+    parallel: vi.fn(async () => {}),
+  })
+  const nativeOn = ctx.on.bind(ctx)
+  ctx.on = ((...args: Parameters<Context['on']>) => { on(...args); return nativeOn(...args) }) as Context['on']
   apply(ctx as any)
   const call = (endpoint: string, payload: unknown = {}) => mocks.call!(endpoint, payload, new AbortController().signal)
   try {
@@ -32,6 +35,6 @@ it('removes the model catalog while reading legacy settings without a runtime ca
     expect(await call('settings.update', { settings, expectedRevision: 6 })).toMatchObject({ ok: true })
     expect(row).toEqual({ settings, revision: 7 })
   } finally {
-    for (const dispose of off.reverse()) await dispose()
+    await ctx.fiber.dispose()
   }
 })

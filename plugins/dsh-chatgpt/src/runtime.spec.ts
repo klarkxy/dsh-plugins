@@ -61,6 +61,15 @@ async function setup(prepare?: (rpc: FakeRpc) => void, overrides = {}) {
 }
 
 describe('isolated capability runtime', () => {
+  it('recovers only existing images inside the runtime generated-images directory without starting a turn', async () => {
+    const { runtime, root, home, processes } = await setup(), native = join(home, 'generated_images')
+    await mkdir(native); await writeFile(join(native, 'saved.png'), png)
+    const result = await runtime.recoverImages([{ path: join(native, 'saved.png'), mediaType: 'image/png' }], root, signal())
+    expect(await readFile(join(root, result.images[0].path))).toEqual(png)
+    expect(processes.flatMap(rpc => rpc.calls).some(call => call.method === 'turn/start')).toBe(false)
+    await writeFile(join(home, 'private.png'), png)
+    await expect(runtime.recoverImages([{ path: join(home, 'private.png'), mediaType: 'image/png' }], root, signal())).rejects.toMatchObject({ code: 'invalid-image' })
+  })
   it('rejects the removed text-chat mode before launching Codex', async () => {
     const { runtime, root, processes } = await setup()
     await expect(runtime.run({ mode: 'ask' as Capability, prompt: 'hello' }, root, signal())).rejects.toMatchObject({ code: 'bad-request' })
@@ -177,7 +186,11 @@ describe('isolated capability runtime', () => {
     const outside = await temp(); await writeFile(join(outside, 'stolen.png'), png)
     const { runtime, root } = await setup(rpc => { rpc.onTurn = () => { rpc.item({ type: 'imageGeneration', id: 'image', status: 'completed', savedPath: join(outside, 'stolen.png') }); rpc.complete() } })
     await expect(runtime.run({ mode: 'image', prompt: 'draw' }, root, signal())).rejects.toMatchObject({ code: 'invalid-image' })
-    expect(await readdir(join(root, '.dsh-chatgpt'))).toEqual([])
+    const outputs = await readdir(join(root, '.dsh-chatgpt')).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return []
+      throw error
+    })
+    expect(outputs).toEqual([])
   })
   it('validates inputs and forwards localImage using its canonical staged path', async () => {
     const { runtime, root, processes } = await setup(); await writeFile(join(root, 'input.png'), png)

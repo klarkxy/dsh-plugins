@@ -2,10 +2,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
 import { notifyModelSettingsChanged } from '@klarkxy/dsh-plugin-kit/model-settings'
 import { ChatGptError, DEFAULT_SETTINGS, PLUGIN_NAME, RPC_CHANNEL, parseSettings, type Settings, type RpcResult } from './contracts.ts'
 import { CodexRuntime } from './runtime.ts'
 import { registerTools, type ToolHost } from './tools.ts'
+import { bindChatGptWebSearch } from './web-search-provider.ts'
 
 export const name = PLUGIN_NAME
 export const inject = ['tools', 'sandboxPolicy', 'attachments', 'storageDomain', 'connection', 'webServer'] as const
@@ -19,6 +22,7 @@ type Domain = { table(name: string): { get(key: string): unknown; put(key: strin
 type Host = Context & HostRpcContext & ToolHost & { storageDomain: { open(spec: typeof domainSpec): Promise<Domain> } }
 
 export function apply(ctx: Context): void {
+  createModelSettingsChanges(ctx, modelSettingsChangesIdentity(PLUGIN_NAME), PLUGIN_NAME)
   const host = ctx as Host
   let settings: Settings = { ...DEFAULT_SETTINGS }, revision = 0, active = 0, closed = false, settingsUpdating = false
   const lifetime = new AbortController()
@@ -39,7 +43,9 @@ export function apply(ctx: Context): void {
     active++
     try { return await action(combined) } finally { active-- }
   }
-  registerTools(host, (request, workspace, signal) => run(signal, combined => runtime.run(request, workspace, combined)), lifetime.signal)
+  const execute = (request: Parameters<CodexRuntime['run']>[0], workspace: string, signal: AbortSignal) => run(signal, combined => runtime.run(request, workspace, combined))
+  registerTools(host, execute, lifetime.signal, (images, directory, signal) => run(signal, combined => runtime.recoverImages(images, directory, combined)))
+  const refreshWeb = bindChatGptWebSearch(ctx, { run: execute, executable: async () => { await ready; return settings.executable } })
   const rpc = async (endpoint: string, payload: unknown, signal: AbortSignal): Promise<RpcResult> => {
     try {
       if (closed) throw new ChatGptError('disposed', 'ChatGPT 插件已卸载。')
@@ -64,7 +70,7 @@ export function apply(ctx: Context): void {
             return next
           } finally {
             settingsUpdating = false
-            if (committed) notifyModelSettingsChanged(ctx, PLUGIN_NAME, next.revision)
+            if (committed) { notifyModelSettingsChanged(ctx, PLUGIN_NAME, next.revision); void refreshWeb() }
           }
         })
         settingsWrites = update.then(() => {}, () => {})

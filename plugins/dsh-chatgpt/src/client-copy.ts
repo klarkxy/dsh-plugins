@@ -58,6 +58,7 @@ export const chatGptMessages = [
   ['本次调用没有成功生成原生图片。', 'This call did not successfully generate a native image.'],
   ['Codex 未提供图片生成目录的可信路径。', 'Codex did not provide a trusted image generation directory path.'],
   ['图片输出目录无效。', 'Invalid image output directory.'],
+  ['图片恢复目录无效。', 'Invalid image recovery directory.'],
   ['ChatGPT 未返回回答。', 'ChatGPT did not return an answer.'],
   ['ChatGPT 调用失败，请检查运行时与输入图片。', 'The ChatGPT call failed. Check the runtime and input images.'],
   ['ChatGPT 模型设置无效。', 'Unknown ChatGPT model setting'],

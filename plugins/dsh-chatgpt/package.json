@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-chatgpt",
-  "version": "0.1.2",
-  "description": "Use ChatGPT web search, image generation, editing, and image analysis through local Codex.",
+  "version": "0.2.0",
+  "description": "Search, generate and edit images, and analyze images through local Codex; search also joins the unified provider order.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "icon": "./icon.svg",

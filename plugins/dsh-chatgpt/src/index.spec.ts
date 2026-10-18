@@ -1,3 +1,4 @@
+import { Context } from '@deepseek-ai/cordis'
 import { describe, it, expect, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   call: undefined as undefined | ((endpoint: string, payload: unknown, signal: AbortSignal) => Promise<any>),
@@ -14,31 +15,31 @@ import { DEFAULT_SETTINGS } from './contracts.ts'
 
 function mount(write?: (value: unknown) => Promise<void>) {
   let row: unknown
-  const tools: any[] = [], off: (() => unknown)[] = []
+  const tools: any[] = []
   const put = vi.fn(async (_key, value) => { await write?.(value); row = value })
   const close = vi.fn(async () => {})
-  const ctx = {
-    parallel: vi.fn(async () => {}),
-    on: () => () => {},
+  const ctx = new Context()
+  const notify = vi.fn(async () => {})
+  Object.assign(ctx, {
+    parallel: notify,
     storageDomain: { open: async () => ({ table: () => ({ get: () => row, put }), close }) },
     tools: { register: (tool: unknown) => { tools.push(tool) } },
     sandboxPolicy: { resolve: () => ({ workspaceRoot: process.cwd(), mode: 'workspace-write' }) },
     attachments: {},
-    effect: (run: () => () => unknown) => { off.push(run()) },
-  }
+  })
   apply(ctx as any)
   const call = (endpoint: string, payload: unknown = {}) => mocks.call!(endpoint, payload, new AbortController().signal)
-  return { tools, put, call, close, off, notify: ctx.parallel }
+  return { tools, put, call, close, dispose: () => ctx.fiber.dispose(), notify }
 }
 
 describe('ChatGPT host integration', () => {
   it('registers all model tools and does not infer merely from opening settings', async () => {
     mocks.run.mockClear(); mocks.login.mockClear()
     const app = mount()
-    expect(app.tools.map(tool => tool.name)).toEqual(['chatgpt_search', 'chatgpt_generate_image', 'chatgpt_edit_image', 'chatgpt_view_image'])
+    expect(app.tools.map(tool => tool.name)).toEqual(['chatgpt_search', 'chatgpt_generate_image', 'chatgpt_edit_image', 'chatgpt_view_image', 'chatgpt_media_jobs', 'chatgpt_recover_media'])
     expect((await app.call('settings')).value).toEqual({ settings: DEFAULT_SETTINGS, revision: 0 })
     expect(mocks.run).not.toHaveBeenCalled(); expect(mocks.login).not.toHaveBeenCalled()
-    await app.off.at(-1)!()
+    await app.dispose()
   })
   it('rejects raw API/token login variants before they reach Codex', async () => {
     mocks.login.mockClear()
@@ -47,7 +48,7 @@ describe('ChatGPT host integration', () => {
     expect(mocks.login).not.toHaveBeenCalled()
     expect(await app.call('login.start', { kind: 'device' })).toMatchObject({ ok: true })
     expect(mocks.login.mock.calls[0][0]).toBe('device')
-    await app.off.at(-1)!()
+    await app.dispose()
   })
   it('persists settings once and refuses stale revisions and malformed updates', async () => {
     const app = mount()
@@ -58,7 +59,7 @@ describe('ChatGPT host integration', () => {
     expect(app.put).toHaveBeenCalledTimes(1)
     expect(app.notify).toHaveBeenCalledTimes(1)
     expect(app.notify).toHaveBeenCalledWith('model-settings/changed', { ns: '@klarkxy/dsh-chatgpt', revision: 1 })
-    await app.off.at(-1)!()
+    await app.dispose()
     expect(app.close).toHaveBeenCalled()
     expect(await app.call('status')).toMatchObject({ ok: false, error: { code: 'cancelled' } })
   })
@@ -73,7 +74,7 @@ describe('ChatGPT host integration', () => {
     expect(await app.call('status')).toMatchObject({ ok: false, error: { code: 'busy' } })
     expect(mocks.status).not.toHaveBeenCalled()
     finish(); expect(await save).toMatchObject({ ok: true })
-    await app.off.at(-1)!()
+    await app.dispose()
   })
   it('notifies after runtime replacement and releasing the settings lock', async () => {
     let finish!: () => void, entered!: () => void
@@ -91,6 +92,6 @@ describe('ChatGPT host integration', () => {
     finish(); await save
     await notificationRead
     expect(reads).toMatchObject([{ ok: true }])
-    await app.off.at(-1)!()
+    await app.dispose()
   })
 })

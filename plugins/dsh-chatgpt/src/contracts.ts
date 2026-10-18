@@ -10,7 +10,7 @@ export type Status = {
   authMode: string | null; accountLabel?: string; plan?: string; login?: Login;
   error?: string;
 }
-export type Request = { mode: Capability; prompt: string; images?: string[] }
+export type Request = { mode: Capability; prompt: string; images?: string[]; onGenerated?: (images: { path: string; mediaType: string }[]) => Promise<void> }
 export type Source = { url: string; title?: string }
 export type ImageResult = { path: string; mediaType: string }
 export type Result = { id: string; mode: Capability; answer: string; images: ImageResult[]; sources: Source[]; searchCount: number; elapsedMs: number }

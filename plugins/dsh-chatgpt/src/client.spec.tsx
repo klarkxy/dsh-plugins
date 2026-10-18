@@ -69,10 +69,16 @@ describe('ChatGPT connection page', () => {
     const remove = vi.fn()
     const register = vi.fn()
     const inject = vi.fn((_name: string, callback: () => unknown) => { callback(); return remove })
+    const order: string[] = []
     apply({
+      inject(deps: string[], callback: (scope: unknown) => void) {
+        order.push(deps[0] === 'remote' ? 'mount' : 'subscribe')
+        if (deps[0] === 'remote') callback({ remote: { $mount: async () => async () => {} }, effect() {} })
+      },
       effect(callback: () => unknown) { const cleanup = callback(); if (typeof cleanup === 'function') cleanups.push(cleanup as () => void) },
       slots: { inject, register }, connection: { rpc: { call: vi.fn() } },
     } as unknown as Context)
+    expect(order[0]).toBe('mount')
     expect(inject).toHaveBeenCalledWith('plugins.bundle.config', expect.any(Function))
     expect(register).toHaveBeenCalledTimes(1)
     expect(register.mock.calls[0][0]).toEqual({ name: 'plugins.bundle.config', key: PLUGIN_NAME, label: 'ChatGPT' })
