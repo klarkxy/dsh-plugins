@@ -95,7 +95,7 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/font/",
   "dshRelease": {
-    "contentHash": "51ff2603dc94f4b459fdf55c07869cb82ea50fc38e3a56d8d599bcd2ddd1e740"
+    "contentHash": "db1cae028b330c4fdf4eaed95db0801baa34fd4b41b7cab77550478707fe62c6"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
