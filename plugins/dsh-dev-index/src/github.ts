@@ -267,7 +267,7 @@ export class GitHubClient {
   private pendingProbe?: {
     controller: AbortController;
     promise: Promise<GhProbe | null>;
-    waiters: number;
+    waiters: Set<{ signal: AbortSignal }>;
     onLifetimeAbort: () => void;
   };
   private readonly fetcher: typeof fetch;
@@ -280,9 +280,20 @@ export class GitHubClient {
     this.discoverProbe = deps.discover ?? ((signal) => probeGh({ run: this.run } satisfies GhDeps, signal));
   }
 
-  dispose(): void {
+  private readonly work = new Set<Promise<unknown>>();
+
+  private track<T>(work: Promise<T>): Promise<T> {
+    this.work.add(work);
+    void work.then(() => this.work.delete(work), () => this.work.delete(work));
+    return work;
+  }
+
+  async dispose(): Promise<void> {
     this.lifetime.abort();
+    this.confirmedProbe = undefined;
     this.abandonProbe(this.pendingProbe);
+    // Includes abandoned probes: their caller may already have stopped waiting.
+    while (this.work.size) await Promise.allSettled([...this.work]);
   }
 
   // Detach and cancel a probe nobody wants any more, releasing its listener. Its
@@ -307,8 +318,8 @@ export class GitHubClient {
     return AbortSignal.any([this.lifetime.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS), ...(signal ? [signal] : [])]);
   }
 
-  // Resolve gh for one caller: join the shared probe, but reject as soon as this
-  // caller's own signal or the client lifetime aborts. An already-aborted caller
+  // Resolve gh for one caller: a peer can keep the shared probe alive, while
+  // the final cancelled waiter must await cleanup. An already-aborted caller
   // never spawns discovery. The throw runs inside the promise so no caller can
   // observe a partially started probe.
   private probe(signal: AbortSignal): Promise<GhProbe | null> {
@@ -316,8 +327,9 @@ export class GitHubClient {
       signal.throwIfAborted();
       if (this.confirmedProbe) return this.confirmedProbe;
       const pending = this.pendingProbe ?? this.startProbe();
-      pending.waiters += 1;
-      return this.awaitProbe(pending, signal);
+      const waiter = { signal };
+      pending.waiters.add(waiter);
+      return this.awaitProbe(pending, waiter);
     });
   }
 
@@ -328,7 +340,7 @@ export class GitHubClient {
     // probes do not accumulate listeners on the lifetime signal.
     this.lifetime.signal.addEventListener("abort", onLifetimeAbort, { once: true });
     const probe: NonNullable<GitHubClient["pendingProbe"]> = {
-      controller, waiters: 0, promise: Promise.resolve(null), onLifetimeAbort,
+      controller, waiters: new Set(), promise: Promise.resolve(null), onLifetimeAbort,
     };
     // Discovery runs inside the promise chain so a synchronous throw is folded
     // into the same catch/finally: the listener is always released, pendingProbe
@@ -341,7 +353,8 @@ export class GitHubClient {
       .then((found) => {
         // Publish only from the current, live probe: an abandoned, cancelled or
         // disposed probe may still resolve late and must not overwrite the cache.
-        if (found && this.pendingProbe === probe && !controller.signal.aborted && !this.lifetime.signal.aborted) {
+        if (found && this.pendingProbe === probe && !controller.signal.aborted && !this.lifetime.signal.aborted
+          && [...probe.waiters].some(waiter => !waiter.signal.aborted)) {
           this.confirmedProbe = found;
         }
         return found;
@@ -352,13 +365,15 @@ export class GitHubClient {
         if (this.pendingProbe === probe) this.pendingProbe = undefined;
       });
     this.pendingProbe = probe;
+    this.track(probe.promise);
     return probe;
   }
 
   // Race the shared probe against this caller's cancellation. A null result falls
-  // through to anonymous access as before. Leaving early decrements the waiter
-  // count; the last one out abandons the probe, while a peer keeps it alive.
-  private async awaitProbe(probe: NonNullable<GitHubClient["pendingProbe"]>, signal: AbortSignal): Promise<GhProbe | null> {
+  // through to anonymous access as before. The last cancelled waiter abandons
+  // and drains the probe, while a peer keeps it alive.
+  private async awaitProbe(probe: NonNullable<GitHubClient["pendingProbe"]>, waiter: { signal: AbortSignal }): Promise<GhProbe | null> {
+    const { signal } = waiter;
     let onAbort: (() => void) | undefined;
     let settled = false;
     try {
@@ -372,8 +387,11 @@ export class GitHubClient {
       return found;
     } finally {
       if (onAbort) signal.removeEventListener("abort", onAbort);
-      probe.waiters -= 1;
-      if (!settled && probe.waiters <= 0) this.abandonProbe(probe);
+      probe.waiters.delete(waiter);
+      if (!settled && probe.waiters.size === 0) {
+        this.abandonProbe(probe);
+        await probe.promise;
+      }
     }
   }
 
@@ -384,12 +402,12 @@ export class GitHubClient {
     merged.throwIfAborted();
     if (probe) {
       try {
-        return { data: await this.viaGh(probe.executable, path, signal), transport: "gh" };
+        return { data: await this.track(this.viaGh(probe.executable, path, signal)), transport: "gh" };
       } catch (error) {
         if (!this.ghBroken(error)) throw error;
       }
     }
-    return { data: await this.viaHttp(path, signal), transport: "anonymous" };
+    return { data: await this.track(this.viaHttp(path, signal)), transport: "anonymous" };
   }
 
   private async viaGh(executable: CliExecutable, path: string, signal?: AbortSignal): Promise<unknown> {
@@ -406,6 +424,7 @@ export class GitHubClient {
       }
       throw error;
     }
+    merged.throwIfAborted();
     if (result.exitCode !== 0) throw classifyGhFailure(result.stderr);
     try {
       return JSON.parse(result.stdout);
@@ -524,7 +543,7 @@ export class GitHubClient {
     const path = `search/code?q=${encodeURIComponent(query)}&per_page=${PER_PAGE}&page=${page}`;
     let data: unknown;
     try {
-      data = await this.viaGh(probe.executable, path, signal);
+      data = await this.track(this.viaGh(probe.executable, path, signal));
     } catch (error) {
       this.ghBroken(error); // code search has no anonymous lane, but the next call re-probes
       throw error;

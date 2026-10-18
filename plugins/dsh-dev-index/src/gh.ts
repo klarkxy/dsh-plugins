@@ -2,7 +2,7 @@ import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
-import { runCli, type CliExecutable } from "@klarkxy/dsh-plugin-kit/cli-process";
+import { cliEnvironment, runCli, type CliExecutable } from "@klarkxy/dsh-plugin-kit/cli-process";
 
 export interface GhProbe {
   executable: CliExecutable;
@@ -42,7 +42,8 @@ export async function findGh(deps: GhDeps = {}): Promise<CliExecutable | null> {
       const candidate = join(dir, file);
       try {
         await access(candidate);
-        return { command: candidate, displayPath: candidate };
+        return { command: candidate, displayPath: candidate, env: cliEnvironment(process.env,
+          ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_HOST", "GH_CONFIG_DIR"]) };
       } catch { /* keep looking */ }
     }
   }

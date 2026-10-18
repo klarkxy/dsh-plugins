@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
-import { CliProcessError } from "@klarkxy/dsh-plugin-kit/cli-process";
+import { CliProcessError, runCli } from "@klarkxy/dsh-plugin-kit/cli-process";
 
 import { findGh, parseGhVersion, probeGh, belowFloor } from "../src/gh.js";
 import { GitHubClient, cleanPath, cleanRef, parseRepo } from "../src/github.js";
@@ -99,6 +99,13 @@ describe("gh CLI discovery", () => {
       await writeFile(join(bin, file), "");
       expect(await findGh({ pathDirs: [empty] })).toBeNull();
       expect((await findGh({ pathDirs: [empty, bin] }))?.displayPath).toBe(join(bin, file));
+      vi.stubEnv("GH_TOKEN", "fixture-gh-token");
+      vi.stubEnv("DSH_PRIVATE_TEST", "private");
+      try {
+        const found = await findGh({ pathDirs: [bin] });
+        expect(found?.env?.GH_TOKEN).toBe("fixture-gh-token");
+        expect(found?.env).not.toHaveProperty("DSH_PRIVATE_TEST");
+      } finally { vi.unstubAllEnvs(); }
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -290,6 +297,72 @@ describe("GitHub repository search", () => {
     expect(discoveryAborted).toBe(true); // no live consumers left
   });
 
+  it("waits for the final waiter's probe cleanup and disposal before settling", async () => {
+    let release!: () => void;
+    let probeSignal!: AbortSignal;
+    const discover = vi.fn((signal: AbortSignal) => {
+      probeSignal = signal;
+      return new Promise<typeof ghProbe>(resolve => { release = () => resolve(ghProbe); });
+    });
+    const client = new GitHubClient({ discover, ...noNetwork });
+    const caller = new AbortController();
+    let settled = false;
+    const request = client.searchRepos({ query: "a" }, caller.signal).catch(error => error).finally(() => { settled = true; });
+    await vi.waitFor(() => expect(discover).toHaveBeenCalledOnce());
+    caller.abort();
+    await vi.waitFor(() => expect(probeSignal.aborted).toBe(true));
+    let disposed = false;
+    const disposal = client.dispose().then(() => { disposed = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(disposed).toBe(false);
+    release();
+    await request;
+    await disposal;
+    expect(disposed).toBe(true);
+  });
+
+  it("does not cache a probe that resolves in the same turn its last caller cancels", async () => {
+    let release!: (value: typeof ghProbe | null) => void;
+    const discover = vi.fn(() => new Promise<typeof ghProbe | null>(resolve => { release = resolve; }));
+    const client = new GitHubClient({ discover, fetcher: (async () => reply({ total_count: 0, items: [] })) as typeof fetch, run: noNetwork.run });
+    const caller = new AbortController();
+    const first = client.searchRepos({ query: "a" }, caller.signal);
+    const rejected = expect(first).rejects.toThrow();
+    await vi.waitFor(() => expect(discover).toHaveBeenCalledOnce());
+    release(ghProbe);
+    caller.abort();
+    await rejected;
+    const next = client.searchRepos({ query: "b" });
+    await vi.waitFor(() => expect(discover).toHaveBeenCalledTimes(2));
+    release(null);
+    expect((await next).transport).toBe("anonymous");
+    await client.dispose();
+  });
+
+  it("awaits real runCli process exit during disposal", async () => {
+    let started!: () => void;
+    const ready = new Promise<void>(resolve => { started = resolve; });
+    let exited = false;
+    const client = new GitHubClient({
+      discover: async () => ghProbe,
+      run: (async (_executable, _args, options) => {
+        try {
+          return await runCli({ command: process.execPath, displayPath: "node" },
+            ["-e", "console.log('ready');setInterval(()=>{},1000)"],
+            { ...options, onLine: () => started() });
+        } finally { exited = true; }
+      }) as typeof runCli,
+      fetcher: noNetwork.fetcher,
+    });
+    const request = client.searchRepos({ query: "a" });
+    const rejected = expect(request).rejects.toThrow();
+    await ready;
+    await client.dispose();
+    expect(exited).toBe(true);
+    await rejected;
+  });
+
   it("does not spawn discovery for an already-aborted caller", async () => {
     const discover = vi.fn(async () => ghProbe);
     const client = new GitHubClient({ discover, run: noNetwork.run, fetcher: noNetwork.fetcher });
@@ -354,10 +427,9 @@ describe("GitHub repository search", () => {
     const firstRejected = expect(first).rejects.toThrow();
     await vi.waitFor(() => expect(probes).toBe(1));
     caller.abort();
-    await firstRejected;
-
-    // Probe 1 resolves late with a positive gh after being abandoned.
+    // Probe 1 must release its real work before its final waiter settles.
     resolveStale(ghProbe);
+    await firstRejected;
     await Promise.resolve();
 
     // The next request must still re-probe (stale result did not cache), and the

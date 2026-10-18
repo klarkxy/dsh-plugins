@@ -25,6 +25,7 @@ Replace `web` with your profile name and restart the profile.
 - The website follows the latest DSH release, which may differ from the version you run.
 - npm metadata is not proof that a plugin works with your DSH.
 - GitHub data comes from your local signed-in gh CLI or anonymous API access (a small hourly quota); the plugin stores no GitHub credentials. Manifest-based code search is only available when gh is signed in.
+- Cancelling the last request using a GitHub CLI check waits for that check to stop. Unloading the plugin waits for its active GitHub requests and CLI processes to finish.
 
 ## Install from GitHub
 

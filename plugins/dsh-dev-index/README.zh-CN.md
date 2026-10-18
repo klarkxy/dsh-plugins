@@ -25,6 +25,7 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 - 官网对应最新发布的 DSH，可能与你正在使用的版本不同。
 - npm 元数据不能证明插件与你的 DSH 兼容。
 - GitHub 数据来自本机已登录的 gh CLI 或匿名 API（匿名额度有限，约每小时几十次请求）；插件不保存任何 GitHub 凭据。按 `dsh.plugin.json` 清单的代码搜索只有在 gh 已登录时可用。
+- 取消最后一个使用 GitHub CLI 检查的请求时，会等待检查停止；卸载插件会等待正在进行的 GitHub 请求和 CLI 进程结束。
 
 ## 从 GitHub 安装
 
