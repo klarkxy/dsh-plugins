@@ -1,226 +1,48 @@
-import { readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
-import { act, type ReactNode } from 'react'
+import { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Simulate } from 'react-dom/test-utils'
 import { JSDOM } from 'jsdom'
-import { describe, expect, it, vi } from 'vitest'
-import { apply } from './client.tsx'
-import { CODE_FONT_PRESETS, CODE_FONT_VARIABLE, STORAGE_KEY, UI_FONT_PRESETS, UI_FONT_VARIABLE, createFontSettingsOverride } from './contracts.ts'
+import { expect, it, vi } from 'vitest'
+import { FontSettingsPanel } from './client.tsx'
+import { type FontRole, type FontThemeSnapshot } from './preferences.ts'
 
-interface ThemeSnapshot {
-  preference: 'light' | 'dark' | 'system'
-  revision: number
-  themes: unknown[]
-  active: { id: string; colorScheme: 'light' | 'dark'; tokens: Record<string, string> }
-  fontSize: number
-}
-
-// Execute the target's published DOM presenter, without importing its client
-// bundle's unrelated renderer/UI dependencies. Fail if the artifact changes.
-const workspaceRequire = createRequire(new URL('../../../package.json', import.meta.url))
-const dshRequire = createRequire(workspaceRequire.resolve('@deepseek-ai/dsh/package.json'))
-const webRequire = createRequire(dshRequire.resolve('@deepseek-ai/dsh-web-app/package.json'))
-const layoutPackage = webRequire.resolve('@deepseek-ai/dsh-client-ui-layout/package.json')
-const layoutVersion = JSON.parse(readFileSync(layoutPackage, 'utf8')).version
-if (layoutVersion !== '0.2.0-rc.2') throw new Error(`Font target presenter must be rc.2, got ${layoutVersion}`)
-const layoutSource = readFileSync(pathToFileURL(join(dirname(layoutPackage), 'lib/client.js')), 'utf8')
-const presenterStart = layoutSource.indexOf('const DARK_ATTRIBUTE =')
-const presenterEnd = layoutSource.indexOf('//#endregion', presenterStart)
-if (presenterStart < 0 || presenterEnd < 0) throw new Error('Target ThemePresenter source not found')
-const Presenter = new Function(`${layoutSource.slice(presenterStart, presenterEnd)}; return ThemePresenter`)() as new () => {
-  apply(snapshot: ThemeSnapshot): void
-  dispose(): void
-}
-
-async function mounted(run: (view: {
-  dom: JSDOM
-  sizes: number[]
-  publish(patch: Partial<ThemeSnapshot>): Promise<void>
-  select(index: number, value: string): Promise<void>
-  locale(active: string): Promise<void>
-  remount(): Promise<void>
-  disposePlugin(): void
-}) => Promise<void>, legacy = { uiFont: '', codeFont: '' }, presenterFirst = true, storageMode?: 'missing' | 'throwing') {
-  const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div></body></html>', { url: 'https://font.test/' })
-  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document,
-    HTMLElement: dom.window.HTMLElement, HTMLInputElement: dom.window.HTMLInputElement,
-    getComputedStyle: dom.window.getComputedStyle.bind(dom.window), localStorage: dom.window.localStorage,
-    IS_REACT_ACT_ENVIRONMENT: true })) vi.stubGlobal(key, value)
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(legacy))
-  if (storageMode === 'missing') vi.stubGlobal('localStorage', undefined)
-  if (storageMode === 'throwing') {
-    vi.spyOn(dom.window.Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota') })
-    vi.spyOn(dom.window.Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('denied') })
+it('reads native edits, writes the text role, resets only panel-controlled roles, and keeps locale live', async () => {
+  const dom = new JSDOM('<div id="root"></div>')
+  vi.stubGlobal('window', dom.window); vi.stubGlobal('document', dom.window.document)
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+  let snapshot: FontThemeSnapshot = { fontSizes: { text: 16, code: 15, terminal: 13 }, fontFamilies: { text: '', code: '', terminal: 'Terminal Mono' } }
+  const listeners = new Set<() => void>(), localeListeners = new Set<() => void>()
+  const writes: unknown[] = []
+  let locale = 'en'
+  const publish = () => { for (const fn of listeners) fn() }
+  const client = {
+    theme: {
+      getTheme: () => snapshot,
+      setFontSize(role: FontRole, px: number) { writes.push([role, px]); snapshot = { ...snapshot, fontSizes: { ...snapshot.fontSizes, [role]: px } }; publish() },
+      setFontFamily(role: FontRole, value: string) { writes.push([role, value]); snapshot = { ...snapshot, fontFamilies: { ...snapshot.fontFamilies, [role]: value } }; publish() },
+    },
+    locale: { getSnapshot: () => ({ active: locale }), subscribe(fn: () => void) { localeListeners.add(fn); return () => { localeListeners.delete(fn) } } },
+    on(_event: string, fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn) } },
+    slots: { inject: () => () => {}, register: () => () => {} },
   }
-  let snapshot: ThemeSnapshot = { preference: 'light', revision: 0, themes: [],
-    active: { id: 'light', colorScheme: 'light', tokens: {} },
-    fontSize: 14 }
-  const listeners = new Set<(snapshot: ThemeSnapshot) => void>()
-  const presenter = new Presenter()
-  presenter.apply(snapshot)
-  const present = (next: ThemeSnapshot) => presenter.apply(next)
-  if (presenterFirst) listeners.add(present)
-  const effects: Array<() => void> = []
-  const sizes: number[] = []
-  let activeLocale = 'en'
-  const localeListeners = new Set<() => void>()
-  let render: ((props: { view: string }) => ReactNode) | undefined
-  const context = {
-    effect(run: () => (() => void)) { effects.push(run()) },
-    slots: { inject(_key: string, callback: () => void) { callback(); return () => {} },
-      register(_spec: unknown, callback: typeof render) { render = callback; return () => {} } },
-    theme: { getTheme: () => snapshot, setFontSize(px: number) {
-      sizes.push(px); snapshot = { ...snapshot, fontSize: px, revision: snapshot.revision + 1 }
-      for (const listener of listeners) listener(snapshot)
-    } },
-    locale: { getSnapshot: () => ({ active: activeLocale }), subscribe: (listener: () => void) => {
-      localeListeners.add(listener); return () => { localeListeners.delete(listener) }
-    } },
-    on(_event: string, listener: (snapshot: ThemeSnapshot) => void) { listeners.add(listener); return () => { listeners.delete(listener) } },
+  const root = createRoot(document.getElementById('root')!)
+  async function select(index: number, value: string) {
+    await act(async () => { const field = document.querySelectorAll('select')[index]!; field.value = value; field.dispatchEvent(new dom.window.Event('change', { bubbles: true })) })
   }
-  apply(context as never)
-  if (!presenterFirst) listeners.add(present)
-  const root = createRoot(dom.window.document.getElementById('root')!)
-  const disposePlugin = () => { for (const dispose of effects.splice(0)) dispose() }
   try {
-    await act(async () => { root.render(render!({ view: 'page' })); await Promise.resolve() })
-    await run({ dom, sizes, disposePlugin,
-      async remount() {
-        await act(async () => root.render(null))
-        await act(async () => root.render(render!({ view: 'page' })))
-      },
-      async locale(active) { await act(async () => { activeLocale = active; for (const listener of localeListeners) listener() }) },
-      async publish(patch) { await act(async () => {
-        snapshot = { ...snapshot, ...patch, revision: snapshot.revision + 1 }
-        for (const listener of listeners) listener(snapshot)
-        await Promise.resolve()
-      }) },
-      async select(index, value) { await act(async () => {
-        const select = dom.window.document.querySelectorAll('select')[index]!
-        select.value = value; select.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
-      }) },
-    })
+    await act(async () => root.render(<FontSettingsPanel client={client} />))
+    expect(document.querySelectorAll('select')[2]!.value).toBe('16')
+    await select(0, 'yahei'); await select(1, 'consolas'); await select(2, '18')
+    expect(writes.at(-1)).toEqual(['text', 18])
+    expect(snapshot.fontFamilies.code).toBe('Consolas, monospace')
+    await act(async () => { snapshot = { ...snapshot, fontSizes: { ...snapshot.fontSizes, text: 20 }, fontFamilies: { ...snapshot.fontFamilies, code: 'Native Mono' } }; publish() })
+    expect(document.querySelectorAll('select')[2]!.value).toBe('20')
+    expect(document.querySelector('input')!.value).toBe('Native Mono')
+    await act(async () => { locale = 'zh'; for (const fn of localeListeners) fn() })
+    expect(document.body.textContent).toContain('终端字体和字号')
+    await act(async () => document.querySelectorAll('button')[1]!.click())
+    expect(snapshot.fontSizes).toEqual({ text: 14, code: 15, terminal: 13 })
+    expect(snapshot.fontFamilies).toEqual({ text: '', code: '', terminal: 'Terminal Mono' })
   } finally {
-    await act(async () => root.unmount())
-    disposePlugin(); presenter.dispose(); vi.restoreAllMocks(); vi.unstubAllGlobals(); dom.window.close()
+    await act(async () => root.unmount()); vi.unstubAllGlobals(); dom.window.close()
   }
-}
-
-describe('font interaction with DSH target presenter', () => {
-  it.each(['missing', 'throwing'] as const)('preserves both font choices across page remount with %s storage', async mode => {
-    await mounted(async ({ dom, select, remount, disposePlugin }) => {
-      const style = dom.window.document.documentElement.style
-      await select(0, 'yahei')
-      expect(style.getPropertyValue(UI_FONT_VARIABLE)).toBe(UI_FONT_PRESETS[0]!.value)
-      await remount()
-      expect(dom.window.document.querySelectorAll('select')[0]!.value).toBe('yahei')
-      await select(1, 'consolas')
-      expect(style.getPropertyValue(UI_FONT_VARIABLE)).toBe(UI_FONT_PRESETS[0]!.value)
-      expect(style.getPropertyValue(CODE_FONT_VARIABLE)).toBe('Consolas, monospace')
-      await remount()
-      expect(dom.window.document.querySelectorAll('select')[0]!.value).toBe('yahei')
-      expect(dom.window.document.querySelectorAll('select')[1]!.value).toBe('consolas')
-      const reset = [...dom.window.document.querySelectorAll('button')].find(button => button.textContent?.includes('Reset'))!
-      await act(async () => reset.click())
-      await remount()
-      expect(dom.window.document.querySelectorAll('select')[0]!.value).toBe('')
-      expect(style.getPropertyValue(UI_FONT_VARIABLE)).toBe('')
-      expect(style.getPropertyValue(CODE_FONT_VARIABLE)).toBe('')
-      disposePlugin()
-    }, { uiFont: 'Old font', codeFont: '' }, true, mode)
-  })
-
-  it('restores prior declarations and priorities without retracting a later third-party write', () => {
-    const dom = new JSDOM('<body></body>')
-    const style = dom.window.document.documentElement.style
-    style.setProperty(UI_FONT_VARIABLE, 'Prior Sans', 'important')
-    style.setProperty(CODE_FONT_VARIABLE, 'Prior Mono')
-    const override = createFontSettingsOverride(style)
-    override.apply({ uiFont: 'Local Sans', codeFont: 'Local Mono' })
-    style.setProperty(CODE_FONT_VARIABLE, 'Other Mono')
-    override.dispose()
-    expect(style.getPropertyValue(UI_FONT_VARIABLE)).toBe('Prior Sans')
-    expect(style.getPropertyPriority(UI_FONT_VARIABLE)).toBe('important')
-    expect(style.getPropertyValue(CODE_FONT_VARIABLE)).toBe('Other Mono')
-    dom.window.close()
-  })
-
-  it.each([true, false])('keeps legacy local fonts across theme changes (presenter first: %s)', async presenterFirst => {
-    await mounted(async ({ dom, publish, disposePlugin }) => {
-      const style = dom.window.document.documentElement.style
-      expect(dom.window.document.body.style.getPropertyValue(UI_FONT_VARIABLE)).toBe('')
-      expect(style.getPropertyValue(UI_FONT_VARIABLE)).toBe('Local Sans')
-      expect(style.getPropertyValue(CODE_FONT_VARIABLE)).toBe('Local Mono')
-      await publish({ fontSize: 17, active: { id: 'dark', colorScheme: 'dark', tokens: {} } })
-      expect(style.getPropertyValue(CODE_FONT_VARIABLE)).toBe('Local Mono')
-      disposePlugin()
-      expect(style.getPropertyValue(CODE_FONT_VARIABLE)).toBe('')
-      expect(style.getPropertyValue(UI_FONT_VARIABLE)).toBe('')
-      expect(dom.window.document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('17px')
-      expect(dom.window.localStorage.getItem(STORAGE_KEY)).toContain('Local Mono')
-    }, { uiFont: 'Local Sans', codeFont: 'Local Mono' }, presenterFirst)
-  })
-
-  it('edits fonts, persists the old schema, synchronizes content size, and resets to defaults', async () => {
-    await mounted(async ({ dom, sizes, select, publish }) => {
-      await select(0, 'yahei'); await select(1, 'jetbrains-mono'); await select(2, '18')
-      expect(sizes).toEqual([18])
-      expect(JSON.parse(dom.window.localStorage.getItem(STORAGE_KEY)!)).toEqual({
-        uiFont: UI_FONT_PRESETS[0]!.value, codeFont: CODE_FONT_PRESETS[1]!.value,
-      })
-      expect(dom.window.document.documentElement.style.getPropertyValue(CODE_FONT_VARIABLE)).toBe(CODE_FONT_PRESETS[1]!.value)
-      await publish({ fontSize: 20 })
-      expect(dom.window.document.querySelectorAll('select')[2]!.value).toBe('20')
-      await act(async () => { dom.window.document.querySelectorAll('button')[1]!.click(); await Promise.resolve() })
-      expect(sizes.at(-1)).toBe(14)
-      expect(dom.window.document.documentElement.style.getPropertyValue(UI_FONT_VARIABLE)).toBe('')
-      expect(dom.window.document.documentElement.style.getPropertyValue(CODE_FONT_VARIABLE)).toBe('')
-      expect(dom.window.document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('14px')
-      expect(dom.window.localStorage.getItem(STORAGE_KEY)).toBeNull()
-    })
-  })
-
-  it('loads system fonts again after installation and preserves manual fallback after denial', async () => {
-    const query = vi.fn().mockResolvedValueOnce([{ family: 'First Font', fullName: 'First Font' }])
-      .mockResolvedValueOnce([{ family: 'First Font' }, { family: 'New Font' }]).mockRejectedValueOnce(new Error('denied'))
-    await mounted(async ({ dom }) => {
-      vi.stubGlobal('queryLocalFonts', query)
-      const button = dom.window.document.querySelectorAll('button')[0]!
-      await act(async () => button.click())
-      expect(dom.window.document.querySelector('option[value="sys:First Font"]')).not.toBeNull()
-      await act(async () => button.click())
-      expect(dom.window.document.querySelector('option[value="sys:New Font"]')).not.toBeNull()
-      await act(async () => button.click())
-      expect(dom.window.document.body.textContent).toContain('denied or is unsupported')
-      expect(query).toHaveBeenCalledTimes(3)
-      expect(dom.window.document.querySelector('option[value="custom"]')).not.toBeNull()
-    })
-  })
-
-  it('switches live field, option and status copy while preserving an uncommitted font draft', async () => {
-    await mounted(async ({ dom, select, locale }) => {
-      vi.stubGlobal('queryLocalFonts', vi.fn().mockResolvedValue([{family:'User Font'}]))
-      await select(0, 'custom')
-      const input = dom.window.document.querySelector('input')!
-      await act(async () => { Simulate.change(input, {target:{value:'"My draft font", sans-serif'}} as never) })
-      await act(async () => dom.window.document.querySelectorAll('button')[0]!.click())
-      expect(dom.window.document.querySelector('[role="status"]')!.textContent).toContain('1 installed fonts')
-      const stored = dom.window.localStorage.getItem(STORAGE_KEY)
-      await locale('zh-CN')
-      expect(dom.window.document.body.textContent).toContain('界面字体')
-      expect(dom.window.document.querySelector('option[value="yahei"]')!.textContent).toBe('微软雅黑')
-      expect(dom.window.document.querySelector('[role="status"]')!.textContent).toContain('已读取 1 款')
-      expect(input.value).toBe('"My draft font", sans-serif')
-      expect(input.placeholder).toContain('例如')
-      expect(dom.window.localStorage.getItem(STORAGE_KEY)).toBe(stored)
-      await locale('en-US')
-      expect(dom.window.document.body.textContent).toContain('Interface font')
-      expect(input.value).toBe('"My draft font", sans-serif')
-      expect(input.placeholder).toContain('e.g.')
-      expect(dom.window.document.querySelector('option[value="sys:User Font"]')!.textContent).toBe('User Font')
-    })
-  })
 })

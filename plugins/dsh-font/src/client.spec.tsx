@@ -81,6 +81,8 @@ function mountClient(options: { locale?: string; storage?: Record<string, string
   let render: ((props: unknown) => ReactNode) | undefined
   const sizes: number[] = []
   const listeners = new Set<() => void>()
+  let snapshot = { fontSizes: { text: options.fontSize ?? 14, code: 14, terminal: 14 }, fontFamilies: { text: '', code: '', terminal: '' } }
+  const families: Array<[string, string]> = []
   const context = {
     effect(run: () => (() => void) | void, label?: string) { effects.push({ run, label, dispose: run() }) },
     slots: {
@@ -88,8 +90,9 @@ function mountClient(options: { locale?: string; storage?: Record<string, string
       register(spec: unknown, callback: (props: unknown) => ReactNode) { registration = spec; render = callback; return () => {} },
     },
     theme: {
-      getTheme: () => ({ fontSize: options.fontSize ?? 14 }),
-      setFontSize(px: number) { sizes.push(px) },
+      getTheme: () => snapshot,
+      setFontSize(role: 'text' | 'code' | 'terminal', px: number) { sizes.push(px); snapshot = { ...snapshot, fontSizes: { ...snapshot.fontSizes, [role]: px } } },
+      setFontFamily(role: 'text' | 'code' | 'terminal', value: string) { families.push([role, value]); snapshot = { ...snapshot, fontFamilies: { ...snapshot.fontFamilies, [role]: value } } },
     },
     locale: {
       getSnapshot: () => ({ active: options.locale ?? 'zh-CN' }),
@@ -98,7 +101,7 @@ function mountClient(options: { locale?: string; storage?: Record<string, string
     on(_event: string, listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } },
   }
   apply(context as never)
-  return { fixture, effects, sizes, listeners, change: () => { for (const listener of listeners) listener() },
+  return { fixture, effects, sizes, families, listeners, change: () => { for (const listener of listeners) listener() },
     getSeat: () => seat, getRegistration: () => registration, getRender: () => render }
 }
 
@@ -114,16 +117,14 @@ describe('font client apply', () => {
     expect(fixture.nodes).toHaveLength(0)
   })
 
-  it('applies stored stacks at boot and clears them on dispose', () => {
-    const { fixture, effects } = mountClient({
-      storage: { [STORAGE_KEY]: '{"uiFont":"\\"YaHei\\", sans-serif","codeFont":"\\"Fira Code\\", monospace"}' },
+  it('migrates stored stacks through the host without document overrides', () => {
+    const { fixture, effects, families } = mountClient({
+      storage: { [STORAGE_KEY]: '{"uiFont":"Local Sans","codeFont":"Local Mono"}' },
     })
-    expect(fixture.styleCalls).toEqual([
-      'set --dsw-font-family = "YaHei", sans-serif',
-      'set --ds-font-family-code = "Fira Code", monospace',
-    ])
+    expect(families).toEqual([['text', 'Local Sans'], ['code', 'Local Mono'], ['terminal', 'Local Mono']])
+    expect(fixture.styleCalls).toEqual([])
     for (const effect of effects) effect.dispose?.()
-    expect(fixture.styleCalls.slice(-2)).toEqual(['remove --dsw-font-family', 'remove --ds-font-family-code'])
+    expect(families).toHaveLength(3)
   })
 
   it('registers the settings panel under the package key', () => {

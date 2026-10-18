@@ -1,36 +1,28 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { migrateFontPreferences, type FontTheme, type FontThemeSnapshot } from './preferences.ts'
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { useState, useSyncExternalStore } from 'react'
 import {
   CODE_FONT_PRESETS, FONT_SIZE_DEFAULT, FONT_SIZE_MAX, FONT_SIZE_MIN, PLUGIN_NAME,
   UI_FONT_PRESETS,
-  createFontSettingsOverride, createFontSettingsStore, fontStackFor, normalizeFontFamily,
+  createFontSettingsStore, fontStackFor, normalizeFontFamily,
   presetFor, systemFontLabel, uniqueSystemFonts,
-  type FontGenericFamily, type FontPreset, type FontSettings, type FontSettingsStorage, type FontSettingsStore,
+  type FontGenericFamily, type FontPreset, type FontSettings, type FontSettingsStorage,
   type SystemFontFamily,
 } from './contracts.ts'
 
 export const name = 'dsh-font-client'
 export const inject = ['slots', 'theme', 'locale'] as const
 
-interface ThemeSnapshotLike {
-  fontSize: number
-}
-
-interface ThemeLike {
-  getTheme(): ThemeSnapshotLike
-  setFontSize(px: number): void
-}
-
 type Client = {
-  theme: ThemeLike
+  theme: FontTheme
   locale: { getSnapshot(): { active: string }; subscribe(fn: () => void): () => void }
   slots: {
     inject(key: string, callback: () => unknown): () => void
     register(spec: { name: string; key: string; label?: string }, render: unknown): () => void
   }
-  on(event: 'theme/change', listener: (snapshot: ThemeSnapshotLike) => void): () => void
+  on(event: 'theme/change', listener: (snapshot: FontThemeSnapshot) => void): () => void
 }
 
 const COPY = {
@@ -44,7 +36,7 @@ const COPY = {
     customUiPlaceholder: '例如 "Microsoft YaHei", sans-serif',
     customCodePlaceholder: '例如 "JetBrains Mono", monospace',
     uiHelp: '作用于整个界面的文字。自定义时输入完整的 font-family 字体栈，留空恢复默认。',
-    codeHelp: '作用于代码块、行内代码与终端的等宽字体。',
+    codeHelp: '作用于代码块与行内代码。终端字体和字号可在「设置 → 通用」中单独调整。',
     sizeHelp: '与「设置 → 通用」中的字号同步，范围 10–22。',
     loadFonts: '读取系统字体',
     reloadFonts: '重新读取系统字体',
@@ -67,7 +59,7 @@ const COPY = {
     customUiPlaceholder: 'e.g. "Microsoft YaHei", sans-serif',
     customCodePlaceholder: 'e.g. "JetBrains Mono", monospace',
     uiHelp: 'Applies to all interface text. For a custom value enter a full font-family stack; empty restores the default.',
-    codeHelp: 'Monospace font for code blocks, inline code and terminals.',
+    codeHelp: 'Applies to code blocks and inline code. Adjust terminal font and size separately in Settings → General.',
     sizeHelp: 'Synced with Settings → General; 10–22 px.',
     loadFonts: 'Load system fonts',
     reloadFonts: 'Reload system fonts',
@@ -113,8 +105,8 @@ function useLocale(client: Client): 'zh' | 'en' {
 function useFontSize(client: Client): number {
   return useSyncExternalStore(
     fn => client.on('theme/change', () => fn()),
-    () => client.theme.getTheme().fontSize,
-    () => client.theme.getTheme().fontSize,
+    () => client.theme.getTheme().fontSizes.text,
+    () => client.theme.getTheme().fontSizes.text,
   )
 }
 
@@ -190,13 +182,16 @@ export function FontField(props: {
 
 export function FontSettingsPanel(props: {
   client: Client
-  store: FontSettingsStore
-  applySettings(settings: FontSettings): void
   view?: 'summary' | 'page'
 }) {
   const locale = useLocale(props.client)
   const text = COPY[locale]
-  const [settings, setSettings] = useState<FontSettings>(() => props.store.load())
+  const families = useSyncExternalStore(
+    fn => props.client.on('theme/change', () => fn()),
+    () => props.client.theme.getTheme().fontFamilies,
+    () => props.client.theme.getTheme().fontFamilies,
+  )
+  const settings: FontSettings = { uiFont: families.text, codeFont: families.code }
   const fontSize = useFontSize(props.client)
   // System font list is shared by both fields: one permission prompt, one list.
   const [fontList, setFontList] = useState<{ state: 'idle' | 'loading' | 'ready' | 'denied'; families: readonly SystemFontFamily[] }>(
@@ -222,13 +217,8 @@ export function FontSettingsPanel(props: {
   }
 
   function update(patch: Partial<FontSettings>) {
-    const next: FontSettings = {
-      uiFont: normalizeFontFamily(patch.uiFont ?? settings.uiFont),
-      codeFont: normalizeFontFamily(patch.codeFont ?? settings.codeFont),
-    }
-    props.store.save(next)
-    props.applySettings(next)
-    setSettings(next)
+    if (patch.uiFont !== undefined) props.client.theme.setFontFamily('text', normalizeFontFamily(patch.uiFont))
+    if (patch.codeFont !== undefined) props.client.theme.setFontFamily('code', normalizeFontFamily(patch.codeFont))
   }
 
   const uiName = presetFor(settings.uiFont, UI_FONT_PRESETS)?.label[locale] ?? (settings.uiFont || text.defaultName)
@@ -281,7 +271,7 @@ export function FontSettingsPanel(props: {
             // The theme service is the only write entry; it validates again and
             // persists through the host settings scope, and theme/change keeps
             // this panel in sync with the native Settings → General stepper.
-            try { props.client.theme.setFontSize(px) } catch { /* out-of-range guard already applied */ }
+            try { props.client.theme.setFontSize('text', px) } catch { /* out-of-range guard already applied */ }
           }
         }}
       >
@@ -296,7 +286,7 @@ export function FontSettingsPanel(props: {
       </Button>
       <Button variant="outline" size="md" onClick={() => {
         update({ uiFont: '', codeFont: '' })
-        if (fontSize !== FONT_SIZE_DEFAULT) props.client.theme.setFontSize(FONT_SIZE_DEFAULT)
+        if (fontSize !== FONT_SIZE_DEFAULT) props.client.theme.setFontSize('text', FONT_SIZE_DEFAULT)
       }}>{text.reset}</Button>
     </div>
     {fontList.state === 'ready' ? <p role="status" className="dsh-ui-hint">{text.fontsLoaded(fontList.families.length)}</p> : null}
@@ -308,7 +298,7 @@ export function FontSettingsPanel(props: {
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client & { effect: Context['effect'] }
   const store = createFontSettingsStore(readStorage())
-  let applySettings = (_settings: FontSettings) => {}
+  migrateFontPreferences(client.theme, store, readStorage())
   ctx.effect(() => {
     if (typeof document === 'undefined') return () => {}
     const style = document.createElement('style')
@@ -317,18 +307,9 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'font.styles')
-  // rc.2 defines font stacks on :root; root inline overrides reach its derived
-  // code, Markdown and terminal tokens without changing host theme settings.
-  ctx.effect(() => {
-    if (typeof document === 'undefined') return () => {}
-    const override = createFontSettingsOverride(document.documentElement.style)
-    applySettings = next => override.apply(next)
-    applySettings(store.load())
-    return () => { override.dispose(); applySettings = () => {} }
-  }, 'font.apply')
   ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
     { name: 'plugins.bundle.config', key: PLUGIN_NAME },
     (slotProps: { view?: 'summary' | 'page' }) =>
-      <FontSettingsPanel client={client} store={store} applySettings={next => applySettings(next)} view={slotProps?.view} />,
+      <FontSettingsPanel client={client} view={slotProps?.view} />,
   )), 'font.settings')
 }

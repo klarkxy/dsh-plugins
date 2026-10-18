@@ -4,14 +4,11 @@
 
 export const PLUGIN_NAME = '@klarkxy/dsh-font'
 
-/** localStorage key. Fonts are a property of the rendering environment (each
- * browser/machine has its own installed fonts), so they persist browser-local,
- * exactly like the host's own GUI preferences (dsh-client-store, ui-theme
- * notes). The conversation font size is NOT stored here: the official
- * `ctx.theme.setFontSize()` entry persists it host-side already. */
+/** Legacy browser-local font choices, retained as the one-time migration backup.
+ * The active panel reads and writes the host's role-specific preferences. */
 export const STORAGE_KEY = 'klarkxy.dsh-font.v1'
 
-/** DSH 0.2.0-rc.2 ui-theme/theme-settings.ts bounds, shared by its native stepper. */
+/** Host text-role bounds, shared by the native conversation-size stepper. */
 export const FONT_SIZE_MIN = 10
 export const FONT_SIZE_MAX = 22
 export const FONT_SIZE_DEFAULT = 14
@@ -94,7 +91,9 @@ export const CODE_FONT_PRESETS: readonly FontPreset[] = [
 ]
 
 export function presetFor(value: string, presets: readonly FontPreset[]): FontPreset | undefined {
-  return presets.find(preset => preset.value === value)
+  // The host quotes every non-generic family when persisting a stack.
+  const comparable = (stack: string) => stack.split(',').map(name => name.trim().replace(/^["']|["']$/g, '')).join(',')
+  return presets.find(preset => comparable(preset.value) === comparable(value))
 }
 
 export type FontGenericFamily = 'sans-serif' | 'monospace'

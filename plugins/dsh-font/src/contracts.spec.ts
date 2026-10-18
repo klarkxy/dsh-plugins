@@ -59,6 +59,7 @@ describe('presets', () => {
 
   it('matches a stored stack back to its preset', () => {
     expect(presetFor('"JetBrains Mono", monospace', CODE_FONT_PRESETS)?.id).toBe('jetbrains-mono')
+    expect(presetFor('"Consolas", monospace', CODE_FONT_PRESETS)?.id).toBe('consolas')
     expect(presetFor('"Custom", monospace', CODE_FONT_PRESETS)).toBeUndefined()
     expect(presetFor('', UI_FONT_PRESETS)).toBeUndefined()
   })

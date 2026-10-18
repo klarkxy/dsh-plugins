@@ -1,13 +1,13 @@
 {
   "name": "@klarkxy/dsh-font",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Font: customize the interface font, code font, and conversation font size of the DeepSeek Harness Web GUI.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
     "node": ">=22",
-    "dsh": ">=0.2.0-rc.2"
+    "dsh": ">=0.2.1-rc.1"
   },
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
