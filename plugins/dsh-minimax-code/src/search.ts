@@ -2,7 +2,7 @@ import { lstat, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node
 import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { runCli, type CliExecutable } from '@klarkxy/dsh-plugin-kit/cli-process'
-import { discoverCli } from './cli.ts'
+import { discoverCli, minimaxEnvironment } from './cli.ts'
 import { MiniMaxCodeError, type Settings } from './contracts.ts'
 import type { CapabilityResult, RuntimeDeps } from './runtime.ts'
 
@@ -80,10 +80,13 @@ export class MiniMaxSearchStream {
     // Updated and completed snapshots share the same tool ID; never count them twice.
     this.calls.set(item.id, sources)
   }
+  get truncated(): boolean { return this.resultTruncated }
+  private resultTruncated = false
   result(count: number): SearchSource[] {
     if (!this.completed || !this.calls.size) throw fail('search-incomplete', 'MiniMax returned no completed native search tool call.')
     const unique = new Map<string, SearchSource>()
     for (const rows of this.calls.values()) for (const row of rows) if (!unique.has(row.url)) unique.set(row.url, row)
+    this.resultTruncated = unique.size > count
     return [...unique.values()].slice(0, count)
   }
 }
@@ -224,7 +227,7 @@ async function preflight(settings: Settings, signal: AbortSignal, deps: SearchDe
   signal.throwIfAborted()
   if (version.exitCode !== 0) throw fail('search-unavailable', 'The official MiniMax Code version check failed.')
   if (!/^(?:mcode(?:\s+version)?\s+)?v?0\.6\.9\s*$/iu.test(version.stdout.trim())) throw fail('unsupported-search-cli', 'MiniMax native search requires a separately verified CLI isolation and stream profile; this version is not supported.')
-  const inherited = executable.env ?? process.env
+  const inherited = executable.env ?? minimaxEnvironment()
   const dataDir = resolve(settings.searchDataDir?.trim() || deps.dataDir?.() || inherited.MINIMAX_DATA_DIR?.trim() || inherited.MAVIS_DATA_DIR?.trim() || join(homedir(), '.minimax'))
   if (deps.verifyIsolation) await deps.verifyIsolation(executable, signal)
   else await verifyMiniMaxSearchProfile(dataDir, signal)
@@ -250,10 +253,10 @@ export function createMiniMaxSearch(deps: SearchDeps = {}): NonNullable<RuntimeD
     async run(args, workspace, settings, signal): Promise<CapabilityResult> {
       const input = request(args)
       const executable = await preflight(settings, signal, deps)
-      const parent = await realpath(tmpdir()), root = resolve(workspace)
+      const parent = await realpath(tmpdir()), root = workspace === undefined ? undefined : resolve(workspace)
       const directory = await mkdtemp(join(parent, 'dsh-minimax-search-'))
       try {
-        if (inside(root, directory)) throw fail('search-isolation-unavailable', 'Search must run in a temporary directory outside the workspace.')
+        if (root !== undefined && inside(root, directory)) throw fail('search-isolation-unavailable', 'Search must run in a temporary directory outside the workspace.')
         signal.throwIfAborted()
         const config = join(directory, 'config.yaml')
         await writeFile(config, SEARCH_CONFIG, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
@@ -266,7 +269,7 @@ export function createMiniMaxSearch(deps: SearchDeps = {}): NonNullable<RuntimeD
         signal.throwIfAborted()
         if (output.exitCode !== 0) throw searchFailure(output.stderr)
         const sources = stream.result(input.count)
-        return { status: 'complete', answer: sources.length ? `MiniMax returned ${sources.length} public web search sources.` : 'MiniMax completed the search with no public results.', files: [], data: { query: input.query, sources } }
+        return { status: 'complete', answer: sources.length ? `MiniMax returned ${sources.length} public web search sources.` : 'MiniMax completed the search with no public results.', files: [], data: { query: input.query, sources, truncated: stream.truncated } }
       } finally { await cleanup(directory, parent) }
     },
   }

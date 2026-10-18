@@ -1,11 +1,14 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { PLUGIN_NAME, RPC_CHANNEL, DEFAULT_SETTINGS, parseSettings, MiniMaxCodeError, type Settings, type RpcResult } from './contracts.ts'
 import { MiniMaxRuntime } from './runtime.ts'
 import { jobSchema, type JobStore } from './jobs.ts'
 import { registerTools, type ToolHost } from './tools.ts'
+import { connectMiniMaxWeb } from './connect-web.ts'
 import { miniMaxSearch } from './search.ts'
 
 export const name = PLUGIN_NAME
@@ -18,10 +21,12 @@ type Domain = { table(name: string): Table; close(): Promise<void> }
 type Host = Context & HostRpcContext & ToolHost & { storageDomain: { open(value: typeof spec): Promise<Domain> } }
 
 export function apply(ctx: Context): void {
+  createModelSettingsChanges(ctx, modelSettingsChangesIdentity(PLUGIN_NAME), PLUGIN_NAME)
   const host = ctx as Host
   const lifetime = new AbortController(), domain = host.storageDomain.open(spec)
   let settings: Settings = { ...DEFAULT_SETTINGS }, revision = 0, active = 0, changing = false, closed = false
   let writes = Promise.resolve()
+  const pendingCalls = new Set<Promise<unknown>>()
   const ready = domain.then(d => {
     const raw = d.table('settings').get('config')
     if (raw === undefined) return
@@ -38,9 +43,11 @@ export function apply(ctx: Context): void {
     const combined = AbortSignal.any([signal, lifetime.signal]); combined.throwIfAborted(); await ready; combined.throwIfAborted()
     if (changing) throw new MiniMaxCodeError('busy', 'Settings are being saved. Try again shortly.')
     active++
-    try { return await action(combined) } finally { active-- }
+    const pending = action(combined); pendingCalls.add(pending)
+    try { return await pending } finally { pendingCalls.delete(pending); active-- }
   }
   registerTools(host, { execute: (operation, args, exec) => run(exec.signal, signal => runtime.execute(operation, args, { ...exec, signal })) }, ready, lifetime.signal)
+  const refreshWeb = connectMiniMaxWeb(ctx as unknown as Parameters<typeof connectMiniMaxWeb>[0], { run, settings: () => settings }, ready, lifetime.signal)
   const rpc = async (endpoint: string, payload: unknown, signal: AbortSignal): Promise<RpcResult> => {
     try {
       if (closed) throw new MiniMaxCodeError('disposed', 'The MiniMax Code plugin was unloaded.')
@@ -59,6 +66,7 @@ export function apply(ctx: Context): void {
           await (await domain).table('settings').put('config', next)
           settings = next.settings; revision = next.revision
           await runtime.dispose(); runtime = new MiniMaxRuntime(host, () => settings, jobs, { search: miniMaxSearch })
+          void refreshWeb()
           return next
         } finally { changing = false }
       })
@@ -72,7 +80,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => registerHostRpc(host, RPC_CHANNEL, rpc), 'minimax.rpc')
   ctx.effect(() => async () => {
     closed = true; lifetime.abort()
-    await runtime.dispose(); await writes
+    await runtime.dispose(); await Promise.allSettled([...pendingCalls]); await writes
     await (await domain).close()
   }, 'minimax.lifecycle')
 }

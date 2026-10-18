@@ -27,12 +27,14 @@ dsh plugin --profile web add @klarkxy/dsh-minimax-code
 | `minimax_understand_audio`、`minimax_understand_video` | 针对音视频提问 |
 | `minimax_media_jobs`、`minimax_recover_media` | 查找并重新取回之前的结果 |
 
+宿主提供网页搜索功能时，可在网页设置中选择 **MiniMax Code** 作为提供方，独立的 `minimax_search` 工具仍可使用。搜索需要已登录且没有可执行扩展的官方 mcode CLI 配置；请在本插件中设置 CLI 路径和搜索配置目录。本地发现 CLI 表示可选用，登录和兼容性会在执行请求时检查。调用可能消耗账号的模型与工具额度。暂未接入网页抓取，已验证的搜索连接没有开放此能力。
+
 ## 限制
 
 - 生成视频必须选择模型。H3 系列可以带声音，会消耗账号点数；Hailuo 2.3 是更便宜的无声选项。实际费用以你的 MiniMax 账号为准。
 - 查询视频进度请用 `minimax_video_status`，不要重复提交。
 - 输入只能是工作区文件或会话附件。结果保存在 `.dsh-minimax-code/` 下，只读工作区无法生成媒体。
-- 取消只停止本地进程，远端生成可能仍在进行。
+- 取消只停止本地进程，远端生成可能仍在进行。请在同一工作区查找任务；查询和恢复不会重新提交生成。
 - 不提供图片理解、X 搜索和音乐生成。
 
 ## 许可证

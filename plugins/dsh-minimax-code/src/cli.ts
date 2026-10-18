@@ -3,7 +3,7 @@ import { constants } from 'node:fs'
 import { delimiter, dirname, extname, join, resolve } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { Ajv, type ValidateFunction } from 'ajv'
-import { runCli, type CliExecutable } from '@klarkxy/dsh-plugin-kit/cli-process'
+import { cliEnvironment, runCli, type CliExecutable } from '@klarkxy/dsh-plugin-kit/cli-process'
 import { MiniMaxCodeError, type Settings } from './contracts.ts'
 
 export const CONNECTORS = {
@@ -28,12 +28,14 @@ const requiredProperties: Record<ConnectorCapability, string[]> = {
   understand_audio: ['audio_info'], understand_video: ['video_info'],
 }
 const fail = (code: string, message: string) => new MiniMaxCodeError(code, message)
+// Broker credentials are obtained by the signed-in CLI, never inherited from Harness.
+export const minimaxEnvironment = () => cliEnvironment(process.env, ['MINIMAX_DATA_DIR', 'MAVIS_DATA_DIR', 'MCODE_HOME', 'MCODE_CONFIG_DIR'])
 
 /** Parse the official generated Windows launcher as data; never invoke a command shell. */
 export async function managedLauncher(path: string): Promise<CliExecutable> {
   const content = await readFile(path, 'utf8')
   if (content.length > 32_768) throw fail('unsupported-launcher', 'The MiniMax tools launcher is not supported.')
-  const env = { ...process.env }
+  const env = minimaxEnvironment()
   let command: string | undefined, script: string | undefined
   for (const raw of content.split(/\r?\n/)) {
     const line = raw.trim()
@@ -65,12 +67,12 @@ async function resolveExecutable(path: string, kind: 'tools' | 'code'): Promise<
   if (/\.(?:cmd|ps1)$/i.test(canonical)) {
     if (kind === 'tools' && /mcode-tools-(?:cn|global)\.cmd$/i.test(canonical)) return managedLauncher(canonical)
     const js = join(dirname(canonical), 'node_modules', '@minimax-ai', 'code', kind === 'tools' ? 'mcode-tools.js' : 'cli.js')
-    try { await access(js, constants.R_OK); return { command: process.execPath, args: [js], displayPath: canonical } }
+    try { await access(js, constants.R_OK); return { command: process.execPath, args: [js], env: minimaxEnvironment(), displayPath: canonical } }
     catch { throw fail('unsupported-launcher', 'This CLI launcher is unsupported or stale. Select the official JavaScript entry or regional mcode-tools launcher.') }
   }
-  if (/\.[cm]?js$/i.test(canonical)) return { command: process.execPath, args: [canonical], displayPath: canonical }
+  if (/\.[cm]?js$/i.test(canonical)) return { command: process.execPath, args: [canonical], env: minimaxEnvironment(), displayPath: canonical }
   await access(canonical, process.platform === 'win32' ? constants.R_OK : constants.X_OK)
-  return { command: canonical, displayPath: canonical }
+  return { command: canonical, env: minimaxEnvironment(), displayPath: canonical }
 }
 export async function discoverCli(settings: Settings, kind: 'tools' | 'code'): Promise<CliExecutable> {
   const explicit = kind === 'tools' ? settings.toolsExecutable : settings.codeExecutable

@@ -2,7 +2,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Button, DisclosureRow, IconSettingsOutlineRegular, Input, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
-import { createModelSettingsSubscriber } from '@klarkxy/dsh-plugin-kit/model-settings-client'
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import { DEFAULT_SETTINGS, PLUGIN_NAME, RPC_CHANNEL, type RpcResult, type Settings, type Status } from './contracts.ts'
 import { capabilityLabel, clientMessage } from './client-copy.ts'
 
@@ -185,7 +186,8 @@ export function MiniMaxCodePanel({ rpc, locale, subscribeSettings }: { rpc: Rpc;
 
 export function apply(ctx: Context): void {
   const client = ctx as ClientContext
-  const settingsSubscriber = createModelSettingsSubscriber(ctx, PLUGIN_NAME)
+  mountModelSettingsChanges(ctx, PLUGIN_NAME)
+  const settingsSubscriber = createModelSettingsSubscriber(ctx, PLUGIN_NAME, modelSettingsChangesIdentity(PLUGIN_NAME))
   const subscribeSettings = (change: () => void, error?: (message: string) => void) => settingsSubscriber.subscribe(change, error)
   let locale: Locale | undefined
   try { locale = client.locale } catch { locale = undefined }

@@ -1,3 +1,4 @@
+import { Context } from '@deepseek-ai/cordis'
 import { randomUUID } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JobStore, MediaJob } from './jobs.ts'
@@ -28,11 +29,11 @@ function domain() {
   return { settings, jobs, put, close, storage }
 }
 function mount(data = domain()) {
-  const cleanup: (() => Promise<void> | void)[] = []
   const open = vi.fn(async () => data.storage)
-  const host = { storageDomain: { open }, effect(factory: () => () => Promise<void> | void) { cleanup.push(factory()) } }
+  const host = new Context()
+  Object.assign(host, { storageDomain: { open } })
   apply(host as any)
-  return { ...data, host, open, dispose: async () => { for (const fn of cleanup.reverse()) await fn() }, runtime: captured.instances.at(-1), tools: captured.tools.at(-1), rpc: captured.rpc.at(-1).call }
+  return { ...data, host, open, dispose: () => host.fiber.dispose(), runtime: captured.instances.at(-1), tools: captured.tools.at(-1), rpc: captured.rpc.at(-1).call }
 }
 function job(workspace = 'workspace'): MediaJob {
   return { version: 1, id: randomUUID(), workspace, operation: 'generate_video', createdAt: '2026-10-13T00:00:00Z', updatedAt: '2026-10-13T00:00:00Z', status: 'pending', model: 'MiniMax-H3', taskId: 'paid-task', assets: [], failures: [] }

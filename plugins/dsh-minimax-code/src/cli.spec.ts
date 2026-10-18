@@ -40,7 +40,8 @@ describe('managed MiniMax launcher', () => {
       'set "MCODE_REGION=cn"', `"${process.execPath}" "${entry}" %*`, 'exit /b %ERRORLEVEL%',
     ].join('\r\n'))
     const resolved = await managedLauncher(launcher)
-    expect(resolved).toMatchObject({ command: process.execPath, args: [entry], env: { MCODE_REGION: 'cn', MCODE_TEST_SENTINEL: 'preserved' } })
+    expect(resolved).toMatchObject({ command: process.execPath, args: [entry], env: { MCODE_REGION: 'cn' } })
+    expect(resolved.env).not.toHaveProperty('MCODE_TEST_SENTINEL')
     for (const prefix of prefixes) {
       expect(resolved.env).not.toHaveProperty(`${prefix}TEST_SENTINEL`)
       expect(process.env[`${prefix}TEST_SENTINEL`]).toBe('parent-value')

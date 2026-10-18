@@ -18,7 +18,7 @@ export type CapabilityResult = {
 export type RuntimeDeps = {
   cli?: (settings: Settings) => MiniMaxCli;
   download?: typeof downloadMedia;
-  search?: { status(settings: Settings, signal: AbortSignal): Promise<boolean>; run(args: unknown, workspace: string, settings: Settings, signal: AbortSignal): Promise<CapabilityResult> };
+  search?: { status(settings: Settings, signal: AbortSignal): Promise<boolean>; run(args: unknown, workspace: string | undefined, settings: Settings, signal: AbortSignal): Promise<CapabilityResult> };
 }
 const fail = (code: string, message: string) => new MiniMaxCodeError(code, message)
 const message = (error: unknown) => error instanceof Error ? error.message.slice(0, 500) : 'The operation failed.'

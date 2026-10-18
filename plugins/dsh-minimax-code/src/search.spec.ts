@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { registerMiniMaxWebProvider } from './web-provider.ts'
 import { DEFAULT_SETTINGS } from './contracts.ts'
 import { createMiniMaxSearch, MiniMaxSearchStream, verifyMiniMaxSearchProfile } from './search.ts'
 
@@ -95,6 +96,19 @@ describe('MiniMax native search stream', () => {
 })
 
 describe('MiniMax search preflight and owned execution', () => {
+  it('runs the real isolated search adapter through the session-free web seam', async () => {
+    const f = adapter(); let provider: any
+    registerMiniMaxWebProvider({ registerSearchProvider(value) { provider = value; return () => {} } }, { available: () => true, settings: () => DEFAULT_SETTINGS, search: f.search, run: async (signal, action) => { signal.throwIfAborted(); return action(signal) } })
+    expect(provider.available()).toBe(true); expect(f.run).not.toHaveBeenCalled()
+    const controller = new AbortController()
+    expect(await provider.search({ query: 'test', maxResults: 20 }, controller.signal)).toMatchObject({ sources: [{ url: rows[0].link }], truncated: false })
+    const options = f.run.mock.calls.at(-1)![2]
+    expect(options.signal).toBe(controller.signal)
+    await expect(stat(options.cwd)).rejects.toThrow()
+    const before = f.run.mock.calls.length; controller.abort()
+    await expect(provider.search({ query: 'test' }, controller.signal)).rejects.toThrow()
+    expect(f.run.mock.calls.length).toBe(before)
+  })
   it('fails closed for an enabled global MCP profile; status makes only a version request', async () => {
     const root = await profile()
     await json(root, 'mcp.json', { mcpServers: { private: { command: 'never-run', env: { TOKEN: 'synthetic-private-value' } } } })

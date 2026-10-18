@@ -27,12 +27,14 @@ Start and sign in to the official MiniMax Code desktop app, then open **Plugins 
 | `minimax_understand_audio`, `minimax_understand_video` | Ask questions about audio or video |
 | `minimax_media_jobs`, `minimax_recover_media` | Find earlier results and fetch them again |
 
+When the host provides web search, choose **MiniMax Code** as its provider in the web settings. The dedicated `minimax_search` tool remains available. Search uses the official mcode CLI signed in to a profile without executable extensions; configure its path and search profile in this plugin. Local CLI discovery indicates availability, while sign-in and compatibility are checked when a request runs. Calls may use your account's model and tool allowance. Page retrieval is not integrated; the verified search connection does not expose it.
+
 ## Limits
 
 - Video requires choosing a model. H3 models can add sound and use account credits; Hailuo 2.3 is a cheaper silent option. Actual costs follow your MiniMax account.
 - Check video progress with `minimax_video_status` instead of submitting again.
 - Inputs must be workspace files or session attachments. Results are saved under `.dsh-minimax-code/`, so a read-only workspace cannot create media.
-- Cancelling stops the local process but may not stop generation on MiniMax's side.
+- Cancelling stops the local process but may not stop generation on MiniMax's side. Find the job in the same workspace; status and recovery never resubmit generation.
 - Not included: image understanding, X search, or music.
 
 ## License
