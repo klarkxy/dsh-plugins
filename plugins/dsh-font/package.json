@@ -56,20 +56,18 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-font/src"
   },
-  "dependencies": {
-    "@klarkxy/dsh-plugin-kit": "workspace:*"
-  },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.4"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.4",
+    "@klarkxy/dsh-plugin-kit": "workspace:*",
+    "@deepseek-ai/cordis": "4.0.5",
     "react": "^18.2.0",
     "@types/react": "18.3.31",
     "react-dom": "^18.2.0",
     "@types/react-dom": "^18.3.1",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-theme": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-theme": "0.2.1-rc.1",
     "jsdom": "29.1.1",
     "@types/jsdom": "28.0.3"
   },
@@ -98,5 +96,10 @@
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/font/",
   "dshRelease": {
     "contentHash": "75460281ad5fe1393ffee18ae1739b195ca3a08ceaa76970ba0f6c739b7860ba"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
   }
 }

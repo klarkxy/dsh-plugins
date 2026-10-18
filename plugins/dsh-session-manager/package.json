@@ -74,7 +74,8 @@
     "@deepseek-ai/dsh-api-session-controller": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2",
     "@deepseek-ai/cordis": ">=4.0.4",
-    "@deepseek-ai/schemastery": ">=3.18.4"
+    "@deepseek-ai/schemastery": ">=3.18.4",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-llm": {
@@ -103,29 +104,33 @@
     },
     "@deepseek-ai/schemastery": {
       "optional": true
+    },
+    "@deepseek-ai/dsh-typert-protocol": {
+      "optional": true
     }
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-session": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-session-query": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-api-session-controller": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-storage-domain": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-api-remotes": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-workspace": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-locale": "0.2.0-rc.2",
-    "@deepseek-ai/cordis": "4.0.4",
-    "@deepseek-ai/schemastery": "3.18.4",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-session-query": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-api-remotes": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-workspace": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-locale": "0.2.1-rc.1",
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/schemastery": "3.18.5",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "@types/react": "18.3.31",
     "@types/react-dom": "^18.3.1",
     "jsdom": "29.1.1",
-    "@types/jsdom": "^28.0.3"
+    "@types/jsdom": "^28.0.3",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.1"
   },
   "repository": {
     "type": "git",
@@ -136,8 +141,5 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
-  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/",
-  "dshRelease": {
-    "contentHash": "0bc5b91eefb057d897753206dc018dd94482661ce3748a1a320c9b8ac255ca8d"
-  }
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/"
 }

@@ -80,7 +80,9 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.4",
-    "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2"
+    "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-working-directory": ">=0.2.1-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -88,19 +90,27 @@
     },
     "@deepseek-ai/dsh-storage-domain": {
       "optional": true
+    },
+    "@deepseek-ai/dsh-working-directory": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-typert-protocol": {
+      "optional": true
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.4",
-    "@deepseek-ai/dsh-storage-domain": "0.2.0-rc.2",
-    "zod": "^4.1.5",
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.1",
+    "zod": "4.4.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "@types/react": "18.3.31",
     "@types/react-dom": "^18.3.0",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
     "jsdom": "29.1.1",
-    "@types/jsdom": "28.0.3"
+    "@types/jsdom": "28.0.3",
+    "@deepseek-ai/dsh-working-directory": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.1"
   },
   "keywords": [
     "dsh",

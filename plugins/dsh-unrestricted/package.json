@@ -21,12 +21,21 @@
     "unrestricted"
   ],
   "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "icon.svg",
     "locale/*.json",
+    "lib",
     "cordis.patch.yml",
     "README*.md",
     "NOTICE.md",
@@ -35,17 +44,36 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale"
+      ]
     }
   },
   "engines": {
     "node": ">=24.0.0",
-    "dsh": ">=0.2.0-rc.2"
+    "dsh": ">=0.2.1-rc.1"
   },
   "scripts": {
-    "test": "node tests/preset.test.mjs"
+    "build": "tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-unrestricted",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node tests/preset.test.mjs && vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-unrestricted/src"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.4"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "@deepseek-ai/dsh": "0.2.0-rc.2"
+    "@deepseek-ai/cordis": "4.0.5",
+    "@klarkxy/dsh-plugin-kit": "workspace:*",
+    "@deepseek-ai/dsh": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-web-app": "0.2.1-rc.1"
   },
   "dshRelease": {
     "contentHash": "645472f60965562bbf4c0ca1c2cbd7d1675c29dc0a5ba639f89acee9876ad956"

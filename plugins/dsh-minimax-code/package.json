@@ -57,7 +57,9 @@
     "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-attachment": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-sandbox-policy": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2"
+    "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-web": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -74,21 +76,29 @@
     },
     "@deepseek-ai/dsh-storage-domain": {
       "optional": true
+    },
+    "@deepseek-ai/dsh-web": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-typert-protocol": {
+      "optional": true
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.4",
-    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-attachment": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-sandbox-policy": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-attachment": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-sandbox-policy": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
     "react": "^18.2.0",
     "@types/react": "~18.3.1",
-    "@deepseek-ai/dsh-storage-domain": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.1",
     "jsdom": "29.1.1",
     "@types/react-dom": "^18.3.1",
     "@types/jsdom": "^28.0.3",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "@deepseek-ai/dsh-web": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.1"
   },
   "publishConfig": {
     "access": "public",
