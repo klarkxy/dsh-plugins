@@ -16,7 +16,7 @@ dsh plugin --profile web add @klarkxy/dsh-unrestricted
 
 ## 使用
 
-新建会话时在 Preset 菜单中选择「破限模式」。卡片文案跟随界面语言：中文界面显示「破限模式」，其他语言显示 Unrestricted mode。已有消息的会话不能切换 Preset。从该会话派出的子代理通常也会沿用它。
+新建会话时在 Preset 菜单中选择「破限模式」。卡片文案和已选预设按钮跟随界面语言：中文界面显示「破限模式」，其他语言显示 Unrestricted mode。工作区名称保持用户命名。已有消息的会话不能切换 Preset。从该会话派出的子代理通常也会沿用它。
 
 没有需要记得关闭的开关：选择即生效，换成其他 Preset 即结束。它不会改变你的模型、默认 Preset 或权限。
 

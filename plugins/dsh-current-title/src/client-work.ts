@@ -78,10 +78,6 @@ export function titleMessage(message: string, locale: 'zh' | 'en'): string {
   return pair?.[locale === 'zh' ? 0 : 1] ?? message
 }
 
-export function settingsCopy(locale: 'zh' | 'en') {
-  return titleCopy[locale] ?? titleCopy.zh
-}
-
 /** `undefined` draft = not edited; an empty string is a real edit (use built-in instruction). */
 export function promptFieldValue(draft: string | undefined, saved: string): string {
   return draft ?? saved

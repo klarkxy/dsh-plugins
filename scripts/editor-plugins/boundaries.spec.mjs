@@ -78,9 +78,6 @@ function publishedScripts(directory) {
 const clientBundled = [
   'dsh-model-hub',
   'dsh-current-title',
-  'dsh-chatgpt',
-  'dsh-grok-build',
-  'dsh-minimax-code',
   'dsh-session-manager',
   'dsh-safe-auto',
   'dsh-git-commit',

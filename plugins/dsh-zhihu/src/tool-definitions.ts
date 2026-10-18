@@ -2,7 +2,19 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { reportExecuted, type ZhihuClientOptions } from './zhihu-client.ts'
 import { ZHIHU_SEARCH_TOOL_NAME, ZHIHU_GLOBAL_SEARCH_TOOL_NAME, ZHIHU_HOT_LIST_TOOL_NAME, ZHIHU_ASK_TOOL_NAME, ZHIHU_KNOWLEDGE_SEARCH_TOOL_NAME } from './contracts.ts'
 import { executeZhihuSearch, renderZhihuSearch, ZHIHU_SEARCH_DEFAULT_COUNT, ZHIHU_SEARCH_MAX_COUNT, type ZhihuSearchResult } from './search-api.ts'
-import { ZHIHU_GLOBAL_SEARCH_VERSION, ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT, ZHIHU_GLOBAL_SEARCH_MAX_COUNT, ZHIHU_HOT_LIST_VERSION, ZHIHU_HOT_LIST_DEFAULT_LIMIT, ZHIHU_HOT_LIST_MAX_LIMIT, ZHIHU_ASK_VERSION, ZHIHU_ASK_TIMEOUT_MS, ZHIHU_KNOWLEDGE_SEARCH_VERSION, ZHIHU_KNOWLEDGE_SEARCH_DEFAULT_LIMIT, ZHIHU_KNOWLEDGE_SEARCH_MAX_LIMIT, ZHIHU_ASK_MODELS, ZhihuAskModel, ZHIHU_ASK_DEFAULT_MODEL, ZhihuToolOptions, ZhihuGlobalSearchDb, ZhihuGlobalSearchResult, executeZhihuGlobalSearch, renderZhihuGlobalSearch, ZhihuHotListItem, ZhihuHotListResult, executeZhihuHotList, renderZhihuHotList, ZhihuAskResult, executeZhihuAsk, renderZhihuAsk, ZhihuKnowledgeItem, ZhihuRecallScope, ZHIHU_RECALL_SCOPES, ZhihuKnowledgeSearchResult, normalizeRecallScopes, executeZhihuKnowledgeSearch, renderZhihuKnowledgeSearch } from './operations.ts'
+import {
+  ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT, ZHIHU_GLOBAL_SEARCH_MAX_COUNT,
+  ZHIHU_HOT_LIST_DEFAULT_LIMIT, ZHIHU_HOT_LIST_MAX_LIMIT,
+  ZHIHU_KNOWLEDGE_SEARCH_DEFAULT_LIMIT, ZHIHU_KNOWLEDGE_SEARCH_MAX_LIMIT,
+  ZHIHU_ASK_MODELS, ZHIHU_ASK_DEFAULT_MODEL, ZHIHU_RECALL_SCOPES,
+  executeZhihuGlobalSearch, renderZhihuGlobalSearch,
+  executeZhihuHotList, renderZhihuHotList,
+  executeZhihuAsk, renderZhihuAsk,
+  normalizeRecallScopes, executeZhihuKnowledgeSearch, renderZhihuKnowledgeSearch,
+  type ZhihuAskModel, type ZhihuToolOptions, type ZhihuGlobalSearchDb,
+  type ZhihuGlobalSearchResult, type ZhihuHotListResult, type ZhihuAskResult,
+  type ZhihuKnowledgeSearchResult,
+} from './operations.ts'
 export type CreateZhihuSearchToolOptions = ZhihuClientOptions & {
   /** Best-effort metering hook; invoked after every execution, failures included. */
   onExecuted?: (event: { ok: boolean; results: number }) => void

@@ -6,13 +6,13 @@ import {
   ZHIHU_SEARCH_MAX_COUNT,
   ZHIHU_SEARCH_TOOL_NAME,
   ZHIHU_SEARCH_VERSION,
-  createZhihuSearchTool,
   executeZhihuSearch,
   renderZhihuSearch,
   resolveZhihuToken,
   ZhihuSearchError,
   type ZhihuSearchFetcher,
-} from './zhihu-search.ts'
+} from './search-api.ts'
+import { createZhihuSearchTool } from './tool-definitions.ts'
 
 vi.mock('node:fs/promises', async () => {
   const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')

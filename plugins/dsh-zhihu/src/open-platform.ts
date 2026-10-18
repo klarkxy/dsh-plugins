@@ -44,10 +44,6 @@ export type ZhihuOpenPlatformResult = {
   data: Record<string, ZhihuJsonValue>
   paging?: ZhihuPaging
 }
-export type ZhihuPageInput = { offset?: number | string; limit?: number }
-export type ZhihuDateInput = { startDate?: string; endDate?: string }
-export type ZhihuCreatorContentType = 'all' | 'answer' | 'article' | 'pin' | 'zvideo'
-export type ZhihuCommentOrder = 'score' | 'reverse' | 'ascending'
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 // Keep the free-form tool result compatible with the SDK's JSON value contract.
@@ -184,15 +180,6 @@ export async function executeZhihuOpenPlatform(
       ? { paging: normalizeZhihuPaging(data, params.Offset!) } : {}),
   }
 }
-
-// Typed client entry points. Authentication stays in ZhihuClientOptions, never input.
-export const executeZhihuQuestionRecommendations = (args: { query?: string; count?: number } = {}, options?: ZhihuClientOptions) => executeZhihuOpenPlatform('question.recommendations', args, options)
-export const executeZhihuQuestionAnswers = (args: { questionUrl: string } & ZhihuPageInput, options?: ZhihuClientOptions) => executeZhihuOpenPlatform('question.answers', args, options)
-export const executeZhihuUserContentDetail = (args: { contentUrl: string }, options?: ZhihuClientOptions) => executeZhihuOpenPlatform('content.detail', args, options)
-export const executeZhihuUserContentComments = (args: { contentUrl: string; order?: ZhihuCommentOrder } & ZhihuPageInput, options?: ZhihuClientOptions) => executeZhihuOpenPlatform('content.comments', args, options)
-export const executeZhihuCreatorAccountStats = (args: { contentType?: ZhihuCreatorContentType } & ZhihuDateInput = {}, options?: ZhihuClientOptions) => executeZhihuOpenPlatform('creator.account.stats', args, options)
-export const executeZhihuCreatorContentStats = (args: { contentUrl: string } & ZhihuDateInput, options?: ZhihuClientOptions) => executeZhihuOpenPlatform('creator.content.stats', args, options)
-export const executeZhihuQuota = (args: { apiIds?: ZhihuQuotaId[] } = {}, options?: ZhihuClientOptions) => executeZhihuOpenPlatform('quota', args, options)
 
 export function zhihuOpenPlatformResultCount(result: ZhihuOpenPlatformResult): number {
   if (result.operation === 'quota') return 0

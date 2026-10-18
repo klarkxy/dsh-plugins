@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { IconChevronDownOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { modelMenuEffortLabel, modelMenuEffortOptions, normalizeModelRoute, parseModelMenuChoices, type ModelRoute } from '@klarkxy/dsh-model-route'
 import { ModelMenu } from '@klarkxy/dsh-model-route/ui'

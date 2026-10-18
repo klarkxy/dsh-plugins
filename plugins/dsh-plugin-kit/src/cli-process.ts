@@ -7,6 +7,17 @@ export function cliEnvironment(parent: NodeJS.ProcessEnv = process.env, extra: r
   return Object.fromEntries(Object.entries(parent).filter(([key, value]) => value !== undefined && !key.toUpperCase().startsWith('DSH_') && allowed.has(key.toUpperCase())))
 }
 
+/** Run a JavaScript CLI with process.execPath even when the host is Electron.
+ * Set this explicitly: desktop hosts may already have removed it from their own env.
+ * Native executables continue to use cliEnvironment without this Node-mode override.
+ */
+export function cliNodeEnvironment(parent: NodeJS.ProcessEnv = process.env, extra: readonly string[] = []): NodeJS.ProcessEnv {
+  const env = cliEnvironment(parent, extra)
+  // Windows environment names are case-insensitive; avoid conflicting spellings.
+  for (const key of Object.keys(env)) if (key.toUpperCase() === 'ELECTRON_RUN_AS_NODE') delete env[key]
+  return { ...env, ELECTRON_RUN_AS_NODE: '1' }
+}
+
 /** A resolved executable, never a shell command or an argument string. */
 export type CliExecutable = { command: string; args?: string[]; env?: NodeJS.ProcessEnv; displayPath: string }
 export type CliOutput = { stdout: string; stderr: string; exitCode: number }

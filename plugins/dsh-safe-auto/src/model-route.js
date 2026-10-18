@@ -34,8 +34,6 @@ export function resolveReviewRoute(config, owner) {
     ...(config.reasoningEffort ? { reasoningEffort: config.reasoningEffort } : {}) });
 }
 
-export const sameRoute = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-
 function usageTotal(usage) {
   if (!usage || typeof usage !== 'object') return undefined;
   if (Number.isSafeInteger(usage.totalTokens) && usage.totalTokens >= 0) return usage.totalTokens;

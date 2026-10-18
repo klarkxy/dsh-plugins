@@ -4,7 +4,7 @@
 
 [English](../README.md)
 
-在一个设置页里选择由哪个服务回答模型的网络搜索、设置请求限制，并让模型读取公开网页。
+在一个设置页里选择由哪个服务回答模型的网络搜索、设置请求限制，并让模型读取公开网页。搜索服务、网页读取和请求限制各占一个页签。
 
 ## 安装
 
@@ -12,15 +12,13 @@
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-把 `web` 换成你的 profile 名，重启 DSH Web 后打开「插件 → 网页搜索」。
+把 `web` 换成你的 profile 名，重启 DSH Web 后打开「插件 → 网页搜索」。更新插件后也需要重启 DSH；仅刷新页面不会加载新版搜索代码。
 
 ## 配置搜索
 
-DuckDuckGo 默认可用，无需密钥。也可以填写 API Key 启用 DeepSeek 搜索、Exa、Brave、博查、Serper、Firecrawl、Tavily、Perplexity 或 You.com。拖拽列表调整顺序，每次搜索使用第一个就绪的服务。其他插件提供的搜索服务（例如知乎）也会出现在同一列表中。
+DuckDuckGo 默认可用，无需密钥。也可以填写 API Key 启用 DeepSeek 搜索、Exa、Brave、博查、Serper、Firecrawl、Tavily、Perplexity 或 You.com。拖拽列表调整顺序，每次搜索使用第一个就绪的服务。其他插件提供的搜索服务（例如知乎）也会出现在同一列表中。新服务不会自动开启。
 
-已安装的 ChatGPT、Grok Build、MiniMax 插件也可在这里提供搜索服务，Grok Build 还可提供网页读取。在各插件自己的设置中配置 CLI 路径和登录，再在这里启用与排序。新服务不会自动开启；本地 CLI 可用不代表账号健康。各插件原有独立工具仍可使用。
-
-「请求限制」用于设置结果条数、每次调用的查询数、总超时和网页正文长度上限。
+「设置」页签用于设置结果条数、每次调用的查询数、总超时和网页正文长度上限。
 
 ## 读取网页
 

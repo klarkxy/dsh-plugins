@@ -1,5 +1,5 @@
 import { normalizeSessionTitle } from './output.ts'
-import type { TitleMessage, TitleSnapshot, TitleSourceKind } from './contracts.ts'
+import type { TitleMessage } from './contracts.ts'
 
 export interface SessionEventLike {
   readonly type: string
@@ -40,28 +40,6 @@ export function collectHumanMessages(events: readonly SessionEventLike[], throug
     messages.push({ seq: event.seq, text })
   }
   return messages
-}
-
-export function foldTitle(events: readonly SessionEventLike[]): TitleSnapshot | undefined {
-  let latest: SessionEventLike | undefined
-  for (const event of events) {
-    if (event.type === 'session/title') latest = event
-  }
-  if (!latest?.data || typeof latest.data.title !== 'string') return undefined
-  const kind = latest.data.source?.kind
-  const sourceKind: TitleSourceKind = kind === 'user' || kind === 'fallback' || kind === 'provider' ? kind : 'provider'
-  return {
-    title: latest.data.title,
-    messageSeqs: latest.data.messageSeqs ? [...latest.data.messageSeqs] : [],
-    source: { kind: sourceKind, ...(typeof latest.data.source?.provider === 'string' ? { provider: latest.data.source.provider } : {}) },
-    eventSeq: latest.seq,
-    updatedAt: latest.time ?? 0,
-  }
-}
-
-export function userRenameNewerThan(events: readonly SessionEventLike[], watermarkSeq: number): boolean {
-  const current = foldTitle(events)
-  return Boolean(current && current.source.kind === 'user' && current.eventSeq > watermarkSeq)
 }
 
 export function sourceVersionOf(sessionId: string, messages: readonly TitleMessage[]): string {

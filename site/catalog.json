@@ -234,66 +234,6 @@
       "directory": "plugins/dsh-model-route"
     },
     {
-      "slug": "chatgpt",
-      "package": "@klarkxy/dsh-chatgpt",
-      "category": "models",
-      "kind": "plugin",
-      "title": {
-        "zh": "ChatGPT",
-        "en": "ChatGPT"
-      },
-      "summary": {
-        "zh": "借助本机 Codex 搜索、生图、改图和分析图片；搜索可加入统一排序。",
-        "en": "Search, generate and edit images, and analyze images through local Codex; search also joins the unified provider order."
-      },
-      "readme": {
-        "zh": "README.zh-CN.md",
-        "en": "README.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugins",
-      "directory": "plugins/dsh-chatgpt"
-    },
-    {
-      "slug": "grok-build",
-      "package": "@klarkxy/dsh-grok-build",
-      "category": "models",
-      "kind": "plugin",
-      "title": {
-        "zh": "Grok Build",
-        "en": "Grok Build"
-      },
-      "summary": {
-        "zh": "借助本机 Grok Build 搜索、读网页和生成图片视频；搜索可加入统一排序。",
-        "en": "Search, read pages, and create images and videos through local Grok Build; search also joins the unified provider order."
-      },
-      "readme": {
-        "zh": "README.zh-CN.md",
-        "en": "README.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugins",
-      "directory": "plugins/dsh-grok-build"
-    },
-    {
-      "slug": "minimax-code",
-      "package": "@klarkxy/dsh-minimax-code",
-      "category": "models",
-      "kind": "plugin",
-      "title": {
-        "zh": "MiniMax Code",
-        "en": "MiniMax Code"
-      },
-      "summary": {
-        "zh": "借助本机 MiniMax Code 搜索、生成媒体和理解音视频；搜索可加入统一排序。",
-        "en": "Search, create media, and understand audio and video through local MiniMax Code; search also joins the unified provider order."
-      },
-      "readme": {
-        "zh": "README.zh-CN.md",
-        "en": "README.md"
-      },
-      "repository": "https://github.com/klarkxy/dsh-plugins",
-      "directory": "plugins/dsh-minimax-code"
-    },
-    {
       "slug": "model-hub",
       "package": "@klarkxy/dsh-model-hub",
       "category": "models",

@@ -99,7 +99,7 @@ describe("prepare lifecycle", () => {
 describe("bundle contract", () => {
   it("declares the DSH bundle patch and a prepare build", () => {
     expect(packageJson.name).toBe("@klarkxy/dsh-dev-index");
-    expect(packageJson.packageManager).toBe("pnpm@10.29.2");
+    expect(packageJson.packageManager).toBe("pnpm@11.28.5");
     // prepare builds for GitHub-spec installs, but skips cleanly when the
     // workspace-linked plugin-kit has no built lib yet (monorepo install).
     expect(packageJson.scripts).toMatchObject({

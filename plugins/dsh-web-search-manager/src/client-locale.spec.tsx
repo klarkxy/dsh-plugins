@@ -34,7 +34,7 @@ describe('network search live locale', () => {
       expect(body()).toContain('listed price ¥0.036/request')
       expect(body()).toContain('Bocha')
       expect(body()).not.toContain('中文网页搜索 API')
-      await act(async () => button('Request limits').click())
+      await act(async () => button('Settings').click())
       const input = dom.window.document.querySelector<HTMLInputElement>('input[min="1"][max="20"]')!
       await act(async () => Simulate.change(input, { target: { value: '0' } } as never))
       await act(async () => button('Save').click())

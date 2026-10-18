@@ -6,7 +6,7 @@ import { renderToString } from 'react-dom/server'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it } from 'vitest'
 import { TitleSettings } from './client.tsx'
-import { settingsCopy } from './client-work.ts'
+import { titleCopy } from './client-work.ts'
 import { createTitleClientMarker } from './marker.ts'
 
 /*
@@ -90,7 +90,7 @@ describe('current title settings seat', () => {
   })
 
   it('puts the open session in a labeled card and the defaults beside it', async () => {
-    const copy = settingsCopy('zh')
+    const copy = titleCopy.zh
     const status = {
       settings: { revision: 1, prompt: '', model: { provider: '', model: '' }, cadence: 'all-prompts' },
       support: { weOwn: true, nativeOwner: '@klarkxy/dsh-current-title' },
@@ -124,7 +124,7 @@ describe('current title settings seat', () => {
       expect(defaults.querySelector('textarea')!.className).toBe('dsh-ui-textarea ct-prompt')
       expect(defaults.textContent).toContain(copy.promptHint)
       expect(copy.promptHint).toContain('离开输入框')
-      expect(settingsCopy('en').promptHint).toContain('Saves on blur')
+      expect(titleCopy.en.promptHint).toContain('Saves on blur')
       expect(defaults.querySelector('textarea')).not.toBeNull()
       expect(defaults.querySelector('.dsh-model-menu-trigger, select')).not.toBeNull()
       expect(defaults.querySelector('select')).not.toBeNull()
@@ -150,10 +150,10 @@ describe('current title settings seat', () => {
       await act(async () => { root.render(<TitleSettings client={fakeClient() as never} marker={createTitleClientMarker()} />) })
       await act(async () => { await Promise.resolve() })
       const html = dom.window.document.body.innerHTML
-      expect(html).toContain(settingsCopy('zh').session)
-      expect(html).toContain(settingsCopy('zh').noSession)
+      expect(html).toContain(titleCopy.zh.session)
+      expect(html).toContain(titleCopy.zh.noSession)
       expect(html).not.toContain('class="dsh-ui-title')
-      expect(html).toContain(settingsCopy('zh').defaults)
+      expect(html).toContain(titleCopy.zh.defaults)
     } finally {
       await act(async () => root.unmount())
       dom.window.close()

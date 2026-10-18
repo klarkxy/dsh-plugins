@@ -43,19 +43,20 @@ export function hasWebProvider(web: WebRegistry, kind: ProviderKind, id: string)
   return runtimeOf(web)[kind === 'search' ? 'searchProviders' : 'fetchProviders'].has(id)
 }
 
-/** Hide one volatile selection field without replacing the object the settings UI reads. */
+/** Hide one volatile selection field without replacing the object the settings UI reads.
+ * The host builds these with cosmokit's createVolatile and freezes them, so `get` is an own
+ * non-configurable data property that a get trap may not answer differently. Return a standalone
+ * facade instead of wrapping the cell: the call path reads one thing from it, config.<field>.get().
+ */
 function selectionView(field: unknown): unknown {
   if (!field || (typeof field !== 'object' && typeof field !== 'function')) return field
-  return new Proxy(field, {
-    get(target, key) {
-      if (key === 'get') return () => undefined
-      return Reflect.get(target, key, target)
-    },
-  })
+  return Object.freeze({ get: () => undefined })
 }
 /** One call sees no host selection. Config, its volatile source, and env stay on the real runtime.
  * Cordis reads own data properties from the service and ignores an Object.create overlay, so this
- * has to be a get trap. Other reads go to the traced receiver and keep that call's context.
+ * has to be a get trap. Other reads go to the traced receiver and keep that call's context. Config
+ * is proxied over an empty target for the same reason as the cell: a host that froze it would make
+ * the two selection fields non-configurable own properties, which no get trap may replace.
  */
 function unmanagedView(runtime: Runtime, callReceiver: object): Runtime {
   return new Proxy(runtime, {
@@ -63,12 +64,12 @@ function unmanagedView(runtime: Runtime, callReceiver: object): Runtime {
       if (key === 'searchProviderId' || key === 'fetchProviderId' || key === 'searchProviderEnv' || key === 'fetchProviderEnv') return undefined
       if (key === 'config') {
         const config = Reflect.get(target, 'config', target) ?? {}
-        return new Proxy(config as object, {
-          get(configTarget, configKey) {
+        return new Proxy({}, {
+          get(_view, configKey) {
             if (configKey === 'searchProvider' || configKey === 'fetchProvider') {
-              return selectionView(Reflect.get(configTarget, configKey, configTarget))
+              return selectionView(Reflect.get(config, configKey, config))
             }
-            return Reflect.get(configTarget, configKey, configTarget)
+            return Reflect.get(config, configKey, config)
           },
         })
       }

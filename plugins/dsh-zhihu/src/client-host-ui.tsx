@@ -109,16 +109,6 @@ export function zhihuQueryKeyDown(
   }
 }
 
-export function dockEscapeKeyDown(
-  event: { key?: string; stopPropagation(): void },
-  run: { loading: boolean; close(): void },
-): void {
-  if (event.key !== 'Escape') return
-  event.stopPropagation()
-  if (run.loading) return
-  run.close()
-}
-
 export function renderInput(props: ZhihuInputProps) {
   // Keep the plugin's value-based callback by unwrapping the DOM event from
   // the controlled official input here.

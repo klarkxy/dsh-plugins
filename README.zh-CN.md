@@ -15,9 +15,6 @@ klarkxy 的 DeepSeek Harness（DSH）插件。可以在[插件站点](https://kl
 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/docs/README.zh-CN.md) | 模型枢纽：在一个页面修改各插件和子代理使用的模型，并查看运行中子代理的模型与思考强度。 |
 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/docs/README.zh-CN.md) | 网页搜索：在一个设置页管理和排序多家搜索与网页读取服务，包括已安装插件提供的能力。 |
 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/docs/README.zh-CN.md) | 知乎：知乎搜索、智能体工具、知识库和用量统计。 |
-| [`@klarkxy/dsh-chatgpt`](plugins/dsh-chatgpt/README.zh-CN.md) | ChatGPT：借助本机 Codex 搜索、生图、改图和分析图片；搜索可加入统一排序。 |
-| [`@klarkxy/dsh-grok-build`](plugins/dsh-grok-build/README.zh-CN.md) | Grok Build：借助本机 Grok Build 搜索、读网页和生成图片视频；搜索可加入统一排序。 |
-| [`@klarkxy/dsh-minimax-code`](plugins/dsh-minimax-code/README.zh-CN.md) | MiniMax Code：借助本机 MiniMax Code 搜索、生成媒体和理解音视频；搜索可加入统一排序。 |
 | [`@klarkxy/dsh-font`](plugins/dsh-font/docs/README.zh-CN.md) | 字体：自定义 Web GUI 的界面字体、代码字体与会话字号。 |
 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.zh-CN.md) | 破限：解除模型的回答限制、交付完整成果的会话 Preset，只作用于选用它的会话；可能导致账号被封禁。 |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | DSH 文档：在插件页阅读官方文档；创造模式可查文档和 npm 与 GitHub 上的插件。 |
@@ -48,13 +45,10 @@ pnpm check
 <!-- plugin-release-states:start -->
 | 包 | 生命周期 | 说明 |
 | --- | --- | --- |
-| [@klarkxy/dsh-chatgpt](plugins/dsh-chatgpt/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-current-title](plugins/dsh-current-title/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-font](plugins/dsh-font/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
-| [@klarkxy/dsh-grok-build](plugins/dsh-grok-build/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
-| [@klarkxy/dsh-minimax-code](plugins/dsh-minimax-code/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-model-hub](plugins/dsh-model-hub/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |

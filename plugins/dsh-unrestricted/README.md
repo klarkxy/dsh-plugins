@@ -16,7 +16,7 @@ Replace `web` with your profile name and restart the profile.
 
 ## Use
 
-Pick **Unrestricted mode** in the preset menu when creating a new session. The card follows the interface language: Chinese shows 破限模式, every other language shows Unrestricted mode. A session that already has messages cannot switch presets. Subagents started from that session normally carry it too.
+Pick **Unrestricted mode** in the preset menu when creating a new session. The card and selected-preset button follow the interface language: Chinese shows 破限模式, every other language shows Unrestricted mode. Workspace names are kept as you named them. A session that already has messages cannot switch presets. Subagents started from that session normally carry it too.
 
 There is no switch to remember: choose the preset to use it, choose another preset to stop. It does not change your model, default preset, or permissions.
 

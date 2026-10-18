@@ -24,7 +24,7 @@
     "url": "https://github.com/klarkxy"
   },
   "type": "module",
-  "packageManager": "pnpm@10.29.2",
+  "packageManager": "pnpm@11.28.5",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {

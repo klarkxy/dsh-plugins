@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
-import { createModelSettingsChanges, watchModelSettingsChanges } from './changes.ts'
+import { createModelSettingsChanges, watchModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
 
 function events() {
   const listeners = new Map<string, Set<(...args: any[]) => void>>()

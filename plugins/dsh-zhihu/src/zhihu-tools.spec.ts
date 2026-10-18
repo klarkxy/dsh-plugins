@@ -2,10 +2,6 @@ import '../tests/legacy-call-policy.ts'
 import { describe, expect, it, vi } from 'vitest'
 import type { ZhihuSearchFetcher } from './zhihu-client.ts'
 import {
-  createZhihuAskTool,
-  createZhihuGlobalSearchTool,
-  createZhihuHotListTool,
-  createZhihuKnowledgeSearchTool,
   executeZhihuAsk,
   executeZhihuGlobalSearch,
   executeZhihuHotList,
@@ -14,7 +10,13 @@ import {
   renderZhihuAsk,
   renderZhihuHotList,
   renderZhihuKnowledgeSearch,
-} from './zhihu-tools.ts'
+} from './operations.ts'
+import {
+  createZhihuAskTool,
+  createZhihuGlobalSearchTool,
+  createZhihuHotListTool,
+  createZhihuKnowledgeSearchTool,
+} from './tool-definitions.ts'
 
 vi.mock('node:fs/promises', async () => {
   const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')

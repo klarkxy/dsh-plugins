@@ -7,9 +7,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { HubPage, type HubEntry } from './client.tsx'
 import { castCopy } from './client-cast.tsx'
 import { hubMessage, hubMessages } from './client-copy.ts'
-import { ChatGptPanel } from '../../dsh-chatgpt/src/client.tsx'
-import { chatGptDiagnostic, chatGptMessage, chatGptMessages } from '../../dsh-chatgpt/src/client-copy.ts'
-import { DEFAULT_SETTINGS } from '../../dsh-chatgpt/src/contracts.ts'
 import { TitleSettings } from '../../dsh-current-title/src/client.tsx'
 import { titleCopy, titleMessage } from '../../dsh-current-title/src/client-work.ts'
 
@@ -46,7 +43,6 @@ async function mounted(run: (dom: JSDOM, root: Root) => Promise<void>) {
     }
   }
 }
-const click = async (dom: JSDOM, label: string) => { await act(async () => [...dom.window.document.querySelectorAll('button')].find(button => button.textContent === label)!.click()) }
 const ok = <T,>(value: T) => ({ ok: true as const, value })
 
 describe('live host locale across model settings panels', () => {
@@ -70,35 +66,6 @@ describe('live host locale across model settings panels', () => {
     await locale.change('zh')
     expect(dom.window.document.body.textContent).toContain('已保存。'); expect(input.value).toBe('Draft 保留')
     expect(call).toHaveBeenCalledTimes(2)
-  }))
-
-  it('switches ChatGPT status and save notices while retaining a draft and in-flight action', async () => mounted(async (dom, root) => {
-    const locale = localeStore(), saved = deferred<unknown>()
-    const settings = { ...DEFAULT_SETTINGS }
-    const call = vi.fn(async (_channel, endpoint) => endpoint === 'settings.update' ? saved.promise : ok(endpoint === 'settings' ? { settings, revision: 1 }
-      : { available: false, signedIn: false, error: '未找到官方 Codex 运行时，请在配置中指定路径。' }))
-    const rpc = { call }
-    await act(async () => root.render(<ChatGptPanel rpc={rpc} locale={locale} />))
-    // The executable field lives behind the collapsed-by-default advanced disclosure.
-    await act(async () => { dom.window.document.querySelector<HTMLElement>('.chatgpt-advanced .dsh-stub-disclosure__row')!.click() })
-    const inputs = dom.window.document.querySelectorAll('input'), executable = inputs[1]!
-    await act(async () => Simulate.change(executable, { target: { value: 'C:/Codex 原样/codex.exe' } } as never))
-    await locale.change('zh-CN')
-    expect(executable.value).toBe('C:/Codex 原样/codex.exe')
-    expect(dom.window.document.querySelectorAll('select')).toHaveLength(0)
-    expect(dom.window.document.body.textContent).toContain('图片分析')
-    expect(dom.window.document.body.textContent).toContain('未找到官方 Codex 运行时')
-    expect(call).toHaveBeenCalledTimes(2)
-    await click(dom, '保存配置'); await locale.change('en')
-    expect(dom.window.document.body.textContent).toContain('Saving…')
-    expect(dom.window.document.body.textContent).toContain('Official Codex runtime not found.')
-    expect(executable.disabled).toBe(true); expect(executable.value).toBe('C:/Codex 原样/codex.exe')
-    await act(async () => saved.resolve(ok({ settings: { ...settings, executable: executable.value }, revision: 2 })))
-    expect(dom.window.document.body.textContent).toContain('Saved.')
-    await locale.change('zh')
-    expect(dom.window.document.body.textContent).toContain('已保存。')
-    expect(call.mock.calls.filter(args => args[1] === 'settings.update')).toHaveLength(1)
-    expect(call.mock.calls.filter(args => args[1] === 'settings')).toHaveLength(1)
   }))
 
   it('resolves hub owner and marker copy, aria and diagnostics without changing search or refetching', async () => mounted(async (dom, root) => {
@@ -130,15 +97,10 @@ describe('live host locale across model settings panels', () => {
       const text = typeof value === 'function' ? value('LABEL', 'EXTRA') : value
       expect(text, `castCopy.en.${key}`).not.toMatch(/[\u3400-\u9fff]/)
     }
-    for (const [zh, en] of chatGptMessages) {
-      expect(chatGptMessage(zh, true)).toBe(en); expect(chatGptMessage(en, false)).toBe(zh)
-      expect(chatGptDiagnostic(zh)).toEqual({ zh, en }); expect(en).not.toMatch(/[\u3400-\u9fff]/)
-    }
     for (const language of ['zh', 'en'] as const) {
       expect(titleMessage('User 原样', language)).toBe('User 原样')
       expect(hubMessage('Remote 原样', language)).toBe('Remote 原样')
     }
-    expect(chatGptDiagnostic('Remote 原样')).toBe('Remote 原样')
     for (const [zh, en] of hubMessages) {
       expect(hubMessage(zh, 'en')).toBe(en); expect(hubMessage(en, 'zh')).toBe(zh)
       expect(en).not.toMatch(/[\u3400-\u9fff]/)
@@ -179,16 +141,5 @@ describe('live host locale across model settings panels', () => {
       expect(hubMessage(message, 'zh')).not.toBe(message)
     }
     expect(hubMessage('Provider response: unknown config field: custom', 'zh')).toBe('Provider response: unknown config field: custom')
-  })
-
-  it('covers owned RPC, process and runtime defaults shown by ChatGPT settings', () => {
-    for (const file of ['index.ts', 'process.ts', 'runtime.ts']) {
-      const source = readFileSync(new URL(`../../dsh-chatgpt/src/${file}`, import.meta.url), 'utf8')
-      const messages = [...source.matchAll(/(?:error|failure|ChatGptError)\([^,]+,\s*'([^']+)'/g)].map(match => match[1]!)
-      expect(messages.length).toBeGreaterThan(0)
-      for (const message of messages.filter(message => /[\u3400-\u9fff]/.test(message))) {
-        expect(chatGptMessage(message, true), `${file}: ${message}`).not.toMatch(/[\u3400-\u9fff]/)
-      }
-    }
   })
 })

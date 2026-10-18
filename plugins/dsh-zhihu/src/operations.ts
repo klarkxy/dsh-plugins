@@ -10,15 +10,8 @@
  *   - 知识库检索:POST /api/v1/knowledge/search { Query, Limit(<=10), RecallScopes }
  */
 import {
-  ZHIHU_ASK_TOOL_NAME,
-  ZHIHU_GLOBAL_SEARCH_TOOL_NAME,
-  ZHIHU_HOT_LIST_TOOL_NAME,
-  ZHIHU_KNOWLEDGE_SEARCH_TOOL_NAME,
-} from './contracts.ts'
-import {
   normalizeSearchItem,
   parseZhihuEnvelope,
-  reportExecuted,
   zhihuFetchJson,
   ZhihuSearchError,
   type ZhihuClientOptions,

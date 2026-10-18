@@ -6,7 +6,7 @@ import { apply, inject } from './client.tsx'
 import { applyMarkerFromStatus, createTitleClientMarker, disposeTitleClientMarker } from './marker.ts'
 import {
   createTitleClientWork, promptFieldValue, promptToSave, runTitleRegenerateFlow, runTitleSettingsSave, runTitleStatusLoad,
-  settingsCopy, shouldSkipTitleRefresh,
+  titleCopy, shouldSkipTitleRefresh,
 } from './client-work.ts'
 
 describe('title prompt draft', () => {
@@ -24,7 +24,7 @@ describe('title prompt draft', () => {
   })
 
   it('keeps loading copy in the locale table', () => {
-    expect(settingsCopy('en').loading).toBe('Loading title settings…')
+    expect(titleCopy.en.loading).toBe('Loading title settings…')
     expect(clientSource).not.toContain("seat.locale === 'en' ?")
   })
 })
@@ -80,13 +80,13 @@ describe('current title UI', () => {
     expect(subscribeCall).toBeGreaterThan(mountCall)
     expect(clientSource).toContain("ctx.provide(TITLE_CLIENT_SERVICE, marker)")
     expect(clientSource).not.toContain('settings.section')
-    expect(settingsCopy('zh').regenerate).toBe('重新生成')
-    expect(settingsCopy('en').regenerate).toBe('Regenerate')
-    expect(settingsCopy('zh').label).toBe('自动标题')
-    expect(settingsCopy('zh').session).toBe('当前会话')
-    expect(settingsCopy('en').session).toBe('Current session')
-    expect(settingsCopy('zh').defaults).toBe('默认设置')
-    expect(settingsCopy('en').noSession).toContain('No session is open')
+    expect(titleCopy.zh.regenerate).toBe('重新生成')
+    expect(titleCopy.en.regenerate).toBe('Regenerate')
+    expect(titleCopy.zh.label).toBe('自动标题')
+    expect(titleCopy.zh.session).toBe('当前会话')
+    expect(titleCopy.en.session).toBe('Current session')
+    expect(titleCopy.zh.defaults).toBe('默认设置')
+    expect(titleCopy.en.noSession).toContain('No session is open')
     expect(shouldSkipTitleRefresh({ busy: true })).toBe(true)
     expect(shouldSkipTitleRefresh({ busy: false })).toBe(false)
   })

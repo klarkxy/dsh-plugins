@@ -1,57 +1,48 @@
 /**
- * Right-click open for the sidebar browser: a `contextmenu` gesture on a
- * session row clicks the row itself, so the host's own `onClick` opens that
- * session. The host owns opening (including the archived-session refusal);
- * this module only relays the gesture. No host code registers a contextmenu
- * listener, so the capture-phase relay does not fight an existing handler.
+ * Relay sidebar right-clicks to the host's own session actions menu.
  *
- * DOM contract (dsh-client-ui-workspace, lib/client.js SessionNodeItem):
- * - Session rows are `div[role="treeitem"][data-row-key="session:<id>"]`
- *   inside `div[role="tree"]`. Their `onClick` calls the browser's guarded
- *   open. Overflow and empty rows carry other prefixes, search rows carry no
- *   `data-row-key`, and AnimatedRows exit clones have the attribute removed —
- *   all are ignored by the prefix match.
- * - Workspace group rows toggle expansion on click and have no session to
- *   open, so a right-click there is left alone. Blank new-session rows also
- *   carry `session:` but their click is a no-op in the host; relaying it is
- *   harmless and keeps the selector structural.
- * - The "..." trigger lives in a trailing `span` whose CSS-module class ends
- *   in `_rowActions`, and that span stops click propagation. A right-click
- *   there keeps the native menu button; it must not also open the session.
- * - Class names carry a per-build hash prefix; only `data-row-key` and the
- *   structural suffix are stable.
- * - An opened menu portals to `document.body`, outside the tree, so a
- *   right-click on a menu row never re-enters this relay.
+ * dsh-client-ui-workspace SessionNodeItem renders a keyed treeitem, with a
+ * trailing rowActions span. Its first button is the Menu anchor; subsequent
+ * buttons are contributed row actions. The span stops click propagation, so
+ * clicking the anchor opens the menu without opening the session. Menu portals
+ * outside the tree and the row carries a *_menuOpen class while it is open.
+ * Blank rows, search results, and AnimatedRows exit clones have no keyed menu
+ * anchor and are left alone. CSS-module hash prefixes vary between host builds.
  */
+const ROW_SELECTOR = '[role="treeitem"][data-row-key^="session:"]'
+const ACTIONS_SELECTOR = 'span[class*="_rowActions"]'
 
-const ROW_SELECTOR = '[data-row-key^="session:"]'
-const ACTIONS_SELECTOR = 'span[class*="rowActions"]'
-
-/** Resolve the session row containing `target` when a right-click should open it. */
+/** Resolve a live session row in the sidebar tree. */
 export function findSessionRow(target: Element): HTMLElement | null {
   if (typeof target.closest !== 'function') return null
-  if (target.closest(ACTIONS_SELECTOR) !== null) return null
-  const row = target.closest(ROW_SELECTOR)
-  if (row === null || row.closest('[role="tree"]') === null) return null
-  if (typeof (row as HTMLElement).click !== 'function') return null
-  return row as HTMLElement
+  const row = target.closest<HTMLElement>(ROW_SELECTOR)
+  if (row === null || row.closest('[role="tree"]') === null || row.closest('[inert]') !== null) return null
+  return row
 }
 
-/**
- * Forward one `contextmenu` event to the session row's own click.
- * Returns true when the gesture was relayed (and the default suppressed).
- */
+/** Forward a context-menu gesture only when the host provides a menu anchor. */
 export function forwardContextMenu(event: Event): boolean {
+  if (event.defaultPrevented) return false
   const target = event.target
   if (target === null || typeof (target as Element).closest !== 'function') return false
-  const row = findSessionRow(target as Element)
+  const element = target as Element
+  const row = findSessionRow(element)
   if (row === null) return false
+  const actions = row.querySelector(ACTIONS_SELECTOR)
+  const trigger = actions?.querySelector<HTMLButtonElement>('button')
+  if (trigger == null || trigger.disabled) return false
+  // Other row actions (pin/archive/etc.) must never fire on right-click.
+  if (element.closest(ACTIONS_SELECTOR) !== null && !trigger.contains(element)) return false
   event.preventDefault()
-  row.click()
+  // The host anchor toggles. Repeated context-menu gestures should keep it open.
+  if (!Array.from(row.classList).some(name => name.endsWith('_menuOpen'))) {
+    trigger.focus({ preventScroll: true })
+    trigger.click()
+  }
   return true
 }
 
-/** Capture-phase relay on the document; the returned disposer uninstalls it. */
+/** Capture-phase relay; disposing the client removes the listener. */
 export function installContextMenuForwarding(doc: Document): () => void {
   const listener = (event: Event) => { forwardContextMenu(event) }
   doc.addEventListener('contextmenu', listener, true)

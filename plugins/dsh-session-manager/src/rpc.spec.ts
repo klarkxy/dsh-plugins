@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:http'
@@ -41,17 +41,22 @@ const presenceModelStore = (() => {
 })()
 
 async function withRpc(
-  run: (call: (endpoint: string, payload?: unknown) => Promise<{ status: number; body: any }>) => Promise<void>,
+  run: (
+    call: (endpoint: string, payload?: unknown) => Promise<{ status: number; body: any }>,
+    controls: { profile: string; rejectRequests: (status: number | undefined) => void; stop: () => void },
+  ) => Promise<void>,
   modelStore?: () => typeof presenceModelStore | undefined,
 ) {
   const root = await mkdtemp(join(tmpdir(), 'session-manager-rpc-test-'))
   const profile = join(root, 'profile')
   await mkdir(profile)
   let handler: any
+  let rejection: number | undefined
   const transport = {
     get: () => ({ dir: profile }),
-    connection: { requestRejection: () => undefined },
-    webServer: { register(route: any) { handler = route.handler; return () => { handler = undefined } } },
+    connection: { requestRejection: () => rejection },
+    // Keep the captured handler so tests can probe a request retained across disposal.
+    webServer: { register(route: any) { handler = route.handler; return () => {} } },
   }
   const rootCtx = {
     get: () => undefined,
@@ -76,7 +81,7 @@ async function withRpc(
     return { status: response.status, body: await response.json().catch(() => undefined) }
   }
   try {
-    await run(call)
+    await run(call, { profile, rejectRequests: status => { rejection = status }, stop })
   } finally {
     stop()
     server.closeAllConnections()
@@ -123,8 +128,24 @@ describe('composed plugin channel', () => {
       const allocate = await call('temporary.allocate', { requestId })
       expect(allocate.body.result.ok).toBe(true)
       expect(allocate.body.result.value.path).toBe(join(profileMarker(allocate.body.result.value.path), 'data', 'session-manager', 'workspaces', requestId))
-      const badAllocate = await call('temporary.allocate', { requestId, path: '/elsewhere' })
-      expect(badAllocate.body.result).toMatchObject({ ok: false, error: { code: 'session-manager/temporary-workspace' } })
+    })
+  })
+
+  it('authenticates allocation requests and prevents invalid or retired handlers from creating directories', async () => {
+    await withRpc(async (call, controls) => {
+      controls.rejectRequests(401)
+      expect((await call('temporary.allocate', { requestId })).status).toBe(401)
+      expect(await readdir(controls.profile)).toEqual([])
+      controls.rejectRequests(undefined)
+      for (const payload of [null, [], 'invalid', {}, { requestId: '../elsewhere' }, { requestId, path: '/elsewhere' }]) {
+        const invalid = await call('temporary.allocate', payload)
+        expect(invalid.body.result).toMatchObject({ ok: false, error: { code: 'session-manager/temporary-workspace' } })
+        expect(await readdir(controls.profile)).toEqual([])
+      }
+      controls.stop()
+      const retired = await call('temporary.allocate', { requestId })
+      expect(retired.body.result.ok).toBe(false)
+      expect(await readdir(controls.profile)).toEqual([])
     })
   })
 

@@ -39,8 +39,11 @@ const MARKS: readonly string[] = [WARNING_MARKS.zh, WARNING_MARKS.en]
 const NAMES: readonly string[] = COPY.map(entry => entry.name)
 const DESCRIPTIONS: readonly string[] = COPY.map(entry => entry.description)
 
-/** The picker row and the settings card of this preset. */
-const OWN_ROWS = `button[role="menuitem"],[data-agent-preset-id="${PRESET_ID}"]`
+/** The host renderer marks this outlet; workspace menu buttons live elsewhere. */
+const PRESET_BUTTON = '[data-slot="conversation.hero.agentPreset"] button[aria-haspopup="menu"]'
+
+/** The picker row, selected-preset button, and settings card of this preset. */
+const OWN_ROWS = `button[role="menuitem"],${PRESET_BUTTON},[data-agent-preset-id="${PRESET_ID}"]`
 
 /** A tooltip bubble repeats a description the surface could not show in full. */
 const TOOLTIPS = '[role="tooltip"]'
@@ -76,18 +79,18 @@ function holdsCopy(text: string): boolean {
 }
 
 /** @param node - a node an observer just saw added.
- * @returns whether a preset card could be inside it. */
+ * @returns whether it could contain preset copy, including a replaced label. */
 function mayHoldCard(node: Node): boolean {
-  if (node.nodeType !== Node.ELEMENT_NODE) return false
-  return holdsCopy((node as Element).textContent ?? '')
+  if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.TEXT_NODE) return false
+  return holdsCopy(node.textContent ?? '')
 }
 
 /** @returns every element currently showing this preset's copy. */
 function targets(): Element[] {
   const found: Element[] = []
   for (const element of document.querySelectorAll(OWN_ROWS)) {
-    // The selector covers every menu row; only this preset's row carries the copy.
-    if (element.getAttribute('role') !== 'menuitem'
+    // Host menu buttons have no preset id; recognize this preset by its copy.
+    if (element.getAttribute('data-agent-preset-id') === PRESET_ID
       || NAMES.some(entry => (element.textContent ?? '').includes(entry))) {
       found.push(element)
     }

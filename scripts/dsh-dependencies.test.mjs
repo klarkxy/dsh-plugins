@@ -13,7 +13,7 @@ const target = manifest.devDependencies['@deepseek-ai/dsh-client-ui-primitives']
 const plugins = readdirSync(join(root, 'plugins'), { withFileTypes: true })
   .filter(entry => entry.isDirectory()).map(entry => read(`plugins/${entry.name}/package.json`))
 
-test('DSH development dependencies and both override declarations share one baseline', () => {
+test('DSH development dependencies and workspace overrides share one baseline', () => {
   assert.equal(semver.valid(target), target)
   for (const pkg of [manifest, ...plugins]) {
     for (const [name, version] of Object.entries(pkg.devDependencies ?? {})) {
@@ -21,15 +21,20 @@ test('DSH development dependencies and both override declarations share one base
     }
   }
   const workspace = readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8')
-  const overrides = new Map([...workspace.matchAll(/^  '(@deepseek-ai\/dsh[^']*)': (\S+)\r?$/gm)]
+  const workspaceOverrides = workspace.split(/^overrides:\r?\n/m)[1]?.split(/^\S/m)[0] ?? ''
+  const overrides = new Map([...workspaceOverrides.matchAll(/^  '(@deepseek-ai\/dsh[^']*)': (\S+)\r?$/gm)]
     .map(([, name, version]) => [name, version]))
-  const expected = Object.entries(manifest.pnpm.overrides).filter(([name]) => official(name))
-  assert.equal(overrides.size, expected.length)
-  for (const [name, version] of expected) {
+  assert.equal(manifest.pnpm, undefined, 'pnpm settings belong in pnpm-workspace.yaml')
+  assert.ok(overrides.size > 0, 'workspace must declare DSH overrides')
+  for (const [name, version] of overrides) {
     assert.equal(version, target, name)
-    assert.equal(overrides.get(name), version, name)
     assert.equal(manifest.devDependencies[name], target, `${name}: missing development peer`)
   }
+  const lock = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8')
+  const lockOverrides = lock.split(/^overrides:\r?\n/m)[1]?.split(/^\S/m)[0] ?? ''
+  const locked = new Map([...lockOverrides.matchAll(/^  '(@deepseek-ai\/dsh[^']*)': (\S+)\r?$/gm)]
+    .map(([, name, version]) => [name, version]))
+  assert.deepEqual(overrides, locked, 'workspace and lockfile overrides must agree')
 })
 
 function assertOpenCompatibleRange(range, label) {

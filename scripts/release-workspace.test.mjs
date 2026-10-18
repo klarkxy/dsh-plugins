@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { orderedPackages, packRelease, publishManifest, releaseCandidates, releaseWorkspace } from './release-workspace.mjs';
 import { validateHeldDependencies } from './publish-npm.mjs';
@@ -58,7 +58,7 @@ test('real tarball contains resolved workspace dependencies and keeps source unt
     const manifest = JSON.parse(read('package.json')); assert.equal(manifest.dependencies[dependency.name], '1.2.3');
     assert.ok(files.some(file => file.path === 'index.js')); return 'verified';
   });
-  const tarManifest = JSON.parse(execFileSync('tar', ['-xOf', packed.archive, 'package/package.json'], { encoding: 'utf8' }));
+  const tarManifest = JSON.parse(execFileSync('tar', ['-xOf', basename(packed.archive), 'package/package.json'], { cwd: dirname(packed.archive), encoding: 'utf8' }));
   assert.equal(tarManifest.dependencies[dependency.name], '1.2.3'); assert.equal(packed.hash, 'verified');
   assert.equal(JSON.parse(readFileSync(join(root, feature.directory, 'package.json'))).dependencies[dependency.name], 'workspace:*');
 });

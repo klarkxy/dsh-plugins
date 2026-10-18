@@ -7,6 +7,8 @@ import { WebSearchManager } from './manager.ts'
 
 type Kind = 'search' | 'fetch'
 type Provider = WebSearchProvider | WebFetchProvider
+/** What the host reads from a selection cell. `value` is the unfrozen stand-in's own field. */
+type VolatileField = { get(): string | undefined, value?: string | undefined }
 class Selection {
   constructor(public value: string | undefined) {}
   get(): string | undefined { return this.value }
@@ -16,7 +18,7 @@ class CurrentHost {
   fetchProviders = new Map<string, Provider>()
   searchProviderEnv: string | undefined
   fetchProviderEnv: string | undefined
-  config: { searchProvider: Selection; fetchProvider: Selection }
+  config: { searchProvider: VolatileField, fetchProvider: VolatileField }
   constructor(search: string | undefined, fetch: string | undefined) {
     this.config = { searchProvider: new Selection(search), fetchProvider: new Selection(fetch) }
   }
@@ -50,6 +52,33 @@ class CurrentHost {
   async fetch(request: { url: string }, signal?: AbortSignal) {
     const provider = this.resolve('fetch') as WebFetchProvider
     return provider.fetch(request, signal)
+  }
+}
+
+/** cosmokit/lib createVolatile: the cell the host reads on every call is frozen, so `get` is an
+ * own non-configurable data property and a get trap may not answer it differently. The host moves
+ * the value through a symbol instead. A `Selection` field is substitutable; this one is not. */
+const VOLATILE_WRITE = Symbol.for('cosmokit.volatile.write')
+function createVolatile(initial: string | undefined): VolatileField {
+  const store = { current: initial }
+  return Object.freeze({ get: () => store.current,
+    [VOLATILE_WRITE]: (value: string | undefined) => { store.current = value } })
+}
+function writeVolatile(field: VolatileField, value: string | undefined): void {
+  ;(field as Record<symbol, (value: string | undefined) => void>)[VOLATILE_WRITE](value)
+}
+/** Same host, with the selection cells the running host actually builds. `frozenConfig` covers the
+ * outer object too: nothing proves the host froze it, but a call view that assumes it did not would
+ * break the moment it does. */
+class FrozenHost extends CurrentHost {
+  constructor(search: string | undefined, fetch: string | undefined, frozenConfig = false) {
+    super(search, fetch)
+    const pair = { searchProvider: createVolatile(search), fetchProvider: createVolatile(fetch) }
+    this.config = frozenConfig ? Object.freeze(pair) : pair
+  }
+  /** Host-side selection update: the closed-over cell moves, the frozen members stay in place. */
+  select(kind: Kind, value: string | undefined): void {
+    writeVolatile(kind === 'search' ? this.config.searchProvider : this.config.fetchProvider, value)
   }
 }
 
@@ -172,5 +201,57 @@ describe('current host selection shape, not the installed development WebRuntime
     expect(web.searchProviders.get('pinned')).toBe(original)
     expect(Object.hasOwn(web.searchProviders, 'set')).toBe(false)
     expect(Object.hasOwn(web, 'search')).toBe(false)
+  })
+})
+
+describe.each([
+  { label: 'plain config', frozenConfig: false },
+  { label: 'frozen config', frozenConfig: true },
+])('frozen volatile selection cell over a $label', ({ frozenConfig }) => {
+  it('ranks providers while the frozen cells keep their own selection', async () => {
+    const web = new FrozenHost('search-first', 'fetch-first', frozenConfig)
+    web.searchProviderEnv = 'search-env'
+    web.fetchProviderEnv = 'fetch-env'
+    const searches = [searchProvider('search-first'), searchProvider('search-second')]
+    const fetches = [fetchProvider('fetch-first'), fetchProvider('fetch-second')]
+    for (const provider of searches) web.registerSearchProvider(provider)
+    for (const provider of fetches) web.registerFetchProvider(provider)
+    const manager = manage(web)
+    await enable(manager, { searchOrder: ['search-second', 'search-first'], fetchOrder: ['fetch-second', 'fetch-first'] })
+    await web.search({ query: 'managed' })
+    await web.fetch({ url: 'https://example.com' })
+    expect(searches[1].search).toHaveBeenCalledOnce()
+    expect(fetches[1].fetch).toHaveBeenCalledOnce()
+    expect(searches[0].search).not.toHaveBeenCalled()
+    expect(fetches[0].fetch).not.toHaveBeenCalled()
+    // Untouched objects: same stored ids, same env fallback, still no own `value` to write through.
+    expect(web.config.searchProvider.get()).toBe('search-first')
+    expect(web.config.fetchProvider.get()).toBe('fetch-first')
+    expect(web.searchProviderEnv).toBe('search-env')
+    expect(web.fetchProviderEnv).toBe('fetch-env')
+  })
+  it('follows a write into the frozen cell while managed and restores it on unload', async () => {
+    const web = new FrozenHost('search-first', undefined, frozenConfig)
+    const first = searchProvider('search-first')
+    const second = searchProvider('search-second')
+    web.registerSearchProvider(first)
+    web.registerSearchProvider(second)
+    const manager = manage(web)
+    await enable(manager, { searchOrder: ['search-second'] })
+    web.select('search', 'search-second')
+    web.searchProviderEnv = 'search-first'
+    await web.search({ query: 'still managed' })
+    expect(second.search).toHaveBeenCalledOnce()
+    expect(first.search).not.toHaveBeenCalled()
+    // The write went through the cell's own closure, so it outlives the managed call.
+    expect(web.config.searchProvider.get()).toBe('search-second')
+    await manager.dispose()
+    await web.search({ query: 'restored saved selection' })
+    expect(second.search).toHaveBeenCalledTimes(2)
+    expect(web.config.searchProvider.get()).toBe('search-second')
+    web.select('search', undefined)
+    await web.search({ query: 'restored env selection' })
+    expect(first.search).toHaveBeenCalledOnce()
+    expect(web.searchProviderEnv).toBe('search-first')
   })
 })

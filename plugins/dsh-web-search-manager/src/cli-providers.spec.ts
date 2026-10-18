@@ -1,16 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { WebRuntime } from '@deepseek-ai/dsh-web'
-import { registerChatGptGlobalSearchProvider } from '../../dsh-chatgpt/src/web-search-provider.ts'
-import { registerGrokWebProviders } from '../../dsh-grok-build/src/web-provider.ts'
-import { registerMiniMaxWebProvider } from '../../dsh-minimax-code/src/web-provider.ts'
-import { DEFAULT_SETTINGS as MINIMAX_SETTINGS } from '../../dsh-minimax-code/src/contracts.ts'
+import { WebRuntime, type WebFetchProvider, type WebSearchProvider } from '@deepseek-ai/dsh-web'
+import type { DshWebManagementDescriptor } from '@klarkxy/dsh-plugin-kit/contracts'
 import { WebSearchManager } from './manager.ts'
 import { defaultSettings, type WebSettings } from './contracts.ts'
 
 const cleanup: Array<() => void | Promise<unknown>> = []
 afterEach(async () => { for (const off of cleanup.splice(0).reverse()) await off() })
-const gate = <T>(signal: AbortSignal, action: (signal: AbortSignal) => Promise<T>) => action(signal)
+
 function setup() {
   const ctx = new Context()
   new WebRuntime(ctx)
@@ -24,20 +21,34 @@ async function update(manager: WebSearchManager, patch: Partial<WebSettings>) {
   const { revision, ...settings } = manager.status().settings
   return manager.update({ ...settings, ...patch }, revision)
 }
+function externalSearch(id: string, owner: string, search: WebSearchProvider['search'], available = () => true): WebSearchProvider & { dshWebManagement: DshWebManagementDescriptor } {
+  return {
+    id, available, search, dshWebManagement: {
+      id, label: id, description: `${id} search`, billing: 'model-and-tools', configurationOwner: owner,
+    },
+  }
+}
 
-describe('CLI providers through the managed native web registry', () => {
-  it('discovers CLI capabilities without running them, orders search and preserves external configuration', async () => {
+describe('external providers through the managed native web registry', () => {
+  it('discovers external capabilities without running them, orders search and preserves external configuration', async () => {
     const { web, manager, resolveCredential } = setup()
     let chatReady = true
-    const chatRun = vi.fn(async () => ({ id: 'test', mode: 'search' as const, answer: 'Chat answer', images: [], sources: [{ url: 'https://example.com/chat' }], searchCount: 1, elapsedMs: 1 }))
-    const grokRun = vi.fn(async () => ({ answer: 'Grok answer', sources: [{ url: 'https://example.com/grok' }], files: [], state: 'completed' as const }))
-    cleanup.push(registerChatGptGlobalSearchProvider(web, { available: () => chatReady, run: chatRun }))
-    cleanup.push(registerGrokWebProviders(web, { available: () => true, runtime: () => ({ run: grokRun }), run: gate }))
-    const miniRun = vi.fn(async () => ({ status: 'complete' as const, answer: 'MiniMax answer', files: [], data: { sources: [{ url: 'https://example.com/minimax', title: 'MiniMax', snippet: 'result' }] } }))
-    cleanup.push(registerMiniMaxWebProvider(web, { available: () => true, settings: () => MINIMAX_SETTINGS, run: gate, search: { run: miniRun, status: async () => true } }))
+    const chatRun = vi.fn<WebSearchProvider['search']>(async () => ({ content: 'Chat answer', sources: [{ url: 'https://example.com/chat' }] }))
+    const grokRun = vi.fn<WebSearchProvider['search']>(async () => ({ content: 'Grok answer', sources: [{ url: 'https://example.com/grok' }] }))
+    const miniRun = vi.fn<WebSearchProvider['search']>(async () => ({ sources: [{ url: 'https://example.com/minimax', title: 'MiniMax', snippet: 'result' }] }))
+    const grokFetch = vi.fn<WebFetchProvider['fetch']>(async request => ({ url: request.url, statusCode: 200, body: { kind: 'text', content: 'fetched' }, truncated: false }))
+    const grokFetchProvider: WebFetchProvider & { dshWebManagement: DshWebManagementDescriptor } = {
+      id: 'grok-build', available: () => true, fetch: grokFetch, dshWebManagement: {
+        id: 'grok-build', label: 'grok-build', description: 'grok-build fetch', billing: 'model-and-tools', configurationOwner: '@example/grok-build',
+      },
+    }
+    cleanup.push(web.registerSearchProvider(externalSearch('chatgpt', '@example/chatgpt', chatRun, () => chatReady)))
+    cleanup.push(web.registerSearchProvider(externalSearch('grok-build', '@example/grok-build', grokRun)))
+    cleanup.push(web.registerFetchProvider(grokFetchProvider))
+    cleanup.push(web.registerSearchProvider(externalSearch('minimax-code', '@example/minimax-code', miniRun)))
     await manager.refresh()
     expect(manager.status().providers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'chatgpt', kind: 'search', configurationOwned: false, configurationOwner: '@klarkxy/dsh-chatgpt' }),
+      expect.objectContaining({ id: 'chatgpt', kind: 'search', configurationOwned: false, configurationOwner: '@example/chatgpt' }),
       expect.objectContaining({ id: 'grok-build', kind: 'search', configurationOwned: false }),
       expect.objectContaining({ id: 'grok-build', kind: 'fetch', configurationOwned: false }),
       expect.objectContaining({ id: 'minimax-code', kind: 'search', configurationOwned: false }),
@@ -64,21 +75,27 @@ describe('CLI providers through the managed native web registry', () => {
     const calls = grokRun.mock.calls.length
     await expect(web.search({ query: 'failure' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
     expect(grokRun).toHaveBeenCalledTimes(calls)
+    expect(grokFetch).not.toHaveBeenCalled()
   })
 
   it('keeps native fetch status and final URL while enforcing manager content limits', async () => {
     const { web, manager } = setup()
-    const run = vi.fn(async () => ({ answer: '', sources: [], files: [], state: 'completed' as const,
-      fetch: { url: 'https://example.com/final', statusCode: 404, body: { kind: 'text' as const, content: 'x'.repeat(1500) }, truncated: false },
+    const fetch = vi.fn<WebFetchProvider['fetch']>(async () => ({
+      url: 'https://example.com/final', statusCode: 404, body: { kind: 'text', content: 'x'.repeat(1500) }, truncated: false,
     }))
-    const off = registerGrokWebProviders(web, { available: () => true, runtime: () => ({ run }), run: gate })
+    const provider: WebFetchProvider & { dshWebManagement: DshWebManagementDescriptor } = {
+      id: 'grok-build', available: () => true, fetch, dshWebManagement: {
+        id: 'grok-build', label: 'grok-build', description: 'grok-build fetch', billing: 'model-and-tools', configurationOwner: '@example/grok-build',
+      },
+    }
+    const off = web.registerFetchProvider(provider)
     cleanup.push(off)
     await update(manager, { fetchOrder: ['grok-build'], maxFetchChars: 1000 })
     const result = await web.fetch({ url: 'https://example.com/start' })
     expect(result).toMatchObject({ url: 'https://example.com/final', statusCode: 404, truncated: true })
     expect(result.body.content).toHaveLength(1000)
     off()
-    expect(manager.status().providers.filter(p => p.id === 'grok-build')).toEqual([])
+    expect(manager.status().providers.filter(provider => provider.id === 'grok-build')).toEqual([])
     await expect(web.fetch({ url: 'https://example.com/start' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
   })
 })

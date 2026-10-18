@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "license": "SEE LICENSE IN LICENSE",
-  "packageManager": "pnpm@10.29.2",
+  "packageManager": "pnpm@11.28.5",
   "engines": {
     "node": ">=24"
   },
@@ -77,46 +77,5 @@
     "typescript": "^5.9.2",
     "vitest": "^3.2.4",
     "zod": "4.4.3"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ],
-    "overrides": {
-      "@deepseek-ai/dsh-anonymous-user-id": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-attachment": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-bash-local": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-client-store": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-compaction": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-deepseek-account": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-fs": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-hook-protocol": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-jobs": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-llm-deepseek": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-output-retention": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-sdk-protocol": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-session-telemetry": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-session-title-llm": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-shell": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-spill": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-util-time": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-util-workspace-path": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-workflow": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-sandbox": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-scope": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-storage": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-ptc-runtime": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-session-persistence": "0.2.1-rc.1",
-      "playwright": "1.62.1",
-      "@deepseek-ai/cordis": "4.0.5",
-      "@deepseek-ai/schemastery": "3.18.5",
-      "@deepseek-ai/cordis-plugin-group": "1.0.5",
-      "@deepseek-ai/dsh-web-search-exa": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-host-directory-picker": "0.2.1-rc.1",
-      "@deepseek-ai/dsh-otel": "0.2.1-rc.1",
-      "zod": "4.4.3"
-    }
   }
 }

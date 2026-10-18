@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { cliEnvironment, CliProcessError, runCli, type CliExecutable } from './cli-process.ts'
+import { cliEnvironment, cliNodeEnvironment, CliProcessError, runCli, type CliExecutable } from './cli-process.ts'
 
 const roots: string[] = []
 afterEach(async () => {
@@ -57,6 +57,14 @@ describe('runCli', () => {
     const env = cliEnvironment({ PATH: 'bin', HOME: 'home', CODEX_HOME: 'codex', DSH_PROFILE: 'old', dsh_session: 'old', OPENAI_API_KEY: 'secret', GH_TOKEN: 'secret', NODE_OPTIONS: '--require=inject' }, ['CODEX_HOME'])
     expect(env).toEqual({ PATH: 'bin', HOME: 'home', CODEX_HOME: 'codex' })
   })
+  it('explicitly enables Node mode for JavaScript launchers without forwarding ambient secrets', () => {
+    const parent = { PATH: 'bin', CODEX_HOME: 'codex', ELECTRON_RUN_AS_NODE: '0', electron_run_as_node: '0', NODE_OPTIONS: '--require=inject', OPENAI_API_KEY: 'secret', DSH_PROFILE: 'desktop' }
+    expect(cliNodeEnvironment(parent, ['CODEX_HOME', 'ELECTRON_RUN_AS_NODE'])).toEqual({ PATH: 'bin', CODEX_HOME: 'codex', ELECTRON_RUN_AS_NODE: '1' })
+    expect(cliNodeEnvironment({ PATH: 'bin' })).toEqual({ PATH: 'bin', ELECTRON_RUN_AS_NODE: '1' })
+    expect(cliEnvironment(parent)).toEqual({ PATH: 'bin' })
+    expect(parent.ELECTRON_RUN_AS_NODE).toBe('0')
+  })
+
   it('runs one real Node child, frames split Unicode lines, and keeps a nonzero exit', async () => {
     const cwd = await workspace()
     const text = '雪\u{1F600}A'

@@ -15,9 +15,6 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse them on the [plugin site](http
 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Model Hub: change the models used by your plugins and subagents from one page, and see each running subagent's model and reasoning effort. |
 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/README.md) | Web Search: manage and rank search and page-reading services, including providers from installed plugins, in one settings page. |
 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | Zhihu: Zhihu search, agent tools, knowledge bases, and usage tracking. |
-| [`@klarkxy/dsh-chatgpt`](plugins/dsh-chatgpt/README.md) | ChatGPT: search, generate and edit images, and analyze images through local Codex; search also joins the unified provider order. |
-| [`@klarkxy/dsh-grok-build`](plugins/dsh-grok-build/README.md) | Grok Build: search, read pages, and create images and videos through local Grok Build; search also joins the unified provider order. |
-| [`@klarkxy/dsh-minimax-code`](plugins/dsh-minimax-code/README.md) | MiniMax Code: search, create media, and understand audio and video through local MiniMax Code; search also joins the unified provider order. |
 | [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface font, code font, and conversation font size of the Web GUI. |
 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | Unrestricted: a session preset that removes the limits on what the model answers and delivers complete results, only in sessions that pick it; may get your account banned. |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: read the official DSH docs in the Plugins page; Creator mode can look up docs and plugins on npm and GitHub. |
@@ -48,13 +45,10 @@ The code is the developer documentation. Releases follow the [release guide](REL
 <!-- plugin-release-states:start -->
 | Package | Lifecycle | Notes |
 | --- | --- | --- |
-| [@klarkxy/dsh-chatgpt](plugins/dsh-chatgpt/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-current-title](plugins/dsh-current-title/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-font](plugins/dsh-font/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-grok-build](plugins/dsh-grok-build/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
-| [@klarkxy/dsh-minimax-code](plugins/dsh-minimax-code/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-model-hub](plugins/dsh-model-hub/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |

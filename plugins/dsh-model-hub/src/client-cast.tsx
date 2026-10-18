@@ -6,7 +6,7 @@
  * durable file revision. The page owns its own fetch,
  * subscription and write locking, following the HubPage RequestScope pattern.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Button, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import { modelCatalogFailures, normalizeModelRoute, type ModelRoute } from '@klarkxy/dsh-model-route'
 import { ModelCatalogStatus } from '@klarkxy/dsh-model-route/ui'

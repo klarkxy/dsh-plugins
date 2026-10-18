@@ -172,6 +172,99 @@ describe('unrestricted preset card copy', () => {
     expect(warnings(bubble)).toEqual([WARNING_MARKS.en])
   })
 
+  it('localizes the selected-preset button across locale changes and host rerenders', async () => {
+    const button = document.createElement('button')
+    button.setAttribute('aria-haspopup', 'menu')
+    const label = document.createElement('span')
+    const text = document.createTextNode(PRESET_COPY.zh.name)
+    label.append(text)
+    button.append(label)
+    const seat = document.createElement('div')
+    seat.setAttribute('data-slot', 'conversation.hero.agentPreset')
+    seat.append(button)
+    document.body.append(seat)
+    const { switchTo, dispose } = mount('en-US')
+    await settle()
+    expect(label.textContent).toBe(PRESET_COPY.en.name)
+    expect(label.firstChild).toBe(text)
+
+    switchTo('zh-CN')
+    await settle()
+    expect(label.textContent).toBe(PRESET_COPY.zh.name)
+    switchTo('en-US')
+    await settle()
+    expect(label.textContent).toBe(PRESET_COPY.en.name)
+
+    text.nodeValue = PRESET_COPY.zh.name
+    await settle()
+    expect(label.textContent).toBe(PRESET_COPY.en.name)
+    expect(label.firstChild).toBe(text)
+
+    label.textContent = 'Standard mode'
+    await settle()
+    expect(label.textContent).toBe('Standard mode')
+    label.textContent = PRESET_COPY.zh.name
+    await settle()
+    expect(label.textContent).toBe(PRESET_COPY.en.name)
+    dispose()
+  })
+
+  it('localizes a selected-preset button mounted later without changing other menu buttons', async () => {
+    const { dispose } = mount('en-US')
+    await settle()
+    const button = document.createElement('button')
+    button.setAttribute('aria-haspopup', 'menu')
+    const label = document.createElement('span')
+    label.textContent = PRESET_COPY.zh.name
+    button.append(label)
+    const other = document.createElement('button')
+    other.setAttribute('aria-haspopup', 'menu')
+    other.textContent = 'Other menu'
+    const seat = document.createElement('div')
+    seat.setAttribute('data-slot', 'conversation.hero.agentPreset')
+    seat.append(button)
+    document.body.append(seat, other)
+    await settle()
+    expect(label.textContent).toBe(PRESET_COPY.en.name)
+    expect(other.textContent).toBe('Other menu')
+    expect(warnings(button)).toEqual([])
+    dispose()
+  })
+
+  it('preserves same-named workspace and unrelated menu labels across locale changes', async () => {
+    const workspace = document.createElement('div')
+    workspace.setAttribute('data-slot', 'conversation.hero.workspace')
+    const button = document.createElement('button')
+    button.setAttribute('aria-haspopup', 'menu')
+    button.setAttribute('aria-label', 'Choose workspace')
+    const label = document.createElement('span')
+    const text = document.createTextNode(PRESET_COPY.zh.name)
+    label.append(text)
+    button.append(label)
+    workspace.append(button)
+    document.body.append(workspace)
+
+    const { switchTo, dispose } = mount('en-US')
+    await settle()
+    expect(label.textContent).toBe(PRESET_COPY.zh.name)
+    expect(label.firstChild).toBe(text)
+
+    const other = document.createElement('button')
+    other.setAttribute('aria-haspopup', 'menu')
+    other.textContent = PRESET_COPY.zh.name
+    document.body.append(other)
+    await settle()
+    expect(other.textContent).toBe(PRESET_COPY.zh.name)
+
+    text.nodeValue = PRESET_COPY.en.name
+    other.textContent = PRESET_COPY.en.name
+    switchTo('zh-CN')
+    await settle()
+    expect(label.textContent).toBe(PRESET_COPY.en.name)
+    expect(other.textContent).toBe(PRESET_COPY.en.name)
+    dispose()
+  })
+
   it('leaves another preset card and unrelated text alone', async () => {
     const other = card('标准模式', '处理代码、文件和资料，适合大多数任务。')
     mount()

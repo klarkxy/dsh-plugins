@@ -40,12 +40,10 @@ jobs:
           fi
       - uses: pnpm/action-setup@v4
         if: steps.source.outputs.current == 'true'
-        with:
-          version: 10.29.2
       - uses: actions/setup-node@v4
         if: steps.source.outputs.current == 'true'
         with:
-          node-version: 24
+          node-version: 24.21.0
           registry-url: https://registry.npmjs.org/
           cache: pnpm
       - if: steps.source.outputs.current == 'true'

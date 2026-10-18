@@ -79,7 +79,7 @@ try {
     { path: ['linked', 'model'], label: { zh: '只读引用', en: 'Read-only reference' }, editable: false, description: { zh: '由所属设置管理。', en: 'Managed by its settings owner.' } },
     { path: ['fixed', 'model'], label: { zh: '固定模型', en: 'Fixed model' }, allowFollow: false, current: { provider: 'host', model: 'one', reasoningEffort: 'high' } },
   ] }), write: async () => {} })
-  registerModelSettings(ctx, { ns: '@klarkxy/dsh-chatgpt', title: 'ChatGPT', read: () => ({ revision: 0, catalog: externalCatalog, fields: [{ path: ['model'], label: { zh: 'ChatGPT 模型', en: 'ChatGPT model' },
+  registerModelSettings(ctx, { ns: '@fixture/external-catalog', title: 'ChatGPT', read: () => ({ revision: 0, catalog: externalCatalog, fields: [{ path: ['model'], label: { zh: 'ChatGPT 模型', en: 'ChatGPT model' },
     current: { provider: 'codex', model: 'external' }, followLabel: { zh: 'Codex 默认模型', en: 'Codex default model' } }] }), write: async () => {} })
   const hub = createHubSettings(ctx, { describe: () => [], mutate: async () => { throw Error('Unexpected native write') } })
   const castFile = resolve(output, 'profile/data/model-hub/cast.json')

@@ -17,7 +17,7 @@ function streamOf(verdict) {
 
 /** Fake host: records ctx.on handlers and drives them like the native pipeline. */
 function fixture({ config = { provider: 'p', model: 'm' }, header = {}, llm: withLlm = true } = {}) {
-  const handlers = {}, logs = [], seen = [];
+  const handlers = {}, listenerOptions = {}, logs = [], seen = [];
   const reviewer = { verdict: allowVerdict, fail: false };
   const llm = { stream(options) {
     seen.push(options);
@@ -34,7 +34,7 @@ function fixture({ config = { provider: 'p', model: 'm' }, header = {}, llm: wit
     provide(key, value) { assert.equal(key, 'safeAutoRuntime'); runtime = value; },
     inject(deps, fn) { assert.deepEqual(deps, ['llm']); if (withLlm) fn({ llm, effect: fn2 => fn2() }); },
     effect(fn) { fn(); },
-    on(event, fn) { handlers[event] = fn; },
+    on(event, fn, options) { handlers[event] = fn; listenerOptions[event] = options; },
     workingDirectory: { get: () => reviewer.cwd ?? '/w' },
     sandboxPolicy: { resolve: () => ({ mode: 'workspace-write', workspaceRoot: '/w' }) },
     logger: { info: (...args) => logs.push(args) },
@@ -54,7 +54,7 @@ function fixture({ config = { provider: 'p', model: 'm' }, header = {}, llm: wit
   const postExecute = (e, result = { isError: true, content: [{ type: 'text', text: 'native error' }] }) =>
     handlers['tools/post-execute'](e, result, async () => ({ kind: 'accept' }));
   const finish = e => handlers['tools/result'](e, {});
-  return { handlers, runtime, reviewer, seen, logs, session, agent, events, say, exec, preExecute, ask, postExecute, finish };
+  return { handlers, listenerOptions, runtime, reviewer, seen, logs, session, agent, events, say, exec, preExecute, ask, postExecute, finish };
 }
 
 const control = (enabled, extra = {}) => ({
@@ -66,6 +66,8 @@ const escalated = { command: 'git push', description: 'push', sandbox_permission
 test('registers the native seams with prepend for pre-execute and approval', () => {
   const f = fixture();
   assert.deepEqual(Object.keys(f.handlers).sort(), ['approval/request', 'tools/post-execute', 'tools/pre-execute', 'tools/result']);
+  assert.deepEqual(f.listenerOptions['tools/pre-execute'], { prepend: true });
+  assert.deepEqual(f.listenerOptions['approval/request'], { prepend: true });
 });
 
 test('a non-active session delegates approval and leaves pre-execute untouched', async () => {

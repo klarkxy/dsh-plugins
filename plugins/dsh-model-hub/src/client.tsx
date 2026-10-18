@@ -6,7 +6,7 @@
  * revision. An empty route means "follow the host default" and unsets the
  * field.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Button, Input, SegmentedTabs } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   MODEL_CATALOG_INJECT, modelCatalogFailures, normalizeModelRoute, parseModelMenuChoices, readModelCatalog, type ModelRoute,

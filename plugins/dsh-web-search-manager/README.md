@@ -4,7 +4,7 @@
 
 [简体中文](docs/README.zh-CN.md)
 
-Choose which service answers the model's web searches, set request limits, and let the model read public web pages — all from one settings page.
+Choose which service answers the model's web searches, set request limits, and let the model read public web pages — all from one settings page, with a tab each for search, page reading, and request limits.
 
 ## Install
 
@@ -12,15 +12,13 @@ Choose which service answers the model's web searches, set request limits, and l
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-Replace `web` with your profile name, restart DSH Web, and open **Plugins → Web Search**.
+Replace `web` with your profile name, restart DSH Web, and open **Plugins → Web Search**. Restart DSH after plugin updates too; refreshing the page alone does not load updated search code.
 
 ## Set up search
 
-DuckDuckGo works out of the box with no key. You can also enable DeepSeek Search, Exa, Brave, Bocha, Serper, Firecrawl, Tavily, Perplexity, or You.com by entering their API keys. Drag the list to set the order; each search uses the first ready service. Search services added by other plugins, such as Zhihu, appear in the same list.
+DuckDuckGo works out of the box with no key. You can also enable DeepSeek Search, Exa, Brave, Bocha, Serper, Firecrawl, Tavily, Perplexity, or You.com by entering their API keys. Drag the list to set the order; each search uses the first ready service. Search services added by other plugins, such as Zhihu, appear in the same list. New services are not enabled automatically.
 
-Installed ChatGPT, Grok Build, and MiniMax plugins can also supply search services here; Grok Build can supply page reads. Configure CLI paths and sign-in in each plugin's own settings, then enable and order its services here. New services are not enabled automatically. Local CLI availability does not verify account health. Each plugin's standalone tools remain available.
-
-**Request limits** sets the number of results, queries per call, the total timeout, and the maximum page length.
+The **Settings** tab sets the number of results, queries per call, the total timeout, and the maximum page length.
 
 ## Read web pages
 

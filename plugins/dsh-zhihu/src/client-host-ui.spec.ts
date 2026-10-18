@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { apply } from './client.tsx'
 import {
-  dockEscapeKeyDown,
   guardImeEnter,
   IME_KEYCODE,
   renderInput,
@@ -86,14 +85,6 @@ describe('public zhihu host compatibility', () => {
     const normal = reactKey({ key: 'Enter', nativeIsComposing: false, nativeKeyCode: 13 })
     zhihuQueryKeyDown(normal, { disabled: false, search: () => searches.push('go') })
     expect(searches).toEqual(['go', 'go'])
-  })
-
-  it('standalone Escape does not close while loading', () => {
-    const closes: string[] = []
-    dockEscapeKeyDown(reactKey({ key: 'Escape' }), { loading: true, close: () => closes.push('x') })
-    expect(closes).toEqual([])
-    dockEscapeKeyDown(reactKey({ key: 'Escape' }), { loading: false, close: () => closes.push('x') })
-    expect(closes).toEqual(['x'])
   })
 
   it('registers the package settings page using injected official controls', () => {

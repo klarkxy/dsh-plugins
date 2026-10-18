@@ -1,6 +1,6 @@
 import { callLlmText, resolveFeatureModel } from '@klarkxy/dsh-plugin-kit/llm-call'
 import { PLUGIN_NAME } from './contracts.ts'
-import type { SourceReference, TurnPage, TurnText } from './turns.ts'
+import type { SourceReference, TurnPage } from './turns.ts'
 
 const SECTIONS = ['objective', 'decisions', 'reportedOutcomes', 'outstanding', 'nextSteps', 'constraints'] as const
 type Section = typeof SECTIONS[number]

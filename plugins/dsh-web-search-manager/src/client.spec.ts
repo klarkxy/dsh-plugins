@@ -93,6 +93,28 @@ describe('web search settings cards', () => {
     expect(selectedSearchBackend(current)?.id).toBe('exa')
   })
 
+  it('lists both DeepSeek search providers in the saved order and selects the first configured one', () => {
+    const official = provider({ id: 'deepseek-official', kind: 'search' })
+    const api = provider({ id: 'deepseek-search-api', kind: 'search' })
+    const current = status({
+      providers: [official, api, provider({ id: 'deepseek-fetch-api', kind: 'fetch' })],
+      settings: { searchOrder: ['deepseek-official', 'deepseek-search-api'], searchEnabled: true },
+    })
+    expect(catalogSearchBackends(current).map(row => row.id)).toEqual(['deepseek-official', 'deepseek-search-api'])
+    expect(searchBackends(current).map(row => row.id)).toEqual(['deepseek-official', 'deepseek-search-api'])
+    expect(selectedSearchBackend(current)?.id).toBe('deepseek-official')
+    const withoutOfficial = immediateUpdate(current.settings, true, ['deepseek-search-api'], current.providers)
+    expect(withoutOfficial.searchEnabled).toBe(true)
+    expect(selectedSearchBackend(status({ ...current, settings: withoutOfficial }))?.id).toBe('deepseek-search-api')
+    expect(immediateUpdate(current.settings, false, [], current.providers).searchEnabled).toBe(false)
+    const unconfiguredApi = status({
+      providers: [official, provider({ id: 'deepseek-search-api', kind: 'search', configured: false })],
+      settings: { searchOrder: ['deepseek-official', 'deepseek-search-api'], searchEnabled: true },
+    })
+    expect(catalogSearchBackends(unconfiguredApi).map(row => row.id)).toEqual(['deepseek-official', 'deepseek-search-api'])
+    expect(selectedSearchBackend(unconfiguredApi)?.id).toBe('deepseek-official')
+  })
+
   it('keeps an unconfigured backend in the explicit order so the key field can show', () => {
     const current = status({
       providers: [

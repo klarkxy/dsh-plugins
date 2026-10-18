@@ -11,11 +11,9 @@
  * 鉴权、超时、信封解析与计量走 ./zhihu-client.ts 的共享实现；此处只保留
  * 站内搜索的参数收敛、结果规整与工具定义。
  */
-import { ZHIHU_SEARCH_TOOL_NAME } from './contracts.ts'
 import {
   normalizeSearchItem,
   parseZhihuEnvelope,
-  reportExecuted,
   zhihuFetchJson,
   ZhihuSearchError,
   type ZhihuClientOptions,

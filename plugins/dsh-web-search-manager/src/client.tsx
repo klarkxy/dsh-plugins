@@ -236,7 +236,7 @@ function ConfirmButton(props: { label: string; confirmLabel: string; disabled?: 
 
 const copy = {
   zh: {
-    tabsLabel: '网络搜索设置', tabProviders: '搜索服务', tabLimits: '请求限制',
+    tabsLabel: '网络搜索设置', tabSearch: 'web-search', tabFetch: 'web-fetch', tabLimits: '设置',
     loading: '正在读取设置…', loadFailed: '读取设置失败：', reconnect: '重新连接',
     failed: '操作失败。', readOnly: '凭据只读，无法保存。',
     keyDeleted: '已删除 Key。', keySaved: '已保存 Key。', saved: '已保存。',
@@ -256,7 +256,7 @@ const copy = {
     unknownOwner: '请在服务所属插件中配置',
   },
   en: {
-    tabsLabel: 'Web search settings', tabProviders: 'Search services', tabLimits: 'Request limits',
+    tabsLabel: 'Web search settings', tabSearch: 'web-search', tabFetch: 'web-fetch', tabLimits: 'Settings',
     loading: 'Loading settings…', loadFailed: 'Could not load settings: ', reconnect: 'Reconnect',
     failed: 'Operation failed.', readOnly: 'Read-only credential; cannot save.',
     keyDeleted: 'Key deleted.', keySaved: 'Key saved.', saved: 'Saved.',
@@ -380,7 +380,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   const locale = useHostLocale(client)
   const text: Copy = copy[locale]
   const tabsId = useId()
-  const [tab, setTab] = useState<'providers' | 'limits'>('providers')
+  const [tab, setTab] = useState<'search' | 'fetch' | 'limits'>('search')
   const [status, setStatus] = useState<WebStatus>()
   const [limitDraft, setLimitDraft] = useState<Record<LimitKey, string>>()
   const [invalid, setInvalid] = useState<Partial<Record<LimitKey, boolean>>>({})
@@ -656,12 +656,13 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   }
 
   return <section className="web-search-settings ws-root dsh-ui-panel" data-testid="web-search-settings">
-    <SegmentedTabs<'providers' | 'limits'>
+    <SegmentedTabs<'search' | 'fetch' | 'limits'>
       value={tab}
       onChange={setTab}
       label={text.tabsLabel}
       items={[
-        { value: 'providers', label: text.tabProviders, id: tabsId + '-providers-tab', panelId: tabsId + '-providers-panel' },
+        { value: 'search', label: text.tabSearch, id: tabsId + '-search-tab', panelId: tabsId + '-search-panel' },
+        { value: 'fetch', label: text.tabFetch, id: tabsId + '-fetch-tab', panelId: tabsId + '-fetch-panel' },
         { value: 'limits', label: text.tabLimits, id: tabsId + '-limits-tab', panelId: tabsId + '-limits-panel' },
       ]}
     />
@@ -673,19 +674,20 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
     </div> : null}
     {note && <p role="status" className="dsh-ui-notice">{uiMessage(note, locale, saved.providers)}</p>}
     {saved.storageFailed && <p role="alert" className="dsh-ui-banner dsh-ui-banner--danger">{text.storageFailed}</p>}
-    <div role="tabpanel" id={tabsId + '-providers-panel'} aria-labelledby={tabsId + '-providers-tab'}
-      hidden={tab !== 'providers'} tabIndex={0}>
-      {(['search', 'fetch'] as const).map(kind => {
-        const order = pendingOrder?.kind === kind ? pendingOrder.order : providerOrder(saved.settings, kind)
-        const catalog = catalogBackends(saved, kind)
-        const backends = [...order.flatMap(id => catalog.find(provider => provider.id === id) ?? []), ...catalog.filter(provider => !order.includes(provider.id))]
-        const selected = selectedBackend(saved, kind)
-        const on = kind === 'search' ? saved.settings.searchEnabled : saved.settings.fetchEnabled
-        const canEnable = order.some(id => saved.providers.some(provider => provider.kind === kind && provider.id === id && provider.configured))
-        const sortingOther = pendingOrder !== null && pendingOrder.kind !== kind
-        const locked = busy || sortingOther || Boolean(dragSource && !dragSource.startsWith(kind + ':'))
-        const title = kind === 'search' ? text.toolTitle : text.fetchTitle
-        return backends.length === 0 ? (kind === 'search' ? <p key={kind} className="dsh-ui-empty">{text.empty}</p> : null) : <article key={kind}
+    {(['search', 'fetch'] as const).map(kind => {
+      const order = pendingOrder?.kind === kind ? pendingOrder.order : providerOrder(saved.settings, kind)
+      const catalog = catalogBackends(saved, kind)
+      const backends = [...order.flatMap(id => catalog.find(provider => provider.id === id) ?? []), ...catalog.filter(provider => !order.includes(provider.id))]
+      const selected = selectedBackend(saved, kind)
+      const on = kind === 'search' ? saved.settings.searchEnabled : saved.settings.fetchEnabled
+      const canEnable = order.some(id => saved.providers.some(provider => provider.kind === kind && provider.id === id && provider.configured))
+      const sortingOther = pendingOrder !== null && pendingOrder.kind !== kind
+      const locked = busy || sortingOther || Boolean(dragSource && !dragSource.startsWith(kind + ':'))
+      const title = kind === 'search' ? text.toolTitle : text.fetchTitle
+      return <div key={kind} role="tabpanel"
+        id={tabsId + '-' + kind + '-panel'} aria-labelledby={tabsId + '-' + kind + '-tab'}
+        hidden={tab !== kind} tabIndex={0}>
+      {backends.length === 0 ? (kind === 'search' ? <p className="dsh-ui-empty">{text.empty}</p> : null) : <article
         className="web-search-card dsh-ui-card dsh-ui-card--flat"
         data-testid={kind === 'search' ? 'web-search-tool' : 'web-search-fetch'}
         data-on={on ? 'true' : 'false'}>
@@ -841,10 +843,9 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
             setNote({ sources: result.sources })
           })}>{text.test}</Button>
         </div> : null}
-      </article>
-      })}
-
+      </article>}
     </div>
+    })}
     <div role="tabpanel" id={tabsId + '-limits-panel'} aria-labelledby={tabsId + '-limits-tab'}
       hidden={tab !== 'limits'} tabIndex={0}>
       <fieldset className="web-search-limits" disabled={busy || reordering} aria-label={text.tabLimits}>

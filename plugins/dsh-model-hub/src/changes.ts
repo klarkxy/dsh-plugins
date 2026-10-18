@@ -1,4 +1,3 @@
-export { ModelSettingsChangesController, createModelSettingsChanges, watchModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
 import type { Context } from '@deepseek-ai/cordis'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
 import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'

@@ -5,14 +5,15 @@
       "name": "@klarkxy/dsh-chatgpt",
       "state": "published",
       "reason": {
-        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
-        "en": "Published on npm; subsequent versions follow the normal update workflow."
+        "zh": "源码已移除；仅保留历史发布凭据，不参与构建或发布。",
+        "en": "Source removed; historical publication proof only, excluded from builds and releases."
       },
       "publication": {
         "version": "0.1.0-alpha.1",
         "publishedAt": "2026-10-13T15:52:23.464Z",
         "integrity": "sha512-aGD08L5HucBVYW6Uw5CpifJCv5DrsE+3lHOCd8q2xFtY9iNMULc6U9On8VoMhHDKC+yBEMqZFUowLSG2Tih1Cw=="
-      }
+      },
+      "retired": true
     },
     {
       "name": "@klarkxy/dsh-classmates",
@@ -84,27 +85,29 @@
       "name": "@klarkxy/dsh-grok-build",
       "state": "published",
       "reason": {
-        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
-        "en": "Published on npm; subsequent versions follow the normal update workflow."
+        "zh": "源码已移除；仅保留历史发布凭据，不参与构建或发布。",
+        "en": "Source removed; historical publication proof only, excluded from builds and releases."
       },
       "publication": {
         "version": "0.1.0-alpha.1",
         "publishedAt": "2026-10-13T15:52:30.429Z",
         "integrity": "sha512-hS412YFu2QRiDsxUa+ROJcrzcx9bihkoiO+fvHI/EERrGoDo9wnkf3eojc28Zf930eVtJUhjOc4DAFrF4hIjNw=="
-      }
+      },
+      "retired": true
     },
     {
       "name": "@klarkxy/dsh-minimax-code",
       "state": "published",
       "reason": {
-        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
-        "en": "Published on npm; subsequent versions follow the normal update workflow."
+        "zh": "源码已移除；仅保留历史发布凭据，不参与构建或发布。",
+        "en": "Source removed; historical publication proof only, excluded from builds and releases."
       },
       "publication": {
         "version": "0.1.0-alpha.1",
         "publishedAt": "2026-10-13T15:53:04.122Z",
         "integrity": "sha512-5qjBTBVnRL6a8d2X8To9CXTXF/33cnUPBUgNi6B7VgqqCvPIOJKo3V4Bz38Oyi0ZpdZTGzP3JCXoJfceV8fbcg=="
-      }
+      },
+      "retired": true
     },
     {
       "name": "@klarkxy/dsh-model-hub",

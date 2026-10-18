@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseConfig } from '../src/config.js';
-import { conversationRoute, resolveReviewRoute, nativeCompletion, sameRoute } from '../src/model-route.js';
+import { conversationRoute, resolveReviewRoute, nativeCompletion } from '../src/model-route.js';
 
 const config = extra => parseConfig({ ...extra });
 const signal = () => new AbortController().signal;
@@ -40,10 +40,6 @@ test('options are a fallback only when the accepted request header is absent', (
   assert.deepEqual(conversationRoute({ agent: { options: selected() } }), selected());
   assert.throws(() => conversationRoute(owner({ model: 'missing-provider' })), /UNAVAILABLE/);
   assert.throws(() => conversationRoute({}), /UNAVAILABLE/);
-});
-test('sameRoute compares the snapshotted route', () => {
-  assert.equal(sameRoute(route, { ...route }), true);
-  assert.equal(sameRoute(route, { ...route, reasoningEffort: 'low' }), false);
 });
 for (const extra of [
   { provider: 'p' }, { model: 'm' }, { provider: 'p', model: ' ' }, { provider: 'p\n', model: 'm' },

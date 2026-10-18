@@ -1,8 +1,14 @@
 packages:
   - plugins/*
 
-onlyBuiltDependencies:
-  - esbuild
+# Keep the existing build policy: only esbuild may run dependency scripts.
+allowBuilds:
+  esbuild: true
+  '@deepseek-ai/dsh-subprocess-local': false
+  '@google/genai': false
+  koffi: false
+  node-pty: false
+  protobufjs: false
 
 overrides:
   '@deepseek-ai/dsh-anonymous-user-id': 0.2.1-rc.1

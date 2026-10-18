@@ -23,7 +23,6 @@ type OperationValue = (typeof OPERATION_COPY)[number]['value']
 export function openPlatformOptions(t: Translate = translator()): { value: OperationValue; label: string }[] {
   return OPERATION_COPY.map(option => ({ value: option.value, label: t(option.zh, option.en) }))
 }
-export const OPEN_PLATFORM_OPTIONS = openPlatformOptions()
 export type OpenPlatformForm = {
   query: string; count: string; questionUrl: string; contentUrl: string
   offset: string; limit: string; order: string; contentType: string

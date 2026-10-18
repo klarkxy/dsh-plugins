@@ -1,9 +1,8 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
-import { modelRouteKey as sharedModelRouteKey } from '@klarkxy/dsh-model-route'
 import { z } from 'zod'
 import {
   SETTINGS_KEY, defaultModelRoute, isTitleLocaleMode, normalizeCadence, normalizeModelRoute, normalizePrompt,
-  type TitleModelRoute, type TitleSettings,
+  type TitleSettings,
 } from './contracts.ts'
 
 export { SETTINGS_KEY }
@@ -83,9 +82,4 @@ export function settingsPatch(current: TitleSettings, patch: {
     model: patch.model === undefined ? current.model : normalizeModelRoute(patch.model),
     cadence: patch.cadence === undefined ? current.cadence : normalizeCadence(patch.cadence),
   }
-}
-
-/** Same separator and empty-id rule as @klarkxy/dsh-model-route. No in-tree callers. */
-export function modelRouteKey(route: TitleModelRoute): string {
-  return sharedModelRouteKey(route.provider, route.model)
 }
