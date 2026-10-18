@@ -835,7 +835,7 @@ function llmsTxt(ctx) {
   const lines = [
     "# klarkxy's DSH plugins",
     "",
-    "> DeepSeek Harness plugins by klarkxy, published on npm. Install with `dsh plugin --profile <profile> add <package>`; install listed dependencies first.",
+    "> DeepSeek Harness plugins by klarkxy, published on npm. Install with `dsh plugin --profile <profile> add <package>`; each entry lists the plugin plus any required peers, and the remaining dependencies come along automatically.",
     "",
     `Machine-readable catalog: ${catalog.siteUrl}plugins.json`,
     `DSH Discover index: ${catalog.siteUrl}index.json`,

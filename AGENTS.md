@@ -90,11 +90,13 @@ pnpm check               # 较大改动时全仓检查
 | 文件 | 职责 |
 | --- | --- |
 | `site/catalog.json` | 唯一手工维护的数据 |
-| `site/render.mjs` | 纯渲染：catalog + npm 数据 → 文件内容，不做 I/O |
+| `site/render.mjs` | 纯渲染：catalog + npm 数据 → 文件内容（页面、`plugins.json`、`index.json`、`llms.txt`），不做 I/O |
 | `site/build.mjs` | 从 npm registry 拉数据，校验发布包并写入 `_site/` |
 | `site/npm.mjs` | 校验并在内存中读取 npm 发布包，不落盘解包 |
 | `site/assets/` | 样式与脚本；脚本只做渐进增强，页面无 JS 也要可用 |
 | `site/site.test.mjs` | 离线测试，包含在 `pnpm check` |
+
+对外产出还包括 `plugins.json`、`index.json`（DSH 插件市场索引，只收录 bundle 类插件）和 `llms.txt`：它们由 catalog 与 npm 数据生成，不要手写进仓库，改动时在 `site/site.test.mjs` 覆盖。
 
 ### 新增、修改或下线插件
 
