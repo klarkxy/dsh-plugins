@@ -47,7 +47,7 @@ describe('uncertain commit completion through RPC', { timeout: 30_000 }, () => {
       }
       vi.spyOn(kit, 'callLlmText').mockResolvedValue({ text: JSON.stringify({ groups }), provider: 'test', model: 'test' })
       const session = { id: 's1', header: { cwd: root } }
-      const service = new GitCommitService({ plugin: 'test', run, sessions: { get: () => session },
+      const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: () => root }, run, sessions: { get: () => session },
         host: { agentDefaultModel: { currentSelection: () => ({ provider: 'test', model: 'test' }) } },
         llm: { prepareCall: async () => { throw new Error('unused') }, resolveCallConfig: async () => { throw new Error('unused') } },
       })

@@ -9,7 +9,7 @@ import {
   Button, IconChevronDownOutlineRegular, IconRefreshOutlineRegular, Switch, Tag, Tooltip, useAnchoredPosition, useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
-import { createModelSettingsSubscriber } from '@klarkxy/dsh-plugin-kit/model-settings-client'
+import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import {
   GIT_COMMIT_CLIENT_SERVICE, PLUGIN_NAME, RPC_CHANNEL, type CommitModelRoute, type CommitRunResult,
   type GitCommitSettings, type GitCommitStatus, type PartialCommitResult, type RpcResult,
@@ -643,6 +643,7 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string;
 
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
+  mountModelSettingsChanges(ctx, PLUGIN_NAME)
   const settingsSubscriber = createModelSettingsSubscriber(ctx, PLUGIN_NAME)
   const subscribeSettings = (change: () => void, error?: (message: string) => void) => settingsSubscriber.subscribe(change, error)
   ctx.provide(GIT_COMMIT_CLIENT_SERVICE, { active: true })

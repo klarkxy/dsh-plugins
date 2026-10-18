@@ -8,7 +8,7 @@ it('loads the server entry without React and waits for settings in its RPC respo
   let release!: (settings: { revision: number; model: { provider: string; model: string }; allowFallback: boolean }) => void
   const loaded = new Promise<{ revision: number; model: { provider: string; model: string }; allowFallback: boolean }>(resolve => { release = resolve })
   const service = new GitCommitService({
-    plugin: 'test',
+    plugin: 'test', workingDirectory: { get: () => 'D:/repo' },
     llm: { prepareCall: async () => { throw new Error('unused') }, resolveCallConfig: async () => { throw new Error('unused') } },
     sessions: { get: () => undefined },
     settings: { load: () => loaded, save: async () => {} },

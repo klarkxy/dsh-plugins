@@ -62,8 +62,18 @@ describe('Git Commit live locale', () => {
 
   it('localizes owned rejection codes and an empty fallback while preserving external diagnostics', async () => {
     let dictionaries: Record<string, Record<string, string>> = {}
-    apply({ provide() {}, effect(fn: () => unknown) { fn() }, locale: { register(_ns: string, value: typeof dictionaries) { dictionaries = value; return () => {} } }, slots: { inject() { return () => {} } } } as never)
-    await mount(async (dom, root) => {
+    const cleanup: Array<unknown> = []
+    apply({
+      provide() {},
+      inject(deps: string[], callback?: (scope: unknown) => void) {
+        if (deps.length === 1 && deps[0] === 'remote') callback?.({ remote: { $mount: async () => async () => {} }, effect(run: () => () => unknown) { cleanup.push(run()) } })
+        return { dispose() {} }
+      },
+      effect(fn: () => unknown) { const dispose = fn(); if (typeof dispose === 'function') cleanup.push(dispose) },
+      locale: { register(_ns: string, value: typeof dictionaries) { dictionaries = value; return () => {} } },
+      slots: { inject() { return () => {} } },
+    } as never)
+    try { await mount(async (dom, root) => {
       for (const failure of [{ code: 'workspace-changed', message: 'local diagnostic' }, { code: 'unknown', message: '' }, { code: 'external', message: 'provider detail 用户数据' }]) {
         const call = vi.fn(async () => ({ ok: false, error: failure }))
         const useSession = () => false
@@ -77,6 +87,6 @@ describe('Git Commit live locale', () => {
         if (failure.code === 'external') expect(after).toBe(failure.message)
         else { expect(after).not.toBe(before); expect(after).toMatch(/[\u4e00-\u9fff]/) }
       }
-    })
+    }) } finally { for (const dispose of cleanup.reverse()) if (typeof dispose === 'function') await dispose() }
   })
 })

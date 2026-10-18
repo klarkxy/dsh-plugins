@@ -1,13 +1,13 @@
 {
   "name": "@klarkxy/dsh-git-commit",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Git Commit: commit workspace changes from the conversation header, with model-planned commit groups.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
     "node": ">=22",
-    "dsh": ">=0.2.0-rc.2"
+    "dsh": ">=0.2.1-rc.1"
   },
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",

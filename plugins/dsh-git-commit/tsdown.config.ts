@@ -3,7 +3,7 @@ export default defineConfig([
   {
     entry: { index: 'src/index.ts', contracts: 'src/contracts.ts' },
     format: ['esm'], dts: true, clean: true, outDir: 'lib', platform: 'node', target: 'node22', sourcemap: true, hash: false,
-    deps: { neverBundle: ['@deepseek-ai/cordis', '@deepseek-ai/dsh-storage-domain', '@klarkxy/dsh-plugin-kit', '@klarkxy/dsh-model-route', 'zod'] },
+    deps: { neverBundle: ['@deepseek-ai/cordis', '@deepseek-ai/dsh-typert-protocol', '@deepseek-ai/dsh-storage-domain', '@klarkxy/dsh-plugin-kit', '@klarkxy/dsh-model-route', 'zod'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
   },
   {

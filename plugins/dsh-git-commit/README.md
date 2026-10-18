@@ -27,6 +27,7 @@ If the model list cannot load, or some providers fail, use **Retry** beside the 
 
 ## Good to know
 
+- The repository follows the conversation's current working directory. Changing directories while a commit is being planned stops the run.
 - All uncommitted changes in the repository are included, including new files.
 - It only commits; it never pushes.
 - If the run stops partway, finished commits stay and the panel shows what was left. Nothing is rolled back or retried automatically.

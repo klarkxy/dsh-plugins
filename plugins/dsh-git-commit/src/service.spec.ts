@@ -77,7 +77,7 @@ describe('Git Commit partial results and unload', () => {
       return inner(args, options)
     }
     stubPlan(JSON.stringify({ groups: [{ message: 'first', files: ['src/a.ts'] }, { message: 'second', files: ['src/b.ts', 'docs/c.md'] }] }))
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), host, sessions: makeSessions(), run,
       preview: async (_root, path) => ({ path, preview: '', binary: false }) })
     const response = await handleRpc(service, 'commit', { sessionId: 's1' }, new AbortController().signal)
     expect(response).toMatchObject({ ok: false, error: { code: 'commit-failed', partial: {
@@ -99,7 +99,7 @@ describe('Git Commit partial results and unload', () => {
       throw new Error('unreachable')
     })
     const run = repoRunner(), controller = new AbortController()
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), host, sessions: makeSessions(), run,
       preview: async (_root, path) => ({ path, preview: '', binary: false }) })
     await service.updateSettings({ model: defaultSettings().model, allowFallback: true }, 0)
     const committing = service.commit('s1', controller.signal)
@@ -130,7 +130,7 @@ describe('Git Commit partial results and unload', () => {
       return inner(args, options)
     }
     stubPlan(JSON.stringify({ groups: [{ message: 'first', files: ['src/a.ts'] }, { message: 'second', files: ['src/b.ts', 'docs/c.md'] }] }))
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), host, sessions: makeSessions(), run,
       preview: async (_root, path) => ({ path, preview: '', binary: false }) })
     const committing = service.commit('s1')
     const rejected = expect(committing).rejects.toMatchObject({ code: 'cancelled', partial: {
@@ -158,7 +158,7 @@ const porcelain = [' M src/a.ts', ' M src/b.ts', '?? docs/c.md', ''].join(NUL)
 function makeService(planText: string | Error, run: GitRunner & { calls: string[][] }) {
   stubPlan(planText)
   const service = new GitCommitService({
-    plugin: 'test',
+    plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' },
     llm: makeLlm(),
     host,
     sessions: makeSessions(),
@@ -168,6 +168,47 @@ function makeService(planText: string | Error, run: GitRunner & { calls: string[
   service.start()
   return service
 }
+
+describe('effective working directory', () => {
+  it('resolves status from the effective directory instead of the original header', async () => {
+    const seen: string[] = []
+    const inner = repoRunner()
+    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), sessions: makeSessions('D:/original'),
+      workingDirectory: { get: () => 'D:/current' },
+      run: async (args, options) => { seen.push(options.cwd); return inner(args, options) } })
+    expect((await service.status('s1')).available).toBe(true)
+    expect(seen[0]).toBe('D:/current')
+    await service.dispose()
+  })
+
+  it.each(['final-status', 'index-preparation'])('rechecks cwd after %s', async phase => {
+    let cwd = 'D:/repo', statuses = 0
+    const inner = repoRunner()
+    const run: GitRunner = async (args, options) => {
+      const result = await inner(args, options)
+      if (args[0] === 'status' && ++statuses === 3 && phase === 'final-status') cwd = 'D:/other'
+      if (args[0] === 'rev-parse' && args[1] === '--git-path' && phase === 'index-preparation') cwd = 'D:/other'
+      return result
+    }
+    stubPlan(JSON.stringify({ groups: [{ message: 'fix', files: ['src/a.ts', 'src/b.ts', 'docs/c.md'] }] }))
+    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+      workingDirectory: { get: () => cwd }, preview: async (_root, path) => ({ path, preview: '', binary: false }) })
+    await expect(service.commit('s1')).rejects.toMatchObject({ code: 'session-changed' })
+    expect(inner.calls.some(args => args[0] === 'add' || args[0] === 'commit')).toBe(false)
+    await service.dispose()
+  })
+
+  it('refuses Git mutations when effective cwd changes during planning', async () => {
+    let cwd = 'D:/repo'
+    const run = repoRunner()
+    stubPlan(JSON.stringify({ groups: [{ message: 'fix', files: ['src/a.ts', 'src/b.ts', 'docs/c.md'] }] }), () => { cwd = 'D:/other' })
+    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+      workingDirectory: { get: () => cwd }, preview: async (_root, path) => ({ path, preview: '', binary: false }) })
+    await expect(service.commit('s1')).rejects.toMatchObject({ code: 'session-changed' })
+    expect(run.calls.some(args => args[0] === 'add' || args[0] === 'commit')).toBe(false)
+    await service.dispose()
+  })
+})
 
 describe('GitCommitService.status', () => {
   it('reports repo, workspace count and the resolved model', async () => {
@@ -209,7 +250,7 @@ describe('GitCommitService model selection', () => {
     const plan = JSON.stringify({ groups: [{ message: 'chore: update workspace', files: ['src/a.ts', 'src/b.ts', 'docs/c.md'] }] })
     const call = vi.spyOn(kit, 'callLlmText').mockImplementation(async (_llm, request) => ({ text: plan, ...request.route }))
     const service = new GitCommitService({
-      plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run: repoRunner(),
+      plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), host, sessions: makeSessions(), run: repoRunner(),
       preview: async (_root, path) => ({ path, preview: '', binary: false }),
       settings: { load: async () => ({ ...defaultSettings(), ...(route ? { model: route } : {}) }), save: async () => {} },
     })
@@ -222,7 +263,7 @@ describe('GitCommitService model selection', () => {
 describe('GitCommitService initialization', () => {
   it('releases a cancelled commit waiting for the initial settings load', async () => {
     const load = deferred<GitCommitSettings>()
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), sessions: makeSessions(),
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), sessions: makeSessions(),
       settings: { load: () => load.promise, save: async () => {} } })
     const firstSignal = new AbortController()
     const first = service.commit('s1', firstSignal.signal)
@@ -239,7 +280,7 @@ describe('GitCommitService initialization', () => {
 
   it('adopts a refreshed row after initialization without a late load overwriting it', async () => {
     const load = deferred<GitCommitSettings>()
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), sessions: makeSessions(),
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), sessions: makeSessions(),
       settings: { load: () => load.promise, save: async () => {} } })
     const refreshed = { revision: 8, model: pageRoute, allowFallback: true }
     service.adoptSettings(refreshed)
@@ -257,7 +298,7 @@ describe('GitCommitService initialization', () => {
     const run = repoRunner()
     stubPlan('invalid plan')
     const service = new GitCommitService({
-      plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+      plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), host, sessions: makeSessions(), run,
       preview: async (_root, path) => ({ path, preview: '', binary: false }),
       settings: { load: () => load.promise, save: async () => {} },
     })
@@ -284,7 +325,7 @@ describe('GitCommitService initialization', () => {
   it('compares revision only after loading and serializes competing updates', async () => {
     const load = deferred<GitCommitSettings>()
     const save = vi.fn(async (_settings: GitCommitSettings) => {})
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), sessions: makeSessions(),
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), sessions: makeSessions(),
       settings: { load: () => load.promise, save } })
     const patch = { model: pageRoute, allowFallback: true }
     const first = service.updateSettings(patch, 7)
@@ -302,7 +343,7 @@ describe('GitCommitService initialization', () => {
   it('retains the loaded row after a failed write and allows a retry', async () => {
     const stored = { ...defaultSettings(), revision: 7 }
     const save = vi.fn().mockRejectedValueOnce(new Error('write failed')).mockResolvedValue(undefined)
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), sessions: makeSessions(),
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), sessions: makeSessions(),
       settings: { load: async () => stored, save } })
     const patch = { model: pageRoute, allowFallback: true }
     await expect(service.updateSettings(patch, 7)).rejects.toThrow('write failed')
@@ -315,7 +356,7 @@ describe('GitCommitService initialization', () => {
     const run = repoRunner()
     stubPlan('unused')
     const save = vi.fn(async () => {})
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), host, sessions: makeSessions(), run,
       preview: async (_root, path) => ({ path, preview: '', binary: false }),
       settings: { load: () => load.promise, save } })
     const failure = { code: 'settings-unavailable' }
@@ -333,7 +374,7 @@ describe('GitCommitService initialization', () => {
   })
 
   it('recovers from a failed initial read only after adopting a known settings row', async () => {
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), sessions: makeSessions(),
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), sessions: makeSessions(),
       settings: { load: async () => { throw new Error('read failed') }, save: async () => {} } })
     await expect(service.ready()).rejects.toMatchObject({ code: 'settings-unavailable' })
     const stored = { revision: 7, model: pageRoute, allowFallback: false }
@@ -348,7 +389,7 @@ describe('GitCommitService initialization', () => {
     const load = deferred<GitCommitSettings>()
     const save = vi.fn(async (_settings: GitCommitSettings) => {})
     const run = repoRunner()
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), host, sessions: makeSessions(), run,
       settings: { load: () => load.promise, save } })
     const commit = expect(service.commit('s1')).rejects.toMatchObject({ code: 'cancelled' })
     const update = expect(service.updateSettings({ model: pageRoute, allowFallback: true }, 7)).rejects.toMatchObject({ code: 'disposed' })
@@ -366,7 +407,7 @@ describe('GitCommitService initialization', () => {
     const load = deferred<GitCommitSettings>()
     const run = repoRunner()
     const controller = new AbortController()
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), host, sessions: makeSessions(), run,
       settings: { load: () => load.promise, save: async () => {} } })
     const commit = expect(service.commit('s1', controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
     controller.abort()
@@ -460,7 +501,7 @@ describe('GitCommitService.commit', () => {
     }
     stubPlan(plan)
     const service = new GitCommitService({
-      plugin: 'test',
+      plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' },
       llm: makeLlm(), host,
       sessions: makeSessions(),
       run: blocking,
@@ -485,7 +526,7 @@ describe('GitCommitService.commit', () => {
       return inner(args, options)
     }
     stubPlan(plan)
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), host, sessions: makeSessions(), run,
       preview: async path => ({ path, preview: '', binary: false }) })
     service.start()
     await expect(service.commit('s1')).rejects.toMatchObject({ code: 'workspace-changed' })
@@ -501,7 +542,7 @@ describe('GitCommitService.commit', () => {
       'status --porcelain': porcelain,
     })
     stubPlan(plan, () => gate)
-    const service = new GitCommitService({ plugin: 'test', llm: makeLlm(), host, sessions: makeSessions(), run,
+    const service = new GitCommitService({ plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), host, sessions: makeSessions(), run,
       preview: async path => ({ path, preview: '', binary: false }) })
     service.start()
     const committing = service.commit('s1')

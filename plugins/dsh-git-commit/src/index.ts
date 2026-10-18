@@ -1,16 +1,18 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
 import { registerModelSettings, notifyModelSettingsChanged, type ModelSettingsEvents } from '@klarkxy/dsh-plugin-kit/model-settings'
 import {
   PLUGIN_NAME, RPC_CHANNEL, SETTINGS_KEY, normalizeFallback, normalizeModelRoute,
   type CommitRunResult, type GitCommitSettings, type GitCommitStatus, type RpcResult,
 } from './contracts.ts'
-import { CommitRunError, GitCommitService, type AgentStoreLike, type SessionStoreLike } from './service.ts'
+import { CommitRunError, GitCommitService, type AgentStoreLike, type GitCommitServiceDeps, type SessionStoreLike } from './service.ts'
 import { gitCommitDomain, parseSettings, updateSettingsSchema } from './storage.ts'
 
 export const name = PLUGIN_NAME
-export const inject = ['llm', 'sessions', 'agents', 'storageDomain', 'connection', 'webServer', 'sessionProjections', 'agentDefaultModel'] as const
+export const inject = ['llm', 'sessions', 'workingDirectory', 'agents', 'storageDomain', 'connection', 'webServer', 'sessionProjections', 'agentDefaultModel'] as const
 export { GitCommitService } from './service.ts'
 export { parsePorcelain } from './git.ts'
 export { parsePlan, buildPlanInput } from './plan.ts'
@@ -33,6 +35,7 @@ type DomainHandle = {
 type Host = Context & HostRpcContext & {
   llm: LlmTextCaller
   sessions: SessionStoreLike
+  workingDirectory: GitCommitServiceDeps['workingDirectory']
   agents: AgentStoreLike
   storageDomain: { open: (spec: typeof gitCommitDomain) => Promise<DomainHandle> }
 }
@@ -103,6 +106,7 @@ export async function handleRpc(
 }
 
 export function apply(ctx: Context): void {
+  createModelSettingsChanges(ctx, modelSettingsChangesIdentity(PLUGIN_NAME), PLUGIN_NAME)
   const host = ctx as Host
   // Publish immediately; service operations wait for the initial stored row.
   const domainPromise = host.storageDomain.open(gitCommitDomain)
@@ -113,6 +117,7 @@ export function apply(ctx: Context): void {
     llm: host.llm,
     host,
     sessions: host.sessions,
+    workingDirectory: host.workingDirectory,
     agents: host.agents,
     settings: {
       load: async () => parseSettings((await tablePromise).get(SETTINGS_KEY)),

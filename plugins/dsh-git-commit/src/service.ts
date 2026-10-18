@@ -30,6 +30,7 @@ export interface GitCommitServiceDeps {
   readonly llm: LlmTextCaller
   readonly host?: unknown
   readonly sessions: SessionStoreLike
+  readonly workingDirectory: { get(session: SessionLike): string }
   readonly agents?: AgentStoreLike
   readonly run?: GitRunner
   readonly preview?: (root: string, path: string) => Promise<UntrackedPreview>
@@ -186,7 +187,7 @@ export class GitCommitService {
   private async resolveRepo(sessionId: string, signal?: AbortSignal): Promise<{ root: string; branch: string }> {
     const session = this.deps.sessions.get(sessionId)
     if (!session) throw new CommitRunError('no-session', 'dsh-git-commit: session is not live on this host')
-    const cwd = normalizeCwd(session.header?.cwd)
+    const cwd = normalizeCwd(this.deps.workingDirectory.get(session))
     if (!cwd) throw new CommitRunError('no-cwd', 'dsh-git-commit: session has no working directory')
     try {
       return await repoInfo(this.run, cwd, signal)
@@ -245,13 +246,13 @@ export class GitCommitService {
     await this.waitForSettings(signal)
     if (this.disposed || signal?.aborted) throw new CommitRunError('cancelled', 'dsh-git-commit: plugin is no longer active')
     const session = this.deps.sessions.get(sessionId)
-    const sessionCwd = normalizeCwd(session?.header?.cwd)
+    const sessionCwd = session ? normalizeCwd(this.deps.workingDirectory.get(session)) : undefined
     const resolved = await this.resolveRepo(sessionId, signal)
     const assertReady = () => {
       signal?.throwIfAborted()
       if (this.disposed || !this.deps.llm) throw new CommitRunError('cancelled', 'dsh-git-commit: plugin is no longer active')
       const currentSession = this.deps.sessions.get(sessionId)
-      if (currentSession !== session || normalizeCwd(currentSession?.header?.cwd) !== sessionCwd) {
+      if (currentSession !== session || (currentSession ? normalizeCwd(this.deps.workingDirectory.get(currentSession)) : undefined) !== sessionCwd) {
         throw new CommitRunError('session-changed', 'dsh-git-commit: session workspace changed during planning')
       }
       if (this.deps.agents?.get(sessionId)?.status === 'running') {
@@ -327,7 +328,13 @@ export class GitCommitService {
     }
     let executed: ExecutedCommit[]
     try {
-      executed = await commitGroups(this.run, resolved.root, effective, selected, signal, async () => {
+      const commitRun: GitRunner = (args, options) => {
+        // Async index preparation can yield after verification. Recheck the
+        // session immediately before either Git mutation is dispatched.
+        if (args[0] === 'add' || args[0] === 'commit') assertReady()
+        return this.run(args, options)
+      }
+      executed = await commitGroups(commitRun, resolved.root, effective, selected, signal, async () => {
         assertReady()
         const currentBranchRef = await this.run(['symbolic-ref', '--quiet', 'HEAD'], { cwd: resolved.root, signal }).catch(() => 'DETACHED')
         if (currentBranchRef !== branchRef) {
@@ -338,6 +345,7 @@ export class GitCommitService {
         }
         // A new merge conflict must never be passed to git add or git commit.
         await workingTreeChanges(this.run, resolved.root, signal)
+        assertReady()
       })
     } catch (error) {
       if (!(error instanceof PartialCommitError)) throw error
