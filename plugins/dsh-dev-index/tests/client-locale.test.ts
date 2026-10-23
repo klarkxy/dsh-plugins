@@ -58,4 +58,42 @@ describe('documentation locale independence', () => {
       for (const [key, value] of previous) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
     }
   })
+
+  it('offers a way out when the documentation takes too long to load', async () => {
+    const dom = new JSDOM('<div id="root"></div>'); const previous = new Map<string, unknown>()
+    for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true })) {
+      previous.set(key, (globalThis as Record<string, unknown>)[key]); Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+    }
+    // The module detects a slow load by time alone, so the test holds the timer.
+    const timers: Array<() => void> = []
+    let definition!: { factory(require: (id: string) => unknown): { apply(ctx: unknown): void } }
+    const source = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
+    runInNewContext(source, {
+      setTimeout: (fn: () => void) => { timers.push(fn); return timers.length },
+      clearTimeout: () => {},
+      window: { __ModuleLoader__: { load(value: typeof definition) { definition = value } } },
+    })
+    const client = definition.factory(id => id === 'react' ? React : {
+      Button: ({ children, onClick }: { children: React.ReactNode; onClick(): void }) => React.createElement('button', { onClick }, children),
+      SegmentedTabs: ({ label, value, onChange, items }: { label: string; value: string; onChange(value: string): void; items: Array<{ value: string; label: string }> }) => React.createElement('div', { 'aria-label': label },
+        ...items.map(item => React.createElement('button', { key: item.value, 'aria-pressed': value === item.value, onClick: () => onChange(item.value) }, item.label))),
+    })
+    let render!: () => React.ReactNode
+    client.apply({ locale: { getSnapshot: () => ({ active: 'en' }), subscribe: () => () => {} },
+      slots: { inject(_key: string, register: () => void) { register() }, register(_spec: unknown, view: typeof render) { render = view } },
+    })
+    const root = createRoot(dom.window.document.getElementById('root')!)
+    try {
+      await act(async () => root.render(render()))
+      expect(dom.window.document.body.textContent).toContain('Loading documentation…')
+      expect(dom.window.document.querySelector('.dsh-ui-banner')).toBeNull()
+      await act(async () => { timers.at(-1)!() })
+      expect(dom.window.document.querySelector('.dsh-ui-banner')).not.toBeNull()
+      expect(dom.window.document.body.textContent).toContain('The documentation did not load.')
+      expect(dom.window.document.body.textContent).toContain('Retry')
+    } finally {
+      await act(async () => root.unmount()); dom.window.close()
+      for (const [key, value] of previous) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+    }
+  })
 })

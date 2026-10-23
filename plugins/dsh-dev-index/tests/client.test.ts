@@ -82,7 +82,6 @@ describe("Plugins page documentation browser", () => {
   it("does not hard-code page spacing or stack two viewport heights", () => {
     expect(source).not.toMatch(/margin-top:\s*20px/);
     expect(source).not.toMatch(/min-height:\s*420px/);
-    expect(source).toMatch(/LOAD_TIMEOUT_MS/);
   });
 
   it("requires only host modules the package declares in dsh.client.inject", () => {

@@ -215,7 +215,6 @@ describe("plugin registry", () => {
 
 describe("plugin registry tools", () => {
   it("expose the renamed pair, forward cancellation, and stop serving after disposal", async () => {
-    const calls: unknown[][] = [];
     const client = new PluginRegistry({
       fetcher: ((_url: string, options?: RequestInit) => new Promise<Response>((_resolve, reject) => {
         options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true });
@@ -233,7 +232,6 @@ describe("plugin registry tools", () => {
     client.dispose();
     await expect(searchPending).rejects.toThrow();
     await expect(fetchPending).rejects.toThrow();
-    expect(calls).toEqual([]);
   });
 
   it("routes GitHub sources to the GitHub client and validates the source list", async () => {
