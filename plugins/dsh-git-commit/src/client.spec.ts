@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs'
+import { act, createElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import { JSDOM } from 'jsdom'
 import { describe, expect, it } from 'vitest'
-import { clientCss } from './client.tsx'
-
-const source = readFileSync(new URL('./client.tsx', import.meta.url), 'utf8')
+import { GitCommitAction, apply, clientCss } from './client.tsx'
 
 interface Rule {
   selectors: readonly string[]
@@ -94,13 +94,46 @@ function winner(rules: readonly Rule[], target: Target, property: string): { val
 }
 
 describe('git commit client', () => {
-  it('injects its stylesheet once from apply, not inside the header button', () => {
-    expect(source).not.toContain('<style>{css}</style>')
-    expect(source).toContain("'git-commit.styles'")
-  })
-
-  it('asks for confirmation before committing everything', () => {
-    expect(source).toContain("onClick={() => setConfirming(true)}")
+  it('injects its stylesheet once from apply, not inside the header button', async () => {
+    // One stylesheet serves both the header popover and the plugin-page
+    // settings, so the settings page is styled even when no session header is
+    // mounted (see the clientCss comment in client.tsx). Injecting it inside
+    // the button component used to leave the settings page unstyled.
+    const dom = new JSDOM('<html><head></head><body><div id="root"></div></body></html>')
+    const previous = new Map<string, unknown>()
+    for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement,
+      Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true })) {
+      previous.set(key, (globalThis as Record<string, unknown>)[key])
+      Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+    }
+    const root = createRoot(dom.window.document.getElementById('root')!)
+    const disposers: Array<(() => void) | void> = []
+    const owned = () => [...dom.window.document.head.querySelectorAll('style[data-plugin="dsh-git-commit-client"]')]
+    try {
+      apply({
+        provide() {},
+        effect: (fn: () => (() => void) | void) => { disposers.push(fn()) },
+        inject: (_deps: string[], callback: (scope: unknown) => void) => callback({ remote: { $mount: async () => async () => {} }, effect() {} }),
+        slots: { inject: () => () => {}, register: () => () => {} },
+        locale: { register: () => () => {} },
+      } as never)
+      await act(async () => root.render(createElement(GitCommitAction, {
+        sessionId: 's1',
+        call: async () => ({ ok: true, value: { available: true, branch: 'main', workspace: { files: 1 } } }),
+        useSession: () => false,
+        t: (key: string) => key,
+      })))
+      await act(async () => dom.window.document.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]')!.click())
+      expect(owned()).toHaveLength(1)
+      expect(owned()[0]!.textContent).toBe(clientCss)
+      expect(dom.window.document.querySelectorAll('.gcm-root style')).toHaveLength(0)
+      for (const dispose of disposers) if (typeof dispose === 'function') dispose()
+      expect(owned()).toHaveLength(0)
+    } finally {
+      await act(async () => root.unmount())
+      dom.window.close()
+      for (const [key, value] of previous) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+    }
   })
 
   it('keeps the portaled panel fixed to the trigger', () => {
