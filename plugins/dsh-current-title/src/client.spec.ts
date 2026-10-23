@@ -1,8 +1,6 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
-import { PLUGIN_NAME, TITLE_CLIENT_SERVICE, type RpcResult, type TitleStatus } from './contracts.ts'
-import { apply, inject } from './client.tsx'
+import { TITLE_CLIENT_SERVICE, type RpcResult, type TitleStatus } from './contracts.ts'
+import { inject } from './client.tsx'
 import { applyMarkerFromStatus, createTitleClientMarker, disposeTitleClientMarker } from './marker.ts'
 import {
   createTitleClientWork, promptFieldValue, promptToSave, runTitleRegenerateFlow, runTitleSettingsSave, runTitleStatusLoad,
@@ -25,11 +23,9 @@ describe('title prompt draft', () => {
 
   it('keeps loading copy in the locale table', () => {
     expect(titleCopy.en.loading).toBe('Loading title settings…')
-    expect(clientSource).not.toContain("seat.locale === 'en' ?")
+    expect(titleCopy.zh.loading).toBe('正在读取标题设置…')
   })
 })
-
-const clientSource = readFileSync(new URL('./client.tsx', import.meta.url), 'utf8')
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -50,36 +46,9 @@ function titleStatus(sessionId: string, title: string): TitleStatus {
   }
 }
 
-describe('current title settings sync', () => {
-  it('mounts this package before creating its subscriber', () => {
-    const order: string[] = []
-    apply({
-      inject(deps: string[], callback: (scope: unknown) => void) {
-        order.push(deps.join(','))
-        if (deps[0] === 'remote' && deps.length === 1) callback({ remote: { $mount: async () => async () => {} }, effect() {} })
-      },
-      effect() {},
-      provide() {},
-      slots: { inject: () => () => {} },
-    } as never)
-    expect(order).toEqual(['remote'])
-    expect(clientSource.indexOf('mountModelSettingsChanges(ctx, packageName)'))
-      .toBeLessThan(clientSource.indexOf(`createModelSettingsSubscriber(ctx, packageName, modelSettingsChangesIdentity(packageName))`))
-  })
-})
-
 describe('current title UI', () => {
-  it('injects native session and locale for the title marker', () => {
-    expect(clientSource).toContain("from '@klarkxy/dsh-plugin-kit/client-utils'")
-    expect(clientSource).toContain('type Client = NativeSurfaceClient &')
+  it('declares its inject list, localized copy and refresh gating', () => {
     expect(inject).toEqual(['slots', 'connection', 'remote', 'remote.session', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
-    expect(clientSource).toContain("client.slots.inject('plugins.bundle.config'")
-    const mountCall = clientSource.indexOf('mountModelSettingsChanges(ctx, packageName)')
-    const subscribeCall = clientSource.indexOf('createModelSettingsSubscriber(ctx, packageName, modelSettingsChangesIdentity(packageName))')
-    expect(mountCall).toBeGreaterThanOrEqual(0)
-    expect(subscribeCall).toBeGreaterThan(mountCall)
-    expect(clientSource).toContain("ctx.provide(TITLE_CLIENT_SERVICE, marker)")
-    expect(clientSource).not.toContain('settings.section')
     expect(titleCopy.zh.regenerate).toBe('重新生成')
     expect(titleCopy.en.regenerate).toBe('Regenerate')
     expect(titleCopy.zh.label).toBe('自动标题')

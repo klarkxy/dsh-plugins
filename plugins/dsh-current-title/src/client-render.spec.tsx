@@ -1,11 +1,11 @@
 import { Context } from '@deepseek-ai/cordis'
 import { useNativeSeat } from '@klarkxy/dsh-plugin-kit/client-utils'
-import { act } from 'react'
+import { act, type ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it } from 'vitest'
-import { TitleSettings } from './client.tsx'
+import { TitleSettings, apply } from './client.tsx'
 import { titleCopy } from './client-work.ts'
 import { createTitleClientMarker } from './marker.ts'
 
@@ -38,12 +38,12 @@ function store<T>(initial: T) {
   }
 }
 
-function fakeClient() {
+function fakeClient(locale = 'zh') {
   const session = store('session-under-test')
   return {
     uiWorkspace: { current: session },
     uiSession: { adapter: { current: store({ key: 'fallback' }) } },
-    locale: { getSnapshot: () => ({ active: 'zh' }), subscribe: store('zh').subscribe },
+    locale: { getSnapshot: () => ({ active: locale }), subscribe: store(locale).subscribe },
     sessions: { binding: () => undefined },
     connection: { generation: { subscribe: () => () => {} }, rpc: { call: async () => ({ ok: true, value: {} }) } },
   }
@@ -161,10 +161,56 @@ describe('current title settings seat', () => {
     }
   })
 
-  it('never hands the plugin context to the component', async () => {
-    const { readFileSync } = await import('node:fs')
-    const source = readFileSync(new URL('./client.tsx', import.meta.url), 'utf8')
-    expect(source).not.toContain('owner={ctx}')
-    expect(source).toContain('<TitleSettings client={client} marker={marker}')
+  it('never hands the plugin context to the component', () => {
+    // A slot component never receives `ctx`: the host composes its own props,
+    // and a Cordis context throws on any undeclared property read — feeding one
+    // back through `useNativeSeat` used to crash the entry and abdicate the
+    // keyed cell (see the file header). The seat's render callback must close
+    // over the client and marker instead.
+    let view: (() => ReactElement) | undefined
+    const registered: unknown[] = []
+    apply({
+      provide() {},
+      effect: (fn: () => unknown) => { fn() },
+      inject: (_deps: string[], callback: (scope: unknown) => void) => callback({ remote: { $mount: async () => async () => {} }, effect() {} }),
+      slots: {
+        inject: (_key: string, callback: () => unknown) => { callback(); return () => {} },
+        register: (spec: unknown, render: () => ReactElement) => { registered.push(spec); view = render; return () => {} },
+      },
+      connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
+    } as never)
+    expect(registered).toEqual([{ name: 'plugins.bundle.config', key: '@klarkxy/dsh-current-title' }])
+    const element = view!()
+    expect(element.type).toBe(TitleSettings)
+    expect(element.props).toHaveProperty('client')
+    expect(element.props).toHaveProperty('marker')
+    expect(element.props).not.toHaveProperty('owner')
+  })
+
+  it('shows the locale-table loading copy while the status is in flight', async () => {
+    const dom = new JSDOM('<div id="root"></div>')
+    const previous = new Map<string, unknown>()
+    for (const [key, value] of Object.entries({
+      window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement,
+      Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true,
+    })) {
+      previous.set(key, (globalThis as Record<string, unknown>)[key])
+      Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+    }
+    const root = createRoot(dom.window.document.getElementById('root')!)
+    try {
+      for (const locale of ['zh', 'en'] as const) {
+        const client = fakeClient(locale)
+        // The status read never settles, so the seat stays on the loading hint.
+        client.connection.rpc.call = () => new Promise<never>(() => {})
+        await act(async () => root.render(<TitleSettings client={client as never} marker={createTitleClientMarker()} />))
+        expect(dom.window.document.querySelector('[data-testid="current-title-settings"]')!.textContent)
+          .toContain(titleCopy[locale].loading)
+      }
+    } finally {
+      await act(async () => root.unmount())
+      dom.window.close()
+      for (const [key, value] of previous) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+    }
   })
 })
