@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-web-search-manager",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Manage and rank search and page-reading services, including providers from installed plugins, in one settings page.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -152,6 +152,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "e86bf9ef6ca28eaf4dc5a9047a5718f54ef20befd42d82fe247477cef17564f7"
+    "contentHash": "b13ef2869d849beeed7fa30c94ddb05a2ec803a59d0d258a098c92c211b8a91f"
   }
 }

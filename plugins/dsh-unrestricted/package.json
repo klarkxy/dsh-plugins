@@ -78,6 +78,6 @@
     "@deepseek-ai/dsh-web-app": "0.2.1-rc.1"
   },
   "dshRelease": {
-    "contentHash": "6a85a44cbf887e350768c49e2943b8a5264d626c1610a6f2f00e59d86ba0dbcd"
+    "contentHash": "bd660d10571c79c51df7a755d2c9a189027343511030a929703764e2acf511d1"
   }
 }

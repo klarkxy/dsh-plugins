@@ -1,6 +1,6 @@
 {
   "id": "@klarkxy/dsh-dev-index",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "main": "lib/index.js",
   "description": "DSH Docs: read the official DSH documentation in the Plugins page; Creator mode searches docs and checks plugin metadata on npm and GitHub with native tools.",
   "engines": {
