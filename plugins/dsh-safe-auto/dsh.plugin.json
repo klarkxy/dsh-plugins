@@ -1,13 +1,13 @@
 {
   "id": "@klarkxy/dsh-safe-auto",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "main": "src/index.js",
   "description": "Safe Auto: a reviewer model answers native approval requests, Codex auto-review style; only a pass approves that one call.",
   "engines": {
     "dsh": ">=0.2.1-rc.1"
   },
   "contributes": {
-    "tools": [],
+    "tools": ["safe_auto_history"],
     "skills": []
   }
 }

@@ -3,12 +3,13 @@ import { parseConfig } from './config.js';
 import { isPermissionEvent } from './control.js';
 import { dangerousCommand } from './dangerous.js';
 import { buildTranscript } from './transcript.js';
-import { review, reviewInput } from './reviewer.js';
+import { review, reviewInput, SYSTEM_PROMPT } from './reviewer.js';
+import { openAudit, auditedCapture } from './audit.js';
 import { resolveReviewRoute } from './model-route.js';
 export { Config } from './config.js';
 
 export const name = 'dsh-safe-auto';
-export const inject = ['sandboxPolicy', 'workingDirectory'];
+export const inject = ['sandboxPolicy', 'workingDirectory', 'storageDomain'];
 
 /*
  * Safe Auto routes native approval requests to a reviewer model, following
@@ -105,12 +106,62 @@ export function apply(ctx, raw = {}) {
   // A headless profile without that row applies the profile config to every
   // top-level session; once the row has attached and gone, review stops.
   let attachedOnce = false;
-  ctx.provide?.('safeAutoRuntime', { base, attach(next) {
+  const pendingWrites = new Set();
+  const lifetime = new AbortController();
+  const ready = openAudit(ctx.storageDomain);
+  // Keep an unavailable store observable without an unhandled rejection at mount.
+  void ready.catch(() => { try { ctx.logger?.warn?.('safe-auto audit store could not be opened; automatic approvals will be rejected'); } catch {} });
+  const history = {
+    async list(payload) { return (await ready).list(payload); },
+    async get(payload) { return (await ready).get(payload); },
+  };
+  ctx.provide?.('safeAutoRuntime', { base, history, attach(next) {
     if (control) throw new Error('Safe Auto controls already attached');
     control = next; attachedOnce = true;
     const epoch = ++controlEpoch;
     return () => { if (control === next && controlEpoch === epoch) { control = undefined; ++controlEpoch; } };
   } });
+  ctx.effect(() => async () => {
+    lifetime.abort();
+    await Promise.allSettled([...pendingWrites]);
+    try { await (await ready).close(); } catch { /* mount failure remains visible to history callers */ }
+  });
+  // The query tool and the page share the same read-only store operations.
+  ctx.inject?.(['tools'], scope => scope.effect(() => scope.tools.register({
+    name: 'safe_auto_history',
+    description: 'Query persisted Safe Auto reviews for the current session. List returns summaries and a pagination cursor; get returns the full redacted audit record, including review input and rationale. The Plugins page provides profile-wide audit history.',
+    parameters: { type: 'object', properties: {
+      action: { type: 'string', enum: ['list', 'get'] },
+      id: { type: 'string', description: 'Review ID, required for get.' },
+      sessionId: { type: 'string' }, tool: { type: 'string' },
+      outcome: { type: 'string', enum: ['pending', 'interrupted', 'allowed-once', 'rejected', 'cancelled'] },
+      risk: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+      from: { type: 'string', description: 'Inclusive start time in ISO 8601 with offset.' },
+      to: { type: 'string', description: 'Inclusive end time in ISO 8601 with offset.' },
+      query: { type: 'string', description: 'Search review contents.' },
+      limit: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
+      cursor: { type: 'string', description: 'nextCursor from the preceding list page with the same filters.' },
+    }, required: ['action'], additionalProperties: false },
+    output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
+    async execute(args, exec) {
+      if (!args || !['list', 'get'].includes(args.action)) throw new Error('Invalid history request');
+      const sessionId = exec?.agent?.session?.id;
+      if (typeof sessionId !== 'string' || !sessionId) throw new Error('History queries require an agent-bound session');
+      exec.signal?.throwIfAborted();
+      const { action, ...payload } = args;
+      if (payload.sessionId !== undefined && payload.sessionId !== sessionId) throw new Error('History queries are limited to the current session');
+      if (action === 'get') {
+        const record = await history.get({ id: payload.id });
+        exec.signal?.throwIfAborted();
+        if (record.sessionId !== sessionId) throw new Error('Audit record is unavailable in this session');
+        return record;
+      }
+      const { id: _id, ...filters } = payload;
+      const page = await history.list({ ...filters, sessionId });
+      exec.signal?.throwIfAborted();
+      return page;
+    },
+  })));
   if (!base.enabled) return;
 
   let llm;
@@ -120,14 +171,14 @@ export function apply(ctx, raw = {}) {
     llm = active;
     scope.effect(() => () => { if (llm === active) llm = undefined; });
   });
-  const lifetime = new AbortController();
   const breaker = createBreaker();
   // agent -> callId -> live execution. Approval requests carry only agent and
   // callId, so the action's arguments are looked up here.
   const executions = new WeakMap();
   // execution token -> model-facing explanation for a non-granted review.
   const feedback = new Map();
-  ctx.effect(() => () => { lifetime.abort(); feedback.clear(); });
+  const approvalPending = new Map(); // approvalId -> { auditId, store, session }; entries below
+  ctx.effect(() => () => { lifetime.abort(); feedback.clear(); approvalPending.clear(); });
 
   const active = session => {
     if (!session || isSubagentSession(session)) return undefined;
@@ -168,29 +219,174 @@ export function apply(ctx, raw = {}) {
     return { ...decision, content: [{ type: 'text', text }] };
   });
 
-  ctx.on('tools/result', exec => {
+  const auditCalls = new Map();
+  const track = promise => {
+    pendingWrites.add(promise);
+    void promise.then(() => pendingWrites.delete(promise), () => pendingWrites.delete(promise));
+    return promise;
+  };
+  ctx.on('tools/result', (exec, result) => {
+    const records = auditCalls.get(exec.token);
+    auditCalls.delete(exec.token);
+    if (records && typeof result?.isError === 'boolean') {
+      track(Promise.all(records.map(({ store, id }) => store.execution(id, {
+        state: result.isError ? 'failed' : 'succeeded', completedAt: new Date().toISOString(),
+        ...(result.isError ? { error: result.error?.message || 'Tool execution failed' } : {}),
+      }))).catch(() => { try { ctx.logger?.warn?.('safe-auto execution audit write failed'); } catch {} }));
+    }
     feedback.delete(exec.token);
     const calls = exec.agent && executions.get(exec.agent);
     if (calls?.get(String(exec.callId)) === exec) calls.delete(String(exec.callId));
+    // A finished call whose decided never committed (append failure) can no
+    // longer be confirmed — drop its pending link so the map does not leak.
+    for (const [id, entry] of approvalPending) {
+      if (entry.session === exec.agent?.session && String(entry.callId) === String(exec.callId)) approvalPending.delete(id);
+    }
   });
 
-  ctx.on('approval/request', async (req, next) => {
+  // approvalId -> { auditId, store, session } (declared above with feedback):
+  // granted reviews still awaiting the native approval/decided that mirrors
+  // this handler's returned verdict. The durable record keeps reviewer
+  // outcome and the OBSERVED native grant (approvalState) as separate facts:
+  // a persisted 'allowed-once' whose decided was never seen — process exit, a
+  // failed corrective write, a crashed handler — reopens as interrupted,
+  // never as an actual grant.
+  const writeApproval = (store, auditId, outcome) => {
+    if (!['allowed-once', 'rejected', 'cancelled', 'unavailable'].includes(outcome)) return;
+    void track(store.approval(auditId, { outcome })).catch(
+      () => { try { ctx.logger?.warn?.('safe-auto native approval record failed'); } catch {} });
+  };
+  // Live feed: session/event fires synchronously after the decided append's
+  // commit, so a decided can arrive while the verdict's durable write is still
+  // queued — the store write, not wall-clock order, records it. Matching is
+  // by the exact asked request id captured when this review began: an
+  // unlabelled decided is never inferred, so an unknown decision stays
+  // 'not-observed' truthfully.
+  ctx.on('session/event', (session, event) => {
+    if (event?.type !== 'approval/decided') return;
+    const id = event.data?.id === undefined || event.data?.id === null ? undefined : String(event.data.id);
+    const entry = id === undefined ? undefined : approvalPending.get(id);
+    if (!entry || entry.session !== session) return;
+    approvalPending.delete(id);
+    writeApproval(entry.store, entry.auditId, event.data?.outcome);
+  });
+
+  ctx.on('approval/request', (req, next) => track((async () => {
     const session = req.agent?.session;
     const config = active(session);
     if (!config) return next();
+    if (lifetime.signal.aborted) return 'cancelled';
     const exec = req.callId === undefined ? undefined : executions.get(req.agent)?.get(String(req.callId));
     // Without the concrete action there is nothing to review; keep the native flow.
     if (!exec) return next();
     const owner = control;
     const epoch = controlEpoch;
-    const permissions = permissionRevision(session);
+    let permissions, turn;
+    try { permissions = permissionRevision(session); turn = humanTurn(session); } catch { return 'cancelled'; }
     const signal = AbortSignal.any([req.signal, exec.signal, lifetime.signal, owner?.signal].filter(Boolean));
-    const turn = humanTurn(session);
     const started = Date.now();
-    const finish = (outcome, row, text) => {
+    let store, auditId;
+    const storageFailure = async () => {
+      // A transient failure may still permit recording the rejection. If the
+      // medium remains unavailable, the pending/not-observed evidence stays
+      // explicitly inconclusive rather than claiming execution succeeded.
+      if (auditId) {
+        try {
+          const saved = store.get({ id: auditId });
+          await store.finish(auditId, { outcome: saved?.outcome === 'allowed-once' ? 'cancelled' : 'rejected',
+            code: 'AUDIT_WRITE_FAILED', durationMs: Date.now() - started });
+        } catch { /* the original write failure already prevents approval */ }
+      }
+      feedback.set(exec.token, MESSAGES.failed('the audit record could not be saved'));
+      audit({ tool: exec.name, callId: String(exec.callId), outcome: 'rejected', code: 'AUDIT_WRITE_FAILED', durationMs: Date.now() - started });
+      return 'rejected';
+    };
+    // The native asked/decided pair is captured before the first durable
+    // await: the host appends approval/asked before dispatching the request
+    // and approval/decided once the outcome is known, so the request id this
+    // review answers for is already in the log. An aborted request settles
+    // 'cancelled' while the review is in flight and its decided may commit
+    // before this verdict lands — both are re-read here so a late verdict
+    // never marks a cancelled grant confirmed.
+    let approvalId;
+    {
+      try {
+        const events = session.snapshotEvents?.() ?? [];
+        for (let index = events.length - 1; index >= 0; index--) {
+          const event = events[index];
+          if (event?.type !== 'approval/asked') continue;
+          const data = event.data ?? {};
+          if (String(data.callId ?? '') === String(exec.callId)
+            && (data.toolName === undefined || data.toolName === exec.name)) {
+            approvalId = data.id === undefined || data.id === null ? undefined : String(data.id);
+            break;
+          }
+        }
+      } catch { /* an unreadable log keeps approvalId undefined: not-observed */ }
+    }
+    try {
+      store = await ready;
+      // Snapshot immediately, including early failures and breaker rejections.
+      // Invalid/oversized actions are labelled rather than silently omitted.
+      let action, capture;
+      try {
+        action = auditedCapture({ tool: exec.name, arguments: exec.arguments, approvalReason: req.reason ?? '' });
+        if (action.includes('[audit capture truncated:')) capture = 'Action exceeds the audit capture budget; stored snapshot is explicitly truncated. Review was not approved.';
+      } catch { action = '[unserializable action]'; capture = 'Action could not be serialized; review was not approved.'; }
+      const rule = SHELL_TOOLS.has(exec.name) ? dangerousCommand(exec.arguments?.command, exec.name) : undefined;
+      let mode;
+      try { mode = ctx.sandboxPolicy.resolve({ session }).mode; } catch {}
+      const escalates = WIDER_MODES[mode]?.includes(exec.arguments?.sandbox_permissions);
+      auditId = await store.begin({ sessionId: String(session.id), agentId: String(req.agent.id ?? session.id),
+        callId: String(exec.callId), tool: exec.name, turn: turn ?? null,
+        trigger: { kind: escalates ? 'sandbox-escalation' : rule ? 'dangerous-command' : 'approval',
+          ...(rule ? { rule } : {}), reason: req.reason ?? '' },
+        action, policy: SYSTEM_PROMPT,
+        settings: { timeoutMs: config.timeoutMs, outputTokens: config.outputTokens, maxTranscriptBytes: config.maxTranscriptBytes, reviewerPrompt: config.reviewerPrompt },
+        ...(capture ? { capture } : {}),
+      });
+    } catch { return storageFailure(); }
+    const finish = async (outcome, row, text, stillCurrent) => {
+      try {
+        await store.finish(auditId, { outcome, durationMs: Date.now() - started, ...row });
+        // Storage introduces an await: recheck authority after the durable write,
+        // immediately before returning the one-call permission grant.
+        if (outcome === 'allowed-once' && !stillCurrent?.()) {
+          outcome = 'cancelled'; row = { ...row, code: 'REVIEW_CANCELLED' };
+          await store.finish(auditId, { outcome, durationMs: Date.now() - started, ...row });
+        }
+      } catch { return storageFailure(); }
+      if (outcome === 'allowed-once') {
+        const records = auditCalls.get(exec.token) ?? [];
+        records.push({ store, id: auditId }); auditCalls.set(exec.token, records);
+      }
       if (text !== undefined && outcome !== 'allowed-once') feedback.set(exec.token, text);
-      audit({ tool: exec.name, callId: String(exec.callId), outcome, durationMs: Date.now() - started, ...row });
+      audit({ id: auditId, tool: exec.name, callId: String(exec.callId), outcome, durationMs: Date.now() - started, ...row, rationale: undefined });
       return outcome;
+    };
+    // A grant is durable-but-provisional until the native approval/decided
+    // for this request arrives. Two honest endings: the decided commits while
+    // the review is still in flight (abort settles 'cancelled'; the late
+    // verdict is discarded natively) — re-read the log and record that decided
+    // outcome; or the decided is still pending — queue on approvalId so the
+    // post-commit observer writes it. With no captured asked id nothing can
+    // be inferred and the row truthfully stays 'not-observed'. Non-grants
+    // need no link: approvalState already reports that no grant was confirmed.
+    const linkApproval = () => {
+      if (approvalId === undefined) return;
+      try {
+        const events = session.snapshotEvents?.() ?? [];
+        for (let index = events.length - 1; index >= 0; index--) {
+          const event = events[index];
+          if (event?.type !== 'approval/decided') continue;
+          const data = event.data ?? {};
+          if ((data.id === undefined || data.id === null ? undefined : String(data.id)) === approvalId) {
+            writeApproval(store, auditId, data.outcome); // decided already committed; never wait on session/event
+            return;
+          }
+        }
+      } catch { /* fall through: queue on session/event */ }
+      approvalPending.set(approvalId, { auditId, store, session, callId: String(exec.callId) });
     };
     if (breaker.open(session, turn)) return finish('rejected', { code: 'CIRCUIT_OPEN' }, MESSAGES.breaker);
     let route;
@@ -235,9 +431,18 @@ export function apply(ctx, raw = {}) {
       } catch { return false; }
     };
     if (!current()) return finish('cancelled', { code: 'REVIEW_INVALIDATED' });
+    try {
+      await store.prepare(auditId, { action: rawAction, input, environment: rawEnvironment, reviewer: route });
+    } catch { return storageFailure(); }
+    if (!current()) return finish('cancelled', { code: 'REVIEW_INVALIDATED' });
     let verdict;
-    try { verdict = await review({ llm, route, input, config, signal }); }
+    const attempts = [];
+    try { verdict = await review({ llm, route, input, config, signal, onAttempt: async attempt => {
+      attempts.push(attempt);
+      try { await store.prepare(auditId, { attempts }); } catch { throw new Error('AUDIT_WRITE_FAILED'); }
+    } }); }
     catch (error) {
+      if (error.message === 'AUDIT_WRITE_FAILED') return storageFailure();
       if (!current()) return finish('cancelled', { code: 'REVIEW_CANCELLED' });
       const detail = error.message === 'REVIEW_TIMEOUT' ? 'the reviewer timed out' : error.message === 'NATIVE_REVIEWER_UNAVAILABLE'
         ? 'no reviewer model service' : error.message === 'INVALID_REVIEW_RESPONSE' ? 'the reviewer returned an invalid verdict'
@@ -245,8 +450,16 @@ export function apply(ctx, raw = {}) {
       return finish('rejected', { code: error.message }, MESSAGES.failed(detail));
     }
     if (!current()) return finish('cancelled', { code: 'REVIEW_CANCELLED' });
-    const row = { code: verdict.outcome === 'allow' ? 'ALLOWED' : 'DENIED', risk: verdict.risk, authorization: verdict.authorization };
+    const row = { code: verdict.outcome === 'allow' ? 'ALLOWED' : 'DENIED', risk: verdict.risk, authorization: verdict.authorization, rationale: verdict.rationale };
     breaker.record(session, turn, verdict.outcome === 'deny');
-    return verdict.outcome === 'allow' ? finish('allowed-once', row) : finish('rejected', row, MESSAGES.denied(verdict.rationale));
-  }, { prepend: true });
+    if (verdict.outcome !== 'allow') return finish('rejected', row, MESSAGES.denied(verdict.rationale));
+    // Register the pending native-approval observation before the durable
+    // verdict lands: a decided that commits between the verdict write and this
+    // link is caught by the next session/event pass, and the snapshotEvents
+    // scan above re-anchors on a decided already in the log.
+    linkApproval();
+    const granted = await finish('allowed-once', row, undefined, current);
+    if (granted !== 'allowed-once') approvalPending.delete(approvalId); // corrected verdict: nothing to confirm
+    return granted;
+  })()), { prepend: true });
 }

@@ -18,6 +18,8 @@ export function Button({ variant, size, icon, className, children, ...rest }) {
   return h('button', { type: 'button', className, ...rest }, icon, children);
 }
 
+export const Input = React.forwardRef(function Input(props, ref) { return h('input', { ...props, ref }); });
+
 export function Tag({ tone, className, children }) {
   return h('span', { className }, children);
 }

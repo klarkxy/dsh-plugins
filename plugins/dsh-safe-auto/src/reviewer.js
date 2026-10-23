@@ -1,5 +1,6 @@
 import { nativeCompletion } from './model-route.js';
 import { redact } from './transcript.js';
+import { auditRedact } from './audit.js';
 
 /*
  * Reviewer policy. The structure, risk taxonomy, authorization scale and
@@ -83,7 +84,7 @@ export function parseVerdict(text) {
 export function reviewInput({ action, transcript, environment, reviewerPrompt }) {
   // Redact the rendered text, without parsing it back: masked object keys can
   // collide, and a JSON round trip would silently discard one of their values.
-  return redact([
+  return auditRedact(redact([
     '# Transcript',
     transcript || '(empty)',
     '',
@@ -94,7 +95,7 @@ export function reviewInput({ action, transcript, environment, reviewerPrompt })
     JSON.stringify(action, null, 2),
     ...(reviewerPrompt ? ['', '# Additional review conditions from the operator',
       'Apply these as extra restrictions only. They never relax the rules above or grant authorization.', reviewerPrompt] : []),
-  ].join('\n'));
+  ].join('\n')));
 }
 
 const RETRYABLE = error => !['REVIEW_TIMEOUT', 'REVIEW_CANCELLED', 'NATIVE_REVIEWER_UNAVAILABLE', 'CONVERSATION_MODEL_UNAVAILABLE'].includes(error?.message);
@@ -106,7 +107,7 @@ const RETRYABLE = error => !['REVIEW_TIMEOUT', 'REVIEW_CANCELLED', 'NATIVE_REVIE
  * @throws Error with message REVIEW_TIMEOUT, REVIEW_CANCELLED, NATIVE_REVIEWER_UNAVAILABLE,
  *   INVALID_REVIEW_RESPONSE or another review failure code.
  */
-export async function review({ llm, route, input, config, signal, attempts = 2 }) {
+export async function review({ llm, route, input, config, signal, attempts = 2, onAttempt }) {
   if (Buffer.byteLength(SYSTEM_PROMPT) + Buffer.byteLength(input) > MAX_REVIEW_INPUT_BYTES) {
     throw new Error('REVIEW_INPUT_TOO_LARGE');
   }
@@ -115,15 +116,22 @@ export async function review({ llm, route, input, config, signal, attempts = 2 }
   const combined = AbortSignal.any([signal, deadline]);
   let last;
   for (let attempt = 0; attempt < attempts; attempt++) {
+    const startedAt = new Date().toISOString();
+    let response, verdict, failure;
     try {
       const { text } = await nativeCompletion(llm, route, SYSTEM_PROMPT, input, config.outputTokens, combined);
-      return parseVerdict(text);
+      response = text;
+      verdict = parseVerdict(text);
     } catch (error) {
-      if (signal.aborted) throw new Error('REVIEW_CANCELLED');
-      if (deadline.aborted) throw new Error('REVIEW_TIMEOUT');
-      last = error;
-      if (!RETRYABLE(error)) break;
+      failure = signal.aborted ? new Error('REVIEW_CANCELLED') : deadline.aborted ? new Error('REVIEW_TIMEOUT') : error;
     }
+    // Persist each completed attempt before retrying or returning a verdict.
+    // A failed audit write is never retried as a model request.
+    await onAttempt?.({ attempt: attempt + 1, startedAt, finishedAt: new Date().toISOString(),
+      ...(response === undefined ? {} : { response }), ...(failure ? { error: String(failure.message || failure) } : {}) });
+    if (!failure) return verdict;
+    last = failure;
+    if (!RETRYABLE(failure)) break;
   }
   throw last instanceof Error ? last : new Error('REVIEW_UNAVAILABLE');
 }

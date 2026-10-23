@@ -60,6 +60,12 @@ export async function apply(ctx) {
   ctx.effect(() => registerControlRoute(ctx, async (endpoint, payload, signal) => {
     try {
       control.signal.throwIfAborted();
+      if (endpoint === 'history.list' || endpoint === 'history.get') {
+        signal?.throwIfAborted();
+        const value = await ctx.safeAutoRuntime.history[endpoint.slice('history.'.length)](payload);
+        signal?.throwIfAborted(); control.signal.throwIfAborted();
+        return { ok: true, value };
+      }
       return { ok: true, value: await control.call(endpoint, payload, signal) };
     }
     catch (error) { return { ok: false, error: { code: 'safe-auto/rejected', message: error instanceof Error ? error.message : 'Request rejected', details: {} } }; }

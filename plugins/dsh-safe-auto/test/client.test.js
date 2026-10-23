@@ -32,7 +32,7 @@ const snapshot = (extra = {}) => ({ revision: '1:0', current: 'workspace-write',
 
 test('exact slot registrations use injection, replacement priority and bundle key; registration does not write', () => {
   const waiting = [], registered = [], calls = [], dependencies = [];
-  client.apply({ slots: { inject: (name, fn) => waiting.push([name, fn]), register: (options, component) => registered.push({ options, component }) }, connection: { rpc: { call: (...args) => { calls.push(args); return Promise.resolve({ ok: true, value: {} }); } } }, remote: { session: { modelCatalog: () => catalog } }, inject: (names, callback) => { dependencies.push(names); callback({ remote: { $mount: async () => async () => {} }, effect: () => {} }); } });
+  client.apply({ effect: fn => { fn(); }, slots: { inject: (name, fn) => waiting.push([name, fn]), register: (options, component) => registered.push({ options, component }) }, connection: { rpc: { call: (...args) => { calls.push(args); return Promise.resolve({ ok: true, value: {} }); } } }, remote: { session: { modelCatalog: () => catalog } }, inject: (names, callback) => { dependencies.push(names); callback({ remote: { $mount: async () => async () => {} }, effect: () => {} }); } });
   assert.deepEqual(client.inject, ['slots', 'connection', 'remote', 'remote.session', 'locale']);
   assert.deepEqual(dependencies, [['remote']]);
   assert.deepEqual(waiting.map(([name]) => name), ['conversation.input.permission', 'plugins.bundle.config']);
@@ -46,6 +46,109 @@ test('exact slot registrations use injection, replacement priority and bundle ke
   assert.equal(panel.options.key, '@klarkxy/dsh-safe-auto');
   assert.deepEqual(calls, []);
   assert.deepEqual(Object.keys(panel.options.inject()), ['api', 'locale']);
+});
+
+test('apply injects one head stylesheet with the official tokens and cleans it up', () => {
+  const dom = new JSDOM('<!DOCTYPE html><html><head></head><body></body></html>');
+  const previous = new Map();
+  for (const [key, value] of Object.entries({ document: dom.window.document })) { previous.set(key, globalThis[key]); Object.defineProperty(globalThis, key, { configurable: true, writable: true, value }); }
+  try {
+    const cleanups = [];
+    const ctx = {
+      effect: fn => { const cleanup = fn?.(); if (typeof cleanup === 'function') cleanups.push(cleanup); },
+      slots: { inject: () => {}, register: () => () => {} },
+      connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
+      remote: { session: { modelCatalog: () => catalog } },
+      inject: (names, callback) => callback({ remote: { $mount: async () => async () => {} }, effect: () => {} }),
+    };
+    client.apply(ctx);
+    const owned = () => [...dom.window.document.head.querySelectorAll('style[data-plugin="@klarkxy/dsh-safe-auto"]')];
+    assert.equal(owned().length, 1);
+    assert.match(owned()[0].textContent, /--dsw-alias-label-primary/);
+    // Lifetimes own their styles independently: disposing one must not leave
+    // another mounted instance unstyled.
+    client.apply(ctx);
+    assert.equal(owned().length, 2);
+    cleanups.shift()();
+    assert.equal(owned().length, 1);
+    cleanups.forEach(cleanup => cleanup());
+    assert.equal(owned().length, 0);
+  } finally {
+    for (const [key, value] of previous) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+    dom.window.close();
+  }
+});
+
+test('history filters omit empty fields and convert local time to explicit ISO', () => {
+  assert.deepEqual(client.historyFilters({ query: '', sessionId: 's', tool: '', from: '2026-10-23T08:00:00Z' }), { sessionId: 's', from: '2026-10-23T08:00:00.000Z' });
+});
+
+test('history searches, pages, reads details, exports all matching records and ignores stale reads', async () => {
+  const dom = new JSDOM('<div id="root"></div>'); const previous = new Map();
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true })) {
+    previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key)); Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  }
+  const root = createRoot(dom.window.document.getElementById('root'));
+  const row = id => ({ id, startedAt: '2026-10-23T08:00:00Z', tool: 'pwsh', sessionId: 's', outcome: 'allowed-once', executionState: 'not-observed' });
+  const calls = [], downloads = []; let oldResolve;
+  const api = { async historyList(payload) {
+    calls.push(payload);
+    if (payload.query === 'old') return new Promise(resolve => { oldResolve = resolve; });
+    return payload.cursor ? { items: [row('second')], total: 2 } : { items: [row('first')], nextCursor: 'page-two', total: 2 };
+  }, async historyGet(id) { return { ...row(id), rationale: 'Approved for a routine task', input: 'full audit input' }; } };
+  const click = async label => { const button = [...dom.window.document.querySelectorAll('button')].find(el => el.textContent === label); assert.ok(button, label); await act(async () => button.click()); };
+  const submit = async query => {
+    const form = dom.window.document.querySelector('form'); const input = form.querySelector('input');
+    await act(async () => { Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, query); input.dispatchEvent(new dom.window.Event('input', { bubbles: true })); input.dispatchEvent(new dom.window.Event('change', { bubbles: true })); });
+    // React was imported before jsdom: invoke the public form control callback
+    // through React's current props to exercise this controlled field reliably.
+    const propsKey = Object.keys(input).find(key => key.startsWith('__reactProps$'));
+    await act(async () => input[propsKey].onChange({ target: { value: query } }));
+    await act(async () => form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })));
+  };
+  try {
+    await act(async () => root.render(React.createElement(client.HistoryPanel, { api, download: records => downloads.push(records) })));
+    assert.match(dom.window.document.body.textContent, /Review passed/);
+    assert.match(dom.window.document.body.textContent, /No approval result observed/);
+    assert.match(dom.window.document.body.textContent, /No execution result observed/);
+    await click('View details'); assert.match(dom.window.document.body.textContent, /full audit input/);
+    await click('Export this record'); assert.equal(downloads[0][0].id, 'first');
+    await click('Next'); assert.equal(calls.at(-1).cursor, 'page-two');
+    await click('Previous'); assert.equal(calls.at(-1).cursor, undefined);
+    await click('Export filtered results'); assert.deepEqual(downloads[1].map(item => item.id), ['first', 'second']);
+    await submit('old'); await submit('latest');
+    assert.equal(calls.at(-1).query, 'latest');
+    await act(async () => oldResolve({ items: [row('stale')], total: 1 }));
+    assert.match(dom.window.document.body.textContent, /2 records/);
+    assert.doesNotMatch(dom.window.document.body.textContent, /stale/);
+  } finally {
+    await act(async () => root.unmount()); dom.window.close();
+    for (const [key, descriptor] of previous) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; }
+  }
+});
+
+test('history export cancellation and failures never download a partial file', async () => {
+  const dom = new JSDOM('<div id="root"></div>'); const previous = new Map();
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true })) {
+    previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key)); Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  }
+  const root = createRoot(dom.window.document.getElementById('root'));
+  const downloads = []; let resolveDetail, fail = false;
+  const api = { async historyList() { return { items: [{ id: 'one', tool: 'pwsh', sessionId: 's', outcome: 'rejected', startedAt: '2026-10-23T08:00:00Z' }], total: 1 }; },
+    async historyGet() { if (fail) throw new Error('detail unavailable'); return new Promise(resolve => { resolveDetail = resolve; }); } };
+  const click = async text => { const button = [...dom.window.document.querySelectorAll('button')].find(el => el.textContent === text); assert.ok(button, text); await act(async () => button.click()); };
+  try {
+    await act(async () => root.render(React.createElement(client.HistoryPanel, { api, download: rows => downloads.push(rows) })));
+    await click('Export filtered results'); await click('Cancel export');
+    await act(async () => resolveDetail({ id: 'one' }));
+    assert.deepEqual(downloads, []);
+    fail = true; await click('Export filtered results');
+    assert.match(dom.window.document.querySelector('[role="alert"]').textContent, /detail unavailable/);
+    assert.deepEqual(downloads, []);
+  } finally {
+    await act(async () => root.unmount()); dom.window.close();
+    for (const [key, descriptor] of previous) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; }
+  }
 });
 
 test('RPC envelope uses exact channel, rejects errors and preserves values', async () => {
@@ -151,19 +254,21 @@ test('permission menu zh anchor uses the localized labels', () => {
 test('settings render as a tablist: reviewer tab selected, other panels hidden', () => {
   const policyLimits = { timeoutMs: 90000, outputTokens: 4096, maxTranscriptBytes: 48000 };
   const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values, policyLimits }, initialCatalog: catalog });
-  assert.equal((html.match(/role="tab"/g) || []).length, 3);
-  assert.equal((html.match(/role="tabpanel"/g) || []).length, 3);
+  assert.equal((html.match(/role="tab"/g) || []).length, 4);
+  assert.equal((html.match(/role="tabpanel"/g) || []).length, 4);
   assert.match(html, /aria-selected="true"[^>]*>Reviewer/);
   // Only the reviewer panel is visible; hidden panels stay in the markup so
   // aria-controls always resolves.
-  assert.equal((html.match(/hidden=""/g) || []).length, 2);
+  assert.equal((html.match(/hidden=""/g) || []).length, 3);
   assert.match(html, /<textarea/);
-  assert.match(html, /--dsw-alias-label-primary/);
+  // Styles moved out of the seats: apply() injects one head stylesheet, so
+  // per-instance SSR markup no longer embeds the css or its tokens.
+  assert.doesNotMatch(html, /<style/);
 });
 
 test('the limits tab exists only while the host reports policy limits', () => {
   const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog });
-  assert.equal((html.match(/role="tab"/g) || []).length, 2);
+  assert.equal((html.match(/role="tab"/g) || []).length, 3);
   assert.doesNotMatch(html, /-limits-panel"/);
   // A stale limits selection falls back to the reviewer tab.
   const stale = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog, initialTab: 'limits' });

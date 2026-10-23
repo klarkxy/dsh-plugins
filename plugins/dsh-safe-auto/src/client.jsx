@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Button, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconShieldOutlineRegular, Menu,
+import { Button, Input, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconShieldOutlineRegular, Menu,
   PermissionIconFullAccessRegular, PermissionIconReadOnlyRegular, PermissionIconWorkspaceWriteRegular, SegmentedTabs } from '@deepseek-ai/dsh-client-ui-primitives';
 import { MODEL_CATALOG_INJECT, readModelCatalog, modelMenuEffortLabel, modelMenuEffortOptions, parseModelMenuChoices } from '@klarkxy/dsh-model-route';
 import { ModelCatalogStatus, ModelMenu, modelMenuCss, useModelCatalog } from '@klarkxy/dsh-model-route/ui';
@@ -262,12 +262,19 @@ export function permissionLabel(value, name, t = translator('en')) {
 // descendants: every `dsh-ui-*` class below sits inside `.dsh-safe-auto`.
 // Only this plugin's own geometry is styled here. The prompt textarea uses the
 // shared dsh-ui-textarea shell.
+//
+// `modelMenuCss` is the deliberate exception to that baseline: it is the
+// companion stylesheet of the shared library @klarkxy/dsh-model-route's
+// ModelMenu component — bundled into this client through the library's
+// alwaysBundle entry, scoped under the library's own `.dsh-model-menu-*`
+// namespace, and restricted to the same official token whitelist. It belongs
+// to the library, not to this plugin's own rules, so it is concatenated here
+// verbatim rather than rewritten under the plugin root.
 const css = `${officialUiCss('dsh-safe-auto')}${modelMenuCss}
 /* A fieldset is the settings group and takes the contract's card surface; its
  * legend keeps the UA inline padding from indenting the group title. */
 .dsh-safe-auto legend { padding: 0; }
 `;
-function Style() { return h('style', null, css); }
 function ErrorText({ error, t }) { return error ? h('p', { role: 'alert', className: 'dsh-ui-error dsh-ui-wrap' }, errorText(t, error)) : null; }
 
 /** Composer permission control via the replacement slot: native presets plus Safe Auto. */
@@ -322,7 +329,7 @@ export function PermissionMenu({ sessionId, locked, api, locale, initialSnapshot
   }
   const current = options.find(option => option.value === snapshot?.current);
   const CurrentIcon = current && PERMISSION_ICONS[current.value];
-  return h('span', { className: 'dsh-safe-auto dsh-safe-auto-permission', 'aria-busy': busy }, h(Style),
+  return h('span', { className: 'dsh-safe-auto dsh-safe-auto-permission', 'aria-busy': busy },
     h(Menu, {
       open, side: 'top', align: 'start', portal: true, listClassName: 'dsh-safe-auto',
       selectedId: snapshot?.current, items, onSelect: choose, onClose: () => setOpen(false),
@@ -347,7 +354,9 @@ export function ReviewerFields({ values, catalog, disabled, onChange, locale }) 
   const retained = effort && h('span', null, ' ', t('savedEffortRetained', effort));
   /* The reviewer route uses the contract's standard editor (dsh-model-route's
    * ModelMenu): follow mode is the leading row, effort lives in its own pane. */
-  return h('fieldset', { disabled, className: 'dsh-ui-card' }, h('legend', { className: 'dsh-ui-heading' }, t('reviewer')),
+  // The card carries the plugin root class itself: scoped contract rules
+  // resolve without depending on which ancestor mounted this fieldset.
+  return h('fieldset', { disabled, className: 'dsh-safe-auto dsh-ui-card' }, h('legend', { className: 'dsh-ui-heading' }, t('reviewer')),
     h('div', { className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, t('model')),
       h(ModelMenu, {
         open, onOpenChange: setOpen, listClassName: 'dsh-safe-auto', locale: localeLanguage(locale),
@@ -372,6 +381,116 @@ export function ReviewerFields({ values, catalog, disabled, onChange, locale }) 
     !state.follow && !state.known && h('p', { className: 'dsh-ui-help' }, t('modelAbsent')),
     !state.follow && unknownEffort && h('p', { className: 'dsh-ui-help' }, t('effortAbsent')),
     !state.follow && h('p', { className: 'dsh-ui-help' }, t('effortClears')));
+}
+
+const HISTORY_TEXT = {
+  zh: { title: '审核历史', help: '保存启用此功能后的审核。内容已尽力脱敏；记录持续保留，可导出供审计。', search: '搜索内容', session: '会话 ID', tool: '工具', outcome: '审核结果', risk: '风险', from: '开始时间', to: '结束时间', all: '全部', apply: '查询', refresh: '刷新', next: '下一页', back: '上一页', detail: '查看详情', empty: '没有匹配的审核记录', loading: '正在查询…', exportOne: '导出此记录', exportAll: '导出筛选结果', cancel: '取消导出', exporting: count => `正在导出 ${count} 条…`, count: count => `共 ${count} 条`, missing: '审核记录不存在', execution: '工具结果', approval: '实际审批', approvalUnknown: '未观察到审批结果', unavailable: '未记录', outcomes: { pending: '审核中', interrupted: '审核中断', 'allowed-once': '审核通过', rejected: '拒绝', cancelled: '取消', unavailable: '审批不可用' }, risks: { low: '低', medium: '中', high: '高', critical: '严重' }, states: { 'not-observed': '未观察到执行结果', succeeded: '工具返回成功', failed: '工具返回错误' } },
+  en: { title: 'Review history', help: 'Reviews are retained from the time this feature is enabled. Content is redacted on a best-effort basis and can be exported for audit.', search: 'Search contents', session: 'Session ID', tool: 'Tool', outcome: 'Outcome', risk: 'Risk', from: 'From', to: 'To', all: 'All', apply: 'Search', refresh: 'Refresh', next: 'Next', back: 'Previous', detail: 'View details', empty: 'No matching reviews', loading: 'Loading reviews…', exportOne: 'Export this record', exportAll: 'Export filtered results', cancel: 'Cancel export', exporting: count => `Exporting ${count} records…`, count: count => `${count} records`, missing: 'Review record not found', execution: 'Tool result', approval: 'Actual approval', approvalUnknown: 'No approval result observed', unavailable: 'Not recorded', outcomes: { pending: 'Pending', interrupted: 'Interrupted', 'allowed-once': 'Review passed', rejected: 'Rejected', cancelled: 'Cancelled', unavailable: 'Approval unavailable' }, risks: { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' }, states: { 'not-observed': 'No execution result observed', succeeded: 'Tool returned success', failed: 'Tool returned an error' } },
+};
+
+export function historyFilters(values) {
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== '').map(([key, value]) =>
+    [key, key === 'from' || key === 'to' ? new Date(value).toISOString() : value]));
+}
+export function downloadHistory(records, filename = 'safe-auto-history.json') {
+  const url = URL.createObjectURL(new Blob([JSON.stringify({ format: 'safe-auto-audit-v1', exportedAt: new Date().toISOString(), count: records.length, records }, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a'); link.href = url; link.download = filename;
+  link.click(); setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export function HistoryPanel({ api, locale, initialPage = null, download = downloadHistory }) {
+  const language = useSyncExternalStore(listener => locale?.subscribe?.(listener) ?? (() => {}), () => localeLanguage(locale), () => localeLanguage(locale));
+  const t = HISTORY_TEXT[language];
+  const [draft, setDraft] = useState({ query: '', sessionId: '', tool: '', outcome: '', risk: '', from: '', to: '' });
+  const [filter, setFilter] = useState({});
+  const [page, setPage] = useState(initialPage);
+  const [cursors, setCursors] = useState([undefined]);
+  const [index, setIndex] = useState(0);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [exporting, setExporting] = useState(null);
+  const generation = useRef(0), detailsGeneration = useRef(0), exportGeneration = useRef(0);
+  const alive = useRef(true), filterRef = useRef(filter);
+  filterRef.current = filter;
+  const load = useCallback(async (filters, cursor) => {
+    const ticket = ++generation.current; ++detailsGeneration.current; ++exportGeneration.current;
+    setBusy(true); setError(''); setDetail(null); setExporting(null);
+    try {
+      const result = await api.historyList({ ...filters, limit: 25, ...(cursor ? { cursor } : {}) });
+      if (alive.current && ticket === generation.current) setPage(result);
+    } catch (e) { if (alive.current && ticket === generation.current) { setError(errorMessage(e)); setPage(null); } }
+    finally { if (alive.current && ticket === generation.current) setBusy(false); }
+  }, [api]);
+  useEffect(() => {
+    alive.current = true; void load({}, undefined);
+    const stop = api.subscribeGeneration?.(() => { setCursors([undefined]); setIndex(0); void load(filterRef.current, undefined); });
+    return () => { alive.current = false; generation.current++; detailsGeneration.current++; exportGeneration.current++; stop?.(); };
+  }, [load, api]);
+  const search = e => {
+    e?.preventDefault();
+    try { const next = historyFilters(draft); setFilter(next); setCursors([undefined]); setIndex(0); void load(next); }
+    catch (e) { setError(errorMessage(e)); }
+  };
+  const showDetail = async id => {
+    const ticket = ++detailsGeneration.current; setError(''); setDetail(null);
+    try {
+      const row = await api.historyGet(id);
+      if (!row) throw new Error(t.missing);
+      if (alive.current && ticket === detailsGeneration.current) setDetail(row);
+    } catch (e) { if (alive.current && ticket === detailsGeneration.current) setError(errorMessage(e)); }
+  };
+  const exportAll = async () => {
+    const ticket = ++exportGeneration.current; const records = []; let cursor;
+    setExporting(0); setError('');
+    try {
+      // Freeze the time boundary: later reviews must not enter an ongoing export.
+      const now = new Date().toISOString();
+      const filters = { ...filter, to: filter.to && Date.parse(filter.to) < Date.parse(now) ? filter.to : now };
+      do {
+        const batch = await api.historyList({ ...filters, limit: 100, ...(cursor ? { cursor } : {}) });
+        if (!alive.current || ticket !== exportGeneration.current) return;
+        for (const item of batch.items) {
+          const row = await api.historyGet(item.id);
+          if (!alive.current || ticket !== exportGeneration.current) return;
+          if (!row) throw new Error(t.missing);
+          records.push(row); setExporting(records.length);
+        }
+        if (batch.nextCursor && batch.nextCursor === cursor) throw new Error('Invalid history cursor');
+        cursor = batch.nextCursor;
+      } while (cursor);
+      download(records);
+    } catch (e) { if (alive.current && ticket === exportGeneration.current) setError(errorMessage(e)); }
+    finally { if (alive.current && ticket === exportGeneration.current) setExporting(null); }
+  };
+  const field = (key, label, options) => h('label', { key, className: 'dsh-ui-field' }, h('span', { className: 'dsh-ui-label' }, label),
+    options ? h('select', { className: 'dsh-ui-select', value: draft[key], onChange: e => setDraft({ ...draft, [key]: e.target.value }) }, h('option', { value: '' }, t.all), ...Object.entries(options).map(([value, label]) => h('option', { key: value, value }, label)))
+      : h(Input, { type: key === 'from' || key === 'to' ? 'datetime-local' : 'text', maxLength: 256, value: draft[key], onChange: e => setDraft({ ...draft, [key]: e.target.value }) }));
+  return h('section', { className: 'dsh-ui-stack', 'aria-label': t.title, 'aria-busy': busy },
+    h('p', { className: 'dsh-ui-help' }, t.help),
+    h('form', { className: 'dsh-ui-stack', onSubmit: search },
+      h('div', { className: 'dsh-ui-fields-grid' }, field('query', t.search), field('sessionId', t.session), field('tool', t.tool), field('outcome', t.outcome, t.outcomes), field('risk', t.risk, t.risks), field('from', t.from), field('to', t.to)),
+      h('div', { className: 'dsh-ui-actions' }, h(Button, { type: 'submit', variant: 'primary' }, t.apply),
+        h(Button, { type: 'button', variant: 'ghost', onClick: () => { setCursors([undefined]); setIndex(0); void load(filter); } }, t.refresh),
+        h(Button, { type: 'button', variant: 'ghost', disabled: busy || exporting !== null || !page?.total, onClick: exportAll }, t.exportAll))),
+    error && h('p', { role: 'alert', className: 'dsh-ui-error' }, error),
+    exporting !== null && h('div', { className: 'dsh-ui-actions', role: 'status' }, t.exporting(exporting), h(Button, { variant: 'ghost', onClick: () => { exportGeneration.current++; setExporting(null); } }, t.cancel)),
+    busy ? h('p', { role: 'status' }, t.loading) : page && h(React.Fragment, null,
+      h('p', { className: 'dsh-ui-meta' }, t.count(page.total)),
+      !page.items.length && h('p', { className: 'dsh-ui-empty' }, t.empty),
+      ...page.items.map(row => h('article', { key: row.id, className: 'dsh-ui-card dsh-ui-stack' },
+        h('div', { className: 'dsh-ui-row-wrap' }, h('strong', null, row.tool), h('span', null, t.outcomes[row.reviewOutcome || row.outcome] || row.reviewOutcome || row.outcome), h('span', null, t.risks[row.risk] || row.risk || '')),
+        h('p', { className: 'dsh-ui-meta dsh-ui-wrap' }, new Date(row.startedAt).toLocaleString(language), ' · ', row.sessionId, ' · ', row.reviewer ? `${row.reviewer.provider}/${row.reviewer.model}` : t.unavailable),
+        row.rationale && h('p', { className: 'dsh-ui-wrap' }, row.rationale),
+        h('p', { className: 'dsh-ui-help' }, t.approval, ': ', !row.approvalState || row.approvalState === 'not-observed' ? t.approvalUnknown : row.approvalState === 'allowed-once' ? language === 'zh' ? '单次放行' : 'Allowed once' : t.outcomes[row.approvalState]),
+        h('p', { className: 'dsh-ui-help' }, t.execution, ': ', t.states[row.executionState || 'not-observed']),
+        h(Button, { variant: 'ghost', onClick: () => showDetail(row.id) }, t.detail))),
+      h('div', { className: 'dsh-ui-actions' },
+        h(Button, { variant: 'ghost', disabled: index === 0, onClick: () => { const next = index - 1; setIndex(next); void load(filter, cursors[next]); } }, t.back),
+        h(Button, { variant: 'ghost', disabled: !page.nextCursor, onClick: () => { const next = index + 1; setCursors([...cursors.slice(0, next), page.nextCursor]); setIndex(next); void load(filter, page.nextCursor); } }, t.next))),
+    detail && h('section', { className: 'dsh-ui-stack', 'aria-label': t.detail },
+      h('h3', null, detail.id), h(Button, { variant: 'ghost', onClick: () => download([detail], `safe-auto-${detail.id}.json`) }, t.exportOne),
+      h('pre', { className: 'dsh-ui-wrap', style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: '60vh', overflow: 'auto' } }, JSON.stringify(detail, null, 2))));
 }
 
 export function SettingsPanel({ view, api, locale, initialSettings = null, initialCatalog = null, initialTab = 'reviewer' }) {
@@ -466,15 +585,16 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
     role: 'tabpanel', id: `${tabsId}-${value}-panel`, 'aria-labelledby': `${tabsId}-${value}-tab`,
     hidden: activeTab !== value, tabIndex: 0, className,
   }, children);
-  if (view === 'summary') return h('div', { className: 'dsh-safe-auto' }, h(Style),
+  if (view === 'summary') return h('div', { className: 'dsh-safe-auto' },
     h('p', { className: 'dsh-ui-compact dsh-ui-wrap' }, t('summary')), h(ErrorText, { error, t }));
-  return h('section', { className: 'dsh-safe-auto dsh-ui-stack', 'aria-label': t('panelLabel'), 'aria-busy': busy }, h(Style),
+  return h('section', { className: 'dsh-safe-auto dsh-ui-page', 'aria-label': t('panelLabel'), 'aria-busy': busy },
     h('p', { className: 'dsh-ui-compact dsh-ui-wrap' }, t('intro')),
     !values && h('p', { className: 'dsh-ui-loading' }, t('loading')),
     values && h(React.Fragment, null,
       h(SegmentedTabs, { value: activeTab, onChange: setTab, label: t('tabsLabel'), items: [
         tabItem('reviewer', t('tabReviewer')),
         tabItem('details', t('details')),
+        tabItem('history', HISTORY_TEXT[localeLanguage(locale)].title),
         ...(settings?.policyLimits ? [tabItem('limits', t('tabLimits'))] : []),
       ] }),
       tabPanel('reviewer', 'dsh-ui-stack', [
@@ -486,10 +606,11 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
           h('p', null, t('safetyDetail')),
           h('p', null, t('reviewInput')),
           h('p', null, t('breakerDetail')))),
+      tabPanel('history', 'dsh-ui-stack', activeTab === 'history' ? h(HistoryPanel, { api, locale }) : null),
       settings?.policyLimits && tabPanel('limits', 'dsh-ui-stack', [
         h('p', { key: 'line', className: 'dsh-ui-meta dsh-ui-wrap' }, t('limitsLine', settings.policyLimits)),
         h('p', { key: 'help', className: 'dsh-ui-help' }, t('limitsHelp'))]),
-      h('div', { className: 'dsh-ui-actions' },
+      activeTab === 'reviewer' && h('div', { className: 'dsh-ui-form-footer' },
         h(Button, { variant: 'primary', disabled: busy || externalChange || !dirty.current || (values.reviewerPrompt || '').length > 4096, onClick: save }, t('save')),
         h(Button, { variant: 'ghost', disabled: busy, onClick: () => refresh(true) }, t('refreshDiscard')))),
     h(ErrorText, { error, t }), h(ModelCatalogStatus, { state: catalogState, locale: localeLanguage(locale) }),
@@ -499,6 +620,16 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
 }
 
 export function apply(ctx) {
+  // Each plugin lifetime owns its stylesheet; individual seats do not inject
+  // copies. A second lifetime must survive disposal of the first one.
+  ctx.effect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const style = document.createElement('style');
+    style.setAttribute('data-plugin', BUNDLE);
+    style.textContent = css;
+    document.head.appendChild(style);
+    return () => style.remove();
+  });
   mountModelSettingsChanges(ctx, BUNDLE);
   const settingsSubscriber = createModelSettingsSubscriber(ctx, BUNDLE);
   const call = (endpoint, payload) => unwrapRpc((...args) => ctx.connection.rpc.call(...args), endpoint, payload);
@@ -508,6 +639,8 @@ export function apply(ctx) {
     getSettings: () => call('settings.get', {}),
     saveSettings: payload => call('settings.save', payload),
     modelCatalog: () => readModelCatalog(ctx),
+    historyList: payload => call('history.list', payload),
+    historyGet: id => call('history.get', { id }),
     getSession: sessionId => call('session.get', { sessionId }),
     selectSession: payload => call('session.select', payload),
   });

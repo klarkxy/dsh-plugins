@@ -22,6 +22,20 @@ Under **Plugins → Safe Auto** choose the reviewer model (empty follows the cur
 
 If the model list cannot load or some providers fail, use **Retry** in the settings panel. Retrying keeps your reviewer settings and unsaved draft.
 
+## Review history
+
+Open **Plugins → Safe Auto → Review history** to read every review this plugin recorded. Filter by search text, session, tool, result, risk, and a start and end time, then page through the matches. Opening a record shows the whole review: what triggered it, the arguments that were sent, the review input, the verdict, and whether the approved call actually ran afterwards.
+
+Export one record, or every record matching the current filters, as JSON. Exporting all matches walks the pages one at a time, can be cancelled at any point, and a failed or cancelled export writes no file.
+
+Recording starts after installing the review-history feature; earlier reviews are not backfilled. Records stay in the Harness profile and are never deleted automatically.
+
+### Tools
+
+| Tool | What it does |
+|---|---|
+| `safe_auto_history` | Read-only lookup of the current session's review history. `list` returns summaries plus a pagination cursor; `get` returns one complete record. Use the Plugins page to read history across sessions. Reading history never triggers a review and never calls the reviewer model. |
+
 ## What gets reviewed
 
 - Sandbox escalations requested by `write`, `edit`, `bash`, and `pwsh`.
@@ -46,6 +60,9 @@ Reading files, searching, building, and testing need no approval; they are not i
 - Turning Safe Auto off or changing its reviewer settings invalidates reviews already in progress.
 - Subagent sessions do not use Safe Auto; they follow the native approval flow.
 - Do not combine it with other automatic approvers.
+- History contains redacted copies of review evidence. Known credentials are masked on a best-effort basis; unfamiliar secret formats can remain. Oversized or invalid actions that cannot be reviewed carry explicit capture limits.
+- The reviewer verdict, the observed approval decision, and the tool result are recorded separately. A passed review does not establish that permission was granted; unobserved approval and execution results remain marked as such. The local audit record provides no tamper-proof guarantee.
+- If an audit record cannot be saved, automatic approval is refused.
 
 ## License
 

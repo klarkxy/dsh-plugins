@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-safe-auto",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Safe Auto: a reviewer model answers native approval requests, Codex auto-review style; only a pass approves that one call.",
   "icon": "./icon.svg",
   "type": "module",
@@ -23,7 +23,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node --check src/config.js && node --check src/dangerous.js && node --check src/transcript.js && node --check src/model-route.js && node --check src/reviewer.js && node --check src/index.js && node --check src/control.js && node --check src/ui-host.js && tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-safe-auto",
+    "build": "node --check src/config.js && node --check src/dangerous.js && node --check src/transcript.js && node --check src/model-route.js && node --check src/reviewer.js && node --check src/audit.js && node --check src/index.js && node --check src/control.js && node --check src/ui-host.js && tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-safe-auto",
     "test": "node --test test/*.test.js"
   },
   "engines": {

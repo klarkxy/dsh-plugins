@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { apply, MESSAGES, createBreaker, MAX_ACTION_BYTES } from '../src/index.js';
+import { openAudit } from '../src/audit.js';
 import { parseConfig } from '../src/config.js';
 import { createControl } from '../src/control.js';
 
@@ -30,10 +31,29 @@ function fixture({ config = { provider: 'p', model: 'm' }, header = {}, llm: wit
     return streamOf(reviewer.verdict);
   } };
   let runtime;
+  const rows = new Map();
+  const storage = { fail: false, beforePut: undefined };
+  const disposers = [], tools = [];
   const ctx = {
     provide(key, value) { assert.equal(key, 'safeAutoRuntime'); runtime = value; },
-    inject(deps, fn) { assert.deepEqual(deps, ['llm']); if (withLlm) fn({ llm, effect: fn2 => fn2() }); },
-    effect(fn) { fn(); },
+    inject(deps, fn) {
+      if (deps[0] === 'llm' && withLlm) fn({ llm, effect: fn2 => fn2() });
+      if (deps[0] === 'tools') fn({ effect: fn2 => fn2(), tools: { register(tool) { tools.push(tool); return () => {}; } } });
+    },
+    effect(fn) { disposers.push(fn()); },
+    storageDomain: { async open() {
+      let tail = Promise.resolve();
+      const queued = fn => { const result = tail.then(fn); tail = result.catch(() => {}); return result; };
+      const put = async (key, value) => {
+        await storage.beforePut?.(key, value);
+        if (storage.fail) throw new Error('disk full');
+        rows.set(key, structuredClone(value));
+      };
+      return { table: () => ({ get: key => rows.get(key), entries: () => [...rows.entries()][Symbol.iterator](),
+        put: (key, value) => queued(() => put(key, value)),
+        update: (key, fn) => queued(async () => { const value = fn(rows.get(key)); await put(key, value); return value; }),
+      }), close: async () => { await tail; } };
+    } },
     on(event, fn, options) { handlers[event] = fn; listenerOptions[event] = options; },
     workingDirectory: { get: () => reviewer.cwd ?? '/w' },
     sandboxPolicy: { resolve: () => ({ mode: 'workspace-write', workspaceRoot: '/w' }) },
@@ -54,7 +74,18 @@ function fixture({ config = { provider: 'p', model: 'm' }, header = {}, llm: wit
   const postExecute = (e, result = { isError: true, content: [{ type: 'text', text: 'native error' }] }) =>
     handlers['tools/post-execute'](e, result, async () => ({ kind: 'accept' }));
   const finish = e => handlers['tools/result'](e, {});
-  return { handlers, listenerOptions, runtime, reviewer, seen, logs, session, agent, events, say, exec, preExecute, ask, postExecute, finish };
+  // The native approval audit pair: append like the real service (asked at
+  // dispatch, decided once the outcome is known), then feed the post-commit
+  // observer synchronously — session/event listeners fire after the append.
+  const emitEvent = (type, data) => {
+    const event = { seq: events.length, type, data };
+    events.push(event);
+    handlers['session/event']?.(session, event);
+  };
+  const asked = (e, { id = 'a1' } = {}) => emitEvent('approval/asked', { id, toolName: e.name, callId: e.callId, reason: 'escalate' });
+  const decided = (id = 'a1', outcome = 'allowed-once') => emitEvent('approval/decided', { id, outcome });
+  const approve = (e, { id = 'a1', outcome = 'allowed-once' } = {}) => { asked(e, { id }); decided(id, outcome); };
+  return { handlers, listenerOptions, runtime, reviewer, seen, logs, session, agent, events, say, exec, preExecute, ask, postExecute, finish, emitEvent, asked, decided, approve, rows, storage, disposers, tools };
 }
 
 const control = (enabled, extra = {}) => ({
@@ -63,9 +94,180 @@ const control = (enabled, extra = {}) => ({
 });
 const escalated = { command: 'git push', description: 'push', sandbox_permissions: 'danger-full-access', justification: 'Push the branch.' };
 
+test('persists complete review evidence and associates the observed tool outcome', async () => {
+  const f = fixture();
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  assert.equal(await f.ask(e), 'allowed-once');
+  const page = await f.runtime.history.list({});
+  assert.equal(page.items.length, 1);
+  const record = await f.runtime.history.get({ id: page.items[0].id });
+  assert.equal(record.sessionId, 's');
+  assert.equal(record.callId, e.callId);
+  assert.equal(record.rationale, 'Routine.');
+  assert.match(record.input, /Clean the build output/);
+  assert.match(record.action, /git push/);
+  assert.match(record.policy, /Risk Taxonomy/);
+  assert.equal(record.reviewer.model, 'm');
+  assert.match(record.attempts[0].response, /Routine/);
+  assert.equal(f.tools[0].name, 'safe_auto_history');
+  assert.deepEqual(await f.tools[0].execute({ action: 'list', sessionId: 's' }, { agent: f.agent }), await f.runtime.history.list({ sessionId: 's' }));
+  assert.deepEqual(await f.tools[0].execute({ action: 'get', id: record.id }, { agent: f.agent }), record);
+  assert.equal(f.seen.length, 1, 'history reads do not call the reviewer');
+  f.handlers['tools/result'](e, { isError: false, value: {}, content: [] });
+  await new Promise(setImmediate);
+  assert.equal((await f.runtime.history.get({ id: record.id })).execution.state, 'succeeded');
+});
+
+test('history tool requires a caller and cannot read another session audit evidence', async () => {
+  const f = fixture();
+  const e = f.exec('bash', escalated); await f.preExecute(e); await f.ask(e);
+  const record = (await f.runtime.history.list({})).items[0];
+  const tool = f.tools[0];
+  const other = { agent: { session: { id: 'other-session' } } };
+  await assert.rejects(tool.execute({ action: 'list' }), /agent-bound/);
+  await assert.rejects(tool.execute({ action: 'list', sessionId: 's' }, other), /current session/);
+  assert.equal((await tool.execute({ action: 'list' }, other)).total, 0);
+  await assert.rejects(tool.execute({ action: 'get', id: record.id }, other), /unavailable in this session/);
+  const signal = AbortSignal.abort();
+  await assert.rejects(tool.execute({ action: 'list' }, { agent: f.agent, signal }), { name: 'AbortError' });
+});
+
+test('a grant is confirmed by the observed native approval decision, and stays provisional without one', async () => {
+  const f = fixture();
+  const confirmed = f.exec('bash', escalated);
+  await f.preExecute(confirmed);
+  f.asked(confirmed, { id: 'a1' });
+  assert.equal(await f.ask(confirmed), 'allowed-once');
+  let record = (await f.runtime.history.list({})).items[0];
+  assert.equal(record.outcome, 'allowed-once');
+  assert.equal(record.approvalState, 'not-observed');
+  f.decided('a1', 'allowed-once');
+  await new Promise(setImmediate);
+  record = (await f.runtime.history.list({})).items[0];
+  assert.equal(record.approvalState, 'allowed-once');
+  assert.equal(record.outcome, 'allowed-once');
+});
+
+test('a decided for another request never confirms this grant', async () => {
+  const f = fixture();
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  f.asked(e, { id: 'a1' });
+  assert.equal(await f.ask(e), 'allowed-once');
+  f.decided('other-request', 'allowed-once');
+  await new Promise(setImmediate);
+  const record = (await f.runtime.history.list({})).items[0];
+  assert.equal(record.approvalState, 'not-observed');
+});
+
+test('a decided committed before the verdict lands records the native outcome, never a grant', async () => {
+  const f = fixture();
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  // The request aborts while the reviewer is in flight: asked/decided('cancelled')
+  // commit before the late verdict is discarded by the host.
+  f.asked(e, { id: 'a1' });
+  f.decided('a1', 'cancelled');
+  assert.equal(await f.ask(e), 'allowed-once');
+  await new Promise(setImmediate);
+  const record = (await f.runtime.history.list({})).items[0];
+  assert.equal(record.approvalState, 'cancelled');
+  assert.equal(record.outcome, 'cancelled', 'a discarded late verdict never reports an actual grant');
+});
+
+test('denied and cancelled requests are never labelled as executed', async () => {
+  const f = fixture(); f.reviewer.verdict = denyVerdict;
+  const e = f.exec('bash', escalated); await f.preExecute(e);
+  assert.equal(await f.ask(e), 'rejected');
+  f.handlers['tools/result'](e, { isError: true, error: { message: 'Approval denied' }, content: [] });
+  await new Promise(setImmediate);
+  assert.equal((await f.runtime.history.list({})).items[0].executionState, 'not-observed');
+});
+
+test('audit input matches the actual redacted model input for credential-bearing actions', async () => {
+  const f = fixture();
+  const e = f.exec('custom', { apiKey: 'arbitrary-sensitive-value', headers: { Authorization: 'Basic dXNlcjpwYXNz' } });
+  await f.preExecute(e); assert.equal(await f.ask(e), 'allowed-once');
+  const [record] = [...f.rows.values()];
+  assert.equal(record.input, f.seen[0].messages[0].content[0].text);
+  assert.doesNotMatch(record.input, /arbitrary-sensitive-value|dXNlcjpwYXNz/);
+});
+
+test('audit storage failure rejects without calling the reviewer', async () => {
+  const f = fixture(); f.storage.fail = true;
+  const e = f.exec('bash', escalated); await f.preExecute(e);
+  assert.equal(await f.ask(e), 'rejected');
+  assert.equal(f.seen.length, 0);
+  assert.match((await f.postExecute(e)).content[0].text, /audit record could not be saved/);
+});
+
+test('a final audit write failure cannot grant a model-approved action', async () => {
+  const f = fixture();
+  f.storage.beforePut = (_key, value) => { if (value.outcome === 'allowed-once') throw new Error('disk full'); };
+  const e = f.exec('bash', escalated); await f.preExecute(e);
+  assert.equal(await f.ask(e), 'rejected');
+  assert.equal(f.seen.length, 1);
+});
+
+test('a failed corrective write never claims an actual grant: reopen reports the durable verdict unconfirmed', async () => {
+  const f = fixture();
+  const owner = control(true); let enabled = true;
+  owner.config = () => parseConfig({ provider: 'p', model: 'm', enabled });
+  owner.state = () => ({ active: enabled, revision: enabled ? '1' : '2' });
+  f.runtime.attach(owner);
+  // The durable 'allowed-once' lands; the permission flips during that write,
+  // so the post-write recheck tries to cancel — and the corrective write
+  // fails. The handler truthfully rejects, but the stored row still says
+  // 'allowed-once' with no observed native decision.
+  f.storage.beforePut = (_key, value) => {
+    if (value.outcome === 'allowed-once') enabled = false;
+    if (!enabled && value.outcome === 'cancelled') throw new Error('disk full');
+  };
+  const e = f.exec('bash', escalated); await f.preExecute(e);
+  assert.equal(await f.ask(e), 'rejected');
+  const stored = [...f.rows.values()].find(row => row.outcome === 'allowed-once');
+  assert.ok(stored, 'the unconfirmed grant is durable');
+  assert.equal(stored.approvalState, 'not-observed');
+  // Reopen over the same rows: an unconfirmed grant must not read as one.
+  const reopened = await openAudit({ async open() { return {
+    table: () => ({ get: key => f.rows.get(key), entries: () => [...f.rows.entries()][Symbol.iterator]() }),
+    close: async () => {} }; } });
+  const record = reopened.get({ id: stored.id });
+  assert.equal(record.outcome, 'interrupted');
+  assert.equal(record.unconfirmed, true);
+  assert.equal(record.code, stored.code, 'reviewer verdict details survive');
+  await reopened.close();
+});
+
+test('permission invalidation during the final durable write cancels the grant', async () => {
+  const f = fixture();
+  const owner = control(true); let enabled = true;
+  owner.config = () => parseConfig({ provider: 'p', model: 'm', enabled });
+  owner.state = () => ({ active: enabled, revision: enabled ? '1' : '2' });
+  f.runtime.attach(owner);
+  f.storage.beforePut = (_key, value) => { if (value.outcome === 'allowed-once') enabled = false; };
+  const e = f.exec('bash', escalated); await f.preExecute(e);
+  assert.equal(await f.ask(e), 'cancelled');
+  const page = await f.runtime.history.list({});
+  assert.equal(page.items[0].outcome, 'cancelled');
+});
+
+test('runtime unload cancels and drains in-flight reviews before closing the audit store', async () => {
+  const f = fixture();
+  const e = f.exec('bash', escalated);
+  const pending = await pendingReview(f, e);
+  const unload = f.disposers[0]();
+  pending.release();
+  assert.equal(await pending.result, 'cancelled');
+  await unload;
+  const page = await f.runtime.history.list({});
+  assert.equal(page.items[0].outcome, 'cancelled');
+});
+
 test('registers the native seams with prepend for pre-execute and approval', () => {
   const f = fixture();
-  assert.deepEqual(Object.keys(f.handlers).sort(), ['approval/request', 'tools/post-execute', 'tools/pre-execute', 'tools/result']);
+  assert.deepEqual(Object.keys(f.handlers).sort(), ['approval/request', 'session/event', 'tools/post-execute', 'tools/pre-execute', 'tools/result']);
   assert.deepEqual(f.listenerOptions['tools/pre-execute'], { prepend: true });
   assert.deepEqual(f.listenerOptions['approval/request'], { prepend: true });
 });

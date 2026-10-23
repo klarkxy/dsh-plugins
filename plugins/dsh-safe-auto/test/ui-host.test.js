@@ -34,7 +34,10 @@ test('UI host mounts an authenticated route and disposes control without model c
   const ctx = new Context();
   Object.assign(ctx, {
     on: () => () => {},
-    safeAutoRuntime: { base: parseConfig(), attach(control) { attached = true; assert.equal(control.settingsView().revision, 0); return () => { attached = false; }; } },
+    safeAutoRuntime: { base: parseConfig(), history: {
+      async list(payload) { assert.deepEqual(payload, { tool: 'pwsh' }); return { items: [{ id: 'review-1' }], total: 1 }; },
+      async get(payload) { assert.deepEqual(payload, { id: 'review-1' }); return { id: payload.id, rationale: 'Routine.' }; },
+    }, attach(control) { attached = true; assert.equal(control.settingsView().revision, 0); return () => { attached = false; }; } },
     storageDomain: { async open(spec) {
       assert.equal(spec.name, 'dsh_safe_auto');
       // Rows saved by 0.1.x carry retired keys; they strip on load instead of breaking the panel.
@@ -62,6 +65,10 @@ test('UI host mounts an authenticated route and disposes control without model c
   const rejected = await roundTrip(route.handler, request('POST', '/dsh-safe-auto/settings.save', envelope('settings.save', { expectedRevision: 0, values: { mode: 'smart' } }), { 'content-type': 'application/json' }));
   assert.equal(JSON.parse(rejected.body).result.ok, false);
   assert.equal(rejections, 2);
+  const history = await roundTrip(route.handler, request('POST', '/dsh-safe-auto/history.list', envelope('history.list', { tool: 'pwsh' }), { 'content-type': 'application/json' }));
+  assert.deepEqual(JSON.parse(history.body).result.value, { items: [{ id: 'review-1' }], total: 1 });
+  const detail = await roundTrip(route.handler, request('POST', '/dsh-safe-auto/history.get', envelope('history.get', { id: 'review-1' }), { 'content-type': 'application/json' }));
+  assert.equal(JSON.parse(detail.body).result.value.rationale, 'Routine.');
   for (const dispose of disposers.reverse()) await dispose();
   assert.equal(attached, false); assert.equal(closed, true); assert.equal(removed, true);
 });

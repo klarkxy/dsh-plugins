@@ -11,6 +11,9 @@ import { parseConfig } from '../src/config.js';
 
 // Use the SAME pinned packages as the workspace's DSH contract tests.
 const requireHost = createRequire(new URL('../../dsh-dev-index/package.json', import.meta.url));
+// Storage domain deps resolve through @klarkxy/dsh-plugin-kit's devDeps
+// (dsh-safe-auto deliberately keeps no devDep on dsh-storage-json).
+const requireKit = createRequire(new URL('../../dsh-plugin-kit/package.json', import.meta.url));
 let host;
 try {
   const toolsPath = requireHost.resolve('@deepseek-ai/dsh-tools');
@@ -23,6 +26,8 @@ try {
     llm: await load(requireTools, '@deepseek-ai/dsh-llm'),
     approval: await load(requireTools, '@deepseek-ai/dsh-user-approval'),
     sandbox: await load(requireTools, '@deepseek-ai/dsh-sandbox'),
+    storageDomain: await load(requireKit, '@deepseek-ai/dsh-storage-domain'),
+    storageJson: await load(requireKit, '@deepseek-ai/dsh-storage-json'),
   };
 } catch (error) {
   if (process.env.CI || error.code !== 'MODULE_NOT_FOUND') throw error;
@@ -53,6 +58,23 @@ async function harness(t, { config = {} } = {}) {
   }
   mounted.push(await ctx.plugin(WorkingDirectoryFixture));
   mounted.push(await ctx.plugin(host.approval.default, { policy: 'ask' }));
+  // Real JSON-backed storageDomain facility — safeAuto's apply() opens the
+  // audit domain at mount; without this service the runtime never activates.
+  const storageRoot = join(root, 'storages');
+  const storageBackend = new host.storageJson.JsonStorageBackend(storageRoot);
+  const domainFacility = new host.storageDomain.DomainFacility({
+    storage: { backend: { get: name => {
+      if (name !== 'json') throw new Error(`backend-not-found: ${name}`);
+      return storageBackend;
+    } } },
+    logger: { error() {}, warn() {} },
+    emit() {},
+  }, { backend: 'json' });
+  ctx.provide('storageDomain', domainFacility);
+  t.after(async () => {
+    await domainFacility.closeAll();
+    await storageBackend.close();
+  });
   const modelFiber = await ctx.plugin(host.llm.default); mounted.push(modelFiber);
   class Reviewer extends host.llm.LlmAdapter {
     async *stream(options) {
@@ -97,7 +119,14 @@ async function harness(t, { config = {} } = {}) {
   const session = { id: 'native-contract', header: { cwd: root },
     get seq() { return events.length; }, eventAt(seq) { return events[seq]; },
     requestHeader: () => ({ config: { provider: 'conversation', model: 'one' } }),
-    snapshotEvents(from = 0) { return events.slice(from); }, append(type, data) { events.push({ seq: events.length, type, data }); } };
+    snapshotEvents(from = 0) { return events.slice(from); },
+    // The real Session emits session/event synchronously after the append
+    // commits; the fixture must do the same or observers never see decided.
+    append(type, data) {
+      const event = { seq: events.length, type, data };
+      events.push(event);
+      try { ctx.emit('session/event', session, event); } catch { /* observer failures are contained by the host */ }
+    } };
   session.append('turn/start', {});
   session.append('user/message', { source: { kind: 'user' }, content: [{ type: 'text', text: `Write "after" to ${target}.` }] });
   const agent = { id: 'native-agent', session };
@@ -143,6 +172,12 @@ test('escalated write: reviewer allow runs it once; deny returns the denial guid
     assert.deepEqual(h.decided(), ['allowed-once']);
     assert.deepEqual(h.downstream, []);
     assert.equal(h.ctx.sandboxPolicy.resolve().mode, 'workspace-write', 'standing policy is never changed');
+    // The observed native approval/decided confirms the durable grant — the
+    // reviewer's verdict and the host's actual decision are recorded apart.
+    await new Promise(setImmediate); // let the tracked approvalState write land
+    const granted = await h.ctx.safeAutoRuntime.history.list({});
+    assert.equal(granted.items[0].approvalState, 'allowed-once');
+    assert.equal(granted.items[0].outcome, 'allowed-once');
 
     writeFileSync(h.target, 'before');
     h.state.verdict = { risk_level: 'high', user_authorization: 'low', outcome: 'deny', rationale: 'Overwrites an unrelated file.' };

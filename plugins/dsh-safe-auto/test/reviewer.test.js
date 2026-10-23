@@ -14,6 +14,25 @@ function reply(text) {
 }
 const run = (llm, extra = {}, signal = new AbortController().signal) => review({ llm, route, input: 'input', config: config(extra), signal });
 
+test('attempt observer receives invalid raw responses before a retry and final verdict', async () => {
+  const attempts = []; let calls = 0;
+  const verdict = await review({ llm: { stream: () => reply(++calls === 1 ? 'not a verdict' : ok) }, route,
+    input: 'input', config: config(), signal: new AbortController().signal, onAttempt: row => attempts.push(row) });
+  assert.equal(verdict.outcome, 'allow');
+  assert.deepEqual(attempts.map(row => [row.attempt, row.response, row.error]), [
+    [1, 'not a verdict', 'INVALID_REVIEW_RESPONSE'], [2, ok, undefined],
+  ]);
+  assert.ok(attempts.every(row => row.startedAt && row.finishedAt));
+});
+
+test('attempt audit failure prevents approval and is not retried as a model call', async () => {
+  let calls = 0;
+  await assert.rejects(review({ llm: { stream: () => { calls++; return reply(ok); } }, route,
+    input: 'input', config: config(), signal: new AbortController().signal,
+    onAttempt() { throw new Error('AUDIT_WRITE_FAILED'); } }), /AUDIT_WRITE_FAILED/);
+  assert.equal(calls, 1);
+});
+
 test('parseVerdict accepts a bare object, prose around it and code fences', () => {
   assert.deepEqual({ ...parseVerdict(ok) }, { outcome: 'allow', risk: 'low', authorization: 'high', rationale: 'Routine test run.' });
   assert.equal(parseVerdict(`Here is my verdict:\n${ok}\nThanks.`).outcome, 'allow');
