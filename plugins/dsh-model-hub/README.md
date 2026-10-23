@@ -4,7 +4,7 @@
 
 [简体中文](docs/README.zh-CN.md)
 
-See and change the models used by your DeepSeek Harness plugins from one page, manage which models subagents may use, and watch which model and reasoning effort each running subagent is on.
+View and change the models your DeepSeek Harness plugins use, control which models subagents may use, and track the model and reasoning effort of each running subagent — all on one page.
 
 ## Install
 
@@ -18,16 +18,16 @@ Replace `web` with your profile name and restart the profile.
 
 Open **Plugins → Model Hub**.
 
-- **Fields**: every model setting exposed by installed plugins, such as Auto Title, Git Commit, and Safe Auto. Search by plugin, purpose, or current model, then pick a new model. Changes are saved by the plugin that owns the setting.
-- **Subagent Cast**: turn the subagent model allowlist on or off and add, replace, or remove models. When enabled with at least one model, it guides the agent to discover the models available in the current conversation and explicitly choose one when delegating. For independent reviews and alternative approaches, it encourages a different model when suitable, while allowing the same model when it fits better. You can add your own task tendencies for individual models; they remain optional hints, and no model-specific tendencies are supplied by default. Below the list, a live view shows each running subagent with the model and reasoning effort it is currently using; an effort marked as adapter default comes from the adapter rather than an explicit choice.
+- **Fields**: every model setting exposed by installed plugins, such as Auto Title, Git Commit, and Safe Auto. Search by plugin, purpose, or current model, then pick a new model. The plugin that owns the setting saves the change.
+- **Subagent Cast**: toggle the subagent model allowlist and add, replace, or remove models. When enabled with at least one model, it guides the agent to discover the models available in the current conversation and pick one explicitly when delegating. For independent reviews and alternative approaches it favors a different model when suitable, but allows the same one when it fits better. Per-model task tendencies you add are optional hints; none are supplied by default. Below the list, a live view shows each running subagent with its current model and reasoning effort; an effort marked adapter default comes from the adapter, not an explicit choice.
 
 ## Limits
 
 - Only plugins that expose model settings appear.
 - Changes made elsewhere update the page automatically. If an edit conflicts with a newer change, refresh and choose again.
-- If the model list cannot load, use **Retry**. The last available list stays visible; warnings identify providers that could not be loaded while other providers remain usable.
-- Model selection guidance requires host tools that support choosing a subagent model. Existing conversations retain their saved model lists; start a new conversation to use an updated list.
-- Guidance does not force a model choice or add extra subtasks solely for variety.
+- If the model list cannot load, use **Retry**. The last available list stays visible; warnings name providers that failed while others stay usable.
+- Selection guidance needs host tools that support choosing a subagent model. Existing conversations keep their saved lists; start a new one to use an updated list.
+- Guidance never forces a model choice or adds subtasks just for variety.
 - Remote subagents and finished runs have no readable route; the live list covers only live local subagents.
 - No usage statistics.
 

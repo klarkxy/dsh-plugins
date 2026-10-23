@@ -27,12 +27,12 @@ Titles update automatically. Under **Plugins → Auto Title** you can:
 - pick a title model (empty follows the current session model);
 - regenerate the title of the open session.
 
-If the model list cannot load, or some providers fail, use **Retry** beside the model picker. Retrying keeps your saved model and prompt draft.
+If the model list cannot load, or some providers fail, use **Retry** beside the model picker; retrying keeps your saved model and prompt draft.
 
 ## Limits
 
-- Each title costs one model call, using the model's lowest supported reasoning effort; failed generations keep the existing title.
-- Cancellation and timeouts wait for the model call to stop. A provider that does not honor cancellation can delay completion.
+- Each title costs one model call at the model's lowest supported reasoning effort; a failed generation keeps the existing title.
+- Cancellation and timeouts wait for the model call to stop; a provider that ignores cancellation can delay completion.
 - Turning the plugin off hands titles back to the built-in DSH title feature.
 
 ## License

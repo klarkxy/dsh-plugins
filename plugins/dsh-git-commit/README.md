@@ -23,14 +23,14 @@ Replace `web` with your profile name and restart it if DSH asks.
 
 Under **Plugins → Git Commit** you can choose the **Commit planning model** (empty follows the current session model) and turn on **Commit even without a model plan**, which makes one commit when the model is unavailable.
 
-If the model list cannot load, or some providers fail, use **Retry** beside the model picker. Your saved model stays selected.
+If the model list cannot load, or some providers fail, use **Retry** beside the model picker; your saved model stays selected.
 
 ## Good to know
 
-- The repository follows the conversation's current working directory. Changing directories while a commit is being planned stops the run.
-- All uncommitted changes in the repository are included, including new files.
+- The repository follows the conversation's current working directory; changing directories while a commit is being planned stops the run.
+- All uncommitted changes are included, including new files.
 - It only commits; it never pushes.
-- If the run stops partway, finished commits stay and the panel shows what was left. Nothing is rolled back or retried automatically.
+- If the run stops partway, finished commits stay and the panel shows what was left; nothing is rolled back or retried automatically.
 - The button is unavailable while the session is running.
 
 ## License

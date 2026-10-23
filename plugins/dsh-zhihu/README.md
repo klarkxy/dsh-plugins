@@ -4,7 +4,7 @@
 
 [简体中文](docs/README.zh-CN.md)
 
-Use Zhihu as a research source for the model: site search, web search, the hot list, Zhida answers, knowledge bases, question discovery, and creator statistics. Every request uses your own Zhihu Access Secret. Results are reference material, not conclusions.
+Use Zhihu as a research source for the model: site search, web search, hot list, Zhida answers, knowledge bases, question discovery, and creator statistics. Every request uses your own Zhihu Access Secret; results are reference material, not conclusions.
 
 ## Install
 
@@ -16,10 +16,10 @@ Replace `web` with your profile name and restart DSH Web. Use the full scoped na
 
 ## Use
 
-Open **Plugins → Zhihu** and enter your Access Secret under **Settings**. The other tabs are:
+Open **Plugins → Zhihu** and enter your Access Secret under **Settings**. Other tabs:
 
-- **Stats**: local daily calls, failures, and results;
-- **Official quota**: your remaining free allowance as reported by Zhihu;
+- **Stats**: local daily calls, failures, and result counts;
+- **Official quota**: remaining free allowance as reported by Zhihu;
 - **Knowledge base**: upload and search reference files;
 - **Test**: run any search or query by hand.
 
@@ -27,21 +27,21 @@ With the Web Search plugin installed, Zhihu web search also appears in its provi
 
 ## Give the tools to the model
 
-The plugin enables these model tools by default. No agent preset changes are needed:
+These model tools are enabled by default; no agent preset changes needed:
 
 | Tool | Purpose |
 | --- | --- |
 | `zhihu_search`, `zhihu_global_search`, `zhihu_hot_list` | Zhihu search, web search, hot list |
-| `zhihu_ask` | Zhida AI answers based on Zhihu content |
+| `zhihu_ask` | Zhida AI answers from Zhihu content |
 | `zhihu_knowledge_search` | Search knowledge bases |
 | `zhihu_question_recommendations`, `zhihu_question_answers` | Find questions and read answer summaries |
-| `zhihu_user_content_detail`, `zhihu_user_content_comments` | Read your own published content and its comments |
+| `zhihu_user_content_detail`, `zhihu_user_content_comments` | Read your published content and its comments |
 | `zhihu_creator_account_stats`, `zhihu_creator_content_stats` | Your creator statistics |
 | `zhihu_quota` | Check official quota |
 
 ## Cost protection
 
-By default the plugin only uses Zhihu's free allowance: before each request it checks the official quota and skips the request if none is left. It also stops after 100 requests per day (Beijing time). Both can be changed in the plugin configuration:
+By default the plugin uses only Zhihu's free allowance: before each request it checks the official quota and skips the request if none is left. It also stops after 100 requests per day (Beijing time). Both are configurable:
 
 ```yaml
 config:
