@@ -210,7 +210,7 @@ export function TitleSettings(props: {
     })
   }
 
-  return <section className="current-title-settings ct-root dsh-ui-panel" lang={seat.locale} data-testid="current-title-settings">
+  return <section className="current-title-settings ct-root dsh-ui-page" lang={seat.locale} data-testid="current-title-settings">
     {!status && !error ? <p role="status" className="dsh-ui-hint">{text.loading}</p> : null}
     <article className="dsh-ui-card" data-testid="current-title-session">
       <h3 className="dsh-ui-heading">{text.session}</h3>
@@ -336,11 +336,13 @@ export function TitleSettings(props: {
 
 /* The contract owns every type tier, the field rhythm, the focus ring, the
  * select shell and the textarea shell. The only geometry left here is this
- * panel's own: its reading width, and a taller prompt box. */
-const styles = `${officialUiCss('ct-root')}${modelMenuCss}
-.ct-root { max-width: 760px; }
-.ct-prompt { min-height: 96px; }
+ * panel's own: its reading width, and a taller prompt box. Every rule stays
+ * under the plugin root so nothing leaks into the host document. */
+export const currentTitleOwnCss = `
+.ct-root .ct-prompt { min-height: 96px; }
 `
+export const currentTitleStyles = `${officialUiCss('ct-root')}${modelMenuCss}${currentTitleOwnCss}`
+const styles = currentTitleStyles
 
 declare module '@deepseek-ai/cordis' {
   interface Context { dshCurrentTitleClient: { active: boolean } }

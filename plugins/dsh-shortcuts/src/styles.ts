@@ -1,11 +1,7 @@
-import { officialElevation, officialFocus, officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
+import { officialFocus, officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 
 export const SHORTCUTS_STYLES = `${officialUiCss(['shortcuts-root', 'shortcuts-fixed-root'])}
 .shortcuts-root, .shortcuts-fixed-root {
-  &.shortcuts-page {
-    max-width: 760px;
-  }
-
   /* --- Toolbar & Section Headers --- */
   & .shortcuts-toolbar {
     display: flex;
@@ -39,6 +35,8 @@ export const SHORTCUTS_STYLES = `${officialUiCss(['shortcuts-root', 'shortcuts-f
     gap: 4px;
     vertical-align: middle;
   }
+  /* 官方 ShortcutKeys 无盒式键帽变体（plain 为无框文字键、tooltip 为 16px 提示键），
+   * kbd 原生元素为例外：这里保留 22px 盒式键帽，供设置列表、草稿摘要与面板脚注共用。 */
   & kbd, & .shortcuts-key {
     display: inline-flex;
     align-items: center;
@@ -275,29 +273,6 @@ export const SHORTCUTS_STYLES = `${officialUiCss(['shortcuts-root', 'shortcuts-f
     gap: 8px;
     padding-top: 8px;
     border-top: 0.5px solid var(--dsw-alias-border-l2);
-  }
-
-  /* --- Floating Error Toast --- */
-  &.shortcuts-error {
-    ${officialElevation('prominent')}
-    pointer-events: auto;
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    max-width: min(440px, calc(100vw - 48px));
-    padding: 12px 16px;
-    border-left: 3px solid var(--dsw-alias-state-error-primary);
-    border-radius: var(--dsw-radius-lg);
-    background: var(--dsw-alias-bg-overlay);
-    backdrop-filter: var(--dsw-menu-backdrop-filter);
-    font-size: 13px;
-    line-height: 20px;
-    color: var(--dsw-alias-label-primary);
   }
 
   & .shortcuts-recorder:focus-visible {

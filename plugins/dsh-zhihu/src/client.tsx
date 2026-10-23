@@ -11,10 +11,13 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  DisclosureRow,
+  IconThinkOutlineRegular,
   Modal,
   Pill,
   SegmentedTabs,
   StateDot,
+  TextShimmer,
   type SegmentedTab,
 } from '@deepseek-ai/dsh-client-ui-primitives';
 import { clientText, translator, useHostLocale, useT, ZhihuLocaleContext, type HostLocaleService, type Translate, type ClientText } from './client-locale.ts'
@@ -34,13 +37,9 @@ export const inject = ['slots', 'connection', 'remote', 'remote.credentials', 'l
 const PACKAGE_NAME = '@klarkxy/dsh-zhihu'
 const SLOT_ORDER = 120
 
-/* 活动暗示:三点呼吸(参数改写自 Amicro pulse-dots,MIT);装饰 aria-hidden,
-   关键帧在 client-styles.ts,reduced-motion 停循环后保留静态点。 */
-const activityDots = () => <span className="zhihu-dots" aria-hidden="true">
-  <i />
-  <i />
-  <i />
-</span>
+/* 活动暗示用官方 TextShimmer：高亮在文本上流动，reduced-motion 与朗读语义
+   都由 primitives 统一处理，插件不再自绘三点呼吸动画。 */
+const activityText = (children: ReactNode) => <TextShimmer active>{children}</TextShimmer>
 
 type RpcCaller = {
   call: (channel: string, endpoint: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>
@@ -288,6 +287,26 @@ function LinkOrText(props: { url: string; label: string; className?: string }): 
   return <ExternalLink url={props.url} className={props.className}>{props.label}</ExternalLink>
 }
 
+/** 直答的思考过程：官方 DisclosureRow 承载折叠，卡面用契约的 flat 卡片。 */
+function ReasoningDisclosure(props: { reasoning: string }): ReactNode {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const toggle = useCallback(() => setOpen(value => !value), [])
+  return <div className="zhihu-ask-reasoning dsh-ui-card dsh-ui-card--flat">
+    <DisclosureRow
+      icon={<IconThinkOutlineRegular />}
+      title={t('思考过程', 'Reasoning')}
+      open={open}
+      expandable
+      expandOnRowClick
+      onToggle={toggle}>
+      <p className="dsh-ui-help">
+        {props.reasoning}
+      </p>
+    </DisclosureRow>
+  </div>
+}
+
 function OutcomeView(props: { outcome: SearchOutcome; stale: boolean }): ReactNode {
   const { outcome, stale } = props
   const t = useT()
@@ -300,14 +319,7 @@ function OutcomeView(props: { outcome: SearchOutcome; stale: boolean }): ReactNo
     summary = t(`直答（${outcome.answer.model || '默认模型'}）`, `Direct answer (${outcome.answer.model || 'default model'})`)
     body = <div>
       {outcome.answer.reasoning
-        ? <details className="zhihu-ask-reasoning dsh-ui-card dsh-ui-card--flat">
-        <summary className="dsh-ui-heading">
-          {t('思考过程', 'Reasoning')}
-        </summary>
-        <p className="dsh-ui-help">
-          {outcome.answer.reasoning}
-        </p>
-      </details>
+        ? <ReasoningDisclosure reasoning={outcome.answer.reasoning} />
         : null}
       <p className="zhihu-ask-content dsh-ui-wrap">
         {outcome.answer.content}
@@ -443,7 +455,7 @@ function SettingsShell(props: { children?: ReactNode }): ReactNode {
   const t = useT()
   // Credentials lead the tab; what the plugin can do is secondary and folded.
   return (
-    <section className="dsh-ui-stack" data-testid="zhihu-settings" aria-label={t('知乎凭证设置', 'Zhihu credential settings')}>
+    <section className="dsh-ui-form" data-testid="zhihu-settings" aria-label={t('知乎凭证设置', 'Zhihu credential settings')}>
       {props.children}
       <CapabilitiesNote />
     </section>
@@ -486,8 +498,7 @@ function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
     return (
       <SettingsShell>
         <p className="dsh-ui-loading" role="status">
-          {activityDots()}
-          {t('正在读取凭证状态…', 'Loading credential status…')}
+          {activityText(t('正在读取凭证状态…', 'Loading credential status…'))}
         </p>
       </SettingsShell>
     );
@@ -609,25 +620,19 @@ function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
       {note !== undefined ? <p className="dsh-ui-notice" role="status">
         {clientText(note, t)}
       </p> : null}
-      <div className="dsh-ui-actions">
+      <div className="dsh-ui-form-footer">
         <ZhihuButton
           variant="danger"
           className="zhihu-button-danger"
           disabled={busy || keyLocked || !configured}
           onClick={() => setConfirmClear(true)}>
-          {pending === 'clear' ? <Fragment>
-            {activityDots()}
-            {t('清除中…', 'Clearing…')}
-          </Fragment> : t('清除', 'Clear')}
+          {pending === 'clear' ? activityText(t('清除中…', 'Clearing…')) : t('清除', 'Clear')}
         </ZhihuButton>
         <ZhihuButton
           variant="primary"
           disabled={busy || keyLocked || keyValue.length === 0 || draftFailure !== undefined}
           onClick={() => void save()}>
-          {pending === 'save' ? <Fragment>
-            {activityDots()}
-            {t('保存中…', 'Saving…')}
-          </Fragment> : t('保存', 'Save')}
+          {pending === 'save' ? activityText(t('保存中…', 'Saving…')) : t('保存', 'Save')}
         </ZhihuButton>
       </div>
       <Modal
@@ -924,8 +929,7 @@ function UsageSection(props: { rpc: RpcCaller }): ReactNode {
     return (
       <section data-testid="zhihu-usage" aria-label={sectionLabel}>
         <p className="dsh-ui-loading" role="status">
-          {activityDots()}
-          {t('正在读取用量…', 'Loading usage…')}
+          {activityText(t('正在读取用量…', 'Loading usage…'))}
         </p>
       </section>
     );
@@ -1082,6 +1086,7 @@ function KnowledgeSection(props: { rpc: RpcCaller }): ReactNode {
   const [baseId, setBaseId] = useState('')
   const [file, setFile] = useState<File | undefined>(undefined)
   const [fileKey, setFileKey] = useState(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<ClientText | undefined>(undefined)
   const [failure, setFailure] = useState<ClientText | undefined>(undefined)
@@ -1152,8 +1157,7 @@ function KnowledgeSection(props: { rpc: RpcCaller }): ReactNode {
         <ExternalLink url={KB_MANAGE_URL}>{t('管理知识库', 'Manage knowledge bases')}</ExternalLink>
       </p>
       {list.status === 'loading' ? <p className="dsh-ui-loading" role="status">
-        {activityDots()}
-        {t('正在读取知识库列表…', 'Loading knowledge bases…')}
+        {activityText(t('正在读取知识库列表…', 'Loading knowledge bases…'))}
       </p> : null}
       {list.status === 'error' ? <Fragment>
         <p className="dsh-ui-error" role="alert">{clientText(list.failure.text, t)}</p>
@@ -1199,10 +1203,12 @@ function KnowledgeSection(props: { rpc: RpcCaller }): ReactNode {
         <span className="dsh-ui-label" id="zhihu-kb-file-label">
           {t('参考资料', 'Reference file')}
         </span>
-        {/* Visually hidden but still focusable and in the accessibility tree;
-            the visible label below is the real trigger, so no script click is needed. */}
+        {/* Visually hidden but still in the accessibility tree; the official
+            Button below is the visible trigger and forwards to this input. */}
         <input
           key={fileKey}
+          ref={fileInputRef}
+          tabIndex={-1}
           id="zhihu-kb-file"
           type="file"
           accept={KB_ACCEPT}
@@ -1211,12 +1217,11 @@ function KnowledgeSection(props: { rpc: RpcCaller }): ReactNode {
           disabled={busy}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0])} />
         <div className="dsh-ui-row">
-          <label
-            htmlFor="zhihu-kb-file"
-            className="zhihu-file-trigger"
-            aria-disabled={busy || undefined}>
+          <ZhihuButton
+            disabled={busy}
+            onClick={() => fileInputRef.current?.click()}>
             {t('选择文件', 'Choose file')}
-          </label>
+          </ZhihuButton>
           <span className="dsh-ui-meta dsh-ui-wrap">
             {file ? `${file.name} · ${formatSize(file.size)}` : t('未选择文件（最大 20 MB）', 'No file chosen (max 20 MB)')}
           </span>
@@ -1233,10 +1238,7 @@ function KnowledgeSection(props: { rpc: RpcCaller }): ReactNode {
           variant="primary"
           disabled={busy || !file}
           onClick={() => void upload()}>
-          {busy ? <Fragment>
-            {activityDots()}
-            {t('上传中…', 'Uploading…')}
-          </Fragment> : t('确认上传', 'Upload')}
+          {busy ? activityText(t('上传中…', 'Uploading…')) : t('确认上传', 'Upload')}
         </ZhihuButton>
       </div> : null}
       {note ? <p className="dsh-ui-notice" role="status">
@@ -1473,10 +1475,7 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi }) {
       </div>
       {/* One live region carries both the idle hint and the loading notice. */}
       <div className={phase === 'loading' ? 'dsh-ui-loading' : 'dsh-ui-hint'} role="status">
-        {phase === 'loading' ? <Fragment>
-          {activityDots()}
-          {t('正在请求知乎…', 'Requesting Zhihu…')}
-        </Fragment> : phase === 'idle' && mode !== 'hot' && !query.trim() ? t('输入关键词后搜索。', 'Enter keywords to search.') : null}
+        {phase === 'loading' ? activityText(t('正在请求知乎…', 'Requesting Zhihu…')) : phase === 'idle' && mode !== 'hot' && !query.trim() ? t('输入关键词后搜索。', 'Enter keywords to search.') : null}
       </div>
       {phase === 'error' && failure ? <div className="dsh-ui-error" role="alert">
         {clientText(failure.text, t)}
@@ -1488,7 +1487,7 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi }) {
     </div>
   return (
     <section
-      className="zhihu-panel zhihu-settings-embed"
+      className="zhihu-panel zhihu-settings-embed dsh-ui-page"
       data-testid="zhihu-settings-embed"
       aria-label={t('知乎', 'Zhihu')}>
       {tablist}

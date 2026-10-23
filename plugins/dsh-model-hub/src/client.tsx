@@ -286,7 +286,7 @@ export function HubPage({ view, api, locale, initialEntries = null, initialCatal
     failures: modelCatalogFailures(catalog),
     refresh: refreshNow,
   }
-  return <section className="dsh-model-hub dsh-ui-stack" lang={t.language} aria-label={t('title')} aria-busy={writing !== '' || refreshing}>
+  return <section className="dsh-model-hub dsh-ui-page" lang={t.language} aria-label={t('title')} aria-busy={writing !== '' || refreshing}>
     <Style />
     <SegmentedTabs<'fields' | 'cast'>
       value={tab}

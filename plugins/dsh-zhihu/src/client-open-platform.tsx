@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Checkbox } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Checkbox, JsonTree, type JsonTreeLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import { ZHIHU_QUOTA_IDS, normalizeZhihuQuotaId, ZHIHU_RPC_CHANNEL } from './contracts.ts'
 import { createZhihuClientState, type ZhihuClientState } from './client-state.ts'
 import { renderInput, renderSelect, ZhihuButton, ZhihuDetails } from './client-host-ui.tsx'
@@ -33,6 +33,22 @@ export const createOpenPlatformForm = (): OpenPlatformForm => ({
   order: 'score', contentType: 'all', startDate: '', endDate: '', apiIds: [],
 })
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
+
+/** Localized copy for the official JSON inspector (the package is cordis-free). */
+function jsonTreeLabels(t: Translate): JsonTreeLabels {
+  return {
+    copyValue: t('复制值', 'Copy value'),
+    copyJson: t('复制 JSON', 'Copy JSON'),
+    copyPath: t('复制路径', 'Copy path'),
+    copyPrettyJson: t('复制格式化 JSON', 'Copy pretty JSON'),
+    copyCompactJson: t('复制紧凑 JSON', 'Copy compact JSON'),
+    copied: t('已复制', 'Copied'),
+    copyFailed: t('复制失败', 'Copy failed'),
+    collapseNode: t('折叠节点', 'Collapse node'),
+    expandNode: t('展开节点', 'Expand node'),
+    copyButtonTitle: action => t(`${action}：点击复制`, `${action}: click to copy`),
+  }
+}
 
 /** Int64 stays decimal text throughout the browser; never round-trip through Number. */
 export function openPlatformOffset(value: unknown): string | null {
@@ -263,7 +279,9 @@ export function ZhihuOpenPlatformSection({ rpc, quotaOnly = false, selectedOpera
       {result.paging?.warning && <p className="dsh-ui-banner">{clientText(result.paging.warning, t)}</p>}
       {!stale && paged && result.paging?.canContinue && nextOffset === null && <p className="dsh-ui-banner">{t('下一页位置缺失或未前进，已停止翻页。', 'The next page position is missing or did not advance; paging stopped.')}</p>}
       {activeOperation === 'content.detail' && (typeof result.data.Body !== 'string' || !result.data.Body.trim()) && <p className="dsh-ui-banner dsh-ui-banner--danger">{t('响应缺少正文（Body），未取得全文。', 'The response has no body (Body); full text was not retrieved.')}</p>}
-      <pre className="zhihu-open-platform-data dsh-ui-code">{JSON.stringify(result.data, null, 2)}</pre>
+      <div className="dsh-ui-scroll">
+        <JsonTree data={result.data} label={t('返回数据', 'Response data')} copyable expandTopLevel labels={jsonTreeLabels(t)} />
+      </div>
     </div>}
   </section>
 }

@@ -461,11 +461,14 @@ function createHost({ WebSearchManager, BraveSearchProvider, WebRuntime, Context
   return { reset, rpc, snapshot, state }
 }
 
+/* Limits remain mounted while another tab is selected. Their disabled state
+ * follows page requests, so it also detects readiness on the provider tabs. */
 async function settle(page) {
   await page.waitForFunction(() => {
-    const limits = document.querySelector('fieldset.web-search-limits')
+    const settings = document.querySelector('[data-testid="web-search-settings"]')
+    const limits = settings?.querySelector('[role="tabpanel"][id$="-limits-panel"] fieldset')
     return Boolean(limits) && !limits.disabled
-  }, { timeout: 20_000 })
+  }, undefined, { timeout: 20_000 })
 }
 
 async function waitReady(page) {

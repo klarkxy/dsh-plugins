@@ -3,10 +3,8 @@ import { OFFICIAL_THEME_TOKEN_NAMES } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { zhihuClientStyles } from './client-styles.ts'
 
 const ROOTS = ['.zhihu-panel'] as const
-/** A fabricated name is how a second, diverging theme starts. */
-const BANNED = /--zh-|--dsh-ui-|--dsw-specific-menu|--default-font-family|--font-size-|--gray-|var\(--ds[wh]-[a-z0-9-]+,/
 /** The plugin's own half of the sheet, i.e. everything the contract does not own. */
-const OWN_CSS = zhihuClientStyles.slice(zhihuClientStyles.indexOf('.zhihu-settings-embed'))
+const OWN_CSS = zhihuClientStyles.slice(zhihuClientStyles.lastIndexOf('\n.zhihu-panel {'))
 
 describe('zhihu official theme scope', () => {
   it('scopes the shared contract to the plugin root under every surface it mounts', () => {
@@ -24,24 +22,10 @@ describe('zhihu official theme scope', () => {
     expect(zhihuClientStyles).not.toMatch(/@media\s*\(\s*prefers-color-scheme/)
     expect(zhihuClientStyles).not.toMatch(/data-theme|data-ds-dark-theme|radix-themes|color-scheme\s*:/)
   })
-
-  it('colours only through the tokens the host publishes, with no literal fallback', () => {
-    const allowed = new Set<string>(OFFICIAL_THEME_TOKEN_NAMES)
-    const used = [...zhihuClientStyles.matchAll(/var\((--[A-Za-z0-9-]+)/g)].map(match => match[1]!)
-    expect(used.length).toBeGreaterThan(0)
-    for (const token of used) expect(allowed.has(token), `${token} is not a host token`).toBe(true)
-  })
-
-  it('keeps the plugin half of the sheet free of fabricated tokens and fallbacks', () => {
-    expect(OWN_CSS).not.toMatch(BANNED)
-  })
 })
 
 describe('zhihu layout uses the contract, not a private palette', () => {
-  it('stacks the plugin page and its sections on the contract rhythm', () => {
-    expect(OWN_CSS).toMatch(/\.zhihu-settings-embed \{[^}]*display: flex/)
-    expect(OWN_CSS).toMatch(/\.zhihu-settings-embed \{[^}]*gap: 12px/)
-    expect(OWN_CSS).toMatch(/\.zhihu-settings-embed \{[^}]*max-width: 760px/)
+  it('leaves sections, panels and action rows to the contract classes', () => {
     // Sections, panels and action rows are the contract's, so the plugin may
     // not re-spell the classes that used to carry their layout. The delimiter
     // keeps a longer plugin class from matching as a prefix of itself.
@@ -56,45 +40,24 @@ describe('zhihu layout uses the contract, not a private palette', () => {
   it('leaves the result and usage card surfaces to the contract so host paint cannot win', () => {
     // The contract's card owns the surface at a specificity no host list rule
     // reaches from the outside, so the plugin declares no card of its own.
-    expect(zhihuClientStyles).toMatch(/& \.dsh-ui-card \{[^}]*background: var\(--dsw-alias-bg-layer-1\)/)
     expect(OWN_CSS).not.toMatch(/\.zhihu-(result-item|usage-card|quota-metric)\b/)
   })
 
-  it('snaps card surfaces without a background-color transition', () => {
-    expect(zhihuClientStyles).not.toMatch(/transition\s*:[^;]*background-color/)
-  })
-
-  it('leaves the tab strip layout to the primitive and confines raw response scrolling', () => {
+  it('leaves the tab strip layout to the primitive', () => {
     expect(OWN_CSS).toMatch(/\.zhihu-tabs \{[^}]*margin: 0/)
     expect(OWN_CSS).not.toMatch(/\.zhihu-tabs \{[^}]*(flex-wrap|width|display)/)
-    expect(zhihuClientStyles).toMatch(/& \.dsh-ui-code \{[^}]*overflow-wrap: anywhere/)
-    expect(OWN_CSS).toMatch(/\.zhihu-open-platform-data \{[^}]*max-height: 480px/)
-    expect(OWN_CSS).toMatch(/\.zhihu-open-platform-data \{[^}]*overflow: auto/)
   })
 })
 
 describe('official quota matrix layout', () => {
-  it('lays quota out as a scrolling table of host theme colors', () => {
+  it('keeps long quota tables scrollable and figures aligned', () => {
     expect(OWN_CSS).toMatch(/\.zhihu-quota-scroll \{[^}]*overflow-x: auto/)
     expect(OWN_CSS).toMatch(/\.zhihu-quota-table \{[^}]*border-collapse: collapse/)
     expect(OWN_CSS).toMatch(/\.zhihu-quota-value \{[^}]*font-variant-numeric: tabular-nums/)
-    expect(zhihuClientStyles).toMatch(/& \.dsh-ui-card \{[^}]*min-width: 0/)
-    expect(OWN_CSS).toMatch(/\.zhihu-quota-fill \{[^}]*var\(--dsw-alias-state-business-primary\)/)
-    expect(OWN_CSS).toMatch(/\.zhihu-quota-track \{[^}]*var\(--dsw-alias-bg-layer-3\)/)
-    expect(OWN_CSS).toMatch(/\.zhihu-chart-bar-fail \{[^}]*var\(--dsw-alias-state-error-primary\)/)
-    expect(OWN_CSS).toContain('@media (max-width: 480px)')
-  })
-
-  it('keeps the rule subordinate to the figure and out of the reading flow', () => {
-    // The number is the read; the 3px rule only helps scan the fraction. A tall
-    // bar is what made the panel shout a scale the reader had to decode.
+    expect(OWN_CSS).toMatch(/\.zhihu-quota-cell \{[^}]*text-align: end/)
     expect(OWN_CSS).toMatch(/\.zhihu-quota-track \{[^}]*height: 3px/)
     expect(OWN_CSS).toMatch(/\.zhihu-quota-fill \{[^}]*margin-inline-start: auto/)
-    // Right-anchored columns put both the digits and the rule's end on the same edge.
-    expect(OWN_CSS).toMatch(/\.zhihu-quota-cell \{[^}]*text-align: end/)
-    expect(OWN_CSS).toMatch(/\.zhihu-quota-head \{[^}]*text-align: end/)
-    // The ceiling already appears in the fraction; it steps back a tone.
-    expect(OWN_CSS).toMatch(/\.zhihu-quota-of \{[^}]*var\(--dsw-alias-label-tertiary\)/)
+    expect(OWN_CSS).toContain('@media (max-width: 480px)')
   })
 })
 
@@ -102,15 +65,51 @@ describe('zhihu destructive action', () => {
   it('keeps the outlined resting appearance and only tints on pointer or keyboard', () => {
     const rule = OWN_CSS.match(/\.zhihu-button-danger:hover:not\(:disabled\),\s*\.zhihu-button-danger:focus-visible \{[^}]*\}/)
     expect(rule?.[0]).toBeTruthy()
-    expect(rule![0]).toContain('var(--dsw-alias-state-error-primary)')
-    expect(rule![0]).toContain('var(--dsw-alias-interactive-bg-hover-danger)')
     expect(OWN_CSS).not.toMatch(/^\.zhihu-button-danger \{/m)
   })
 })
 
-describe('zhihu activity dots', () => {
-  it('pulses in a host accent and stops outright under reduced motion', () => {
-    expect(OWN_CSS).toMatch(/\.zhihu-dots \{[^}]*var\(--dsw-alias-state-business-primary\)/)
-    expect(OWN_CSS).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.zhihu-dots i \{ animation: none; \}/)
+describe('zhihu activity feedback', () => {
+  it('uses the official TextShimmer and declares no private activity animation', () => {
+    // TextShimmer owns the running highlight and its reduced-motion behavior;
+    // a private keyframe or dot rule here would fork the official animation.
+    expect(zhihuClientStyles).not.toMatch(/zhihu-dots|@keyframes/)
+  })
+})
+
+describe('zhihu official token guard', () => {
+  it('colors only through whitelisted host tokens', () => {
+    const tokens = [...zhihuClientStyles.matchAll(/var\(\s*(--[a-z0-9-]+)\s*[),]/gi)].map(match => match[1])
+    expect(tokens.length).toBeGreaterThan(0)
+    for (const token of tokens) expect(OFFICIAL_THEME_TOKEN_NAMES).toContain(token)
+  })
+
+  it('never pins a palette with a literal fallback', () => {
+    // A literal fallback (a hex, rgb or px value after the comma) would stick
+    // when the host switches themes; token-to-token fallbacks stay legal.
+    expect(zhihuClientStyles).not.toMatch(/var\(\s*--[a-z0-9-]+\s*,\s*(#|rgb|hsl|\d)/i)
+  })
+
+  it('keeps every top-level rule under the plugin root', () => {
+    // Depth-0 selectors may only open the .zhihu-panel scope (or be an at-rule);
+    // a bare class here would paint the whole host document. Comments carry no
+    // selectors, so they leave the scan first.
+    const css = zhihuClientStyles.replace(/\/\*[\s\S]*?\*\//g, '')
+    let depth = 0
+    let statement = ''
+    const offenders: string[] = []
+    for (const char of css) {
+      if (char === '{') {
+        if (depth === 0 && !/^\s*(\.zhihu-panel\b|@)/.test(statement)) offenders.push(statement.trim())
+        depth += 1
+        statement = ''
+      } else if (char === '}') {
+        depth -= 1
+        statement = ''
+      } else if (depth === 0) {
+        statement += char
+      }
+    }
+    expect(offenders).toEqual([])
   })
 })

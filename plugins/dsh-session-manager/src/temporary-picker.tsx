@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react'
-import { Button, IconFolderCloseRegular, IconPlusOutlineRegular, Menu, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconFolderCloseRegular, IconNewChatOutlineRegular, IconPlusOutlineRegular, Menu, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from '@deepseek-ai/dsh-client-ui-workspace/client'
-import { FreeChatIcon } from './free-panel.tsx'
 import { TEMP_WORKSPACE_FLOW_SLOT } from './contracts.ts'
+import { FREE_CHAT_ROOT } from './styles.ts'
 import { copyLocale, uiText, type CopyLocale } from './ui-copy.ts'
 import type { TemporaryWorkspaceModel } from './temporary-workspace.ts'
 
@@ -113,14 +113,17 @@ function TemporaryWorkspacePicker(props: PickerProps & {
         icon: <IconFolderCloseRegular size={16} />, disabled: busy }))}
       footer={[
         ...available ? [{ id: '::add-workspace', label: props.t('menu.addWorkspace'), icon: <IconPlusOutlineRegular size={16} />, disabled: busy }] : [],
-        { id: '::temporary-workspace', label: uiText(locale, 'tempWorkspace'), icon: <FreeChatIcon size={16} />, disabled: busy },
+        { id: '::temporary-workspace', label: uiText(locale, 'tempWorkspace'), icon: <IconNewChatOutlineRegular size={16} />, disabled: busy },
       ]}
       onSelect={id => {
         if (id === '::add-workspace') openDirectory()
         else if (id === '::temporary-workspace') { props.onClose(); void props.model.create() }
         else props.onPick(id as never)
       }} />
-    {props.open && workspaces.phase === 'pending' && <span role="status">{props.t('picker.loading')}</span>}
+    {/* The picker renders straight into the host's conversation.hero.workspace
+     * slot with no plugin-rooted ancestor, so the loading line carries the root
+     * class itself for the dsh-ui-loading recipe to reach it. */}
+    {props.open && workspaces.phase === 'pending' && <span role="status" className={`${FREE_CHAT_ROOT} dsh-ui-loading`}>{props.t('picker.loading')}</span>}
     {props.renderSlot(TEMP_WORKSPACE_FLOW_SLOT, {
       open: flowOpen, busy: adopting,
       onCancel: () => { epoch.current++; setFlowOpen(false); setAdopting(false) },
@@ -138,7 +141,7 @@ function TemporaryWorkspacePicker(props: PickerProps & {
         }).finally(() => { if (ticket === epoch.current) setAdopting(false) })
       },
     })}
-    <Modal open={failure !== undefined} title={props.t('folderError.title')} closeLabel={props.t('close')}
+    <Modal open={failure !== undefined} className={FREE_CHAT_ROOT} title={props.t('folderError.title')} closeLabel={props.t('close')}
       onClose={() => setFailure(undefined)} footer={<>
         <Button variant="outline" onClick={() => setFailure(undefined)}>{props.t('cancel')}</Button>
         <Button variant="primary" disabled={!available} onClick={openDirectory}>{props.t('folderError.retry')}</Button>
@@ -148,7 +151,7 @@ function TemporaryWorkspacePicker(props: PickerProps & {
 
 export function TemporaryWorkspaceNotice({ model, locale }: { model: TemporaryWorkspaceModel; locale: CopyLocale }) {
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot)
-  return <Modal open={state.failure !== undefined} title={uiText(locale, 'createFailed')}
+  return <Modal open={state.failure !== undefined} className={FREE_CHAT_ROOT} title={uiText(locale, 'createFailed')}
     closeLabel={uiText(locale, 'close')} onClose={model.dismissFailure} footer={<>
       <Button variant="outline" onClick={model.dismissFailure}>{uiText(locale, 'close')}</Button>
       <Button variant="primary" disabled={state.creating} onClick={() => { void model.create() }}>{uiText(locale, 'retry')}</Button>

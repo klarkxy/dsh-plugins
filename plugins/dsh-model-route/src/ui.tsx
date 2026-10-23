@@ -11,7 +11,8 @@
  * Sticky group headings, subsequence ranking, highlight walking and focus
  * hand-back all match the host. SYNC POINT: when the host's ModelSelect or
  * ModelSelect.module.css changes, this copy must be re-transcribed; styles
- * below may only reference --dsw-* theme tokens, never literal colors.
+ * below may only reference allowlisted theme tokens (the --dsw-* set plus the
+ * host's --ds-* motion tokens), never literal colors.
  *
  * It statically imports the primitives, so only browser clients should load
  * this entry; host code and node tests use the core entry (`./index.ts`).
@@ -444,7 +445,8 @@ export function ModelMenu(props: ModelMenuProps) {
  * sticky group headings (MenuGroup's own CSS), and the l1-stroke prominent
  * elevation at portal z-index 1100. The trigger mirrors the composer's 28px
  * model pill, chevron rotating open. MenuSurface paints fill and backdrop.
- * Only --dsw-* theme tokens may appear here — a literal color is a bug.
+ * Only allowlisted --dsw- and --ds- theme tokens may appear here — a literal
+ * color is a bug.
  */
 export const modelMenuCss = `
 .dsh-model-menu-root { min-width: 0; position: relative; display: inline-flex; }
@@ -467,12 +469,14 @@ export const modelMenuCss = `
   display: flex;
 }
 .dsh-model-menu-trigger:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
-.dsh-model-menu-trigger:focus-visible:not([data-selection-focus]) { box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); }
+.dsh-model-menu-trigger:focus-visible:not([data-selection-focus]) { box-shadow: 0 0 0 var(--dsw-focus-ring-width) var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); }
 .dsh-model-menu-trigger:disabled { color: var(--dsw-alias-label-dimmed); cursor: default; }
 .dsh-model-menu-triggerLabel { text-overflow: ellipsis; white-space: nowrap; min-width: 0; overflow: hidden; }
 .dsh-model-menu-triggerEffort { text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: var(--dsw-alias-label-caption); flex-shrink: 1000; overflow: hidden; }
-.dsh-model-menu-chevron { color: var(--dsw-alias-label-caption); flex: none; transition: transform 0.12s; }
+.dsh-model-menu-chevron { color: var(--dsw-alias-label-caption); flex: none; transition: transform var(--ds-transition-duration) var(--ds-ease-in-out); }
 .dsh-model-menu-chevronOpen { transform: rotate(180deg); }
+/* Portal overlay: the host publishes no z-index token, so the card keeps the
+ * native menu layer's 1100 verbatim. */
 .dsh-model-menu-menu {
   z-index: 1100;
   --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
@@ -498,6 +502,8 @@ export const modelMenuCss = `
 .dsh-model-menu-searchWithQuery { padding-right: 34px; }
 .dsh-model-menu-searchRow .dsh-model-menu-search input { padding: 0; font-size: 12px; line-height: normal; }
 .dsh-model-menu-searchRow .dsh-model-menu-search input::placeholder { color: var(--dsw-alias-label-caption); }
+/* The clear button is a circle by geometry (border-radius: 50%), a shape the
+ * radius token scale does not describe. */
 .dsh-model-menu-searchClear {
   width: 24px;
   height: 24px;

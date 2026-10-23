@@ -147,7 +147,7 @@ export function SessionManagerSettings(props: {
     })
   }
   return (
-    <div className={`${FREE_CHAT_ROOT} dsh-ui-panel`}>
+    <div className={`${FREE_CHAT_ROOT} dsh-ui-page`}>
       <section className="dsh-ui-card">
         <h3 className="dsh-ui-heading">{copy('settingsMode')}</h3>
         <p className="dsh-ui-hint">{copy('settingsModeHint')}</p>
@@ -297,7 +297,7 @@ export function SessionManagerSettings(props: {
           </div>
         </div>
       </section>
-      <div className="dsh-ui-actions">
+      <div className="dsh-ui-form-footer">
         <Button variant="primary" disabled={invalid || snapshot.saving} onClick={save}>
           {snapshot.saving ? copy('settingsSaving') : copy('saveSettings')}
         </Button>

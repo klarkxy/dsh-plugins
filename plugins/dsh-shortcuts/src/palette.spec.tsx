@@ -50,10 +50,14 @@ describe('command palette interaction', () => {
     await act(async () => model!.dispose())
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
-  it('keeps execution errors visible after the modal closes', async () => {
+  it('keeps execution errors visible after the modal closes, toasting for five seconds', async () => {
     const { input } = await mount(vi.fn(() => { throw Error('Action failed') }))
     await act(async () => key(input, 'Enter'))
     expect(document.querySelector('[role="dialog"]')).toBeNull()
-    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Action failed')
+    const toast = document.querySelector('[role="alert"]')
+    expect(toast?.textContent).toContain('Action failed')
+    const dismiss = [...toast!.querySelectorAll('button')].find(button => button.textContent === 'Dismiss')!
+    await act(async () => dismiss.click())
+    expect(document.querySelector('[role="alert"]')).toBeNull()
   })
 })

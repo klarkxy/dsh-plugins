@@ -4,19 +4,6 @@ import type { FreeChatModel } from './session-actions.ts'
 import { FREE_CHAT_ROOT } from './styles.ts'
 import { deleteBody, failureText, uiText, type CopyLocale } from './ui-copy.ts'
 
-export function FreeChatIcon({ size }: { size: number; active?: boolean }): React.ReactElement {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
-      <path
-        d="M2.5 3.5h11v7.5h-4.2L6 13.5V11H2.5z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.2"
-      />
-    </svg>
-  )
-}
-
 /** Create failures used to surface inside the standalone panel. The panel is gone,
  * so they get a small overlay instead; closing it dismisses the stored notice. */
 export function CreateNoticeDialog(props: { model: FreeChatModel; locale: CopyLocale }): React.ReactElement | null {

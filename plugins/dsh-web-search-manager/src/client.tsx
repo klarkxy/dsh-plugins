@@ -1,7 +1,7 @@
 import { localErrorText } from './client-error.ts'
+import { webSearchClientStyles } from './client-styles.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { Button, Input, SegmentedTabs, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
-import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { createPluginReadGate } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { PROVIDER_PRICING_CHECKED, providerDisplayLabel, searchProviderInfo, usesBundledPricing } from './provider-info.ts'
@@ -588,7 +588,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   }
 
   if (!status || !limitDraft) {
-    return <section className="web-search-settings ws-root dsh-ui-panel">
+    return <section className="web-search-settings ws-root dsh-ui-page">
       {loadError
         ? <p role="alert" className="dsh-ui-error">{text.loadFailed}{uiMessage(loadError, locale, status?.providers)}</p>
         : <p role="status" className="dsh-ui-hint">{text.loading}</p>}
@@ -655,7 +655,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
     })
   }
 
-  return <section className="web-search-settings ws-root dsh-ui-panel" data-testid="web-search-settings">
+  return <section className="web-search-settings ws-root dsh-ui-page" data-testid="web-search-settings">
     <SegmentedTabs<'search' | 'fetch' | 'limits'>
       value={tab}
       onChange={setTab}
@@ -848,9 +848,9 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
     })}
     <div role="tabpanel" id={tabsId + '-limits-panel'} aria-labelledby={tabsId + '-limits-tab'}
       hidden={tab !== 'limits'} tabIndex={0}>
-      <fieldset className="web-search-limits" disabled={busy || reordering} aria-label={text.tabLimits}>
+      <fieldset className="dsh-ui-fields-grid" disabled={busy || reordering} aria-label={text.tabLimits}>
         {LIMITS.map(([key, min, max]) => (
-          <label key={key} className="ws-limit">
+          <label key={key} className="dsh-ui-field">
             <span className="dsh-ui-label">{text[key]}</span>
             <Input className="ws-input" type="number" min={min} max={max} step={1} value={limitDraft[key]}
               aria-invalid={invalid[key] || undefined}
@@ -865,85 +865,19 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
         ))}
       </fieldset>
     </div>
-    <div className="dsh-ui-actions dsh-ui-actions-end">
+    <div className="dsh-ui-form-footer dsh-ui-actions-end">
       <span className="dsh-ui-meta">{limitsDirty || keysDirty ? text.unsaved : text.saveHint}</span>
       <Button variant="primary" size="md" disabled={busy || reordering} onClick={saveAll}>{text.save}</Button>
     </div>
   </section>
 }
 
-/* The contract owns the type tiers, the card, the field, the button row, the
- * notice, the focus ring and the state colours. What is left is this panel's own
- * geometry: the reading width, the ranked three-column row, the drag affordance,
- * the drop indicator, the screen-reader-only announcer and the limits grid. */
-const styles = `${officialUiCss('ws-root')}
-.ws-root { max-width: 760px; }
-.ws-card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 8px; }
-.ws-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-.ws-provider-note { display: flex; align-items: center; gap: 6px; }
-.web-search-provider { display: grid; gap: 8px; min-width: 0; }
-.web-search-provider-info { display: grid; gap: 3px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
-.web-search-provider-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-height: 24px; }
-.web-search-settings a { color: var(--dsw-alias-state-business-primary); font-size: 12px; line-height: 18px; text-underline-offset: 3px; }
-/* The primitive renders a 32px control in an inline-flex wrapper; a settings
- * field needs it to fill the column it sits in. */
-.ws-input { width: 100%; }
-.web-search-rank { margin: 0; padding: 0; list-style: none; }
-.web-search-rank li {
-  position: relative;
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: start;
-  padding: 14px 0;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
-}
-.web-search-settings button.web-search-drag-handle {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  min-height: 24px;
-  padding: 0;
-  cursor: grab;
-  opacity: 0.65;
-}
-.web-search-settings button.web-search-drag-handle:hover { opacity: 1; }
-.web-search-settings button.web-search-drag-handle:active { cursor: grabbing; }
-.web-search-settings button.web-search-drag-handle[aria-disabled='true'] { cursor: wait; opacity: 0.4; }
-.web-search-rank li[data-dragging] { opacity: 0.45; }
-.web-search-rank li[data-drop]::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; background: var(--dsw-alias-state-business-primary); pointer-events: none; }
-.web-search-rank li[data-drop='before']::after { top: -1px; }
-.web-search-rank li[data-drop='after']::after { bottom: -1px; }
-.web-search-rank-index { color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; line-height: 24px; }
-.web-search-rank-move { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; padding-top: 2px; }
-.web-search-limits { margin: 0; border: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; }
-/* A two-column grid, so these fields keep the contract's caption and the
- * primitive's control and only own their vertical rhythm — a stacked list is
- * what draws the hairline between fields, and there is nothing to separate. */
-.ws-limit { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.ws-danger:hover:not(:disabled),
-.ws-danger[data-armed] { color: var(--dsw-alias-state-error-primary); border-color: var(--dsw-alias-state-error-primary); }
-.ws-danger:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover-danger); }
-@media (max-width: 560px) { .web-search-rank-move { flex-direction: column; align-items: flex-end; } .web-search-limits { grid-template-columns: minmax(0, 1fr); } }
-`
-
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
   ctx.effect(() => {
     if (typeof document === 'undefined') return () => {}
     const style = document.createElement('style')
-    style.setAttribute('data-plugin', '@klarkxy/dsh-web-search-manager'); style.textContent = styles
+    style.setAttribute('data-plugin', '@klarkxy/dsh-web-search-manager'); style.textContent = webSearchClientStyles
     style.dataset.dshWebSearch = ''; document.head.appendChild(style)
     return () => style.remove()
   }, 'web-search-manager.styles')

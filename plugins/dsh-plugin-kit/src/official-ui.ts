@@ -223,6 +223,17 @@ ${scope} {
 /* --- Layout scaffolding. --- */
 & .dsh-ui-stack { display: flex; flex-direction: column; gap: 12px; }
 & .dsh-ui-stack-lg { display: flex; flex-direction: column; gap: 20px; }
+/* Plugin detail pages share one reading column. These are layout recipes;
+ * controls keep their own primitive styles. Form spacing follows the host's
+ * settings-form/fields.module.css and SettingsForm.module.css. */
+& .dsh-ui-page { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 760px; min-width: 0; }
+& .dsh-ui-form { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+&.dsh-ui-form > .dsh-ui-field, & .dsh-ui-form > .dsh-ui-field { padding: 12px 0; }
+& .dsh-ui-form-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 16px; min-width: 0; }
+& .dsh-ui-fields-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; min-width: 0; margin: 0; padding: 0; border: 0; }
+@media (max-width: 560px) {
+  & .dsh-ui-fields-grid { grid-template-columns: minmax(0, 1fr); }
+}
 & .dsh-ui-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 & .dsh-ui-row-wrap { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 & .dsh-ui-spacer { flex: 1; min-width: 0; }
@@ -250,6 +261,9 @@ ${scope} {
  * official primitive, so this only owns the vertical rhythm. --- */
 & .dsh-ui-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 & .dsh-ui-field + .dsh-ui-field { border-top: 0.5px solid var(--dsw-alias-border-l2); padding-top: 12px; }
+/* Grid fields share a row, so the stacked-field divider must not win later in
+ * the cascade. Reset it here, after the field recipe. */
+& .dsh-ui-fields-grid > .dsh-ui-field { padding: 0; border: 0; }
 & .dsh-ui-label { display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--dsw-alias-label-primary); }
 & .dsh-ui-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 & .dsh-ui-help { font-size: 12px; line-height: 1.6; color: var(--dsw-alias-label-secondary); }
@@ -447,6 +461,6 @@ ${scope} {
   // purpose: a leading `&` followed by one recipe class and no combinator, so
   // sibling and child rules such as `.dsh-ui-field + .dsh-ui-field` keep their
   // own meaning and are left alone.
-  return sheet.replace(/^& (\.dsh-ui-[a-z0-9-]+)(?![+>~])/gm, (_match, className: string) =>
+  return sheet.replace(/^& (\.dsh-ui-[a-z0-9-]+)(?=\s*\{)/gm, (_match, className: string) =>
     `&${className}, & ${className}`)
 }

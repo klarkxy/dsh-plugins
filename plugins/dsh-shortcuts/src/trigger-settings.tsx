@@ -26,7 +26,9 @@ export function TriggerSettings(props: TriggerSettingsProps) {
   const label = (binding: ShortcutBinding | null) => binding ? parts(binding).join(' + ') : unbound
   const currentConflicts = props.runtime === 'web' ? props.conflicts(current.binding) : []
   const candidateConflicts = candidate ? props.conflicts(candidate) : []
-  return <section className="dsh-ui-card">
+  // The card carries the plugin root class itself: scoped contract rules
+  // resolve without depending on which ancestor mounted this section.
+  return <section className="shortcuts-root dsh-ui-card">
     <div className="shortcuts-section-head">
       <div className="shortcuts-section-title">
         <h3 className="dsh-ui-heading">{zh ? '命令面板快捷入口' : 'Command palette shortcut'}</h3>

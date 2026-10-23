@@ -107,6 +107,10 @@ describe('official UI contract', () => {
     expect(css).toContain('&.dsh-ui-textarea, & .dsh-ui-textarea {')
     // A sibling rule is a different thing and must keep its own shape.
     expect(css).toContain('& .dsh-ui-field + .dsh-ui-field {')
+    expect(css).toContain('&.dsh-ui-form > .dsh-ui-field, & .dsh-ui-form > .dsh-ui-field { padding: 12px 0; }')
+    expect(css).not.toContain('&.dsh-ui-field, & .dsh-ui-field + .dsh-ui-field')
+    expect(css).not.toContain('&.dsh-ui-control, & .dsh-ui-control[aria-invalid')
+    expect(css.indexOf('& .dsh-ui-fields-grid > .dsh-ui-field {')).toBeGreaterThan(css.indexOf('& .dsh-ui-field + .dsh-ui-field {'))
     // Every recipe the sheet defines must be reachable from the root.
     const recipes = [...new Set([...css.matchAll(/\.dsh-ui-[a-z0-9-]+/g)].map(m => m[0]))]
     const unreachable = recipes.filter(name => !css.includes(`&${name},`))

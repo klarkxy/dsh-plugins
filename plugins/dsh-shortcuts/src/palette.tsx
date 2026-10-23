@@ -1,9 +1,8 @@
-import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { CommandPaletteSnapshot } from './contracts.ts'
 import type { SelectorHook } from './settings.tsx'
-import { SHORTCUTS_STYLES } from './styles.ts'
 
 export interface PaletteProps {
   usePalette: SelectorHook<CommandPaletteSnapshot>
@@ -39,7 +38,6 @@ export function CommandPalettePanel(props: PaletteProps) {
         </span>
         <Button variant="outline" size="sm" onClick={props.openSettings}>{zh ? '查看与修改全部快捷键' : 'View and edit all shortcuts'}</Button>
       </div>}>
-      <style>{SHORTCUTS_STYLES}</style>
       <Input ref={input} data-modal-autofocus value={query} placeholder={zh ? '搜索插件命令…' : 'Search plugin commands…'}
         className="dsh-ui-control"
         role="combobox" aria-label={zh ? '搜索命令' : 'Search commands'} aria-expanded={state.open} aria-controls={listId}
@@ -71,6 +69,8 @@ export function CommandPalettePanel(props: PaletteProps) {
       </div>
       {!rows.length && <p className="dsh-ui-empty">{zh ? '没有匹配的插件命令。其他插件注册后会自动出现在这里。' : 'No matching plugin commands. Commands appear here when another plugin registers them.'}</p>}
     </Modal>
-    {!state.open && state.error && <div className="shortcuts-root shortcuts-error" role="alert"><span>{state.error}</span><Button variant="outline" size="sm" onClick={props.clearError}>{zh ? '关闭' : 'Dismiss'}</Button></div>}
+    {!state.open && state.error && <Toast key={state.error} text={state.error} holdMs={5000}
+      actions={[{ label: zh ? '关闭' : 'Dismiss', onClick: props.clearError }]}
+      onDone={props.clearError} />}
   </>
 }

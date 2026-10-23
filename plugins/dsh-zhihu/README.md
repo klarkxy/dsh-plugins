@@ -21,7 +21,7 @@ Open **Plugins → Zhihu** and enter your Access Secret under **Settings**. Othe
 - **Stats**: local daily calls, failures, and result counts;
 - **Official quota**: remaining free allowance as reported by Zhihu;
 - **Knowledge base**: upload and search reference files;
-- **Test**: run any search or query by hand.
+- **Test**: run any search or query by hand, expand an answer's reasoning, and inspect or copy structured response data.
 
 With the Web Search plugin installed, Zhihu web search also appears in its provider list.
 

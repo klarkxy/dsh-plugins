@@ -335,7 +335,10 @@ export function CastPage({ api, locale }: { api: CastApi; locale: LocaleLike }) 
     failures: modelCatalogFailures(catalog),
     refresh: refreshNow,
   }
-  return <div className="cast-root dsh-ui-stack" aria-label={t('title')} aria-busy={saving !== '' || refreshing}>
+  /* The root also carries the hub root class so officialUiCss('dsh-model-hub')
+   * and castCss (both scoped under .dsh-model-hub) still apply when CastPage
+   * renders outside HubPage's own subtree. */
+  return <div className="cast-root dsh-model-hub dsh-ui-stack" aria-label={t('title')} aria-busy={saving !== '' || refreshing}>
     <style>{castCss}</style>
     <div className="cast-head">
       <Switch checked={cast?.enabled ?? false} label={t('enabledLabel')} disabled={disabled || cast === null || (!cast.enabled && cast.routes.length === 0)}

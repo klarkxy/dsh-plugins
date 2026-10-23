@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 
+import { OFFICIAL_THEME_TOKEN_NAMES, officialUiCss } from "@klarkxy/dsh-plugin-kit/official-ui";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("../client.js", import.meta.url), "utf8");
@@ -82,6 +83,27 @@ describe("Plugins page documentation browser", () => {
   it("does not hard-code page spacing or stack two viewport heights", () => {
     expect(source).not.toMatch(/margin-top:\s*20px/);
     expect(source).not.toMatch(/min-height:\s*420px/);
+  });
+
+  it("keeps the hand-copied CSS in step with the official recipe", () => {
+    const official = officialUiCss("dsh-di-root");
+    /* Each recipe line is extracted from the generated sheet rather than
+     * re-typed here, so this guard cannot drift in the same direction as the
+     * copy: a recipe change in plugin-kit fails here until client.js follows. */
+    const focus = official.match(/^& :focus-visible \{ ([^}]*) \}$/m)?.[1];
+    expect(focus).toBeDefined();
+    expect(source).toContain(`& :focus-visible { ${focus} }`);
+    /* The banner's frame: hairline border, left rail, radius. */
+    const bannerStart = official.indexOf("&.dsh-ui-banner,");
+    const banner = official.slice(bannerStart, official.indexOf("\n}", bannerStart));
+    for (const property of ["border:", "border-left:", "border-radius:"]) {
+      const declaration = banner.split("\n").map(line => line.trim()).find(line => line.startsWith(property));
+      expect(declaration, property).toBeDefined();
+      expect(source).toContain(declaration!);
+    }
+    /* The copy may only reach for tokens the whitelist publishes. */
+    const tokens = new Set(Array.from(source.matchAll(/var\(\s*(--[a-z0-9-]+)/g), match => match[1]));
+    for (const token of tokens) expect(OFFICIAL_THEME_TOKEN_NAMES).toContain(token);
   });
 
   it("requires only host modules the package declares in dsh.client.inject", () => {

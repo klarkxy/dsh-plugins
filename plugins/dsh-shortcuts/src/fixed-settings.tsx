@@ -5,7 +5,6 @@ import type { NormalizedBinding, ShortcutBinding } from '@deepseek-ai/dsh-client
 import type { FixedBindingsModel } from './fixed-bindings.ts'
 import { fixedDispatchIssue } from './fixed-dispatch.ts'
 import { Keycaps, Recorder, type SelectorHook } from './settings.tsx'
-import { SHORTCUTS_STYLES } from './styles.ts'
 
 type Snapshot = ReturnType<FixedBindingsModel['state']['getSnapshot']>
 type SaveResult = ReturnType<FixedBindingsModel['setSlot']>
@@ -169,7 +168,6 @@ export function FixedSettings({ useFixedBindings, model, recording, locale, quer
   const currentSlot = draft && (draft.operation.type === 'set' || draft.operation.type === 'reset-slot') ? draft.operation.slot : undefined
 
   return <section className="shortcuts-fixed-root dsh-ui-section dsh-ui-stack" aria-label={t.title}>
-    <style>{SHORTCUTS_STYLES}</style>
     <div className="shortcuts-section-head">
       <div className="shortcuts-section-title">
         <strong className="dsh-ui-heading">{t.title}</strong>

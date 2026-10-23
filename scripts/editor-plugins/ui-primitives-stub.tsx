@@ -198,6 +198,36 @@ export const DisclosureRow = React.memo(function DisclosureRow({
     (open || collapsedContent) && h('div', { className: 'dsh-stub-disclosure__body' }, open ? children : collapsedContent))
 })
 
+/** Text activity animation: the double renders the text and records activity. */
+export const TextShimmer = React.memo(function TextShimmer({
+  children, active, className, contentClassName,
+}: {
+  children: React.ReactNode
+  active?: boolean
+  className?: string
+  contentClassName?: string
+}) {
+  return h('span', { className: cx('dsh-stub-shimmer', className), 'data-active': active !== false },
+    h('span', { className: contentClassName }, children))
+})
+
+/** Read-only JSON inspector: the double renders the serialized data with its label. */
+export function JsonTree({ data, label, className, copyable, expandTopLevel }: {
+  data: object | unknown[]
+  label: string
+  className?: string
+  collapsedStringLines?: number
+  stringWrapping?: { label: string; getDefault: () => boolean; setDefault: (wrapped: boolean) => void }
+  copyable?: boolean
+  expandTopLevel?: boolean
+  labels: Record<string, unknown>
+}) {
+  return h('div', {
+    className: cx('dsh-stub-json-tree', className), role: 'tree', 'aria-label': label,
+    'data-copyable': copyable === true || undefined, 'data-expand-top': expandTopLevel === true || undefined,
+  }, JSON.stringify(data, null, 2))
+}
+
 /** The real Modal portals to document.body and owns mask, card and Escape. */
 export function Modal({ open, onClose, title, closeLabel, description, children, footer, className, contentClassName, headless }: {
   open: boolean
@@ -339,8 +369,28 @@ export function MenuItemButton({ children, shortcut, icon, disabled, danger, sep
     }, icon, children, shortcut ? h('span', { 'aria-hidden': 'true' }, shortcut.keys.join(' ')) : null))
 }
 
-export function Toast({ text }: { text: string; tone?: 'success'; onDone: () => void }) {
-  return h('div', { role: 'status' }, text)
+/** The real Toast is a transient top-center banner: it portals to
+ * document.body with `role="alert"`, holds at full opacity for `holdMs`
+ * (default 3000), fades, then calls `onDone` so the owner unmounts it. Timing
+ * belongs to the host component, so the double keeps the structure and
+ * semantics — portal, role, icon seat, inline actions — and surfaces the hold
+ * as data instead of running a timer. Without `tone="success"` the icon seat
+ * keeps its warning tint. */
+export function Toast({ text, icon, tone, anchor: _anchor, holdMs = 3000, actions, onDone: _onDone }: {
+  text: string
+  icon?: React.ReactNode
+  tone?: 'success'
+  anchor?: HTMLElement | null
+  holdMs?: number
+  actions?: readonly { label: string; prefix?: string; onClick: () => void }[]
+  onDone: () => void
+}) {
+  const body = h('div', { role: 'alert', className: 'dsh-stub-toast', 'data-tone': tone === 'success' ? 'success' : 'warning', 'data-hold-ms': holdMs },
+    tone === 'success' || icon !== undefined ? h('span', { 'aria-hidden': 'true', className: 'dsh-stub-toast__icon' }, icon) : null,
+    h('span', { className: 'dsh-stub-toast__text' }, text,
+      actions?.map((action, index) => h(React.Fragment, { key: index }, action.prefix,
+        h('button', { type: 'button', className: 'dsh-stub-toast__action', onClick: action.onClick }, action.label)))))
+  return typeof document === 'undefined' ? body : ReactDOM.createPortal(body, document.body)
 }
 
 /** Anchored menu double: the trigger renders in place; rows render while open. */
@@ -374,7 +424,9 @@ function icon(name: string) {
 }
 
 export const IconChecklistOutlineRegular = icon('checklist')
+export const IconThinkOutlineRegular = icon('think')
 export const IconFolderCloseRegular = icon('folder-close')
+export const IconNewChatOutlineRegular = icon('new-chat')
 export const IconPlusOutlineRegular = icon('plus')
 export const IconCheckOutlineRegular = icon('check')
 export const IconChevronDownOutlineMedium = icon('chevron-down-medium')
@@ -442,13 +494,13 @@ export function isBehindModal(_anchor: HTMLElement | null): boolean { return fal
 // The barrel is expected to export everything above; a plugin importing a name
 // that is not here would otherwise get `undefined` and fail far from the cause.
 const known = new Set([
-  'Button', 'Tag', 'Checkbox', 'Switch', 'Input', 'Pill', 'SegmentedTabs', 'DisclosureRow',
-  'Modal', 'Menu', 'MenuItemButton', 'MenuSurface', 'MenuGroup', 'PathLabel', 'Tooltip', 'StateDot', 'IconChecklistOutlineRegular',
+  'Button', 'Tag', 'Checkbox', 'Switch', 'Input', 'Pill', 'SegmentedTabs', 'DisclosureRow', 'TextShimmer', 'JsonTree',
+  'Modal', 'Menu', 'MenuItemButton', 'MenuSurface', 'MenuGroup', 'PathLabel', 'Tooltip', 'StateDot', 'IconChecklistOutlineRegular', 'IconThinkOutlineRegular',
   'IconCheckOutlineRegular', 'IconChevronDownOutlineMedium', 'IconChevronRightOutlineMedium', 'IconChevronDownOutlineRegular',
   'IconChevronRightOutlineRegular', 'IconCloseFillRegular', 'IconEditOutlineRegular', 'IconRefreshOutlineRegular', 'IconSettingsOutlineRegular', 'IconShieldOutlineRegular',
   'IconUserOutlineRegular', 'IconUsersOutlineRegular', 'useAnchoredPosition',
   'useDismissOnOutsidePointer', 'useModalLayer', 'modalSelector', 'closeTopModal', 'isBehindModal',
-  'observeStickyMenuGroups', 'rankByName',
+  'observeStickyMenuGroups', 'rankByName', 'Toast',
 ])
 
 export function assertKnownPrimitive(name: string): void {

@@ -81,8 +81,7 @@ export function fontCopy(locale: 'zh' | 'en') {
 /* The panel's own geometry only: reading width, and the custom-stack input row
  * rhythm. Everything visual comes from the contract recipes and primitives. */
 const styles = `${officialUiCss('font-root')}
-.font-root { max-width: 760px; }
-.font-custom { margin-top: 8px; }
+.font-root .font-custom { margin-top: 8px; }
 `
 
 function readStorage(): FontSettingsStorage | undefined {
@@ -231,7 +230,7 @@ export function FontSettingsPanel(props: {
   const sizes: number[] = []
   for (let px = FONT_SIZE_MIN; px <= FONT_SIZE_MAX; px += 1) sizes.push(px)
 
-  return <section className="font-root dsh-ui-panel" data-testid="font-settings">
+  return <section className="font-root dsh-ui-page dsh-ui-form" data-testid="font-settings">
     <FontField
       label={text.uiFont}
       help={text.uiHelp}
@@ -279,7 +278,7 @@ export function FontSettingsPanel(props: {
       </select>
       <span className="dsh-ui-help">{text.sizeHelp}</span>
     </label>
-    <div className="dsh-ui-actions">
+    <div className="dsh-ui-form-footer">
       <Button variant="outline" size="md" disabled={fontList.state === 'loading'}
         onClick={() => { void loadSystemFonts() }}>
         {fontList.state === 'loading' ? text.loadingFonts : fontList.state === 'ready' ? text.reloadFonts : text.loadFonts}

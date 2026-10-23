@@ -1,5 +1,5 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
-import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useRef, useState } from 'react'
 import type { Shortcuts, ShortcutContext } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/protocol'
@@ -55,6 +55,7 @@ interface ScreenProps extends Omit<ShortcutsSettingsProps, 'locale' | 'openPalet
   closePalette(): void
   execute(id: ShortcutCommandId): Promise<boolean>
   clearError(): void
+  clearDispatchError(): void
   view?: 'summary' | 'page'
 }
 function SettingsContent(props: ScreenProps) {
@@ -63,8 +64,8 @@ function SettingsContent(props: ScreenProps) {
   props.useCatalog(value => value)
   props.useFixedCatalog(value => value)
   const dispatchError = props.useDispatchStatus(value => value)
-  return <div className="shortcuts-root shortcuts-page dsh-ui-panel">
-    {dispatchError && <div role="alert" className="dsh-ui-banner dsh-ui-banner--danger"><p>{dispatchError}</p></div>}
+  return <div className="shortcuts-root shortcuts-page dsh-ui-page">
+    {dispatchError && <div role="alert" className="dsh-ui-banner dsh-ui-banner--danger"><p>{dispatchError}</p><div className="dsh-ui-actions"><Button variant="ghost" size="sm" onClick={props.clearDispatchError}>{locale === 'zh' ? '关闭' : 'Dismiss'}</Button></div></div>}
     <TriggerSettings {...props} locale={locale} />
     <ShortcutsSettings {...props} locale={locale} fixedSettings={{ useFixedBindings: props.useFixedBindings, model: props.fixedModel }} />
   </div>
@@ -85,7 +86,9 @@ function Overlay(props: ScreenProps) {
   // Cancelling discards the saved context; the next round trip saves its own.
   const closeSettings = () => { roundTrip.current = null; setSettingsOpen(false) }
   return <>
-    {dispatchError && <div role="alert" className="shortcuts-root shortcuts-error"><span>{dispatchError}</span></div>}
+    {dispatchError && <Toast key={dispatchError} text={dispatchError} holdMs={5000}
+      actions={[{ label: locale === 'zh' ? '关闭' : 'Dismiss', onClick: props.clearDispatchError }]}
+      onDone={props.clearDispatchError} />}
     <CommandPalettePanel {...props} locale={locale} close={props.closePalette} openSettings={() => {
       // The palette's own dialog is still mounted, so a fresh capture would
       // report this overlay as the top modal. Read the live session context
@@ -141,6 +144,13 @@ export function apply(ctx: Context): void {
   const dispatchStatus = {
     getSnapshot: () => dispatchError,
     subscribe: (listener: () => void) => { dispatchErrors.add(listener); return () => { dispatchErrors.delete(listener) } },
+  }
+  // The dispatch toast dismisses itself: when its hold ends, onDone resets the
+  // store rather than leaving the last failure up until the next dispatch.
+  const clearDispatchError = () => {
+    if (dispatchError === null) return
+    dispatchError = null
+    for (const listener of dispatchErrors) listener('')
   }
   ctx.effect(() => installFixedDispatcher({ window, getMappings: () => fixed.state.getSnapshot().rows,
     isRecording: () => recordingActive,
@@ -198,7 +208,7 @@ export function apply(ctx: Context): void {
     describeBinding: shortcuts.describeBinding.bind(shortcuts), edit: shortcuts.edit.bind(shortcuts), recording,
     fixedModel: { setSlot: fixed.setSlot.bind(fixed), clear: fixed.clear.bind(fixed), reset: fixed.reset.bind(fixed), resetAll: fixed.resetAll.bind(fixed), describeSlot: fixed.describeSlot.bind(fixed), resetSlot: fixed.resetSlot.bind(fixed) },
     runtime: shortcuts.runtime, openPalette: open, currentContext,
-    closePalette: () => model.close(), execute: (id: ShortcutCommandId) => model.execute(id), clearError: () => model.clearError(),
+    closePalette: () => model.close(), execute: (id: ShortcutCommandId) => model.execute(id), clearError: () => model.clearError(), clearDispatchError,
     saveTrigger: trigger.save, conflicts: (binding: Parameters<typeof trigger.save>[0]) => [...triggerConflicts(shortcuts, binding), ...fixed.state.getSnapshot().rows.filter(row => binding && row.bindings.some(other => other && fixedBindingsOverlap(binding, other, shortcuts.platform))).map(row => row.label)], claim: () => claimPaletteKey(shortcuts),
   }
   const injection = () => injected

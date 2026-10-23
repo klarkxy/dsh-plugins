@@ -21,6 +21,7 @@ Open **Plugins → Shortcuts**:
 - In **Additional shortcuts**, each binding has its own edit, unbind, and restore controls, showing original and effective keys together. Menu Up/Down and complementary Control/Meta bindings are edited separately.
 - Stop keeps its double-press confirmation. Choose one unmodified key, such as F8, and press it twice; modifier combinations and two-key chords cannot preserve the host's stop sequence.
 - Open the command palette to find and run commands registered by plugins. This plugin's commands also appear in the native shortcut list.
+- If a local shortcut fails, a notification appears briefly; the plugin settings page shows the same failure while the notification is active.
 
 In the **Web GUI**, the additional palette shortcut defaults to **Ctrl+Shift+P**, matching VS Code. Change this local opening shortcut in the plugin settings, including choosing **Ctrl+K**. It works when the browser delivers the keypress to the page.
 

@@ -18,16 +18,6 @@ import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
  */
 export const zhihuClientStyles = `${officialUiCss('zhihu-panel')}
 .zhihu-panel {
-/* --- Plugin page. The contract's rules nest under the scope selector, so the
- * root's own column and reading width are the one part it cannot reach. --- */
-&.zhihu-settings-embed {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  max-width: 760px;
-  min-width: 0;
-}
 /* The tab strip is a primitive; this only places it in the page column. */
 .zhihu-tabs { margin: 0; }
 
@@ -44,9 +34,8 @@ export const zhihuClientStyles = `${officialUiCss('zhihu-panel')}
   background: var(--dsw-alias-interactive-bg-hover-danger);
 }
 
-/* --- Disclosures. The capability and fine-print blocks use the host
- * DisclosureRow; only the reasoning block is still a native <summary>. --- */
-.zhihu-ask-reasoning > summary { cursor: pointer; width: fit-content; }
+/* --- Disclosures. Capability, fine print and the reasoning block all use the
+ * host DisclosureRow; only its detail list needs layout here. --- */
 .zhihu-guide-list { margin: 4px 0 0; padding-inline-start: 20px; display: grid; gap: 6px; }
 
 /* --- Result rows. The card, the row and the name all come from the contract; a
@@ -60,10 +49,9 @@ export const zhihuClientStyles = `${officialUiCss('zhihu-panel')}
 .zhihu-ask-content { white-space: pre-wrap; }
 
 /* --- Open platform. The section is the last block of its tab, so it keeps a
- * trailing hairline; the raw response scrolls instead of growing the page. --- */
+ * trailing hairline; the response is the official JsonTree inspector. --- */
 .zhihu-open-platform { padding-bottom: 16px; border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
 .zhihu-open-platform-quota > legend { padding: 0 8px 0 0; }
-.zhihu-open-platform-data { max-height: 480px; overflow: auto; margin: 8px 0 0; }
 
 /* --- Usage. The stat tiles are a grid and the day list is a table, neither of
  * which the contract has a recipe for; figures align in the columns they sit
@@ -87,7 +75,7 @@ export const zhihuClientStyles = `${officialUiCss('zhihu-panel')}
 .zhihu-chart-bar-ok { fill: var(--dsw-alias-state-business-primary); }
 .zhihu-chart-bar-fail { fill: var(--dsw-alias-state-error-primary); }
 .zhihu-chart-hit { fill: transparent; }
-.zhihu-chart-grid { stroke: var(--dsw-alias-border-l2); stroke-width: 1; }
+.zhihu-chart-grid { stroke: var(--dsw-alias-border-l2); stroke-width: 0.5; }
 .zhihu-chart-axis,
 .zhihu-chart-tick,
 .zhihu-chart-value { fill: var(--dsw-alias-label-secondary); font-size: var(--dsh-content-font-size-secondary); font-family: var(--ds-font-family-code); }
@@ -121,9 +109,9 @@ export const zhihuClientStyles = `${officialUiCss('zhihu-panel')}
   .zhihu-quota-table td { padding: 5px 6px; }
 }
 
-/* --- File field. The input is visually hidden but stays focusable and in the
- * accessibility tree; its <label> is the visible trigger, so a click on the
- * label opens the file dialog natively and keyboard focus rings the label. --- */
+/* --- File field. The input is visually hidden but stays in the accessibility
+ * tree; the official Button beside it is the visible trigger and forwards the
+ * click, so its own focus ring and disabled state apply. --- */
 .zhihu-file {
   position: absolute;
   width: 1px;
@@ -134,30 +122,6 @@ export const zhihuClientStyles = `${officialUiCss('zhihu-panel')}
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-.zhihu-file-trigger {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-md);
-  color: var(--dsw-alias-label-primary);
-  cursor: pointer;
-  flex: none;
-}
-.zhihu-file-trigger:hover { background: var(--dsw-alias-interactive-bg-hover); }
-.zhihu-file-trigger[aria-disabled="true"] { opacity: .5; pointer-events: none; }
-.zhihu-file:focus-visible + .dsh-ui-row .zhihu-file-trigger { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
-
-/* 活动反馈:三点呼吸(pulse-dots),参数改写自 Amicro(MIT License,
-   Copyright (c) 2026 Syed Subhan Uddin);装饰元素 aria-hidden。 */
-.zhihu-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; color: var(--dsw-alias-state-business-primary); }
-.zhihu-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: zhihu-activity-pulse 1.4s ease infinite; }
-.zhihu-dots i:nth-child(2) { animation-delay: .2s; }
-.zhihu-dots i:nth-child(3) { animation-delay: .4s; }
-@media (prefers-reduced-motion: reduce) {
-  /* Stop the loop outright so the three dots stay lit instead of flickering. */
-  .zhihu-dots i { animation: none; }
 }
 }
 
@@ -170,7 +134,4 @@ export const zhihuClientStyles = `${officialUiCss('zhihu-panel')}
   color: var(--dsw-alias-brand-primary);
   background: none;
 }
-
-/* Keyframes cannot nest inside a style rule; the name is plugin-prefixed. */
-@keyframes zhihu-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
 `

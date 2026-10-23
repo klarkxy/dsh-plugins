@@ -96,22 +96,29 @@ export interface ModelCatalogStatusProps {
   readonly locale?: string
 }
 
-/** Also accepts a mapped state from a caller that owns broader async orchestration. */
+/**
+ * Also accepts a mapped state from a caller that owns broader async orchestration.
+ *
+ * The dsh-ui-* classes carry the styling and resolve through the consuming
+ * plugin's own officialUiCss scope (every consumer mounts its root class, so
+ * e.g. `.dsh-model-hub .dsh-ui-loading` paints this); dsh-model-catalog-status
+ * stays as a structural hook for tests and layout, never a colour source.
+ */
 export function ModelCatalogStatus({ state, locale }: ModelCatalogStatusProps) {
   const zh = locale?.toLowerCase().startsWith('zh') === true
   const copy = zh
     ? { loading: '正在加载模型…', error: '模型列表加载失败', partial: '部分提供商的模型未能加载', retry: '重试' }
     : { loading: 'Loading models…', error: 'Unable to load models', partial: 'Some providers could not load their models', retry: 'Retry' }
   if (!state.loading && !state.error && state.failures.length === 0) return null
-  return <div className="dsh-model-catalog-status" lang={zh ? 'zh' : 'en'}>
-    {state.loading ? <p role="status">{copy.loading}</p> : null}
-    {state.error ? <p role="alert">{copy.error}: {state.error}</p> : null}
-    {state.failures.length > 0 ? <div role="status">
+  return <div className="dsh-model-catalog-status dsh-ui-stack" lang={zh ? 'zh' : 'en'}>
+    {state.loading ? <p role="status" className="dsh-ui-loading">{copy.loading}</p> : null}
+    {state.error ? <p role="alert" className="dsh-ui-error dsh-ui-wrap">{copy.error}: {state.error}</p> : null}
+    {state.failures.length > 0 ? <div role="status" className="dsh-ui-meta">
       <p>{copy.partial}</p>
-      <ul>{state.failures.map((failure, index) => <li key={`${failure.id}:${index}`}>{failure.name || failure.id}: {failure.message}</li>)}</ul>
+      <ul className="dsh-ui-list">{state.failures.map((failure, index) => <li key={`${failure.id}:${index}`}>{failure.name || failure.id}: {failure.message}</li>)}</ul>
     </div> : null}
     {state.error || state.failures.length > 0
-      ? <Button type="button" size="sm" disabled={state.loading} onClick={() => { void state.refresh() }}>{copy.retry}</Button>
+      ? <div className="dsh-ui-actions"><Button type="button" size="sm" disabled={state.loading} onClick={() => { void state.refresh() }}>{copy.retry}</Button></div>
       : null}
   </div>
 }

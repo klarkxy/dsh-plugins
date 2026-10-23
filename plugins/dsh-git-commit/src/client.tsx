@@ -415,11 +415,10 @@ export const clientCss = `${officialUiCss('gcm-root')}${modelMenuCss}
  * of at the trigger. Naming both classes puts this rule at the same weight,
  * later in the sheet, so it wins. */
 .gcm-root.gcm-panel { position: fixed; width: min(360px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 32px)); overflow: auto; }
-.gcm-model { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-primary); }
-.gcm-commits { margin: 0; padding-inline-start: 18px; display: grid; gap: 2px; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
-.gcm-commits code { font-size: 12px; background: var(--dsw-alias-bg-layer-2); padding: 0 4px; border-radius: var(--dsw-radius-sm); }
-.gcm-settings { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.gcm-settings-status { display: flex; flex-direction: column; gap: 4px; }
+.gcm-root .gcm-model { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-primary); }
+.gcm-root .gcm-commits { margin: 0; padding-inline-start: 18px; display: grid; gap: 2px; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.gcm-root .gcm-commits code { font-size: 12px; background: var(--dsw-alias-bg-layer-2); padding: 0 4px; border-radius: var(--dsw-radius-sm); }
+.gcm-root .gcm-settings-status { display: flex; flex-direction: column; gap: 4px; }
 `
 
 declare module '@deepseek-ai/cordis' {
@@ -568,7 +567,7 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string;
 
   if (!settings) {
     return (
-      <section className="gcm-root gcm-settings">
+      <section className="gcm-root gcm-settings dsh-ui-page">
         {error
           ? <p role="alert" className="dsh-ui-error">{text[error]}</p>
           : <p role="status" className="dsh-ui-hint">{text.loading}</p>}
@@ -587,7 +586,7 @@ export function GitCommitSettingsPanel(props: { client: Client; locale?: string;
   const effortName = selectedEffort ? modelMenuEffortLabel(selectedEffort, language) : undefined
 
   return (
-    <section className="gcm-root gcm-settings" data-testid="git-commit-settings">
+    <section className="gcm-root gcm-settings dsh-ui-page" data-testid="git-commit-settings">
       <div className="gcm-settings-status">
         {syncError && <p role="status" className="dsh-ui-hint">{text.syncUnavailable}</p>}
         <Button variant="ghost" size="sm" disabled={busy} onClick={() => refreshRef.current()}>{text.refresh}</Button>

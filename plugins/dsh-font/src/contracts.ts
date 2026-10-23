@@ -13,8 +13,9 @@ export const FONT_SIZE_MIN = 10
 export const FONT_SIZE_MAX = 22
 export const FONT_SIZE_DEFAULT = 14
 
-/** DSH rc.2 defines these font stacks on :root. Root inline overrides also
- * reach derived Markdown, brand and terminal font tokens. */
+/** Root font overrides reach derived Markdown, brand and terminal fonts.
+ * These are the host variables this feature changes, rather than a private
+ * palette used to style the plugin's settings page. */
 export const UI_FONT_VARIABLE = '--dsw-font-family'
 export const CODE_FONT_VARIABLE = '--ds-font-family-code'
 

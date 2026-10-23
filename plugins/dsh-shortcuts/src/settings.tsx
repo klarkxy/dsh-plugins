@@ -2,7 +2,6 @@ import * as React from 'react'
 import { Button, Checkbox, Input, Modal, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ShortcutCatalogEntry, ShortcutFixedCatalogEntry, Shortcuts } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { BindingIssue, ShortcutBinding, ShortcutConfigSnapshot, ShortcutEdit, ShortcutRevision, ShortcutSaveResult } from '@deepseek-ai/dsh-client-shortcuts/protocol'
-import { SHORTCUTS_STYLES } from './styles.js'
 import { FixedSettings, type FixedSettingsProps } from './fixed-settings.tsx'
 
 export type SelectorHook<T> = <S>(selector: (snapshot: T) => S) => S
@@ -236,7 +235,6 @@ export function ShortcutsSettings({ useCatalog, useFixedCatalog, useConfig, desc
   const shown = catalog.filter(matches)
   const shownFixed = fixed.filter(matches)
   return <div className="shortcuts-root dsh-ui-stack-lg">
-    <style>{SHORTCUTS_STYLES}</style>
     <div className="shortcuts-toolbar">
       <Input aria-label={t.search} placeholder={t.search} value={query} onChange={event => setQuery(event.currentTarget.value)} className="shortcuts-search" />
       <div className="dsh-ui-row-wrap">

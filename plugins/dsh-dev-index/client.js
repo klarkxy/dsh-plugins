@@ -26,7 +26,7 @@ const css = `
   & *, & *::before, & *::after { box-sizing: border-box; }
   & h1, & h2, & h3, & h4, & p, & figure { margin: 0; }
   /* Keyboard focus only: pointer input keeps the native resting appearance. */
-  & :focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 2px; border-radius: var(--dsw-radius-sm); }
+  & :focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 2px; }
   & [hidden] { display: none !important; }
 
   /* --- Type tiers. The same 14/22 and 12/18 steps the primitives use. --- */
@@ -36,7 +36,7 @@ const css = `
   /* --- Layout scaffolding. Each recipe also matches the root itself, because
    * this plugin's one surface carries the root class and the stack on the same
    * element; a descendant-only rule would leave it unstyled. --- */
-  &.dsh-ui-stack, & .dsh-ui-stack { display: flex; flex-direction: column; gap: 12px; }
+  &.dsh-ui-page, & .dsh-ui-page { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 760px; min-width: 0; }
   &.dsh-ui-row-wrap, & .dsh-ui-row-wrap { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
   &.dsh-ui-spacer, & .dsh-ui-spacer { flex: 1; min-width: 0; }
 
@@ -116,7 +116,7 @@ const css = `
 
       return h('section', {
         'aria-label': chinese ? 'DSH 文档浏览器' : 'DSH documentation browser',
-        className: 'dsh-di-root dsh-ui-stack',
+        className: 'dsh-di-root dsh-ui-page',
       },
       h('style', null, css),
       h('div', { className: 'dsh-ui-row-wrap' },
