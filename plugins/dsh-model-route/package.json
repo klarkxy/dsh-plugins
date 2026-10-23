@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-route",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Shared library that lets DSH plugins describe model settings the same way.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -91,6 +91,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "565119bdc7e8390bf0e484a27679f6ab275cfa5d69933ca4bccacbd84d2e7a0b"
+    "contentHash": "bf98daddfdbb2e138904e0dc4a4895b2548a3dfe726140458e7a1ac6b95368c4"
   }
 }
