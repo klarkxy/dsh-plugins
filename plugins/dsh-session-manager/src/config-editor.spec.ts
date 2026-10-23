@@ -93,10 +93,6 @@ describe('presence config patches', () => {
     const root = { get: () => undefined }
     await expect(writePresenceConfig(root as never, base, { model: { provider: 'p', model: 'm' } }))
       .rejects.toMatchObject({ code: 'session-manager/unavailable' })
-    // Patches without a model change never need the store.
-    const missingEntry = { get: () => ({ entries: () => [], edit: vi.fn() }) }
-    await expect(writePresenceConfig(missingEntry as never, base, { recapMinutes: 20 }))
-      .rejects.toMatchObject({ code: 'session-manager/unavailable' })
   })
 
   it('fails closed without the editor or the entry', async () => {

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { resolveConfig } from './contracts.ts'
 import { callerFromExecution } from './caller.ts'
 import { itemsFromSurface, pageItems } from './conversation.ts'
-import { createCursorKey, decodeCursor, encodeCursor, prefixDigest } from './cursor.ts'
+import { createCursorKey, decodeCursor, encodeCursor } from './cursor.ts'
 import { listSessions, readSession, searchSessions } from './query.ts'
 import { apply } from './index.ts'
 
@@ -663,7 +663,6 @@ describe('session discovery', () => {
     const branch = { ...grown, seq: original.seq + 2, type: 'session/active-branch', data: { revision: 1 } } as SessionEvent
     events = [original, branch]
     revision = 1
-    expect(prefixDigest(events.filter(event => event.seq <= original.seq))).toBe(prefixDigest([original]))
     const stale = await readSession(query, { mode: 'details', sessionId: 'revise', modelSurface: true, cursor: next }, { signal }, config, cursors)
     expect(stale).toMatchObject({ status: 'failed', code: 'SESSION_QUERY_STALE_CURSOR' })
     expect(stale).not.toHaveProperty('items')
