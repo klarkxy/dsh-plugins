@@ -82,11 +82,20 @@ SOFTWARE.
 
 工具组合、persona 起始句与计划模式正文改写自 DeepSeek Harness
 `@deepseek-ai/dsh-web-app/presets/standard.patch.yml`（本机 DSH `0.2.1-rc.1` 随附的
-`standard` Agent Preset 声明）。
+`standard` Agent Preset 声明）。persona `suffix` 中「继续做完 / 不中途停下」「拒绝是故障」
+「按意图而非关键词理解任务」三节的思路参考了 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)
+（MIT）的提示词结构，按本 Preset 的会话级定位重写：只写进本 Preset 的 persona，不改写其他
+Preset，也不改动宿主文件。
 
 The tool roster, the persona opening sentence, and the plan-mode body are adapted from
 DeepSeek Harness `@deepseek-ai/dsh-web-app/presets/standard.patch.yml` (the `standard`
 agent-preset declaration shipped with DSH `0.2.1-rc.1`).
+
+The three persona-`suffix` sections on carrying work through, on refusal as a malfunction,
+and on reading intent rather than keywords follow the prompt structure of
+[YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) (MIT), rewritten for this
+preset's session scope: they live only in this preset's persona, rewrite no other preset,
+and patch no host file.
 
 ```text
 MIT License

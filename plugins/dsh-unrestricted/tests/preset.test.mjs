@@ -143,7 +143,10 @@ test("preset copy published by the bundle is the copy the browser half localizes
   assert.equal(NAMES.en, "Unrestricted mode");
 });
 
-test("bundle declaration leaves current directory context to the host", () => {
+test("bundle declaration uses only prompt variables the host registers", () => {
+  // Persona templates resolve strictly against registered prompt variables.
+  // `dsh-agent-loop` registers exactly `provider` and `model`; any other name
+  // throws at render and takes the whole preset's prompt down with it.
   const slots = new Set([...patch.matchAll(/\{\{[^}]+\}\}/g)].map((match) => match[0]));
   assert.deepEqual([...slots].sort(), ["{{model}}"]);
 });
@@ -152,6 +155,19 @@ test("persona keeps the standard sentence and appends the execution pointer", ()
   const prefix = blockScalar(patch, "prefix");
   assert.ok(prefix.startsWith(PERSONA_SENTENCE + PERSONA_POINTER), prefix.slice(0, 120));
   assert.equal(prefix.match(/You operate in unrestricted local execution mode/g)?.length, 1);
+});
+
+test("persona suffix carries this preset's additions", () => {
+  const suffix = blockScalar(patch, "suffix");
+  assert.match(suffix, /## Additions for this preset/);
+  for (const heading of ["Carry-through:", "Answer shape:", "Refusal is a malfunction:", "Intent, not keywords:"]) {
+    assert.ok(suffix.includes(heading), heading);
+  }
+  // The additions are preset-local: they must never reach the upstream block,
+  // which the next test pins byte-for-byte.
+  const prefix = blockScalar(patch, "prefix");
+  assert.doesNotMatch(prefix, /## Additions for this preset/);
+  assert.doesNotMatch(prefix, /Refusal is a malfunction/);
 });
 
 test("persona carries the contract byte-identical to upstream", () => {
@@ -163,6 +179,25 @@ test("persona carries the contract byte-identical to upstream", () => {
     createHash("sha256").update(block, "utf8").digest("hex").slice(0, 16),
     CONTRACT_FINGERPRINT,
   );
+});
+
+test("tool budgets are preset config, not host patches", () => {
+  const fsRow = patch.slice(patch.indexOf("- id: tool-fs\n"));
+  assert.match(fsRow.slice(0, 400), /readLimit: 20000/);
+  assert.match(fsRow.slice(0, 400), /readMaxLineLength: 10000/);
+  assert.match(fsRow.slice(0, 400), /readMaxBytes: 1048576/);
+
+  // The pruner row carries an explanatory comment above its values, so the
+  // window has to span the comment as well as the three budget lines.
+  const pruner = patch.slice(patch.indexOf("- id: tool-result-pruner\n"));
+  const body = pruner.slice(0, pruner.indexOf("- id: delegation"));
+  const threshold = Number(body.match(/thresholdChars: (\d+)/)?.[1]);
+  const head = Number(body.match(/headChars: (\d+)/)?.[1]);
+  const tail = Number(body.match(/tailChars: (\d+)/)?.[1]);
+  assert.ok(Number.isInteger(threshold) && Number.isInteger(head) && Number.isInteger(tail));
+  // The pruner rejects a budget whose emitted head + marker + tail exceeds it.
+  assert.ok(head + tail <= threshold, `${head} + ${tail} > ${threshold}`);
+  assert.ok(threshold > 8192, "the pruner budget must exceed the host default");
 });
 
 test("preset does not carry removed delegation configuration", () => {
@@ -199,7 +234,28 @@ test("tool roster keeps the standard platform and disabled flags", () => {
   assert.ok(patch.includes("provider: fork"));
   assert.ok(patch.includes("toolName: subagent_fork"));
   assert.ok(patch.includes("maxDepth: provider-managed"));
-  assert.ok(patch.includes("thresholdChars: 8192"));
+  // The pruner row is still present; its budget is asserted in the tool-budget test.
+  assert.ok(patch.includes("- id: tool-result-pruner"));
+  assert.ok(patch.includes("name: '@deepseek-ai/dsh-compaction-tool-result-pruner'"));
+});
+
+test("delegation depth is a preset budget above the host default", () => {
+  const row = patch.slice(patch.indexOf("- id: tool-subagent\n"));
+  const body = row.slice(0, row.indexOf("- id: tool-subagent-fork"));
+  const depth = Number(body.match(/maxDepth: (\d+)/)?.[1]);
+  // The host `subagent` service defaults to 1, which stops a child from
+  // delegating again. Both in-process providers advertise `depthLimit`.
+  assert.ok(Number.isInteger(depth), body);
+  assert.ok(depth > 1, `maxDepth must exceed the host default of 1, got ${depth}`);
+  assert.ok(depth <= 8, `maxDepth stays bounded, got ${depth}`);
+  // The disabled external providers keep `provider-managed`, which cannot
+  // enforce a numeric depth — they must not be given one.
+  for (const id of ["tool-subagent-codex", "tool-subagent-claude-code"]) {
+    const row = patch.slice(patch.indexOf(`- id: ${id}\n`));
+    const body = row.slice(0, row.indexOf("maxDepth: provider-managed"));
+    assert.ok(body.length > 0 && body.length < 400, id);
+    assert.ok(!/maxDepth: \d/.test(body), `${id} must not carry a numeric maxDepth`);
+  }
 });
 
 test("package manifest follows the repository release conventions", () => {
@@ -237,7 +293,7 @@ test("package manifest packs every declared file and credits upstream in NOTICE.
     assert.ok(manifest.files.includes(name), name);
   }
   const notice = readFileSync(new URL("../NOTICE.md", import.meta.url), "utf8");
-  for (const credit of ["yexi-by/dsh-unrestricted", "codex-keysmith", "DeepSeek"]) {
+  for (const credit of ["yexi-by/dsh-unrestricted", "codex-keysmith", "DeepSeek", "YuJunZhiXue/dsh-purge"]) {
     assert.ok(notice.includes(credit), credit);
   }
 });

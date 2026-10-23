@@ -45,4 +45,4 @@ The host defaults suit chat-shaped output: a `read` that hits the 50 KiB cap ret
 
 ## Credits
 
-The contract text is adapted from [yexi-by/dsh-unrestricted](https://github.com/yexi-by/dsh-unrestricted) (MIT). See [NOTICE.md](NOTICE.md) for full attribution and licenses.
+The contract text is adapted from [yexi-by/dsh-unrestricted](https://github.com/yexi-by/dsh-unrestricted) (MIT); the persona suffix sections follow the prompt structure of [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) (MIT). See [NOTICE.md](NOTICE.md) for full attribution and licenses.

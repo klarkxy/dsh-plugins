@@ -45,4 +45,4 @@ dsh plugin --profile web add @klarkxy/dsh-unrestricted
 
 ## 署名
 
-契约文本改写自 [yexi-by/dsh-unrestricted](https://github.com/yexi-by/dsh-unrestricted)（MIT）。完整署名与许可见 [NOTICE.md](NOTICE.md)。
+契约文本改写自 [yexi-by/dsh-unrestricted](https://github.com/yexi-by/dsh-unrestricted)（MIT）；persona 后缀三节参考 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)（MIT）的提示词结构。完整署名与许可见 [NOTICE.md](NOTICE.md)。
