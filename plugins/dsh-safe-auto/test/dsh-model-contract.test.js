@@ -174,8 +174,15 @@ test('escalated write: reviewer allow runs it once; deny returns the denial guid
     assert.equal(h.ctx.sandboxPolicy.resolve().mode, 'workspace-write', 'standing policy is never changed');
     // The observed native approval/decided confirms the durable grant — the
     // reviewer's verdict and the host's actual decision are recorded apart.
-    await new Promise(setImmediate); // let the tracked approvalState write land
-    const granted = await h.ctx.safeAutoRuntime.history.list({});
+    // JSON durability includes async filesystem IO; one event-loop tick is
+    // insufficient. Wait for the observable durable state with a fixed bound.
+    let granted;
+    const deadline = Date.now() + 3000;
+    do {
+      granted = await h.ctx.safeAutoRuntime.history.list({});
+      if (granted.items[0]?.approvalState === 'allowed-once') break;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    } while (Date.now() < deadline);
     assert.equal(granted.items[0].approvalState, 'allowed-once');
     assert.equal(granted.items[0].outcome, 'allowed-once');
 
