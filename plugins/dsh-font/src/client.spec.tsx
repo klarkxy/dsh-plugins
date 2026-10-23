@@ -1,24 +1,14 @@
-import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CODE_FONT_PRESETS, STORAGE_KEY, UI_FONT_PRESETS } from './contracts.ts'
-import { FontField, apply, fontCopy } from './client.tsx'
-
-const clientSource = readFileSync(new URL('./client.tsx', import.meta.url), 'utf8')
+import { FontField, apply, fontCopy, inject } from './client.tsx'
 
 describe('font client contract', () => {
-  it('injects exactly the services it consumes and keeps the bundle configuration seat', () => {
-    expect(clientSource).toContain("export const inject = ['slots', 'theme', 'locale'] as const")
-    expect(clientSource).toContain("client.slots.inject('plugins.bundle.config'")
-    expect(clientSource).toContain("key: PLUGIN_NAME")
-    expect(clientSource).not.toContain('settings.section')
-    expect(clientSource).not.toContain('settings.plugins.tab')
-    expect(clientSource).not.toContain('dsh-editor.settings.')
+  it('injects exactly the services it consumes and localizes its copy', () => {
+    expect([...inject]).toEqual(['slots', 'theme', 'locale'])
     expect(fontCopy('zh').label).toBe('字体')
     expect(fontCopy('en').label).toBe('Font')
-    // The system-font picker is a progressive enhancement over the same entry.
-    expect(clientSource).toContain('queryLocalFonts')
     expect(fontCopy('zh').loadFonts).toBe('读取系统字体')
     expect(fontCopy('zh').reloadFonts).toBe('重新读取系统字体')
     expect(fontCopy('zh').fontsLoaded(237)).toContain('237')

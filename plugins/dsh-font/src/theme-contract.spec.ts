@@ -1,37 +1,51 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { runInNewContext } from 'node:vm'
 import { expect, it, vi } from 'vitest'
 
 // Exercise the shipped implementation behind the panel's narrow structural
 // interface. The package is resolved from this workspace's target dependency,
-// never hardcoded to one developer's installation or an obsolete version.
-const require = createRequire(import.meta.url)
-const source = readFileSync(join(dirname(require.resolve('@deepseek-ai/dsh-client-ui-theme/package.json')), 'lib/client.js'), 'utf8')
-function method(name: string) {
-  const start = source.indexOf(`\n\t\t\t${name}(`)
-  const end = source.indexOf('\n\t\t\t}', start) + '\n\t\t\t}'.length
-  if (start < 0 || end <= start) throw new Error(`Target theme method missing: ${name}`)
-  return source.slice(start, end)
+// never hardcoded to one developer's installation or an obsolete version. The
+// published bundle is a host ModuleLoader unit rather than an importable
+// module, so the test captures its definition through the same loader shape
+// the host uses (dev-index's client.test.ts established the pattern here).
+type ThemeSnapshot = { fontSizes: Record<string, number>; fontFamilies: Record<string, string> }
+interface ThemeRuntimeLike {
+  getTheme(): ThemeSnapshot
+  setFontSize(role: string, px: number): void
+  setFontFamily(role: string, value: string): void
 }
+type ThemeRuntimeCtor = new (ctx: unknown, host: unknown) => ThemeRuntimeLike
+
+const require = createRequire(import.meta.url)
+const bundle = readFileSync(join(dirname(require.resolve('@deepseek-ai/dsh-client-ui-theme/package.json')), 'lib/client.js'), 'utf8')
+let definition: { factory: (require: (id: string) => unknown) => { ThemeRuntime: ThemeRuntimeCtor } } | undefined
+runInNewContext(bundle, { window: { __ModuleLoader__: { load(value: typeof definition) { definition = value } } } })
+const { ThemeRuntime } = definition!.factory((id: string) => {
+  if (['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-store'].includes(id)) return {}
+  throw new Error(`unexpected host module: ${id}`)
+})
 
 it('published theme exposes stable role snapshots and persists each exact role', () => {
-  const constantsStart = source.indexOf('const FONT_SIZE_SPECS =')
-  const constantsEnd = source.indexOf('function isThemePreference', constantsStart)
-  if (constantsStart < 0 || constantsEnd < 0) throw new Error('Target font contract constants missing')
-  const constants = source.slice(constantsStart, constantsEnd).replace(/Schema\.object\([\s\S]*?\n\t\t\}\);/, '')
-  const implementation = new Function('FONT_SIZE_FIELD', `${constants}; return {${method('getTheme')},${method('setFontSize')},${method('setFontFamily')},${method('buildSnapshot')}}`)('fontSize')
-  const writes = vi.fn(), publish = vi.fn()
-  const runtime = { ...implementation, snapshot: { fontSizes: { text: 14, code: 13, terminal: 12 }, fontFamilies: { text: '', code: '', terminal: '' } },
-    fontSizes: { text: 14, code: 13, terminal: 12 }, fontFamilies: { text: '', code: '', terminal: '' },
-    host: { set: writes }, write: (operation: () => void) => operation(), publish,
-    preference: 'light', themes: [{ id: 'light', tokens: {} }], revision: 1, composeActive: (value: unknown) => value }
-  expect(runtime.getTheme()).toBe(runtime.getTheme())
-  runtime.setFontSize('text', 18)
-  runtime.setFontFamily('code', 'Native Mono')
-  expect(writes.mock.calls).toEqual([['fontSize', 18], ['codeFontFamily', '"Native Mono"']])
-  const snapshot = runtime.buildSnapshot()
-  expect(snapshot.fontSizes).toEqual({ text: 18, code: 13, terminal: 12 })
-  expect(snapshot.fontFamilies).toEqual({ text: '', code: '"Native Mono"', terminal: '' })
-  expect(publish).toHaveBeenCalledTimes(2)
+  const events: string[] = []
+  const host = { set: vi.fn(() => Promise.resolve()), mutate: vi.fn(() => Promise.resolve()), subscribe: () => () => {}, getSnapshot: () => ({ value: undefined }) }
+  const theme = new ThemeRuntime({
+    effect: (fn: () => unknown) => fn(),
+    inject: () => {},
+    emit: (name: string) => events.push(name),
+  }, host)
+  // dsh-font hands getTheme().fontFamilies to useSyncExternalStore; the host
+  // documents a stable reference until the next change, and a fresh snapshot
+  // per call would loop the hook forever.
+  expect(theme.getTheme()).toBe(theme.getTheme())
+  theme.setFontSize('text', 18)
+  theme.setFontFamily('code', 'Native Mono')
+  // The write keys reach beyond what dsh-font itself consumes: they are the
+  // Settings → General native-row sync contract, asserted here as living
+  // documentation of the host package's persistence surface.
+  expect(host.set.mock.calls).toEqual([['fontSize', 18], ['codeFontFamily', '"Native Mono"']])
+  expect(theme.getTheme().fontSizes.text).toBe(18)
+  expect(theme.getTheme().fontFamilies.code).toBe('"Native Mono"')
+  expect(events.filter(name => name === 'theme/change')).toHaveLength(2)
 })
