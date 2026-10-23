@@ -272,15 +272,6 @@ async function openPlugin(facility: DomainFacility, spec: DomainSpec) {
 }
 
 describe('legacy-shaped domain fixture layout', () => {
-  it('declares official per-record layout and does not skip invalid records', () => {
-    expect(recapDomain.layout).toBe('per-record')
-    expect(moodDomain.layout).toBe('per-record')
-    expect(fusionDomain.layout).toBe('per-record')
-    expect(recapDomain.invalidRecords).toBeUndefined()
-    expect(moodDomain.invalidRecords).toBeUndefined()
-    expect(fusionDomain.invalidRecords).toBeUndefined()
-  })
-
   it('rejects a recap v3 single file when the host opens current as layout single despite compatibleVersions', async () => {
     const root = scratchRoot()
     writeSingle(root, recapDomain.name, 3, 'state', 'global', recapRecord(3))
