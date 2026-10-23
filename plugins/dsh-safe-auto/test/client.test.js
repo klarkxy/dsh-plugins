@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import React from 'react';
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { JSDOM } from 'jsdom';
 
 // Node does not load .jsx natively. This file uses plain createElement syntax:
 // resolve its imports and load the exact source, without a build or loader.
@@ -102,7 +104,6 @@ test('permission menu lists native presets plus Safe Auto with the current one c
   // The list stays closed in SSR; only the anchor shows the current selection.
   assert.match(html, /Safe Auto/);
   assert.doesNotMatch(html, /role="menu"/);
-  assert.match(source, /selectedId: snapshot\?\.current/);
   assert.equal(client.permissionLabel('read-only', 'read-only'), 'Read Only');
   assert.equal(client.permissionLabel('workspace-write', 'workspace-write', client.translator('zh')), '工作区内修改');
   assert.equal(client.permissionLabel('custom-preset', 'My Preset'), 'My Preset');
@@ -112,8 +113,33 @@ test('permission menu keeps an unavailable Safe Auto visible but disabled', () =
   const html = render(client.PermissionMenu, { sessionId: 's', locked: false, api: {},
     initialSnapshot: snapshot({ available: false, options: snapshot().options.filter(o => o.value !== 'safe-auto') }) });
   assert.match(html, /Workspace Write/);
-  assert.match(source, /unavailableShort/);
-  assert.match(source, /disabled: true/);
+});
+
+test('permission menu checks the current preset and disables an unavailable Safe Auto once opened', async () => {
+  const dom = new JSDOM('<div id="root"></div>'); const previous = new Map();
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true })) { previous.set(key, globalThis[key]); Object.defineProperty(globalThis, key, { configurable: true, writable: true, value }); }
+  const root = createRoot(dom.window.document.getElementById('root'));
+  const openMenu = async (session, key) => {
+    const api = { getSession: async () => session };
+    await act(async () => root.render(React.createElement(client.PermissionMenu, { key, sessionId: 's', locked: false, api })));
+    await act(async () => dom.window.document.querySelector('button[aria-haspopup="menu"]').click());
+    return [...dom.window.document.querySelectorAll('[role="menuitem"]')];
+  };
+  try {
+    const items = await openMenu(snapshot({ current: 'safe-auto', safeAuto: true }), 'checked');
+    assert.equal(items.length, 4);
+    const safeAuto = items.find(item => item.textContent.includes('Safe Auto'));
+    assert.equal(safeAuto.getAttribute('aria-checked'), 'true');
+    for (const item of items.filter(item => item !== safeAuto)) assert.equal(item.getAttribute('aria-checked'), 'false');
+
+    const unavailableItems = await openMenu(snapshot({ available: false, options: snapshot().options.filter(o => o.value !== 'safe-auto') }), 'unavailable');
+    const unavailable = unavailableItems.find(item => item.textContent.includes('Safe Auto · unavailable'));
+    assert.equal(unavailable.disabled, true);
+    for (const item of unavailableItems.filter(item => item !== unavailable)) assert.equal(item.disabled, false);
+  } finally {
+    await act(async () => root.unmount()); dom.window.close();
+    for (const [key, value] of previous) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  }
 });
 
 test('permission menu zh anchor uses the localized labels', () => {
@@ -200,6 +226,7 @@ test('the limits tab shows one line built from the reported limits', () => {
   const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values, policyLimits }, initialCatalog: catalog, initialTab: 'limits' });
   assert.match(html, /Review timeout 90 s · Output cap 4096 tokens · Transcript cap 48000 bytes/);
   assert.match(html, /configured in the profile/);
+  // The retired limitsFuses second line (dropped in the approval-flow rebuild) must not return.
   assert.doesNotMatch(source, /limitsFuses/);
   const zh = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values, policyLimits }, initialCatalog: catalog, initialTab: 'limits', locale: zhLocale });
   assert.match(zh, /单次审核超时 90 秒 · 输出上限 4096 tokens · 对话记录上限 48000 bytes/);
