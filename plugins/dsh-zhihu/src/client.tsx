@@ -30,6 +30,7 @@ import { openPlatformOptions, ZhihuOpenPlatformSection } from './client-open-pla
 import type { ZhihuOpenPlatformOperation } from './open-platform.ts'
 import { ZhihuCallPolicySection } from './client-call-policy.tsx'
 import { ZhihuQuotaSection } from './client-quota.tsx'
+import { ZhihuSyncCredentials } from './client-sync-credentials.tsx'
 
 export const name = 'dsh-zhihu-client'
 export const inject = ['slots', 'connection', 'remote', 'remote.credentials', 'locale'] as const
@@ -1491,7 +1492,7 @@ function ZhihuSettings(props: { rpc: RpcCaller; credentials: CredentialsApi }) {
       data-testid="zhihu-settings-embed"
       aria-label={t('知乎', 'Zhihu')}>
       {tablist}
-      {panel('settings', <Fragment><SettingsSection credentials={credentials} /><ZhihuCallPolicySection rpc={rpc} /></Fragment>)}
+      {panel('settings', <Fragment><SettingsSection credentials={credentials} /><ZhihuSyncCredentials credentials={credentials} /><ZhihuCallPolicySection rpc={rpc} /></Fragment>)}
       {panel('usage', <UsageSection rpc={rpc} />)}
       {panel('quota', <ZhihuQuotaSection rpc={rpc} />)}
       {panel('knowledge', <KnowledgeSection rpc={rpc} />)}

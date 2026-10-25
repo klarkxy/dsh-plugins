@@ -12,6 +12,7 @@ import { createZhihuUsageRecorder, resolveDays, zhihuUsageDomainSpec, type Zhihu
 import { ZHIHU_RPC_CHANNEL, ZHIHU_CREDENTIAL_REF, ZHIHU_SEARCH_EVENT, type ZhihuRpcResult } from './contracts.ts'
 import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
 import { bindZhihuWebSearch } from './web-search-provider.ts'
+import { createZhihuSyncService, zhihuSyncDomainSpec, ZHIHU_SYNC_CREDENTIAL_REFS, ZhihuSyncServiceError } from './sync-service.ts'
 import { executeZhihuOpenPlatform, resolveZhihuOpenPlatformOperation, ZHIHU_OPEN_PLATFORM_APIS, zhihuOpenPlatformResultCount } from './open-platform.ts'
 
 export const name = '@klarkxy/dsh-zhihu'
@@ -22,6 +23,7 @@ export type ZhihuService = {
   dispose(): Promise<void>
   usageSummary(days: unknown): Promise<{ days: unknown[] }>
   toolOptions: ZhihuClientOptions & { onExecuted: (event: ZhihuSearchExecuted) => void }
+  syncCall?: (endpoint: string, payload: unknown, signal: AbortSignal, caller: 'ui' | 'tool') => Promise<unknown>
 }
 
 type Host = Context & HostRpcContext & {
@@ -150,7 +152,24 @@ export async function apply(ctx: Context, config: ZhihuCallPolicyOptions = {}): 
     emit.call(ctx, ZHIHU_SEARCH_EVENT, event)
   })
   ctx.effect(() => async () => { await service.dispose(); await domain.close() }, 'zhihu.usageDomainClose')
+  const syncDomain = await ctx.storageDomain.open(zhihuSyncDomainSpec)
+  const sync = createZhihuSyncService(syncDomain.table('drafts'), {
+    resolveCredentials: async () => {
+      const [key, secret] = await Promise.all(ZHIHU_SYNC_CREDENTIAL_REFS.map(ref => host.credentials.resolve(credentialRef(ref))))
+      if (!key?.value.trim() || !secret?.value.trim()) throw new ZhihuSyncServiceError('sync-credentials-missing', '请在知乎插件设置中填写发布 App Key 和 App Secret。')
+      return { appKey: key.value.trim(), appSecret: secret.value.trim() }
+    },
+  })
+  service.syncCall = (endpoint, payload, signal, caller) => service.run(combined => sync.call(endpoint, payload, combined, caller), signal)
+  ctx.effect(() => async () => { await service.dispose(); await syncDomain.close() }, 'zhihu.syncDomainClose')
   ctx.provide('zhihu', service)
-  ctx.effect(() => registerHostRpc(host, ZHIHU_RPC_CHANNEL, service.call))
+  ctx.effect(() => registerHostRpc(host, ZHIHU_RPC_CHANNEL, async (endpoint, payload, signal) => {
+    if (!endpoint.startsWith('sync.')) return service.call(endpoint, payload, signal)
+    try { return { ok: true, value: await service.syncCall!(endpoint, payload, signal, 'ui') } }
+    catch (error) {
+      if (signal.aborted) return fail('cancelled', '请求已取消')
+      return fail(error instanceof ZhihuSyncServiceError ? error.code : 'sync-failed', error instanceof Error ? error.message : '知乎同步失败。')
+    }
+  }))
   bindZhihuWebSearch(ctx, service)
 }

@@ -14,7 +14,7 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse them on the [plugin site](http
 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: find and read sessions across working directories, use temporary workspaces, continue with one tap on an empty composer, and get a welcome-back recap after time away. |
 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Model Hub: change the models used by your plugins and subagents from one page, and see each running subagent's model and reasoning effort. |
 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/README.md) | Web Search: manage and rank search and page-reading services, including providers from installed plugins, in one settings page. |
-| [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | Zhihu: Zhihu search, agent tools, knowledge bases, and usage tracking. |
+| [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | Zhihu: Zhihu search, agent tools, knowledge bases, usage tracking, and draft management. |
 | [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface font, code font, and conversation font size of the Web GUI. |
 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | Unrestricted: a session preset that removes the limits on what the model answers and delivers complete results, only in sessions that pick it; may get your account banned. |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: read the official DSH docs in the Plugins page; Creator mode can look up docs and plugins on npm and GitHub. |

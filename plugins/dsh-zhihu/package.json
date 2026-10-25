@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-zhihu",
   "version": "0.2.7",
-  "description": "Zhihu search, agent tools, knowledge bases, and usage tracking for DeepSeek Harness.",
+  "description": "Zhihu search, agent tools, knowledge bases, usage tracking, and draft management for DeepSeek Harness.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -95,6 +95,8 @@
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-zhihu/src"
   },
   "dependencies": {
+    "marked": "^18.0.14",
+    "parse5": "^8.0.1",
     "zod": "^4.1.5",
     "@klarkxy/dsh-plugin-kit": "workspace:*"
   },
