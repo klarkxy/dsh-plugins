@@ -90,10 +90,14 @@ function store() {
 /* ------------------------------------------------------------------ */
 
 export interface ContinueSessionState {
-  /** undefined until the first resolve settles; null means the localized client default. */
+  /** undefined until the first resolve settles; null means show nothing. */
   readonly text?: string | null
-  /** Active-branch sequence this text belongs to. Fixed text has none. */
+  /** Active-branch sequence this text belongs to; absent while a turn is still open. */
   readonly seq?: number
+  /** The latest turn is still open, so the shipped placeholder stays. */
+  readonly pending?: true
+  /** Empty fixed text uses the localized default once a turn has ended. */
+  readonly fallback?: true
 }
 
 const EMPTY_CONTINUE: ContinueSessionState = {}
@@ -133,11 +137,15 @@ export function createContinueModel(host: PresenceHost): ContinueModel {
     load(sessionId) {
       if (sessionId === '' || lifetime.signal.aborted || inflight.has(sessionId)) return
       const current = read(sessionId)
-      if (current.text !== undefined && current.seq === undefined) return
+      // A settled seq-less line is final (fixed text, fallback, empty model
+      // line); a pending answer is not — the host saw an open turn, so an
+      // explicit load must be able to re-ask once it has ended. Without this
+      // a stranded turn or a missed running edge would pin the ghost forever.
+      if (current.text !== undefined && current.seq === undefined && current.pending !== true) return
       const ticket = new AbortController()
       inflight.set(sessionId, ticket)
       const signal = AbortSignal.any([lifetime.signal, ticket.signal])
-      void callContinueSuggest(host, sessionId, current.seq, signal)
+      void callContinueSuggest(host, sessionId, current.text ? current.seq : undefined, signal)
         .then(value => {
           if (signal.aborted || inflight.get(sessionId) !== ticket) return
           write(sessionId, value)
@@ -182,13 +190,18 @@ async function callContinueSuggest(
   knownSeq: number | undefined,
   signal: AbortSignal,
 ): Promise<ContinueSessionState> {
-  const value = await callPresence<{ text?: unknown; seq?: unknown }>(host, CONTINUE_SUGGEST_ENDPOINT, {
+  const value = await callPresence<{ text?: unknown; seq?: unknown; pending?: unknown; fallback?: unknown }>(host, CONTINUE_SUGGEST_ENDPOINT, {
     sessionId,
     ...knownSeq === undefined ? {} : { knownSeq },
   }, signal)
   const text = typeof value?.text === 'string' && value.text.trim() !== '' ? value.text : null
   const seq = typeof value?.seq === 'number' && Number.isSafeInteger(value.seq) && value.seq >= 0 ? value.seq : undefined
-  return { text, ...seq === undefined ? {} : { seq } }
+  return {
+    text,
+    ...seq === undefined ? {} : { seq },
+    ...value?.pending === true ? { pending: true as const } : {},
+    ...value?.fallback === true ? { fallback: true as const } : {},
+  }
 }
 
 /* ------------------------------------------------------------------ */

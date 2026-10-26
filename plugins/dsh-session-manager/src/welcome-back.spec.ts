@@ -332,20 +332,22 @@ describe('ghost continuation suggestions', () => {
       cache, { sessionId: session.id }, signal)
     expect(first.text).toBeNull()
     expect(remember).toHaveBeenCalledWith(session.id, first.seq, null, expect.any(AbortSignal))
-    expect(await suggestContinuation(services(ctx), config, stub, cache, { sessionId: session.id }, signal)).toEqual(first)
-    expect(stub.prepareCall).toHaveBeenCalledTimes(2)
+    const retry = await suggestContinuation(services(ctx), config, stub, cache, { sessionId: session.id }, signal)
+    expect(retry).toEqual({ text: 'unused', seq: first.seq })
+    expect(stub.prepareCall).toHaveBeenCalledTimes(3)
   })
 
   it('uses fixed text only in fixed mode, even when a model line was configured', async () => {
     const { ctx, session } = await fixture({ continueText: '接着修复菜单', continueMode: 'auto' })
     conversation(session)
     const cache = createSuggestionCache()
+    const seq = session.snapshotEvents().at(-1)!.seq
     const fixed = await suggestContinuation(services(ctx), resolveConfig({ continueText: '接着修复菜单' }), undefined,
       cache, { sessionId: session.id }, new AbortController().signal)
-    expect(fixed).toEqual({ text: '接着修复菜单' })
+    expect(fixed).toEqual({ text: '接着修复菜单', seq })
     const plain = await suggestContinuation(services(ctx), resolveConfig(), undefined,
       cache, { sessionId: session.id }, new AbortController().signal)
-    expect(plain).toEqual({ text: null })
+    expect(plain).toEqual({ text: null, seq, fallback: true })
   })
 
   it('generates once after a turn ends and reuses the line stored for that session', async () => {
@@ -377,11 +379,22 @@ describe('ghost continuation suggestions', () => {
     session.append('turn/start', { turn: 1 })
     request(session, 'Repair the menu')
     expect(await suggestContinuation(services(ctx), config, stub, cache, { sessionId: session.id }, signal))
-      .toEqual({ text: null })
+      .toEqual({ text: null, pending: true })
     conversation(session)
     const seq = session.snapshotEvents().at(-1)!.seq
     expect(await suggestContinuation(services(ctx), config, stub, cache, { sessionId: session.id, knownSeq: seq }, signal))
       .toEqual({ text: null, seq })
+    expect(stub.prepareCall).not.toHaveBeenCalled()
+  })
+
+  it('hides the previous line once the next turn starts', async () => {
+    const { ctx, session } = await fixture()
+    conversation(session)
+    session.append('turn/start', { turn: 2 })
+    const stub = models('接着验证菜单')
+    const result = await suggestContinuation(services(ctx), resolveConfig({ continueMode: 'auto' }), stub,
+      createSuggestionCache(), { sessionId: session.id }, new AbortController().signal)
+    expect(result).toEqual({ text: null, pending: true })
     expect(stub.prepareCall).not.toHaveBeenCalled()
   })
 
@@ -392,7 +405,7 @@ describe('ghost continuation suggestions', () => {
     const config = resolveConfig({ continueMode: 'auto' })
     const signal = new AbortController().signal
     expect(await suggestContinuation(services(ctx), config, stub, cache, { sessionId: session.id }, signal))
-      .toEqual({ text: null })
+      .toEqual({ text: null, pending: true })
     conversation(session)
     const child = ctx.sessions.create(SessionId('suggest-child'), {
       meta: { cwd: resolve('fixture'), origin: 'subagent', delegationDepth: 1, parentSession: session.id },
@@ -403,7 +416,7 @@ describe('ghost continuation suggestions', () => {
     expect(stub.prepareCall).not.toHaveBeenCalled()
   })
 
-  it('keeps only the first line of a suggestion and rejects oversized ones', async () => {
+  it('keeps only the first line and does not reject a long line by character count', async () => {
     const { ctx, session } = await fixture()
     conversation(session)
     const config = resolveConfig({ continueMode: 'auto' })
@@ -412,9 +425,9 @@ describe('ghost continuation suggestions', () => {
     const seq = session.snapshotEvents().at(-1)!.seq
     expect(await suggestContinuation(services(ctx), config, multiline, createSuggestionCache(), { sessionId: session.id }, signal))
       .toEqual({ text: '先重启服务', seq })
-    const long = models('很长的建议'.repeat(40))
-    expect(await suggestContinuation(services(ctx), config, long, createSuggestionCache(), { sessionId: session.id }, signal))
-      .toEqual({ text: null, seq })
+    const long = 'Please continue verifying the menu after restarting the service and report what still fails'
+    expect(await suggestContinuation(services(ctx), config, models(long), createSuggestionCache(), { sessionId: session.id }, signal))
+      .toEqual({ text: long, seq })
   })
 })
 

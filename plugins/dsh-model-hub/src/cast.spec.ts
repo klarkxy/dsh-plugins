@@ -364,6 +364,8 @@ describe('buildCastPrompt', () => {
     expect(text).toContain('using the same model is appropriate')
     expect(text).toContain('Do not create extra subtasks solely for model diversity')
     expect(text).toContain('discovery results and tool schema are authoritative')
+    expect(text).toContain('later list edits apply to new top-level Sessions')
+    expect(text).toContain('explicit selection, not pure route inheritance')
     expect(text).toContain('do not invent routes or pass unsupported fields')
     expect(text).not.toContain('User-provided task tendencies')
     expect(text).not.toContain('a/one')

@@ -327,20 +327,42 @@ function parseCommit(data: unknown): CommitResponse {
 
 // ── 阿里 OSS PutObject（v1 签名，等价 oss2 StsAuth + Bucket.put_object）─────────
 
-const PRIVATE_HOST_RE = /^(localhost|127\.|0\.0\.0\.0|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|\[|::1|0:)/i
+// OSS 主机与 bucket 的最小校验。只接受 aliyuncs.com 下的主机名与合法 bucket 名：
+// 路径、端口、账号密码、反斜杠都可能把直传请求改投到别的主机上，而请求头里带着 STS 凭据。
+const OSS_HOST_RE = /^(?:[a-z0-9-]+\.)*aliyuncs\.com$/
+const OSS_BUCKET_RE = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/
 
 function ossEndpointHost(endpoint: string): string {
   const text = endpoint.trim()
   if (!text) throw new ZhihuSyncMediaError('BAD_RESPONSE', 'OSS endpoint 为空。')
   if (/^http:\/\//i.test(text)) throw new ZhihuSyncMediaError('OSS_ERROR', 'OSS endpoint 必须使用 HTTPS。')
-  const host = text.replace(/^https:\/\//i, '').split('/')[0]!.split(':')[0]!.toLowerCase()
-  if (!host || PRIVATE_HOST_RE.test(host) || /^\d+\.\d+\.\d+\.\d+$/.test(host)) {
-    throw new ZhihuSyncMediaError('OSS_ERROR', 'OSS endpoint 不是合法的公有云主机。')
-  }
-  if (host !== 'aliyuncs.com' && !host.endsWith('.aliyuncs.com')) {
-    throw new ZhihuSyncMediaError('OSS_ERROR', 'OSS endpoint 不在 aliyuncs.com 白名单内。')
+  // 只接受裸主机名或 https://主机名。
+  const host = text.replace(/^https:\/\//i, '').replace(/\/+$/, '').toLowerCase()
+  if (!OSS_HOST_RE.test(host)) {
+    throw new ZhihuSyncMediaError('OSS_ERROR', 'OSS endpoint 必须是不带路径、端口与账号密码的 aliyuncs.com 主机名。')
   }
   return host
+}
+
+/**
+ * 拼出直传地址，并校验最终 URL：主机名必须与预期的合规主机完全一致，且不得带账号密码。
+ * 返回的就是实际发出去的那个 URL——校验与请求必须是同一个地址。
+ */
+function ossTargetUrl(bucket: string, host: string, encodedKey: string, isCname: boolean): string {
+  if (!OSS_BUCKET_RE.test(bucket)) {
+    throw new ZhihuSyncMediaError('BAD_RESPONSE', 'OSS bucket 名称不合法。')
+  }
+  const requestHost = isCname ? host : `${bucket}.${host}`
+  let target: URL
+  try {
+    target = new URL(`https://${requestHost}/${encodedKey}`)
+  } catch {
+    throw new ZhihuSyncMediaError('OSS_ERROR', 'OSS 目标地址不合法。')
+  }
+  if (target.protocol !== 'https:' || target.username || target.password || target.hostname !== requestHost) {
+    throw new ZhihuSyncMediaError('OSS_ERROR', 'OSS 目标地址不合法。')
+  }
+  return target.toString()
 }
 
 function encodeObjectName(name: string): string {
@@ -379,8 +401,7 @@ async function ossPutObject(
 ): Promise<{ ok: true } | { ok: false; ossCode: string; status: number }> {
   const host = ossEndpointHost(address.endpoint)
   const encodedKey = encodeObjectName(address.objectName)
-  const requestHost = address.isCname ? host : `${address.bucketName}.${host}`
-  const url = `https://${requestHost}/${encodedKey}`
+  const url = ossTargetUrl(address.bucketName, host, encodedKey, address.isCname)
   const date = new Date().toUTCString()
   const authorization = ossAuthorization('PUT', md5B64, contentType, date, auth, address.bucketName, encodedKey)
 

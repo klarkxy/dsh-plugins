@@ -26,7 +26,7 @@ Open **Plugins → Model Hub**.
 - Only plugins that expose model settings appear.
 - Changes made elsewhere update the page automatically. If an edit conflicts with a newer change, refresh and choose again.
 - If the model list cannot load, use **Retry**. The last available list stays visible; warnings name providers that failed while others stay usable.
-- Selection guidance needs host tools that support choosing a subagent model. Existing conversations keep their saved lists; start a new one to use an updated list.
+- Selection guidance needs host tools that support choosing a subagent model. List changes apply to new conversations; existing conversations and their subagents keep their saved lists. Refreshing the settings page does not change a conversation's list. Omitting an explicit model can still inherit the parent model.
 - Guidance never forces a model choice or adds subtasks just for variety.
 - Remote subagents and finished runs have no readable route; the live list covers only live local subagents.
 - No usage statistics.

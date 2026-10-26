@@ -104,7 +104,7 @@ describe('composed plugin channel', () => {
       const prepare = await call('welcomeback.prepare', { sessionId: 's' })
       expect(prepare.body.result).toEqual({ ok: true, value: { show: false } })
       const suggest = await call('continue.suggest', { sessionId: 's' })
-      expect(suggest.body.result).toEqual({ ok: true, value: { text: null } })
+      expect(suggest.body.result).toEqual({ ok: true, value: { text: null, pending: true } })
       const compact = await call('welcomeback.compact', { sessionId: 's', requestId })
       expect(compact.body.result).toMatchObject({ ok: false, error: { code: 'session-manager/unavailable' } })
       // Presence configuration: read returns the resolved view; write needs the host editor.

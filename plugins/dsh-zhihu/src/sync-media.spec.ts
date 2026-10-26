@@ -267,6 +267,51 @@ describe('uploadZhihuSyncMedia', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
+  it('OSS endpoint 带路径、端口、账号密码或反斜杠时拒绝', async () => {
+    // 这些写法都能骗过「以 .aliyuncs.com 结尾」的字符串判断，把直传改投到别的主机。
+    for (const endpoint of [
+      'evil.example.com/oss-cn-test.aliyuncs.com',
+      'oss-cn-test.aliyuncs.com:8443',
+      'https://user:pass@oss-cn-test.aliyuncs.com',
+      'evil.example.com\\@oss-cn-test.aliyuncs.com',
+    ]) {
+      const evil = JSON.parse(JSON.stringify(APPLY_UPLOADING)) as typeof APPLY_UPLOADING
+      evil.upload_config.address.endpoint = endpoint
+      const { syncRequest } = transport({ 'POST /openapi/media/uploads': () => evil })
+      const fetcher = vi.fn()
+      await expect(uploadZhihuSyncMedia(pngInput(), options({ syncRequest, fetcher: fetcher as unknown as typeof fetch }), new AbortController().signal))
+        .rejects.toMatchObject({ code: 'OSS_ERROR' })
+      expect(fetcher, endpoint).not.toHaveBeenCalled()
+    }
+  })
+
+  it('OSS bucket 名称非法时拒绝，不把 STS 凭据发往他域', async () => {
+    // bucket 名会拼进直传主机名：带斜杠就会让请求落到 bucket 名本身指向的域。
+    const evil = JSON.parse(JSON.stringify(APPLY_UPLOADING)) as typeof APPLY_UPLOADING
+    evil.upload_config.address.bucket_name = 'attacker.example/'
+    const { syncRequest } = transport({ 'POST /openapi/media/uploads': () => evil })
+    const fetcher = vi.fn()
+    await expect(uploadZhihuSyncMedia(pngInput(), options({ syncRequest, fetcher: fetcher as unknown as typeof fetch }), new AbortController().signal))
+      .rejects.toMatchObject({ code: 'BAD_RESPONSE' })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('合法 CNAME 仍按 endpoint 主机直传', async () => {
+    const cname = JSON.parse(JSON.stringify(APPLY_UPLOADING)) as typeof APPLY_UPLOADING
+    cname.upload_config.address.is_cname = true
+    const { syncRequest } = transport({
+      'POST /openapi/media/uploads': () => cname,
+      'PATCH /openapi/media/uploads/sess-1': () => COMMIT_OK,
+      'GET /openapi/media/images/sess-1/watermark': () => ({ state: 'failed' }),
+    })
+    const fetcher = vi.fn(async (url: string | URL) => {
+      expect(String(url)).toBe('https://oss-cn-test.aliyuncs.com/img/o.png')
+      return new Response('', { status: 200 })
+    }) as unknown as typeof fetch
+    const res = await uploadZhihuSyncMedia(pngInput(), options({ syncRequest, fetcher }), new AbortController().signal)
+    expect(res.url).toBe('https://pic1.zhimg.com/orig.png')
+  })
+
   it('kind:video 明确拒绝', async () => {
     const { syncRequest } = transport({})
     await expect(uploadZhihuSyncMedia(pngInput({ kind: 'video' }), options({ syncRequest }), new AbortController().signal))

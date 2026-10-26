@@ -21,3 +21,6 @@ plugins/*/src/*.d.ts
 .playwright-cli/
 debug.log
 outreach/
+
+# Local code graph index (machine-local SQLite database)
+.codegraph/

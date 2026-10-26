@@ -4,7 +4,7 @@
 
 [English](../README.md)
 
-把知乎交给模型当调研信源：站内搜索、全网搜索、热榜、知乎直答、知识库、问题发现和创作数据。`zhihu_sync` 工具还可以保存、校验文章、提问或想法草稿并上传配图；实际发布需要人工在预览界面确认。每次请求只用你自己的知乎 Access Secret；结果是参考资料，不是定论。
+把知乎交给模型当调研信源：站内搜索、全网搜索、热榜、知乎直答、知识库、问题发现和创作数据。`zhihu_sync` 工具还可以保存、校验文章、提问或想法草稿并上传配图。每次请求只用你自己的知乎 Access Secret；结果是参考资料，不是定论。
 
 ## 安装
 
@@ -27,7 +27,7 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 
 ## 草稿与配图
 
-在「插件 → 知乎 → 设置」填写发布用 App Key 和 App Secret，可从[知乎同步助手](https://www.zhihu.com/playground/zhihu-publisher)申请；它们与检索 Access Secret 分开配置。`zhihu_sync` 工具随后可让模型保存、列出、读取并校验文章、提问或想法草稿，并为其上传配图；草稿在重启 DSH 后仍可继续处理。发布本身不对模型开放，需要人工在预览界面确认。
+在「插件 → 知乎 → 设置」填写发布用 App Key 和 App Secret，可从[知乎同步助手](https://www.zhihu.com/playground/zhihu-publisher)申请；它们与检索 Access Secret 分开配置。知乎的授权说明可以整段粘进 App Secret 输入框，条件是两项凭据都写成 `ZHIHU_OPENAPI_APP_KEY:"…"` 与 `ZHIHU_OPENAPI_APP_SECRET:"…"` 的形式；插件只保存其中的两项凭据。`zhihu_sync` 工具随后可让模型保存、列出、读取并校验文章、提问或想法草稿，并为其上传配图；草稿在重启 DSH 后仍可继续处理。本版本没有发布入口：模型与插件界面都不能发布草稿。
 
 ## 让模型使用
 
@@ -42,7 +42,7 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 | `zhihu_user_content_detail`、`zhihu_user_content_comments` | 读取自己已发布的内容及评论 |
 | `zhihu_creator_account_stats`、`zhihu_creator_content_stats` | 自己的创作数据 |
 | `zhihu_quota` | 查询官方额度 |
-| `zhihu_sync` | 保存、列出、读取并校验草稿，上传配图；发布需人工在预览界面确认 |
+| `zhihu_sync` | 保存、列出、读取并校验草稿，上传配图 |
 
 ## 费用保护
 
@@ -63,7 +63,7 @@ config:
 - 草稿支持文章、提问和想法，不支持回答或视频。图片支持 JPEG、PNG、GIF、WebP、BMP；GIF 最大 15 MB，其他图片最大 30 MB。HEIC/AVIF 请先转换格式。
 - 草稿与图片操作使用知乎提供的发布授权；搜索额度与付费搜索开关不控制它们。
 - 所有请求都不会自动重试。
-- 不提供 OAuth 账号切换、充值或钱包查询。
+- 不提供草稿发布、OAuth 账号切换、充值或钱包查询。
 
 ## 许可证
 

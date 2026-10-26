@@ -54,7 +54,7 @@ describe('continue ghost', () => {
   it('replaces the shipped placeholder text on an empty composer and fills the draft on Tab', async () => {
     await useDom(async dom => {
       const setDraft = vi.fn()
-      const suggest = vi.fn(async () => ({ ok: true, value: { text: null } }))
+      const suggest = vi.fn(async () => ({ ok: true, value: { text: null, seq: 4, fallback: true } }))
       const model = createContinueModel(host({ rpc: { call: suggest } }))
       let root: Root | undefined
       try {
@@ -145,10 +145,40 @@ describe('continue ghost', () => {
     })
   })
 
+  it('keeps the shipped placeholder while the latest turn is still open', async () => {
+    await useDom(async dom => {
+      const setDraft = vi.fn()
+      const model = createContinueModel(host({
+        rpc: { call: vi.fn(async () => ({ ok: true, value: { text: null, pending: true } })) },
+      }))
+      let root: Root | undefined
+      try {
+        await act(async () => {
+          root = createRoot(dom.window.document.getElementById('root')!)
+          root.render(
+            <div data-composer-card="true">
+              <textarea data-composer-input="true" data-placeholder="发消息或创建任务" />
+              <div data-composer-placeholder="true">发消息或创建任务</div>
+              <ContinueGhost sessionId="s" {...input('')} inputActions={{ setDraft }} model={model} locale="zh" />
+            </div>,
+          )
+        })
+        const placeholder = dom.window.document.querySelector('[data-composer-placeholder]')!
+        expect(placeholder.textContent).toBe('发消息或创建任务')
+        await act(async () => {
+          placeholder.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+        })
+        expect(setDraft).not.toHaveBeenCalled()
+      } finally {
+        await act(async () => { root?.unmount() })
+      }
+    })
+  })
+
   it('shows the model suggestion when the host resolves one', async () => {
     await useDom(async dom => {
       const model = createContinueModel(host({
-        rpc: { call: vi.fn(async () => ({ ok: true, value: { text: '继续处理重启验证' } })) },
+        rpc: { call: vi.fn(async () => ({ ok: true, value: { text: '继续处理重启验证', seq: 4 } })) },
       }))
       let root: Root | undefined
       try {
@@ -172,7 +202,9 @@ describe('continue ghost', () => {
 
   it('restores the original placeholder when the draft gains text, and re-applies after a host re-render', async () => {
     await useDom(async dom => {
-      const model = createContinueModel(host())
+      const model = createContinueModel(host({
+        rpc: { call: vi.fn(async () => ({ ok: true, value: { text: null, seq: 4, fallback: true } })) },
+      }))
       let root: Root | undefined
       const render = (draft: string) => {
         root!.render(

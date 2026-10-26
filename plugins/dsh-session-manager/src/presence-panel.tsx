@@ -52,8 +52,14 @@ export function ContinueGhost(props: GhostSlotProps & {
     () => props.model.getSnapshot(sessionId),
     () => props.model.getSnapshot(sessionId),
   )
-  const text = snapshot.text ?? uiText(props.locale, 'continueDefault')
-  const active = sessionId !== '' && !blank && bare && draft === '' && phase === 'plain'
+  // An unresolved or still-open turn keeps the shipped placeholder. Empty fixed
+  // text becomes the localized default; an empty model line shows nothing.
+  const shown = running || snapshot.pending === true || snapshot.text === undefined
+    ? ''
+    : (snapshot.text ?? (snapshot.fallback === true ? uiText(props.locale, 'continueDefault') : ''))
+  const idle = sessionId !== '' && !blank && bare && draft === '' && phase === 'plain' && !running
+  const active = shown !== '' && idle
+  const text = shown
   const latest = useRef({ active, text })
   useEffect(() => {
     latest.current = { active, text }
@@ -66,13 +72,13 @@ export function ContinueGhost(props: GhostSlotProps & {
     // A falling edge is the previous turn ending. Drop the cached line so the
     // next idle composer asks once for the new cut.
     if (finished && sessionId !== '') props.model.invalidate(sessionId)
-    if (active && !running) props.model.load(sessionId)
-  }, [props.model, active, running, sessionId])
+    if (idle && !running) props.model.load(sessionId)
+  }, [props.model, idle, running, sessionId])
   // Config invalidation can happen while this same idle composer stays
   // mounted. Its empty snapshot must start a fresh load too.
   useEffect(() => {
-    if (active && !running && snapshot.text === undefined) props.model.load(sessionId)
-  }, [props.model, active, running, sessionId, snapshot])
+    if (idle && !running && snapshot.text === undefined) props.model.load(sessionId)
+  }, [props.model, idle, running, sessionId, snapshot])
 
   // Replace the shipped placeholder's text while the composer is empty. Class
   // hashes change per host build, so the DOM contract is the stable data

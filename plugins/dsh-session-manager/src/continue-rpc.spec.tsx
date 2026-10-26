@@ -8,7 +8,7 @@ import Sessions, { SessionId } from '@deepseek-ai/dsh-session'
 import Query from '@deepseek-ai/dsh-session-query'
 import { MessageId } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it, vi } from 'vitest'
-import { CONTINUE_SUGGEST_ENDPOINT, resolveConfig, type ContinueSuggestValue } from './contracts.ts'
+import { CONTINUE_SUGGEST_ENDPOINT, resolveConfig } from './contracts.ts'
 import { createContinueModel, type ContinueModel } from './presence-model.ts'
 import { ContinueGhost } from './presence-panel.tsx'
 import { PresenceSettingsStore } from './presence-settings.ts'
@@ -165,7 +165,7 @@ describe('continuation cancellation across registered RPC', () => {
       expect(f.calls[0]!.signal?.aborted).toBe(false)
       expect(f.model.getSnapshot('rpc-continue')).toBe(initial)
       expect(changed).not.toHaveBeenCalled()
-      expect(f.placeholder()).toBe('Continue')
+      expect(f.placeholder()).toBe('Native')
       expect(f.store.suggestion('rpc-continue')).toBeUndefined()
       await act(async () => {
         await new Promise<void>(done => setImmediate(done))
@@ -187,24 +187,25 @@ describe('continuation cancellation across registered RPC', () => {
     })
   })
 
-  it('keeps a genuine settled model failure cached through successful RPC with its sequence', async () => {
+  it('generates again when a finished idle session is reopened after an empty result', async () => {
     await withContinuation(async f => {
       f.prepare.mockRejectedValueOnce(new Error('model failed'))
       await f.mount()
       await act(async () => {
         await vi.waitFor(() => expect(f.model.getSnapshot('rpc-continue')).toEqual({ seq: f.seq, text: null }))
       })
-      const expected: ContinueSuggestValue = { seq: f.seq, text: null }
-      expect(f.calls[0]!.result).toEqual({ ok: true, value: expected })
-      expect(f.store.suggestion('rpc-continue')).toEqual(expected)
-      expect(f.calls).toHaveLength(1)
+      expect(f.calls[0]!.result).toEqual({ ok: true, value: { seq: f.seq, text: null } })
+      expect(f.store.suggestion('rpc-continue')).toEqual({ seq: f.seq, text: null })
       await act(async () => {
+        f.model.invalidate('rpc-continue')
         f.model.load('rpc-continue')
-        await vi.waitFor(() => expect(f.calls[1]?.result).toEqual({ ok: true, value: expected }))
+        await vi.waitFor(() => expect(f.model.getSnapshot('rpc-continue')).toEqual({
+          seq: f.seq, text: 'Retry the verification',
+        }))
       })
       expect(f.calls).toHaveLength(2)
-      expect(f.prepare).toHaveBeenCalledOnce()
-      expect(f.placeholder()).toBe('Continue')
+      expect(f.prepare).toHaveBeenCalledTimes(2)
+      expect(f.placeholder()).toBe('Retry the verification')
     })
   })
 })

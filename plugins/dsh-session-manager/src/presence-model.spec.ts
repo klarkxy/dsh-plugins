@@ -114,6 +114,39 @@ it('clears all continuation caches, aborts pending replies and ignores their lat
   model.cancel()
 })
 
+it('re-asks on explicit load after a pending answer cached without a running edge', async () => {
+  // Server-side the turn is still open (no running edge ever reaches this
+  // client): the pending state must not pin the ghost, or a stranded turn or
+  // a missed status flip would silence it forever.
+  let calls = 0
+  const releases: Array<() => void> = []
+  const call = vi.fn(async () => {
+    calls++
+    if (calls === 1) return { ok: true, value: { text: null, pending: true } }
+    return new Promise(resolve => { releases.push(() => resolve({ ok: true, value: { text: 'Done turn', seq: 4 } })) })
+  })
+  const model = createContinueModel({ rpc: { call } })
+  try {
+    model.load('s')
+    await vi.waitFor(() => expect(model.getSnapshot('s')).toEqual({ text: null, pending: true }))
+    expect(call).toHaveBeenCalledTimes(1)
+    // Remounts and return triggers run explicit loads; a pending answer is not
+    // settled, so the next one re-asks the host once.
+    model.load('s')
+    await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(2))
+    releases[0]!()
+    await vi.waitFor(() => expect(model.getSnapshot('s')).toEqual({ text: 'Done turn', seq: 4 }))
+    // The settled seq'd line reloads on explicit load too, handing knownSeq to
+    // the host which short-circuits instead of regenerating the same cut.
+    model.load('s')
+    await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(3))
+    releases[1]!()
+    expect(call.mock.calls[2]![2]).toMatchObject({ sessionId: 's', knownSeq: 4 })
+  } finally {
+    model.cancel()
+  }
+})
+
 it.each(['RPC failure', 'transport rejection'])('retains an existing suggestion after %s and allows a later explicit load', async failure => {
   const call = vi.fn()
     .mockResolvedValueOnce({ ok: true, value: { seq: 4, text: 'Previous suggestion' } })

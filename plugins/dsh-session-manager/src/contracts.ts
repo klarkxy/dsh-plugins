@@ -30,9 +30,8 @@ export const DEFAULT_COMPACT_MINUTES = 60
 /** Idle thresholds accept one week at most; 0 disables the feature. */
 export const MAX_IDLE_MINUTES = 10_080
 export const MAX_CONTINUE_TEXT_CHARS = 200
-/** Cap every model-written recap section and the auto ghost suggestion shown in the UI. */
+/** Cap every model-written recap section shown in the UI. */
 export const MAX_RECAP_SECTION_CHARS = 600
-export const MAX_SUGGESTION_CHARS = 120
 export type ContinueMode = 'fixed' | 'auto'
 export const CONTINUE_MODES: readonly ContinueMode[] = ['fixed', 'auto']
 
@@ -88,10 +87,14 @@ export interface ContinueSuggestRequest {
 }
 
 export interface ContinueSuggestValue {
-  /** Null means the client falls back to its localized default continuation. */
+  /** Null means there is no continuation to show. */
   readonly text: string | null
-  /** Active-branch sequence this text belongs to; absent for fixed text and the client default. */
+  /** Active-branch sequence this text belongs to; absent while a turn is still open. */
   readonly seq?: number
+  /** True while the latest turn has not ended, so the composer keeps its own placeholder. */
+  readonly pending?: true
+  /** Empty fixed text uses the localized default once a turn has ended. */
+  readonly fallback?: true
 }
 
 /** The user-facing presence settings view served to the bundle config page. */
