@@ -127,7 +127,7 @@ describe('presence settings page', () => {
     })
   })
 
-  it('groups the fields into ghost, welcome-back and model sections', async () => {
+  it('groups ghost controls and their dependent return settings', async () => {
     await useDom(async dom => {
       const rpc: PresenceHost['rpc'] = {
         call: vi.fn(async (_channel: string, endpoint: string) =>
@@ -142,18 +142,22 @@ describe('presence settings page', () => {
           root = createRoot(dom.window.document.getElementById('root')!)
           root.render(<SessionManagerSettings model={model} locale="zh" />)
         })
-        // Two cards: the continue ghost and the welcome-back features. The
-        // recap model lives inside the welcome-back card, not its own section.
-        expect(headings(dom)).toEqual(['继续灰影', '欢迎回来'])
+        // Two flat sections share one reading surface. The recap model lives
+        // beside its threshold under the recap switch, not in a separate card.
+        expect(headings(dom)).toEqual(['继续灰影', '回到会话时'])
+        expect(dom.window.document.querySelectorAll('.dsm-settings > .dsm-setting')).toHaveLength(2)
+        expect(dom.window.document.querySelector('.dsh-ui-card')).toBeNull()
         // Fixed mode shows the text field. The remaining model picker is the recap's.
         expect(dom.window.document.body.textContent).toContain('固定文本内容')
-        expect(dom.window.document.body.textContent).not.toContain('灰影模型')
+        expect(dom.window.document.body.textContent).not.toContain('生成模型')
         // Welcome-back card: two switches, each gating its nested threshold inputs.
-        expect(switchRow(dom, '欢迎回来摘要').getAttribute('aria-checked')).toBe('true')
-        expect(switchRow(dom, '压缩建议').getAttribute('aria-checked')).toBe('true')
+        expect(switchRow(dom, '显示会话摘要').getAttribute('aria-checked')).toBe('true')
+        expect(switchRow(dom, '建议压缩上下文').getAttribute('aria-checked')).toBe('true')
         const trigger = dom.window.document.querySelector('.dsh-model-menu-trigger')!
         expect(trigger.getAttribute('aria-label')).toBe('摘要模型: 当前会话 / 宿主默认模型')
         expect(trigger.getAttribute('aria-haspopup')).toBe('menu')
+        expect(trigger.closest('.dsm-model-field')).not.toBeNull()
+        expect(dom.window.document.querySelectorAll('.dsm-minutes-control .dsh-ui-meta')).toHaveLength(2)
         expect(dom.window.document.querySelector('select')).toBeNull()
       } finally {
         await act(async () => { root?.unmount() })
@@ -193,7 +197,7 @@ describe('presence settings page', () => {
         const save = button(dom, '保存')
         await act(async () => { save.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
         const write = calls.find(call => call.endpoint === CONFIG_WRITE_ENDPOINT)
-        expect(dom.window.document.body.textContent).toContain('灰影模型')
+        expect(dom.window.document.body.textContent).toContain('生成模型')
         expect(write?.payload).toEqual({
           patch: { recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'auto' },
         })
@@ -231,7 +235,7 @@ describe('presence settings page', () => {
           />)
         })
         // Stored 0 shows the compact switch off with the default minutes prefilled.
-        expect(switchRow(dom, '压缩建议').getAttribute('aria-checked')).toBe('false')
+        expect(switchRow(dom, '建议压缩上下文').getAttribute('aria-checked')).toBe('false')
         const compactInput = [...dom.window.document.querySelectorAll('input')].pop()!
         expect(compactInput.value).toBe('60')
         expect(compactInput.disabled).toBe(true)
@@ -241,7 +245,7 @@ describe('presence settings page', () => {
         const choice = [...dom.window.document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find(item => item.textContent?.includes('Model'))!
         await act(async () => { choice.click() })
         // Turning the recap switch off disables its nested fields and writes 0.
-        await act(async () => { switchRow(dom, '欢迎回来摘要').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+        await act(async () => { switchRow(dom, '显示会话摘要').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
         expect(dom.window.document.querySelector<HTMLButtonElement>('.dsh-model-menu-trigger')!.disabled).toBe(true)
         await act(async () => { button(dom, '保存').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
         const write = calls.find(call => call.endpoint === CONFIG_WRITE_ENDPOINT)
@@ -368,8 +372,8 @@ describe('presence settings page', () => {
           if (!(control instanceof dom.window.HTMLElement)) throw new Error(`missing control for ${name}`)
           return control as HTMLInputElement
         }
-        const recap = labelled('Recap threshold')
-        const compact = labelled('Suggestion threshold')
+        const recap = labelled('Show recap after')
+        const compact = labelled('Show suggestion after')
         const fixed = labelled('Fixed text')
         expect(recap).toBeTruthy()
         expect(compact).toBeTruthy()
@@ -381,7 +385,7 @@ describe('presence settings page', () => {
         const recapInput = recap instanceof dom.window.HTMLInputElement ? recap : recap.querySelector('input')
         if (!(recapInput instanceof dom.window.HTMLInputElement)) throw new Error('recap minutes input missing')
         await act(async () => { change(dom, recapInput, '0') })
-        const shown = labelled('Recap threshold')
+        const shown = labelled('Show recap after')
         const shownInput = shown instanceof dom.window.HTMLInputElement ? shown : shown.querySelector('input')
         expect(shownInput?.value).toBe('0')
         expect(shownInput?.getAttribute('aria-invalid')).toBe('true')
@@ -389,7 +393,7 @@ describe('presence settings page', () => {
         expect((button(dom, 'Save') as HTMLButtonElement).disabled).toBe(true)
         current = { ...current, recapMinutes: 30, continueText: 'remote' }
         await act(async () => { notify?.() })
-        expect(labelled('Recap threshold').value).toBe('0')
+        expect(labelled('Show recap after').value).toBe('0')
         expect(dom.window.document.body.textContent).toContain('Settings changed elsewhere')
       } finally {
         await act(async () => { root?.unmount() })

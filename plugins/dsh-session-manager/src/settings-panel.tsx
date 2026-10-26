@@ -148,156 +148,169 @@ export function SessionManagerSettings(props: {
   }
   return (
     <div className={`${FREE_CHAT_ROOT} dsh-ui-page`}>
-      <section className="dsh-ui-card">
-        <h3 className="dsh-ui-heading">{copy('settingsMode')}</h3>
-        <p className="dsh-ui-hint">{copy('settingsModeHint')}</p>
-        <div>
-          <SegmentedTabs<'fixed' | 'auto'>
-            label={copy('settingsMode')}
-            items={[
-              { id: `${tabsId}-fixed`, panelId: fixedPanelId, value: 'fixed', label: copy('modeFixed') },
-              { id: `${tabsId}-auto`, panelId: autoPanelId, value: 'auto', label: copy('modeAuto') },
-            ]}
-            value={draft.continueMode}
-            onChange={value => edit({ ...draft, continueMode: value })}
-          />
-        </div>
-        <div
-          role="tabpanel"
-          id={fixedPanelId}
-          aria-labelledby={`${tabsId}-fixed`}
-          hidden={draft.continueMode !== 'fixed'}
-        >
-          {draft.continueMode === 'fixed' ? (
-            <label className="dsh-ui-field">
-              <span className="dsh-ui-label">{copy('continueTextLabel')}</span>
-              <Input
-                value={draft.continueText}
-                placeholder={copy('continueTextPlaceholder')}
-                onChange={event => edit({ ...draft, continueText: event.target.value })}
+      <div className="dsm-settings">
+        <section className="dsm-setting" aria-labelledby={`${tabsId}-ghost-heading`}>
+          <header className="dsm-setting-header">
+            <h3 id={`${tabsId}-ghost-heading`} className="dsh-ui-title">{copy('settingsMode')}</h3>
+            <p className="dsh-ui-hint">{copy('settingsModeHint')}</p>
+          </header>
+          <div className="dsm-ghost-controls">
+            <div className="dsh-ui-field">
+              <span className="dsh-ui-label">{copy('continueSourceLabel')}</span>
+              <SegmentedTabs<'fixed' | 'auto'>
+                label={copy('continueSourceLabel')}
+                items={[
+                  { id: `${tabsId}-fixed`, panelId: fixedPanelId, value: 'fixed', label: copy('modeFixed') },
+                  { id: `${tabsId}-auto`, panelId: autoPanelId, value: 'auto', label: copy('modeAuto') },
+                ]}
+                value={draft.continueMode}
+                onChange={value => edit({ ...draft, continueMode: value })}
               />
-            </label>
-          ) : null}
-        </div>
-        <div
-          role="tabpanel"
-          id={autoPanelId}
-          aria-labelledby={`${tabsId}-auto`}
-          hidden={draft.continueMode !== 'auto'}
-        >
-          {draft.continueMode === 'auto' ? (
-            <div className="dsh-ui-field">
-              <span className="dsh-ui-label">{copy('ghostModelLabel')}</span>
-              <div>
-                <ModelMenu
-                  locale={props.locale}
-                  open={ghostMenuOpen}
-                  onOpenChange={setGhostMenuOpen}
-                  listClassName={FREE_CHAT_ROOT}
-                  anchor={<button type="button" className="dsh-model-menu-trigger" aria-label={`${copy('ghostModelLabel')}: ${ghostLabel}`} aria-haspopup="menu" aria-expanded={ghostMenuOpen}>
-                    <span className="dsh-model-menu-triggerLabel">{ghostLabel}</span>
-                    <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${ghostMenuOpen ? ' dsh-model-menu-chevronOpen' : ''}`} />
-                  </button>}
-                  choices={selectableChoices}
-                  selected={ghostRoute}
-                  onPick={route => edit({ ...draft, ghostModel: modelRouteKey(route.provider, route.model) })}
-                  leading={[{ id: 'follow', label: copy('modelFollowOption'), selected: !ghostRoute }]}
-                  onPickLeading={() => edit({ ...draft, ghostModel: '' })}
-                  modelValue={ghostLabel}
-                />
+            </div>
+            <div
+              role="tabpanel"
+              id={fixedPanelId}
+              aria-labelledby={`${tabsId}-fixed`}
+              hidden={draft.continueMode !== 'fixed'}
+            >
+              {draft.continueMode === 'fixed' ? (
+                <label className="dsh-ui-field">
+                  <span className="dsh-ui-label">{copy('continueTextLabel')}</span>
+                  <Input
+                    className="dsm-ghost-input"
+                    value={draft.continueText}
+                    placeholder={copy('continueTextPlaceholder')}
+                    onChange={event => edit({ ...draft, continueText: event.target.value })}
+                  />
+                </label>
+              ) : null}
+            </div>
+            <div
+              role="tabpanel"
+              id={autoPanelId}
+              aria-labelledby={`${tabsId}-auto`}
+              hidden={draft.continueMode !== 'auto'}
+            >
+              {draft.continueMode === 'auto' ? (
+                <div className="dsh-ui-field dsm-model-field">
+                  <span className="dsh-ui-label">{copy('ghostModelLabel')}</span>
+                  <ModelMenu
+                    locale={props.locale}
+                    open={ghostMenuOpen}
+                    onOpenChange={setGhostMenuOpen}
+                    listClassName={FREE_CHAT_ROOT}
+                    anchor={<button type="button" className="dsh-model-menu-trigger" aria-label={`${copy('ghostModelLabel')}: ${ghostLabel}`} aria-haspopup="menu" aria-expanded={ghostMenuOpen}>
+                      <span className="dsh-model-menu-triggerLabel">{ghostLabel}</span>
+                      <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${ghostMenuOpen ? ' dsh-model-menu-chevronOpen' : ''}`} />
+                    </button>}
+                    choices={selectableChoices}
+                    selected={ghostRoute}
+                    onPick={route => edit({ ...draft, ghostModel: modelRouteKey(route.provider, route.model) })}
+                    leading={[{ id: 'follow', label: copy('modelFollowOption'), selected: !ghostRoute }]}
+                    onPickLeading={() => edit({ ...draft, ghostModel: '' })}
+                    modelValue={ghostLabel}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </div>
+          {draft.continueMode === 'auto' ? <p className="dsh-ui-hint">{copy('ghostModelHint')}</p> : null}
+        </section>
+        <section className="dsm-setting" aria-labelledby={`${tabsId}-return-heading`}>
+          <header className="dsm-setting-header">
+            <h3 id={`${tabsId}-return-heading`} className="dsh-ui-title">{copy('welcomeBackGroup')}</h3>
+          </header>
+          <div className="dsm-feature">
+            <div className="dsh-ui-toggle-row">
+              <span className="dsh-ui-toggle-text">
+                <span className="dsh-ui-toggle-label">{copy('recapEnabledLabel')}</span>
+                <span className="dsh-ui-hint">{copy('recapEnabledHint')}</span>
+              </span>
+              <Switch
+                label={copy('recapEnabledLabel')}
+                checked={draft.recapEnabled}
+                onChange={next => edit({ ...draft, recapEnabled: next })}
+              />
+            </div>
+            <div className="dsm-feature-options" data-disabled={draft.recapEnabled ? undefined : 'true'}>
+              <div className="dsh-ui-fields-grid">
+                <div>
+                  <label className="dsh-ui-field">
+                    <span className="dsh-ui-label">{copy('recapMinutesLabel')}</span>
+                    <span className="dsm-minutes-control">
+                      <Input
+                        className="dsm-minutes"
+                        value={draft.recapMinutes}
+                        inputMode="numeric"
+                        disabled={!draft.recapEnabled}
+                        aria-invalid={recapInvalid || undefined}
+                        aria-describedby={recapInvalid ? `${tabsId}-recap-error` : undefined}
+                        onChange={event => edit({ ...draft, recapMinutes: event.target.value })}
+                      />
+                      <span className="dsh-ui-meta">{copy('minutesUnit')}</span>
+                    </span>
+                  </label>
+                  {recapInvalid ? <p id={`${tabsId}-recap-error`} className="dsh-ui-error" role="alert">{copy('minutesInvalid')}</p> : null}
+                </div>
+                <div className="dsh-ui-field dsm-model-field">
+                  <span className="dsh-ui-label">{copy('modelLabel')}</span>
+                  <ModelMenu
+                    locale={props.locale}
+                    open={menuOpen}
+                    onOpenChange={setMenuOpen}
+                    listClassName={FREE_CHAT_ROOT}
+                    anchor={<button type="button" className="dsh-model-menu-trigger" disabled={!draft.recapEnabled} aria-label={`${copy('modelLabel')}: ${selectedLabel}`} aria-haspopup="menu" aria-expanded={menuOpen}>
+                      <span className="dsh-model-menu-triggerLabel">{selectedLabel}</span>
+                      <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${menuOpen ? ' dsh-model-menu-chevronOpen' : ''}`} />
+                    </button>}
+                    choices={selectableChoices}
+                    selected={selectedRoute}
+                    onPick={route => edit({ ...draft, model: modelRouteKey(route.provider, route.model) })}
+                    leading={[{ id: 'follow', label: copy('modelFollowOption'), selected: !selectedRoute }]}
+                    onPickLeading={() => edit({ ...draft, model: '' })}
+                    modelValue={selectedLabel}
+                  />
+                </div>
               </div>
-              <p className="dsh-ui-hint">{copy('ghostModelHint')}</p>
+              <ModelCatalogStatus state={catalog} locale={props.locale} />
             </div>
-          ) : null}
-        </div>
-      </section>
-      <section className="dsh-ui-card">
-        <h3 className="dsh-ui-heading">{copy('welcomeBackGroup')}</h3>
-        <div className="dsm-feature">
-          <div className="dsh-ui-toggle-row">
-            <span className="dsh-ui-toggle-text">
-              <span className="dsh-ui-toggle-label">{copy('recapEnabledLabel')}</span>
-              <span className="dsh-ui-hint">{copy('recapEnabledHint')}</span>
-            </span>
-            <Switch
-              label={copy('recapEnabledLabel')}
-              checked={draft.recapEnabled}
-              onChange={next => edit({ ...draft, recapEnabled: next })}
-            />
           </div>
-          <div className="dsm-subs" data-disabled={draft.recapEnabled ? undefined : 'true'}>
-            <div>
-              <label className="dsh-ui-field">
-                <span className="dsh-ui-label">{copy('recapMinutesLabel')}</span>
-                <Input
-                  className="dsm-minutes"
-                  value={draft.recapMinutes}
-                  inputMode="numeric"
-                  disabled={!draft.recapEnabled}
-                  aria-invalid={recapInvalid || undefined}
-                  aria-describedby={recapInvalid ? `${tabsId}-recap-error` : undefined}
-                  onChange={event => edit({ ...draft, recapMinutes: event.target.value })}
-                />
-              </label>
-              {recapInvalid ? <p id={`${tabsId}-recap-error`} className="dsh-ui-error" role="alert">{copy('minutesInvalid')}</p> : null}
+          <div className="dsm-feature">
+            <div className="dsh-ui-toggle-row">
+              <span className="dsh-ui-toggle-text">
+                <span className="dsh-ui-toggle-label">{copy('compactEnabledLabel')}</span>
+                <span className="dsh-ui-hint">{copy('compactEnabledHint')}</span>
+              </span>
+              <Switch
+                label={copy('compactEnabledLabel')}
+                checked={draft.compactEnabled}
+                onChange={next => edit({ ...draft, compactEnabled: next })}
+              />
             </div>
-            <div className="dsh-ui-field">
-              <span className="dsh-ui-label">{copy('modelLabel')}</span>
+            <div className="dsm-feature-options dsm-compact-options" data-disabled={draft.compactEnabled ? undefined : 'true'}>
               <div>
-                <ModelMenu
-                  locale={props.locale}
-                  open={menuOpen}
-                  onOpenChange={setMenuOpen}
-                  listClassName={FREE_CHAT_ROOT}
-                  anchor={<button type="button" className="dsh-model-menu-trigger" disabled={!draft.recapEnabled} aria-label={`${copy('modelLabel')}: ${selectedLabel}`} aria-haspopup="menu" aria-expanded={menuOpen}>
-                    <span className="dsh-model-menu-triggerLabel">{selectedLabel}</span>
-                    <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${menuOpen ? ' dsh-model-menu-chevronOpen' : ''}`} />
-                  </button>}
-                  choices={selectableChoices}
-                  selected={selectedRoute}
-                  onPick={route => edit({ ...draft, model: modelRouteKey(route.provider, route.model) })}
-                  leading={[{ id: 'follow', label: copy('modelFollowOption'), selected: !selectedRoute }]}
-                  onPickLeading={() => edit({ ...draft, model: '' })}
-                  modelValue={selectedLabel}
-                />
+                <label className="dsh-ui-field">
+                  <span className="dsh-ui-label">{copy('compactMinutesLabel')}</span>
+                  <span className="dsm-minutes-control">
+                    <Input
+                      className="dsm-minutes"
+                      value={draft.compactMinutes}
+                      inputMode="numeric"
+                      disabled={!draft.compactEnabled}
+                      aria-invalid={compactInvalid || undefined}
+                      aria-describedby={compactInvalid ? `${tabsId}-compact-error` : undefined}
+                      onChange={event => edit({ ...draft, compactMinutes: event.target.value })}
+                    />
+                    <span className="dsh-ui-meta">{copy('minutesUnit')}</span>
+                  </span>
+                </label>
+                {compactInvalid ? <p id={`${tabsId}-compact-error`} className="dsh-ui-error" role="alert">{copy('minutesInvalid')}</p> : null}
               </div>
-              <p className="dsh-ui-hint">{copy('modelGroupHint')}</p>
-            </div>
-            <ModelCatalogStatus state={catalog} locale={props.locale} />
-          </div>
-        </div>
-        <div className="dsm-feature">
-          <div className="dsh-ui-toggle-row">
-            <span className="dsh-ui-toggle-text">
-              <span className="dsh-ui-toggle-label">{copy('compactEnabledLabel')}</span>
-              <span className="dsh-ui-hint">{copy('compactEnabledHint')}</span>
-            </span>
-            <Switch
-              label={copy('compactEnabledLabel')}
-              checked={draft.compactEnabled}
-              onChange={next => edit({ ...draft, compactEnabled: next })}
-            />
-          </div>
-          <div className="dsm-subs" data-disabled={draft.compactEnabled ? undefined : 'true'}>
-            <div>
-              <label className="dsh-ui-field">
-                <span className="dsh-ui-label">{copy('compactMinutesLabel')}</span>
-                <Input
-                  className="dsm-minutes"
-                  value={draft.compactMinutes}
-                  inputMode="numeric"
-                  disabled={!draft.compactEnabled}
-                  aria-invalid={compactInvalid || undefined}
-                  aria-describedby={compactInvalid ? `${tabsId}-compact-error` : undefined}
-                  onChange={event => edit({ ...draft, compactMinutes: event.target.value })}
-                />
-              </label>
-              {compactInvalid ? <p id={`${tabsId}-compact-error`} className="dsh-ui-error" role="alert">{copy('minutesInvalid')}</p> : null}
             </div>
           </div>
-        </div>
-      </section>
-      <div className="dsh-ui-form-footer">
+        </section>
+      </div>
+      <div className="dsh-ui-form-footer dsm-settings-footer">
         <Button variant="primary" disabled={invalid || snapshot.saving} onClick={save}>
           {snapshot.saving ? copy('settingsSaving') : copy('saveSettings')}
         </Button>

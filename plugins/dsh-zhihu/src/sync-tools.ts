@@ -1,5 +1,6 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ZhihuService } from './index.ts'
+import type { ZhihuJsonValue } from './open-platform.ts'
 
 /** Publishing is a human confirmation action in the preview pane. The tool can
  * prepare the same saved draft, but never receives a UI review ticket. */
@@ -52,7 +53,7 @@ export function createZhihuSyncTool(service: ZhihuService) {
     async execute(args, exec) {
       if (!service.syncCall) throw new Error('知乎同步服务未启用。')
       if (args.action === 'upload_image') {
-        return await service.syncCall('sync.media.upload', args.image, exec.signal, 'tool') as Record<string, import('@deepseek-ai/dsh-util-values').JsonValue>
+        return await service.syncCall('sync.media.upload', args.image, exec.signal, 'tool') as Record<string, ZhihuJsonValue>
       }
       const result = await service.syncCall(`sync.${args.action}`, {
         ...(args.offset === undefined ? {} : { offset: args.offset }),
@@ -60,7 +61,7 @@ export function createZhihuSyncTool(service: ZhihuService) {
         ...(args.expectedRevision === undefined ? {} : { expectedRevision: args.expectedRevision }),
         ...(args.draft === undefined ? {} : { draft: args.draft }),
       }, exec.signal, 'tool')
-      return result as Record<string, import('@deepseek-ai/dsh-util-values').JsonValue>
+      return result as Record<string, ZhihuJsonValue>
     },
   })
 }
