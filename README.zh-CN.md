@@ -29,6 +29,14 @@ dsh plugin --profile web add @klarkxy/dsh-current-title
 
 把 `web` 换成你的 profile 名，安装后重启该 profile。插件依赖的共享库会随它一起装上。
 
+要在 DSH 中浏览插件列表，先启用实验性的「自定义插件市场」组合包，再选择「插件 → 发现 → 添加索引源」，输入：
+
+```text
+https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/index.json
+```
+
+列表更新也来自这个索引源。安装任何插件前，DSH 都会要求确认。
+
 ## 开发
 
 需要 Node.js 24+ 与 pnpm 10。

@@ -267,8 +267,8 @@ export async function publish(root, packer, { lookup = readRegistry, fetcher = f
     function commit(root) {
       const { changedFiles } = JSON.parse(readFileSync(join(root, planFile), 'utf8'));
       if (!changedFiles.length) return;
-      run('git', ['add', '--', ...changedFiles], root);
-      run('git', ['commit', '-m', 'chore: record npm package versions and content fingerprints'], root);
+      run('git', ['add', '--', ...changedFiles, 'index.json'], root);
+      run('git', ['commit', '-m', 'chore: record npm releases and plugin market index'], root);
       // Normal fast-forward push: a concurrent human change fails safely, never force-push.
       run('git', ['push', 'origin', 'HEAD:main'], root);
     }

@@ -9,11 +9,12 @@
 | `site/catalog.json` | 唯一手工维护的数据 |
 | `site/render.mjs` | 纯渲染：catalog + npm 数据 → 页面、`plugins.json`、`index.json`、`llms.txt`，不做 I/O |
 | `site/build.mjs` | 拉 npm 数据，校验发布包并写 `_site/` |
+| `site/market.mjs` | 用同一份渲染逻辑更新或核对 Git 根目录的 `index.json` |
 | `site/npm.mjs` | 在内存中校验读取 npm 包，不落盘 |
 | `site/assets/` | 样式与脚本；只做渐进增强，无 JS 也要可用 |
 | `site/site.test.mjs` | 离线测试，含在 `pnpm check` |
 
-`plugins.json`、`index.json`（插件市场索引，只收 bundle 类）、`llms.txt` 由构建生成，不手写，改动在 `site.test.mjs` 覆盖。
+`plugins.json`、`_site/index.json`（插件市场索引，只收 bundle 类）、`llms.txt` 由构建生成，不手写，改动在 `site.test.mjs` 覆盖。根目录 `index.json` 是同一市场索引的 Git 发布副本，用 `pnpm site:market` 更新、`pnpm site:market:check` 核对，也不手写。
 
 ## 增改/下线插件
 
@@ -25,4 +26,4 @@ README 原始 HTML 只保留 `<img>`、`<br>`，链接/图片地址只允许 htt
 
 ## 验证与部署
 
-`pnpm site:test`（离线）、`pnpm site:build`（拉线上数据）、`node site/build.mjs --save-snapshot|--snapshot .scratch/snap.json`（快照离线重建）、`pnpm check`。改页面后本地预览 `_site/`（桌面+手机宽度）；站点在 `/dsh-plugins/` 子路径下，页面内链接用相对路径（404 除外）。部署：`.github/workflows/pages.yml` 在推 `main`、**Publish npm plugins** 结束后和每天 01:17 UTC 跑 test+build 并部署；拉取失败即构建失败，线上保留上一版，不吞网络错误、不用过期数据。
+`pnpm site:test`（离线）、`pnpm site:build`（拉线上数据）、`pnpm site:market:check`（核对 Git 市场索引与 npm）、`node site/build.mjs --save-snapshot|--snapshot .scratch/snap.json`（快照离线重建）、`pnpm check`。改页面后本地预览 `_site/`（桌面+手机宽度）；站点在 `/dsh-plugins/` 子路径下，页面内链接用相对路径（404 除外）。部署：`.github/workflows/pages.yml` 在推 `main`、**Publish npm plugins** 结束后和每天 01:17 UTC 跑 test+build 并部署；拉取失败即构建失败，线上保留上一版，不吞网络错误、不用过期数据。

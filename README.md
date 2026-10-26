@@ -29,6 +29,14 @@ dsh plugin --profile web add @klarkxy/dsh-current-title
 
 Replace `web` with your profile name and restart the profile after installing. The shared libraries a plugin depends on are installed along with it.
 
+To browse the plugin list in DSH, enable the experimental **Custom Plugin Market** bundle, then choose **Plugins → Discover → Add index source** and enter:
+
+```text
+https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/index.json
+```
+
+The same source provides list updates. DSH asks for confirmation before installing anything.
+
 ## Development
 
 Requires Node.js 24+ and pnpm 10.

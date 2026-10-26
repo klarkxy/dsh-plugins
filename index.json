@@ -1,0 +1,434 @@
+{
+  "format": 1,
+  "title": {
+    "en": "klarkxy's DSH plugins",
+    "zh": "klarkxy 的 DSH 插件"
+  },
+  "description": {
+    "en": "Installable DeepSeek Harness bundles published by klarkxy.",
+    "zh": "klarkxy 发布的可安装 DeepSeek Harness 组合包。"
+  },
+  "metadata": {
+    "categories": {
+      "workflow": {
+        "title": {
+          "zh": "工作方式",
+          "en": "How the agent works"
+        }
+      },
+      "sessions": {
+        "title": {
+          "zh": "会话与记忆",
+          "en": "Sessions and memory"
+        }
+      },
+      "models": {
+        "title": {
+          "zh": "模型与联网",
+          "en": "Models and the web"
+        }
+      },
+      "dev": {
+        "title": {
+          "zh": "插件开发",
+          "en": "Plugin development"
+        }
+      }
+    }
+  },
+  "plugins": [
+    {
+      "name": "@klarkxy/dsh-git-commit",
+      "title": {
+        "zh": "Git 提交",
+        "en": "Git Commit"
+      },
+      "description": {
+        "zh": "在对话里提交工作区改动，由模型分组并生成提交信息。",
+        "en": "Commit workspace changes from the conversation, with the model grouping the commits."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/git-commit/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-git-commit"
+      },
+      "metadata": {
+        "category": "workflow",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "git",
+          "commit"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.3.1",
+          "publishTimestamp": 1792747993,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-current-title",
+      "title": {
+        "zh": "自动标题",
+        "en": "Auto Title"
+      },
+      "description": {
+        "zh": "会话标题跟随最新任务自动更新，你手动改过的名字不会被覆盖。",
+        "en": "Session titles follow the latest task automatically; names you set by hand stay put."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/current-title/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-current-title"
+      },
+      "metadata": {
+        "category": "sessions",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "session-title",
+          "title-generation"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.3.1",
+          "publishTimestamp": 1792747975,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-web-search-manager",
+      "title": {
+        "zh": "网页搜索",
+        "en": "Web Search"
+      },
+      "description": {
+        "zh": "在一个设置页管理和排序多家搜索与网页读取服务，包括已安装插件提供的能力。",
+        "en": "Manage and rank search and page-reading services, including providers from installed plugins, in one settings page."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/web-search-manager/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-web-search-manager"
+      },
+      "metadata": {
+        "category": "models",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "web-search",
+          "search-provider",
+          "page-fetching",
+          "duckduckgo",
+          "tavily"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.3.1",
+          "publishTimestamp": 1792748025,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.2"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-zhihu",
+      "title": {
+        "zh": "知乎",
+        "en": "Zhihu"
+      },
+      "description": {
+        "zh": "知乎搜索、智能体工具、知识库、用量统计与草稿管理。",
+        "en": "Zhihu search, agent tools, knowledge bases, usage tracking, and draft management."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/zhihu/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-zhihu"
+      },
+      "metadata": {
+        "category": "models",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "zhihu",
+          "zhihu-search",
+          "knowledge-base",
+          "web-search"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.2.7",
+          "publishTimestamp": 1792748030,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.2"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-dev-index",
+      "title": {
+        "zh": "DSH 文档",
+        "en": "DSH Docs"
+      },
+      "description": {
+        "zh": "在插件页阅读 DSH 官方文档；创造模式用原生工具搜索文档、查核 npm 与 GitHub 上的插件信息。",
+        "en": "Read the official DSH docs in the Plugins page; Creator mode searches docs and checks plugins on npm and GitHub with native tools."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/dev-index/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-dev-index"
+      },
+      "metadata": {
+        "category": "dev",
+        "keywords": [
+          "dsh-plugin",
+          "deepseek-harness",
+          "dsh-plugins",
+          "dsh-dev-index",
+          "creator-mode"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.2.7",
+          "publishTimestamp": 1792748001,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.2"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-safe-auto",
+      "title": {
+        "zh": "Safe Auto",
+        "en": "Safe Auto"
+      },
+      "description": {
+        "zh": "需要审批的请求交给审核模型判断，通过才放行这一次。",
+        "en": "A reviewer model answers approval requests; only calls that pass go ahead."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/safe-auto/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-safe-auto"
+      },
+      "metadata": {
+        "category": "workflow",
+        "keywords": [
+          "dsh-plugin",
+          "deepseek-harness",
+          "approval",
+          "security"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.5.0",
+          "publishTimestamp": 1792748010,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-session-manager",
+      "title": {
+        "zh": "会话管理",
+        "en": "Session Manager"
+      },
+      "description": {
+        "zh": "跨工作目录查找和阅读会话，使用临时工作区；空输入一键继续，久离回来给出摘要与压缩建议。",
+        "en": "Find and read sessions across working directories, use temporary workspaces, continue with one tap on an empty composer, and get a welcome-back recap after time away."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-session-manager"
+      },
+      "metadata": {
+        "category": "sessions",
+        "keywords": []
+      },
+      "versions": [
+        {
+          "version": "0.3.1",
+          "publishTimestamp": 1792748015,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.2"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-model-hub",
+      "title": {
+        "zh": "模型枢纽",
+        "en": "Model Hub"
+      },
+      "description": {
+        "zh": "在一个页面修改各插件和子代理使用的模型，并查看运行中子代理的模型与思考强度。",
+        "en": "Change the models used by your plugins and subagents from one page, and see each running subagent's model and reasoning effort."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-model-hub"
+      },
+      "metadata": {
+        "category": "models",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "deepseek-harness",
+          "model-route",
+          "llm"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.5",
+          "publishTimestamp": 1792748001,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.2"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-font",
+      "title": {
+        "zh": "字体",
+        "en": "Font"
+      },
+      "description": {
+        "zh": "自定义 Web GUI 的界面字体、代码字体与会话字号。",
+        "en": "Customize the interface font, code font, and conversation font size of the Web GUI."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/font/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-font"
+      },
+      "metadata": {
+        "category": "workflow",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "font",
+          "font-family",
+          "font-size",
+          "theme"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.2.1",
+          "publishTimestamp": 1792747988,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-unrestricted",
+      "title": {
+        "zh": "破限",
+        "en": "Unrestricted"
+      },
+      "description": {
+        "zh": "解除模型的回答限制、交付完整成果的会话 Preset，只作用于选用它的会话；可能导致账号被封禁。",
+        "en": "A session preset that removes the limits on what the model answers and delivers complete results, only in sessions that pick it; may get your account banned."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/unrestricted/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-unrestricted"
+      },
+      "metadata": {
+        "category": "workflow",
+        "keywords": [
+          "deepseek-harness",
+          "dsh-preset",
+          "unrestricted"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.2.0",
+          "publishTimestamp": 1792748021,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.1"
+          }
+        }
+      ]
+    }
+  ]
+}

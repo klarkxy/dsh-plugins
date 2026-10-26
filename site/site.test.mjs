@@ -74,6 +74,24 @@ test("catalog validation rejects duplicates and missing translations", () => {
   assert.throws(() => validateCatalog(broken), /duplicate slug[\s\S]*missing summary\.en/);
 });
 
+test("the Git market index stays aligned with the catalog", () => {
+  const market = JSON.parse(readFileSync(new URL("../index.json", import.meta.url), "utf8"));
+  assert.equal(market.format, 1);
+  assert.deepEqual(market.plugins.map((p) => p.name), catalog.plugins.filter((p) => p.kind !== "service").map((p) => p.package));
+  for (const entry of market.plugins) {
+    const plugin = catalog.plugins.find((p) => p.package === entry.name);
+    assert.deepEqual(entry.title, plugin.title);
+    assert.deepEqual(entry.description, plugin.summary);
+    assert.equal(entry.metadata.category, plugin.category);
+    assert.deepEqual(entry.repository, { url: plugin.repository, ...(plugin.directory ? { directory: plugin.directory } : {}) });
+    assert.ok(entry.versions.length > 0);
+    for (const version of entry.versions) {
+      assert.equal(version.source.type, "npm");
+      assert.ok(Number.isInteger(version.publishTimestamp) && version.publishTimestamp >= 0);
+    }
+  }
+});
+
 function fixture() {
   const data = {};
   for (const [i, p] of catalog.plugins.entries()) {

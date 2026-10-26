@@ -18,6 +18,8 @@
     "release:docs": "node scripts/release-status.mjs --write-docs",
     "release:fingerprint": "node scripts/release-status.mjs --fingerprint",
     "site:build": "node site/build.mjs",
+    "site:market": "node site/market.mjs",
+    "site:market:check": "node site/market.mjs --check",
     "site:test": "node --test site/*.test.mjs",
     "check": "pnpm release:check && pnpm site:test && pnpm build && pnpm test:editor-build && pnpm typecheck && pnpm test && pnpm pack:check",
     "test:editor-build": "vitest run --config vitest.editor-plugins.config.ts scripts/editor-plugins",

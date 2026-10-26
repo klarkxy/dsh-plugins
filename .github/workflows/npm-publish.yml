@@ -68,11 +68,12 @@ jobs:
         run: node scripts/publish-npm.mjs publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Write package versions back to main
+      - name: Write package versions and the market index back to main
         if: steps.source.outputs.current == 'true'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          pnpm site:market
           node scripts/publish-npm.mjs commit
       - name: Preserve plan and release archives
         if: always() && steps.source.outputs.current == 'true'

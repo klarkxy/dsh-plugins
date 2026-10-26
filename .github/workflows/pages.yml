@@ -37,6 +37,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm site:test
+      - run: pnpm site:market:check
       - run: pnpm site:build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
