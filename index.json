@@ -191,8 +191,8 @@
       },
       "versions": [
         {
-          "version": "0.2.8",
-          "publishTimestamp": 1793019257,
+          "version": "0.2.9",
+          "publishTimestamp": 1793371395,
           "source": {
             "type": "npm"
           },
@@ -268,8 +268,8 @@
       },
       "versions": [
         {
-          "version": "0.5.0",
-          "publishTimestamp": 1792748010,
+          "version": "0.5.1",
+          "publishTimestamp": 1793371575,
           "source": {
             "type": "npm"
           },
@@ -301,8 +301,8 @@
       },
       "versions": [
         {
-          "version": "0.3.2",
-          "publishTimestamp": 1793019311,
+          "version": "0.3.3",
+          "publishTimestamp": 1793371408,
           "source": {
             "type": "npm"
           },
@@ -340,8 +340,8 @@
       },
       "versions": [
         {
-          "version": "0.1.6",
-          "publishTimestamp": 1793019216,
+          "version": "0.1.7",
+          "publishTimestamp": 1793371475,
           "source": {
             "type": "npm"
           },
