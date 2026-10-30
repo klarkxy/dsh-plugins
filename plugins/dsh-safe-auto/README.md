@@ -34,7 +34,7 @@ Recording starts after installing the review-history feature; earlier reviews ar
 
 | Tool | What it does |
 |---|---|
-| `safe_auto_history` | Read-only lookup of the current session's review history. `list` returns summaries plus a pagination cursor; `get` returns one complete record. Use the Plugins page to read history across sessions. Reading history never triggers a review and never calls the reviewer model. |
+| `safe_auto_history` | Read-only lookup of the current session's review history. `list` returns summaries and a next-page cursor only when more records remain; `get` returns one complete record. Use the Plugins page to read history across sessions. Reading history never triggers a review and never calls the reviewer model. |
 
 ## What gets reviewed
 

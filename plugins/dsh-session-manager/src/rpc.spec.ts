@@ -2,7 +2,8 @@ import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:http'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { retryDomain } from './retry-journal.ts'
 import { resolveConfig } from './contracts.ts'
 import { registerSessionManagerRpc } from './rpc.ts'
 
@@ -43,9 +44,10 @@ const presenceModelStore = (() => {
 async function withRpc(
   run: (
     call: (endpoint: string, payload?: unknown) => Promise<{ status: number; body: any }>,
-    controls: { profile: string; rejectRequests: (status: number | undefined) => void; stop: () => void },
+    controls: { profile: string; rejectRequests: (status: number | undefined) => void; stop: () => Promise<void> },
   ) => Promise<void>,
   modelStore?: () => typeof presenceModelStore | undefined,
+  services: Record<string, unknown> = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), 'session-manager-rpc-test-'))
   const profile = join(root, 'profile')
@@ -59,7 +61,7 @@ async function withRpc(
     webServer: { register(route: any) { handler = route.handler; return () => {} } },
   }
   const rootCtx = {
-    get: () => undefined,
+    get: (key: string) => services[key],
     sessionQuery: { observeSession: async () => fakeObservation() },
   }
   const stop = registerSessionManagerRpc(rootCtx as never, transport as never, resolveConfig(), () => undefined, modelStore)
@@ -83,7 +85,7 @@ async function withRpc(
   try {
     await run(call, { profile, rejectRequests: status => { rejection = status }, stop })
   } finally {
-    stop()
+    await stop()
     server.closeAllConnections()
     await new Promise<void>(done => server.close(() => done()))
     await rm(root, { recursive: true, force: true })
@@ -91,6 +93,32 @@ async function withRpc(
 }
 
 describe('composed plugin channel', () => {
+  it('opens one retry journal per owner and closes it when RPC is disposed', async () => {
+    const close = vi.fn(async () => {})
+    const open = vi.fn(async () => ({ table: () => ({ entries: () => new Map().entries(), put: async () => {} }), close }))
+    await withRpc(async (call, controls) => {
+      expect(open).not.toHaveBeenCalled()
+      expect((await call('retry.capabilities', {})).body.result.value.retry).toBe(true)
+      expect((await call('retry.capabilities', {})).body.result.value.retry).toBe(true)
+      expect(open).toHaveBeenCalledExactlyOnceWith(retryDomain)
+      await controls.stop()
+      expect(close).toHaveBeenCalledTimes(1)
+      expect((await call('retry.capabilities', {})).body.result.ok).toBe(false)
+      expect(open).toHaveBeenCalledTimes(1)
+    }, undefined, { storageDomain: { open }, sessionController: { fork() {}, prompt() {} } })
+  })
+
+  it('does not treat unreadable retry records as an empty history', async () => {
+    const close = vi.fn(async () => {})
+    const open = vi.fn(async () => ({
+      table: () => ({ entries: () => new Map([['corrupt', {}]]).entries(), put: async () => {} }), close,
+    }))
+    await withRpc(async call => {
+      expect((await call('retry.capabilities', {})).body.result.ok).toBe(false)
+      expect(close).toHaveBeenCalledTimes(1)
+    }, undefined, { storageDomain: { open }, sessionController: { fork() {}, prompt() {} } })
+  })
+
   it('routes every endpoint and rejects unknown ones and extra payload keys', async () => {
     await withRpc(async call => {
       const unknown = await call('welcomeback.unknown', {})
@@ -105,6 +133,12 @@ describe('composed plugin channel', () => {
       expect(prepare.body.result).toEqual({ ok: true, value: { show: false } })
       const suggest = await call('continue.suggest', { sessionId: 's' })
       expect(suggest.body.result).toEqual({ ok: true, value: { text: null, pending: true } })
+      const edit = await call('edit.prepare', { sessionId: 's', promptSeq: 1 })
+      expect(edit.body.result).toMatchObject({ ok: false, error: { code: 'session-manager/unavailable' } })
+      const invalidEdit = await call('edit.prepare', { sessionId: 's', promptSeq: 1, admin: true })
+      expect(invalidEdit.body.result).toMatchObject({ ok: false, error: { code: 'session-manager/invalid-request' } })
+      const invalidFile = await call('edit.file', { sessionId: 's', promptSeq: 1, attachmentId: 'a', childId: 'child' })
+      expect(invalidFile.body.result).toMatchObject({ ok: false, error: { code: 'session-manager/invalid-request' } })
       const compact = await call('welcomeback.compact', { sessionId: 's', requestId })
       expect(compact.body.result).toMatchObject({ ok: false, error: { code: 'session-manager/unavailable' } })
       // Presence configuration: read returns the resolved view; write needs the host editor.

@@ -1,0 +1,2 @@
+# Frozen delivery hashes cover exact bytes, including the original line endings.
+host-patches/thread-management/** -text whitespace=trailing-space,space-before-tab,cr-at-eol

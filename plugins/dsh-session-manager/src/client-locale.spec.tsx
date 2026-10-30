@@ -19,7 +19,9 @@ describe('session manager live locale', () => {
     let active = 'en', unload = () => {}, resolve: (value: unknown) => void = () => {}
     const close = vi.fn(), openWorkspace = vi.fn(), listeners = new Set<() => void>()
     const renderers = new Map<string, ComponentType<any>>(), specs: any[] = []
-    const allocate = vi.fn(() => new Promise(done => { resolve = done }))
+    const allocate = vi.fn((_channel: string, endpoint: string, _payload: unknown) => endpoint === 'retry.capabilities'
+      ? Promise.resolve({ ok: true, value: { retry: false, retryModified: false, retryContent: false } })
+      : new Promise(done => { resolve = done }))
     const ctx = {
       inject(deps: string[], callback?: (scope: unknown) => void) {
         if (deps[0] === 'remote') callback?.({ remote: { $mount: async () => async () => {} }, effect() {} })
@@ -52,9 +54,10 @@ describe('session manager live locale', () => {
       expect(item().textContent).toContain('Temporary Workspace')
       await act(async () => { item().click() })
       expect(close).toHaveBeenCalledOnce()
-      expect(allocate).toHaveBeenCalledOnce()
+      const allocationCalls = allocate.mock.calls.filter(call => call[1] === 'temporary.allocate')
+      expect(allocationCalls).toHaveLength(1)
       expect(item().disabled).toBe(true)
-      const requestId = allocate.mock.calls[0]![2].requestId
+      const requestId = (allocationCalls[0]![2] as { requestId: string }).requestId
       await act(async () => { resolve({ ok: true, value: { requestId, path: '/temporary/one' } }) })
       expect(ctx.workspaces.create).toHaveBeenCalledWith({ path: '/temporary/one' })
       expect(openWorkspace).toHaveBeenCalledWith('made', expect.any(Function))
@@ -74,11 +77,11 @@ describe('session manager live locale', () => {
     expect(listeners.size).toBe(0)
   })
 
-  it('provides bilingual config descriptions and localizes an unavailable fork', () => {
+  it('provides bilingual config descriptions and localizes an unavailable host operation', () => {
     for (const field of ['pageChars', 'listLimit', 'searchLimit']) {
       expect(Config.dict![field]!.meta.description).toMatchObject({ zh: expect.stringMatching(/[一-龿]/), en: expect.any(String) })
     }
-    expect(failureText('zh', { code: 'session/fork-unavailable' })).toBe('当前版本不能完成这个操作。')
-    expect(failureText('en', { code: 'session/fork-unavailable' })).toBe('This runtime cannot complete that action.')
+    expect(failureText('zh', { code: 'session/retry-media-unavailable' })).toBe('当前版本不能完成这个操作。')
+    expect(failureText('en', { code: 'session/retry-media-unavailable' })).toBe('This runtime cannot complete that action.')
   })
 })

@@ -17,11 +17,13 @@ export const READ_TOOL = 'read_session'
 export const WELCOME_BACK_PREPARE_ENDPOINT = 'welcomeback.prepare'
 export const WELCOME_BACK_COMPACT_ENDPOINT = 'welcomeback.compact'
 export const CONTINUE_SUGGEST_ENDPOINT = 'continue.suggest'
+export const EDIT_PREPARE_ENDPOINT = 'edit.prepare'
+export const EDIT_FILE_ENDPOINT = 'edit.file'
 export const CONFIG_READ_ENDPOINT = 'config.read'
 export const CONFIG_WRITE_ENDPOINT = 'config.write'
 /** Card entry id in the chat flow; the recap renders at the latest completed turn's tail. */
 export const WELCOME_BACK_CARD_ID = '@klarkxy/dsh-session-manager.welcome-back'
-export const WELCOME_BACK_CARD_SLOT = 'conversation.chat.turnTail'
+export const TURN_TAIL_SLOT = 'conversation.chat.turnTail'
 export const CONTINUE_GHOST_ID = '@klarkxy/dsh-session-manager.continue-ghost'
 export const CONTINUE_GHOST_SLOT = 'conversation.input.overlay'
 
@@ -40,6 +42,25 @@ export interface RecapPayload {
   readonly summary: string
   readonly progress: string
   readonly nextStep: string
+}
+
+export interface EditPrepareRequest {
+  readonly sessionId: string
+  readonly promptSeq: number
+}
+
+export type EditContent = { readonly type: 'text'; readonly text: string }
+  | { readonly type: 'image'; readonly attachmentId: string }
+  | { readonly type: 'file'; readonly attachmentId: string; readonly name: string; readonly bytes: number }
+
+export interface EditPrepareValue {
+  readonly sessionId: string
+  readonly promptSeq: number
+  readonly text: string
+  /** Original order; images are read through the source Session's authorized endpoint. */
+  readonly content?: readonly EditContent[]
+  /** The host recorded later file changes after this prompt. */
+  readonly modified: boolean
 }
 
 export interface WelcomeBackPrepareRequest {

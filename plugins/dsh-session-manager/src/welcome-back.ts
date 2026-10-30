@@ -35,13 +35,43 @@ export interface PresenceServices {
   readonly sessionQuery: SessionQueryEngine
   /** Live-agent registry; absence disables the running check (treated as not running). */
   agents?: { get(id: string): { status?: string } | undefined }
-  /** Host session controller; required for compaction. */
+  /** Host session controller; required for compaction, forking, and prompting. */
   sessionController?: {
     resolveAgent(id: string): Promise<{ agent: unknown } | { error: { code: string } }>
+    fork?(request: { sessionId: string; atSeq?: number }): Promise<{ sessionId?: string }>
+    prompt?(request: {
+      requestId: string
+      sessionId: string
+      mode: 'queue' | 'steer'
+      content: readonly unknown[]
+    }, signal?: AbortSignal): Promise<unknown>
+    rename?(request: { sessionId: string; title: string }): Promise<unknown>
+    attachment?(request: { sessionId: string; attachmentId: string }): Promise<unknown>
   }
   /** Host compaction implementation; required for compaction. */
   compaction?: {
     compactNow(agent: unknown, signal: AbortSignal): Promise<{ shadowedTokenCount?: number } | null>
+  }
+  /** Host workspace controller; retry uses it for best-effort sidebar placement, pin, and archive. */
+  workspaceController?: {
+    follow?(signal: AbortSignal): AsyncIterable<{
+      type?: string
+      value?: {
+        items?: readonly { workspaceId?: string; sessionIds?: readonly string[] }[]
+        pinnedSessionIds?: readonly string[]
+      }
+    }>
+    insertSessionBefore?(request: { workspaceId: string; sessionId: string; beforeSessionId?: string }): Promise<unknown>
+    pinSession?(request: { sessionId: string }): Promise<unknown>
+    archiveSession?(request: { sessionId: string }): Promise<unknown>
+  }
+  /** Attachment byte reads; required when a resent prompt carries original files. */
+  attachments?: {
+    readFileStream(ref: { attachmentId: string; name: string; bytes: number }, signal: AbortSignal): AsyncIterable<Uint8Array>
+  }
+  /** Upload staging bound to the target session; required when a resent prompt carries files. */
+  fileUploads?: {
+    uploadStream(request: { sessionId: string; data: AsyncIterable<Uint8Array>; name: string; signal: AbortSignal }): Promise<unknown>
   }
 }
 
@@ -440,10 +470,16 @@ export function presenceServices(ctx: Context, sessionQuery: SessionQueryEngine)
   const agents = optional('agents') as PresenceServices['agents']
   const sessionController = optional('sessionController') as PresenceServices['sessionController']
   const compaction = optional('compaction') as PresenceServices['compaction']
+  const workspaceController = optional('workspaceController') as PresenceServices['workspaceController']
+  const attachments = optional('attachments') as PresenceServices['attachments']
+  const fileUploads = optional('fileUploads') as PresenceServices['fileUploads']
   return {
     sessionQuery,
     ...(agents === undefined ? {} : { agents }),
     ...(sessionController === undefined ? {} : { sessionController }),
     ...(compaction === undefined ? {} : { compaction }),
+    ...(workspaceController === undefined ? {} : { workspaceController }),
+    ...(attachments === undefined ? {} : { attachments }),
+    ...(fileUploads === undefined ? {} : { fileUploads }),
   }
 }

@@ -346,9 +346,9 @@ describe('tendency store', () => {
 
 describe('buildCastPrompt', () => {
   const routes = [
-    { index: 0, provider: 'a', model: 'one', reasoningEffort: 'high', tendency: 'careful reviews' },
+    { index: 0, provider: 'a', model: 'team/one', reasoningEffort: 'high', tendency: 'careful reviews' },
     { index: 1, provider: 'b', model: 'two' },
-    { index: 2, provider: 'c', model: 'three', tendency: 'fast drafts' },
+    { index: 2, provider: 'c', model: 'c/three', tendency: 'fast drafts' },
   ]
 
   it('stays empty when disabled or routeless', () => {
@@ -360,6 +360,9 @@ describe('buildCastPrompt', () => {
     const text = buildCastPrompt(true, [{ index: 0, provider: 'a', model: 'one' }])
     expect(text).toContain('list_subagent_models')
     expect(text).toContain('supply provider and model together explicitly')
+    expect(text).toContain('do not copy the whole label into model')
+    expect(text).toContain('{"provider":"example-provider","model":"team/model-a"}')
+    expect(text).toContain('copy both exactly without stripping or adding any prefix')
     expect(text).toContain('prefer a model different from your own')
     expect(text).toContain('using the same model is appropriate')
     expect(text).toContain('Do not create extra subtasks solely for model diversity')
@@ -376,8 +379,8 @@ describe('buildCastPrompt', () => {
     const text = buildCastPrompt(true, routes)
     expect(text).toContain('task tendencies')
     expect(text).toContain('advisory')
-    expect(text).toContain('- a/one (reasoning effort: high): careful reviews')
-    expect(text).toContain('- c/three: fast drafts')
+    expect(text).toContain('- {"provider":"a","model":"team/one"} (reasoning effort: high): careful reviews')
+    expect(text).toContain('- {"provider":"c","model":"c/three"}: fast drafts')
     expect(text).not.toContain('b/two')
   })
 })
@@ -391,7 +394,7 @@ describe('promptText', () => {
     expect(generic).toContain('supply provider and model together explicitly')
     expect(() => readFileSync(join(profileDir, 'data', 'model-hub', 'cast.json'))).toThrow()
     setTendency(cast, 'a', 'one', 'careful reviews')
-    expect(cast.promptText()).toContain('- a/one: careful reviews')
+    expect(cast.promptText()).toContain('- {"provider":"a","model":"one"}: careful reviews')
     setTendency(cast, 'a', 'one', '')
     expect(cast.promptText()).toBe(generic)
     expect(target.mutate).not.toHaveBeenCalled()
@@ -404,7 +407,7 @@ describe('promptText', () => {
     const cast = createCast(deps)
     setTendency(cast, 'a', 'one', 'careful reviews')
     const text = cast.promptText(() => ({ enabled: true, allowedModels: [{ provider: 'a', model: 'one' }] }))
-    expect(text).toContain('- a/one: careful reviews')
+    expect(text).toContain('- {"provider":"a","model":"one"}: careful reviews')
   })
 
   it('falls back to the settings descriptor when the service is missing or failing', () => {
@@ -413,9 +416,9 @@ describe('promptText', () => {
     const { deps } = castDeps(target, profileDir)
     const cast = createCast(deps)
     setTendency(cast, 'a', 'one', 'careful reviews')
-    expect(cast.promptText(() => undefined)).toContain('- a/one: careful reviews')
-    expect(cast.promptText(() => { throw new Error('no routes configured') })).toContain('- a/one: careful reviews')
-    expect(cast.promptText(() => 'garbage')).toContain('- a/one: careful reviews')
+    expect(cast.promptText(() => undefined)).toContain('- {"provider":"a","model":"one"}: careful reviews')
+    expect(cast.promptText(() => { throw new Error('no routes configured') })).toContain('- {"provider":"a","model":"one"}: careful reviews')
+    expect(cast.promptText(() => 'garbage')).toContain('- {"provider":"a","model":"one"}: careful reviews')
   })
 
   it('returns empty text when the selection is disabled or every source fails', () => {
@@ -450,7 +453,7 @@ describe('apply wiring', () => {
     expect(options.name).toBe('model-hub:subagent-cast')
     expect(options.order).toBe(2801)
     expect(options.interpolate).toBe(false)
-    expect(options.text()).toContain('- a/one: careful reviews')
+    expect(options.text()).toContain('- {"provider":"a","model":"one"}: careful reviews')
     current = { enabled: false, allowedModels: [{ provider: 'a', model: 'one' }] }
     expect(options.text()).toBe('')
   })

@@ -441,8 +441,9 @@ export async function openAudit(storageDomain) {
   };
   const view = row => {
     if (row === undefined) return undefined;
-    // Deep copy: callers must never mutate the authoritative in-memory row.
-    const next = { ...structuredClone(row), executionState: row.execution?.state ?? 'not-observed' };
+    // Schema-validated rows may retain undefined optional fields in memory.
+    // Match their persisted JSON form and detach the caller's copy.
+    const next = { ...JSON.parse(JSON.stringify(row)), executionState: row.execution?.state ?? 'not-observed' };
     return decorate(row, next);
   };
   /*
@@ -455,7 +456,7 @@ export async function openAudit(storageDomain) {
   const summary = row => {
     const light = {};
     for (const [key, value] of Object.entries(row)) if (!HEAVY.has(key)) light[key] = value;
-    const out = structuredClone(light);
+    const out = JSON.parse(JSON.stringify(light));
     out.executionState = row.execution?.state ?? 'not-observed';
     decorate(row, out);
     return out;
@@ -649,7 +650,7 @@ export async function openAudit(storageDomain) {
     /**
      * Synchronous filtered listing, newest first, keyset-paginated so new
      * inserts during iteration never shift page boundaries.
-     * @returns {{items: object[], nextCursor: string|undefined, total: number}}
+     * @returns {{items: object[], nextCursor?: string, total: number}}
      */
     list(payload = {}) {
       const filter = listPayloadSchema.parse(payload ?? {});
@@ -683,7 +684,7 @@ export async function openAudit(storageDomain) {
       }
       const last = page[page.length - 1];
       const hasMore = last !== undefined && rows.some(row => afterCursor(row, { startedAt: last.startedAt, id: last.id }));
-      return { items: page.map(summary), nextCursor: hasMore ? encodeCursor(last) : undefined, total };
+      return { items: page.map(summary), ...(hasMore ? { nextCursor: encodeCursor(last) } : {}), total };
     },
 
     /** Synchronous full record read, including heavy fields. */

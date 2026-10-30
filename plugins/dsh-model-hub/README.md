@@ -19,7 +19,7 @@ Replace `web` with your profile name and restart the profile.
 Open **Plugins → Model Hub**.
 
 - **Fields**: every model setting exposed by installed plugins, such as Auto Title, Git Commit, and Safe Auto. Search by plugin, purpose, or current model, then pick a new model. The plugin that owns the setting saves the change.
-- **Subagent Cast**: toggle the subagent model allowlist and add, replace, or remove models. When enabled with at least one model, it guides the agent to discover the models available in the current conversation and pick one explicitly when delegating. For independent reviews and alternative approaches it favors a different model when suitable, but allows the same one when it fits better. Per-model task tendencies you add are optional hints; none are supplied by default. Below the list, a live view shows each running subagent with its current model and reasoning effort; an effort marked adapter default comes from the adapter, not an explicit choice.
+- **Subagent Cast**: toggle the subagent model allowlist and add, replace, or remove models. When enabled with at least one model, it guides the agent to discover the models available in the current conversation and pick one explicitly when delegating. The guidance distinguishes provider and model names to help avoid repeating the provider prefix. For independent reviews and alternative approaches it favors a different model when suitable, but allows the same one when it fits better. Per-model task tendencies you add are optional hints; none are supplied by default. Below the list, a live view shows each running subagent with its current model and reasoning effort; an effort marked adapter default comes from the adapter, not an explicit choice.
 
 ## Limits
 

@@ -4,7 +4,6 @@ import {
   bindHost,
   createFreeChatModel,
   createRetryModel,
-  directRetryRequest,
   editRetryRequest,
   type SessionHost,
 } from './session-actions.ts'
@@ -97,7 +96,7 @@ describe('session actions', () => {
     expect(model.getSnapshot().notice).toBeUndefined()
   })
 
-  it('omits text on a direct retry and reuses the request id after a transport failure', async () => {
+  it('sends one edited body and reuses the request id after a transport failure', async () => {
     let revision = 7
     const previewRetry = vi.fn(async () => ({ branchRevision: revision, eligible: true, inputRevision: 'in-7' }))
     const retry = vi.fn()
@@ -105,31 +104,32 @@ describe('session actions', () => {
         revision = 8
         throw new Error('socket')
       })
-      .mockResolvedValueOnce({ sessionId: 's', branchRevision: 8 })
+      .mockResolvedValueOnce({ sessionId: 'child', sourceSessionId: 's', archived: true })
     const model = createRetryModel(host(list([]), {
       capabilities: async () => ({ retry: true, freeSession: false, deleteSession: false }),
       previewRetry,
       retry,
-    }), () => 'retry-id')
+    }), () => 'edit-id')
     await model.load()
     const signal = new AbortController().signal
-    await model.retry('s', 'm', signal)
+    await model.beginEdit('s', 'm', 'edited', signal)
+    await model.sendEdit('s', 'm', signal)
     expect(model.getSnapshot().failure?.code).toBe('transport')
-    await model.retry('s', 'm', signal)
+    await model.sendEdit('s', 'm', signal)
     expect(previewRetry).toHaveBeenCalledTimes(1)
     expect(retry).toHaveBeenCalledTimes(2)
     const bodies = retry.mock.calls.map(call => call[0] as Record<string, unknown>)
-    expect(bodies[0]).toEqual(directRetryRequest({
-      sessionId: 's', messageId: 'm', expectedRevision: 7, expectedInputRevision: 'in-7', requestId: 'retry-id',
+    expect(bodies[0]).toEqual(editRetryRequest({
+      sessionId: 's', messageId: 'm', expectedRevision: 7, expectedInputRevision: 'in-7', requestId: 'edit-id', text: 'edited',
     }))
-    expect(Object.hasOwn(bodies[0]!, 'text')).toBe(false)
+    expect(Object.hasOwn(bodies[0]!, 'text')).toBe(true)
     expect(bodies[1]).toEqual(bodies[0])
   })
 
   it('sends edited plain text, keeps one submission, and drops a cancelled preview', async () => {
     let release: (value: unknown) => void = () => {}
     const previewRetry = vi.fn(() => new Promise(resolve => { release = resolve }))
-    const retry = vi.fn(async () => ({ sessionId: 's', branchRevision: 2 }))
+    const retry = vi.fn(async () => ({ sessionId: 'child', sourceSessionId: 's', archived: true }))
     const model = createRetryModel(host(list([]), {
       capabilities: async () => ({ retry: true, freeSession: true, deleteSession: false }),
       previewRetry,
@@ -151,7 +151,7 @@ describe('session actions', () => {
 
     let hang: (value: unknown) => void = () => {}
     previewRetry.mockImplementation(() => new Promise(resolve => { hang = resolve }))
-    const pending = model.retry('s', 'm', signal)
+    const pending = model.beginEdit('s', 'm', 'other', signal)
     model.cancel()
     hang({ branchRevision: 9, eligible: true, inputRevision: 'in-9' })
     await pending
@@ -160,7 +160,54 @@ describe('session actions', () => {
     expect(failureText('en', { code: 'session/retry-blocked', reason: 'modified' })).toContain('may have made changes')
   })
 
-  it('replays one committed retry when the reply is lost and the revision has moved', async () => {
+  it('keeps the modification warning with an edited draft and sends consent once', async () => {
+    const previewRetry = vi.fn(async () => ({ branchRevision: 2, eligible: false, reason: 'modified', inputRevision: 'in-2' }))
+    const retry = vi.fn(async () => ({ sessionId: 'child', sourceSessionId: 's', archived: true }))
+    const model = createRetryModel(host(list([]), {
+      capabilities: async () => ({ retry: true, retryModified: true, freeSession: false, deleteSession: false }),
+      previewRetry,
+      retry,
+    }), () => 'edit-modified-id')
+    await model.load()
+    const signal = new AbortController().signal
+    await model.beginEdit('s', 'm', 'original', signal)
+    expect(model.getSnapshot()).toMatchObject({ editing: true, modified: true, draft: 'original' })
+    model.setDraft('edited')
+    await model.sendEdit('s', 'm', signal, undefined, true)
+    expect(retry.mock.calls[0]?.[0]).toEqual(editRetryRequest({
+      sessionId: 's', messageId: 'm', expectedRevision: 2, expectedInputRevision: 'in-2', requestId: 'edit-modified-id', text: 'edited', allowModified: true,
+    }))
+    expect(model.getSnapshot()).toMatchObject({ editing: false, modified: false })
+  })
+
+  it('does not open an editor for a modified preview without an input token', async () => {
+    const model = createRetryModel(host(list([]), {
+      capabilities: async () => ({ retry: true, freeSession: false, deleteSession: false }),
+      previewRetry: async () => ({ branchRevision: 1, eligible: false, reason: 'modified' }),
+      retry: vi.fn(),
+    }))
+    await model.load()
+    await model.beginEdit('s', 'm', 'original', new AbortController().signal)
+    expect(model.getSnapshot()).toMatchObject({ editing: false, modified: false })
+    expect(model.getSnapshot().failure?.reason).toBe('input-revision')
+  })
+
+  it('keeps a modified edit blocked when the host lacks confirmation support', async () => {
+    const retry = vi.fn()
+    const model = createRetryModel(host(list([]), {
+      capabilities: async () => ({ retry: true, freeSession: false, deleteSession: false }),
+      previewRetry: async () => ({ branchRevision: 1, eligible: false, reason: 'modified', inputRevision: 'in-1' }),
+      retry,
+    }))
+    await model.load()
+    const signal = new AbortController().signal
+    await model.beginEdit('s', 'm', 'original', signal)
+    expect(model.getSnapshot().editing).toBe(false)
+    expect(model.getSnapshot().failure?.reason).toBe('modified')
+    expect(retry).not.toHaveBeenCalled()
+  })
+
+  it('replays one committed edit when the reply is lost and the revision has moved', async () => {
     let revision = 0
     let commits = 0
     const previewRetry = vi.fn(async () => ({ branchRevision: revision, eligible: true, inputRevision: 'in-0' }))
@@ -171,7 +218,7 @@ describe('session actions', () => {
           revision = 1
           throw new Error('lost')
         }
-        return { sessionId: 's', branchRevision: revision }
+        return { sessionId: 'child', sourceSessionId: 's', archived: true }
       }
       commits += 1
       throw new Error(`second execution ${body.expectedRevision} ${body.requestId}`)
@@ -183,14 +230,15 @@ describe('session actions', () => {
     }), () => 'id-1')
     await model.load()
     const signal = new AbortController().signal
-    await model.retry('s', 'm', signal)
-    await model.retry('s', 'm', signal)
+    await model.beginEdit('s', 'm', 'edited', signal)
+    await model.sendEdit('s', 'm', signal)
+    await model.sendEdit('s', 'm', signal)
     expect(commits).toBe(1)
     expect(previewRetry).toHaveBeenCalledTimes(1)
     expect(retry.mock.calls[1]?.[0]).toEqual(retry.mock.calls[0]?.[0])
   })
 
-  it('does not retry when the preview has no input token', async () => {
+  it('does not edit when the preview has no input token', async () => {
     const previewRetry = vi.fn(async () => ({ branchRevision: 1, eligible: true }))
     const retry = vi.fn()
     const model = createRetryModel(host(list([]), {
@@ -199,12 +247,12 @@ describe('session actions', () => {
       retry,
     }))
     await model.load()
-    await model.retry('s', 'm', new AbortController().signal)
+    await model.beginEdit('s', 'm', 'original', new AbortController().signal)
     expect(retry).not.toHaveBeenCalled()
     expect(model.getSnapshot().failure?.reason).toBe('input-revision')
   })
 
-  it('keeps a draft on session A and refuses the same message id on session B', async () => {
+  it('keeps a draft on session A and refuses edit targets on session B', async () => {
     const previewRetry = vi.fn(async () => ({ branchRevision: 2, eligible: true, inputRevision: 'tok' }))
     const retry = vi.fn()
     const model = createRetryModel(host(list([]), {
@@ -216,15 +264,17 @@ describe('session actions', () => {
     const signal = new AbortController().signal
     await model.beginEdit('A', 'm', 'draft A', signal)
     expect(model.getSnapshot()).toMatchObject({ editing: true, sessionId: 'A', messageId: 'm', draft: 'draft A' })
+    await model.beginEdit('B', 'm', 'replacement B', signal)
     await model.sendEdit('B', 'm', signal)
     expect(retry).not.toHaveBeenCalled()
+    expect(previewRetry).toHaveBeenCalledTimes(1)
     expect(model.getSnapshot()).toMatchObject({ editing: true, sessionId: 'A', draft: 'draft A' })
     model.retire('A', 'm')
     expect(model.getSnapshot().editing).toBe(false)
     expect(model.getSnapshot().draft).toBe('')
   })
 
-  it('publishes a clear busy flag after a retired row finishes so another row can retry', async () => {
+  it('publishes a clear busy flag after a retired row finishes so another row can edit', async () => {
     let release: (value: unknown) => void = () => {}
     let started = false
     const previewRetry = vi.fn(async () => ({ branchRevision: 1, eligible: true, inputRevision: 'tok-a' }))
@@ -233,7 +283,7 @@ describe('session actions', () => {
         started = true
         return new Promise(resolve => { release = resolve })
       }
-      return Promise.resolve({ sessionId: 'B', branchRevision: 5 })
+      return Promise.resolve({ sessionId: 'child', sourceSessionId: 'B', archived: true })
     })
     const model = createRetryModel(host(list([]), {
       capabilities: async () => ({ retry: true, freeSession: true, deleteSession: false }),
@@ -242,17 +292,19 @@ describe('session actions', () => {
     }), () => 'row-id')
     await model.load()
     const signal = new AbortController().signal
-    const pending = model.retry('A', 'm1', signal)
+    await model.beginEdit('A', 'm1', 'edited A', signal)
+    const pending = model.sendEdit('A', 'm1', signal)
     await vi.waitFor(() => { expect(retry).toHaveBeenCalledTimes(1) })
     model.retire('A', 'm1')
     expect(model.getSnapshot().busy).toBe(true)
-    release({ sessionId: 'A', branchRevision: 2 })
+    release({ sessionId: 'child', sourceSessionId: 'A', archived: true })
     await pending
     expect(model.getSnapshot().busy).toBe(false)
     expect(model.getSnapshot().editing).toBe(false)
     previewRetry.mockResolvedValue({ branchRevision: 4, eligible: true, inputRevision: 'tok-b' })
-    await model.retry('B', 'm2', signal)
+    await model.beginEdit('B', 'm2', 'edited B', signal)
     expect(previewRetry).toHaveBeenCalledTimes(2)
+    await model.sendEdit('B', 'm2', signal)
     expect(retry).toHaveBeenCalledTimes(2)
     expect(retry.mock.calls[1]?.[0]).toMatchObject({
       sessionId: 'B',
@@ -267,7 +319,7 @@ describe('session actions', () => {
     const retry = vi.fn()
       .mockRejectedValueOnce(new Error('lost'))
       .mockRejectedValueOnce(new Error('lost'))
-      .mockResolvedValueOnce({ sessionId: 'A', branchRevision: 4 })
+      .mockResolvedValueOnce({ sessionId: 'child', sourceSessionId: 'A', archived: true })
     const model = createRetryModel(host(list([]), {
       capabilities: async () => ({ retry: true, freeSession: true, deleteSession: false }),
       previewRetry,
@@ -308,7 +360,6 @@ describe('session actions', () => {
     const pre = new AbortController()
     pre.abort()
     await model.beginEdit('s', 'm', 'plain', pre.signal)
-    await model.retry('s', 'm', pre.signal)
     expect(previewRetry).not.toHaveBeenCalled()
     expect(retry).not.toHaveBeenCalled()
 
@@ -317,16 +368,17 @@ describe('session actions', () => {
     retry.mockImplementation(() => {
       attempts += 1
       if (attempts === 1) return new Promise((_resolve, reject) => { release = reject })
-      return Promise.resolve({ sessionId: 's', branchRevision: 1 })
+      return Promise.resolve({ sessionId: 'child', sourceSessionId: 's', archived: true })
     })
     const live = new AbortController()
-    const pending = model.retry('s', 'm', live.signal)
+    await model.beginEdit('s', 'm', 'plain', live.signal)
+    const pending = model.sendEdit('s', 'm', live.signal)
     await vi.waitFor(() => { expect(retry).toHaveBeenCalledTimes(1) })
     live.abort()
     release(new Error('lost'))
     await pending
     expect(previewRetry).toHaveBeenCalledTimes(1)
-    await model.retry('s', 'm', new AbortController().signal)
+    await model.sendEdit('s', 'm', new AbortController().signal)
     expect(previewRetry).toHaveBeenCalledTimes(1)
     expect(retry).toHaveBeenCalledTimes(2)
     expect(retry.mock.calls[1]?.[0]).toEqual(retry.mock.calls[0]?.[0])

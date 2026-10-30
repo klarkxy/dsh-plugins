@@ -79,7 +79,7 @@ export async function executeZhihuSearch(
     query: trimmed,
     count: resolvedCount,
     items: items.map(normalizeSearchItem),
-    emptyReason,
+    ...(emptyReason !== undefined ? { emptyReason } : {}),
   }
 }
 

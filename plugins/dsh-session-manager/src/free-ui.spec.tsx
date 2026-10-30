@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
 import { DeleteChatDialog } from './free-panel.tsx'
-import { createFreeChatModel, createRetryModel, type SessionHost } from './session-actions.ts'
+import { createFreeChatModel, createRetryModel, type DirectRetryRequest, type EditRetryRequest, type SessionHost } from './session-actions.ts'
 import { UserMessageActions } from './user-actions.tsx'
 import { failureText } from './ui-copy.ts'
 import type { ListedSession } from './free-list.ts'
@@ -87,10 +87,10 @@ describe('delete chat dialog', () => {
 })
 
 describe('user message actions', () => {
-  it('retries without text, edits plain text, and renders the failure in the current locale', async () => {
+  it('edits plain text and renders the failure in the current locale', async () => {
     await useDom(async dom => {
-      const previewRetry = vi.fn(async () => ({ branchRevision: 4, eligible: false, reason: 'running' }))
-      const retry = vi.fn(async (body: { text?: string }) => body)
+      const previewRetry = vi.fn(async (): Promise<{ branchRevision: number; eligible: boolean; reason?: string; inputRevision?: string }> => ({ branchRevision: 4, eligible: false, reason: 'running' }))
+      const retry = vi.fn(async (body: DirectRetryRequest | EditRetryRequest) => body)
       const host: SessionHost = {
         list: { getSnapshot: () => listed([]), subscribe: () => () => {} },
         capabilities: async () => ({ retry: true, freeSession: false, deleteSession: false }),
@@ -110,11 +110,10 @@ describe('user message actions', () => {
           root = createRoot(dom.window.document.getElementById('root')!)
           render('zh')
         })
-        const button = (label: string) => [...dom.window.document.querySelectorAll('button')].find(item => item.textContent === label)
-        const retryButton = button('重试')
-        expect(retryButton).toBeTruthy()
+        const button = (label: string) => [...dom.window.document.querySelectorAll('button')].find(item => (item.getAttribute('aria-label') ?? item.textContent) === label)
+        expect(button('重试')).toBeUndefined()
         await act(async () => {
-          retryButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+          button('编辑并重发')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
           await previewRetry.mock.results[0]?.value
         })
         expect(retry).not.toHaveBeenCalled()
@@ -126,9 +125,12 @@ describe('user message actions', () => {
         await act(async () => { button('Edit and resend')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
         const draft = dom.window.document.querySelector('textarea')
         expect(draft?.value).toBe('original plain')
-        expect(draft?.hasAttribute('data-modal-autofocus')).toBe(true)
+        expect(dom.window.document.querySelector('[role="dialog"]')).toBeNull()
+        expect(dom.window.document.activeElement).toBe(draft)
         expect(dom.window.document.querySelector('button[data-modal-autofocus]')?.textContent).not.toBe('Send')
         await act(async () => { button('Send')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+        expect(dom.window.document.querySelector('[role="dialog"]')).not.toBeNull()
+        await act(async () => { button('Confirm resend')!.click() })
         expect(retry.mock.calls[0]?.[0]).toMatchObject({ text: 'original plain', expectedRevision: 4, expectedInputRevision: 'input-4' })
         expect(Object.hasOwn(retry.mock.calls[0]?.[0] as object, 'text')).toBe(true)
       } finally {
@@ -137,7 +139,55 @@ describe('user message actions', () => {
     })
   })
 
-  it('renders a native input revision conflict as a stale retry', async () => {
+  it('keeps the branch warning only in the modified edit confirmation', async () => {
+    await useDom(async dom => {
+      const previewRetry = vi.fn(async (): Promise<{ branchRevision: number; eligible: boolean; reason?: string; inputRevision?: string }> => ({ branchRevision: 4, eligible: false, reason: 'modified', inputRevision: 'input-4' }))
+      const retry = vi.fn(async (body: DirectRetryRequest | EditRetryRequest) => body)
+      const model = createRetryModel({
+        list: { getSnapshot: () => listed([]), subscribe: () => () => {} },
+        capabilities: async () => ({ retry: true, retryModified: true, freeSession: false, deleteSession: false }),
+        previewRetry,
+        retry,
+      })
+      await model.load()
+      let root: Root | undefined
+      const render = (locale: 'zh' | 'en') => {
+        root!.render(<UserMessageActions messageId="m" text="original" sessionId="s" locale={locale} model={model} />)
+      }
+      const button = (label: string) => [...dom.window.document.querySelectorAll('button')].find(item => (item.getAttribute('aria-label') ?? item.textContent) === label)
+      try {
+        await act(async () => {
+          root = createRoot(dom.window.document.getElementById('root')!)
+          render('zh')
+        })
+        await act(async () => {
+          button('编辑并重发')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+          await previewRetry.mock.results[0]?.value
+        })
+        expect(dom.window.document.querySelector('textarea')?.value).toBe('original')
+        expect(dom.window.document.querySelector('.dsm-message-editor')?.textContent).not.toContain('移入归档')
+        await act(async () => { button('发送')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+        expect(dom.window.document.querySelector('[role="dialog"]')?.textContent).toContain('移入归档')
+        await act(async () => { button('确认重发')!.click() })
+        expect(retry.mock.calls[0]?.[0]).toMatchObject({ allowModified: true, text: 'original' })
+
+        await act(async () => { render('en') })
+        await act(async () => {
+          button('Edit and resend')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+          await previewRetry.mock.results[1]?.value
+        })
+        expect(dom.window.document.querySelector('.dsm-message-editor')?.textContent).not.toContain('previous version moves to the archive')
+        await act(async () => { button('Send')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+        expect(dom.window.document.querySelector('[role="dialog"]')?.textContent).toContain('previous version moves to the archive')
+        await act(async () => { button('Confirm resend')!.click() })
+        expect(retry.mock.calls[1]?.[0]).toMatchObject({ allowModified: true, text: 'original' })
+      } finally {
+        await act(async () => { root?.unmount() })
+      }
+    })
+  })
+
+  it('renders a native input revision conflict as a stale edit', async () => {
     await useDom(async dom => {
       const previewRetry = vi.fn(async () => ({ branchRevision: 1, eligible: true, inputRevision: 'tok' }))
       const retry = vi.fn(async () => {
@@ -162,10 +212,16 @@ describe('user message actions', () => {
           root = createRoot(dom.window.document.getElementById('root')!)
           render('zh')
         })
-        const retryButton = [...dom.window.document.querySelectorAll('button')].find(item => item.textContent === '重试')
+        const button = (label: string) => [...dom.window.document.querySelectorAll('button')].find(item => (item.getAttribute('aria-label') ?? item.textContent) === label)
         await act(async () => {
-          retryButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+          button('编辑并重发')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
           await previewRetry.mock.results[0]?.value
+        })
+        await act(async () => {
+          button('发送')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+        })
+        await act(async () => {
+          button('确认重发')!.click()
           await retry.mock.results[0]?.value.catch(() => undefined)
         })
         const stale = failureText('zh', { code: 'session/retry-input' })
@@ -177,6 +233,37 @@ describe('user message actions', () => {
       } finally {
         await act(async () => { root?.unmount() })
       }
+    })
+  })
+
+  it('disables other edit targets without discarding the active draft', async () => {
+    await useDom(async dom => {
+      const previewRetry = vi.fn(async () => ({ branchRevision: 1, eligible: true, inputRevision: 'tok' }))
+      const retry = vi.fn()
+      const model = createRetryModel({
+        list: { getSnapshot: () => listed([]), subscribe: () => () => {} },
+        capabilities: async () => ({ retry: true, freeSession: true, deleteSession: false }),
+        previewRetry, retry,
+      })
+      await model.load()
+      let root: Root | undefined
+      try {
+        await act(async () => {
+          root = createRoot(dom.window.document.getElementById('root')!)
+          root.render(<>
+            <UserMessageActions messageId="a" text="draft A" sessionId="s" locale="en" model={model} />
+            <UserMessageActions messageId="b" text="draft B" sessionId="s" locale="en" model={model} />
+          </>)
+        })
+        const buttons = (label: string) => [...dom.window.document.querySelectorAll('button')].filter(item => item.getAttribute('aria-label') === label)
+        await act(async () => { buttons('Edit and resend')[0]!.click() })
+        expect(dom.window.document.querySelector('textarea')?.value).toBe('draft A')
+        expect(buttons('Edit and resend').map(item => item.disabled)).toEqual([false, true])
+        await act(async () => { buttons('Edit and resend')[1]!.click() })
+        expect(dom.window.document.querySelector('textarea')?.value).toBe('draft A')
+        expect(previewRetry).toHaveBeenCalledTimes(1)
+        expect(retry).not.toHaveBeenCalled()
+      } finally { await act(async () => { root?.unmount() }) }
     })
   })
 
@@ -201,7 +288,7 @@ describe('user message actions', () => {
       }
       try {
         await act(async () => { mount('A') })
-        const edit = [...dom.window.document.querySelectorAll('button')].find(item => item.textContent === 'Edit and resend')
+        const edit = [...dom.window.document.querySelectorAll('button')].find(item => item.getAttribute('aria-label') === 'Edit and resend')
         await act(async () => { edit!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
         expect(dom.window.document.querySelector('textarea')?.value).toBe('draft A')
         await act(async () => { root?.unmount() })

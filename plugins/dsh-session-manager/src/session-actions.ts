@@ -6,15 +6,20 @@
  */
 import type { OperationFailure } from './ui-copy.ts'
 import type { SessionListSnapshot } from './free-list.ts'
+import type { PromptContent } from './edit-host.ts'
 
 export interface SessionCapabilities {
   readonly retry: boolean
+  /** Whether retry accepts explicit confirmation of later modifications. */
+  readonly retryModified: boolean
+  readonly retryContent?: boolean
   readonly freeSession: boolean
   readonly deleteSession: boolean
 }
 
 export const UNSUPPORTED_CAPABILITIES: SessionCapabilities = {
   retry: false,
+  retryModified: false,
   freeSession: false,
   deleteSession: false,
 }
@@ -30,18 +35,21 @@ export interface RetryPreview {
   readonly reason?: string
 }
 
-/** Direct retry omits `text` so the host keeps the original attachments. */
+/** Base request shape of the host's retry API; an edit adds `text` or `content`. */
 export interface DirectRetryRequest {
   readonly sessionId: string
   readonly messageId: string
   readonly expectedRevision: number
   readonly expectedInputRevision: string
   readonly requestId: string
+  /** Explicit user confirmation keeps later file and external changes intact. */
+  readonly allowModified?: boolean
 }
 
 /** Edit sends plain text only. The host keeps attachments. */
 export interface EditRetryRequest extends DirectRetryRequest {
-  readonly text: string
+  readonly text?: string
+  readonly content?: readonly PromptContent[]
 }
 
 export interface DeleteOutcome {
@@ -77,6 +85,14 @@ interface RemoteResult {
 
 export function isRecoverable(failure: OperationFailure): boolean {
   return failure.code === 'transport' || failure.code === 'session/delete-pending'
+    || failure.code === 'session/retry-pending' || failure.code === 'session/retry-uncertain'
+}
+
+export function isStaleRetryFailure(failure: OperationFailure | undefined): boolean {
+  return failure?.code === 'session/retry-revision'
+    || failure?.code === 'session/branch-moved'
+    || failure?.code === 'session/retry-input'
+    || failure?.code === 'session/retry-conflict'
 }
 
 export function readFailure(error: unknown): OperationFailure {
@@ -136,6 +152,8 @@ export async function readCapabilities(host: SessionHost): Promise<SessionCapabi
     const record = value as Partial<SessionCapabilities>
     return {
       retry: record.retry === true,
+      retryModified: record.retryModified === true,
+      ...record.retryContent === true ? { retryContent: true } : {},
       freeSession: record.freeSession === true,
       deleteSession: record.deleteSession === true,
     }
@@ -181,40 +199,42 @@ export async function deleteOwnedSession(host: SessionHost, sessionId: string, r
   return { phase }
 }
 
-export function directRetryRequest(input: {
+/** Build the body for one edited prompt; the host keeps the original attachments when only text changes. */
+export function editRetryRequest(input: {
   sessionId: string
   messageId: string
   expectedRevision: number
   expectedInputRevision: string
   requestId: string
-}): DirectRetryRequest {
+  text: string
+  content?: readonly PromptContent[]
+  allowModified?: boolean
+}): EditRetryRequest {
   return {
     sessionId: input.sessionId,
     messageId: input.messageId,
     expectedRevision: input.expectedRevision,
     expectedInputRevision: input.expectedInputRevision,
     requestId: input.requestId,
+    ...input.content === undefined ? { text: input.text } : { content: input.content },
+    ...input.allowModified === true ? { allowModified: true } : {},
   }
-}
-
-export function editRetryRequest(input: DirectRetryRequest & { text: string }): EditRetryRequest {
-  return { ...directRetryRequest(input), text: input.text }
 }
 
 export class SubmissionLedger {
   private active = false
-  private unresolved: DirectRetryRequest | EditRetryRequest | undefined
+  private unresolved: EditRetryRequest | undefined
 
   get busy(): boolean {
     return this.active
   }
 
-  pending(): DirectRetryRequest | EditRetryRequest | undefined {
+  pending(): EditRetryRequest | undefined {
     return this.unresolved
   }
 
   /** Resend the stored body. A non-recoverable result drops it; a lost reply keeps it. */
-  async replay(execute: (body: DirectRetryRequest | EditRetryRequest) => Promise<unknown>): Promise<void> {
+  async replay(execute: (body: EditRetryRequest) => Promise<unknown>): Promise<void> {
     const body = this.unresolved
     if (body === undefined) return
     if (this.active) throw new HostOperationError('busy', 'running')
@@ -232,7 +252,7 @@ export class SubmissionLedger {
   }
 
   /** First submission of a body built from the current preview. */
-  async submit(body: DirectRetryRequest | EditRetryRequest, execute: () => Promise<unknown>): Promise<void> {
+  async submit(body: EditRetryRequest, execute: () => Promise<unknown>): Promise<void> {
     if (this.active || this.unresolved !== undefined) throw new HostOperationError('busy', 'running')
     this.active = true
     try {
@@ -409,8 +429,11 @@ export function createFreeChatModel(host: SessionHost, ids: () => string = () =>
 
 export interface RetrySnapshot {
   readonly controlsRetry: boolean
+  readonly controlsContent?: boolean
   readonly busy: boolean
   readonly editing: boolean
+  /** The current preview found later modifications that the user must acknowledge. */
+  readonly modified: boolean
   readonly draft: string
   readonly sessionId: string
   readonly messageId: string
@@ -421,11 +444,10 @@ export interface RetryModel {
   subscribe(listener: Listener): () => void
   getSnapshot(): RetrySnapshot
   load(): Promise<void>
-  retry(sessionId: string, messageId: string, signal: AbortSignal): Promise<void>
   beginEdit(sessionId: string, messageId: string, text: string, signal: AbortSignal): Promise<void>
   setDraft(text: string): void
   cancelEdit(): void
-  sendEdit(sessionId: string, messageId: string, signal: AbortSignal): Promise<void>
+  sendEdit(sessionId: string, messageId: string, signal: AbortSignal, content?: readonly PromptContent[], confirmed?: boolean): Promise<void>
   retire(sessionId: string, messageId: string): void
   cancel(): void
 }
@@ -437,6 +459,8 @@ export function createRetryModel(host: SessionHost, ids: () => string = () => cr
   let ready = false
   let busy = false
   let editing = false
+  let modified = false
+  let editNeedsPreview = false
   let draft = ''
   let failure: OperationFailure | undefined
   let expectedRevision = 0
@@ -449,8 +473,10 @@ export function createRetryModel(host: SessionHost, ids: () => string = () => cr
   function build(): RetrySnapshot {
     return {
       controlsRetry: controlsFor(capabilities, ready, host).retry,
+      controlsContent: ready && capabilities.retryContent === true,
       busy,
       editing,
+      modified,
       draft,
       sessionId: ownerSession,
       messageId: ownerMessage,
@@ -470,7 +496,9 @@ export function createRetryModel(host: SessionHost, ids: () => string = () => cr
     const record = value as { branchRevision: number; eligible?: boolean; reason?: string; inputRevision?: unknown }
     const inputRevision = typeof record.inputRevision === 'string' ? record.inputRevision : ''
     const eligible = record.eligible === true
-    if (eligible && inputRevision === '') throw new HostOperationError('session/lifecycle-unavailable', 'input-revision')
+    if ((eligible || record.reason === 'modified') && inputRevision === '') {
+      throw new HostOperationError('session/lifecycle-unavailable', 'input-revision')
+    }
     return {
       branchRevision: record.branchRevision,
       inputRevision,
@@ -487,7 +515,7 @@ export function createRetryModel(host: SessionHost, ids: () => string = () => cr
     return readPreview(value)
   }
 
-  async function callRetry(body: DirectRetryRequest | EditRetryRequest, signal: AbortSignal, ticket: number): Promise<void> {
+  async function callRetry(body: EditRetryRequest, signal: AbortSignal, ticket: number): Promise<void> {
     if (signal.aborted || ticket !== call) throw new HostOperationError('busy', 'aborted')
     if (typeof host.retry !== 'function') throw new HostOperationError('session/lifecycle-unavailable')
     await unwrap(host.retry(body))
@@ -513,7 +541,11 @@ export function createRetryModel(host: SessionHost, ids: () => string = () => cr
         && !signal.aborted
         && ownerSession === pending.sessionId
         && ownerMessage === pending.messageId
-      ) editing = false
+      ) {
+        editing = false
+        modified = false
+        editNeedsPreview = false
+      }
     } catch (error) {
       if (ticket === call && !signal.aborted) failure = readFailure(error)
     } finally {
@@ -534,46 +566,9 @@ export function createRetryModel(host: SessionHost, ids: () => string = () => cr
       ready = true
       publish()
     },
-    async retry(sessionId, id, signal) {
-      if (busy || !controlsFor(capabilities, ready, host).retry || signal.aborted) return
-      if (ledger.pending() !== undefined) {
-        if (!samePending(sessionId, id)) return
-        await replaySame(signal)
-        return
-      }
-      const ticket = ++call
-      busy = true
-      failure = undefined
-      editing = false
-      ownerSession = sessionId
-      ownerMessage = id
-      publish()
-      try {
-        const seen = await preview(sessionId, id, signal, ticket)
-        if (seen === undefined) return
-        if (!seen.eligible) {
-          failure = { code: 'session/retry-blocked', reason: seen.reason ?? 'unknown' }
-          return
-        }
-        if (signal.aborted || ticket !== call) return
-        expectedRevision = seen.branchRevision
-        expectedInputRevision = seen.inputRevision
-        const body = directRetryRequest({
-          sessionId,
-          messageId: id,
-          expectedRevision: seen.branchRevision,
-          expectedInputRevision: seen.inputRevision,
-          requestId: ids(),
-        })
-        await ledger.submit(body, () => callRetry(body, signal, ticket))
-      } catch (error) {
-        if (ticket === call && !signal.aborted) failure = readFailure(error)
-      } finally {
-        settle()
-      }
-    },
     async beginEdit(sessionId, id, text, signal) {
       if (busy || !controlsFor(capabilities, ready, host).retry || signal.aborted) return
+      if (editing && (ownerSession !== sessionId || ownerMessage !== id)) return
       if (ledger.pending() !== undefined) {
         if (!samePending(sessionId, id)) return
         await replaySame(signal)
@@ -582,19 +577,22 @@ export function createRetryModel(host: SessionHost, ids: () => string = () => cr
       const ticket = ++call
       busy = true
       failure = undefined
+      modified = false
+      editNeedsPreview = false
       ownerSession = sessionId
       ownerMessage = id
       publish()
       try {
         const seen = await preview(sessionId, id, signal, ticket)
         if (seen === undefined) return
-        if (!seen.eligible) {
-          failure = { code: 'session/retry-blocked', reason: seen.reason ?? 'unknown' }
-          return
-        }
         if (signal.aborted || ticket !== call) return
         expectedRevision = seen.branchRevision
         expectedInputRevision = seen.inputRevision
+        if (!seen.eligible && (seen.reason !== 'modified' || !capabilities.retryModified)) {
+          failure = { code: 'session/retry-blocked', reason: seen.reason ?? 'unknown' }
+          return
+        }
+        modified = !seen.eligible
         draft = text
         editing = true
       } catch (error) {
@@ -611,9 +609,11 @@ export function createRetryModel(host: SessionHost, ids: () => string = () => cr
     cancelEdit() {
       if (busy) return
       editing = false
+      modified = false
+      editNeedsPreview = false
       publish()
     },
-    async sendEdit(sessionId, id, signal) {
+    async sendEdit(sessionId, id, signal, content, confirmed) {
       if (signal.aborted || busy || !controlsFor(capabilities, ready, host).retry) return
       if (!editing || ownerSession !== sessionId || ownerMessage !== id) return
       if (ledger.pending() !== undefined) {
@@ -623,11 +623,28 @@ export function createRetryModel(host: SessionHost, ids: () => string = () => cr
       }
       const ticket = ++call
       busy = true
+      const refresh = editNeedsPreview || isStaleRetryFailure(failure)
       failure = undefined
       const text = draft
       publish()
       try {
         if (signal.aborted || ticket !== call) return
+        if (refresh) {
+          // Revalidate both tokens after a conflict; ordinary first sends keep
+          // the beginEdit preview, and lost replies still replay exactly above.
+          editNeedsPreview = true
+          const seen = await preview(sessionId, id, signal, ticket)
+          if (seen === undefined) return
+          expectedRevision = seen.branchRevision
+          expectedInputRevision = seen.inputRevision
+          if (!seen.eligible && (seen.reason !== 'modified' || !capabilities.retryModified)) {
+            failure = { code: 'session/retry-blocked', reason: seen.reason ?? 'unknown' }
+            return
+          }
+          modified = !seen.eligible
+          editNeedsPreview = false
+        }
+        if (content !== undefined && capabilities.retryContent !== true) throw new HostOperationError('session/lifecycle-unavailable')
         const body = editRetryRequest({
           sessionId,
           messageId: id,
@@ -635,11 +652,19 @@ export function createRetryModel(host: SessionHost, ids: () => string = () => cr
           expectedInputRevision,
           requestId: ids(),
           text,
+          ...content === undefined ? {} : { content },
+          allowModified: confirmed === true,
         })
         await ledger.submit(body, () => callRetry(body, signal, ticket))
-        if (ticket === call && !signal.aborted) editing = false
+        if (ticket === call && !signal.aborted) {
+          editing = false
+          modified = false
+          editNeedsPreview = false
+        }
       } catch (error) {
-        if (ticket === call && !signal.aborted) failure = readFailure(error)
+        const nextFailure = readFailure(error)
+        if (isStaleRetryFailure(nextFailure)) editNeedsPreview = true
+        if (ticket === call && !signal.aborted) failure = nextFailure
       } finally {
         settle()
       }
@@ -648,6 +673,8 @@ export function createRetryModel(host: SessionHost, ids: () => string = () => cr
       if (ownerSession !== sessionId || ownerMessage !== messageId) return
       call += 1
       editing = false
+      modified = false
+      editNeedsPreview = false
       failure = undefined
       draft = ''
       if (!ledger.busy) busy = false
@@ -656,6 +683,8 @@ export function createRetryModel(host: SessionHost, ids: () => string = () => cr
     cancel() {
       call += 1
       editing = false
+      modified = false
+      editNeedsPreview = false
       failure = undefined
       if (!ledger.busy) busy = false
       publish()

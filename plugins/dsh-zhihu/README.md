@@ -44,6 +44,8 @@ These model tools are enabled by default; no agent preset changes needed:
 | `zhihu_quota` | Check official quota |
 | `zhihu_sync` | Save, list, read, and validate drafts or upload images |
 
+Site search and web search return an empty list when nothing matches, with an explanation when the service provides one.
+
 ## Cost protection
 
 By default research requests use only Zhihu's free allowance: before each request the plugin checks the official quota and skips the request if none is left. It also stops after 100 requests per day (Beijing time). Both are configurable:

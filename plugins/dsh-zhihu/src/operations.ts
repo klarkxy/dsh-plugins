@@ -98,7 +98,7 @@ export async function executeZhihuGlobalSearch(
     count: resolvedCount,
     searchDb,
     items: objectItems(data).map(normalizeSearchItem),
-    emptyReason: typeof data.EmptyReason === 'string' ? data.EmptyReason : undefined,
+    ...(typeof data.EmptyReason === 'string' ? { emptyReason: data.EmptyReason } : {}),
   }
 }
 

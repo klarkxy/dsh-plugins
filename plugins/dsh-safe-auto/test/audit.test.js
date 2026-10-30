@@ -137,6 +137,28 @@ test('finish rejects bad outcomes and oversized scalars', async () => {
   await store.close();
 });
 
+test('pending audit views omit absent optional fields without mutating stored evidence', async () => {
+  const { storageDomain, saved } = fakeBackend();
+  const store = await openAudit(storageDomain);
+  const id = await store.begin({
+    sessionId: 's', tool: 'pwsh',
+    trigger: { kind: 'approval', reason: 'Review', rule: undefined },
+    reviewer: { provider: 'p', model: undefined },
+  });
+  const before = structuredClone(saved.get(id));
+  const page = store.list({ sessionId: 's' });
+  const record = store.get({ id });
+  assert.deepEqual(JSON.parse(JSON.stringify(page)), page);
+  assert.deepEqual(JSON.parse(JSON.stringify(record)), record);
+  assert.equal(record.turn, null);
+  assert.equal(record.outcome, 'pending');
+  assert.equal(record.executionState, 'not-observed');
+  record.reviewer.provider = 'changed';
+  page.items[0].trigger.reason = 'changed';
+  assert.deepEqual(saved.get(id), before);
+  await store.close();
+});
+
 test('list filters, bounds, stable keyset pagination across concurrent inserts', async () => {
   const { storageDomain } = fakeBackend();
   const store = await openAudit(storageDomain);

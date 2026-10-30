@@ -38,18 +38,20 @@ describe('session menu registration', () => {
       id: DELETE_DIALOG_ID,
       order: 510,
     })
+    expect(specs).toContainEqual({ name: 'conversation.chat.node', key: 'user', locale: 'chat', priority: -10 })
     expect(specs.some(spec => String(spec['id'] ?? '').includes('copy'))).toBe(false)
     expect(specs.map(spec => spec['name'])).toEqual([
       'sidebar.workspaces.session.menu.item',
       'conversation.hero.workspace',
       USER_ACTIONS_SLOT,
       'conversation.input.overlay',
+      'conversation.chat.node',
       'conversation.chat.turnTail',
       'plugins.bundle.config',
       'shell.overlay',
     ])
     unload()
-    expect(disposed.filter(item => item === 'inject')).toHaveLength(7)
+    expect(disposed.filter(item => item === 'inject')).toHaveLength(8)
     expect(disposed).toContain(DELETE_DIALOG_ID)
   })
 })

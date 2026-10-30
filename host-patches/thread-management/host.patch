@@ -123465,17 +123465,17 @@ index 2b8504d..842d85d 100644
   * Search the live-preferred logical corpus and group by session.
   * @param request - query text, metadata filters, page size, and cursor.
 diff --git a/docs/subsystems/session.md b/docs/subsystems/session.md
-index 415201d..ab72060 100644
+index 415201d..3d6ef97 100644
 --- a/docs/subsystems/session.md
 +++ b/docs/subsystems/session.md
-@@ -813,8 +813,35 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
+@@ -813,8 +813,36 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
  @Remote('search') search(request: SessionSearchRequest, signal: AbortSignal): Promise<SessionSearchValue>
  
  /**
 - * Create or idempotently adopt one ordinary Session.
 - * @param request - requested identity, location, and Agent preset.
 + * Report which session lifecycle operations this host can commit.
-+ * @returns whether retry, free-session creation, and delete are available.
++ * @returns whether retry, a consented retry over recorded modifications, free-session creation, and delete are available.
 + */
 +@Remote('capabilities') capabilities(): SessionCapabilities
 +
@@ -123487,8 +123487,9 @@ index 415201d..ab72060 100644
 +@Remote('previewRetry') previewRetry(request: SessionRetryPreviewRequest): Promise<SessionRetryPreview>
 +
 +/**
-+ * Replace one human prompt in the same session when trusted evidence allows it.
-+ * @param request - anchor, expected revision, idempotency key, and optional replacement text.
++ * Replace one human prompt in the same session. A recorded workspace or external change is refused
++ * unless the request carries `allowModified`; the branch then replaces the conversation only.
++ * @param request - anchor, expected revision, idempotency key, optional replacement text, and modification consent.
 + * @returns the same session id and the committed branch revision.
 + */
 +@Remote('retry') retry(request: SessionRetryRequest): Promise<SessionRetryValue>
@@ -123506,7 +123507,7 @@ index 415201d..ab72060 100644
   * @returns the Session identity and resolved preset when configured.
   */
  @Remote('create') create(request: SessionCreateRequest): Promise<SessionCreateValue>
-@@ -968,6 +995,13 @@ Persistence is intentionally not implemented here — the agent lifecycle attach
+@@ -968,6 +996,13 @@ Persistence is intentionally not implemented here — the agent lifecycle attach
   */
  registerMessageProjection(projection: SessionMessageProjection): () => Promise<void>
  
@@ -123520,7 +123521,7 @@ index 415201d..ab72060 100644
  /**
   * Create a session owned by the calling fiber: disposing that fiber stops
   * event notification and removes the session from the store. `options.seed`
-@@ -1092,7 +1126,7 @@ list(): Session[]
+@@ -1092,7 +1127,7 @@ list(): Session[]
  fork(source: SessionForkSource, boundary?: SessionSeq, childSessionId?: SessionId): Session
  ```
  
@@ -123530,17 +123531,17 @@ index 415201d..ab72060 100644
  Source: [`packages/core/session/src/index.ts`](../../packages/core/session/src/index.ts)
  
 diff --git a/docs/subsystems/session.zh.md b/docs/subsystems/session.zh.md
-index e52c08e..d2bc5f7 100644
+index e52c08e..e83c5e7 100644
 --- a/docs/subsystems/session.zh.md
 +++ b/docs/subsystems/session.zh.md
-@@ -817,8 +817,35 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
+@@ -817,8 +817,36 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
  @Remote('search') search(request: SessionSearchRequest, signal: AbortSignal): Promise<SessionSearchValue>
  
  /**
 - * Create or idempotently adopt one ordinary Session.
 - * @param request - requested identity, location, and Agent preset.
 + * Report which session lifecycle operations this host can commit.
-+ * @returns whether retry, free-session creation, and delete are available.
++ * @returns whether retry, a consented retry over recorded modifications, free-session creation, and delete are available.
 + */
 +@Remote('capabilities') capabilities(): SessionCapabilities
 +
@@ -123552,8 +123553,9 @@ index e52c08e..d2bc5f7 100644
 +@Remote('previewRetry') previewRetry(request: SessionRetryPreviewRequest): Promise<SessionRetryPreview>
 +
 +/**
-+ * Replace one human prompt in the same session when trusted evidence allows it.
-+ * @param request - anchor, expected revision, idempotency key, and optional replacement text.
++ * Replace one human prompt in the same session. A recorded workspace or external change is refused
++ * unless the request carries `allowModified`; the branch then replaces the conversation only.
++ * @param request - anchor, expected revision, idempotency key, optional replacement text, and modification consent.
 + * @returns the same session id and the committed branch revision.
 + */
 +@Remote('retry') retry(request: SessionRetryRequest): Promise<SessionRetryValue>
@@ -123571,7 +123573,7 @@ index e52c08e..d2bc5f7 100644
   * @returns the Session identity and resolved preset when configured.
   */
  @Remote('create') create(request: SessionCreateRequest): Promise<SessionCreateValue>
-@@ -972,6 +999,13 @@ Persistence is intentionally not implemented here — the agent lifecycle attach
+@@ -972,6 +1000,13 @@ Persistence is intentionally not implemented here — the agent lifecycle attach
   */
  registerMessageProjection(projection: SessionMessageProjection): () => Promise<void>
  
@@ -123585,7 +123587,7 @@ index e52c08e..d2bc5f7 100644
  /**
   * Create a session owned by the calling fiber: disposing that fiber stops
   * event notification and removes the session from the store. `options.seed`
-@@ -1096,7 +1130,7 @@ list(): Session[]
+@@ -1096,7 +1131,7 @@ list(): Session[]
  fork(source: SessionForkSource, boundary?: SessionSeq, childSessionId?: SessionId): Session
  ```
  
@@ -123653,25 +123655,41 @@ index 583862e..8ffe225 100644
      }
      await ctx.agents.register(owner)
 diff --git a/packages/api/session-controller/README.i18n.yaml b/packages/api/session-controller/README.i18n.yaml
-index 5878d2f..f99290f 100644
+index 5878d2f..282a3a2 100644
 --- a/packages/api/session-controller/README.i18n.yaml
 +++ b/packages/api/session-controller/README.i18n.yaml
-@@ -18,8 +18,8 @@
-   en: b1a66e01de414924
-   zh: 7c01f66b94b01ff9
+@@ -15,11 +15,11 @@
+   en: 1fdf707322fb6996
+   zh: 0204f7e9d4aa3cce
+ /session-controller/use-this-package:
+-  en: b1a66e01de414924
+-  zh: 7c01f66b94b01ff9
++  en: 3d7fa3bcb9ef763a
++  zh: 5661773c4b5569a3
  /session-controller/client-references:
 -  en: 41bdda1ac32df558
 -  zh: aa5d0e325924066b
-+  en: 38c0d5cb74dc13dd
-+  zh: 0f3a8d88677a9cdd
++  en: 43ac376ceca51406
++  zh: 7fbf5020ab49e42b
  /session-controller/session-media-references:
    en: 266ab2b1e2fec542
    zh: b3450ae28a1e0baf
 diff --git a/packages/api/session-controller/README.md b/packages/api/session-controller/README.md
-index be3f9a0..8d153d2 100644
+index be3f9a0..acd3549 100644
 --- a/packages/api/session-controller/README.md
 +++ b/packages/api/session-controller/README.md
-@@ -71,6 +71,8 @@ The controller composes `ArchivedSessionGate` through `ctx.plugin`: it loads onc
+@@ -56,6 +56,10 @@ The user-invocable `skills/list` metadata includes the winning provider’s opti
+
+ Fork copies the exact inclusive event prefix selected by `atSeq`, including a cut inside an open turn. The child records its inherited marker before synthetic fork results and closing events. Omitting `atSeq` selects the latest completed turn and its standalone tail, stopping before the next turn or queued input; a nonexistent event is rejected. The chat action selects a completed turn.
+
++Same-session retry replaces one human prompt on the active branch and drops the turns after it. `session.previewRetry` reports eligibility without stopping work; a recorded workspace or external change keeps the prompt ineligible, and `session.retry` replaces it only when the request carries `allowModified`. That consent belongs to the request: it is stored on neither the branch nor the retry receipt, and automatic recovery of an interrupted retry never inherits it. A consented retry replaces the conversation only; the changed files and the external state stay as they are. Absent effect evidence and running work are refused either way. `session.capabilities` reports `retryModified` so a Client offers the confirmation only where the Host accepts it.
++
++The optional `content` replacement contains the complete ordered text, image, and file list and is mutually exclusive with `text`. File receipts must belong to this Session; normalization finishes before its branch changes. The durable retry receipt retains normalized references and a payload digest, so a lost reply or cold resumption neither reuses expired uploads nor accepts a changed body under the same request ID. `retryContent` advertises this capability.
++
+ A resume blocked by an existing write handle returns `session/writer-held` with the Session id; other resume failures retain `gateway/internal`.
+
+ `loadThrough(seq)` retains older pages privately until its shared target is covered or loading ends, then publishes the successful pages as one ordered prepend. Live events remain visible while history loads. A later page failure retains the successful prefix; replacing the history window discards buffered pages from the replaced window. Ordinary `loadOlder()` publishes one Host-selected page directly.
+@@ -71,6 +75,8 @@ The controller composes `ArchivedSessionGate` through `ctx.plugin`: it loads onc
  <a id="client-references"></a>
  ## Client references
  
@@ -123681,10 +123699,21 @@ index be3f9a0..8d153d2 100644
  
  References keep local Session data, scoped Contexts, and history streams alive, not Host Agents. Ordinary Session retention never adds a catalog row. Retained subagents with a known direct-parent address keep a fallback row and notify list readers even before the parent catalog arrives; these rows do not join Host-list membership. Fork-title assignment sends rename directly and applies the returned title projection without retaining the child or opening its history. Final release withdraws the generation before teardown; later acquisition can create a new generation with the same id. `binding(id)` and `scope(id)` only borrow an existing generation. `retainInfo(id)` observes stable read-only source counts independently of catalog membership and performs no history I/O. Consumer source keys are declaration-merge extensible; navigation and completion acknowledgement belong to UI consumers, not this Controller. See [Client Session references](../../../.agents/notes/implemented/architecture/2026-09-15-client-session-references.md) for ownership and teardown rules. An unknown-mode subagent address permits history reads with direct-parent validation. Successful descriptor restoration determines the displayed mode; failures remain local to the child, and control requests still require a confirmed continuable identity.
 diff --git a/packages/api/session-controller/README.zh.md b/packages/api/session-controller/README.zh.md
-index de40067..8d0dd86 100644
+index de40067..13debbe 100644
 --- a/packages/api/session-controller/README.zh.md
 +++ b/packages/api/session-controller/README.zh.md
-@@ -71,6 +71,8 @@ Client 的首次 `follow`、重连首屏与 `loadOlder()` 至少请求 50 条以
+@@ -56,6 +56,10 @@ Session 对象还承载本地提交回显：`session.beginSubmission` 在调用
+
+ Fork 复制 `atSeq` 所选的精确事件前缀，包含切点事件，允许在开放轮次内截取。子会话在合成的 fork 结果和结束事件之前记录继承标记。省略 `atSeq` 时选择最近已结束轮次及其独立尾部，在下一轮次或排队输入之前停止；不存在的事件会被拒绝。聊天操作选择已结束轮次。
+
++同会话重试在活跃分支上替换一条人工提示，并丢弃其后的轮次。`session.previewRetry` 在不停止工作的情况下报告可用性；已记录的工作区改动或外部改动会让该提示保持不可替换，只有请求携带 `allowModified` 时 `session.retry` 才会替换它。该确认只属于这次请求：它既不写入分支，也不写入重试回执，中断重试的自动恢复不会继承它。带确认的重试只替换对话；已改动的文件与外部状态保持原样。缺失的效果证据与进行中的工作在两种情况下都被拒绝。`session.capabilities` 报告 `retryModified`，客户端只在宿主接受该确认时才提供该选项。
++
++可选的 `content` 替换参数包含完整、有序的文字、图片和文件列表，与 `text` 互斥。文件凭证必须属于当前会话，内容归一化完成后才改变分支。持久化重试回执保存归一化引用和请求摘要，因此回执丢失或冷恢复不会重新使用已过期的上传凭证，也不会接受同一请求 ID 下的不同内容。`retryContent` 用于声明该能力。
++
+ 恢复会话时若已有写句柄占用，返回 `session/writer-held`，并携带会话 id；其他恢复失败仍返回 `gateway/internal`。
+
+ `loadThrough(seq)` 在共享目标被覆盖或加载结束前私下保留较早页面，随后把成功取得的页面按顺序作为一次前插发布。历史加载期间实时事件仍然可见。后续页面失败时保留已成功取得的部分；历史窗口被替换时丢弃被替换窗口的暂存页面。普通 `loadOlder()` 直接发布 Host 选取的一页结果。
+@@ -71,6 +75,8 @@ Client 的首次 `follow`、重连首屏与 `loadOlder()` 至少请求 50 条以
  <a id="client-references"></a>
  ## Client 引用
  
@@ -123777,7 +123806,7 @@ index 3f0fa77..d34851a 100644
        setup: composition.setup,
      })).agent
 diff --git a/packages/api/session-controller/src/client/contract/sessions.ts b/packages/api/session-controller/src/client/contract/sessions.ts
-index 076188c..4f19cda 100644
+index 076188c..14e3216 100644
 --- a/packages/api/session-controller/src/client/contract/sessions.ts
 +++ b/packages/api/session-controller/src/client/contract/sessions.ts
 @@ -9,6 +9,12 @@ import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'
@@ -123793,7 +123822,7 @@ index 076188c..4f19cda 100644
  import type { AgentContext } from '../scope.ts'
  import type { SessionSearchResultItem } from '../sessions/manager.ts'
  import type { SessionBinding, SessionListState } from '../sessions/service.ts'
-@@ -87,7 +93,44 @@ export interface ISessions {
+@@ -87,7 +93,50 @@ export interface ISessions {
      workspaceId?: WorkspaceId
      cwd?: string
      sessionId?: SessionId
@@ -123824,7 +123853,13 @@ index 076188c..4f19cda 100644
 +    expectedRevision: number
 +    expectedInputRevision: string
 +    requestId: string
++    /** Replacement text for the prompt; the Host keeps the original attachments. */
 +    text?: string
++    /**
++     * Consent to replace the prompt after the workspace or an external system already changed.
++     * The branch replaces the conversation only; the changed files and the external state stay as they are.
++     */
++    allowModified?: boolean
 +  }): Promise<RemoteResult<SessionRetryValue>>
 +  /**
 +   * Delete one session after owned cleanup.
@@ -124093,10 +124128,10 @@ index 50af09d..7a76f99 100644
        ) return [...summaries]
        return summaries.map(summary => summary.sessionId === mutation.summary.sessionId ? filled : summary)
 diff --git a/packages/api/session-controller/src/client/sessions/service.ts b/packages/api/session-controller/src/client/sessions/service.ts
-index 8166b6f..c8cfa34 100644
+index 8166b6f..719e351 100644
 --- a/packages/api/session-controller/src/client/sessions/service.ts
 +++ b/packages/api/session-controller/src/client/sessions/service.ts
-@@ -5,6 +5,12 @@ import { SessionSeq, type SessionId } from '@deepseek-ai/dsh-session/types'
+@@ -5,6 +5,13 @@ import { SessionSeq, type SessionId } from '@deepseek-ai/dsh-session/types'
  import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
  import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
  import { SESSION_SEARCH_RESULT_LIMIT } from '../../types.ts'
@@ -124105,11 +124140,12 @@ index 8166b6f..c8cfa34 100644
 +  SessionDeleteValue,
 +  SessionRetryPreview,
 +  SessionRetryValue,
++  PromptContentPart,
 +} from '../../types.ts'
  import type { SessionProjectionMap } from '@deepseek-ai/dsh-session-projection/types'
  import {
    createSnapshotStore, notifySubscribers, type ObservableSnapshot, type SnapshotStore,
-@@ -33,6 +39,8 @@ export interface SessionSummary {
+@@ -33,6 +40,8 @@ export interface SessionSummary {
    parentId?: SessionId
    /** Coarse durable origin for navigation filtering; not a continuation capability. */
    origin?: 'subagent'
@@ -124118,7 +124154,7 @@ index 8166b6f..c8cfa34 100644
    /** Host running state for `ids` members; a display fallback for other rows. */
    running: boolean
    /** Local ownership counts; Host metadata refreshes cannot overwrite them. */
-@@ -54,10 +62,12 @@ export interface SessionSummary {
+@@ -54,10 +63,12 @@ export interface SessionSummary {
  export interface SessionListState {
    /** Host list order; every id has a matching byId row in the same snapshot. */
    ids: SessionId[]
@@ -124133,7 +124169,7 @@ index 8166b6f..c8cfa34 100644
    /** Shared projection values and explicit-read state, including unopened Sessions. */
    projectionsBySession: Readonly<Record<SessionId, SessionProjectionSnapshot>>
  }
-@@ -256,7 +266,7 @@ export class ClientSessions implements ISessions {
+@@ -256,7 +267,7 @@ export class ClientSessions implements ISessions {
    ) {
      this.manager = new SessionManager(remote)
      this.list = createSnapshotStore<SessionListState>({
@@ -124142,7 +124178,7 @@ index 8166b6f..c8cfa34 100644
      })
      const disposeManagerProjection = this.manager.subscribe(() => { this.projectList() })
      rootCtx.effect(() => async () => {
-@@ -428,13 +438,63 @@ export class ClientSessions implements ISessions {
+@@ -428,13 +439,70 @@ export class ClientSessions implements ISessions {
     * @returns the new session id.
     * @throws {SessionCreateError} with the requested id.
     */
@@ -124187,7 +124223,14 @@ index 8166b6f..c8cfa34 100644
 +    expectedRevision: number
 +    expectedInputRevision: string
 +    requestId: string
++    /** Replacement text for the prompt; the Host keeps the original attachments. */
 +    text?: string
++    content?: readonly PromptContentPart[]
++    /**
++     * Consent to replace the prompt after the workspace or an external system already changed.
++     * The branch replaces the conversation only; the changed files and the external state stay as they are.
++     */
++    allowModified?: boolean
 +  }): Promise<RemoteResult<SessionRetryValue>> {
 +    return this.manager.retry(request)
 +  }
@@ -124207,7 +124250,7 @@ index 8166b6f..c8cfa34 100644
    /**
     * Fork a session from an exact inclusive prefix of the source (same
     * synchronous-addressability guarantee as {@link ClientSessions.create}:
-@@ -454,13 +514,14 @@ export class ClientSessions implements ISessions {
+@@ -454,13 +522,14 @@ export class ClientSessions implements ISessions {
      increaseTitle?: boolean
      onCreated?: (childId: SessionId) => void
    }): Promise<SessionId> {
@@ -124224,7 +124267,7 @@ index 8166b6f..c8cfa34 100644
      if (!result.ok) throw new SessionForkError(result.error, opts.sessionId)
      this.projectList()
      const childId = result.value.sessionId
-@@ -548,7 +609,7 @@ export class ClientSessions implements ISessions {
+@@ -548,7 +617,7 @@ export class ClientSessions implements ISessions {
        if (count === 0) this.retireScope(id, record)
        else this.publishRetention(id)
      })
@@ -124233,7 +124276,7 @@ index 8166b6f..c8cfa34 100644
        this.projectList()
      }
      this.publishRetention(id)
-@@ -609,7 +670,7 @@ export class ClientSessions implements ISessions {
+@@ -609,7 +678,7 @@ export class ClientSessions implements ISessions {
    private projectList(): void {
      const previousById = this.list.getSnapshot().byId
      const {
@@ -124242,7 +124285,7 @@ index 8166b6f..c8cfa34 100644
      } = this.manager.getListSnapshot()
      const ids: SessionId[] = []
      const byId: Record<SessionId, SessionSummary> = {}
-@@ -629,6 +690,7 @@ export class ClientSessions implements ISessions {
+@@ -629,6 +698,7 @@ export class ClientSessions implements ISessions {
          ...(entry.cwd !== undefined ? { cwd: entry.cwd } : {}),
          ...(entry.parentSessionId !== undefined ? { parentId: entry.parentSessionId } : {}),
          ...(entry.origin !== undefined ? { origin: entry.origin } : {}),
@@ -124250,7 +124293,7 @@ index 8166b6f..c8cfa34 100644
        }
      }
      for (const [parentId, projection] of Object.entries(projectionsBySession)) {
-@@ -659,9 +721,9 @@ export class ClientSessions implements ISessions {
+@@ -659,9 +729,9 @@ export class ClientSessions implements ISessions {
      for (const [id, record] of this.scopes) {
        if (byId[id] !== undefined) continue
        const address = this.manager.subagentAddress(id)
@@ -124261,7 +124304,7 @@ index 8166b6f..c8cfa34 100644
        const projectionValues = this.manager.projectionValues(id)
        const projectedTitle = projectionValues?.title
        const title = typeof projectedTitle === 'string' && projectedTitle !== '' ? projectedTitle : previous?.title
-@@ -670,13 +732,12 @@ export class ClientSessions implements ISessions {
+@@ -670,13 +740,12 @@ export class ClientSessions implements ISessions {
          running: snapshot.running,
          retainedBy: record.retention.retainedBy,
          blank: snapshot.blank,
@@ -124386,7 +124429,7 @@ index fc2a11a..dee4935 100644
          }
          continue
 diff --git a/packages/api/session-controller/src/commands.ts b/packages/api/session-controller/src/commands.ts
-index 7e900b9..58aed67 100644
+index 7e900b9..c7b854e 100644
 --- a/packages/api/session-controller/src/commands.ts
 +++ b/packages/api/session-controller/src/commands.ts
 @@ -24,6 +24,7 @@ import { canonicalClientTimeZone } from '@deepseek-ai/dsh-util-time'
@@ -124615,6 +124658,23 @@ index 7e900b9..58aed67 100644
    private async resolveAgent(sessionId: SessionId): Promise<Agent> {
      const found = await this.agents.resolveAgent(sessionId)
      if ('error' in found) throw found.error
+@@ -636,6 +716,7 @@ function imageInEvent(
+   const data = event.data as {
+     readonly content?: unknown
+     readonly message?: { readonly content?: unknown }
++    readonly prompt?: { readonly content?: unknown }
+     readonly inserted?: unknown
+     readonly summary?: unknown
+     readonly rawOutput?: unknown
+@@ -643,6 +724,8 @@ function imageInEvent(
+   // First-party event payloads can be present without their producer plugin mounted.
+   const type: string = event.type
+   switch (type) {
++    case 'session/active-branch':
++      return imageBlockIn(data.prompt?.content, match)
+     case 'user/message':
+     case 'tool/ptc-dispatch':
+       return imageBlockIn(data.content, match)
 diff --git a/packages/api/session-controller/src/free-directory.ts b/packages/api/session-controller/src/free-directory.ts
 new file mode 100644
 index 0000000..28d70ce
@@ -124781,7 +124841,7 @@ index 07fbbfe..699c1b8 100644
        }
      } finally {
 diff --git a/packages/api/session-controller/src/index.ts b/packages/api/session-controller/src/index.ts
-index 3fe1522..110707a 100644
+index 3fe1522..3bbfa99 100644
 --- a/packages/api/session-controller/src/index.ts
 +++ b/packages/api/session-controller/src/index.ts
 @@ -28,6 +28,7 @@ import { installModelSelectionProjection } from './model-selection-projection.ts
@@ -124834,19 +124894,19 @@ index 3fe1522..110707a 100644
      ctx.effect(() => ctx.fileUploads.registerAgentResolver(async (sessionId) => {
        const result = await this.agents.resolveAgent(sessionId)
        if ('error' in result) throw result.error
-@@ -265,8 +276,48 @@ export class SessionController extends TypertRemoteService {
+@@ -265,8 +276,49 @@ export class SessionController extends TypertRemoteService {
    }
  
    /**
 -   * Create or idempotently adopt one ordinary Session.
 -   * @param request - requested identity, location, and Agent preset.
 +   * Report which session lifecycle operations this host can commit.
-+   * @returns whether retry, free-session creation, and delete are available.
++   * @returns whether retry, a consented retry over recorded modifications, free-session creation, and delete are available.
 +   */
 +  @Remote('capabilities')
 +  capabilities(): SessionCapabilities {
 +    const durable = this.lifecycle.durable
-+    return { retry: durable, freeSession: durable, deleteSession: this.lifecycle.canDelete }
++    return { retry: durable, retryModified: durable, retryContent: durable, freeSession: durable, deleteSession: this.lifecycle.canDelete }
 +  }
 +
 +  /**
@@ -124860,8 +124920,9 @@ index 3fe1522..110707a 100644
 +  }
 +
 +  /**
-+   * Replace one human prompt in the same session when trusted evidence allows it.
-+   * @param request - anchor, expected revision, idempotency key, and optional replacement text.
++   * Replace one human prompt in the same session. A recorded workspace or external change is refused
++   * unless the request carries `allowModified`; the branch then replaces the conversation only.
++   * @param request - anchor, expected revision, idempotency key, optional replacement text, and modification consent.
 +   * @returns the same session id and the committed branch revision.
 +   */
 +  @Remote('retry')
@@ -124896,10 +124957,10 @@ index 0000000..3719482
 +export type { SessionLifecycleRecord } from '@deepseek-ai/dsh-session-persistence'
 diff --git a/packages/api/session-controller/src/lifecycle.ts b/packages/api/session-controller/src/lifecycle.ts
 new file mode 100644
-index 0000000..1c31b6b
+index 0000000..0d3bcd8
 --- /dev/null
 +++ b/packages/api/session-controller/src/lifecycle.ts
-@@ -0,0 +1,1165 @@
+@@ -0,0 +1,1205 @@
 +/** Same-session retry, free-session directories, and durable delete tombstones. */
 +
 +import { createHash, randomUUID } from 'node:crypto'
@@ -124921,6 +124982,8 @@ index 0000000..1c31b6b
 +import type { ApiSessionAgentController } from './agent.ts'
 +import type { SessionLifecycleRecord } from './lifecycle-spec.ts'
 +import { allocatedDirectoryIdentity, copyFreeDirectory, freeDirectoryPath, removeFreeDirectory, verifyDirectoryCleanup, verifyDirectoryProof, writeDirectoryProof } from './free-directory.ts'
++import { admitRetryContent, retryContentHash } from './retry-content.ts'
++import type { PromptContentPart } from './types.ts'
 +
 +/** Durable phase stored outside the session log. */
 +type LifecyclePhase = SessionLifecycleRecord['phase']
@@ -125113,6 +125176,7 @@ index 0000000..1c31b6b
 +
 +  /**
 +   * Report whether the active branch can replace one human prompt.
++   * A recorded modification keeps the prompt ineligible whatever a later retry request may consent to.
 +   * @param sessionId - session that owns the prompt.
 +   * @param messageId - human message id.
 +   * @returns revision, eligibility, and a typed reason when blocked.
@@ -125124,8 +125188,10 @@ index 0000000..1c31b6b
 +  }
 +
 +  /**
-+   * Replace one human prompt on the same session when no trusted write is known.
-+   * @param request - anchor, expected revision, idempotency key, and optional text.
++   * Replace one human prompt on the same session.
++   * `allowModified` accepts changes the workspace or an external system already holds: the branch replaces the
++   * conversation only, so the changed files and the external state stay as they are.
++   * @param request - anchor, expected revision, idempotency key, optional text, and modification consent.
 +   * @returns the same session id and the committed branch revision.
 +   */
 +  retry(request: {
@@ -125135,15 +125201,19 @@ index 0000000..1c31b6b
 +    expectedInputRevision: string
 +    requestId: string
 +    text?: string
++    content?: readonly PromptContentPart[]
++    allowModified?: boolean
 +  }): Promise<SessionRetryValue> {
 +    return this.run(request.sessionId, async () => {
 +      await this.assertUsable(request.sessionId)
 +      const agent = await this.requireAgent(request.sessionId)
 +      await this.requireDurable()
++      if (request.text !== undefined && request.content !== undefined) throw new RemoteError('session/retry-conflict', 'Specify text or complete content, not both.', { sessionId: request.sessionId, requestId: request.requestId })
++      const allowModified = request.allowModified === true
 +      const existing = await this.idempotent(agent, request)
 +      if (existing !== undefined) return { sessionId: request.sessionId, branchRevision: existing }
 +      const preview = await this.inspect(agent, request.messageId)
-+      if (!preview.eligible) {
++      if (!retryPermitted(preview, allowModified)) {
 +        throw new RemoteError('session/retry-blocked', preview.reason ?? 'retry is blocked', {
 +          sessionId: request.sessionId,
 +          reason: preview.reason ?? 'blocked',
@@ -125173,7 +125243,7 @@ index 0000000..1c31b6b
 +          inputRevision: again.inputRevision,
 +        })
 +      }
-+      if (!again.eligible || again.branchRevision !== request.expectedRevision) {
++      if (!retryPermitted(again, allowModified) || again.branchRevision !== request.expectedRevision) {
 +        throw new RemoteError('session/retry-blocked', 'work did not become quiet before retry', {
 +          sessionId: request.sessionId,
 +          reason: again.reason ?? 'not-quiet',
@@ -125188,7 +125258,9 @@ index 0000000..1c31b6b
 +          blockers: [],
 +        })
 +      }
-+      const prompt = replacePromptText(anchor.event.data, request.text)
++      const replacement = request.content === undefined ? undefined
++        : await admitRetryContent(this.ctx, this.agents, agent, anchor.event.data, request.content)
++      const prompt = replacement?.prompt ?? replacePromptText(anchor.event.data, request.text)
 +      const revision = agent.session.branchRevision + 1
 +      const receipt: RetryReceipt = {
 +        requestId: request.requestId,
@@ -125197,10 +125269,16 @@ index 0000000..1c31b6b
 +        inputRevision: request.expectedInputRevision,
 +        revision,
 +        ...(request.text === undefined ? {} : { text: request.text }),
++        ...(replacement === undefined ? {} : { prompt, contentHash: retryContentHash(request.content)! }),
 +        stage: 'intent',
 +      }
 +      await this.putRetry(request.sessionId, receipt)
-+      this.assertRetryCut(agent, request, anchor.event)
++      if (replacement !== undefined) {
++        using binding = this.ctx.fileUploads.bindPrompt(agent, replacement.receiptIds, brandString(request.requestId))
++        binding.commit()
++        this.ctx.fileUploads.retirePrompt(agent, brandString(request.requestId))
++      }
++      this.assertRetryCut(agent, request, anchor.event, allowModified)
 +      agent.session.append('session/active-branch', {
 +        revision,
 +        anchorSeq: anchor.event.seq,
@@ -125368,7 +125446,8 @@ index 0000000..1c31b6b
 +    blockers.push(...childBlockers)
 +    if (blockers.some(item => item.startsWith('running:'))) return { branchRevision: revision, inputRevision, eligible: false, reason: 'running', blockers: [...new Set(blockers)] }
 +    if (blockers.length > 0) {
-+      return { branchRevision: revision, inputRevision, eligible: false, reason: blockers[0]?.startsWith('missing') ? 'missing-evidence' : 'modified', blockers: [...new Set(blockers)] }
++      const reason = blockers.some(item => item.startsWith('missing')) ? 'missing-evidence' : 'modified'
++      return { branchRevision: revision, inputRevision, eligible: false, reason, blockers: [...new Set(blockers)] }
 +    }
 +    return { branchRevision: revision, inputRevision, eligible: true }
 +  }
@@ -125378,12 +125457,14 @@ index 0000000..1c31b6b
 +    agent: Agent,
 +    request: { expectedRevision: number; expectedInputRevision: string },
 +    anchor: SessionEvent<'user/message'>,
++    allowModified: boolean,
 +  ): void {
 +    const inputRevision = humanInputRevision(agent)
 +    if (inputRevision !== request.expectedInputRevision) throw new RetryCutRefusal('session/retry-input', 'admitted or queued human input changed', { sessionId: agent.id, inputRevision })
 +    if (agent.session.branchRevision !== request.expectedRevision) throw new RetryCutRefusal('session/retry-revision', 'branch revision changed', { sessionId: agent.id, expectedRevision: request.expectedRevision, branchRevision: agent.session.branchRevision })
 +    const blockers = this.residentEffectBlockers(agent.session, anchor)
-+    if (agent.status === 'running' || blockers.length > 0) throw new RetryCutRefusal('session/retry-blocked', 'work changed before the replacement branch was committed', { sessionId: agent.id, reason: 'not-quiet', blockers })
++    const refused = allowModified ? blockers.filter(isUnwaivableBlocker) : blockers
++    if (agent.status === 'running' || refused.length > 0) throw new RetryCutRefusal('session/retry-blocked', 'work changed before the replacement branch was committed', { sessionId: agent.id, reason: 'not-quiet', blockers })
 +  }
 +
 +  private residentEffectBlockers(parent: Session, anchor: SessionEvent<'user/message'>): string[] {
@@ -125409,16 +125490,18 @@ index 0000000..1c31b6b
 +
 +  private async idempotent(
 +    agent: Agent,
-+    request: { messageId: string; expectedRevision: number; expectedInputRevision: string; requestId: string; text?: string },
++    request: { messageId: string; expectedRevision: number; expectedInputRevision: string; requestId: string; text?: string; content?: readonly PromptContentPart[]; allowModified?: boolean },
 +  ): Promise<number | undefined> {
 +    const event = this.branchEvent(agent.session, request.requestId)
 +    const receipt = this.table?.get(agent.id)?.retry
 +    const known = event?.data ?? (receipt?.requestId === request.requestId ? receipt : undefined)
 +    if (known === undefined) return undefined
++    // Consent belongs to the request that carries it; the stored payload keeps identifying one operation.
 +    const same = known.messageId === request.messageId
 +      && known.expectedRevision === request.expectedRevision
 +      && known.inputRevision === request.expectedInputRevision
 +      && known.text === request.text
++      && this.table?.get(agent.id)?.retryContentHashes?.[request.requestId] === retryContentHash(request.content)
 +    if (!same) {
 +      throw new RemoteError('session/retry-conflict', 'retry requestId was already used with a different payload', {
 +        sessionId: agent.id,
@@ -125446,13 +125529,18 @@ index 0000000..1c31b6b
 +        inputRevision: request.expectedInputRevision,
 +        revision: event?.data.revision ?? agent.session.branchRevision,
 +        ...(request.text === undefined ? {} : { text: request.text }),
++        ...(request.content === undefined || event === undefined ? {} : { prompt: event.data.prompt, contentHash: retryContentHash(request.content)! }),
 +        stage: event === undefined ? 'intent' : 'branched',
 +      }
-+    await this.completeReceipt(agent, pending)
++    await this.completeReceipt(agent, pending, request.allowModified === true)
 +    return pending.revision
 +  }
 +
-+  private async completeReceipt(agent: Agent, receipt: RetryReceipt): Promise<void> {
++  /**
++   * Finish one recorded retry intent. `allowModified` carries the consent of the request that resumes it;
++   * automatic recovery passes no consent and keeps a modified cut refused.
++   */
++  private async completeReceipt(agent: Agent, receipt: RetryReceipt, allowModified: boolean): Promise<void> {
 +    if (this.branchEvent(agent.session, receipt.requestId) === undefined) {
 +      const anchor = this.anchor(agent.session, receipt.messageId)
 +      if (anchor === undefined) {
@@ -125467,15 +125555,15 @@ index 0000000..1c31b6b
 +      this.assertRetryCut(agent, {
 +        expectedRevision: receipt.expectedRevision,
 +        expectedInputRevision: receipt.inputRevision,
-+      }, anchor.event)
-+      if (!preview.eligible) {
++      }, anchor.event, allowModified)
++      if (!retryPermitted(preview, allowModified)) {
 +        throw new RetryCutRefusal('session/retry-blocked', preview.reason ?? 'retry is blocked', {
 +          sessionId: agent.id,
 +          reason: preview.reason ?? 'blocked',
 +          blockers: preview.blockers ?? [],
 +        })
 +      }
-+      const prompt = replacePromptText(anchor.event.data, receipt.text)
++      const prompt = receipt.prompt ?? replacePromptText(anchor.event.data, receipt.text)
 +      agent.session.append('session/active-branch', {
 +        revision: receipt.revision,
 +        anchorSeq: anchor.event.seq,
@@ -125507,7 +125595,8 @@ index 0000000..1c31b6b
 +    if (this.laterBranch(agent.session, receipt.requestId)) return
 +    if (this.branchEvent(agent.session, receipt.requestId) === undefined) {
 +      try {
-+        await this.completeReceipt(agent, receipt)
++        // Automatic recovery carries no consent, so a modified cut stays refused.
++        await this.completeReceipt(agent, receipt, false)
 +      } catch (error: unknown) {
 +        if (!(error instanceof RetryCutRefusal)) throw error
 +        this.ctx.logger.warn(`automatic retry recovery for "${agent.id}" request "${receipt.requestId}" refused (${error.code}): ${error.message}; receipt and history retained`)
@@ -125917,6 +126006,7 @@ index 0000000..1c31b6b
 +      ...(current?.ownedDirectory === undefined ? {} : { ownedDirectory: current.ownedDirectory }),
 +      ...(current?.error === undefined ? {} : { error: current.error }),
 +      retry,
++      ...(retry.contentHash === undefined ? {} : { retryContentHashes: { ...current?.retryContentHashes, [retry.requestId]: retry.contentHash } }),
 +    })
 +  }
 +
@@ -125925,6 +126015,17 @@ index 0000000..1c31b6b
 +      ? this.ctx.sessions.admission.exclusive(sessionId, operation)
 +      : this.admission.exclusive(sessionId, operation)
 +  }
++}
++
++/** Consent waives a recorded modification; every other refusal stands. */
++function retryPermitted(preview: SessionRetryPreview, allowModified: boolean): boolean {
++  if (preview.eligible) return true
++  return allowModified && preview.reason === 'modified'
++}
++
++/** Absent effect evidence and running work stay refused; a recorded modification alone may be waived. */
++function isUnwaivableBlocker(blocker: string): boolean {
++  return blocker.startsWith('missing:') || blocker.startsWith('running:')
 +}
 +
 +function humanInputRevision(agent: Agent): string {
@@ -126091,8 +126192,64 @@ index 54ebe1b..d6bf327 100644
 +    classification: header.classification ?? 'ordinary',
    }
  }
+diff --git a/packages/api/session-controller/src/retry-content.ts b/packages/api/session-controller/src/retry-content.ts
+new file mode 100644
+index 0000000..5eccf56
+--- /dev/null
++++ b/packages/api/session-controller/src/retry-content.ts
+@@ -0,0 +1,50 @@
++/** Attachment admission for replacement prompts uses the ordinary Session's upload authority. */
++import { createHash } from 'node:crypto'
++import type { Context } from '@deepseek-ai/cordis'
++import type { Agent } from '@deepseek-ai/dsh-agent'
++import type { UserMessage } from '@deepseek-ai/dsh-llm'
++import type { FileUploadReceiptId } from '@deepseek-ai/dsh-client-file-upload'
++import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
++import type { ApiSessionAgentController } from './agent.ts'
++import type { PromptContentPart } from './types.ts'
++
++/** Compare retries without retaining uploaded bytes or depending on object property order. */
++export function retryContentHash(content: readonly PromptContentPart[] | undefined): string | undefined {
++  if (content === undefined) return undefined
++  const hash = createHash('sha256')
++  for (const part of content) {
++    hash.update(JSON.stringify(part.type === 'text' ? ['text', part.text]
++      : part.type === 'image' ? ['image', part.mediaType, part.data, part.name ?? null]
++        : ['file', part.receiptId]))
++    hash.update('\n')
++  }
++  return hash.digest('hex')
++}
++
++/** Validate every replacement before the branch changes, returning only durable references. */
++export async function admitRetryContent(
++  ctx: Context, agents: ApiSessionAgentController, agent: Agent, original: UserMessage,
++  content: readonly PromptContentPart[],
++): Promise<{ prompt: UserMessage; receiptIds: FileUploadReceiptId[] }> {
++  if (!content.some(part => part.type !== 'text' || part.text.trim() !== '')) {
++    throw new RemoteError('session/attachment-invalid', 'A replacement prompt must contain text or attachments.', { reason: 'EMPTY_PROMPT' })
++  }
++  if (content.some(part => part.type === 'image')) {
++    const current = agents.selectionFor(agent).current
++    const model = await ctx.llm.resolveModelInfo(current.provider, current.model)
++    if (model.inputModalities !== undefined && !model.inputModalities.includes('image')) {
++      throw new RemoteError('session/attachment-invalid', 'The selected model does not support images.', { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' })
++    }
++  }
++  const receipts = new Set<FileUploadReceiptId>()
++  const parts = content.map(part => {
++    if (part.type !== 'file') return part
++    const attachment = ctx.fileUploads.resolve(agent, part.receiptId)
++    if (!attachment) throw new RemoteError('session/attachment-invalid', 'File was not uploaded for this session.', { reason: 'FILE_NOT_STAGED' })
++    receipts.add(part.receiptId)
++    return { type: 'file' as const, attachment }
++  })
++  const admitted = await ctx.attachments.admitPromptContent(parts)
++  if (ctx.agents.get(agent.id) !== agent) throw new RemoteError('session/not-found', 'The session closed during attachment admission.', { sessionId: agent.id })
++  return { prompt: { ...original, content: admitted }, receiptIds: [...receipts] }
++}
 diff --git a/packages/api/session-controller/src/types.ts b/packages/api/session-controller/src/types.ts
-index a8f0d7e..07db99e 100644
+index a8f0d7e..6efa56d 100644
 --- a/packages/api/session-controller/src/types.ts
 +++ b/packages/api/session-controller/src/types.ts
 @@ -184,6 +184,8 @@ export interface SessionSummary {
@@ -126120,7 +126277,7 @@ index a8f0d7e..07db99e 100644
      'subagent/not-found': {
        readonly parentSessionId: SessionId
        readonly childSessionId: SessionId
-@@ -287,6 +298,60 @@ export interface SessionCreateRequest {
+@@ -287,6 +298,72 @@ export interface SessionCreateRequest {
    readonly cwd?: string
    readonly sessionId?: SessionId
    readonly agentPreset?: string
@@ -126131,6 +126288,10 @@ index a8f0d7e..07db99e 100644
 +/** Host capabilities the client can trust without probing a fake control. */
 +export interface SessionCapabilities {
 +  readonly retry: boolean
++  /** Whether a retry request may accept a recorded workspace or external change. */
++  readonly retryModified: boolean
++  /** Whether same-session edits accept a complete replacement attachment list. */
++  readonly retryContent?: boolean
 +  readonly freeSession: boolean
 +  readonly deleteSession: boolean
 +}
@@ -126159,7 +126320,15 @@ index a8f0d7e..07db99e 100644
 +  /** Token from the preview. A mismatch rejects the retry and leaves input in place. */
 +  readonly expectedInputRevision: string
 +  readonly requestId: string
++  /** Replacement text for the prompt; the Host keeps the original attachments. */
 +  readonly text?: string
++  /** Complete replacement prompt, including uploads staged for this same Session. Mutually exclusive with text. */
++  readonly content?: readonly PromptContentPart[]
++  /**
++   * Consent to replace the prompt after the workspace or an external system already changed.
++   * The branch replaces the conversation only; the changed files and the external state stay as they are.
++   */
++  readonly allowModified?: boolean
 +}
 +
 +/** Committed same-session retry. */
@@ -126181,7 +126350,7 @@ index a8f0d7e..07db99e 100644
  }
  
  /** Session creation response value. */
-@@ -554,6 +619,8 @@ export type SessionFollowFrame =
+@@ -554,6 +631,8 @@ export type SessionFollowFrame =
      readonly type: 'snapshot'
      readonly header: SessionWireHeader
      readonly cursor: number
@@ -126405,6 +126574,33 @@ index 0000000..b515222
 +    expect(JSON.stringify(session.eventSource.getSnapshot().entries)).toContain('NEW_REPLY')
 +  })
 +})
+diff --git a/packages/api/session-controller/tests/commands-queue-attachment.host.spec.ts b/packages/api/session-controller/tests/commands-queue-attachment.host.spec.ts
+index a22e35c..1ac1b20 100644
+--- a/packages/api/session-controller/tests/commands-queue-attachment.host.spec.ts
++++ b/packages/api/session-controller/tests/commands-queue-attachment.host.spec.ts
+@@ -379,6 +379,22 @@ describe('Session attachment authorization', () => {
+     }
+   })
+
++  it('authorizes the durable image in a replacement prompt', async () => {
++    const ref = imageRef('replacement-image')
++    const prompt = createUserMessage({ content: [{ type: 'text', text: 'old' }], source: { kind: 'user' } })
++    const events = [
++      event('user/message', SessionSeq(0), prompt),
++      event('session/active-branch', SessionSeq(1), { revision: 1, expectedRevision: 0, inputRevision: 'input', requestId: 'replacement', messageId: prompt.id, anchorSeq: 0,
++        prompt: { ...prompt, content: [{ type: 'image', attachment: ref }] } }),
++    ]
++    const readImage = vi.fn((image: ImageAttachmentRef) => Promise.resolve({ ref: image, data: Uint8Array.of(1) }))
++    const fixture = await persistedController(events, readImage)
++    try {
++      await expect(fixture.controller.attachment({ sessionId: fixture.sessionId, attachmentId: ref.attachmentId })).resolves.toEqual({ attachment: ref, data: 'AQ==' })
++      expect(readImage).toHaveBeenCalledExactlyOnceWith(ref)
++    } finally { await fixture.ctx.fiber.dispose() }
++  })
++
+   it('does not authorize an attachment through malformed inbox entries', async () => {
+     const ref = imageRef('not-referenced')
+     for (const value of [undefined, null, {}, [null, 1, []]]) {
 diff --git a/packages/api/session-controller/tests/controller.host.spec.ts b/packages/api/session-controller/tests/controller.host.spec.ts
 index 43d1394..17b636d 100644
 --- a/packages/api/session-controller/tests/controller.host.spec.ts
@@ -126449,10 +126645,10 @@ index 43d1394..17b636d 100644
      const header: SessionHeader = {
 diff --git a/packages/api/session-controller/tests/lifecycle-edges.host.spec.ts b/packages/api/session-controller/tests/lifecycle-edges.host.spec.ts
 new file mode 100644
-index 0000000..efd79f1
+index 0000000..cbfec2e
 --- /dev/null
 +++ b/packages/api/session-controller/tests/lifecycle-edges.host.spec.ts
-@@ -0,0 +1,658 @@
+@@ -0,0 +1,780 @@
 +/** Same-session retry blockers, idempotency, and durable delete replay. */
 +
 +import { lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
@@ -126546,8 +126742,8 @@ index 0000000..efd79f1
 +  }
 +}
 +
-+async function promptSession(ctx: Context, id: string, text = 'hello'): Promise<{ session: Session; message: UserMessage }> {
-+  const session = ctx.sessions.create(SessionId(id), { meta: { cwd: '/proj' } })
++async function promptSession(ctx: Context, id: string, text = 'hello', cwd = '/proj'): Promise<{ session: Session; message: UserMessage }> {
++  const session = ctx.sessions.create(SessionId(id), { meta: { cwd } })
 +  const message = createUserMessage({
 +    content: [
 +      { type: 'text', text },
@@ -126577,12 +126773,12 @@ index 0000000..efd79f1
 +    const missing = await contextWithoutHome({ persistence: false })
 +    installFactory(missing)
 +    const first = createSessionTestController(missing, { defaultModelSelection: () => ({ provider: 'fixture', model: 'fixture-model' }), cwd: '/tmp' })
-+    expect(first.capabilities()).toEqual({ retry: false, freeSession: false, deleteSession: false })
++    expect(first.capabilities()).toEqual({ retry: false, retryModified: false, retryContent: false, freeSession: false, deleteSession: false })
 +    await expect(first.create({ kind: 'free', sessionId: SessionId('no-persistence') })).rejects.toMatchObject({ code: 'session/lifecycle-unavailable' })
 +    await missing.fiber.dispose()
 +    const unsupported = await contextWithoutHome({ supportsDelete: false })
 +    const second = createSessionTestController(unsupported, { defaultModelSelection: () => ({ provider: 'fixture', model: 'fixture-model' }), cwd: '/tmp' })
-+    expect(second.capabilities()).toEqual({ retry: true, freeSession: true, deleteSession: false })
++    expect(second.capabilities()).toEqual({ retry: true, retryModified: true, retryContent: true, freeSession: true, deleteSession: false })
 +    await expect(second.delete({ sessionId: SessionId('unsupported-delete'), requestId: 'unsupported' })).rejects.toMatchObject({ code: 'session/lifecycle-unavailable' })
 +    await unsupported.fiber.dispose()
 +  })
@@ -126775,6 +126971,46 @@ index 0000000..efd79f1
 +    } finally { await ctx.fiber.dispose() }
 +  })
 +
++  it('keeps automatic recovery of a modified intent refused until a consenting request resumes it', async () => {
++    const ctx = await harness()
++    try {
++      const { session, message } = await promptSession(ctx, 'intent-consent', 'original')
++      const agent = ctx.agents.get(session.id)!
++      const preview = await ctx.sessionController.previewRetry({ sessionId: session.id, messageId: message.id })
++      const request = {
++        sessionId: session.id,
++        messageId: message.id,
++        expectedRevision: preview.branchRevision,
++        expectedInputRevision: preview.inputRevision,
++        requestId: 'consent-intent',
++        text: 'replacement',
++      }
++      const table = ctx.sessionPersistence.admission.table!
++      await table.put(session.id, {
++        phase: 'active',
++        classification: 'ordinary',
++        retry: { requestId: request.requestId, messageId: message.id, expectedRevision: preview.branchRevision, inputRevision: preview.inputRevision, revision: 1, text: request.text, stage: 'intent' },
++      })
++      session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId('late-write'), name: 'write', arguments: '{}' })
++      session.append('host/tool-effect', { callId: 'late-write', name: 'write', effect: 'filesystem-write', nested: false })
++      const recovery = new SessionLifecycle(ctx, new ApiSessionAgentController(ctx))
++      await recovery.whenReady()
++      let wakes = 0
++      agent.continueFromBranch = () => { wakes += 1; session.append('turn/start', { turn: 2 }) }
++      let admitted = false
++      await recovery.exclusive(session.id, async () => { admitted = true })
++      expect(admitted).toBe(true)
++      expect(wakes).toBe(0)
++      expect(session.snapshotEvents().some(event => event.type === 'session/active-branch')).toBe(false)
++      expect(table.get(session.id)?.retry?.stage).toBe('intent')
++      await expect(ctx.sessionController.retry(request)).rejects.toMatchObject({ code: 'session/retry-blocked' })
++      await expect(ctx.sessionController.retry({ ...request, allowModified: true })).resolves.toEqual({ sessionId: session.id, branchRevision: 1 })
++      expect(wakes).toBe(1)
++      expect(table.get(session.id)?.retry?.stage).toBe('admitted')
++      expect(session.deriveMessages().find(item => item.role === 'user')?.content[0]).toEqual({ type: 'text', text: 'replacement' })
++    } finally { await ctx.fiber.dispose() }
++  })
++
 +  it('blocks filesystem writes, unknown tools, missing evidence, a running agent, and a failed stop', async () => {
 +    const ctx = await harness()
 +    const controller = ctx.sessionController
@@ -126842,6 +127078,88 @@ index 0000000..efd79f1
 +    })).rejects.toBeInstanceOf(RemoteError)
 +    expect(stuck.session.snapshotEvents().some(event => event.type === 'session/active-branch')).toBe(false)
 +    await ctx.fiber.dispose()
++  })
++
++  it('replaces the conversation only after the request consents to the recorded change', async () => {
++    const ctx = await harness()
++    try {
++      const workspace = await mkdtemp(join(resolveDshHome(), 'retry-workspace-'))
++      const { session, message } = await promptSession(ctx, 'retry-consent', 'original', workspace)
++      await writeFile(join(workspace, 'note.txt'), 'changed')
++      session.append('tool/call', {
++        turn: 1, step: 1, callId: ToolCallId('write-1'), name: 'write', arguments: '{}',
++      })
++      session.append('host/tool-effect', {
++        callId: 'write-1', name: 'write', effect: 'filesystem-write', nested: false,
++      })
++      const preview = await ctx.sessionController.previewRetry({ sessionId: session.id, messageId: message.id })
++      expect(preview).toMatchObject({ eligible: false, reason: 'modified' })
++      const request = {
++        sessionId: session.id,
++        messageId: message.id,
++        expectedRevision: preview.branchRevision,
++        expectedInputRevision: preview.inputRevision,
++        requestId: 'consent',
++        text: 'edited',
++      }
++      await expect(ctx.sessionController.retry(request)).rejects.toMatchObject({ code: 'session/retry-blocked' })
++      expect(session.snapshotEvents().some(event => event.type === 'session/active-branch')).toBe(false)
++      await expect(ctx.sessionController.retry({ ...request, allowModified: true })).resolves.toEqual({ sessionId: session.id, branchRevision: 1 })
++      expect(session.snapshotEvents().some(event => event.type === 'session/active-branch')).toBe(true)
++      // The branch replaces the conversation; the recorded change and the changed file both stay.
++      expect(session.snapshotEvents().some(event => event.type === 'host/tool-effect')).toBe(true)
++      expect(session.deriveMessages().find(item => item.role === 'user')?.content[0]).toEqual({ type: 'text', text: 'edited' })
++      expect(await readFile(join(workspace, 'note.txt'), 'utf8')).toBe('changed')
++    } finally { await ctx.fiber.dispose() }
++  })
++
++  it('refuses absent effect evidence even when the request consents', async () => {
++    const ctx = await harness()
++    try {
++      const { session, message } = await promptSession(ctx, 'retry-consent-missing')
++      session.append('tool/call', {
++        turn: 1, step: 1, callId: ToolCallId('missing-1'), name: 'read', arguments: '{}',
++      })
++      const preview = await ctx.sessionController.previewRetry({ sessionId: session.id, messageId: message.id })
++      expect(preview).toMatchObject({ eligible: false, reason: 'missing-evidence' })
++      await expect(ctx.sessionController.retry({
++        sessionId: session.id,
++        messageId: message.id,
++        expectedRevision: preview.branchRevision,
++        expectedInputRevision: preview.inputRevision,
++        requestId: 'consent-missing',
++        allowModified: true,
++      })).rejects.toMatchObject({ code: 'session/retry-blocked' })
++      expect(session.snapshotEvents().some(event => event.type === 'session/active-branch')).toBe(false)
++    } finally { await ctx.fiber.dispose() }
++  })
++
++  it('reports absent effect evidence ahead of a recorded change', async () => {
++    const ctx = await harness()
++    try {
++      const { session, message } = await promptSession(ctx, 'retry-consent-mixed')
++      session.append('tool/call', {
++        turn: 1, step: 1, callId: ToolCallId('write-1'), name: 'write', arguments: '{}',
++      })
++      session.append('host/tool-effect', {
++        callId: 'write-1', name: 'write', effect: 'filesystem-write', nested: false,
++      })
++      session.append('tool/call', {
++        turn: 1, step: 1, callId: ToolCallId('missing-1'), name: 'read', arguments: '{}',
++      })
++      const preview = await ctx.sessionController.previewRetry({ sessionId: session.id, messageId: message.id })
++      expect(preview).toMatchObject({ eligible: false, reason: 'missing-evidence' })
++      expect(preview.blockers).toEqual(expect.arrayContaining([expect.stringContaining('missing:')]))
++      await expect(ctx.sessionController.retry({
++        sessionId: session.id,
++        messageId: message.id,
++        expectedRevision: preview.branchRevision,
++        expectedInputRevision: preview.inputRevision,
++        requestId: 'consent-mixed',
++        allowModified: true,
++      })).rejects.toMatchObject({ code: 'session/retry-blocked' })
++      expect(session.snapshotEvents().some(event => event.type === 'session/active-branch')).toBe(false)
++    } finally { await ctx.fiber.dispose() }
 +  })
 +
 +  it('finishes a proven failed delete after restart and preserves an unproven half-created directory', async () => {
@@ -127113,10 +127431,10 @@ index 0000000..efd79f1
 +}
 diff --git a/packages/api/session-controller/tests/lifecycle-workflow.host.spec.ts b/packages/api/session-controller/tests/lifecycle-workflow.host.spec.ts
 new file mode 100644
-index 0000000..fe2f273
+index 0000000..465c398
 --- /dev/null
 +++ b/packages/api/session-controller/tests/lifecycle-workflow.host.spec.ts
-@@ -0,0 +1,747 @@
+@@ -0,0 +1,825 @@
 +/** Loader composition: fake model, same-session retry, free directory, and real delete. */
 +
 +import { cp, lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
@@ -127143,6 +127461,8 @@ index 0000000..fe2f273
 +import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 +import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 +import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
++import { AttachmentId } from '@deepseek-ai/dsh-attachment'
++import type { FileUploadReceiptId } from '@deepseek-ai/dsh-client-file-upload'
 +import { logPath } from '../../../session/session-persistence-jsonl/src/format.ts'
 +import LocalJobRegistry from '../../../jobs/jobs-local/src/index.ts'
 +import type { JobOutcome } from '@deepseek-ai/dsh-jobs'
@@ -127512,6 +127832,82 @@ index 0000000..fe2f273
 +    expect((await restarted.sessionQuery.listSessions()).map(row => row.header.id)).toContain(id)
 +    expect((await restarted.sessionPersistence.stat(id))?.header).toMatchObject({ classification: 'free', ownedDirectory: owned })
 +    expect(await readFile(join(owned, 'draft.txt'), 'utf8')).toBe('no model prompt yet')
++  })
++
++  it('replaces full content in the same Session, rejects foreign receipts, and retains identity across cold recovery', async () => {
++    const adapter = new MockAdapter([textResponse('FIRST'), textResponse('LATER_SENTINEL'), textResponse('REPLACED')])
++    const ctx = await boot(adapter, () => {})
++    const id = SessionId('native-content-replacement')
++    await ctx.sessionController.create({ kind: 'free', sessionId: id })
++    const agent = ctx.agents.get(id)!
++    for (const [index, text] of ['original', 'later question'].entries()) {
++      await ctx.sessionController.prompt({ requestId: brandString<SessionRequestId>('media-prompt-' + index), sessionId: id, mode: 'queue', content: [{ type: 'text', text }] }, new AbortController().signal)
++      await agent.whenIdle()
++    }
++    const anchor = agent.session.snapshotEvents().find(event => event.type === 'user/message' && event.data.source.kind === 'user')!
++    if (anchor.type !== 'user/message') throw new Error('anchor missing')
++    const preview = await ctx.sessionController.previewRetry({ sessionId: id, messageId: anchor.data.id })
++    const request = { sessionId: id, messageId: anchor.data.id, expectedRevision: preview.branchRevision, expectedInputRevision: preview.inputRevision, requestId: 'media-retry', content: [{ type: 'text' as const, text: 'replacement without attachments' }] }
++    await expect(ctx.sessionController.retry({ ...request, content: [{ type: 'file', receiptId: brandString<FileUploadReceiptId>('foreign-receipt') }] })).rejects.toMatchObject({ code: 'session/attachment-invalid' })
++    expect(agent.session.branchRevision).toBe(0)
++    expect(adapter.requests).toHaveLength(2)
++    expect(await ctx.sessionController.retry(request)).toEqual({ sessionId: id, branchRevision: 1 })
++    await agent.whenIdle()
++    expect(adapter.requests).toHaveLength(3)
++    expect(JSON.stringify(adapter.requests[2]?.messages)).not.toContain('LATER_SENTINEL')
++    const humans = agent.session.deriveMessages().filter(message => message.role === 'user' && message.source.kind === 'user')
++    expect(humans).toHaveLength(1)
++    expect(humans[0]?.content).toEqual(request.content)
++    await ctx.sessionController.retry(request)
++    expect(adapter.requests).toHaveLength(3)
++    await expect(ctx.sessionController.retry({ ...request, content: [{ type: 'text', text: 'different' }] })).rejects.toMatchObject({ code: 'session/retry-conflict' })
++    const home = root!
++    await ctx.fiber.dispose()
++    context = undefined
++    const coldAdapter = new MockAdapter([])
++    const restarted = await boot(coldAdapter, () => {}, home)
++    expect(await restarted.sessionController.retry(request)).toEqual({ sessionId: id, branchRevision: 1 })
++    expect(coldAdapter.requests).toHaveLength(0)
++    const resumed = restarted.agents.get(id)!
++    expect(resumed.session.deriveMessages().filter(message => message.role === 'user' && message.source.kind === 'user')).toHaveLength(1)
++    await expect(restarted.sessionController.retry({ ...request, content: [{ type: 'text', text: 'different' }] })).rejects.toMatchObject({ code: 'session/retry-conflict' })
++  })
++
++  it('recovers admitted file replacement intent without an expired upload receipt', async () => {
++    const ctx = await boot(new MockAdapter([textResponse('ORIGINAL')]), () => {})
++    const id = SessionId('native-content-intent')
++    await ctx.sessionController.create({ kind: 'free', sessionId: id })
++    const agent = ctx.agents.get(id)!
++    await ctx.sessionController.prompt({ requestId: brandString<SessionRequestId>('intent-original'), sessionId: id, mode: 'queue', content: [{ type: 'text', text: 'original' }] }, new AbortController().signal)
++    await agent.whenIdle()
++    const anchor = agent.session.snapshotEvents().find(event => event.type === 'user/message' && event.data.source.kind === 'user')!
++    if (anchor.type !== 'user/message') throw new Error('anchor missing')
++    const preview = await ctx.sessionController.previewRetry({ sessionId: id, messageId: anchor.data.id })
++    const request = { sessionId: id, messageId: anchor.data.id, expectedRevision: preview.branchRevision, expectedInputRevision: preview.inputRevision, requestId: 'file-intent-retry', content: [{ type: 'file' as const, receiptId: brandString<FileUploadReceiptId>('valid-upload') }] }
++    const file = { attachmentId: AttachmentId('sha256:' + 'ef'.repeat(32)), name: 'note.txt', bytes: 4 }
++    vi.spyOn(ctx.fileUploads, 'resolve').mockReturnValue(file)
++    const append = agent.session.append.bind(agent.session)
++    const cut = vi.spyOn(agent.session, 'append').mockImplementation((...args) => {
++      if (args[0] === 'session/active-branch') throw new Error('simulated crash after durable intent')
++      return Reflect.apply(append, agent.session, args)
++    })
++    await expect(ctx.sessionController.retry(request)).rejects.toThrow('simulated crash')
++    cut.mockRestore()
++    expect(agent.session.branchRevision).toBe(0)
++    const home = root!
++    await ctx.fiber.dispose()
++    context = undefined
++    const adapter = new MockAdapter([textResponse('RECOVERED_FILE')])
++    const restarted = await boot(adapter, () => {}, home)
++    const expired = vi.spyOn(restarted.fileUploads, 'resolve')
++    await restarted.sessionController.retry(request)
++    const resumed = restarted.agents.get(id)!
++    await resumed.whenIdle()
++    expect(expired).not.toHaveBeenCalled()
++    expect(adapter.requests).toHaveLength(1)
++    expect(resumed.session.deriveMessages().find(message => message.role === 'user' && message.source.kind === 'user')?.content).toEqual([{ type: 'file', attachment: file }])
++    await restarted.sessionController.retry(request)
++    expect(adapter.requests).toHaveLength(1)
 +  })
 +
 +  it('recognizes a durable final model stream before turn-end bookkeeping on cold retry', async () => {
@@ -128588,14 +128984,15 @@ index 890000a..037ddef 100644
      const childSessionId = SessionId('missing-projection-child')
      const meta: SessionHeader = {
 diff --git a/packages/api/session-controller/tsconfig.host.json b/packages/api/session-controller/tsconfig.host.json
-index 9b80bc3..e6b085d 100644
+index 9b80bc3..ec789cd 100644
 --- a/packages/api/session-controller/tsconfig.host.json
 +++ b/packages/api/session-controller/tsconfig.host.json
-@@ -20,12 +20,19 @@
+@@ -20,12 +20,20 @@
      "src/media-references.ts",
      "src/model-selection-projection.ts",
      "src/archived-session-gate.ts",
 +    "src/lifecycle.ts",
++    "src/retry-content.ts",
 +    "src/lifecycle-spec.ts",
 +    "src/free-directory.ts",
      "src/skill-catalog.ts"
@@ -128830,6 +129227,36 @@ index eec1a12..72b33c8 100644
    ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
      { name: 'conversation.chat.node', key: 'user', locale: NS }, UserMessageNodeView))
    ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+diff --git a/packages/client/ui-chat/src/client/chat/turn-rail-items.ts b/packages/client/ui-chat/src/client/chat/turn-rail-items.ts
+index b1ab1e3..353d0ae 100644
+--- a/packages/client/ui-chat/src/client/chat/turn-rail-items.ts
++++ b/packages/client/ui-chat/src/client/chat/turn-rail-items.ts
+@@ -75,8 +75,13 @@ export function mergeTurnRailItems(
+       anchor: { kind: 'unloaded', seq: entry.seq },
+     })
+   }
++  const hasLogicalOutline = byTurn.size > 0
+   for (const item of loaded) {
+     const preview = byTurn.get(item.turn)
++    // A retry's assistant work gets a fresh physical turn number, but the
++    // logical outline folds that response into the prompted turn. Do not add
++    // the response-only physical turn back through the loaded-window union.
++    if (hasLogicalOutline && item.prompt === '' && preview === undefined) continue
+     byTurn.set(item.turn, {
+       turn: item.turn,
+       prompt: item.prompt !== '' ? item.prompt : preview?.prompt ?? '',
+@@ -85,5 +90,10 @@ export function mergeTurnRailItems(
+     })
+   }
+   if (byTurn.size === 0) return EMPTY_ITEMS
+-  return [...byTurn.values()].sort((left, right) => left.turn - right.turn)
++  const loadedTurns = new Set(loaded.map(item => item.turn))
++  const items = [...byTurn.values()].sort((left, right) => left.turn - right.turn)
++    .filter(item => item.prompt !== '' || item.response !== '' || !loadedTurns.has(item.turn))
++  // A just-started retry has a loaded physical boundary but no prompt or
++  // response yet. Keep that empty placeholder out of the logical rail.
++  return items.length === 0 ? EMPTY_ITEMS : items
+ }
 diff --git a/packages/client/ui-chat/src/client/contract/slots.ts b/packages/client/ui-chat/src/client/contract/slots.ts
 index 5c7a8e3..68575f1 100644
 --- a/packages/client/ui-chat/src/client/contract/slots.ts
@@ -128945,6 +129372,51 @@ index ba6d2e0..f3f02fe 100644
        case 'context':
          return <ContextMessageNodeView {...nodeProps} node={nodeOwner.node} />
        case 'assistant-step':
+diff --git a/packages/client/ui-chat/tests/turn-rail-items.client.spec.ts b/packages/client/ui-chat/tests/turn-rail-items.client.spec.ts
+index 289ff3c..eba7f1d 100644
+--- a/packages/client/ui-chat/tests/turn-rail-items.client.spec.ts
++++ b/packages/client/ui-chat/tests/turn-rail-items.client.spec.ts
+@@ -55,6 +55,40 @@ describe('mergeTurnRailItems', () => {
+     ])
+   })
+
++  it('suppresses loaded response-only retry turns omitted from the logical outline', () => {
++    const items = mergeTurnRailItems(
++      [
++        loadedItem(1, 'root prompt', ''),
++        loadedItem(9, '', 'root replacement response'),
++        loadedItem(10, 'second prompt', ''),
++        loadedItem(17, '', 'second replacement response'),
++      ],
++      [
++        { turn: 1, seq: 4, prompt: 'root prompt', response: 'root replacement response' },
++        { turn: 10, seq: 81, prompt: 'second prompt', response: 'second replacement response' },
++      ],
++    )
++    expect(items).toEqual([
++      { turn: 1, prompt: 'root prompt', response: 'root replacement response', anchor: { kind: 'loaded', key: 'anchor-1' } },
++      { turn: 10, prompt: 'second prompt', response: 'second replacement response', anchor: { kind: 'loaded', key: 'anchor-10' } },
++    ])
++  })
++
++  it('hides a loaded empty retry boundary until it carries content', () => {
++    const items = mergeTurnRailItems(
++      [loadedItem(1, 'root prompt', 'root response'), loadedItem(10, 'edited prompt', ''), loadedItem(27, '', '')],
++      [
++        { turn: 1, seq: 4, prompt: 'root prompt', response: 'root response' },
++        { turn: 10, seq: 81, prompt: 'edited prompt', response: '' },
++        { turn: 27, seq: 220, prompt: '', response: '' },
++      ],
++    )
++    expect(items).toEqual([
++      { turn: 1, prompt: 'root prompt', response: 'root response', anchor: { kind: 'loaded', key: 'anchor-1' } },
++      { turn: 10, prompt: 'edited prompt', response: '', anchor: { kind: 'loaded', key: 'anchor-10' } },
++    ])
++  })
++
+   it('drops entries with damaged navigation fields but degrades malformed previews to empty', () => {
+     expect(mergeTurnRailItems([loadedItem(1)], 'not an outline')).toEqual([
+       { turn: 1, prompt: 'p1', response: 'r1', anchor: { kind: 'loaded', key: 'anchor-1' } },
 diff --git a/packages/client/ui-chat/tests/user-actions.client.spec.tsx b/packages/client/ui-chat/tests/user-actions.client.spec.tsx
 new file mode 100644
 index 0000000..eff4939
@@ -133638,7 +134110,7 @@ index c9039d7..34ef099 100644
          'unarchiveSession(sessionId: SessionId): Promise<void>',
          'pickDirectory(): Promise<string | null>',
 diff --git a/packages/extensions/tool-cordis/src/api-catalog.ts b/packages/extensions/tool-cordis/src/api-catalog.ts
-index a7043c7..7b4462c 100644
+index a7043c7..3c8763d 100644
 --- a/packages/extensions/tool-cordis/src/api-catalog.ts
 +++ b/packages/extensions/tool-cordis/src/api-catalog.ts
 @@ -116,6 +116,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
@@ -133662,7 +134134,7 @@ index a7043c7..7b4462c 100644
 +        signature: '@Remote(\'capabilities\') capabilities(): SessionCapabilities',
 +        description: 'Report which session lifecycle operations this host can commit.',
 +        parameters: [],
-+        returns: 'whether retry, free-session creation, and delete are available.',
++        returns: 'whether retry, a consented retry over recorded modifications, free-session creation, and delete are available.',
 +      },
 +      {
 +        signature: '@Remote(\'previewRetry\') previewRetry(request: SessionRetryPreviewRequest): Promise<SessionRetryPreview>',
@@ -133672,8 +134144,8 @@ index a7043c7..7b4462c 100644
 +      },
 +      {
 +        signature: '@Remote(\'retry\') retry(request: SessionRetryRequest): Promise<SessionRetryValue>',
-+        description: 'Replace one human prompt in the same session when trusted evidence allows it.',
-+        parameters: [{ name: 'request', description: 'anchor, expected revision, idempotency key, and optional replacement text.' }],
++        description: 'Replace one human prompt in the same session. A recorded workspace or external change is refused unless the request carries `allowModified`; the branch then replaces the conversation only.',
++        parameters: [{ name: 'request', description: 'anchor, expected revision, idempotency key, optional replacement text, and modification consent.' }],
 +        returns: 'the same session id and the committed branch revision.',
 +      },
 +      {
@@ -133818,7 +134290,7 @@ index a7043c7..7b4462c 100644
    },
 +  {
 +    name: 'SessionCapabilities',
-+    declaration: 'export interface SessionCapabilities {\n    readonly retry: boolean;\n    readonly freeSession: boolean;\n    readonly deleteSession: boolean;\n}',
++    declaration: 'export interface SessionCapabilities {\n    readonly retry: boolean;\n    readonly retryModified: boolean;\n    readonly freeSession: boolean;\n    readonly deleteSession: boolean;\n}',
 +  },
    {
      name: 'SessionControlBaseline',
@@ -133889,7 +134361,7 @@ index a7043c7..7b4462c 100644
 +  },
 +  {
 +    name: 'SessionRetryRequest',
-+    declaration: 'export interface SessionRetryRequest {\n    readonly sessionId: SessionId;\n    readonly messageId: string;\n    readonly expectedRevision: number;\n    readonly expectedInputRevision: string;\n    readonly requestId: string;\n    readonly text?: string;\n}',
++    declaration: 'export interface SessionRetryRequest {\n    readonly sessionId: SessionId;\n    readonly messageId: string;\n    readonly expectedRevision: number;\n    readonly expectedInputRevision: string;\n    readonly requestId: string;\n    readonly text?: string;\n    readonly allowModified?: boolean;\n}',
 +  },
    {
      name: 'SessionSearchCursor',
@@ -139267,15 +139739,22 @@ index 80b344c..cb1d5f4 100644
  export default SessionPersistence
 diff --git a/packages/session/session-persistence/src/lifecycle-spec.ts b/packages/session/session-persistence/src/lifecycle-spec.ts
 new file mode 100644
-index 0000000..e29964b
+index 0000000..08130f9
 --- /dev/null
 +++ b/packages/session/session-persistence/src/lifecycle-spec.ts
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,64 @@
 +/** Durable session-lifecycle records. The storage domain validates every write. */
 +
 +import { z } from 'zod'
 +import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
-+import type { SessionId } from '@deepseek-ai/dsh-session'
++import { adoptSessionEvent, SessionSeq, type SessionId, type UserMessage } from '@deepseek-ai/dsh-session'
++
++const replacementPrompt = z.custom<UserMessage>(value => {
++  try {
++    adoptSessionEvent({ type: 'user/message', seq: SessionSeq(0), time: 0, data: structuredClone(value) as UserMessage, surfaceOp: 'append' })
++    return true
++  } catch { return false }
++})
 +
 +/** One logical same-session retry. `admitted` means the branch and receipt were accepted, not that a model result exists. */
 +export const sessionRetryReceipt = z.object({
@@ -139286,6 +139765,9 @@ index 0000000..e29964b
 +  /** Opaque admitted-input and pending-queue token. Absent tokens fail closed. */
 +  inputRevision: z.string().min(1),
 +  text: z.string().optional(),
++  /** Normalized replacement survives a crash after intake; uploaded bytes are never stored here. */
++  prompt: replacementPrompt.optional(),
++  contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 +  /** `intent` precedes the branch event, `branched` precedes driver start, `admitted` follows that logical acceptance. */
 +  stage: z.enum(['intent', 'branched', 'admitted']),
 +})
@@ -139306,6 +139788,8 @@ index 0000000..e29964b
 +  rootRemoval: z.literal('final').optional(),
 +  error: z.string().optional(),
 +  retry: sessionRetryReceipt.optional(),
++  /** Retain request identity after a later retry replaces the current receipt. */
++  retryContentHashes: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/)).optional(),
 +})
 +
 +/** Validated lifecycle record. */
@@ -139317,7 +139801,8 @@ index 0000000..e29964b
 + */
 +export const sessionLifecycleDomain = defineDomain({
 +  name: 'session_lifecycle',
-+  version: 1,
++  version: 2,
++  compatibleVersions: [1],
 +  tables: {
 +    sessions: domainTable<SessionId, SessionLifecycleRecord>(sessionLifecycleRecord),
 +  },
@@ -139988,6 +140473,208 @@ index d9632ea..ee4f2fc 100644
    it('inherits title events across forks, skips first-prompt retitling, and lets all-messages update later', async () => {
      const ctx = new Context()
      await ctx.plugin(SessionStore)
+diff --git a/packages/session/session-turn-outline/src/projection.ts b/packages/session/session-turn-outline/src/projection.ts
+index 992273e..fadb1d5 100644
+--- a/packages/session/session-turn-outline/src/projection.ts
++++ b/packages/session/session-turn-outline/src/projection.ts
+@@ -77,14 +77,15 @@ const turnOutlineEntriesSchema: ZodType<readonly TurnOutlineEntry[]> = z.array(z
+ const turnOutlineStateSchema: ZodType<TurnOutlineState> = z.object({
+   turns: turnOutlineEntriesSchema,
+   draft: z.string().max(RESPONSE_PREVIEW_LIMIT),
++  prompted: z.boolean(),
+ }).strict()
+
+-const EMPTY_OUTLINE: TurnOutlineState = { turns: [], draft: '' }
++const EMPTY_OUTLINE: TurnOutlineState = { turns: [], draft: '', prompted: false }
+
+ /** The `turnOutline` unit registered on `ctx.sessionProjections` (exported for the unit spec). */
+ export const turnOutlineProjectionDefinition = {
+   key: 'turnOutline',
+-  stateVersion: 2,
++  stateVersion: 3,
+   stateSchema: turnOutlineStateSchema,
+   init: () => EMPTY_OUTLINE,
+   apply: (state, event) => {
+@@ -101,6 +102,7 @@ export const turnOutlineProjectionDefinition = {
+         return {
+           turns: [...state.turns, { turn: event.data.turn, seq: event.seq, prompt: '', response: '' }],
+           draft: '',
++          prompted: false,
+         }
+       }
+       case 'user/message': {
+@@ -111,20 +113,29 @@ export const turnOutlineProjectionDefinition = {
+         const last = state.turns.at(-1)
+         if (last === undefined || last.prompt !== '') return state
+         const prompt = preview(event.data.content, PROMPT_PREVIEW_LIMIT)
+-        if (prompt === '') return state
+-        return { turns: [...state.turns.slice(0, -1), { ...last, prompt }], draft: state.draft }
++        if (prompt === '') return { turns: state.turns, draft: state.draft, prompted: true }
++        return { turns: [...state.turns.slice(0, -1), { ...last, prompt }], draft: state.draft, prompted: true }
+       }
+       case 'assistant/message': {
++        // A retry starts a new physical turn for assistant work while its
++        // edited prompt stays in the original turn. Fold a response-only turn
++        // into the preceding prompted entry instead of showing two rail marks.
++        const turns = !state.prompted && state.turns.length > 0 ? state.turns.slice(0, -1) : state.turns
++        const prompted = turns === state.turns ? state.prompted : turns.length > 0
+         // Newest text-bearing message wins; the buffer commits at turn/end.
+         const draft = preview(event.data.message.content, RESPONSE_PREVIEW_LIMIT)
+-        if (draft === '' || draft === state.draft) return state
+-        return { turns: state.turns, draft }
++        if (draft === '' || draft === state.draft) return turns === state.turns ? state : { turns, draft: state.draft, prompted }
++        return { turns, draft, prompted }
+       }
+       case 'turn/end': {
+-        if (state.draft === '') return state
+         const last = state.turns.at(-1)
+-        if (last === undefined || last.response === state.draft) return { turns: state.turns, draft: '' }
+-        return { turns: [...state.turns.slice(0, -1), { ...last, response: state.draft }], draft: '' }
++        if (!state.prompted && last !== undefined) {
++          const turns = state.turns.slice(0, -1)
++          return { turns, draft: '', prompted: turns.length > 0 }
++        }
++        if (state.draft === '') return state
++        if (last === undefined || last.response === state.draft) return { turns: state.turns, draft: '', prompted: state.prompted }
++        return { turns: [...state.turns.slice(0, -1), { ...last, response: state.draft }], draft: '', prompted: state.prompted }
+       }
+       default:
+         return state
+diff --git a/packages/session/session-turn-outline/src/types.ts b/packages/session/session-turn-outline/src/types.ts
+index c4ccbcd..fd43b98 100644
+--- a/packages/session/session-turn-outline/src/types.ts
++++ b/packages/session/session-turn-outline/src/types.ts
+@@ -35,6 +35,8 @@ export interface TurnOutlineState {
+   readonly turns: readonly TurnOutlineEntry[]
+   /** Newest text-bearing assistant preview of the open turn; `''` outside one. */
+   readonly draft: string
++  /** Whether the latest physical turn has seen a human prompt, even a whitespace-only one. */
++  readonly prompted: boolean
+ }
+
+ declare module '@deepseek-ai/dsh-session-projection/types' {
+diff --git a/packages/session/session-turn-outline/tests/projection.spec.ts b/packages/session/session-turn-outline/tests/projection.spec.ts
+index c01acf8..f56f7f1 100644
+--- a/packages/session/session-turn-outline/tests/projection.spec.ts
++++ b/packages/session/session-turn-outline/tests/projection.spec.ts
+@@ -72,7 +72,7 @@ describe('turn outline projection unit', () => {
+     const { ctx, session } = await harness(true)
+     expect(outlineOf(ctx, session)).toEqual([])
+     expect(ctx.sessionProjections.checkpoint(session).turnOutline)
+-      .toEqual({ ver: 2, seq: -1, val: { turns: [], draft: '' } })
++      .toEqual({ ver: 3, seq: -1, val: { turns: [], draft: '', prompted: false } })
+   })
+
+   it('folds each turn with its boundary seq, first prompt, and turn-end response', async () => {
+@@ -91,6 +91,63 @@ describe('turn outline projection unit', () => {
+     ])
+   })
+
++  it('drops superseded turns and resets the edited turn across nested rewinds', async () => {
++    const { ctx, session } = await harness(true)
++    const firstBoundary = session.append('turn/start', { turn: 1 }).seq
++    const firstPrompt = appendPrompt(session, 'root prompt')
++    appendAssistant(session, 1, 1, 'root response')
++    endTurn(session, 1)
++    session.append('turn/start', { turn: 2 })
++    const secondPrompt = appendPrompt(session, 'second prompt')
++    appendAssistant(session, 2, 1, 'superseded second response')
++    endTurn(session, 2)
++    session.append('turn/start', { turn: 3 })
++    appendPrompt(session, 'superseded third prompt')
++    appendAssistant(session, 3, 1, 'superseded third response')
++    endTurn(session, 3)
++    const branch = (anchorSeq: SessionSeq, revision: number, text: string) => {
++      const anchor = session.snapshotEvents().find(event => event.seq === anchorSeq)
++      if (anchor?.type !== 'user/message') throw new Error('missing test anchor')
++      session.append('session/active-branch', {
++        revision,
++        expectedRevision: revision - 1,
++        anchorSeq,
++        messageId: anchor.data.id,
++        requestId: `branch-${revision}`,
++        inputRevision: `input-${revision}`,
++        prompt: { ...anchor.data, content: [{ type: 'text', text }] },
++      })
++    }
++    branch(secondPrompt, 1, 'edited second prompt')
++    const secondBoundary = session.snapshotEvents().find(event => event.type === 'turn/start' && event.data.turn === 2)!.seq
++    expect(outlineOf(ctx, session)).toEqual([
++      { turn: 1, seq: firstBoundary, prompt: 'root prompt', response: 'root response' },
++      { turn: 2, seq: secondBoundary, prompt: 'edited second prompt', response: '' },
++    ])
++    session.append('turn/start', { turn: 4 })
++    appendAssistant(session, 4, 1, 'later replacement response')
++    endTurn(session, 4)
++    expect(outlineOf(ctx, session)).toEqual([
++      { turn: 1, seq: firstBoundary, prompt: 'root prompt', response: 'root response' },
++      { turn: 2, seq: secondBoundary, prompt: 'edited second prompt', response: 'later replacement response' },
++    ])
++    branch(secondPrompt, 2, 'final second prompt')
++    expect(outlineOf(ctx, session)).toEqual([
++      { turn: 1, seq: firstBoundary, prompt: 'root prompt', response: 'root response' },
++      { turn: 2, seq: secondBoundary, prompt: 'final second prompt', response: '' },
++    ])
++    branch(firstPrompt, 3, 'edited root prompt')
++    expect(outlineOf(ctx, session)).toEqual([
++      { turn: 1, seq: firstBoundary, prompt: 'edited root prompt', response: '' },
++    ])
++    session.append('turn/start', { turn: 5 })
++    appendAssistant(session, 5, 1, 'root replacement response')
++    endTurn(session, 5)
++    expect(outlineOf(ctx, session)).toEqual([
++      { turn: 1, seq: firstBoundary, prompt: 'edited root prompt', response: 'root replacement response' },
++    ])
++  })
++
+   it('keeps the response empty while its turn is still open (draft only commits at turn/end)', async () => {
+     const { ctx, session } = await harness(true)
+     session.append('turn/start', { turn: 1 })
+@@ -186,7 +243,7 @@ describe('turn outline projection unit', () => {
+       time: 0,
+       data: { message: { content: blocks } },
+     }) as unknown as SessionEvent
+-    const base: TurnOutlineState = { turns: [{ turn: 1, seq: SessionSeq(0), prompt: 'p', response: '' }], draft: '' }
++    const base: TurnOutlineState = { turns: [{ turn: 1, seq: SessionSeq(0), prompt: 'p', response: '' }], draft: '', prompted: true }
+     // Non-text blocks are skipped; whitespace-heavy short blocks cross the raw
+     // reading bound early, so the collapsed (short) draft still marks the
+     // unread remainder with an ellipsis.
+@@ -205,16 +262,16 @@ describe('turn outline projection unit', () => {
+       time: 0,
+       data: { turn: 1, reason: { kind: 'completed' } },
+     } as unknown as SessionEvent
+-    expect(def.apply({ turns: [], draft: 'orphan' }, end)).toEqual({ turns: [], draft: '' })
++    expect(def.apply({ turns: [], draft: 'orphan', prompted: false }, end)).toEqual({ turns: [], draft: '', prompted: false })
+     // …and a re-settled identical response keeps the entries' identity.
+-    const settled: TurnOutlineState = { turns: [{ turn: 1, seq: SessionSeq(0), prompt: 'p', response: 'done' }], draft: 'done' }
++    const settled: TurnOutlineState = { turns: [{ turn: 1, seq: SessionSeq(0), prompt: 'p', response: 'done' }], draft: 'done', prompted: true }
+     const recommitted = def.apply(settled, end)
+     expect(recommitted.turns).toBe(settled.turns)
+     expect(recommitted.draft).toBe('')
+   })
+
+   it('skips a boundary that does not advance the turn number (fabricated envelope)', () => {
+-    const state: TurnOutlineState = { turns: [{ turn: 2, seq: SessionSeq(5), prompt: 'kept', response: '' }], draft: '' }
++    const state: TurnOutlineState = { turns: [{ turn: 2, seq: SessionSeq(5), prompt: 'kept', response: '' }], draft: '', prompted: true }
+     const regressive = {
+       type: 'turn/start',
+       seq: SessionSeq(9),
+@@ -257,6 +314,7 @@ describe('turn outline projection unit', () => {
+             { turn: 2, seq: 4, prompt: '', response: '' },
+           ],
+           draft: '',
++          prompted: false,
+         },
+       },
+     }, [], SessionLogOffset(0), session.header, session.inheritedEventCount)).toThrow(/strictly increasing/)
+@@ -270,6 +328,7 @@ describe('turn outline projection unit', () => {
+             { turn: 2, seq: 4, prompt: '', response: '' },
+           ],
+           draft: '',
++          prompted: false,
+         },
+       },
+     }, [], SessionLogOffset(0), session.header, session.inheritedEventCount)).not.toThrow()
 diff --git a/packages/shell/tool-bash-persistent/tests/loader-composition.spec.ts b/packages/shell/tool-bash-persistent/tests/loader-composition.spec.ts
 index ea3688f..c0fa97f 100644
 --- a/packages/shell/tool-bash-persistent/tests/loader-composition.spec.ts
@@ -140210,7 +140897,7 @@ index 6b362b1..1447f12 100644
    for (let depth = 0; depth < Math.max(...paths.map(search => search.length)); depth++) {
      for (const search of paths) {
 diff --git a/packages/test-support/client-runtime/src/sessions.ts b/packages/test-support/client-runtime/src/sessions.ts
-index ccfa899..86a1938 100644
+index ccfa899..809921a 100644
 --- a/packages/test-support/client-runtime/src/sessions.ts
 +++ b/packages/test-support/client-runtime/src/sessions.ts
 @@ -12,6 +12,13 @@ import type {
@@ -140236,14 +140923,14 @@ index ccfa899..86a1938 100644
      args: unknown[]
    }[] = []
  
-@@ -625,6 +632,43 @@ export class TestSessions implements ISessions {
+@@ -625,6 +632,44 @@ export class TestSessions implements ISessions {
      return id
    }
  
 +  /** Fixture lifecycle capabilities. Durable features are present in the test runtime. */
 +  capabilities(): Promise<RemoteResult<SessionCapabilities>> {
 +    this.calls.push({ method: 'capabilities', args: [] })
-+    return Promise.resolve({ ok: true, value: { retry: true, freeSession: true, deleteSession: true } })
++    return Promise.resolve({ ok: true, value: { retry: true, retryModified: true, freeSession: true, deleteSession: true } })
 +  }
 +
 +  /** Fixture retry preview. */
@@ -140263,6 +140950,7 @@ index ccfa899..86a1938 100644
 +    expectedInputRevision: string
 +    requestId: string
 +    text?: string
++    allowModified?: boolean
 +  }): Promise<RemoteResult<SessionRetryValue>> {
 +    this.calls.push({ method: 'retry', args: [request] })
 +    return Promise.resolve({

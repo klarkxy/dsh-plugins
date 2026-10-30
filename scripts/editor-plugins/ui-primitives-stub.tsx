@@ -435,6 +435,10 @@ export const IconChevronDownOutlineRegular = icon('chevron-down')
 export const IconChevronRightOutlineRegular = icon('chevron-right')
 export const IconCloseFillRegular = icon('close-fill')
 export const IconEditOutlineRegular = icon('edit')
+export const IconCopyOutlineRegular = icon('copy')
+export function FileTypeIcon({ path, className }: { path: string; className?: string }) {
+  return <svg className={className} aria-hidden="true" data-file-icon={path} />
+}
 export const IconRefreshOutlineRegular = icon('refresh')
 export const IconSettingsOutlineRegular = icon('settings')
 export const IconShieldOutlineRegular = icon('shield')
@@ -497,10 +501,10 @@ const known = new Set([
   'Button', 'Tag', 'Checkbox', 'Switch', 'Input', 'Pill', 'SegmentedTabs', 'DisclosureRow', 'TextShimmer', 'JsonTree',
   'Modal', 'Menu', 'MenuItemButton', 'MenuSurface', 'MenuGroup', 'PathLabel', 'Tooltip', 'StateDot', 'IconChecklistOutlineRegular', 'IconThinkOutlineRegular',
   'IconCheckOutlineRegular', 'IconChevronDownOutlineMedium', 'IconChevronRightOutlineMedium', 'IconChevronDownOutlineRegular',
-  'IconChevronRightOutlineRegular', 'IconCloseFillRegular', 'IconEditOutlineRegular', 'IconRefreshOutlineRegular', 'IconSettingsOutlineRegular', 'IconShieldOutlineRegular',
+  'IconChevronRightOutlineRegular', 'IconCloseFillRegular', 'IconEditOutlineRegular', 'IconCopyOutlineRegular', 'IconRefreshOutlineRegular', 'IconSettingsOutlineRegular', 'IconShieldOutlineRegular',
   'IconUserOutlineRegular', 'IconUsersOutlineRegular', 'useAnchoredPosition',
   'useDismissOnOutsidePointer', 'useModalLayer', 'modalSelector', 'closeTopModal', 'isBehindModal',
-  'observeStickyMenuGroups', 'rankByName', 'Toast',
+  'observeStickyMenuGroups', 'rankByName', 'Toast', 'FileTypeIcon',
 ])
 
 export function assertKnownPrimitive(name: string): void {

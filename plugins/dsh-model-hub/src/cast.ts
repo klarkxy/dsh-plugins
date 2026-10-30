@@ -131,13 +131,14 @@ export function buildCastPrompt(enabled: boolean, routes: readonly CastRoute[]):
   const guidance = [
     'Subagent model selection:',
     'When delegating an independent task, actively choose a suitable model instead of silently inheriting your own. If list_subagent_models and a delegation tool with provider/model fields are available, inspect the available routes before the first model-selectable delegation in this task, reuse those results for later delegations, and supply provider and model together explicitly.',
+    'Keep provider and model as separate arguments. A discovery label is displayed as provider/model; do not copy the whole label into model or prepend provider to the model id. Example only: if provider is "example-provider" and its list shows "example-provider/team/model-a", pass {"provider":"example-provider","model":"team/model-a"}. Remove only the known display prefix "example-provider/" from that combined label; preserve all slashes and namespaces inside the model id. If discovery already gives separate fields, copy both exactly without stripping or adding any prefix. The example is not an available route.',
     'For independent reviews, alternative approaches, or disputed conclusions, prefer a model different from your own when a suitable candidate is available. Choose for task fit and the user\'s constraints; using the same model is appropriate when it fits better or no suitable alternative is available. Do not create extra subtasks solely for model diversity.',
     'The current Session\'s discovery results and tool schema are authoritative. Its allowed routes are saved when the Session is created and inherited by its subagents; later list edits apply to new top-level Sessions. This limits explicit selection, not pure route inheritance. Configured model notes may refer to routes unavailable in this Session. If discovery or model-selection fields are unavailable, use the supported delegation behavior; do not invent routes or pass unsupported fields to tools such as subagent_fork. When changing models, omit reasoning_effort unless you have verified a supported value.',
   ]
   if (annotated.length) guidance.push(
     'User-provided task tendencies (advisory): prefer a matching tendency among available models. Models without a tendency remain general-purpose candidates; no model-specific strengths are assumed.',
     ...annotated.map(route =>
-      `- ${route.provider}/${route.model}${route.reasoningEffort ? ` (reasoning effort: ${route.reasoningEffort})` : ''}: ${route.tendency}`),
+      `- ${JSON.stringify({ provider: route.provider, model: route.model })}${route.reasoningEffort ? ` (reasoning effort: ${route.reasoningEffort})` : ''}: ${route.tendency}`),
   )
   return guidance.join('\n')
 }

@@ -1,5 +1,7 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Button, Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { MessageEditor } from './message-editor.tsx'
+import { EditMessageIcon } from './edit-icon.tsx'
 import type { RetryModel } from './session-actions.ts'
 import { FREE_CHAT_ROOT } from './styles.ts'
 import { failureText, uiText, type CopyLocale } from './ui-copy.ts'
@@ -10,7 +12,9 @@ export function UserMessageActions(props: {
   sessionId: string
   locale: CopyLocale
   model: RetryModel
+  hideEdit?: boolean
 }): React.ReactElement | null {
+  const [confirming, setConfirming] = useState(false)
   const snapshot = useSyncExternalStore(props.model.subscribe, props.model.getSnapshot, props.model.getSnapshot)
   const signal = useRef<AbortController>(new AbortController())
   useEffect(() => {
@@ -29,56 +33,29 @@ export function UserMessageActions(props: {
   const draft = mine ? snapshot.draft : props.text
   return (
     <span className={`${FREE_CHAT_ROOT} dsh-free-actions`}>
-      <Tooltip label={copy('retry')} side="bottom">
+      {!props.hideEdit ? <Tooltip label={copy('edit')} side="bottom">
         <Button
           size="sm"
-          variant="ghost"
-          aria-label={copy('retry')}
-          disabled={snapshot.busy}
-          onClick={() => { void props.model.retry(props.sessionId, props.messageId, signal.current.signal) }}
-        >
-          {copy('retry')}
-        </Button>
-      </Tooltip>
-      <Tooltip label={copy('edit')} side="bottom">
-        <Button
-          size="sm"
+          className="dsm-icon-action"
           variant="ghost"
           aria-label={copy('edit')}
-          disabled={snapshot.busy}
+          disabled={snapshot.busy || (snapshot.editing && !mine)}
           onClick={() => { void props.model.beginEdit(props.sessionId, props.messageId, props.text, signal.current.signal) }}
         >
-          {copy('edit')}
+          <EditMessageIcon />
         </Button>
-      </Tooltip>
-      {failure ? <span className="dsh-ui-error dsh-free-alert" role="alert">{failureText(props.locale, failure)}</span> : null}
-      <Modal
-        open={editing}
-        className={FREE_CHAT_ROOT}
-        title={copy('editTitle')}
-        closeLabel={copy('close')}
-        onClose={() => { props.model.cancelEdit() }}
-        footer={(
-          <>
-            <Button variant="ghost" disabled={snapshot.busy} onClick={() => { props.model.cancelEdit() }}>{copy('cancel')}</Button>
-            <Button
-              variant="primary"
-              disabled={snapshot.busy}
-              onClick={() => { void props.model.sendEdit(props.sessionId, props.messageId, signal.current.signal) }}
-            >
-              {copy('send')}
-            </Button>
-          </>
-        )}
-      >
-        <textarea
-          className="dsh-ui-textarea dsh-free-draft"
-          data-modal-autofocus
-          aria-label={copy('draft')}
-          value={draft}
-          onChange={event => { props.model.setDraft(event.target.value) }}
-        />
-      </Modal>
+      </Tooltip> : null}
+      {failure && !editing ? <span className="dsh-ui-error dsh-free-alert" role="alert">{failureText(props.locale, failure)}</span> : null}
+      {editing && !props.hideEdit ? <MessageEditor text={draft} setText={value => { props.model.setDraft(value) }}
+        sessionId={props.sessionId} locale={props.locale} busy={snapshot.busy}
+        error={failure ? failureText(props.locale, failure) : undefined}
+        onCancel={() => { props.model.cancelEdit() }}
+        onSend={() => { setConfirming(true) }} /> : null}
+      <Modal open={confirming && editing} className={FREE_CHAT_ROOT} title={copy('editTitle')} closeLabel={copy('close')}
+        onClose={() => { setConfirming(false) }} footer={<>
+          <Button variant="ghost" data-modal-autofocus onClick={() => { setConfirming(false) }}>{copy('cancel')}</Button>
+          <Button variant="primary" onClick={() => { setConfirming(false); void props.model.sendEdit(props.sessionId, props.messageId, signal.current.signal, undefined, true) }}>{copy('editConfirm')}</Button>
+        </>}><p>{copy('editBranchWarning')}</p></Modal>
     </span>
   )
 }

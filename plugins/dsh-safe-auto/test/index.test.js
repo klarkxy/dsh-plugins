@@ -133,6 +133,35 @@ test('history tool requires a caller and cannot read another session audit evide
   await assert.rejects(tool.execute({ action: 'list' }, { agent: f.agent, signal }), { name: 'AbortError' });
 });
 
+test('history tool returns lossless JSON for empty, paginated, and full-record reads', async () => {
+  const f = fixture();
+  const tool = f.tools[0];
+  const read = async args => {
+    const value = await tool.execute(args, { agent: f.agent });
+    assert.deepEqual(JSON.parse(JSON.stringify(value)), value, 'tool output must survive JSON without losing fields');
+    return value;
+  };
+  const empty = await read({ action: 'list' });
+  assert.deepEqual(empty.items, []);
+  assert.equal(Object.hasOwn(empty, 'nextCursor'), false);
+  for (let i = 0; i < 2; i++) {
+    const e = f.exec('bash', escalated);
+    await f.preExecute(e);
+    await f.ask(e);
+  }
+  const first = await read({ action: 'list', limit: 1 });
+  assert.equal(typeof first.nextCursor, 'string');
+  const last = await read({ action: 'list', limit: 1, cursor: first.nextCursor });
+  assert.equal(last.items.length, 1);
+  assert.equal(Object.hasOwn(last, 'nextCursor'), false);
+  assert.notEqual(first.items[0].id, last.items[0].id);
+  const record = await read({ action: 'get', id: first.items[0].id });
+  assert.equal(record.sessionId, 's');
+  assert.equal(record.rationale, 'Routine.');
+  assert.match(record.input, /Clean the build output/);
+  assert.equal(f.seen.length, 2, 'reading history must not call the reviewer');
+});
+
 test('a grant is confirmed by the observed native approval decision, and stays provisional without one', async () => {
   const f = fixture();
   const confirmed = f.exec('bash', escalated);

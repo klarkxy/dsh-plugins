@@ -10,7 +10,7 @@ import {
   USER_ACTIONS_ID,
   USER_ACTIONS_SLOT,
   WELCOME_BACK_CARD_ID,
-  WELCOME_BACK_CARD_SLOT,
+  TURN_TAIL_SLOT,
 } from './contracts.ts'
 import { installContextMenuForwarding } from './context-menu.ts'
 import { CreateNoticeDialog, DeleteChatDialog } from './free-panel.tsx'
@@ -25,6 +25,9 @@ import { ContinueGhost, WelcomeBackCard, type WelcomeBackTurn } from './presence
 import { SessionManagerSettings } from './settings-panel.tsx'
 import { freeChatCss } from './styles.ts'
 import { UserMessageActions } from './user-actions.tsx'
+import { UserNodeWithEdit } from './user-node.tsx'
+import { bindEditHost } from './edit-host.ts'
+import { bindRetryHost, retryCommitAndOpen } from './retry-host.ts'
 import { uiText } from './ui-copy.ts'
 
 export const name = 'dsh-session-manager-client'
@@ -52,7 +55,10 @@ type Client = Context & {
   sessions?: Parameters<typeof bindHost>[0]['sessions']
   uiWorkspace?: Parameters<typeof bindHost>[0]['uiWorkspace']
   remote?: { session?: { modelCatalog?: () => Promise<unknown> } }
-  connection?: { generation?: { subscribe(listener: () => void): () => void } }
+  connection?: {
+    generation?: { subscribe(listener: () => void): () => void }
+    rpc?: { call(channel: string, endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown> }
+  }
   on?(name: string, listener: () => void): () => void
 }
 
@@ -61,7 +67,14 @@ export function apply(ctx: Context): void {
   mountModelSettingsChanges(client, PLUGIN_NAME)
   const host = bindHost(client)
   const chats = createFreeChatModel(host)
-  const retries = createRetryModel(host)
+  const retryHost = bindRetryHost(client.connection?.rpc)
+  const retries = createRetryModel({
+    list: host.list,
+    capabilities: () => retryHost.capabilities(),
+    previewRetry: request => retryHost.preview(request),
+    retry: retryCommitAndOpen(retryHost.commit, host.openSession),
+  })
+  const editHost = bindEditHost(client as unknown as Parameters<typeof bindEditHost>[0])
   const temporaryHost = bindTemporaryWorkspaceHost(client as unknown as Parameters<typeof bindTemporaryWorkspaceHost>[0])
   const temporary = createTemporaryWorkspaceModel(temporaryHost, undefined,
     () => uiText(copyLocale(client.locale?.getSnapshot().active), 'tempWorkspace'))
@@ -121,11 +134,27 @@ export function apply(ctx: Context): void {
         />
       ))
     )))
+    // The stock host has no additive user-action slot. Replace only its user
+    // renderer, preserving the bubble, copy, and clock while adding exact-seq editing.
+    stops.push(client.slots.inject('conversation.chat.node', () => (
+      client.slots.register({ name: 'conversation.chat.node', key: 'user', locale: 'chat', priority: -10 }, props => {
+        const input = props as unknown as Parameters<typeof UserNodeWithEdit>[0]
+        return (
+          <UserNodeWithEdit
+            {...input}
+            sessionId={(props as { sessionId?: string }).sessionId}
+            locale={useLiveLocale(client.locale)}
+            host={editHost}
+            nativeRetry={retries}
+          />
+        )
+      })
+    )))
     // Recap card lives in the chat flow at the latest completed turn's tail,
     // after the shipped deliverables/plan/schedule entries (orders 0/0/20).
-    stops.push(client.slots.inject(WELCOME_BACK_CARD_SLOT, () => (
+    stops.push(client.slots.inject(TURN_TAIL_SLOT, () => (
       client.slots.register({
-        name: WELCOME_BACK_CARD_SLOT,
+        name: TURN_TAIL_SLOT,
         id: WELCOME_BACK_CARD_ID,
         order: 30,
       }, props => (

@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-hub",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Change the models used by DSH plugins and subagents from one page, and see each running subagent's model and reasoning effort.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -106,6 +106,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/",
   "dshRelease": {
-    "contentHash": "ac644ef0c304d071489b056c90f0db7cca72036986906c5e978090513997ebec"
+    "contentHash": "b35a12a7e5dab58a41d1373915b781b45fc957791a81cc941a052cc965cf2f79"
   }
 }

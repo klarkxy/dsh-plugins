@@ -20,6 +20,8 @@ const reasons = {
     running: '这个聊天仍在运行。请等待当前工作结束后再试。',
     cleanup: '清理没有完成。',
     unsupported: '当前版本不能完成这个操作。',
+    retryPending: '重发尚未完成。再次发送会继续同一次操作，不会新建另一份聊天。',
+    retryUncertain: '上次创建聊天的结果无法确认，已停止再次创建。请先检查会话列表中是否已有新聊天。',
   },
   en: {
     modified: 'Later operations may have made changes. Retry is unavailable.',
@@ -29,6 +31,8 @@ const reasons = {
     running: 'This chat is still running. Wait for the current work to finish, then try again.',
     cleanup: 'Cleanup did not finish.',
     unsupported: 'This runtime cannot complete that action.',
+    retryPending: 'Resend is incomplete. Send again to continue the same operation without creating another chat.',
+    retryUncertain: 'The previous chat creation could not be confirmed. Another chat will not be created; check the session list for an existing new chat.',
   },
 } as const
 
@@ -49,6 +53,12 @@ const text = {
     edit: '编辑并重发',
     send: '发送',
     editTitle: '编辑并重发',
+    editBranchWarning: '对话将从这条消息继续，之前的版本会移入归档。已执行的文件、命令和外部修改不会撤销，模型可能再次执行相关操作。',
+    editConfirm: '确认重发',
+    editAddAttachment: '添加附件',
+    editRemoveAttachment: '删除附件',
+    editImage: '图片',
+    editPreviewFailed: '预览不可用',
     draft: '消息文本',
     continueDefault: '继续',
     welcomeBack: '欢迎回来',
@@ -105,6 +115,12 @@ const text = {
     edit: 'Edit and resend',
     send: 'Send',
     editTitle: 'Edit and resend',
+    editBranchWarning: 'The conversation continues from this message; the previous version moves to the archive. File, command, and external changes already made are not undone — the model may perform those actions again.',
+    editConfirm: 'Confirm resend',
+    editAddAttachment: 'Add attachments',
+    editRemoveAttachment: 'Remove attachment',
+    editImage: 'Image',
+    editPreviewFailed: 'Preview unavailable',
     draft: 'Message text',
     continueDefault: 'Continue',
     welcomeBack: 'Welcome back',
@@ -156,7 +172,9 @@ export function uiText(locale: CopyLocale, key: UiTextKey): string {
 }
 
 export function failureReason(failure: OperationFailure): FailureReason {
-  if (failure.code === 'session/lifecycle-unavailable' || failure.code === 'session/fork-unavailable'
+  if (failure.code === 'session/retry-pending') return 'retryPending'
+  if (failure.code === 'session/retry-uncertain') return 'retryUncertain'
+  if (failure.code === 'session/lifecycle-unavailable' || failure.code === 'session/retry-media-unavailable'
     || failure.code === 'session-manager/unavailable') return 'unsupported'
   if (failure.code === 'session-manager/busy') return 'running'
   if (
