@@ -2,29 +2,29 @@
 
 [简体中文](RELEASING.zh-CN.md) · [Current registry](README.md#plugin-lifecycle)
 
-`scripts/plugin-release-states.json` records the lifecycle of every `plugins/*` package, including shared libraries and private development packages. It moves forward only: **Draft → Testing → Published**.
+`scripts/plugin-release-states.json` records the lifecycle of every `plugins/*` package, including shared libraries and private development packages. It moves forward in one direction: **Draft → Testing → Published**.
 
 | Stage | Meaning | Publication |
 | --- | --- | --- |
-| `draft` | Under development, before testing | Never publish |
-| `testing` | Completing checks and acceptance for its first delivery | No automatic publication; explicitly select its first release |
-| `published` | Has npm publication history, including prereleases | Maintain and update normally; never demote |
+| `draft` | Under development, before testing | Local development only |
+| `testing` | Completing checks and acceptance for its first delivery | Published only when explicitly selected for first release |
+| `published` | Has npm publication history, including prereleases | Maintained and updated through the standard release flow |
 
-Fixes, README changes, new-feature testing and version updates keep a published package Published; failed checks block only that update. Holds, freezes, migration ownership and private status are managed separately; the `latest` / `next` channels do not determine the stage.
+Fixes, README changes, new-feature testing, and version updates keep a published package in `published`; failed checks stop only that update. Holds, freezes, migration ownership, and private status are managed separately, independent of the `latest` and `next` channels.
 
 ## Normal maintenance
 
-1. Edit source, configuration, dependencies or packed documentation while retaining `published`.
-2. Choose a version by compatibility, then run relevant tests, builds, archive checks and target-host acceptance where needed; maintenance needs no manual lifecycle re-promotion or refreshed acceptance fingerprint.
-3. The publisher compares current archive contents with npm, runs `pnpm check`, revalidates the saved plan, publishes and verifies archive downloads; failure never lowers the stage. Edits to `README*.md`, `ACCEPTANCE.md`, `NOTICE.md`, `CHANGELOG*.md` and `docs/` are still packed but do not force a new version; npm documentation refreshes with the next code release. Version, dependency and code changes publish as usual.
+1. Edit source, configuration, dependencies, or packed documentation while keeping `published`.
+2. Choose a version by compatibility, then run the relevant tests, builds, archive checks, and target-host acceptance checks.
+3. The publisher compares current archive contents with npm, runs `pnpm check`, revalidates the saved plan, publishes, and verifies archive downloads; a failed run leaves the lifecycle stage unchanged. Edits to `README*.md`, `ACCEPTANCE.md`, `NOTICE.md`, `CHANGELOG*.md`, and `docs/` are packed into the archive and ship with the next code release. Version, dependency, and code changes publish as usual.
 
-Existing release holds must be resolved for their stated reasons (`scripts/npm-release-holds.json`). Private packages never publish. Obsolete source can be removed: set `retired: true` on its registry entry, retaining its lifecycle and publication history; it no longer participates in builds, active tables or releases.
+Release holds are cleared once their stated conditions in `scripts/npm-release-holds.json` are resolved. Private packages stay local. To retire obsolete source, set `retired: true` on its registry entry: this keeps its lifecycle and publication history while excluding it from builds, active tables, and releases.
 
 ## First publication
 
-Register a new package as `draft`, advance it manually to `testing` when testable, and sync documentation. Before its first release, inspect the final archive, license, dependencies, entrypoints, relevant tests and target-host user scenarios; these checks belong to that delivery, and no permanent acceptance report is kept in the repository.
+Register a new package as `draft`, advance it manually to `testing` when ready for testing, and sync documentation. Before its first release, inspect the final archive, license, dependencies, entrypoints, relevant tests, and target-host user scenarios as part of that delivery.
 
-After explicit authorization, manually run **Publish npm plugins** in Actions and enter full package names, separated by spaces, in `first_release`. A local plan can also be prepared:
+After explicit authorization, manually run **Publish npm plugins** in Actions and enter full package names, separated by spaces, in `first_release`. You can also prepare a local plan:
 
 ```sh
 pnpm build
@@ -34,12 +34,12 @@ pnpm check
 node scripts/publish-npm.mjs publish
 ```
 
-- Ordinary pushes and plans without first-release selection update only Published public packages.
-- Draft, private, held and migration-frozen packages cannot bypass their restrictions through first release.
-- New public dependencies in Testing must be explicitly selected together or published first; selection never expands silently.
-- Passing checks or preparing a plan does not change lifecycle. Only an anonymous npm archive download with matching integrity records `published`, its historical `publication` proof, and updates the root README tables. Still-scanning, network errors and mismatched archives are not verification success.
+- Ordinary pushes and plans without first-release selection update only `published` public packages.
+- Draft, private, held, and migration-frozen packages remain excluded even when listed in `first_release`.
+- New public dependencies in `testing` must be listed together in `first_release` or published beforehand.
+- Lifecycle promotion to `published` happens once the npm archive downloads anonymously with matching integrity; this also records the historical `publication` proof and updates the root README tables.
 
-Each verified result is saved immediately in `.artifacts/npm-release/verified-publications.json`; later submission or verification failures preserve earlier successes, and CI always uploads the plan, archives and verified records. Source writeback may not have happened after failure: retry from the latest `main` with the same `first_release` selection — an identical accepted version is not resubmitted, and re-verification restores the lifecycle writeback. A partially successful batch must not be treated as entirely unpublished.
+Each verified result is saved immediately in `.artifacts/npm-release/verified-publications.json`; if a later package fails, earlier verified packages stay recorded and CI uploads the plan, archives, and verified records. To finish a partial run, retry from the latest `main` with the same `first_release` selection: already accepted versions with matching integrity are reused, and re-verification completes the lifecycle writeback.
 
 ## Lifecycle validation
 
@@ -47,17 +47,17 @@ Each verified result is saved immediately in `.artifacts/npm-release/verified-pu
 pnpm release:status     # Lifecycle, private status and blockers
 pnpm release:docs       # Sync both root README tables
 pnpm release:check      # Lifecycle, documentation and publisher regressions
-pnpm release:fingerprint @klarkxy/dsh-example  # Diagnostic contents; no stage mutation
+pnpm release:fingerprint @klarkxy/dsh-example  # Diagnostic contents; read-only
 ```
 
-The registry uses `schemaVersion: 2`: a Published entry's `publication` retains one existing npm version, publication time and archive integrity — immutable historical proof, not acceptance of the current source; normal updates do not rewrite it. Legacy schema 1 described reversible source readiness and is accepted only as a one-time migration baseline.
+The registry uses `schemaVersion: 2`: a `published` entry's `publication` retains one existing npm version, publication time, and archive integrity as immutable historical proof. Legacy schema 1 serves only as a one-time migration baseline.
 
-Local checks compare the working tree with `HEAD`; publishing CI sets `RELEASE_STATE_BASE` to the pre-push commit, and manual retries use `HEAD^`. Backwards stages, deleting historical entries (retain `retired: true` when removing source), skipping Testing and rewriting publication history fail. A missing historical registry is initialization; Git baseline errors are not swallowed as one. For current lifecycle state, run `pnpm release:status`.
+Local checks compare the working tree with `HEAD`; publishing CI sets `RELEASE_STATE_BASE` to the pre-push commit, and manual retries use `HEAD^`. Validation requires forward stage progression through `testing`, retention of all historical entries (use `retired: true` when removing source), and preservation of `publication` records. A missing historical registry initializes a new baseline, while Git read errors fail fast. Run `pnpm release:status` to inspect current lifecycle state.
 
 ## Per-plan content and dependencies
 
-Plans automatically capture `sourceHashes` for packages and their local dependency closure, recompute them before publishing, and reject stale source, dependency or archive contents; version fields, CI-owned metadata and normal workspace version substitution do not masquerade as source changes, while archive checks still include resolved dependency versions. Legacy plans must be regenerated.
+Plans capture `sourceHashes` for packages and their local dependency closure, recompute them before publishing, and require current source, dependencies, and archive contents to match the plan. Version fields, CI-owned metadata, and workspace version substitution are normalized during source hashing, while archive checks still verify resolved dependency versions.
 
-All local dependency fields participate: public dependencies must be Published or explicitly selected for first publication in the same batch; private Testing development dependencies may be built, checked and bundled with their consumer, while Draft dependencies still block; a public package cannot keep private runtime, optional or peer dependencies. A held dependency supplying an npm version must already have that exact version available; its bundled source still receives the current plan's content check.
+All local dependency fields participate in the closure check: public dependencies must be `published` or explicitly selected in `first_release` in the same batch; private `testing` development dependencies may be built, checked, and bundled with their consumer; public packages may depend only on public runtime, optional, and peer packages. A held dependency supplying an npm version must already have that exact version published, and its bundled source is checked against the current plan.
 
-Fixing release tooling, preparing plans and registering history do not authorize commits, pushes, npm publication or deployment.
+Commits, pushes, npm publication, and site deployment require explicit user authorization.

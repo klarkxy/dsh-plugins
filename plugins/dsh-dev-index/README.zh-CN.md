@@ -4,7 +4,7 @@
 
 [English](README.md)
 
-不离开 DSH 就能阅读 DeepSeek Harness 官方文档；创造模式还会获得查文档、安装前核对插件的工具。
+在 DSH 内直接阅读 DeepSeek Harness 官方文档；创造模式还会获得查文档、安装前核对插件的工具。
 
 ## 安装
 
@@ -21,10 +21,10 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 
 ## 限制
 
-- 这些工具只读，不安装任何东西；安装仍由 DSH 插件管理器负责。
-- 官网对应最新发布的 DSH，可能与你正在使用的版本不同。
-- npm 元数据不能证明插件与你的 DSH 兼容。
-- GitHub 数据来自本机已登录的 gh CLI 或匿名 API（匿名额度有限，约每小时几十次请求）；插件不保存任何 GitHub 凭据。按 `dsh.plugin.json` 清单的代码搜索仅在 gh 已登录时可用。
+- 这些工具均为只读查询，插件安装仍由 DSH 插件管理器负责。
+- 官网对应最新发布的 DSH，可能与你正在使用的版本有差异。
+- npm 元数据仅反映已发布的包信息，与当前 DSH 的兼容性需另行核对。
+- GitHub 数据来自本机已登录的 gh CLI 或匿名 API（匿名额度有限，约每小时几十次请求），插件本身零凭据存储。按 `dsh.plugin.json` 清单的代码搜索需先登录 gh CLI。
 - 取消最后一个使用 GitHub CLI 检查的请求时，会等待该检查停止；卸载插件会等待正在进行的 GitHub 请求和 CLI 进程结束。
 
 ## 从 GitHub 安装

@@ -16,13 +16,6 @@ describe('zhihu client state', () => {
     expect(state.isCurrent(ticket)).toBe(false)
   })
 
-  it('suppresses a result when the tab changed during the request', () => {
-    const state = createZhihuClientState()
-    const { ticket } = state.begin()
-    state.cancel() // tab switch cancels the in-flight search
-    expect(state.isCurrent(ticket)).toBe(false)
-  })
-
   it('suppresses a superseded request and aborts its signal', () => {
     const state = createZhihuClientState()
     const first = state.begin()
@@ -32,7 +25,7 @@ describe('zhihu client state', () => {
     expect(state.isCurrent(second.ticket)).toBe(true)
   })
 
-  it('suppresses results after cancel (panel close or unmount)', () => {
+  it('suppresses results after cancel (tab switch, panel close or unmount)', () => {
     const state = createZhihuClientState()
     const { ticket, signal } = state.begin()
     state.cancel()

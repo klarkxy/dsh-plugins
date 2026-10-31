@@ -35,7 +35,7 @@ To browse the plugin list in DSH, enable the experimental **Custom Plugin Market
 https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/index.json
 ```
 
-The same source provides list updates. DSH asks for confirmation before installing anything.
+The same source provides list updates. DSH asks for confirmation before installing any plugin.
 
 ## Development
 
@@ -54,6 +54,7 @@ The code is the developer documentation. Releases follow the [release guide](REL
 | Package | Lifecycle | Notes |
 | --- | --- | --- |
 | [@klarkxy/dsh-current-title](plugins/dsh-current-title/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
+| [@klarkxy/dsh-delegation](plugins/dsh-delegation/README.md) | Testing (`testing`) | Per-session delegation mode is feature-complete and going through first-release checks. |
 | [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-font](plugins/dsh-font/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
@@ -62,8 +63,8 @@ The code is the developer documentation. Releases follow the [release guide](REL
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-shortcuts](plugins/dsh-shortcuts/README.md) | Draft (`draft`) | New shortcut manager and extensible command palette; not yet published. |
-| [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
+| [@klarkxy/dsh-shortcuts](plugins/dsh-shortcuts/README.md) | Draft (`draft`) | New shortcut manager and extensible command palette; awaiting first-release acceptance. |
+| [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-zhihu](plugins/dsh-zhihu/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 <!-- plugin-release-states:end -->

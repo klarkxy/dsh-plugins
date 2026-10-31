@@ -2,44 +2,44 @@
 
 [English](RELEASING.md) · [当前清单](README.zh-CN.md#插件生命周期)
 
-`scripts/plugin-release-states.json` 记录所有 `plugins/*` 包（含共享库、私有开发包）的生命周期，只向前推进：**草稿 → 测试中 → 已发布**。
+`scripts/plugin-release-states.json` 记录所有 `plugins/*` 包（含共享库、私有开发包）的生命周期，单向向前推进：**草稿 → 测试中 → 已发布**。
 
 | 阶段 | 含义 | 发布行为 |
 | --- | --- | --- |
-| 草稿 `draft` | 尚在开发，未进入测试 | 不发布 |
-| 测试中 `testing` | 正在完成首次交付的检查与验收 | 不自动发布；须明确选择首次发布 |
-| 已发布 `published` | 已有 npm 发布事实，包括预发布版本 | 按正常流程更新，永不降级 |
+| 草稿 `draft` | 尚在开发，待进入测试 | 仅本地开发 |
+| 测试中 `testing` | 正在完成首次交付的检查与验收 | 需明确指定首次发布才可发布 |
+| 已发布 `published` | 已有 npm 发布记录（含预发布版本） | 按正常流程维护与更新 |
 
-已发布包的修复、README 调整、新功能测试和升版都保持已发布；检查失败只阻止该次更新。暂缓、封存、迁移冻结和私有属性单独管理；`latest` / `next` 渠道不决定生命周期。
+已发布包的修复、README 调整、新功能测试和升版均保持 `published`；检查失败仅中止当次更新。暂缓、封存、迁移冻结和私有属性独立管理，与 `latest` / `next` 渠道相互独立。
 
 ## 正常维护
 
-1. 修改源码、配置、依赖或包内文档，保留 `published`。
-2. 按兼容性选择版本，运行相关测试、构建、打包检查及需要的目标宿主验收；维护不需要重新人工晋级或刷新验收指纹。
-3. 发布流程比对当前归档与 npm，运行 `pnpm check`，核对计划仍对应当前源码，发布并下载验证归档；失败不降低阶段。`README*.md`、`ACCEPTANCE.md`、`NOTICE.md`、`CHANGELOG*.md` 与 `docs/` 的改动照常打包但不触发新版本，npm 文档随下次代码发布更新；版本号、依赖和代码改动照常发布。
+1. 修改源码、配置、依赖或包内文档，保持 `published` 状态。
+2. 按兼容性选择版本，运行相关测试、构建、打包检查及目标宿主验收。
+3. 发布流程比对当前归档与 npm，运行 `pnpm check`，核对计划仍对应当前源码，发布并下载验证归档；中途失败时保持原阶段不变。`README*.md`、`ACCEPTANCE.md`、`NOTICE.md`、`CHANGELOG*.md` 与 `docs/` 的改动照常打包，随下次代码发布一起更新到 npm；版本号、依赖和代码改动照常发布。
 
-已有发布暂缓须按其声明的原因解除（`scripts/npm-release-holds.json`）。私有包不发 npm。废弃源码可移除：原清单条目设 `retired: true`，保留生命周期和发布凭据，不再参与构建、状态表或发布。
+发布暂缓在满足 `scripts/npm-release-holds.json` 声明的解除条件后移除。私有包仅在仓库内使用。移除废弃源码时，将原清单条目设为 `retired: true`，保留生命周期和发布凭据，同时移出构建、状态表和发布流程。
 
 ## 首次发布
 
-新包登记为 `draft`，具备可测试功能后人工推进至 `testing` 并同步文档。首次发布前核对最终归档、许可证、依赖、入口、相关测试和目标宿主用户场景；这些检查属于本次交付，不在仓库长期保留验收报告。
+新包登记为 `draft`，具备可测试功能后人工推进至 `testing` 并同步文档。首次发布前在当次交付中核对最终归档、许可证、依赖、入口、相关测试和目标宿主用户场景。
 
-经明确授权后，在 Actions 手动运行 **Publish npm plugins**，于 `first_release` 填入完整包名（多个用空格分隔）。也可本地准备计划：
+经明确授权后，在 Actions 手动运行 **Publish npm plugins**，于 `first_release` 填入完整包名（多个用空格分隔）。也可在本地生成计划：
 
 ```sh
 pnpm build
 node scripts/publish-npm.mjs plan --first-release @klarkxy/dsh-example
 pnpm check
-# 明确获得 npm 发布授权后才执行：
+# 明确获得 npm 发布授权后执行：
 node scripts/publish-npm.mjs publish
 ```
 
-- 普通推送和未填写首次发布选项的计划只更新已发布公开包。
-- 草稿、私有、暂缓和迁移冻结的包不能借首次发布绕过限制。
-- 测试中的新公共依赖须一起明确列出，或先单独发布；不会偷偷扩大范围。
-- 检查通过或生成计划都不改变生命周期；npm 归档可匿名下载且完整性匹配后，才记录 `published` 与 `publication` 凭据并同步根 README。仍在扫描、网络错误或归档不匹配不算验证成功。
+- 普通推送和未填写首次发布选项的计划只更新 `published` 公开包。
+- 草稿、私有、暂缓和迁移冻结的包保持各自的限制。
+- 处于 `testing` 的新公共依赖须一并列入 `first_release`，或先单独完成发布。
+- 当 npm 归档可匿名下载且完整性匹配时，才记录 `published` 与历史 `publication` 凭据并同步根 README。
 
-已验证结果逐包即时保存到 `.artifacts/npm-release/verified-publications.json`；后续提交或验证失败保留已成功项，CI 总会上传计划、归档和记录。失败时源码写回可能尚未发生：在最新 `main` 上用相同 `first_release` 重跑，相同完整性的版本不重复提交，重新验证后补齐生命周期写回。不得把部分成功当成整批未发布。
+已验证结果逐包即时保存到 `.artifacts/npm-release/verified-publications.json`；若后续包失败，前面已验证的包仍会保留，CI 也会上传计划、归档和验证记录。恢复部分成功的批次时，在最新 `main` 上用相同 `first_release` 重跑：已接收且完整性一致的版本会直接复用，重新验证后补齐生命周期写回。
 
 ## 生命周期校验
 
@@ -47,17 +47,17 @@ node scripts/publish-npm.mjs publish
 pnpm release:status     # 显示生命周期、私有属性及发布阻断
 pnpm release:docs       # 同步根 README 中英文表格
 pnpm release:check      # 阶段、文档及发布脚本回归
-pnpm release:fingerprint @klarkxy/dsh-example  # 诊断当前归档内容，不改变阶段
+pnpm release:fingerprint @klarkxy/dsh-example  # 诊断当前归档内容（只读）
 ```
 
-清单采用 `schemaVersion: 2`：已发布条目的 `publication` 保存一个已存在的 npm 版本、发布时间和归档完整性，是不可改写的历史凭据，不是当前源码的验收标记；普通更新不修改它。旧版 schema 1 记录可回退源码状态，仅允许作为一次性迁移输入。
+清单采用 `schemaVersion: 2`：已发布条目的 `publication` 保存一个已存在的 npm 版本、发布时间和归档完整性，作为不可变的历史凭据。旧版 schema 1 仅用作一次性迁移输入。
 
-本地检查比较工作区与 `HEAD`；发布 CI 的 `RELEASE_STATE_BASE` 使用推送前提交，手动重跑用 `HEAD^`。阶段倒退、删除历史条目（移除源码应保留 `retired: true` 条目）、跳过测试阶段或改写历史凭据都会失败。没有旧清单属于首次初始化；Git 基准读取错误不会被当成初始化吞掉。当前生命周期状态以 `pnpm release:status` 为准。
+本地检查比较工作区与 `HEAD`；发布 CI 的 `RELEASE_STATE_BASE` 使用推送前提交，手动重跑用 `HEAD^`。校验要求阶段依次向前推进、保留所有历史条目（移除源码时设 `retired: true`）并保持历史 `publication` 凭据不变。缺少旧清单时按首次初始化处理，Git 基准读取错误则直接报错。当前生命周期状态以 `pnpm release:status` 为准。
 
 ## 每次计划的内容与依赖检查
 
-计划自动保存本次包及本地依赖闭包的 `sourceHashes`，发布前重新计算，拒绝源码、依赖或打包内容改变后的旧计划；版本号、CI 自有元数据和正常工作区版本替换不算源码变化，但实际发布归档仍校验解析后的依赖版本。旧格式计划须重新生成。
+计划保存本次包及本地依赖闭包的 `sourceHashes`，发布前重新计算，要求源码、依赖和打包内容与计划完全一致；版本号、CI 自有元数据和工作区版本替换在源码哈希中归并处理，实际发布归档仍校验解析后的依赖版本。
 
-所有本仓库依赖字段都参与闭包检查：公共依赖须已发布或明确列为同批首次发布；私有的测试中开发依赖允许随使用方构建、检查与打包，草稿依赖仍阻断；公开包不能保留私有运行时、可选或 peer 依赖。暂缓依赖若只提供 npm 版本，该确切版本必须已存在；其源码被打包时仍受本次计划的内容检查。
+所有本仓库依赖字段都参与闭包检查：公共依赖须为 `published` 或同批列入 `first_release`；私有的 `testing` 开发依赖允许随使用方构建、检查与打包；公开包的运行时、可选和 peer 依赖须全部为公开包。暂缓依赖若提供 npm 版本，该确切版本须已存在于 npm，且打包源码同样接受当前计划的内容检查。
 
-修复发布逻辑、准备计划或登记历史，都不自动授权提交、推送、npm 发布或部署。
+提交、推送、npm 发布和站点部署均需用户明确授权。

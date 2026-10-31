@@ -9,6 +9,7 @@ const plugins = fileURLToPath(new URL('../../plugins/', import.meta.url))
 // would allow a newly introduced global rule to approve itself.
 const roots = {
   'dsh-current-title': ['.ct-root'],
+  'dsh-delegation': ['.dlg-root'],
   'dsh-dev-index': ['.dsh-di-root'],
   'dsh-font': ['.font-root'],
   'dsh-git-commit': ['.gcm-root'],

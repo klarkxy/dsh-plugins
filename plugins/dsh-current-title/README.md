@@ -4,7 +4,7 @@
 
 [简体中文](docs/README.zh-CN.md)
 
-Keeps each DeepSeek Harness session title on the task you are working on. A title you rename by hand is never overwritten.
+Keeps each DeepSeek Harness session title on the task you are working on; titles you rename by hand stay put.
 
 ```text
 0903 | Fix | Login callback fails
@@ -27,7 +27,7 @@ Titles update automatically. Under **Plugins → Auto Title** you can:
 - pick a title model (empty follows the current session model);
 - regenerate the title of the open session.
 
-If the model list cannot load, or some providers fail, use **Retry** beside the model picker; retrying keeps your saved model and prompt draft.
+When the model list fails to load or some providers are unavailable, use **Retry** beside the model picker; retrying keeps your saved model and prompt draft.
 
 ## Limits
 

@@ -4,7 +4,7 @@
 
 [简体中文](README.zh-CN.md)
 
-A DeepSeek Harness session preset that removes limits on what the model answers and delivers complete results. It affects only sessions where you choose it; every other preset stays exactly as it was.
+A DeepSeek Harness session preset that removes limits on what the model answers and delivers complete results. It affects only sessions where you choose it; every other preset stays as configured.
 
 ## Install
 
@@ -16,22 +16,22 @@ Replace `web` with your profile name, then restart the profile.
 
 ## Use
 
-Pick **Unrestricted mode** in the preset menu when creating a session. The card and selected-preset button follow the interface language: Chinese shows 破限模式, every other language shows Unrestricted mode. Workspace names stay as you named them. A session with existing messages cannot switch presets. Subagents started from that session normally carry it too.
+Pick **Unrestricted mode** in the preset menu when creating a session. The card and selected-preset button follow the interface language: Chinese shows 破限模式, and every other language shows Unrestricted mode. Workspace names stay as you named them. The preset is chosen when creating a session before messages are sent, and subagents started from that session inherit it by default.
 
-Nothing to remember to turn off: choose the preset to use it, choose another to stop. It does not change your model, default preset, or permissions.
+Choose the preset to use it for a session, or pick another preset for ordinary sessions; your model, default preset, and permissions stay unchanged.
 
 The preset includes the standard session tools, including reminders and current time context. Available actions still depend on the capabilities enabled in your profile.
 
 ## Limits
 
 - ⚠ May get your account banned: a known risk of this preset, marked in red on the preset card. Decide for yourself whether to use it.
-- It unlocks no tools or permissions; approvals, sandbox, and plan mode work as usual.
-- A subagent given its own persona does not carry the preset.
+- Tool access and permissions stay unchanged; approvals, sandbox, and plan mode work as usual.
+- Subagents keep the preset unless assigned a separate persona.
 - To uninstall, remove the bundle in the plugin manager.
 
 ## Tool budgets inside the session
 
-The preset changes only its own sessions' read and retention budgets, using the host's documented config keys. No host file is touched, and every other preset keeps the shipped defaults:
+The preset raises read and retention budgets for its own sessions using the host's documented config keys, while leaving host files and other presets at their shipped defaults:
 
 | Setting | Host default | This preset |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ The preset changes only its own sessions' read and retention budgets, using the 
 | Tool result retained | 8 KiB | 64 KiB |
 | Subagent recursion depth | 1 | 3 |
 
-The host defaults suit chat-shaped output: a `read` that hits the 50 KiB cap returns only a file's first half, a tool result over 8 KiB gets its middle replaced by a marker, and a subagent cannot delegate further by default — so a multi-file audit, a migration, or a multi-angle review cannot fan out in one pass. No mechanism is disabled here; the budgets are only raised to where the work fits.
+The host defaults are sized for short chat turns (50 KiB per `read`, 8 KiB retained tool output, and a single subagent depth). Raising these budgets lets multi-file audits, migrations, and multi-angle reviews run across larger files and deeper subagent trees while keeping all host mechanisms active.
 
 ## Credits
 

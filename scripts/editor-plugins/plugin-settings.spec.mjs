@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
@@ -98,7 +97,8 @@ describe('plugin settings page registrations', () => {
       const h = host([...forbidden, 'shell.overlay'])
       apply(h.ctx)
       await settle()
-      expect(h.injected.filter(name => forbidden.includes(name))).toEqual([])
+      // shell.overlay is declared too: settings live only on the plugin page, never in a chat dock.
+      expect(h.injected.filter(name => forbidden.includes(name) || name === 'shell.overlay')).toEqual([])
       expect(h.registered.filter(entry => entry.spec.name === slot)).toEqual([])
       h.declare(slot)
       const configs = () => h.registered.filter(entry => entry.spec.name === slot)
@@ -138,13 +138,4 @@ describe('plugin settings page registrations', () => {
       expect(h.registered).toEqual([])
     })
   }
-
-  it('keeps Zhihu credentials only on its plugin page without a chat dock', () => {
-    const source = readFileSync(new URL('../../plugins/dsh-zhihu/src/client.tsx', import.meta.url), 'utf8')
-    // The Zhihu chat overlay was removed; credentials live solely in the
-    // plugins.bundle.config seat, so no duplicate settings can resurface.
-    expect(source).not.toContain('shell.overlay')
-    expect(source).not.toContain('OVERLAY_TABS')
-    expect(source).toContain('plugins.bundle.config')
-  })
 })

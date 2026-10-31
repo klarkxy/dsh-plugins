@@ -5,8 +5,8 @@
       "name": "@klarkxy/dsh-chatgpt",
       "state": "published",
       "reason": {
-        "zh": "源码已移除；仅保留历史发布凭据，不参与构建或发布。",
-        "en": "Source removed; historical publication proof only, excluded from builds and releases."
+        "zh": "源码已移除；保留历史发布凭据，已移出构建与发布。",
+        "en": "Source removed; retains historical publication proof and stays outside builds and releases."
       },
       "publication": {
         "version": "0.1.0-alpha.1",
@@ -19,8 +19,8 @@
       "name": "@klarkxy/dsh-classmates",
       "state": "published",
       "reason": {
-        "zh": "源码已移除；仅保留历史发布凭据，不参与构建或发布。",
-        "en": "Source removed; historical publication proof only, excluded from builds and releases."
+        "zh": "源码已移除；保留历史发布凭据，已移出构建与发布。",
+        "en": "Source removed; retains historical publication proof and stays outside builds and releases."
       },
       "publication": {
         "version": "0.0.0-stage",
@@ -40,6 +40,14 @@
         "version": "0.1.0",
         "publishedAt": "2026-09-23T08:28:55.941Z",
         "integrity": "sha512-QKJvQuJ0ZblvYlHtp+o6w6NwymWtlixFeP1EdSo7bQz+b3mI7vN63FD1xH64hM2XfWqv8OdBfNYuxnbq8SYKUw=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-delegation",
+      "state": "testing",
+      "reason": {
+        "zh": "按会话切换的委派模式已具备完整功能，正在完成首次发布检查。",
+        "en": "Per-session delegation mode is feature-complete and going through first-release checks."
       }
     },
     {
@@ -85,8 +93,8 @@
       "name": "@klarkxy/dsh-grok-build",
       "state": "published",
       "reason": {
-        "zh": "源码已移除；仅保留历史发布凭据，不参与构建或发布。",
-        "en": "Source removed; historical publication proof only, excluded from builds and releases."
+        "zh": "源码已移除；保留历史发布凭据，已移出构建与发布。",
+        "en": "Source removed; retains historical publication proof and stays outside builds and releases."
       },
       "publication": {
         "version": "0.1.0-alpha.1",
@@ -99,8 +107,8 @@
       "name": "@klarkxy/dsh-minimax-code",
       "state": "published",
       "reason": {
-        "zh": "源码已移除；仅保留历史发布凭据，不参与构建或发布。",
-        "en": "Source removed; historical publication proof only, excluded from builds and releases."
+        "zh": "源码已移除；保留历史发布凭据，已移出构建与发布。",
+        "en": "Source removed; retains historical publication proof and stays outside builds and releases."
       },
       "publication": {
         "version": "0.1.0-alpha.1",
@@ -178,16 +186,16 @@
       "name": "@klarkxy/dsh-shortcuts",
       "state": "draft",
       "reason": {
-        "zh": "新增快捷键管理与可扩展命令面板，尚未发布。",
-        "en": "New shortcut manager and extensible command palette; not yet published."
+        "zh": "新增快捷键管理与可扩展命令面板，待完成首次发布验收。",
+        "en": "New shortcut manager and extensible command palette; awaiting first-release acceptance."
       }
     },
     {
       "name": "@klarkxy/dsh-unrestricted",
       "state": "published",
       "reason": {
-        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
-        "en": "Published on npm; subsequent versions follow the normal update workflow."
+        "zh": "已有 npm 发布记录；后续修复、测试和版本更新保持已发布。",
+        "en": "Published on npm; fixes, testing and version updates keep the Published lifecycle."
       },
       "publication": {
         "version": "0.1.0-rc.1",

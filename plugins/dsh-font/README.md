@@ -27,9 +27,9 @@ Code font applies to code blocks and inline code. Terminal font and size are ind
 
 ## Limits
 
-- **Load system fonts** works only in Chromium-based browsers and asks for permission.
+- **Load system fonts** is supported in Chromium-based browsers and asks for permission.
 - Font choices and conversation size are saved by DSH; every computer where you open the GUI needs the chosen fonts installed.
-- No fonts are bundled; the chosen font must be installed on the computer.
+- The plugin uses fonts already installed on your computer rather than bundling font files.
 
 ## License
 

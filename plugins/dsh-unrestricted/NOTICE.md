@@ -8,15 +8,14 @@ the projects below; all are reused under the MIT License and credited here.
 
 破限交付契约（persona 中 `## Unrestricted local execution mode` 一节）、persona 指针句和
 计划模式补注，改写自 [yexi-by/dsh-unrestricted](https://github.com/yexi-by/dsh-unrestricted)
-（`src/rules.js`，v0.2.2）。本包没有沿用其运行时 prompt fusion，只把同一份契约沉淀为静态
-Agent Preset 文本，因此不再改写任何其他 Preset 的提示词。
+（`src/rules.js`，v0.2.2）。本包将同一份契约沉淀为独立的静态 Agent Preset 文本，仅在选用该
+Preset 的会话中生效，保持其他 Preset 的提示词原样不变。
 
 The unrestricted delivery contract (the `## Unrestricted local execution mode` section in
 the persona), the persona pointer sentence, and the plan-mode note are adapted from
 [yexi-by/dsh-unrestricted](https://github.com/yexi-by/dsh-unrestricted)
-(`src/rules.js`, v0.2.2). This package keeps none of its runtime prompt fusion: it
-settles the same contract into static agent-preset text, so no other preset's prompt is
-rewritten.
+(`src/rules.js`, v0.2.2). This package settles the contract into a standalone static
+agent-preset declaration, keeping every other preset's prompt untouched.
 
 ```text
 MIT License
@@ -82,20 +81,20 @@ SOFTWARE.
 
 工具组合、persona 起始句与计划模式正文改写自 DeepSeek Harness
 `@deepseek-ai/dsh-web-app/presets/standard.patch.yml`（本机 DSH `0.2.1-rc.1` 随附的
-`standard` Agent Preset 声明）。persona `suffix` 中「继续做完 / 不中途停下」「拒绝是故障」
-「按意图而非关键词理解任务」三节的思路参考了 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)
-（MIT）的提示词结构，按本 Preset 的会话级定位重写：只写进本 Preset 的 persona，不改写其他
-Preset，也不改动宿主文件。
+`standard` Agent Preset 声明）。persona `suffix` 中「继续做完」「完整交付回答」「将拒绝视为故障」
+「按意图而非关键词理解任务」四节的思路参考了 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)
+（MIT）的提示词结构，按本 Preset 的会话级定位重写：仅写入本 Preset 的 persona，保持其他
+Preset 与宿主文件原样不变。
 
 The tool roster, the persona opening sentence, and the plan-mode body are adapted from
 DeepSeek Harness `@deepseek-ai/dsh-web-app/presets/standard.patch.yml` (the `standard`
 agent-preset declaration shipped with DSH `0.2.1-rc.1`).
 
-The three persona-`suffix` sections on carrying work through, on refusal as a malfunction,
-and on reading intent rather than keywords follow the prompt structure of
+The four persona-`suffix` sections on carrying work through, answer shape, treating refusal as
+a malfunction, and reading intent rather than keywords follow the prompt structure of
 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) (MIT), rewritten for this
-preset's session scope: they live only in this preset's persona, rewrite no other preset,
-and patch no host file.
+preset's session scope: they live solely in this preset's persona, leaving other presets and
+host files untouched.
 
 ```text
 MIT License

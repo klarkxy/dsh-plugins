@@ -1,0 +1,5 @@
+# Enabled when installed. Adds a conversation-header delegation switch.
+- insert:
+    - id: delegation
+      name: '@klarkxy/dsh-delegation'
+      disabled: false
