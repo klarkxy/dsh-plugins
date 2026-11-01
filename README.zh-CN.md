@@ -10,6 +10,7 @@ klarkxy 的 DeepSeek Harness（DSH）插件。可以在[插件站点](https://kl
 | --- | --- |
 | [`@klarkxy/dsh-current-title`](plugins/dsh-current-title/docs/README.zh-CN.md) | 自动标题：会话标题跟随最新任务，手动改过的名字保持原样。 |
 | [`@klarkxy/dsh-git-commit`](plugins/dsh-git-commit/docs/README.zh-CN.md) | Git 提交：在对话里提交工作区改动，由模型分组并生成提交信息。 |
+| [`@klarkxy/dsh-delegation`](plugins/dsh-delegation/docs/README.zh-CN.md) | 委派模式：按会话开启，主代理负责拆解、委派和验收，具体工作交给子代理。 |
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.zh-CN.md) | 安全自动：需要审批的请求交给审核模型判断，通过才放行这一次。 |
 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.zh-CN.md) | 会话管理：跨工作目录查找和阅读会话，使用临时工作区；空输入一键继续，久离回来给出摘要与压缩建议。 |
 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/docs/README.zh-CN.md) | 模型枢纽：在一个页面修改各插件和子代理使用的模型，并查看运行中子代理的模型与思考强度。 |

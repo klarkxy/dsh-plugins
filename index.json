@@ -78,6 +78,46 @@
       ]
     },
     {
+      "name": "@klarkxy/dsh-delegation",
+      "title": {
+        "zh": "委派模式",
+        "en": "Delegation Mode"
+      },
+      "description": {
+        "zh": "按会话开启：主代理负责拆解、委派和验收，具体工作交给子代理。",
+        "en": "Per-session switch: the main agent plans, delegates, and reviews while subagents do the work."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/delegation/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-delegation"
+      },
+      "metadata": {
+        "category": "workflow",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "delegation",
+          "subagent"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1793491745,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.1"
+          }
+        }
+      ]
+    },
+    {
       "name": "@klarkxy/dsh-current-title",
       "title": {
         "zh": "自动标题",

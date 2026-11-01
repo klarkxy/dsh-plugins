@@ -10,6 +10,7 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse them on the [plugin site](http
 | --- | --- |
 | [`@klarkxy/dsh-current-title`](plugins/dsh-current-title/README.md) | Auto Title: session titles follow the latest task; names you set by hand stay put. |
 | [`@klarkxy/dsh-git-commit`](plugins/dsh-git-commit/README.md) | Git Commit: commit workspace changes from the conversation, with the model grouping the commits. |
+| [`@klarkxy/dsh-delegation`](plugins/dsh-delegation/README.md) | Delegation Mode: a per-session switch where the main agent plans, delegates, and reviews while subagents do the work. |
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: a reviewer model answers approval requests; only calls that pass go ahead. |
 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: find and read sessions across working directories, use temporary workspaces, continue with one tap on an empty composer, and get a welcome-back recap after time away. |
 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Model Hub: change the models used by your plugins and subagents from one page, and see each running subagent's model and reasoning effort. |

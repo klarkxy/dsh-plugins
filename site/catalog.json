@@ -74,6 +74,26 @@
       "directory": "plugins/dsh-git-commit"
     },
     {
+      "slug": "delegation",
+      "package": "@klarkxy/dsh-delegation",
+      "category": "workflow",
+      "kind": "plugin",
+      "title": {
+        "zh": "委派模式",
+        "en": "Delegation Mode"
+      },
+      "summary": {
+        "zh": "按会话开启：主代理负责拆解、委派和验收，具体工作交给子代理。",
+        "en": "Per-session switch: the main agent plans, delegates, and reviews while subagents do the work."
+      },
+      "readme": {
+        "zh": "docs/README.zh-CN.md",
+        "en": "README.md"
+      },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-delegation"
+    },
+    {
       "slug": "current-title",
       "package": "@klarkxy/dsh-current-title",
       "category": "sessions",
