@@ -195,6 +195,12 @@ export async function publish(root, packer, { lookup = readRegistry, fetcher = f
   await validateHeldDependencies(workspace.heldDependencies, lookup);
   // Submit every changed package before waiting for npm's publish-time scanning.
   for (const release of releases) {
+    // An unchanged fingerprint on a Published package has nothing to submit or record.
+    // Its archive may still differ through documentation, which ships with the next code release.
+    if (!release.publish && workspace.states.get(release.name)?.state === 'published') {
+      console.log(`Unchanged: ${release.name}@${release.version}`);
+      continue;
+    }
     try {
       const { packed } = prepared.get(release.name);
       const archive = join(root, '.artifacts/npm-release', packed.filename);

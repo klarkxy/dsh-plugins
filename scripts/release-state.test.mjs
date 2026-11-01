@@ -267,6 +267,17 @@ test('a failed maintenance release leaves every historical Published record unto
   assert.equal(readFileSync(join(root,releaseStateFile),'utf8'),before);
 });
 
+test('unchanged published packages skip archive comparison so documentation-only edits never block a batch', async t => {
+  const root=fixture(t),before=readFileSync(join(root,releaseStateFile),'utf8');
+  const lookup=async name=>({versions:{'1.2.3':{name,version:'1.2.3',dshRelease:{contentHash:`plan-${name}`},dist:{tarball:'https://example.invalid/old',integrity:'sha512-older-docs'}}},'dist-tags':{}});
+  const result=await plan(root,[],{lookup,packer:fakePack});
+  assert.ok(result.releases.length>0&&result.releases.every(release=>!release.publish));
+  const submits=[];
+  await publish(root,fakePack,{lookup,submit:async args=>{submits.push(args);},fetcher:async()=>{throw Error('Unexpected download');},timeoutMs:0});
+  assert.deepEqual(submits,[]);
+  assert.equal(readFileSync(join(root,releaseStateFile),'utf8'),before);
+});
+
 test('submission, scanning and archive verification failures never promote Testing', async t => {
   for(const options of [{failSubmission:'@klarkxy/dsh-base'},{pending:true},{corruptArchive:true}]) {
     const root=fixture(t);update(root,d=>d.packages.forEach(e=>stage(e,'testing')));await savedPlan(root,['@klarkxy/dsh-base']);
