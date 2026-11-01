@@ -54,7 +54,7 @@ The code is the developer documentation. Releases follow the [release guide](REL
 | Package | Lifecycle | Notes |
 | --- | --- | --- |
 | [@klarkxy/dsh-current-title](plugins/dsh-current-title/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-delegation](plugins/dsh-delegation/README.md) | Testing (`testing`) | Per-session delegation mode is feature-complete and going through first-release checks. |
+| [@klarkxy/dsh-delegation](plugins/dsh-delegation/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-font](plugins/dsh-font/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |

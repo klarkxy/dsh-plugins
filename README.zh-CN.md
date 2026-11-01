@@ -54,7 +54,7 @@ pnpm check
 | 包 | 生命周期 | 说明 |
 | --- | --- | --- |
 | [@klarkxy/dsh-current-title](plugins/dsh-current-title/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
-| [@klarkxy/dsh-delegation](plugins/dsh-delegation/README.md) | 测试中 (`testing`) | 按会话切换的委派模式已具备完整功能，正在完成首次发布检查。 |
+| [@klarkxy/dsh-delegation](plugins/dsh-delegation/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-font](plugins/dsh-font/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |

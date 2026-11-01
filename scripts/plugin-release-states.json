@@ -44,10 +44,15 @@
     },
     {
       "name": "@klarkxy/dsh-delegation",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "按会话切换的委派模式已具备完整功能，正在完成首次发布检查。",
-        "en": "Per-session delegation mode is feature-complete and going through first-release checks."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-11-01T00:09:05.166Z",
+        "integrity": "sha512-HDnudgGGll6gznRA/6iqVsN3NZLoesUpXRJvD/kgQ3t2IuWMIyxZerPG7IgOuIY9FVxES9oCq3oemoLGx4td7A=="
       }
     },
     {
