@@ -14,7 +14,7 @@
 | `site/assets/` | 样式与脚本；脚本做渐进增强，纯 HTML 页面直接可用 |
 | `site/site.test.mjs` | 离线测试，含在 `pnpm check` |
 
-`plugins.json`、`_site/index.json`（插件市场索引，只收 bundle 类）、`llms.txt` 由构建自动生成，改动在 `site.test.mjs` 覆盖。根目录 `index.json` 是同一市场索引的 Git 发布副本，用 `pnpm site:market` 更新、`pnpm site:market:check` 核对。
+`plugins.json`、`_site/index.json`（插件市场索引，只收 bundle 类）、`llms.txt` 由构建自动生成，改动在 `site.test.mjs` 覆盖。根目录 `index.json` 是同一市场索引的 Git 发布副本，用 `pnpm site:market` 更新，CI 用 `pnpm site:market:check` 核对。
 
 ## 增改/下线插件
 

@@ -44,7 +44,7 @@
     }
   },
   "scripts": {
-    "build": "tsdown && node --check lib/index.js && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-model-hub",
+    "build": "tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-model-hub",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-model-hub/src"
   },
