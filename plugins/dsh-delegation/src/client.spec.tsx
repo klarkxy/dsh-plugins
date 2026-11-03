@@ -18,7 +18,6 @@ const status = (overrides: Record<string, unknown> = {}) => ({
 
 const zh: Record<string, string> = {
   action: '委派',
-  normal: '默认',
   mode: '委派模式',
   titleOn: '委派模式已开启',
   titleOff: '开启委派模式',
@@ -55,12 +54,12 @@ describe('delegation new-session option', () => {
     const call = vi.fn(async () => ok(status({ locked: true })))
     await mount(async (dom, render) => {
       await render(actionFor(call))
-      const button = dom.window.document.querySelector<HTMLButtonElement>('.dlg-toggle')!
+      const button = dom.window.document.querySelector<HTMLButtonElement>('.dlg-chip')!
       expect(button.disabled).toBe(true)
       await act(async () => button.click())
       expect(call).toHaveBeenCalledTimes(1)
       await render(<DelegationAction sessionId="s1" call={call} t={t} useSession={select => select({ blank: false })} />)
-      expect(dom.window.document.querySelector('.dlg-toggle')).toBeNull()
+      expect(dom.window.document.querySelector('.dlg-chip')).toBeNull()
     })
   })
 
@@ -73,7 +72,7 @@ describe('delegation new-session option', () => {
     await mount(async (dom, render) => {
       const action = () => <DelegationAction sessionId="s1" call={call} t={t} useSession={useSession} useProjection={useProjection} />
       await render(action())
-      const button = () => dom.window.document.querySelector<HTMLButtonElement>('.dlg-toggle')!
+      const button = () => dom.window.document.querySelector<HTMLButtonElement>('.dlg-chip')!
       expect(button().disabled).toBe(true)
       preset = 'standard'
       await render(action())
@@ -90,8 +89,8 @@ describe('delegation new-session option', () => {
       ? fail('session-locked') : ok(status({ locked: ++reads > 1 })))
     await mount(async (dom, render) => {
       await render(actionFor(call))
-      await act(async () => dom.window.document.querySelector<HTMLButtonElement>('.dlg-toggle')!.click())
-      expect(dom.window.document.querySelector<HTMLButtonElement>('.dlg-toggle')!.disabled).toBe(true)
+      await act(async () => dom.window.document.querySelector<HTMLButtonElement>('.dlg-chip')!.click())
+      expect(dom.window.document.querySelector<HTMLButtonElement>('.dlg-chip')!.disabled).toBe(true)
       expect(dom.window.document.body.textContent).toContain('只能在会话开始前选择委派模式')
     })
   })
@@ -105,7 +104,7 @@ describe('delegation new-session option', () => {
     })
   })
 
-  it('shows Default or Delegate with the switch state and toggles with CAS', async () => {
+  it('always shows the Delegate label and toggles the pressed chip with CAS', async () => {
     let current = status({ enabled: true, revision: 2 })
     const call = vi.fn(async (endpoint: string, payload: { enabled?: boolean } = {}) =>
       endpoint === 'session.update'
@@ -113,17 +112,14 @@ describe('delegation new-session option', () => {
         : ok(current))
     await mount(async (dom, render) => {
       await render(actionFor(call))
-      const button = dom.window.document.querySelector<HTMLButtonElement>('.dlg-toggle')!
-      expect(button.getAttribute('role')).toBe('switch')
-      expect(button.getAttribute('aria-checked')).toBe('true')
+      const button = dom.window.document.querySelector<HTMLButtonElement>('.dlg-chip')!
+      expect(button.getAttribute('aria-pressed')).toBe('true')
       expect(button.getAttribute('aria-label')).toBe('委派模式')
-      expect(dom.window.document.querySelector('.dlg-mode-label')!.textContent).toBe('委派')
-      expect(dom.window.document.querySelector('.dlg-mode')!.getAttribute('data-enabled')).toBe('true')
+      expect(dom.window.document.querySelector('.dlg-chip-label')!.textContent).toBe('委派')
       await act(async () => button.click())
       expect(call).toHaveBeenCalledWith('session.update', { sessionId: 's1', enabled: false, expectedRevision: 2 })
-      expect(dom.window.document.querySelector('.dlg-toggle')!.getAttribute('aria-checked')).toBe('false')
-      expect(dom.window.document.querySelector('.dlg-mode-label')!.textContent).toBe('默认')
-      expect(dom.window.document.querySelector('.dlg-mode')!.getAttribute('data-enabled')).toBe('false')
+      expect(dom.window.document.querySelector('.dlg-chip')!.getAttribute('aria-pressed')).toBe('false')
+      expect(dom.window.document.querySelector('.dlg-chip-label')!.textContent).toBe('委派')
     })
   })
 
@@ -131,7 +127,7 @@ describe('delegation new-session option', () => {
     const call = vi.fn(async () => ok(status({ capable: false })))
     await mount(async (dom, render) => {
       await render(actionFor(call))
-      const button = dom.window.document.querySelector<HTMLButtonElement>('.dlg-toggle')!
+      const button = dom.window.document.querySelector<HTMLButtonElement>('.dlg-chip')!
       expect(button.disabled).toBe(true)
       expect(dom.window.document.body.textContent).toContain('委派模式不可用')
       await act(async () => button.click())
@@ -145,10 +141,10 @@ describe('delegation new-session option', () => {
       endpoint === 'session.update' ? fail('stale') : ok(status({ enabled: false, revision: ++statuses === 1 ? 0 : 1 })))
     await mount(async (dom, render) => {
       await render(actionFor(call))
-      await act(async () => dom.window.document.querySelector<HTMLButtonElement>('.dlg-toggle')!.click())
+      await act(async () => dom.window.document.querySelector<HTMLButtonElement>('.dlg-chip')!.click())
       expect(call.mock.calls.map(args => args[0])).toEqual(['session.status', 'session.update', 'session.status'])
       expect(dom.window.document.body.textContent).toContain('状态已在别处更改，已刷新')
-      expect(dom.window.document.querySelector('.dlg-toggle')!.getAttribute('aria-checked')).toBe('false')
+      expect(dom.window.document.querySelector('.dlg-chip')!.getAttribute('aria-pressed')).toBe('false')
     })
   })
 
@@ -157,9 +153,9 @@ describe('delegation new-session option', () => {
       endpoint === 'session.update' ? fail('internal') : ok(status({ enabled: true, revision: 2 })))
     await mount(async (dom, render) => {
       await render(actionFor(call))
-      await act(async () => dom.window.document.querySelector<HTMLButtonElement>('.dlg-toggle')!.click())
+      await act(async () => dom.window.document.querySelector<HTMLButtonElement>('.dlg-chip')!.click())
       expect(dom.window.document.body.textContent).toContain('切换失败')
-      expect(dom.window.document.querySelector('.dlg-toggle')!.getAttribute('aria-checked')).toBe('true')
+      expect(dom.window.document.querySelector('.dlg-chip')!.getAttribute('aria-pressed')).toBe('true')
     })
   })
 
@@ -180,16 +176,16 @@ describe('delegation new-session option', () => {
     })
     await mount(async (dom, render) => {
       await render(actionFor(call))
-      const toggle = () => dom.window.document.querySelector<HTMLButtonElement>('.dlg-toggle')!
-      expect(toggle().getAttribute('aria-checked')).toBe('false')
+      const toggle = () => dom.window.document.querySelector<HTMLButtonElement>('.dlg-chip')!
+      expect(toggle().getAttribute('aria-pressed')).toBe('false')
       // A focus-triggered refetch hangs while the save lands.
       await act(async () => dom.window.dispatchEvent(new dom.window.Event('focus')))
       await act(async () => toggle().click())
       expect(updates.at(-1)).toMatchObject({ enabled: true, expectedRevision: 0 })
-      expect(toggle().getAttribute('aria-checked')).toBe('true')
+      expect(toggle().getAttribute('aria-pressed')).toBe('true')
       // The pre-save read resolving now must not roll the button back.
       await act(async () => slow.resolve(ok(status({ enabled: false, revision: 0 }))))
-      expect(toggle().getAttribute('aria-checked')).toBe('true')
+      expect(toggle().getAttribute('aria-pressed')).toBe('true')
       await act(async () => toggle().click())
       expect(updates.at(-1)).toMatchObject({ enabled: false, expectedRevision: 1 })
     })
@@ -206,11 +202,11 @@ describe('delegation new-session option', () => {
     await mount(async (dom, render) => {
       const action = () => <DelegationAction sessionId="s1" call={call} t={t} useSession={useSession} />
       await render(action())
-      expect(dom.window.document.querySelector('.dlg-toggle')).toBeNull()
+      expect(dom.window.document.querySelector('.dlg-chip')).toBeNull()
       snapshot.openState = 'open'
       await render(action())
       expect(statuses).toBe(2)
-      expect(dom.window.document.querySelector('.dlg-toggle')).not.toBeNull()
+      expect(dom.window.document.querySelector('.dlg-chip')).not.toBeNull()
     })
   })
 })

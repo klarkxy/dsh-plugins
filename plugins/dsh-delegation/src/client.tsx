@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Button, Switch, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconUsersOutlineRegular, Pill, Switch, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import {
   DELEGATION_CLIENT_SERVICE, PLUGIN_NAME, RPC_CHANNEL,
@@ -14,7 +14,6 @@ const NS = 'dsh-delegation.action'
 
 const zh = {
   action: '委派',
-  normal: '默认',
   mode: '委派模式',
   titleOn: '本会话将使用委派模式：主代理负责拆解、委派和验收；会话开始后保持锁定',
   titleOff: '开启委派模式：主代理把具体工作交给子代理；会话开始后保持锁定',
@@ -26,7 +25,6 @@ const zh = {
 
 const en: Record<keyof typeof zh, string> = {
   action: 'Delegate',
-  normal: 'Default',
   mode: 'Delegation Mode',
   titleOn: 'This session will use Delegation Mode: the main agent plans, delegates, and reviews. Locked once the session starts.',
   titleOff: 'Turn on Delegation Mode: the main agent hands the work to subagents. Locked once the session starts.',
@@ -164,16 +162,17 @@ export function DelegationAction({ sessionId, call, subscribeGeneration, useSess
   return (
     <span className="dlg-root dlg-action">
       <Tooltip label={tooltip} side="bottom" gap={4}>
-        <span className="dlg-mode" data-enabled={enabled}>
-          <span className="dlg-mode-label">{enabled ? t('action') : t('normal')}</span>
-          <Switch
-            className="dlg-toggle"
-            checked={enabled}
-            label={t('mode')}
-            disabled={!capable || locked || saving}
-            onChange={() => void toggle()}
-          />
-        </span>
+        <Pill
+          className="dlg-chip"
+          active={enabled}
+          aria-pressed={enabled}
+          aria-label={t('mode')}
+          disabled={!capable || locked || saving}
+          onClick={() => void toggle()}
+        >
+          <IconUsersOutlineRegular />
+          <span className="dlg-chip-label">{t('action')}</span>
+        </Pill>
       </Tooltip>
       {notice ? <span role="status" className="dlg-note">{t(notice)}</span> : null}
     </span>
@@ -182,10 +181,12 @@ export function DelegationAction({ sessionId, call, subscribeGeneration, useSess
 
 export const clientCss = `${officialUiCss('dlg-root')}
 .dlg-root.dlg-action { display: inline-flex; align-items: center; gap: 6px; }
-.dlg-root .dlg-mode { display: inline-flex; align-items: center; gap: 8px; color: var(--dsw-alias-label-tertiary); }
-.dlg-root .dlg-mode-label { font-size: 13px; line-height: 20px; }
-.dlg-root .dlg-mode[data-enabled="true"] { color: var(--dsw-alias-state-business-primary); }
-.dlg-root .dlg-toggle[aria-checked="true"] { background: var(--dsw-alias-state-business-primary); }
+.dlg-root .dlg-chip { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 13px; line-height: 20px; border: 1px solid var(--dsw-alias-border-l3); background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.dlg-root .dlg-chip svg { width: 16px; height: 16px; }
+.dlg-root .dlg-chip:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.dlg-root .dlg-chip[aria-pressed="true"] { background: var(--dsw-alias-button-primary-fill); border-color: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+.dlg-root .dlg-chip[aria-pressed="true"]:hover:not(:disabled) { background: var(--dsw-alias-button-primary-hover); border-color: var(--dsw-alias-button-primary-hover); }
+.dlg-root .dlg-chip:disabled { opacity: 0.5; cursor: default; }
 .dlg-root .dlg-note { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
 `
 
