@@ -189,10 +189,15 @@
     },
     {
       "name": "@klarkxy/dsh-magpie",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "magpie 网关接入功能完整，已通过真实宿主验收，进入首次发布检查。",
-        "en": "Magpie gateway connector is feature-complete, passed real-host acceptance, and is going through first-release checks."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-11-03T13:47:40.833Z",
+        "integrity": "sha512-t2xkGnfpLCI4iwi6A77Xtlmj01fRFLPLEqGcwbawPnu95IMJ7J/0+3H2wuW0Ql3TjEGxYMypLan9MSfyQm7TyQ=="
       }
     },
     {
