@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { Button, Input, SegmentedTabs, Switch, IconChevronDownOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { modelRouteKey, parseModelRouteKey, parseModelMenuChoices } from '@klarkxy/dsh-model-route'
 import { ModelMenu, ModelCatalogStatus, useModelCatalog } from '@klarkxy/dsh-model-route/ui'
-import { DEFAULT_COMPACT_MINUTES, DEFAULT_RECAP_MINUTES, type ConfigView } from './contracts.ts'
+import { DEFAULT_COMPACT_MINUTES, DEFAULT_RECAP_MINUTES, type AutoContinueMode, type ConfigView } from './contracts.ts'
 import type { PresenceConfigModel } from './presence-model.ts'
 import { FREE_CHAT_ROOT } from './styles.ts'
 import { failureText, uiText, type CopyLocale } from './ui-copy.ts'
@@ -14,6 +14,8 @@ interface DraftState {
   compactMinutes: string
   continueText: string
   continueMode: 'fixed' | 'auto'
+  autoContinueMode: AutoContinueMode
+  autoContinueMax: string
   /** '' follows the conversation / host default. */
   model: string
   /** '' follows the conversation / host default for the ghost. */
@@ -30,6 +32,8 @@ function toDraft(values: ConfigView): DraftState {
     compactMinutes: String(compactEnabled ? values.compactMinutes : DEFAULT_COMPACT_MINUTES),
     continueText: values.continueText,
     continueMode: values.continueMode,
+    autoContinueMode: values.autoContinueMode,
+    autoContinueMax: String(values.autoContinueMax),
     model: values.model === null ? '' : modelRouteKey(values.model.provider, values.model.model),
     ghostModel: values.ghostModel === null ? '' : modelRouteKey(values.ghostModel.provider, values.ghostModel.model),
   }
@@ -42,6 +46,13 @@ function minutesOf(text: string): number | undefined {
   return Number.isSafeInteger(value) && value >= 1 ? value : undefined
 }
 
+/** Automatic continuations per human message: a whole number from 1 to 10. */
+function autoMaxOf(text: string): number | undefined {
+  if (!/^\d+$/.test(text.trim())) return undefined
+  const value = Number.parseInt(text.trim(), 10)
+  return Number.isSafeInteger(value) && value >= 1 && value <= 10 ? value : undefined
+}
+
 function sameDraft(left: DraftState, right: DraftState): boolean {
   return left.recapEnabled === right.recapEnabled
     && left.recapMinutes === right.recapMinutes
@@ -49,6 +60,8 @@ function sameDraft(left: DraftState, right: DraftState): boolean {
     && left.compactMinutes === right.compactMinutes
     && left.continueText === right.continueText
     && left.continueMode === right.continueMode
+    && left.autoContinueMode === right.autoContinueMode
+    && left.autoContinueMax === right.autoContinueMax
     && left.model === right.model
     && left.ghostModel === right.ghostModel
 }
@@ -119,9 +132,11 @@ export function SessionManagerSettings(props: {
     ?? copy('modelFollowOption')
   const recapMinutes = draft.recapEnabled ? minutesOf(draft.recapMinutes) : 0
   const compactMinutes = draft.compactEnabled ? minutesOf(draft.compactMinutes) : 0
+  const autoContinueMax = autoMaxOf(draft.autoContinueMax)
   const recapInvalid = recapMinutes === undefined
   const compactInvalid = compactMinutes === undefined
-  const invalid = recapInvalid || compactInvalid
+  const autoMaxInvalid = autoContinueMax === undefined
+  const invalid = recapInvalid || compactInvalid || autoMaxInvalid
   const fixedPanelId = `${tabsId}-fixed-panel`
   const autoPanelId = `${tabsId}-auto-panel`
   const save = () => {
@@ -136,6 +151,8 @@ export function SessionManagerSettings(props: {
       compactMinutes,
       continueText: draft.continueText,
       continueMode: draft.continueMode,
+      autoContinueMode: draft.autoContinueMode,
+      autoContinueMax: autoContinueMax!,
       // An untouched selector must not replace a route carrying an effort.
       // A different model deliberately starts without the old model's effort.
       ...draft.model === baseline.current?.model ? {} : {
@@ -215,6 +232,43 @@ export function SessionManagerSettings(props: {
             </div>
           </div>
           {draft.continueMode === 'auto' ? <p className="dsh-ui-hint">{copy('ghostModelHint')}</p> : null}
+        </section>
+        <section className="dsm-setting" aria-labelledby={`${tabsId}-auto-continue-heading`}>
+          <header className="dsm-setting-header">
+            <h3 id={`${tabsId}-auto-continue-heading`} className="dsh-ui-title">{copy('autoContinueGroup')}</h3>
+          </header>
+          <div className="dsm-feature-options">
+            <label className="dsh-ui-field">
+              <span className="dsh-ui-label">{copy('autoContinueDefaultLabel')}</span>
+              <select
+                className="dsh-ui-select"
+                value={draft.autoContinueMode}
+                onChange={event => edit({ ...draft, autoContinueMode: event.target.value as AutoContinueMode })}
+              >
+                <option value="off">{copy('autoContinueOff')}</option>
+                <option value="cautious">{copy('autoContinueCautious')}</option>
+                <option value="bold">{copy('autoContinueBold')}</option>
+              </select>
+              <span className="dsh-ui-hint">{copy('autoContinueDefaultHint')}</span>
+            </label>
+            <div>
+              <label className="dsh-ui-field">
+                <span className="dsh-ui-label">{copy('autoContinueMaxLabel')}</span>
+                <span className="dsm-minutes-control">
+                  <Input
+                    className="dsm-minutes"
+                    value={draft.autoContinueMax}
+                    inputMode="numeric"
+                    aria-invalid={autoMaxInvalid || undefined}
+                    aria-describedby={autoMaxInvalid ? `${tabsId}-auto-max-error` : undefined}
+                    onChange={event => edit({ ...draft, autoContinueMax: event.target.value })}
+                  />
+                </span>
+              </label>
+              <p className="dsh-ui-hint">{copy('autoContinueMaxHint')}</p>
+              {autoMaxInvalid ? <p id={`${tabsId}-auto-max-error`} className="dsh-ui-error" role="alert">{copy('autoContinueMaxInvalid')}</p> : null}
+            </div>
+          </div>
         </section>
         <section className="dsm-setting" aria-labelledby={`${tabsId}-return-heading`}>
           <header className="dsm-setting-header">

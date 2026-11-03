@@ -1,6 +1,7 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { normalizeModelRoute, type ModelRoute } from '@klarkxy/dsh-model-route'
 import { z } from 'zod'
+import { MAX_AUTO_CONTINUE_MAX, MIN_AUTO_CONTINUE_MAX, type AutoContinueMode } from './contracts.ts'
 
 export const SETTINGS_KEY = 'current'
 
@@ -38,6 +39,19 @@ export interface PresenceSettings {
   readonly suggestions: Readonly<Record<string, GhostSuggestion>>
 }
 
+const autoContinueSchema = z.object({
+  mode: z.enum(['off', 'cautious', 'bold']),
+  max: z.number().int().min(MIN_AUTO_CONTINUE_MAX).max(MAX_AUTO_CONTINUE_MAX),
+  revision: z.number().int().min(1),
+}).strict()
+
+/** The locked per-session auto-continue choice; keyed by session id. */
+export interface SessionAutoContinue {
+  readonly mode: AutoContinueMode
+  readonly max: number
+  readonly revision: number
+}
+
 export const presenceDomain = defineDomain({
   name: 'dsh_editor_session_manager',
   version: 1,
@@ -48,8 +62,16 @@ export const presenceDomain = defineDomain({
       ghostModel?: { provider: string; model: string; reasoningEffort?: string } | null
       suggestions?: Record<string, { seq: number; text: string | null }>
     }>(presenceSettingsSchema),
+    auto_continue: domainTable<string, SessionAutoContinue>(autoContinueSchema),
   },
 })
+
+/** A missing or unreadable session row reads as "no record": off, revision 0. */
+export function parseAutoContinue(value: unknown): SessionAutoContinue | undefined {
+  const parsed = autoContinueSchema.safeParse(value)
+  if (!parsed.success) return undefined
+  return { mode: parsed.data.mode, max: parsed.data.max, revision: parsed.data.revision }
+}
 
 /** Malformed rows collapse to a fresh default instead of blocking the settings page. */
 export function parsePresenceSettings(value: unknown): PresenceSettings | undefined {

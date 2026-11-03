@@ -51,7 +51,7 @@ describe('welcome-back native compaction binding', () => {
 
 describe('presence config confirmation', () => {
   const config = { recapMinutes: 15, compactMinutes: 60, continueText: 'B', continueMode: 'fixed' as const,
-    model: { provider: 'p', model: 'm', reasoningEffort: 'low' }, ghostModel: null }
+    model: { provider: 'p', model: 'm', reasoningEffort: 'low' }, ghostModel: null, autoContinueMode: 'off' as const, autoContinueMax: 3 }
 
   it('requires effort to match before reporting a confirmed save', async () => {
     let reads = 0

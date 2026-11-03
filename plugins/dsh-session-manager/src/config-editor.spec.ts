@@ -36,7 +36,7 @@ describe('presence config patches', () => {
 
   it('reads the resolved view and writes through the host config editor', async () => {
     expect(readPresenceConfig(base)).toEqual({
-      recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null,
+      recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3,
     })
     const models = store({ provider: 'p', model: 'm' })
     expect(readPresenceConfig(base, models).model).toEqual({ provider: 'p', model: 'm' })

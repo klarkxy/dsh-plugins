@@ -45,7 +45,7 @@ describe('presence triggers', () => {
       Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
     }
     let config: ConfigView = {
-      recapMinutes: 15, compactMinutes: 60, continueText: 'A', continueMode: 'fixed', model: null, ghostModel: null,
+      recapMinutes: 15, compactMinutes: 60, continueText: 'A', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3,
     }
     let unload = () => {}
     let renderGhost!: (props: unknown) => ReactNode
@@ -162,7 +162,7 @@ describe('presence triggers', () => {
       sessions: { list: sessionList('alpha').list },
       connection: { rpc: { call: async (_channel: string, endpoint: string) => {
         if (endpoint === CONFIG_READ_ENDPOINT) return { ok: true, value: {
-          recapMinutes: minutes, compactMinutes: minutes, continueText: '', continueMode: 'fixed', model: null, ghostModel: null,
+          recapMinutes: minutes, compactMinutes: minutes, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3,
         } }
         if (endpoint === WELCOME_BACK_PREPARE_ENDPOINT) prepared.push(minutes)
         return { ok: true, value: { show: false } }
@@ -220,7 +220,7 @@ describe('presence triggers', () => {
           rpc: {
             call: vi.fn(async (_channel: string, endpoint: string, payload: { sessionId?: string }) => {
               if (endpoint === CONFIG_READ_ENDPOINT) return { ok: true, value: {
-                recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null,
+                recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3,
               } }
               if (endpoint === WELCOME_BACK_PREPARE_ENDPOINT) calls.push(payload.sessionId ?? '')
               return { ok: true, value: { show: false } }

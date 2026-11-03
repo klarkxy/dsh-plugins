@@ -7,6 +7,7 @@ import {
   PLUGIN_NAME,
   CONTINUE_GHOST_SLOT,
   DELETE_DIALOG_ID,
+  TEMP_WORKSPACE_CHANNEL,
   USER_ACTIONS_ID,
   USER_ACTIONS_SLOT,
   WELCOME_BACK_CARD_ID,
@@ -18,6 +19,7 @@ import { installTemporaryWorkspacePicker, TemporaryWorkspaceNotice, type PickerR
 import { bindTemporaryWorkspaceHost, createTemporaryWorkspaceModel } from './temporary-workspace.ts'
 import { bindHost, createFreeChatModel, createRetryModel, type FreeChatModel, type RetryModel } from './session-actions.ts'
 import { bindPresenceHost, createContinueModel, createPresenceConfigModel, createWelcomeBackModel } from './presence-model.ts'
+import { AutoContinueOption } from './auto-continue-option.tsx'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
 import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import { MODEL_CATALOG_INJECT, readModelCatalog } from '@klarkxy/dsh-model-route'
@@ -101,6 +103,25 @@ export function apply(ctx: Context): void {
     )))
     stops.push(installTemporaryWorkspacePicker(client.slots as unknown as PickerRegistry, temporary,
       temporaryHost.createWorkspace, client.locale))
+    stops.push(client.slots.inject('conversation.hero.options', () => (
+      client.slots.register({
+        name: 'conversation.hero.options',
+        id: 'auto-continue',
+        order: 30,
+        inject: () => ({
+          call: (endpoint: string, payload: unknown) => client.connection?.rpc?.call(TEMP_WORKSPACE_CHANNEL, endpoint, payload),
+          subscribeGeneration: (listener: () => void) => client.connection?.generation?.subscribe(listener),
+        }),
+      }, props => (
+        <AutoContinueOption
+          sessionId={(props as { sessionId: string }).sessionId}
+          call={(props as { call: (endpoint: string, payload: unknown) => Promise<unknown> }).call}
+          subscribeGeneration={(props as { subscribeGeneration?: (listener: () => void) => (() => void) | undefined }).subscribeGeneration}
+          useSession={(props as { useSession?: <T>(selector: (snapshot: import('./auto-continue-option.tsx').AutoContinueSessionSnapshotLike) => T) => T }).useSession}
+          locale={useLiveLocale(client.locale)}
+        />
+      ))
+    )))
     stops.push(client.slots.inject(USER_ACTIONS_SLOT, () => (
       client.slots.register({
         name: USER_ACTIONS_SLOT,

@@ -145,7 +145,7 @@ describe('composed plugin channel', () => {
       const read = await call('config.read', {})
       expect(read.body.result).toEqual({
         ok: true,
-        value: { recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null },
+        value: { recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3 },
       })
       const write = await call('config.write', { patch: { recapMinutes: 30 } })
       expect(write.body.result).toMatchObject({ ok: false, error: { code: 'session-manager/unavailable' } })

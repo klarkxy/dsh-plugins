@@ -21,6 +21,8 @@ export const EDIT_PREPARE_ENDPOINT = 'edit.prepare'
 export const EDIT_FILE_ENDPOINT = 'edit.file'
 export const CONFIG_READ_ENDPOINT = 'config.read'
 export const CONFIG_WRITE_ENDPOINT = 'config.write'
+export const AUTO_CONTINUE_STATUS_ENDPOINT = 'autocontinue.status'
+export const AUTO_CONTINUE_UPDATE_ENDPOINT = 'autocontinue.update'
 /** Card entry id in the chat flow; the recap renders at the latest completed turn's tail. */
 export const WELCOME_BACK_CARD_ID = '@klarkxy/dsh-session-manager.welcome-back'
 export const TURN_TAIL_SLOT = 'conversation.chat.turnTail'
@@ -36,6 +38,27 @@ export const MAX_CONTINUE_TEXT_CHARS = 200
 export const MAX_RECAP_SECTION_CHARS = 600
 export type ContinueMode = 'fixed' | 'auto'
 export const CONTINUE_MODES: readonly ContinueMode[] = ['fixed', 'auto']
+/** Per-session automatic continuation stance; 'off' never sends one. */
+export type AutoContinueMode = 'off' | 'cautious' | 'bold'
+export const AUTO_CONTINUE_MODES: readonly AutoContinueMode[] = ['off', 'cautious', 'bold']
+export const DEFAULT_AUTO_CONTINUE_MAX = 3
+export const MIN_AUTO_CONTINUE_MAX = 1
+export const MAX_AUTO_CONTINUE_MAX = 10
+
+/** The per-session auto-continue row as the hero option sees it. */
+export interface AutoContinueStatus {
+  readonly sessionId: string
+  /** 'executor' for subagent threads: they never carry their own option. */
+  readonly role: 'coordinator' | 'executor'
+  /** The locked mode; 'off' when the session has no record yet. */
+  readonly mode: AutoContinueMode
+  /** Automatic continuations allowed after each human message. */
+  readonly max: number
+  /** The session record's revision; 0 when the session has no record yet. */
+  readonly revision: number
+  /** No edit is allowed once the first turn starts, or while the session is cold. */
+  readonly locked: boolean
+}
 
 /** Model-written welcome-back recap; an empty section means not established. */
 export interface RecapPayload {
@@ -128,6 +151,10 @@ export interface ConfigView {
   readonly model: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
   /** Plugin-owned ghost model; null follows the conversation / host default model. */
   readonly ghostModel: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
+  /** Initial auto-continue mode for sessions created later. */
+  readonly autoContinueMode: AutoContinueMode
+  /** Automatic continuations allowed after each human message in an auto-continue session. */
+  readonly autoContinueMax: number
 }
 
 /** Sparse settings patch from the bundle config page; every key optional. */
@@ -140,6 +167,8 @@ export interface ConfigPatch {
   readonly model?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
   /** Null resumes following the conversation / host default model for the ghost. */
   readonly ghostModel?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
+  readonly autoContinueMode?: AutoContinueMode
+  readonly autoContinueMax?: number
 }
 
 export interface ConfigWriteRequest {
@@ -178,6 +207,10 @@ export interface Config {
   continueText?: string
   /** fixed: send continueText; auto: generate the ghost once after the previous turn ends and cache it in the session. */
   continueMode?: ContinueMode
+  /** Initial auto-continue mode for sessions created later. */
+  autoContinueMode?: AutoContinueMode
+  /** Automatic continuations allowed after each human message in an auto-continue session. */
+  autoContinueMax?: number
 }
 
 export interface ResolvedConfig {
@@ -188,6 +221,8 @@ export interface ResolvedConfig {
   readonly compactMinutes: number
   readonly continueText: string
   readonly continueMode: ContinueMode
+  readonly autoContinueMode: AutoContinueMode
+  readonly autoContinueMax: number
 }
 
 export function resolveConfig(config: Config = {}): ResolvedConfig {
@@ -199,6 +234,8 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
     compactMinutes: boundInteger(config.compactMinutes, DEFAULT_COMPACT_MINUTES, 0, MAX_IDLE_MINUTES, 'compactMinutes'),
     continueText: boundText(config.continueText, MAX_CONTINUE_TEXT_CHARS, 'continueText'),
     continueMode: boundMode(config.continueMode, 'continueMode'),
+    autoContinueMode: boundAutoContinueMode(config.autoContinueMode, 'autoContinueMode'),
+    autoContinueMax: boundInteger(config.autoContinueMax, DEFAULT_AUTO_CONTINUE_MAX, MIN_AUTO_CONTINUE_MAX, MAX_AUTO_CONTINUE_MAX, 'autoContinueMax'),
   }
 }
 
@@ -222,6 +259,14 @@ function boundMode(value: ContinueMode | undefined, name: string): ContinueMode 
   const resolved = value ?? 'fixed'
   if (!CONTINUE_MODES.includes(resolved)) {
     throw new TypeError(`${PLUGIN_NAME}: ${name} must be one of ${CONTINUE_MODES.join(', ')}`)
+  }
+  return resolved
+}
+
+function boundAutoContinueMode(value: AutoContinueMode | undefined, name: string): AutoContinueMode {
+  const resolved = value ?? 'off'
+  if (!AUTO_CONTINUE_MODES.includes(resolved)) {
+    throw new TypeError(`${PLUGIN_NAME}: ${name} must be one of ${AUTO_CONTINUE_MODES.join(', ')}`)
   }
   return resolved
 }

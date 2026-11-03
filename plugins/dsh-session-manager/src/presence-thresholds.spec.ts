@@ -61,7 +61,7 @@ describe('welcome-back threshold changes', () => {
   })
 
   it('confirms a saved threshold through temporary RPC failures during host reload', async () => {
-    const config = { recapMinutes: 1, compactMinutes: 1, continueText: '', continueMode: 'fixed', model: null, ghostModel: null }
+    const config = { recapMinutes: 1, compactMinutes: 1, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3 }
     let reads = 0
     const call = vi.fn(async (_channel: string, endpoint: string) => {
       if (endpoint === CONFIG_WRITE_ENDPOINT) throw new Error('old fiber disposed')

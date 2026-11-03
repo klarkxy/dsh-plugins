@@ -35,7 +35,7 @@ function fixture(failRegistration = false) {
   const disposers: Array<() => unknown> = []
   const ctx = Object.assign(new Context(), {
     effect: (fn: () => unknown) => { const dispose = fn(); if (typeof dispose === 'function') disposers.push(dispose) },
-    on: () => { if (failRegistration) throw new Error('registration failed'); return () => {} },
+    on: (name: string) => { if (failRegistration && name === 'model-settings/collect') throw new Error('registration failed'); return () => {} },
     inject(services: string[], callback: (scope: unknown) => void) {
       if (services.includes('storageDomain')) mount = callback
       else callback({ effect: (fn: () => unknown) => fn() })

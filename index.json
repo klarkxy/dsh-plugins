@@ -326,8 +326,8 @@
         "en": "Session Manager"
       },
       "description": {
-        "zh": "跨工作目录查找和阅读会话，使用临时工作区；空输入一键继续，久离回来给出摘要与压缩建议。",
-        "en": "Find and read sessions across working directories, use temporary workspaces, continue with one tap on an empty composer, and get a welcome-back recap after time away."
+        "zh": "跨工作目录查找和阅读会话，使用临时工作区；空输入一键继续或在回复提前结束时自动继续，久离回来给出摘要与压缩建议。",
+        "en": "Find and read sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, and get a welcome-back recap after time away."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/",

@@ -37,7 +37,7 @@ async function useDom(run: (dom: JSDOM) => Promise<void>): Promise<void> {
 }
 
 const initial: ConfigView = {
-  recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null,
+  recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3,
 }
 
 function headings(dom: JSDOM): string[] {
@@ -144,8 +144,8 @@ describe('presence settings page', () => {
         })
         // Two flat sections share one reading surface. The recap model lives
         // beside its threshold under the recap switch, not in a separate card.
-        expect(headings(dom)).toEqual(['继续灰影', '回到会话时'])
-        expect(dom.window.document.querySelectorAll('.dsm-settings > .dsm-setting')).toHaveLength(2)
+        expect(headings(dom)).toEqual(['继续灰影', '自动继续', '回到会话时'])
+        expect(dom.window.document.querySelectorAll('.dsm-settings > .dsm-setting')).toHaveLength(3)
         expect(dom.window.document.querySelector('.dsh-ui-card')).toBeNull()
         // Fixed mode shows the text field. The remaining model picker is the recap's.
         expect(dom.window.document.body.textContent).toContain('固定文本内容')
@@ -158,7 +158,7 @@ describe('presence settings page', () => {
         expect(trigger.getAttribute('aria-haspopup')).toBe('menu')
         expect(trigger.closest('.dsm-model-field')).not.toBeNull()
         expect(dom.window.document.querySelectorAll('.dsm-minutes-control .dsh-ui-meta')).toHaveLength(2)
-        expect(dom.window.document.querySelector('select')).toBeNull()
+        expect(dom.window.document.querySelectorAll('select.dsh-ui-select')).toHaveLength(1)
       } finally {
         await act(async () => { root?.unmount() })
       }
@@ -199,7 +199,7 @@ describe('presence settings page', () => {
         const write = calls.find(call => call.endpoint === CONFIG_WRITE_ENDPOINT)
         expect(dom.window.document.body.textContent).toContain('生成模型')
         expect(write?.payload).toEqual({
-          patch: { recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'auto' },
+          patch: { recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'auto', autoContinueMode: 'off', autoContinueMax: 3 },
         })
         expect(text()).toContain('已保存')
       } finally {
@@ -250,7 +250,7 @@ describe('presence settings page', () => {
         await act(async () => { button(dom, '保存').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
         const write = calls.find(call => call.endpoint === CONFIG_WRITE_ENDPOINT)
         expect(write?.payload).toEqual({
-          patch: { recapMinutes: 0, compactMinutes: 0, continueText: '', continueMode: 'fixed', model: { provider: 'p', model: 'm' } },
+          patch: { recapMinutes: 0, compactMinutes: 0, continueText: '', continueMode: 'fixed', autoContinueMode: 'off', autoContinueMax: 3, model: { provider: 'p', model: 'm' } },
         })
       } finally {
         await act(async () => { root?.unmount() })

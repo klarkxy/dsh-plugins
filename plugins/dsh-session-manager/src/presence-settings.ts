@@ -3,7 +3,7 @@ import type { PresenceModelStore, PresenceWriteOptions } from './config-editor.t
 import { SETTINGS_KEY, parsePresenceSettings, type PresenceSettings } from './storage.ts'
 
 export interface PresenceDomainHandle {
-  table(name: 'settings'): {
+  table(name: 'settings' | 'auto_continue'): {
     entries(): IterableIterator<[unknown, unknown]>
     get(key: string): unknown
     put(key: string, value: unknown): Promise<void>

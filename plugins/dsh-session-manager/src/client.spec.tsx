@@ -43,6 +43,7 @@ describe('session menu registration', () => {
     expect(specs.map(spec => spec['name'])).toEqual([
       'sidebar.workspaces.session.menu.item',
       'conversation.hero.workspace',
+      'conversation.hero.options',
       USER_ACTIONS_SLOT,
       'conversation.input.overlay',
       'conversation.chat.node',
@@ -51,7 +52,7 @@ describe('session menu registration', () => {
       'shell.overlay',
     ])
     unload()
-    expect(disposed.filter(item => item === 'inject')).toHaveLength(8)
+    expect(disposed.filter(item => item === 'inject')).toHaveLength(9)
     expect(disposed).toContain(DELETE_DIALOG_ID)
   })
 })

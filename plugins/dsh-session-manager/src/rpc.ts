@@ -6,6 +6,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import type { RpcResult } from '@klarkxy/dsh-plugin-kit/contracts'
 import {
+  AUTO_CONTINUE_MODES,
+  AUTO_CONTINUE_STATUS_ENDPOINT,
+  AUTO_CONTINUE_UPDATE_ENDPOINT,
   CONFIG_READ_ENDPOINT,
   CONFIG_WRITE_ENDPOINT,
   CONTINUE_SUGGEST_ENDPOINT,
@@ -14,6 +17,7 @@ import {
   TEMP_WORKSPACE_CHANNEL,
   WELCOME_BACK_COMPACT_ENDPOINT,
   WELCOME_BACK_PREPARE_ENDPOINT,
+  type AutoContinueMode,
   type ContinueSuggestRequest,
   type EditPrepareRequest,
   type ResolvedConfig,
@@ -21,6 +25,7 @@ import {
   type WelcomeBackPrepareRequest,
   type ConfigWriteRequest,
 } from './contracts.ts'
+import { AutoContinueError, type AutoContinueService } from './auto-continue.ts'
 import { readPresenceConfig, writePresenceConfig, type PresenceModelStore } from './config-editor.ts'
 import { runTemporaryAllocate } from './temporary-directory.ts'
 import { prepareEdit } from './edit-prepare.ts'
@@ -57,7 +62,8 @@ function isAbort(error: unknown): boolean {
 }
 
 function failure(error: unknown): RpcResult {
-  if (error instanceof PresenceError || error instanceof RetryError || error instanceof RetryJournalError) {
+  if (error instanceof PresenceError || error instanceof RetryError || error instanceof RetryJournalError
+    || error instanceof AutoContinueError) {
     return { ok: false, error: { code: error.code, message: error.message } }
   }
   if (isAbort(error)) return { ok: false, error: { code: 'session-manager/failed', message: 'request cancelled' } }
@@ -81,6 +87,7 @@ export function registerSessionManagerRpc(
   config: ResolvedConfig,
   models: () => PresenceModelHost | undefined,
   modelStore?: () => PresenceModelStore | undefined,
+  autoContinue?: () => AutoContinueService | undefined,
 ): () => Promise<void> {
   const profile = transport.get('profileContext') as { dir?: string } | undefined
   if (!profile?.dir) throw new Error(PROFILE_ERROR)
@@ -158,6 +165,24 @@ export function registerSessionManagerRpc(
         if (!payloadKeys(payload, ['patch'])) throw new PresenceError('session-manager/invalid-request', 'invalid config write request')
         const value = await writePresenceConfig(root, config, (payload as unknown as ConfigWriteRequest).patch, modelStore?.(), merged)
         return { ok: true, value }
+      }
+      if (endpoint === AUTO_CONTINUE_STATUS_ENDPOINT) {
+        if (!payloadKeys(payload, ['sessionId'])) throw new PresenceError('session-manager/invalid-request', 'invalid auto-continue request')
+        const service = autoContinue?.()
+        if (service === undefined) throw new AutoContinueError('unavailable', 'auto-continue storage is not mounted')
+        const sessionId = (payload as Record<string, unknown>).sessionId
+        if (typeof sessionId !== 'string' || sessionId.trim() === '') throw new PresenceError('session-manager/invalid-request', 'sessionId must be a non-empty string')
+        return { ok: true, value: await service.status(sessionId, merged) }
+      }
+      if (endpoint === AUTO_CONTINUE_UPDATE_ENDPOINT) {
+        if (!payloadKeys(payload, ['sessionId', 'mode', 'expectedRevision'])) throw new PresenceError('session-manager/invalid-request', 'invalid auto-continue request')
+        const service = autoContinue?.()
+        if (service === undefined) throw new AutoContinueError('unavailable', 'auto-continue storage is not mounted')
+        const request = payload as { sessionId?: unknown; mode?: unknown; expectedRevision?: unknown }
+        if (typeof request.sessionId !== 'string' || request.sessionId.trim() === '') throw new PresenceError('session-manager/invalid-request', 'sessionId must be a non-empty string')
+        if (typeof request.mode !== 'string' || !AUTO_CONTINUE_MODES.includes(request.mode as AutoContinueMode)) throw new PresenceError('session-manager/invalid-request', 'mode must be one of off, cautious, bold')
+        if (typeof request.expectedRevision !== 'number' || !Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 0) throw new PresenceError('session-manager/invalid-request', 'expectedRevision must be a non-negative integer')
+        return { ok: true, value: await service.update(request.sessionId, request.mode as AutoContinueMode, request.expectedRevision, merged) }
       }
       throw new PresenceError('session-manager/invalid-request', 'unknown Session Manager operation')
     } catch (error) {

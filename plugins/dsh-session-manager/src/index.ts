@@ -7,6 +7,8 @@ import {
   resolveConfig,
   type Config as PluginConfig,
 } from './contracts.ts'
+import { AutoContinueError, AutoContinueService, type AutoContinueTableLike } from './auto-continue.ts'
+import { AutoContinueRunner } from './auto-runner.ts'
 import { createCursorKey } from './cursor.ts'
 import { registerSessionTools } from './tools.ts'
 import { registerSessionManagerRpc } from './rpc.ts'
@@ -35,6 +37,8 @@ export interface Config {
   compactMinutes?: number
   continueText?: string
   continueMode?: 'fixed' | 'auto'
+  autoContinueMode?: 'off' | 'cautious' | 'bold'
+  autoContinueMax?: number
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -45,6 +49,8 @@ export const Config: Schema<Config> = Schema.object({
   compactMinutes: Schema.number().default(DEFAULT_COMPACT_MINUTES),
   continueText: Schema.string().default(''),
   continueMode: Schema.union([Schema.const('fixed' as const), Schema.const('auto' as const)]).default('fixed'),
+  autoContinueMode: Schema.union([Schema.const('off' as const), Schema.const('cautious' as const), Schema.const('bold' as const)]).default('off'),
+  autoContinueMax: Schema.number().default(3),
 }).i18n({
   zh: {
     pageChars: '明细与交接模式每页内容的输出上限（UTF-8 字节）；对话预览按轮数分页，不受此限',
@@ -54,6 +60,8 @@ export const Config: Schema<Config> = Schema.object({
     compactMinutes: '距离上次响应超过该分钟数后，“欢迎回来”卡片附带缓存失效提示及压缩上下文、在新会话中继续两个可选操作；0 为关闭',
     continueText: '输入框为空时灰影补全使用的固定文本；留空使用默认“继续”',
     continueMode: 'fixed 使用固定文本；auto 在上一轮结束后用模型生成一次灰影文本，并缓存在这个会话中',
+    autoContinueMode: '新会话默认的自动继续形态：off 关闭；cautious 仅在回复有明确未完成依据时自动发送继续；bold 没完成就继续，低风险选择按推荐方案走。会话开始后锁定',
+    autoContinueMax: '自动继续会话中，你每发一条消息之后最多自动继续的次数（1–10）',
   },
   en: {
     pageChars: 'Maximum content per details/handoff page (UTF-8 bytes); conversation previews page by turn count instead',
@@ -63,6 +71,8 @@ export const Config: Schema<Config> = Schema.object({
     compactMinutes: 'Add the cache-expiry note and optional compact-context / continue-in-new-session actions past this many idle minutes; 0 disables it',
     continueText: 'Fixed ghost-completion text for an empty composer; empty uses the localized default ("Continue")',
     continueMode: 'fixed sends the configured text; auto generates the ghost once after the previous turn ends and caches it in the session',
+    autoContinueMode: 'Default Auto-continue mode for new sessions: off disables it; cautious continues only on clear evidence; bold continues unless done, taking the recommended option on low-risk choices. Locked once a session starts',
+    autoContinueMax: 'How many times it may continue automatically after each message you send (1-10)',
   },
 })
 
@@ -74,6 +84,8 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
   // Plugin-owned settings live in a dedicated storage domain; without
   // storageDomain the model selector stays hidden and writes fail soft.
   let settings: PresenceSettingsStore | undefined
+  let autoContinueTable: AutoContinueTableLike | undefined
+  let autoContinueService: AutoContinueService | undefined
   let storageGeneration: object | undefined
   ctx.inject(['storageDomain'], injected => {
     const generation = {}
@@ -122,6 +134,7 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
           },
         })
         settings = opened
+        autoContinueTable = domain.table('auto_continue') as AutoContinueTableLike
       } catch (error) {
         unregister?.()
         if (store !== undefined) await store.close()
@@ -132,6 +145,7 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
     injected.effect(() => async () => {
       disposed = true
       unregister?.()
+      autoContinueTable = undefined
       if (settings === store) settings = undefined
       // Close immediately to reject queued work, then wait for a late open too.
       await store?.close()
@@ -166,6 +180,59 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
         owned?.rememberSuggestion(sessionId, seq, text, signal) ?? Promise.resolve(),
     }
   }
+  // Per-session auto-continue: the record table is only available while the
+  // presence domain is mounted; seeding and the runner share the injected
+  // agent/session services and degrade cleanly when they unload.
+  ctx.inject(['agents', 'sessions', 'sessionProjections'], inner => {
+    const scoped = inner as unknown as {
+      agents: { get(id: string): { id: string; session?: unknown } | undefined }
+      sessions: { get(id: string): { id: string; header?: unknown } | undefined; flush(session: unknown): Promise<unknown> }
+      sessionProjections: { stateOf(session: unknown, key: string): { openTurnStartSeq: unknown; lastTurn: number } | undefined }
+    }
+    const service = new AutoContinueService({
+      records: () => autoContinueTable,
+      sessionStore: scoped.sessions as never,
+      agents: scoped.agents as never,
+      sessionQuery: ctx.sessionQuery as never,
+      hasStarted: session => {
+        const boundary = scoped.sessionProjections.stateOf(session, 'turnBoundary')
+        return boundary === undefined || boundary.openTurnStartSeq !== null || boundary.lastTurn > 0
+      },
+      config: () => resolved,
+    })
+    autoContinueService = service
+    const runner = new AutoContinueRunner({
+      service: () => autoContinueService,
+      config: () => resolved,
+      models: captureModels,
+      agents: scoped.agents as never,
+      sessions: scoped.sessions as never,
+      sessionQuery: ctx.sessionQuery as never,
+      log: {
+        debug: message => (ctx as { logger?: { debug?(m: string): void } }).logger?.debug?.(message),
+        warn: message => (ctx as { logger?: { warn?(m: string): void } }).logger?.warn?.(message),
+      },
+    })
+    // Seeding listens on agent/created: serial and awaited before the agent's
+    // queued work, so the row exists before the first prompt assembly. A throw
+    // here would fail agent creation, so the listener never propagates one.
+    inner.effect(() => ctx.on('agent/created', async ({ agent, source }: { agent: { id: string; session?: { id: string; header?: unknown } }; source: string }) => {
+      try {
+        await service.seed(agent as never, source)
+      } catch (error) {
+        ctx.logger.warn('dsh-session-manager: could not seed auto-continue state: %s', error instanceof Error ? error.message : String(error))
+      }
+    }), 'session-manager.autocontinue.seed')
+    inner.effect(() => {
+      const offEvent = ctx.on('session/event', (session: { id: string }, event: never) => runner.onSessionEvent(session, event))
+      const offDisposed = ctx.on('agent/disposed', (payload: never) => runner.onAgentDisposed(payload))
+      return async () => {
+        offEvent()
+        offDisposed()
+        await runner.dispose()
+      }
+    }, 'session-manager.autocontinue.runner')
+  })
   // CLI-only hosts still load the query tools; the browser RPC follows its own services.
   ctx.inject(['connection', 'webServer'], inner => {
     inner.effect(() => registerSessionManagerRpc(
@@ -174,6 +241,7 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
       resolved,
       captureModels,
       () => settings,
+      () => autoContinueService,
     ))
   })
 }

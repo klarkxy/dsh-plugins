@@ -265,6 +265,50 @@ ${modelMenuCss}
 }
 .${FREE_CHAT_ROOT} .dsh-welcome-done { margin: 6px 0 0; }
 
+/* Hero-row Auto-continue chip: icon + mode label, tinted while a mode is on. */
+.${FREE_CHAT_ROOT}.smac-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.${FREE_CHAT_ROOT} .smac-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 20px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+.${FREE_CHAT_ROOT} .smac-chip svg { width: 16px; height: 16px; }
+.${FREE_CHAT_ROOT} .smac-chip .smac-chevron { width: 12px; height: 12px; }
+.${FREE_CHAT_ROOT} .smac-chip:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.${FREE_CHAT_ROOT} .smac-chip.smac-chip-on {
+  background: var(--dsw-alias-button-primary-fill);
+  border-color: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-foreground);
+}
+.${FREE_CHAT_ROOT} .smac-chip.smac-chip-on:hover:not(:disabled) {
+  background: var(--dsw-alias-button-primary-hover);
+  border-color: var(--dsw-alias-button-primary-hover);
+}
+.${FREE_CHAT_ROOT} .smac-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.${FREE_CHAT_ROOT} .smac-note {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .${FREE_CHAT_ROOT} .dsm-user-original { display: contents; }
 .${FREE_CHAT_ROOT} .dsm-user-original[hidden] { display: none; }
 .${FREE_CHAT_ROOT} .dsm-message-edit { width: min(100%, 720px); align-self: flex-end; }

@@ -7,10 +7,14 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import {
+  AUTO_CONTINUE_MODES,
   CONTINUE_MODES,
+  MAX_AUTO_CONTINUE_MAX,
   MAX_CONTINUE_TEXT_CHARS,
   MAX_IDLE_MINUTES,
+  MIN_AUTO_CONTINUE_MAX,
   PLUGIN_NAME,
+  type AutoContinueMode,
   type ConfigPatch,
   type ConfigView,
   type ContinueMode,
@@ -52,6 +56,8 @@ export function readPresenceConfig(config: ResolvedConfig, store?: PresenceModel
     continueMode: config.continueMode,
     model: store?.read()?.model ?? null,
     ghostModel: store?.read()?.ghostModel ?? null,
+    autoContinueMode: config.autoContinueMode,
+    autoContinueMax: config.autoContinueMax,
   }
 }
 
@@ -76,6 +82,20 @@ function continueMode(value: unknown): ContinueMode {
     throw new PresenceError('session-manager/invalid-request', `continueMode must be one of ${CONTINUE_MODES.join(', ')}`)
   }
   return value as ContinueMode
+}
+
+function autoContinueMode(value: unknown): AutoContinueMode {
+  if (typeof value !== 'string' || !AUTO_CONTINUE_MODES.includes(value as AutoContinueMode)) {
+    throw new PresenceError('session-manager/invalid-request', `autoContinueMode must be one of ${AUTO_CONTINUE_MODES.join(', ')}`)
+  }
+  return value as AutoContinueMode
+}
+
+function autoContinueMax(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < MIN_AUTO_CONTINUE_MAX || value > MAX_AUTO_CONTINUE_MAX) {
+    throw new PresenceError('session-manager/invalid-request', `autoContinueMax must be an integer from ${MIN_AUTO_CONTINUE_MAX} to ${MAX_AUTO_CONTINUE_MAX}`)
+  }
+  return value
 }
 
 function modelRoute(value: unknown): ModelRoute | null {
@@ -109,6 +129,8 @@ export function sanitizeConfigPatch(patch: unknown): ConfigPatch {
     else if (key === 'continueMode') next.continueMode = continueMode(record[key])
     else if (key === 'model') next.model = modelRoute(record[key])
     else if (key === 'ghostModel') next.ghostModel = modelRoute(record[key])
+    else if (key === 'autoContinueMode') next.autoContinueMode = autoContinueMode(record[key])
+    else if (key === 'autoContinueMax') next.autoContinueMax = autoContinueMax(record[key])
     else throw new PresenceError('session-manager/invalid-request', `unknown config key: ${key}`)
   }
   return next
