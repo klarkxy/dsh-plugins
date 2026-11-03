@@ -14,6 +14,7 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse them on the [plugin site](http
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: a reviewer model answers approval requests; only calls that pass go ahead. |
 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: find and read sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, and get a welcome-back recap after time away. |
 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Model Hub: change the models used by your plugins and subagents from one page, and see each running subagent's model and reasoning effort. |
+| [`@klarkxy/dsh-magpie`](plugins/dsh-magpie/README.md) | Magpie: connect DSH to a magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search. |
 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/README.md) | Web Search: manage and rank search and page-reading services, including providers from installed plugins, in one settings page. |
 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | Zhihu: Zhihu search, agent tools, knowledge bases, usage tracking, and draft management. |
 | [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface, conversation, and code fonts and the conversation font size of the Web GUI. |

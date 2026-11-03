@@ -392,6 +392,46 @@
       ]
     },
     {
+      "name": "@klarkxy/dsh-magpie",
+      "title": {
+        "zh": "Magpie",
+        "en": "Magpie"
+      },
+      "description": {
+        "zh": "把 DSH 连接到本机、局域网或其他位置的 magpie 网关，同步模型、默认模型和网络搜索。",
+        "en": "Connect DSH to a magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/magpie/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-magpie"
+      },
+      "metadata": {
+        "category": "models",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "magpie",
+          "llm"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1793713660,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.1"
+          }
+        }
+      ]
+    },
+    {
       "name": "@klarkxy/dsh-font",
       "title": {
         "zh": "字体",

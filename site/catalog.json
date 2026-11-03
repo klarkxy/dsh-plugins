@@ -274,6 +274,26 @@
       "directory": "plugins/dsh-model-hub"
     },
     {
+      "slug": "magpie",
+      "package": "@klarkxy/dsh-magpie",
+      "category": "models",
+      "kind": "plugin",
+      "title": {
+        "zh": "Magpie",
+        "en": "Magpie"
+      },
+      "summary": {
+        "zh": "把 DSH 连接到本机、局域网或其他位置的 magpie 网关，同步模型、默认模型和网络搜索。",
+        "en": "Connect DSH to a magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search."
+      },
+      "readme": {
+        "zh": "docs/README.zh-CN.md",
+        "en": "README.md"
+      },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-magpie"
+    },
+    {
       "slug": "font",
       "package": "@klarkxy/dsh-font",
       "category": "workflow",
