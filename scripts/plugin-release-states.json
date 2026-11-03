@@ -189,10 +189,10 @@
     },
     {
       "name": "@klarkxy/dsh-magpie",
-      "state": "draft",
+      "state": "testing",
       "reason": {
-        "zh": "新增 magpie 网关接入插件，待完成首次发布验收。",
-        "en": "New magpie gateway connector; awaiting first-release acceptance."
+        "zh": "magpie 网关接入功能完整，已通过真实宿主验收，进入首次发布检查。",
+        "en": "Magpie gateway connector is feature-complete, passed real-host acceptance, and is going through first-release checks."
       }
     },
     {
