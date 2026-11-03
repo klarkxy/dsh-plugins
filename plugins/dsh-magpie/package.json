@@ -2,6 +2,7 @@
   "name": "@klarkxy/dsh-magpie",
   "version": "0.1.0",
   "description": "Connect DSH to a magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search.",
+  "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -28,6 +29,7 @@
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
+    "icon.svg",
     "locale/*.json",
     "lib",
     "cordis.patch.yml",
