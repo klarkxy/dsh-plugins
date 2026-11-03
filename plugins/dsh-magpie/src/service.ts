@@ -8,7 +8,7 @@ import { GatewayError, fetchGatewayInfo, fetchModels } from './gateway.ts'
 import { buildRoutes } from './mapping.ts'
 import { planDisconnect, planSync, type PlanOp, type SettingsDescriptorLike } from './plan.ts'
 import {
-  LOOPBACK_PLACEHOLDER_KEY, NS_LLM, ROUTE_NAMES,
+  LOOPBACK_PLACEHOLDER_KEY, NS_LLM, ROUTE_NAMES, RPC_ENDPOINTS,
   type GatewayInfo, type MagpieOptions, type MagpieStatus, type RouteModel,
   type RpcResult, type SaveConnectionInput, type SetOptionsInput, type TestResult,
 } from './contracts.ts'
@@ -291,12 +291,12 @@ export function createMagpieService(deps: MagpieServiceDeps) {
     try {
       const body = (payload ?? {}) as Record<string, unknown>
       switch (endpoint) {
-        case 'status': return { ok: true, value: await status() }
-        case 'saveConnection': return { ok: true, value: await saveConnection(body as SaveConnectionInput, signal) }
-        case 'test': return { ok: true, value: await test(signal) }
-        case 'sync': return { ok: true, value: await sync(signal) }
-        case 'setOptions': return { ok: true, value: await setOptions(body as SetOptionsInput, signal) }
-        case 'disconnect': return { ok: true, value: await disconnect(signal) }
+        case RPC_ENDPOINTS.status: return { ok: true, value: await status() }
+        case RPC_ENDPOINTS.saveConnection: return { ok: true, value: await saveConnection(body as SaveConnectionInput, signal) }
+        case RPC_ENDPOINTS.test: return { ok: true, value: await test(signal) }
+        case RPC_ENDPOINTS.sync: return { ok: true, value: await sync(signal) }
+        case RPC_ENDPOINTS.setOptions: return { ok: true, value: await setOptions(body as SetOptionsInput, signal) }
+        case RPC_ENDPOINTS.disconnect: return { ok: true, value: await disconnect(signal) }
         default: return { ok: false, error: { code: 'not-found', message: `unknown endpoint: ${endpoint}` } }
       }
     } catch (error) {

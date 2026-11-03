@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs'
+import { createServer, type Server } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { apply, inject } from './index.ts'
+import { RPC_CHANNEL, RPC_ENDPOINTS } from './contracts.ts'
 
 const fixtures = fileURLToPath(new URL('../test/fixtures/', import.meta.url))
 const listing = JSON.parse(readFileSync(`${fixtures}models.deepseek-harness.json`, 'utf8'))
@@ -10,7 +12,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /** A minimal cordis-like context without connection/webServer, plus a settings store. */
-function makeHost(options: { syncOnStart?: boolean } = {}) {
+function makeHost(options: { syncOnStart?: boolean; child?: Record<string, unknown> } = {}) {
   const rows = new Map<string, { base: Record<string, unknown>; user: Record<string, unknown>; revision: number }>([
     ['llm-pi-ai', { base: {}, user: {}, revision: 1 }],
     ['agent-default-model', { base: { provider: 'deepseek-official', model: 'deepseek-flash' }, user: {}, revision: 1 }],
@@ -31,6 +33,7 @@ function makeHost(options: { syncOnStart?: boolean } = {}) {
     },
     inject(deps: readonly string[], callback: (child: unknown) => void) {
       injected.push([...deps])
+      if (options.child) callback(options.child)
       return { dispose() {} }
     },
     credentials: {
@@ -74,8 +77,9 @@ function makeHost(options: { syncOnStart?: boolean } = {}) {
 
 function stubGateway() {
   const original = globalThis.fetch
-  globalThis.fetch = (async (url: RequestInfo | URL) => {
+  globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
     const text = String(url)
+    if (!text.startsWith('http://127.0.0.1:3425/')) return original(url, init)
     const body = text.endsWith('/v1/models') ? listing : { name: 'magpie', version: '0.1.2798' }
     return { ok: true, status: 200, json: async () => body } as Response
   }) as typeof fetch
@@ -117,5 +121,65 @@ describe('host wiring without a web server', () => {
     } finally {
       restore()
     }
+  })
+})
+
+describe('settings-page RPC over the real transport', () => {
+  async function withRpcServer(run: (call: (endpoint: string, payload?: unknown) => Promise<{ status: number; body: { result?: { ok: boolean; value?: unknown } } }>) => Promise<void>) {
+    const restore = stubGateway()
+    let handler: ((req: unknown, res: unknown) => void) | undefined
+    const child = {
+      effect(run: () => unknown) { run() },
+      credentials: undefined as unknown,
+      connection: { requestRejection: () => undefined },
+      webServer: {
+        register(route: { kind: string; path: string; handler: typeof handler }) {
+          if (route.path === RPC_CHANNEL) handler = route.handler
+          return () => {}
+        },
+      },
+    }
+    const host = makeHost({ syncOnStart: false, child })
+    child.credentials = host.ctx.credentials
+    apply(host.ctx as never, host.config as never)
+    const server: Server = createServer((req, res) => {
+      if (handler === undefined) { res.writeHead(404); res.end(); return }
+      void handler(req, res)
+    })
+    await new Promise<void>(done => server.listen(0, '127.0.0.1', done))
+    const port = (server.address() as { port: number }).port
+    const call = async (endpoint: string, payload?: unknown) => {
+      const response = await fetch(`http://127.0.0.1:${port}${RPC_CHANNEL}/${endpoint}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          type: 'client-request', rpcId: 'test', method: endpoint,
+          ...payload === undefined ? {} : { payload },
+        }),
+      })
+      return { status: response.status, body: await response.json().catch(() => ({})) }
+    }
+    try {
+      await run(call)
+    } finally {
+      server.closeAllConnections()
+      await new Promise<void>(done => server.close(() => done()))
+      host.dispose()
+      restore()
+    }
+  }
+
+  it('admits every wire endpoint the settings page calls', async () => {
+    await withRpcServer(async call => {
+      for (const endpoint of Object.values(RPC_ENDPOINTS)) {
+        const response = await call(endpoint, {})
+        expect(response.status, `endpoint ${endpoint}`).toBe(200)
+        expect(response.body.result?.ok, `endpoint ${endpoint}`).toBe(true)
+      }
+      // The old camelCase names the transport rejected with 404 stay rejected.
+      for (const legacy of ['saveConnection', 'setOptions']) {
+        expect((await call(legacy, {})).status, `legacy ${legacy}`).toBe(404)
+      }
+    })
   })
 })

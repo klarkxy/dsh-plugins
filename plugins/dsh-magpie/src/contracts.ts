@@ -1,6 +1,15 @@
 export const PLUGIN_NAME = '@klarkxy/dsh-magpie'
 export const PLUGIN_VERSION = '0.1.0'
 export const RPC_CHANNEL = '/dsh-magpie'
+/** Wire endpoint names; the host RPC transport only admits lowercase/dotted names. */
+export const RPC_ENDPOINTS = {
+  status: 'status',
+  saveConnection: 'connection.save',
+  test: 'test',
+  sync: 'sync',
+  setOptions: 'options.set',
+  disconnect: 'disconnect',
+} as const
 
 /** The three llm-pi-ai provider routes, named exactly as `magpie dsh` writes them. */
 export const ROUTES = {

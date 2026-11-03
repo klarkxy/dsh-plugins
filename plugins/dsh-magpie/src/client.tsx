@@ -8,7 +8,7 @@ import { Button, Input, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitive
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
-  PLUGIN_NAME, RPC_CHANNEL,
+  PLUGIN_NAME, RPC_CHANNEL, RPC_ENDPOINTS,
   type MagpieStatus, type RpcResult, type TestResult,
 } from './contracts.ts'
 
@@ -110,7 +110,7 @@ export function MagpieSettingsPage({ client }: { client: Client }) {
 
   const load = useCallback(async () => {
     try {
-      const next = await call<MagpieStatus>('status')
+      const next = await call<MagpieStatus>(RPC_ENDPOINTS.status)
       if (!mounted.current) return
       setStatus(next)
       setAddress(current => addressDirty ? current : next.address)
@@ -185,7 +185,7 @@ export function MagpieSettingsPage({ client }: { client: Client }) {
           </span>
           {status.keyConfigured ? <Button variant="ghost" size="sm" disabled={Boolean(busy)}
             onClick={() => void action('clear-key', async () => {
-              refresh(await call<MagpieStatus>('saveConnection', { clearKey: true }))
+              refresh(await call<MagpieStatus>(RPC_ENDPOINTS.saveConnection, { clearKey: true }))
               setNote(text.saved)
             })}>{text.keyClear}</Button> : null}
         </span>
@@ -194,17 +194,17 @@ export function MagpieSettingsPage({ client }: { client: Client }) {
       <div className="dsh-ui-form-footer mgp-row">
         <Button variant="outline" size="md" disabled={Boolean(busy)} onClick={() => void action('test', async () => {
           if (addressDirty || keyDraft) {
-            refresh(await call<MagpieStatus>('saveConnection', {
+            refresh(await call<MagpieStatus>(RPC_ENDPOINTS.saveConnection, {
               address, apiKey: keyDraft || undefined,
             }))
             setKeyDraft(''); setAddressDirty(false)
           }
-          const result = await call<TestResult>('test')
+          const result = await call<TestResult>(RPC_ENDPOINTS.test)
           setNote(text.testOk(result.models))
           await load()
         })}>{text.test}</Button>
         <Button variant="primary" size="md" disabled={Boolean(busy) || (!addressDirty && !keyDraft)} onClick={() => void action('save', async () => {
-          refresh(await call<MagpieStatus>('saveConnection', { address, apiKey: keyDraft || undefined }))
+          refresh(await call<MagpieStatus>(RPC_ENDPOINTS.saveConnection, { address, apiKey: keyDraft || undefined }))
           setKeyDraft(''); setAddressDirty(false); setNote(text.saved)
         })}>{text.save}</Button>
       </div>
@@ -214,7 +214,7 @@ export function MagpieSettingsPage({ client }: { client: Client }) {
       <div className="mgp-row">
         <h3 className="dsh-ui-label mgp-grow">{text.sync}</h3>
         <Button variant="outline" size="md" disabled={Boolean(busy) || status.syncing} onClick={() => void action('sync', async () => {
-          refresh(await call<MagpieStatus>('sync'))
+          refresh(await call<MagpieStatus>(RPC_ENDPOINTS.sync))
           setNote(text.saved)
         })}>{status.syncing ? text.syncing : text.syncNow}</Button>
       </div>
@@ -222,7 +222,7 @@ export function MagpieSettingsPage({ client }: { client: Client }) {
         <span className="mgp-row">
           <Switch checked={status.options.syncOnStart} disabled={Boolean(busy)} label={text.syncOnStart}
             onChange={next => void action('options', async () => {
-              refresh(await call<MagpieStatus>('setOptions', { syncOnStart: next }))
+              refresh(await call<MagpieStatus>(RPC_ENDPOINTS.setOptions, { syncOnStart: next }))
             })} />
           <span className="dsh-ui-label">{text.syncOnStart}</span>
         </span>
@@ -246,7 +246,7 @@ export function MagpieSettingsPage({ client }: { client: Client }) {
         <span className="dsh-ui-label">{text.defaultModel}</span>
         <select className="dsh-ui-select" value={status.options.defaultModel ?? ''} disabled={Boolean(busy)}
           onChange={event => void action('options', async () => {
-            refresh(await call<MagpieStatus>('setOptions', { defaultModel: event.target.value || null }))
+            refresh(await call<MagpieStatus>(RPC_ENDPOINTS.setOptions, { defaultModel: event.target.value || null }))
           })}>
           <option value="">{text.keepCurrent}</option>
           {defaultChoices.map(id => <option key={id} value={id}>{modelLabel(id)}</option>)}
@@ -260,14 +260,14 @@ export function MagpieSettingsPage({ client }: { client: Client }) {
         <span className="dsh-ui-label mgp-grow">{text.webSearch}</span>
         <Switch checked={status.options.webSearch} disabled={Boolean(busy)} label={text.webSearch}
           onChange={next => void action('options', async () => {
-            refresh(await call<MagpieStatus>('setOptions', { webSearch: next }))
+            refresh(await call<MagpieStatus>(RPC_ENDPOINTS.setOptions, { webSearch: next }))
           })} />
       </div>
       <p className="dsh-ui-help">{text.webSearchHelp}</p>
       {status.options.webSearch ? <label className="dsh-ui-field">
         <select className="dsh-ui-select" value={status.options.webSearchModel ?? ''} disabled={Boolean(busy)}
           onChange={event => void action('options', async () => {
-            refresh(await call<MagpieStatus>('setOptions', { webSearchModel: event.target.value || null }))
+            refresh(await call<MagpieStatus>(RPC_ENDPOINTS.setOptions, { webSearchModel: event.target.value || null }))
           })}>
           <option value="">{text.sameAsDefault}</option>
           {models.map(model => <option key={model.id} value={model.id}>{model.name ?? model.id}</option>)}
@@ -283,7 +283,7 @@ export function MagpieSettingsPage({ client }: { client: Client }) {
         </div>
         <ConfirmButton label={text.disconnect} confirmLabel={text.confirmDisconnect} disabled={Boolean(busy)}
           onConfirm={() => void action('disconnect', async () => {
-            refresh(await call<MagpieStatus>('disconnect'))
+            refresh(await call<MagpieStatus>(RPC_ENDPOINTS.disconnect))
             setNote(text.saved)
           })} />
       </div>
