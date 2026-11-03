@@ -1,0 +1,5 @@
+# Enabled when installed. Adds a Magpie gateway connection and its settings page.
+- insert:
+    - id: magpie
+      name: '@klarkxy/dsh-magpie'
+      disabled: false

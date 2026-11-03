@@ -13,6 +13,7 @@ const roots = {
   'dsh-dev-index': ['.dsh-di-root'],
   'dsh-font': ['.font-root'],
   'dsh-git-commit': ['.gcm-root'],
+  'dsh-magpie': ['.mgp-root'],
   'dsh-model-hub': ['.dsh-model-hub'],
   'dsh-model-route': ['.dsh-model-menu-'],
   'dsh-safe-auto': ['.dsh-safe-auto'],

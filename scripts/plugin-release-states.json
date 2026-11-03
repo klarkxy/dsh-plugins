@@ -188,6 +188,14 @@
       }
     },
     {
+      "name": "@klarkxy/dsh-magpie",
+      "state": "draft",
+      "reason": {
+        "zh": "新增 magpie 网关接入插件，待完成首次发布验收。",
+        "en": "New magpie gateway connector; awaiting first-release acceptance."
+      }
+    },
+    {
       "name": "@klarkxy/dsh-shortcuts",
       "state": "draft",
       "reason": {

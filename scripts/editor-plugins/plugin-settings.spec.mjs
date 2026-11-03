@@ -2,12 +2,13 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { apply as currentTitle } from '../../plugins/dsh-current-title/src/client.tsx'
+import { apply as magpie } from '../../plugins/dsh-magpie/src/client.tsx'
 import { apply as webSearch } from '../../plugins/dsh-web-search-manager/src/client.tsx'
 import { apply as zhihu } from '../../plugins/dsh-zhihu/src/client.tsx'
 
 const slot = 'plugins.bundle.config'
 const forbidden = ['settings.section', 'settings.plugins.tab', 'dsh-editor.settings.models', 'dsh-editor.settings.zhihu']
-const statusChannels = ['/dsh-current-title', '/dsh-web-search', '/zhihu']
+const statusChannels = ['/dsh-current-title', '/dsh-magpie', '/dsh-web-search', '/zhihu']
 
 function host(initial = []) {
   const declared = new Set(initial)
@@ -87,6 +88,7 @@ function host(initial = []) {
 
 const plugins = [
   ['@klarkxy/dsh-current-title', currentTitle],
+  ['@klarkxy/dsh-magpie', magpie],
   ['@klarkxy/dsh-web-search-manager', webSearch], ['@klarkxy/dsh-zhihu', zhihu],
 ]
 const settle = () => new Promise(resolve => setImmediate(resolve))
