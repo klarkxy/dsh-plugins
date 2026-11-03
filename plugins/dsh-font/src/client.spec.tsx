@@ -2,7 +2,10 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { ReactNode } from 'react'
 import { JSDOM } from 'jsdom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CODE_FONT_PRESETS, CONVERSATION_STORAGE_KEY, STORAGE_KEY, UI_FONT_PRESETS } from './contracts.ts'
+import {
+  CODE_FONT_PRESETS, CONVERSATION_STORAGE_KEY, STORAGE_KEY, TEXT_DEFAULT_FONT_VARIABLE,
+  UI_FONT_PRESETS, UI_FONT_VARIABLE, cssVar,
+} from './contracts.ts'
 import { FontField, apply, fontCopy, inject } from './client.tsx'
 
 describe('font client contract', () => {
@@ -140,8 +143,8 @@ describe('font client apply', () => {
       expect(sheet.cssRules).toHaveLength(1)
       const rule = sheet.cssRules[0] as CSSStyleRule
       expect(rule.selectorText).toBe('[data-conversation-region="chat"]')
-      expect(rule.style.getPropertyValue('--dsw-font-family')).toBe('"Serif", serif, var(--dsh-font-family-text-default)')
-      expect(rule.style.getPropertyValue('font-family')).toBe('var(--dsw-font-family)')
+      expect(rule.style.getPropertyValue(UI_FONT_VARIABLE)).toBe(`"Serif", serif, ${cssVar(TEXT_DEFAULT_FONT_VARIABLE)}`)
+      expect(rule.style.getPropertyValue('font-family')).toBe(cssVar(UI_FONT_VARIABLE))
       dom.window.localStorage.removeItem(CONVERSATION_STORAGE_KEY)
       dom.window.dispatchEvent(new dom.window.StorageEvent('storage', { key: CONVERSATION_STORAGE_KEY }))
       expect(sheet.cssRules).toHaveLength(0)

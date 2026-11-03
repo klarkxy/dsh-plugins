@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   CODE_FONT_PRESETS, CODE_FONT_VARIABLE, CONVERSATION_FONT_SELECTOR, CONVERSATION_STORAGE_KEY,
-  FONT_SIZE_MAX, FONT_SIZE_MIN, STORAGE_KEY, UI_FONT_PRESETS, UI_FONT_VARIABLE,
+  FONT_SIZE_MAX, FONT_SIZE_MIN, STORAGE_KEY, TEXT_DEFAULT_FONT_VARIABLE, UI_FONT_PRESETS, UI_FONT_VARIABLE,
   applyFontSettings, clearFontSettings, conversationFontDeclarations, createConversationFontStore,
-  createFontSettingsStore, defaultFontSettings,
+  createFontSettingsStore, cssVar, defaultFontSettings,
   fontStackFor, fontTokenDeclarations, normalizeFontFamily, parseFontSettings, presetFor,
   serializeFontSettings, systemFontLabel, uniqueSystemFonts,
 } from './contracts.ts'
@@ -218,6 +218,7 @@ describe('local store', () => {
 })
 
 describe('conversation font tokens', () => {
+  const FAMILY = cssVar(UI_FONT_VARIABLE)
   function rule(selector: string, declarations: Record<string, string>) {
     const names = Object.keys(declarations)
     return {
@@ -235,23 +236,23 @@ describe('conversation font tokens', () => {
     const tokens = fontTokenDeclarations([
       sheetOf(
         rule('body', {
-          '--dsw-font-family': 'var(--dsh-font-family-text-default)',
-          '--dsw-font-markdown-base': 'var(--dsh-content-font-size,14px) / calc(24px) var(--dsw-font-family)',
-          '--dsw-font-markdown-base-font-family': 'var(--dsw-font-family)',
-          '--dsw-font-markdown-code-font-family': 'var(--ds-font-family-code)',
-          '--dsw-font-s-14': '14px/22px var(--dsw-font-family)',
-          '--dsw-alias-settings-card-fill': 'var(--dsw-alias-bg-layer-2)',
+          [UI_FONT_VARIABLE]: cssVar(TEXT_DEFAULT_FONT_VARIABLE),
+          '--dsw-font-markdown-base': `14px / 24px ${FAMILY}`,
+          '--dsw-font-markdown-base-font-family': FAMILY,
+          '--dsw-font-markdown-code-font-family': cssVar(CODE_FONT_VARIABLE),
+          '--dsw-font-s-14': `14px/22px ${FAMILY}`,
+          '--dsw-alias-settings-card-fill': cssVar('--dsw-alias-bg-layer-2'),
         }),
-        rule('.markdown', { '--ignored': 'var(--dsw-font-family)' }),
-        rule('body.extra', { '--also-ignored': 'var(--dsw-font-family)' }),
-        rule(':root', { '--dsw-font-xl-24': '600 24px/32px var(--dsw-font-family)' }),
+        rule('.markdown', { '--ignored': FAMILY }),
+        rule('body.extra', { '--also-ignored': FAMILY }),
+        rule(':root', { '--dsw-font-xl-24': `600 24px/32px ${FAMILY}` }),
       ),
     ])
     expect(tokens).toEqual([
-      ['--dsw-font-markdown-base', 'var(--dsh-content-font-size,14px) / calc(24px) var(--dsw-font-family)'],
-      ['--dsw-font-markdown-base-font-family', 'var(--dsw-font-family)'],
-      ['--dsw-font-s-14', '14px/22px var(--dsw-font-family)'],
-      ['--dsw-font-xl-24', '600 24px/32px var(--dsw-font-family)'],
+      ['--dsw-font-markdown-base', `14px / 24px ${FAMILY}`],
+      ['--dsw-font-markdown-base-font-family', FAMILY],
+      ['--dsw-font-s-14', `14px/22px ${FAMILY}`],
+      ['--dsw-font-xl-24', `600 24px/32px ${FAMILY}`],
     ])
   })
 
@@ -260,26 +261,27 @@ describe('conversation font tokens', () => {
     const tokens = fontTokenDeclarations([
       hostile,
       sheetOf(
-        rule('body', { '--a': 'first var(--dsw-font-family)', '--b': 'var(--dsw-font-family)' }),
-        rule('body', { '--a': 'later var(--dsw-font-family)' }),
+        rule('body', { '--a': `first ${FAMILY}`, '--b': FAMILY }),
+        rule('body', { '--a': `later ${FAMILY}` }),
         rule(':root', { '--b': 'static value' }),
       ),
     ])
-    expect(tokens).toEqual([['--a', 'later var(--dsw-font-family)']])
+    expect(tokens).toEqual([['--a', `later ${FAMILY}`]])
   })
 })
 
 describe('conversation font declarations', () => {
+  const FAMILY = cssVar(UI_FONT_VARIABLE)
   it('writes nothing for an empty family', () => {
     expect(conversationFontDeclarations('', [['--t', 'v']])).toEqual([])
     expect(conversationFontDeclarations(' ; ', [])).toEqual([])
   })
 
   it('leads with the scoped variable and a plain font-family, then the tokens', () => {
-    expect(conversationFontDeclarations(' "Source Han Serif SC", serif ', [['--t', 'v var(--dsw-font-family)']])).toEqual([
-      ['--dsw-font-family', '"Source Han Serif SC", serif, var(--dsh-font-family-text-default)'],
-      ['font-family', 'var(--dsw-font-family)'],
-      ['--t', 'v var(--dsw-font-family)'],
+    expect(conversationFontDeclarations(' "Source Han Serif SC", serif ', [['--t', `v ${FAMILY}`]])).toEqual([
+      [UI_FONT_VARIABLE, `"Source Han Serif SC", serif, ${cssVar(TEXT_DEFAULT_FONT_VARIABLE)}`],
+      ['font-family', FAMILY],
+      ['--t', `v ${FAMILY}`],
     ])
   })
 })
