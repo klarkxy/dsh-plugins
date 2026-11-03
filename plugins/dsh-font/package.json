@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-font",
   "version": "0.2.1",
-  "description": "Font: customize the interface font, code font, and conversation font size of the DeepSeek Harness Web GUI.",
+  "description": "Font: customize the interface, conversation, and code fonts and the conversation font size of the DeepSeek Harness Web GUI.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -35,6 +35,7 @@
     "cordis.patch.yml",
     "README.md",
     "docs/README.zh-CN.md",
+    "docs/preview.png",
     "LICENSE"
   ],
   "dsh": {

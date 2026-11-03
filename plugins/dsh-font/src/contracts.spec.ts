@@ -1,8 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  CODE_FONT_PRESETS, CODE_FONT_VARIABLE, FONT_SIZE_MAX, FONT_SIZE_MIN, STORAGE_KEY, UI_FONT_PRESETS, UI_FONT_VARIABLE,
-  applyFontSettings, clearFontSettings, createFontSettingsStore, defaultFontSettings,
-  fontStackFor, normalizeFontFamily, parseFontSettings, presetFor, serializeFontSettings, systemFontLabel, uniqueSystemFonts,
+  CODE_FONT_PRESETS, CODE_FONT_VARIABLE, CONVERSATION_FONT_SELECTOR, CONVERSATION_STORAGE_KEY,
+  FONT_SIZE_MAX, FONT_SIZE_MIN, STORAGE_KEY, UI_FONT_PRESETS, UI_FONT_VARIABLE,
+  applyFontSettings, clearFontSettings, conversationFontDeclarations, createConversationFontStore,
+  createFontSettingsStore, defaultFontSettings,
+  fontStackFor, fontTokenDeclarations, normalizeFontFamily, parseFontSettings, presetFor,
+  serializeFontSettings, systemFontLabel, uniqueSystemFonts,
 } from './contracts.ts'
 
 describe('font family normalization', () => {
@@ -70,6 +73,7 @@ describe('css variable application', () => {
   it('targets the host font tokens verbatim', () => {
     expect(UI_FONT_VARIABLE).toBe('--dsw-font-family')
     expect(CODE_FONT_VARIABLE).toBe('--ds-font-family-code')
+    expect(CONVERSATION_FONT_SELECTOR).toBe('[data-conversation-region="chat"]')
     expect(FONT_SIZE_MIN).toBe(10)
     expect(FONT_SIZE_MAX).toBe(22)
   })
@@ -210,5 +214,137 @@ describe('local store', () => {
     expect(store.load()).toEqual({ uiFont: 'External', codeFont: '' })
     storage.removeItem(STORAGE_KEY)
     expect(store.load()).toEqual(defaultFontSettings())
+  })
+})
+
+describe('conversation font tokens', () => {
+  function rule(selector: string, declarations: Record<string, string>) {
+    const names = Object.keys(declarations)
+    return {
+      selectorText: selector,
+      style: {
+        length: names.length,
+        item: (index: number) => names[index] ?? '',
+        getPropertyValue: (name: string) => declarations[name] ?? '',
+      },
+    }
+  }
+  const sheetOf = (...cssRules: unknown[]) => ({ cssRules })
+
+  it('collects body/:root custom properties that reference the interface font', () => {
+    const tokens = fontTokenDeclarations([
+      sheetOf(
+        rule('body', {
+          '--dsw-font-family': 'var(--dsh-font-family-text-default)',
+          '--dsw-font-markdown-base': 'var(--dsh-content-font-size,14px) / calc(24px) var(--dsw-font-family)',
+          '--dsw-font-markdown-base-font-family': 'var(--dsw-font-family)',
+          '--dsw-font-markdown-code-font-family': 'var(--ds-font-family-code)',
+          '--dsw-font-s-14': '14px/22px var(--dsw-font-family)',
+          '--dsw-alias-settings-card-fill': 'var(--dsw-alias-bg-layer-2)',
+        }),
+        rule('.markdown', { '--ignored': 'var(--dsw-font-family)' }),
+        rule('body.extra', { '--also-ignored': 'var(--dsw-font-family)' }),
+        rule(':root', { '--dsw-font-xl-24': '600 24px/32px var(--dsw-font-family)' }),
+      ),
+    ])
+    expect(tokens).toEqual([
+      ['--dsw-font-markdown-base', 'var(--dsh-content-font-size,14px) / calc(24px) var(--dsw-font-family)'],
+      ['--dsw-font-markdown-base-font-family', 'var(--dsw-font-family)'],
+      ['--dsw-font-s-14', '14px/22px var(--dsw-font-family)'],
+      ['--dsw-font-xl-24', '600 24px/32px var(--dsw-font-family)'],
+    ])
+  })
+
+  it('lets the last declaration win, drops tokens re-declared without the variable, and skips unreadable sheets', () => {
+    const hostile = { get cssRules(): never { throw new Error('denied') } }
+    const tokens = fontTokenDeclarations([
+      hostile,
+      sheetOf(
+        rule('body', { '--a': 'first var(--dsw-font-family)', '--b': 'var(--dsw-font-family)' }),
+        rule('body', { '--a': 'later var(--dsw-font-family)' }),
+        rule(':root', { '--b': 'static value' }),
+      ),
+    ])
+    expect(tokens).toEqual([['--a', 'later var(--dsw-font-family)']])
+  })
+})
+
+describe('conversation font declarations', () => {
+  it('writes nothing for an empty family', () => {
+    expect(conversationFontDeclarations('', [['--t', 'v']])).toEqual([])
+    expect(conversationFontDeclarations(' ; ', [])).toEqual([])
+  })
+
+  it('leads with the scoped variable and a plain font-family, then the tokens', () => {
+    expect(conversationFontDeclarations(' "Source Han Serif SC", serif ', [['--t', 'v var(--dsw-font-family)']])).toEqual([
+      ['--dsw-font-family', '"Source Han Serif SC", serif, var(--dsh-font-family-text-default)'],
+      ['font-family', 'var(--dsw-font-family)'],
+      ['--t', 'v var(--dsw-font-family)'],
+    ])
+  })
+})
+
+describe('conversation font store', () => {
+  function memoryStorage(initial: Record<string, string> = {}) {
+    const data = new Map(Object.entries(initial))
+    return {
+      data,
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => { data.set(key, value) },
+      removeItem: (key: string) => { data.delete(key) },
+    }
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('normalizes on write and removes the key when cleared', () => {
+    const storage = memoryStorage()
+    const store = createConversationFontStore(storage)
+    expect(store.get()).toBe('')
+    store.set('  "Serif";  ')
+    expect(store.get()).toBe('"Serif"')
+    expect(storage.data.get(CONVERSATION_STORAGE_KEY)).toBe('"Serif"')
+    expect(createConversationFontStore(storage).get()).toBe('"Serif"')
+    store.set('')
+    expect(storage.data.has(CONVERSATION_STORAGE_KEY)).toBe(false)
+    expect(store.get()).toBe('')
+  })
+
+  it('keeps the in-memory value when persistence fails', () => {
+    const store = createConversationFontStore({
+      getItem() { throw new Error('denied') },
+      setItem() { throw new Error('denied') },
+      removeItem() { throw new Error('denied') },
+    })
+    expect(store.get()).toBe('')
+    expect(() => store.set('"Serif"')).not.toThrow()
+    expect(store.get()).toBe('"Serif"')
+  })
+
+  it('notifies subscribers on set and on a matching storage event, and detaches after the last unsubscribe', () => {
+    const fired = (event: { key: string | null }) => { for (const fn of [...storageEvents]) fn(event) }
+    const storageEvents = new Set<(event: { key: string | null }) => void>()
+    vi.stubGlobal('window', {
+      addEventListener: (type: string, fn: (event: { key: string | null }) => void) => { if (type === 'storage') storageEvents.add(fn) },
+      removeEventListener: (_type: string, fn: (event: { key: string | null }) => void) => { storageEvents.delete(fn) },
+    })
+    const storage = memoryStorage()
+    const store = createConversationFontStore(storage)
+    expect(storageEvents.size).toBe(0)
+    let calls = 0
+    const unsubscribe = store.subscribe(() => { calls += 1 })
+    expect(storageEvents.size).toBe(1)
+    store.set('"Serif"')
+    expect(calls).toBe(1)
+    storage.setItem(CONVERSATION_STORAGE_KEY, '"External"')
+    fired({ key: 'unrelated.key' })
+    expect(calls).toBe(1)
+    fired({ key: CONVERSATION_STORAGE_KEY })
+    expect(calls).toBe(2)
+    expect(store.get()).toBe('"External"')
+    unsubscribe()
+    expect(storageEvents.size).toBe(0)
+    store.set('"Again"')
+    expect(calls).toBe(2)
   })
 })

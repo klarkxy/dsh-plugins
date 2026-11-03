@@ -19,6 +19,14 @@ export const FONT_SIZE_DEFAULT = 14
 export const UI_FONT_VARIABLE = '--dsw-font-family'
 export const CODE_FONT_VARIABLE = '--ds-font-family-code'
 
+/** The host wraps message scroll and composer inside one chat region; it is
+ * the scope for the Obsidian-style third font kind. */
+export const CONVERSATION_FONT_SELECTOR = '[data-conversation-region="chat"]'
+
+/** Browser-local conversation stack: the host persists only its text/code
+ * roles, so this third kind keeps its own key in the same storage. */
+export const CONVERSATION_STORAGE_KEY = 'klarkxy.dsh-font.conversation.v1'
+
 export interface FontSettings {
   /** Full CSS font-family stack for the interface; empty keeps the host default. */
   uiFont: string
@@ -243,6 +251,135 @@ export function createFontSettingsStore(storage: FontSettingsStorage | undefined
         pendingPersistence = false
       } catch {
         /* stay in-memory */
+      }
+    },
+  }
+}
+
+/** Structural slices of the CSSOM the token scan needs — StyleSheetList,
+ * CSSStyleSheet and CSSStyleRule satisfy them, and tests supply doubles. */
+interface FontTokenRule {
+  selectorText?: string
+  style?: {
+    length: number
+    item(index: number): string
+    getPropertyValue(name: string): string
+  }
+}
+
+/** The host declares every font shorthand token (markdown, typography scales)
+ * on `body`/`:root` with `var(--dsw-font-family)` baked in, so re-declaring the
+ * variable on the conversation scope alone changes nothing — the tokens must
+ * be re-declared there. This collects the current verbatim declarations from
+ * whatever sheets the document carries: later declarations win, and a later
+ * declaration that dropped the variable removes the token (its live cascade
+ * no longer follows the interface font). Cross-origin sheets are skipped. */
+export function fontTokenDeclarations(sheets: Iterable<{ cssRules: ArrayLike<unknown> }>): Array<[string, string]> {
+  const tokens = new Map<string, string>()
+  for (const sheet of sheets) {
+    let rules: ArrayLike<unknown>
+    try {
+      rules = sheet.cssRules
+    } catch {
+      continue
+    }
+    for (let index = 0; index < rules.length; index += 1) {
+      const rule = rules[index] as FontTokenRule | undefined
+      if (!rule?.style || (rule.selectorText !== 'body' && rule.selectorText !== ':root')) continue
+      for (let i = 0; i < rule.style.length; i += 1) {
+        const name = rule.style.item(i)
+        if (!name.startsWith('--') || name === UI_FONT_VARIABLE) continue
+        const value = rule.style.getPropertyValue(name)
+        if (value.includes(`var(${UI_FONT_VARIABLE})`)) tokens.set(name, value)
+        else tokens.delete(name)
+      }
+    }
+  }
+  return [...tokens]
+}
+
+/** Declarations written under CONVERSATION_FONT_SELECTOR: the family stack
+ * falls back to the host default like the body's own declaration, a plain
+ * `font-family` reaches text that does not consume a token, and the collected
+ * shorthand tokens are re-bound so their `var(--dsw-font-family)` resolves
+ * against this scope. */
+export function conversationFontDeclarations(family: string, tokens: Iterable<readonly [string, string]>): Array<[string, string]> {
+  const normalized = normalizeFontFamily(family)
+  if (!normalized) return []
+  return [
+    [UI_FONT_VARIABLE, `${normalized}, var(--dsh-font-family-text-default)`],
+    ['font-family', `var(${UI_FONT_VARIABLE})`],
+    ...[...tokens].map(([name, value]) => [name, value] as [string, string]),
+  ]
+}
+
+export interface ConversationFontStore {
+  get(): string
+  set(value: string): void
+  subscribe(fn: () => void): () => void
+}
+
+/** Single-string companion to createFontSettingsStore: same normalization,
+ * same in-memory degradation on storage failure, plus a `storage`-event
+ * listener so sibling windows stay in sync. The listener attaches with the
+ * first subscriber and detaches with the last unsubscribe. */
+export function createConversationFontStore(storage: FontSettingsStorage | undefined): ConversationFontStore {
+  let current = ''
+  let pendingPersistence = false
+  const listeners = new Set<() => void>()
+  let detachStorage: (() => void) | undefined
+
+  function load(): string {
+    if (storage && !pendingPersistence) {
+      try {
+        current = normalizeFontFamily(storage.getItem(CONVERSATION_STORAGE_KEY))
+      } catch {
+        /* keep the last readable or locally saved value */
+      }
+    }
+    return current
+  }
+
+  function notify() {
+    for (const fn of [...listeners]) fn()
+  }
+
+  function attach() {
+    if (detachStorage || typeof window === 'undefined') return
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== CONVERSATION_STORAGE_KEY && event.key !== null) return
+      load()
+      notify()
+    }
+    window.addEventListener('storage', onStorage)
+    detachStorage = () => window.removeEventListener('storage', onStorage)
+  }
+
+  return {
+    get: load,
+    set(value) {
+      current = normalizeFontFamily(value)
+      if (storage) {
+        pendingPersistence = true
+        try {
+          if (!current) storage.removeItem(CONVERSATION_STORAGE_KEY)
+          else storage.setItem(CONVERSATION_STORAGE_KEY, current)
+          pendingPersistence = false
+        } catch {
+          /* stay in-memory */
+        }
+      }
+      notify()
+    },
+    subscribe(fn) {
+      if (listeners.size === 0) attach()
+      listeners.add(fn)
+      return () => {
+        listeners.delete(fn)
+        if (listeners.size === 0) {
+          detachStorage?.()
+          detachStorage = undefined
+        }
       }
     },
   }

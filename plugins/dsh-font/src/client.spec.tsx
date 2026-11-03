@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ReactNode } from 'react'
+import { JSDOM } from 'jsdom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CODE_FONT_PRESETS, STORAGE_KEY, UI_FONT_PRESETS } from './contracts.ts'
+import { CODE_FONT_PRESETS, CONVERSATION_STORAGE_KEY, STORAGE_KEY, UI_FONT_PRESETS } from './contracts.ts'
 import { FontField, apply, fontCopy, inject } from './client.tsx'
 
 describe('font client contract', () => {
@@ -98,13 +99,57 @@ function mountClient(options: { locale?: string; storage?: Record<string, string
 afterEach(() => vi.unstubAllGlobals())
 
 describe('font client apply', () => {
-  it('mounts an owned stylesheet and removes it with the effect', () => {
+  it('mounts owned stylesheets and removes them with the effects', () => {
     const { fixture, effects } = mountClient()
-    expect(fixture.nodes).toHaveLength(1)
+    expect(fixture.nodes).toHaveLength(2)
     expect(fixture.nodes[0].attrs.get('data-plugin')).toBe('@klarkxy/dsh-font')
     expect(fixture.nodes[0].textContent.length).toBeGreaterThan(1000)
+    expect(fixture.nodes[1].attrs.get('data-font-role')).toBe('conversation')
     for (const effect of effects) effect.dispose?.()
     expect(fixture.nodes).toHaveLength(0)
+  })
+
+  it('maintains a conversation stylesheet scoped to the chat region', () => {
+    const dom = new JSDOM('<div id="root"></div>', { url: 'https://local.test/' })
+    vi.stubGlobal('window', dom.window)
+    vi.stubGlobal('document', dom.window.document)
+    vi.stubGlobal('localStorage', dom.window.localStorage)
+    const disposes: Array<(() => void) | void> = []
+    const context = {
+      effect(run: () => (() => void) | void) { disposes.push(run()) },
+      slots: {
+        inject(_key: string, callback: () => unknown) { callback(); return () => {} },
+        register: () => () => {},
+      },
+      theme: {
+        getTheme: () => ({ fontSizes: { text: 14, code: 14, terminal: 14 }, fontFamilies: { text: '', code: '', terminal: '' } }),
+        setFontSize() {},
+        setFontFamily() {},
+      },
+      locale: { getSnapshot: () => ({ active: 'zh' }), subscribe: () => () => {} },
+      on: () => () => {},
+    }
+    try {
+      apply(context as never)
+      const style = dom.window.document.querySelector('style[data-font-role="conversation"]') as HTMLStyleElement
+      expect(style).toBeTruthy()
+      const sheet = style.sheet!
+      expect(sheet.cssRules).toHaveLength(0)
+      dom.window.localStorage.setItem(CONVERSATION_STORAGE_KEY, '"Serif", serif')
+      dom.window.dispatchEvent(new dom.window.StorageEvent('storage', { key: CONVERSATION_STORAGE_KEY }))
+      expect(sheet.cssRules).toHaveLength(1)
+      const rule = sheet.cssRules[0] as CSSStyleRule
+      expect(rule.selectorText).toBe('[data-conversation-region="chat"]')
+      expect(rule.style.getPropertyValue('--dsw-font-family')).toBe('"Serif", serif, var(--dsh-font-family-text-default)')
+      expect(rule.style.getPropertyValue('font-family')).toBe('var(--dsw-font-family)')
+      dom.window.localStorage.removeItem(CONVERSATION_STORAGE_KEY)
+      dom.window.dispatchEvent(new dom.window.StorageEvent('storage', { key: CONVERSATION_STORAGE_KEY }))
+      expect(sheet.cssRules).toHaveLength(0)
+    } finally {
+      for (const dispose of disposes) dispose?.()
+      vi.unstubAllGlobals()
+      dom.window.close()
+    }
   })
 
   it('migrates stored stacks through the host without document overrides', () => {
@@ -135,13 +180,14 @@ describe('font client apply', () => {
 })
 
 describe('font settings panel', () => {
-  it('renders the three fields in Chinese without a custom input by default', () => {
+  it('renders the four fields in Chinese without a custom input by default', () => {
     const mounted = mountClient()
     const html = renderToStaticMarkup(mounted.getRender()!({ view: 'page' }) as ReactNode)
-    expect(html).toContain('界面字体')
-    expect(html).toContain('代码字体')
-    expect(html).toContain('会话字号')
-    expect(html.match(/<select\b/g)).toHaveLength(3)
+    expect(html.indexOf('界面字体')).toBeLessThan(html.indexOf('对话字体'))
+    expect(html.indexOf('对话字体')).toBeLessThan(html.indexOf('代码字体'))
+    expect(html.indexOf('代码字体')).toBeLessThan(html.indexOf('会话字号'))
+    expect(html).toContain('跟随界面字体')
+    expect(html.match(/<select\b/g)).toHaveLength(4)
     expect(html).not.toContain('dsh-stub-input')
     expect(html).toContain('data-testid="font-settings"')
   })
@@ -153,6 +199,8 @@ describe('font settings panel', () => {
     })
     const html = renderToStaticMarkup(mounted.getRender()!({ view: 'page' }) as ReactNode)
     expect(html).toContain('Interface font')
+    expect(html).toContain('>Conversation font<')
+    expect(html).toContain('Same as interface font')
     expect(html).toContain('Code font')
     expect(html).toContain('Conversation font size')
     expect(html).toContain('dsh-stub-input')
@@ -160,9 +208,9 @@ describe('font settings panel', () => {
   })
 
   it.each([
-    ['zh-CN', '默认'],
-    ['en', 'Default'],
-  ])('renders the %s summary with preset names and the current size', (locale, defaultName) => {
+    ['zh-CN', '默认', '同界面'],
+    ['en', 'Default', 'Same as UI'],
+  ])('renders the %s summary with preset names and the current size', (locale, defaultName, followUi) => {
     const mounted = mountClient({
       locale,
       storage: { [STORAGE_KEY]: JSON.stringify({ uiFont: '', codeFont: CODE_FONT_PRESETS.find(p => p.id === 'jetbrains-mono')!.value }) },
@@ -171,6 +219,7 @@ describe('font settings panel', () => {
     const html = renderToStaticMarkup(mounted.getRender()!({ view: 'summary' }) as ReactNode)
     expect(html).toContain('data-testid="font-summary"')
     expect(html).toContain(defaultName)
+    expect(html).toContain(followUi)
     expect(html).toContain('JetBrains Mono')
     expect(html).toContain('16px')
   })

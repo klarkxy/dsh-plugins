@@ -4,12 +4,13 @@ import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { useState, useSyncExternalStore } from 'react'
 import {
-  CODE_FONT_PRESETS, FONT_SIZE_DEFAULT, FONT_SIZE_MAX, FONT_SIZE_MIN, PLUGIN_NAME,
-  UI_FONT_PRESETS,
-  createFontSettingsStore, fontStackFor, normalizeFontFamily,
+  CODE_FONT_PRESETS, CONVERSATION_FONT_SELECTOR, FONT_SIZE_DEFAULT, FONT_SIZE_MAX, FONT_SIZE_MIN,
+  PLUGIN_NAME, UI_FONT_PRESETS,
+  conversationFontDeclarations, createConversationFontStore, createFontSettingsStore,
+  fontStackFor, fontTokenDeclarations, normalizeFontFamily,
   presetFor, systemFontLabel, uniqueSystemFonts,
-  type FontGenericFamily, type FontPreset, type FontSettings, type FontSettingsStorage,
-  type SystemFontFamily,
+  type ConversationFontStore, type FontGenericFamily, type FontPreset, type FontSettings,
+  type FontSettingsStorage, type SystemFontFamily,
 } from './contracts.ts'
 
 export const name = 'dsh-font-client'
@@ -29,13 +30,18 @@ const COPY = {
   zh: {
     label: '字体',
     uiFont: '界面字体',
+    conversationFont: '对话字体',
     codeFont: '代码字体',
     fontSize: '会话字号',
     defaultOption: '默认',
+    followUi: '跟随界面字体',
+    sameAsUi: '同界面',
     customOption: '自定义…',
     customUiPlaceholder: '例如 "Microsoft YaHei", sans-serif',
+    customConversationPlaceholder: '例如 "Source Han Serif SC", serif',
     customCodePlaceholder: '例如 "JetBrains Mono", monospace',
-    uiHelp: '作用于整个界面的文字。自定义时输入完整的 font-family 字体栈，留空恢复默认。',
+    uiHelp: '作用于整个界面的文字，对话字体跟随它时也包括对话区。自定义时输入完整的 font-family 字体栈，留空恢复默认。',
+    conversationHelp: '作用于对话区的消息和输入框，适合为长文单独选择字体（如衬线体）。仅保存在当前浏览器。',
     codeHelp: '作用于代码块与行内代码。终端字体和字号可在「设置 → 通用」中单独调整。',
     sizeHelp: '与「设置 → 通用」中的字号同步，范围 10–22。',
     loadFonts: '读取系统字体',
@@ -46,19 +52,24 @@ const COPY = {
     fontsDenied: '系统字体读取被拒绝或当前环境不支持，仍可手动输入字体名。',
     systemGroup: '系统字体',
     reset: '全部恢复默认',
-    summary: (ui: string, code: string, size: number) => `界面 ${ui} · 代码 ${code} · ${size}px`,
+    summary: (ui: string, conv: string, code: string, size: number) => `界面 ${ui} · 对话 ${conv} · 代码 ${code} · ${size}px`,
     defaultName: '默认',
   },
   en: {
     label: 'Font',
     uiFont: 'Interface font',
+    conversationFont: 'Conversation font',
     codeFont: 'Code font',
     fontSize: 'Conversation font size',
     defaultOption: 'Default',
+    followUi: 'Same as interface font',
+    sameAsUi: 'Same as UI',
     customOption: 'Custom…',
     customUiPlaceholder: 'e.g. "Microsoft YaHei", sans-serif',
+    customConversationPlaceholder: 'e.g. "Source Han Serif SC", serif',
     customCodePlaceholder: 'e.g. "JetBrains Mono", monospace',
-    uiHelp: 'Applies to all interface text. For a custom value enter a full font-family stack; empty restores the default.',
+    uiHelp: 'Applies to all interface text, including the conversation while the conversation font follows it. For a custom value enter a full font-family stack; empty restores the default.',
+    conversationHelp: 'Applies to messages and the input box in the conversation, e.g. a serif face for long text. Saved in this browser only.',
     codeHelp: 'Applies to code blocks and inline code. Adjust terminal font and size separately in Settings → General.',
     sizeHelp: 'Synced with Settings → General; 10–22 px.',
     loadFonts: 'Load system fonts',
@@ -69,7 +80,7 @@ const COPY = {
     fontsDenied: 'Access to system fonts was denied or is unsupported here; you can still type a font name.',
     systemGroup: 'Installed fonts',
     reset: 'Reset all to defaults',
-    summary: (ui: string, code: string, size: number) => `${ui} · ${code} · ${size}px`,
+    summary: (ui: string, conv: string, code: string, size: number) => `${ui} · ${conv} · ${code} · ${size}px`,
     defaultName: 'Default',
   },
 } as const
@@ -181,6 +192,7 @@ export function FontField(props: {
 
 export function FontSettingsPanel(props: {
   client: Client
+  conversation: ConversationFontStore
   view?: 'summary' | 'page'
 }) {
   const locale = useLocale(props.client)
@@ -191,8 +203,13 @@ export function FontSettingsPanel(props: {
     () => props.client.theme.getTheme().fontFamilies,
   )
   const settings: FontSettings = { uiFont: families.text, codeFont: families.code }
+  const conversationFont = useSyncExternalStore(
+    fn => props.conversation.subscribe(fn),
+    () => props.conversation.get(),
+    () => props.conversation.get(),
+  )
   const fontSize = useFontSize(props.client)
-  // System font list is shared by both fields: one permission prompt, one list.
+  // System font list is shared by the font fields: one permission prompt, one list.
   const [fontList, setFontList] = useState<{ state: 'idle' | 'loading' | 'ready' | 'denied'; families: readonly SystemFontFamily[] }>(
     { state: 'idle', families: [] },
   )
@@ -221,10 +238,11 @@ export function FontSettingsPanel(props: {
   }
 
   const uiName = presetFor(settings.uiFont, UI_FONT_PRESETS)?.label[locale] ?? (settings.uiFont || text.defaultName)
+  const convName = presetFor(conversationFont, UI_FONT_PRESETS)?.label[locale] ?? (conversationFont || text.sameAsUi)
   const codeName = presetFor(settings.codeFont, CODE_FONT_PRESETS)?.label[locale] ?? (settings.codeFont || text.defaultName)
 
   if (props.view === 'summary') {
-    return <span className="font-root" data-testid="font-summary">{text.summary(uiName, codeName, fontSize)}</span>
+    return <span className="font-root" data-testid="font-summary">{text.summary(uiName, convName, codeName, fontSize)}</span>
   }
 
   const sizes: number[] = []
@@ -244,6 +262,20 @@ export function FontSettingsPanel(props: {
       customPlaceholder={text.customUiPlaceholder}
       systemGroupLabel={text.systemGroup}
       onCommit={value => update({ uiFont: value })}
+    />
+    <FontField
+      label={text.conversationFont}
+      help={text.conversationHelp}
+      value={conversationFont}
+      presets={UI_FONT_PRESETS}
+      locale={locale}
+      generic="sans-serif"
+      systemFonts={fontList.families}
+      defaultLabel={text.followUi}
+      customLabel={text.customOption}
+      customPlaceholder={text.customConversationPlaceholder}
+      systemGroupLabel={text.systemGroup}
+      onCommit={value => props.conversation.set(value)}
     />
     <FontField
       label={text.codeFont}
@@ -285,6 +317,7 @@ export function FontSettingsPanel(props: {
       </Button>
       <Button variant="outline" size="md" onClick={() => {
         update({ uiFont: '', codeFont: '' })
+        props.conversation.set('')
         if (fontSize !== FONT_SIZE_DEFAULT) props.client.theme.setFontSize('text', FONT_SIZE_DEFAULT)
       }}>{text.reset}</Button>
     </div>
@@ -297,6 +330,7 @@ export function FontSettingsPanel(props: {
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client & { effect: Context['effect'] }
   const store = createFontSettingsStore(readStorage())
+  const conversation = createConversationFontStore(readStorage())
   migrateFontPreferences(client.theme, store, readStorage())
   ctx.effect(() => {
     if (typeof document === 'undefined') return () => {}
@@ -306,9 +340,32 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'font.styles')
+  ctx.effect(() => {
+    if (typeof document === 'undefined') return () => {}
+    const style = document.createElement('style')
+    style.setAttribute('data-plugin', PLUGIN_NAME)
+    style.setAttribute('data-font-role', 'conversation')
+    document.head.appendChild(style)
+    const write = () => {
+      const sheet = style.sheet
+      if (!sheet) return
+      while (sheet.cssRules.length > 0) sheet.deleteRule(0)
+      const declarations = conversationFontDeclarations(
+        conversation.get(),
+        fontTokenDeclarations(document.styleSheets ?? []),
+      )
+      if (declarations.length === 0) return
+      sheet.insertRule(`${CONVERSATION_FONT_SELECTOR}{}`)
+      const rule = sheet.cssRules[0] as CSSStyleRule
+      for (const [name, value] of declarations) rule.style.setProperty(name, value)
+    }
+    write()
+    const unsubscribe = conversation.subscribe(write)
+    return () => { unsubscribe(); style.remove() }
+  }, 'font.conversation')
   ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
     { name: 'plugins.bundle.config', key: PLUGIN_NAME },
     (slotProps: { view?: 'summary' | 'page' }) =>
-      <FontSettingsPanel client={client} view={slotProps?.view} />,
+      <FontSettingsPanel client={client} conversation={conversation} view={slotProps?.view} />,
   )), 'font.settings')
 }

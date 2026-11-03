@@ -398,8 +398,8 @@
         "en": "Font"
       },
       "description": {
-        "zh": "自定义 Web GUI 的界面字体、代码字体与会话字号。",
-        "en": "Customize the interface font, code font, and conversation font size of the Web GUI."
+        "zh": "自定义 Web GUI 的界面字体、对话字体、代码字体与会话字号。",
+        "en": "Customize the interface, conversation, and code fonts and the conversation font size of the Web GUI."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/font/",

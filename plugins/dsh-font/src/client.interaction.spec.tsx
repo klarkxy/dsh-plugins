@@ -2,10 +2,21 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { JSDOM } from 'jsdom'
 import { expect, it, vi } from 'vitest'
+import { CONVERSATION_STORAGE_KEY, createConversationFontStore } from './contracts.ts'
 import { FontSettingsPanel } from './client.tsx'
 import { type FontRole, type FontThemeSnapshot } from './preferences.ts'
 
-it('reads native edits, writes the text role, resets only panel-controlled roles, and keeps locale live', async () => {
+function memoryStorage() {
+  const data = new Map<string, string>()
+  return {
+    data,
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => { data.set(key, value) },
+    removeItem: (key: string) => { data.delete(key) },
+  }
+}
+
+it('reads native edits, writes text/conversation/code roles to their own stores, resets the panel ones, and keeps locale live', async () => {
   const dom = new JSDOM('<div id="root"></div>')
   vi.stubGlobal('window', dom.window); vi.stubGlobal('document', dom.window.document)
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
@@ -24,24 +35,36 @@ it('reads native edits, writes the text role, resets only panel-controlled roles
     on(_event: string, fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn) } },
     slots: { inject: () => () => {}, register: () => () => {} },
   }
+  const storage = memoryStorage()
+  const conversation = createConversationFontStore(storage)
   const root = createRoot(document.getElementById('root')!)
   async function select(index: number, value: string) {
     await act(async () => { const field = document.querySelectorAll('select')[index]!; field.value = value; field.dispatchEvent(new dom.window.Event('change', { bubbles: true })) })
   }
   try {
-    await act(async () => root.render(<FontSettingsPanel client={client} />))
-    expect(document.querySelectorAll('select')[2]!.value).toBe('16')
-    await select(0, 'yahei'); await select(1, 'consolas'); await select(2, '18')
+    await act(async () => root.render(<FontSettingsPanel client={client} conversation={conversation} />))
+    expect(document.querySelectorAll('select')[3]!.value).toBe('16')
+    expect(document.querySelectorAll('select')[1]!.value).toBe('')
+    await select(0, 'yahei')
+    const themeWrites = writes.length
+    await select(1, 'source-han-serif')
+    // The conversation field writes its own browser-local store, not a theme role.
+    expect(writes.length).toBe(themeWrites)
+    expect(conversation.get()).toBe('"Source Han Serif SC", "Noto Serif CJK SC", "Noto Serif SC", serif')
+    expect(storage.data.get(CONVERSATION_STORAGE_KEY)).toBe(conversation.get())
+    await select(2, 'consolas'); await select(3, '18')
     expect(writes.at(-1)).toEqual(['text', 18])
     expect(snapshot.fontFamilies.code).toBe('Consolas, monospace')
     await act(async () => { snapshot = { ...snapshot, fontSizes: { ...snapshot.fontSizes, text: 20 }, fontFamilies: { ...snapshot.fontFamilies, code: 'Native Mono' } }; publish() })
-    expect(document.querySelectorAll('select')[2]!.value).toBe('20')
+    expect(document.querySelectorAll('select')[3]!.value).toBe('20')
     expect(document.querySelector('input')!.value).toBe('Native Mono')
     await act(async () => { locale = 'zh'; for (const fn of localeListeners) fn() })
     expect(document.body.textContent).toContain('终端字体和字号')
     await act(async () => document.querySelectorAll('button')[1]!.click())
     expect(snapshot.fontSizes).toEqual({ text: 14, code: 15, terminal: 13 })
     expect(snapshot.fontFamilies).toEqual({ text: '', code: '', terminal: 'Terminal Mono' })
+    expect(conversation.get()).toBe('')
+    expect(storage.data.has(CONVERSATION_STORAGE_KEY)).toBe(false)
   } finally {
     await act(async () => root.unmount()); vi.unstubAllGlobals(); dom.window.close()
   }
@@ -58,15 +81,16 @@ it('loads system fonts through the browser API and degrades cleanly without it',
     on: () => () => {},
     slots: { inject: () => () => {}, register: () => () => {} },
   }
+  const conversation = createConversationFontStore(undefined)
   const root = createRoot(document.getElementById('root')!)
   try {
-    await act(async () => root.render(<FontSettingsPanel client={client} />))
+    await act(async () => root.render(<FontSettingsPanel client={client} conversation={conversation} />))
     const loadButton = () => document.querySelectorAll('button')[0]!
     // Duplicates per style are expected from the Local Font Access API.
     vi.stubGlobal('queryLocalFonts', async () => [{ family: 'Test Sans', fullName: '' }, { family: 'Test Sans', fullName: '' }])
     await act(async () => loadButton().click())
-    // Both fields share the one enumeration; duplicates collapse per family.
-    expect(document.querySelectorAll('option[value="sys:Test Sans"]')).toHaveLength(2)
+    // All three fields share the one enumeration; duplicates collapse per family.
+    expect(document.querySelectorAll('option[value="sys:Test Sans"]')).toHaveLength(3)
     expect(document.body.textContent).toContain('已读取 1 款系统字体')
     expect(loadButton().textContent).toBe('重新读取系统字体')
 
