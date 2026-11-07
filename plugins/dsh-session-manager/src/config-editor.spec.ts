@@ -5,17 +5,29 @@ import { PresenceError } from './welcome-back.ts'
 
 const base = resolveConfig()
 
-function store(model: { provider: string; model: string } | null = null): PresenceModelStore & { writes: (typeof model)[]; ghostWrites: (typeof model)[] } {
-  const row = { revision: 0, model, ghostModel: null as typeof model }
+function store(model: { provider: string; model: string } | null = null): PresenceModelStore & { writes: (typeof model)[]; ghostWrites: (typeof model)[]; fieldWrites: [string, typeof model][] } {
+  const row = { revision: 0, model, ghostModel: null as typeof model, judgeModel: null as typeof model, handoffModel: null as typeof model }
   const writes: (typeof model)[] = []
   const ghostWrites: (typeof model)[] = []
-  return {
+  const fieldWrites: [string, typeof model][] = []
+  const stub = {
     writes,
     ghostWrites,
+    fieldWrites,
     read: () => row,
-    write: async next => { writes.push(next); row.model = next; row.revision += 1; return row.revision },
-    writeGhost: async next => { ghostWrites.push(next); row.ghostModel = next; row.revision += 1; return row.revision },
+    write: async (next: typeof model) => stub.writeFeature('model', next),
+    writeGhost: async (next: typeof model) => stub.writeFeature('ghostModel', next),
+    writeFeature: async (field: 'model' | 'ghostModel' | 'judgeModel' | 'handoffModel', next: typeof model) => {
+      fieldWrites.push([field, next])
+      if (field === 'model') { writes.push(next); row.model = next }
+      if (field === 'ghostModel') { ghostWrites.push(next); row.ghostModel = next }
+      if (field === 'judgeModel') row.judgeModel = next
+      if (field === 'handoffModel') row.handoffModel = next
+      row.revision += 1
+      return row.revision
+    },
   }
+  return stub as PresenceModelStore & { writes: (typeof model)[]; ghostWrites: (typeof model)[]; fieldWrites: [string, typeof model][] }
 }
 
 describe('presence config patches', () => {
@@ -36,7 +48,7 @@ describe('presence config patches', () => {
 
   it('reads the resolved view and writes through the host config editor', async () => {
     expect(readPresenceConfig(base)).toEqual({
-      recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3,
+      recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, judgeModel: null, handoffModel: null, autoContinueMode: 'off', autoContinueMax: 3,
     })
     const models = store({ provider: 'p', model: 'm' })
     expect(readPresenceConfig(base, models).model).toEqual({ provider: 'p', model: 'm' })
@@ -68,17 +80,20 @@ describe('presence config patches', () => {
     expect(cleared.model).toBeNull()
   })
 
-  it('validates and retains optional effort and forwards request cancellation to both store writes', async () => {
+  it('validates and retains optional effort and forwards request cancellation to every feature write', async () => {
     const route = { provider: 'p', model: 'm', reasoningEffort: 'high' }
     const models = store()
-    const write = vi.spyOn(models, 'write')
-    const ghost = vi.spyOn(models, 'writeGhost')
+    const feature = vi.spyOn(models, 'writeFeature')
     const signal = new AbortController().signal
     const view = await writePresenceConfig({ get: () => undefined } as never, base,
-      { model: route, ghostModel: route }, models, signal)
-    expect(view).toMatchObject({ model: route, ghostModel: route })
-    expect(write).toHaveBeenCalledWith(route, { signal })
-    expect(ghost).toHaveBeenCalledWith(route, { signal })
+      { model: route, ghostModel: route, judgeModel: route, handoffModel: route }, models, signal)
+    expect(view).toMatchObject({ model: route, ghostModel: route, judgeModel: route, handoffModel: route })
+    expect(feature.mock.calls).toEqual([
+      ['model', route, { signal }],
+      ['ghostModel', route, { signal }],
+      ['judgeModel', route, { signal }],
+      ['handoffModel', route, { signal }],
+    ])
     for (const reasoningEffort of ['', ' ', 4, null, {}]) {
       expect(() => sanitizeConfigPatch({ ghostModel: { ...route, reasoningEffort } })).toThrow(PresenceError)
     }
@@ -86,7 +101,7 @@ describe('presence config patches', () => {
     abort.abort()
     await expect(writePresenceConfig({} as never, base, { model: route }, models, abort.signal))
       .rejects.toMatchObject({ name: 'AbortError' })
-    expect(write).toHaveBeenCalledOnce()
+    expect(feature).toHaveBeenCalledTimes(4)
   })
 
   it('fails soft on a model write when plugin storage is absent', async () => {

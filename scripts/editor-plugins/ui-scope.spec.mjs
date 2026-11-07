@@ -14,7 +14,7 @@ const roots = {
   'dsh-font': ['.font-root'],
   'dsh-git-commit': ['.gcm-root'],
   'dsh-magpie': ['.mgp-root'],
-  'dsh-model-hub': ['.dsh-model-hub'],
+  'dsh-model-hub': ['.dsh-model-hub', '.dsh-model-hub-subagent'],
   'dsh-model-route': ['.dsh-model-menu-'],
   'dsh-safe-auto': ['.dsh-safe-auto'],
   'dsh-session-manager': ['.dsh-free-chat'],

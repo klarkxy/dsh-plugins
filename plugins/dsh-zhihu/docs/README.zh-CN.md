@@ -16,7 +16,7 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 
 ## 使用
 
-打开「插件 → 知乎」，在「设置」中填写 Access Secret。其他页签：
+打开「设置 → 知乎」，在「设置」页签中填写 Access Secret。其他页签：
 
 - **统计**：本机记录的每日调用、失败和结果条数；
 - **官方用量**：知乎返回的剩余免费额度；
@@ -27,7 +27,7 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 
 ## 草稿与配图
 
-在「插件 → 知乎 → 设置」填写发布用 App Key 和 App Secret，可从[知乎同步助手](https://www.zhihu.com/playground/zhihu-publisher)申请；它们与检索 Access Secret 分开配置。知乎的授权说明也可以整段粘进 App Secret 输入框（包含 `ZHIHU_OPENAPI_APP_KEY:"…"` 与 `ZHIHU_OPENAPI_APP_SECRET:"…"` 两项），插件会自动提取并仅保存这两项凭据。`zhihu_sync` 工具随后可让模型保存、列出、读取并校验文章、提问或想法草稿，并为其上传配图；草稿在重启 DSH 后仍可继续处理。插件负责草稿准备与校验，正式发布请在知乎完成。
+在「设置 → 知乎 → 设置」页签填写发布用 App Key 和 App Secret，可从[知乎同步助手](https://www.zhihu.com/playground/zhihu-publisher)申请；它们与检索 Access Secret 分开配置。知乎的授权说明也可以整段粘进 App Secret 输入框（包含 `ZHIHU_OPENAPI_APP_KEY:"…"` 与 `ZHIHU_OPENAPI_APP_SECRET:"…"` 两项），插件会自动提取并仅保存这两项凭据。`zhihu_sync` 工具随后可让模型保存、列出、读取并校验文章、提问或想法草稿，并为其上传配图；草稿在重启 DSH 后仍可继续处理。插件负责草稿准备与校验，正式发布请在知乎完成。
 
 ## 让模型使用
 

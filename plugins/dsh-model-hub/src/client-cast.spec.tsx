@@ -6,7 +6,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { CastPage, type CastApi, type CastState } from './client-cast.tsx'
 import type { CastCommit } from './cast.ts'
 
-const catalog = { groups: [{ id: 'p', name: 'Provider', models: [{ id: 'one', name: 'One' }, { id: 'two', name: 'Two' }] }] }
+/* 'one' and 'two' list the same effort levels; 'three' lists only 'low', so a
+ * route can move to a model that does not support the current effort. */
+const catalog = { groups: [{ id: 'p', name: 'Provider', models: [
+  { id: 'one', name: 'One', reasoning: { efforts: [{ id: 'low' }, { id: 'high' }] } },
+  { id: 'two', name: 'Two', reasoning: { efforts: [{ id: 'low' }, { id: 'high' }] } },
+  { id: 'three', name: 'Three', reasoning: { efforts: [{ id: 'low' }] } },
+] }] }
 const state: CastState = {
   enabled: true,
   revision: 5,
@@ -24,7 +30,7 @@ function api(overrides: Partial<CastApi> = {}): CastApi {
     setCastRoute: vi.fn(async () => ({ committed: true as const })),
     removeCastRoute: vi.fn(async () => ({ committed: true as const })),
     setCastTendency: vi.fn(async () => state),
-    listRunning: vi.fn(async () => ({ revision: 0, entries: [] })),
+    setCastRoutePreferences: vi.fn(async () => state),
     modelCatalog: vi.fn(async () => catalog),
     ...overrides,
   }
@@ -62,14 +68,23 @@ const triggers = (dom: JSDOM) => Array.from(dom.window.document.querySelectorAll
 const tendencies = (dom: JSDOM) => Array.from(dom.window.document.querySelectorAll<HTMLInputElement>('input[aria-label^="Task tendency"], input[aria-label$="的任务倾向"]'))
 const removes = (dom: JSDOM) => Array.from(dom.window.document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Remove"], button[aria-label^="移除 "]'))
 const refreshButton = (dom: JSDOM) => Array.from(dom.window.document.querySelectorAll<HTMLButtonElement>('.cast-head button')).find(button => /^(Refresh|Refreshing…|刷新|正在刷新…)$/.test(button.textContent || ''))!
+/** Open one picker and take a model from the model pane. */
 async function choose(dom: JSDOM, trigger: HTMLButtonElement, name = 'Two') {
   await act(async () => trigger.click())
   await act(async () => dom.window.document.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click())
   const option = Array.from(dom.window.document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')).find(button => button.textContent === name)!
   await act(async () => option.click())
 }
+/** Open one picker and take a reasoning effort from the effort pane. */
+async function chooseEffort(dom: JSDOM, trigger: HTMLButtonElement, name = 'High') {
+  await act(async () => trigger.click())
+  const cells = Array.from(dom.window.document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+  await act(async () => cells[1]!.click())
+  const option = Array.from(dom.window.document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')).find(button => button.textContent === name)!
+  await act(async () => option.click())
+}
 
-describe('subagent cast tab', () => {
+describe('subagent configuration page', () => {
   it('refreshes after native commit and uses only the revision read from the host for later writes', async () => mounted(async (dom, root) => {
     let current = state
     const client = api({ getCast: vi.fn(async () => current), setCastEnabled: vi.fn(async payload => {
@@ -98,7 +113,7 @@ describe('subagent cast tab', () => {
     await act(async () => castSwitch(dom).click())
     expect(client.setCastEnabled).toHaveBeenCalledTimes(1)
     expect(client.getCast).toHaveBeenCalledTimes(2)
-    expect(dom.window.document.querySelector('[role="alert"]')!.textContent).toContain('Saved; cast refresh failed: descriptor read failed after commit')
+    expect(dom.window.document.querySelector('[role="alert"]')!.textContent).toContain('Saved; configuration refresh failed: descriptor read failed after commit')
     expect(dom.window.document.body.textContent).not.toContain('Not saved')
     expect(castSwitch(dom).getAttribute('aria-checked')).toBe('true')
     expect(castSwitch(dom).disabled).toBe(true)
@@ -124,7 +139,7 @@ describe('subagent cast tab', () => {
     await act(async () => castSwitch(dom).click())
     expect(dom.window.document.body.textContent).toContain('Saving…')
     await act(async () => save.resolve({ committed: true }))
-    expect(dom.window.document.body.textContent).toContain('Saved. List changes apply to new conversations.')
+    expect(dom.window.document.body.textContent).toContain('Saved.')
     expect(dom.window.document.body.textContent).not.toContain('Saving…')
     expect(castSwitch(dom).disabled).toBe(true)
     await act(async () => next.resolve({ ...state, enabled: false, revision: 50 }))
@@ -134,22 +149,57 @@ describe('subagent cast tab', () => {
   it('renders the enabled state with one row per route, tendency drafts and the add control', async () => mounted(async (dom, root) => {
     await render(root, api())
     expect(castSwitch(dom).getAttribute('aria-checked')).toBe('true')
-    expect(castSwitch(dom).getAttribute('aria-label')).toBe('Enable subagent cast')
-    expect(dom.window.document.body.textContent).toContain('Task tendencies guide delegation.')
-    expect(dom.window.document.body.textContent).toContain('Existing conversations and their subagents keep their saved lists.')
+    expect(castSwitch(dom).getAttribute('aria-label')).toBe('Enable subagent model selection')
+    expect(dom.window.document.body.textContent).toContain('Configure the model and reasoning effort for new subagents.')
+    expect(dom.window.document.body.textContent).toContain('existing conversations keep their saved list.')
     expect(triggers(dom)).toHaveLength(3)
-    expect(triggers(dom)[0]!.textContent).toContain('Provider / One')
-    expect(triggers(dom)[1]!.textContent).toContain('Provider / Two')
+    expect(triggers(dom)[0]!.textContent).toContain('One')
+    expect(triggers(dom)[0]!.textContent).not.toContain('Provider')
+    expect(triggers(dom)[1]!.textContent).toContain('Two')
     expect(triggers(dom)[2]!.textContent).toContain('Add model…')
     expect(tendencies(dom).map(input => input.value)).toEqual(['reviews', ''])
     expect(removes(dom).map(button => button.getAttribute('aria-label'))).toEqual(['Remove p / one', 'Remove p / two'])
   }))
 
+  it('shows the short model name and the localized default effort in zh', async () => mounted(async (dom, root) => {
+    await render(root, api(), 'zh-CN')
+    expect(triggers(dom)[0]!.textContent).toBe('One · 默认')
+    // The full route stays in the accessible name and the tooltip.
+    expect(triggers(dom)[0]!.getAttribute('aria-label')).toBe('p / one')
+    expect(triggers(dom)[0]!.getAttribute('title')).toBe('p / one')
+    expect(dom.window.document.body.textContent).toContain('配置新建子代理的模型与思考强度。')
+  }))
+
+  it('can add the same model again after its previous row was removed', async () => mounted(async (dom, root) => {
+    let current: CastState = { enabled: false, revision: 0, tendencyRevision: 0, routes: [] }
+    const client = api({
+      getCast: vi.fn(async () => current),
+      addCastRoute: vi.fn(async ({ route }) => {
+        current = { ...current, revision: current.revision + 1, routes: [...current.routes, route] }
+        return { committed: true }
+      }),
+      removeCastRoute: vi.fn(async () => {
+        current = { ...current, revision: current.revision + 1, routes: [] }
+        return { committed: true }
+      }),
+    })
+    await render(root, client)
+    await choose(dom, triggers(dom).at(-1)!)
+    expect(current.routes).toHaveLength(1)
+    await act(async () => removes(dom)[0]!.click())
+    expect(current.routes).toHaveLength(0)
+    expect(triggers(dom).at(-1)!.textContent).toContain('Add model…')
+    await choose(dom, triggers(dom).at(-1)!)
+    expect(current.routes).toEqual([{ provider: 'p', model: 'two' }])
+    expect(client.addCastRoute).toHaveBeenCalledTimes(2)
+    expect(client.setCastRoutePreferences).not.toHaveBeenCalled()
+  }))
+
   it('renders the empty state and a switched-off cast in zh', async () => mounted(async (dom, root) => {
     await render(root, api({ getCast: vi.fn(async () => ({ enabled: false, revision: 1, routes: [] })) }), 'zh-CN')
     expect(castSwitch(dom).getAttribute('aria-checked')).toBe('false')
-    expect(castSwitch(dom).getAttribute('aria-label')).toBe('启用子代理阵容')
-    expect(dom.window.document.body.textContent).toContain('名单修改对新建会话生效，已有会话及其子代理沿用原名单。')
+    expect(castSwitch(dom).getAttribute('aria-label')).toBe('启用子代理选模')
+    expect(dom.window.document.body.textContent).toContain('名单修改对新建会话生效，已有会话沿用原名单。')
     expect(dom.window.document.body.textContent).toContain('先添加模型，再启用显式模型选择。移除最后一个模型会关闭开关。')
     expect(triggers(dom)).toHaveLength(1)
     expect(triggers(dom)[0]!.textContent).toContain('添加模型…')
@@ -226,10 +276,9 @@ describe('subagent cast tab', () => {
     expect(retry).toBeDefined()
     await act(async () => retry.click())
     expect(dom.window.document.querySelector('[role="alert"]')).toBeNull()
-    expect(triggers(dom)[0]!.textContent).toContain('Provider / One')
+    expect(triggers(dom)[0]!.textContent).toContain('One')
     expect(triggers(dom).every(button => !button.disabled)).toBe(true)
     expect(client.getCast).toHaveBeenCalledTimes(2)
-    expect(client.listRunning).toHaveBeenCalledTimes(2)
     expect(client.setCastRoute).not.toHaveBeenCalled()
     expect(client.setCastEnabled).not.toHaveBeenCalled()
   }))
@@ -239,7 +288,7 @@ describe('subagent cast tab', () => {
       ...catalog, failures: [{ id: 'offline', name: 'Offline provider', message: 'Sign in required' }],
     } }) }))
     expect(dom.window.document.querySelector('.dsh-model-catalog-status [role="status"]')!.textContent).toContain('Offline provider: Sign in required')
-    expect(triggers(dom)[0]!.textContent).toContain('Provider / One')
+    expect(triggers(dom)[0]!.textContent).toContain('One')
     expect(triggers(dom).every(button => !button.disabled)).toBe(true)
   }))
 
@@ -257,6 +306,62 @@ describe('subagent cast tab', () => {
     await choose(dom, triggers(dom)[0]!)
     expect(client.setCastRoute).toHaveBeenCalledTimes(1)
     expect(client.setCastRoute).toHaveBeenCalledWith({ index: 0, route: { provider: 'p', model: 'two' }, expectedRevision: 5 })
+  }))
+
+  it('saves the reasoning effort picked in the menu', async () => mounted(async (dom, root) => {
+    const client = api()
+    await render(root, client)
+    await chooseEffort(dom, triggers(dom)[0]!)
+    expect(client.setCastRoutePreferences).toHaveBeenCalledTimes(1)
+    expect(client.setCastRoutePreferences).toHaveBeenCalledWith({
+      provider: 'p', model: 'one',
+      preferences: { reasoningEffort: 'high' },
+      expectedRevision: 2,
+    })
+    // The native route list is untouched by an effort change.
+    expect(client.setCastRoute).not.toHaveBeenCalled()
+  }))
+
+  it('keeps the effort of a route when the new model supports it', async () => mounted(async (dom, root) => {
+    const client = api({ getCast: vi.fn(async () => ({ ...state, routes: [
+      { provider: 'p', model: 'one', reasoningEffort: 'high', tendency: 'reviews' },
+      state.routes[1]!,
+    ] })) })
+    await render(root, client)
+    await choose(dom, triggers(dom)[0]!)
+    expect(client.setCastRoute).toHaveBeenCalledWith({ index: 0, route: { provider: 'p', model: 'two' }, expectedRevision: 5 })
+    expect(client.setCastRoutePreferences).toHaveBeenCalledWith({
+      provider: 'p', model: 'two',
+      preferences: { reasoningEffort: 'high' },
+      expectedRevision: 2,
+    })
+  }))
+
+  it('drops an effort the new model does not support', async () => mounted(async (dom, root) => {
+    const client = api({ getCast: vi.fn(async () => ({ ...state, routes: [
+      { provider: 'p', model: 'one', reasoningEffort: 'high', tendency: 'reviews' },
+      state.routes[1]!,
+    ] })) })
+    await render(root, client)
+    await choose(dom, triggers(dom)[0]!, 'Three')
+    expect(client.setCastRoute).toHaveBeenCalledWith({ index: 0, route: { provider: 'p', model: 'three' }, expectedRevision: 5 })
+    expect(client.setCastRoutePreferences).not.toHaveBeenCalled()
+  }))
+
+  it('keeps the effort chosen for a newly added model', async () => mounted(async (dom, root) => {
+    const client = api()
+    await render(root, client)
+    await choose(dom, triggers(dom)[2]!, 'Two')
+    expect(client.addCastRoute).toHaveBeenCalledTimes(1)
+    expect(client.addCastRoute).toHaveBeenCalledWith({ route: { provider: 'p', model: 'two' }, expectedRevision: 5 })
+    // The add control now offers the effort levels of the model it added.
+    expect(triggers(dom)[2]!.textContent).toContain('Two')
+    await chooseEffort(dom, triggers(dom)[2]!)
+    expect(client.setCastRoutePreferences).toHaveBeenCalledWith({
+      provider: 'p', model: 'two',
+      preferences: { reasoningEffort: 'high' },
+      expectedRevision: 2,
+    })
   }))
 
   it('saves a tendency on blur only when it changed, and clears it with an empty string', async () => mounted(async (dom, root) => {
@@ -320,7 +425,7 @@ describe('subagent cast tab', () => {
     await render(root, client)
     await choose(dom, triggers(dom)[0]!)
     const banner = dom.window.document.querySelector('[role="alert"]')!
-    expect(banner.textContent).toContain('Cast settings changed elsewhere; your draft is preserved. Refresh, review, then try again.')
+    expect(banner.textContent).toContain('Settings changed elsewhere; your draft is preserved. Refresh, review, then try again.')
     expect(banner.textContent).not.toContain('Settings changed; refresh and retry')
     expect(castSwitch(dom).disabled).toBe(true)
     expect(triggers(dom).every(button => button.disabled)).toBe(true)
@@ -348,51 +453,6 @@ describe('subagent cast tab', () => {
     await act(async () => write.resolve({ ...state, routes: [{ ...state.routes[0]!, tendency: 'triage' }, state.routes[1]!] }))
     expect(castSwitch(dom).disabled).toBe(false)
     expect(tendencies(dom)[0]!.value).toBe('triage')
-  }))
-
-  it('renders running subagents with routes, adapter-default efforts, pending and remote rows', async () => mounted(async (dom, root) => {
-    const client = api({
-      listRunning: vi.fn(async () => ({ revision: 3, entries: [
-        { id: 'child-one', label: 'reviewer', parentSessionId: 'parent', local: true, startedAt: 10,
-          route: { provider: 'deepseek', model: 'chat', reasoningEffort: 'high' } },
-        { id: 'child-two', local: true, startedAt: 20,
-          route: { provider: 'openai', model: 'gpt-5', reasoningEffort: 'medium' }, effortIsAdapterDefault: true },
-        { id: 'child-three', label: 'queued', local: true, startedAt: 30 },
-        { id: 'child-four', label: 'remote-run', local: false, startedAt: 40 },
-      ] })),
-    })
-    await render(root, client)
-    const body = dom.window.document.body.textContent || ''
-    expect(body).toContain('Running subagents')
-    expect(body).toContain('reviewer')
-    expect(body).toContain('deepseek / chat · high')
-    expect(body).toContain('child-two')
-    expect(body).toContain('openai / gpt-5 · medium (adapter default)')
-    expect(body).toContain('No model request yet')
-    expect(body).toContain('Remote subagent; route unavailable')
-    expect(body).not.toContain('No subagents are running.')
-  }))
-
-  it('renders the empty running state and surfaces a running read failure in zh', async () => mounted(async (dom, root) => {
-    await render(root, api(), 'zh-CN')
-    expect(dom.window.document.body.textContent).toContain('运行中的子代理')
-    expect(dom.window.document.body.textContent).toContain('当前没有运行中的子代理。')
-  }))
-
-  it('surfaces a running read failure without blocking the cast controls', async () => mounted(async (dom, root) => {
-    const client = api({ listRunning: vi.fn(async () => { throw new Error('registry gone') }) })
-    await render(root, client)
-    expect(dom.window.document.body.textContent).toContain('Running state failed: registry gone')
-    expect(castSwitch(dom).disabled).toBe(false)
-  }))
-
-  it('refetches the running list on change notifications', async () => mounted(async (dom, root) => {
-    let changed!: () => void
-    const client = api({ subscribeChanges: onChange => { changed = onChange; return () => {} } })
-    await render(root, client)
-    expect(client.listRunning).toHaveBeenCalledTimes(1)
-    await act(async () => changed())
-    expect(client.listRunning).toHaveBeenCalledTimes(2)
   }))
 
   it('refreshes on a change notification and reports sync failures', async () => mounted(async (dom, root) => {

@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-model-hub",
-  "version": "0.1.8",
-  "description": "Change the models used by DSH plugins and subagents from one page, and see each running subagent's model and reasoning effort.",
+  "version": "0.2.0",
+  "description": "Configure models and reasoning effort for new DSH subagents, and see each subagent's last-used model in the conversation popup.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {

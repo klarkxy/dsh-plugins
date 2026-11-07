@@ -1,10 +1,10 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Button, IconUsersOutlineRegular, Pill, Switch, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { IconUsersOutlineRegular, Pill, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import {
   DELEGATION_CLIENT_SERVICE, PLUGIN_NAME, RPC_CHANNEL,
-  type DelegationSessionStatus, type DelegationSettings, type RpcResult,
+  type DelegationSessionStatus, type RpcResult,
 } from './contracts.ts'
 
 export const name = 'dsh-delegation-client'
@@ -201,161 +201,18 @@ type Client = Context & {
   }
   slots: {
     inject(key: string, callback: () => unknown): () => void
-    register(spec: { name: string; id: string; order: number; locale: string; inject: () => unknown } | { name: string; key: string }, render: unknown): () => void
+    register(spec: { name: string; id: string; order: number; label?: () => string; locale?: string; inject?: () => unknown }, render: unknown): () => void
   }
   locale: {
     register(ns: string, locales: { zh: Record<string, string>; en: Record<string, string> }): () => void
-    getSnapshot?(): { active: string }
-    subscribe?(listener: () => void): () => void
   }
-}
-
-/** Host UI language, following live switches with the host's English fallback. */
-function useHostLocale(client: Client): string {
-  const subscribe = useCallback(
-    (listener: () => void) => client.locale.subscribe?.(listener) ?? (() => {}),
-    [client],
-  )
-  const snapshot = useCallback(() => client.locale.getSnapshot?.().active ?? 'en', [client])
-  return useSyncExternalStore(subscribe, snapshot, snapshot)
-}
-
-const settingsZh = {
-  default: '新会话默认启用委派',
-  defaultHint: '只影响之后新建的会话；发送第一条消息前可单独选择，会话开始后保持锁定。需要预设包含子代理工具。',
-  loading: '正在读取设置…',
-  saved: '已保存。',
-  stale: '设置已更新，请刷新后重试。',
-  failed: '无法读取委派设置。',
-  retry: '重试',
-  refresh: '刷新设置',
-}
-
-const settingsEn: Record<keyof typeof settingsZh, string> = {
-  default: 'Enable Delegation Mode for new sessions',
-  defaultHint: 'Only affects sessions created later. Choose before sending the first message; the choice stays locked once the session starts. Requires a preset with subagent tools.',
-  loading: 'Loading settings…',
-  saved: 'Saved.',
-  stale: 'Settings changed; refresh and retry.',
-  failed: 'Could not load delegation settings.',
-  retry: 'Retry',
-  refresh: 'Refresh settings',
-}
-
-function settingsCopy(locale: string): Record<keyof typeof settingsZh, string> {
-  return String(locale).startsWith('zh') ? settingsZh : settingsEn
-}
-
-/** Plugin-page card: the default flag applied to sessions created from now on. */
-export function DelegationSettingsPanel(props: { client: Client; locale?: string }) {
-  const hostLocale = useHostLocale(props.client)
-  const text = settingsCopy(props.locale ?? hostLocale)
-  const [settings, setSettings] = useState<DelegationSettings>()
-  const [error, setError] = useState<'' | 'failed' | 'stale'>('')
-  const [note, setNote] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const operation = useRef({ epoch: 0, active: false, writing: false })
-
-  const call = useCallback(
-    (endpoint: string, payload: unknown = {}) => props.client.connection.rpc.call(RPC_CHANNEL, endpoint, payload),
-    [props.client],
-  )
-
-  const refresh = useCallback(() => {
-    const state = operation.current
-    if (!state.active || state.writing) return
-    const epoch = state.epoch
-    setBusy(true)
-    void rpc<DelegationSettings>(call, 'settings').then(next => {
-      if (!state.active || state.epoch !== epoch) return
-      setSettings(next)
-      setError('')
-    }).catch(() => {
-      if (!state.active || state.epoch !== epoch) return
-      setError('failed')
-    }).finally(() => {
-      if (state.active && state.epoch === epoch) setBusy(false)
-    })
-  }, [call])
-  const refreshRef = useRef(refresh)
-  refreshRef.current = refresh
-  useEffect(() => {
-    const state = operation.current
-    state.epoch++
-    state.active = true
-    state.writing = false
-    setBusy(false)
-    setSettings(undefined)
-    setError('')
-    setNote(false)
-    refreshRef.current()
-    return () => { state.active = false; state.epoch++ }
-  }, [call])
-
-  const save = useCallback((defaultEnabled: boolean) => {
-    const state = operation.current
-    if (!settings || !state.active || state.writing) return
-    state.writing = true
-    const epoch = state.epoch
-    setBusy(true)
-    setNote(false)
-    setError('')
-    void rpc<DelegationSettings>(call, 'settings.update', {
-      defaultEnabled,
-      expectedRevision: settings.revision,
-    }).then(next => {
-      if (!state.active || state.epoch !== epoch) return
-      setSettings(next)
-      setNote(true)
-    }).catch(reason => {
-      if (!state.active || state.epoch !== epoch) return
-      setError(reason instanceof RpcError && reason.code === 'stale' ? 'stale' : 'failed')
-    }).finally(() => {
-      if (state.active && state.epoch === epoch) { state.writing = false; setBusy(false) }
-    })
-  }, [call, settings])
-
-  if (!settings) {
-    return (
-      <section className="dlg-root dlg-settings dsh-ui-page">
-        {error
-          ? <p role="alert" className="dsh-ui-error">{text[error]}</p>
-          : <p role="status" className="dsh-ui-hint">{text.loading}</p>}
-        <Button variant="ghost" size="sm" disabled={busy} onClick={() => refreshRef.current()}>{text.retry}</Button>
-      </section>
-    )
-  }
-
-  return (
-    <section className="dlg-root dlg-settings dsh-ui-page" data-testid="delegation-settings">
-      <div className="dlg-settings-status">
-        <Button variant="ghost" size="sm" disabled={busy} onClick={() => refreshRef.current()}>{text.refresh}</Button>
-        {error && <p role="alert" className="dsh-ui-error">{text[error]}</p>}
-        {note && <p role="status" className="dsh-ui-notice">{text.saved}</p>}
-      </div>
-      <article className="dlg-root dsh-ui-card">
-        <header className="dsh-ui-toggle-row">
-          <div className="dsh-ui-toggle-text">
-            <h3 className="dsh-ui-toggle-label">{text.default}</h3>
-            <p className="dsh-ui-hint">{text.defaultHint}</p>
-          </div>
-          <Switch
-            checked={settings.defaultEnabled}
-            label={text.default}
-            disabled={busy}
-            onChange={next => save(next)}
-          />
-        </header>
-      </article>
-    </section>
-  )
 }
 
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
   ctx.provide(DELEGATION_CLIENT_SERVICE, { active: true })
   ctx.effect(() => client.locale.register(NS, { zh: { ...zh }, en: { ...en } }), 'delegation.locale')
-  // Style both the new-session option and the independent settings page.
+  // Style the new-session Delegate chip.
   ctx.effect(() => {
     if (typeof document === 'undefined') return () => {}
     const style = document.createElement('style')
@@ -364,10 +221,9 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'delegation.styles')
-  ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
-    { name: 'plugins.bundle.config', key: PLUGIN_NAME },
-    () => <DelegationSettingsPanel client={client} />,
-  )), 'delegation.settings')
+  // No settings row: delegation is chosen per session on the new-session
+  // page, so a global default switch was redundant. The settings RPC stays
+  // alive so stored rows that already carry defaultEnabled keep working.
   ctx.effect(() => client.slots.inject('conversation.hero.options', () => client.slots.register(
     {
       name: 'conversation.hero.options',

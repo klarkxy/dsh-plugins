@@ -43,19 +43,29 @@ export interface PresenceModelStore {
     readonly revision: number
     readonly model: ModelRoute | null
     readonly ghostModel: ModelRoute | null
+    readonly judgeModel: ModelRoute | null
+    readonly handoffModel: ModelRoute | null
   } | undefined
   write(model: ModelRoute | null, options?: PresenceWriteOptions): Promise<number | undefined>
   writeGhost(model: ModelRoute | null, options?: PresenceWriteOptions): Promise<number | undefined>
+  writeFeature(
+    field: 'model' | 'ghostModel' | 'judgeModel' | 'handoffModel',
+    route: ModelRoute | null,
+    options?: PresenceWriteOptions,
+  ): Promise<number | undefined>
 }
 
 export function readPresenceConfig(config: ResolvedConfig, store?: PresenceModelStore): ConfigView {
+  const row = store?.read()
   return {
     recapMinutes: config.recapMinutes,
     compactMinutes: config.compactMinutes,
     continueText: config.continueText,
     continueMode: config.continueMode,
-    model: store?.read()?.model ?? null,
-    ghostModel: store?.read()?.ghostModel ?? null,
+    model: row?.model ?? null,
+    ghostModel: row?.ghostModel ?? null,
+    judgeModel: row?.judgeModel ?? null,
+    handoffModel: row?.handoffModel ?? null,
     autoContinueMode: config.autoContinueMode,
     autoContinueMax: config.autoContinueMax,
   }
@@ -129,6 +139,8 @@ export function sanitizeConfigPatch(patch: unknown): ConfigPatch {
     else if (key === 'continueMode') next.continueMode = continueMode(record[key])
     else if (key === 'model') next.model = modelRoute(record[key])
     else if (key === 'ghostModel') next.ghostModel = modelRoute(record[key])
+    else if (key === 'judgeModel') next.judgeModel = modelRoute(record[key])
+    else if (key === 'handoffModel') next.handoffModel = modelRoute(record[key])
     else if (key === 'autoContinueMode') next.autoContinueMode = autoContinueMode(record[key])
     else if (key === 'autoContinueMax') next.autoContinueMax = autoContinueMax(record[key])
     else throw new PresenceError('session-manager/invalid-request', `unknown config key: ${key}`)
@@ -153,13 +165,18 @@ export async function writePresenceConfig(
   // Validate before capability checks: a malformed patch is rejected either way.
   const next = sanitizeConfigPatch(patch)
   signal?.throwIfAborted()
-  const { model, ghostModel, ...configPatch } = next
-  if (model !== undefined || ghostModel !== undefined) {
+  const { model, ghostModel, judgeModel, handoffModel, ...configPatch } = next
+  const modelWrites: Array<readonly ['model' | 'ghostModel' | 'judgeModel' | 'handoffModel', ModelRoute | null]> = [
+    ...model === undefined ? [] : [['model', model] as const],
+    ...ghostModel === undefined ? [] : [['ghostModel', ghostModel] as const],
+    ...judgeModel === undefined ? [] : [['judgeModel', judgeModel] as const],
+    ...handoffModel === undefined ? [] : [['handoffModel', handoffModel] as const],
+  ]
+  if (modelWrites.length > 0) {
     if (store === undefined) {
       throw new PresenceError('session-manager/unavailable', 'this runtime cannot store the session model selection')
     }
-    if (model !== undefined) await store.write(model, { signal })
-    if (ghostModel !== undefined) await store.writeGhost(ghostModel, { signal })
+    for (const [field, route] of modelWrites) await store.writeFeature(field, route, { signal })
   }
   if (Object.keys(configPatch).length > 0) {
     signal?.throwIfAborted()

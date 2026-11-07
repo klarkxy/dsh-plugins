@@ -16,6 +16,7 @@ import type { PresenceModelHost } from './welcome-back.ts'
 import type { HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { openCompatibleDomain } from '@klarkxy/dsh-plugin-kit/domain'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { retainAuxiliaryModel } from '@klarkxy/dsh-plugin-kit/auxiliary-model'
 import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
 import {
   notifyModelSettingsChanged,
@@ -80,7 +81,25 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
   createModelSettingsChanges(ctx, modelSettingsChangesIdentity(PLUGIN_NAME), PLUGIN_NAME)
   const resolved = resolveConfig(config)
   const cursors = createCursorKey()
-  ctx.effect(() => registerSessionTools(ctx, resolved, cursors))
+  // Shared auxiliary-model store: root-owned, one for every participant.
+  // Declaring only the services it needs keeps a legitimately absent service
+  // (a CLI host without connection/webServer) a clean skip, while a real
+  // initialization failure — a corrupt domain or a rejected RPC mount —
+  // flips auxBroken so features without an explicit model degrade instead of
+  // silently billing the conversation model.
+  let auxBroken = false
+  ctx.inject(['storageDomain', 'webServer', 'connection'], inner => {
+    let mounted = true
+    void retainAuxiliaryModel(inner as Context).then(release => {
+      if (!mounted) { void release(); return }
+      inner.effect(() => release)
+    }).catch(error => {
+      auxBroken = true
+      ctx.logger?.warn?.('dsh-session-manager: auxiliary model store unavailable; feature models without an explicit override are disabled: %s',
+        error instanceof Error ? error.message : String(error))
+    })
+    inner.effect(() => () => { mounted = false })
+  })
   // Plugin-owned settings live in a dedicated storage domain; without
   // storageDomain the model selector stays hidden and writes fail soft.
   let settings: PresenceSettingsStore | undefined
@@ -111,24 +130,34 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
           read(signal) {
             signal.throwIfAborted()
             const current = opened.read()
+            const field = (
+              path: 'model' | 'ghostModel' | 'judgeModel' | 'handoffModel',
+              label: { zh: string; en: string },
+            ) => ({
+              path: [path],
+              label,
+              current: current[path] ?? undefined,
+              allowFollow: true,
+              followLabel: { zh: '辅助模型 / 会话 / 宿主默认', en: 'Auxiliary / conversation / host default' },
+            })
             return {
               revision: current.revision,
-              fields: [{
-                path: ['model'],
-                label: { zh: '欢迎回来摘要模型', en: 'Welcome-back recap model' },
-                current: current.model ?? undefined,
-                allowFollow: true,
-                followLabel: { zh: '当前会话 / 宿主默认模型', en: 'Current conversation / host default' },
-              }],
+              fields: [
+                field('model', { zh: '欢迎回来摘要模型', en: 'Welcome-back recap model' }),
+                field('ghostModel', { zh: '继续灰影生成模型', en: 'Continue ghost model' }),
+                field('judgeModel', { zh: '自动继续判定模型', en: 'Auto-continue judge model' }),
+                field('handoffModel', { zh: '交接摘要模型', en: 'Handoff summary model' }),
+              ],
             }
           },
           async write(path, route, expectedRevision, signal) {
             signal.throwIfAborted()
-            if (path.length !== 1 || path[0] !== 'model') {
+            const key = path.length === 1 ? path[0] : undefined
+            if (key !== 'model' && key !== 'ghostModel' && key !== 'judgeModel' && key !== 'handoffModel') {
               throw new Error('Unknown Session Manager model setting')
             }
             const model = modelRouteOverride(route as ModelRoute) ?? null
-            const revision = await opened.write(model, { expectedRevision, signal })
+            const revision = await opened.writeFeature(key, model, { expectedRevision, signal })
             notifyModelSettingsChanged(ctx, PLUGIN_NAME, revision)
             return revision
           },
@@ -172,14 +201,20 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
     const owned = settings
     return {
       ...models,
+      auxBroken,
       signal: owned === undefined ? models.signal : AbortSignal.any([models.signal, owned.signal]),
       saved: () => owned?.read().model ?? null,
       savedGhost: () => owned?.read().ghostModel ?? null,
+      savedJudge: () => owned?.read().judgeModel ?? null,
+      savedHandoff: () => owned?.read().handoffModel ?? null,
       suggestion: sessionId => owned?.suggestion(sessionId),
-      rememberSuggestion: (sessionId, seq, text, signal) =>
-        owned?.rememberSuggestion(sessionId, seq, text, signal) ?? Promise.resolve(),
+      rememberSuggestion: (sessionId, seq, text, key, signal) =>
+        owned?.rememberSuggestion(sessionId, seq, text, key, signal) ?? Promise.resolve(),
     }
   }
+  // Registered after captureModels exists: the read_session tool builds the
+  // handoff summarizer from the same captured model state as the presence endpoints.
+  ctx.effect(() => registerSessionTools(ctx, resolved, cursors, captureModels))
   // Per-session auto-continue: the record table is only available while the
   // presence domain is mounted; seeding and the runner share the injected
   // agent/session services and degrade cleanly when they unload.

@@ -432,6 +432,7 @@ export const IconCheckOutlineRegular = icon('check')
 export const IconChevronDownOutlineMedium = icon('chevron-down-medium')
 export const IconChevronRightOutlineMedium = icon('chevron-right-medium')
 export const IconChevronDownOutlineRegular = icon('chevron-down')
+export const IconChevronUpOutlineRegular = icon('chevron-up')
 export const IconChevronRightOutlineRegular = icon('chevron-right')
 export const IconCloseFillRegular = icon('close-fill')
 export const IconEditOutlineRegular = icon('edit')
@@ -444,6 +445,11 @@ export const IconSettingsOutlineRegular = icon('settings')
 export const IconShieldOutlineRegular = icon('shield')
 export const IconUserOutlineRegular = icon('user')
 export const IconUsersOutlineRegular = icon('users')
+export const PermissionIconFullAccessRegular = icon('permission-full-access')
+export const PermissionIconReadOnlyRegular = icon('permission-read-only')
+export const PermissionIconWorkspaceWriteRegular = icon('permission-workspace-write')
+export const IconGlobeOutlineRegular = icon('globe')
+export const IconQuestionOutlineRegular = icon('question')
 
 /* --- Hooks. The real ones measure and listen; under test there is no viewport
  * to measure and no pointer to dismiss with, so these are inert but keep their
@@ -501,8 +507,12 @@ const known = new Set([
   'Button', 'Tag', 'Checkbox', 'Switch', 'Input', 'Pill', 'SegmentedTabs', 'DisclosureRow', 'TextShimmer', 'JsonTree',
   'Modal', 'Menu', 'MenuItemButton', 'MenuSurface', 'MenuGroup', 'PathLabel', 'Tooltip', 'StateDot', 'IconChecklistOutlineRegular', 'IconThinkOutlineRegular',
   'IconCheckOutlineRegular', 'IconChevronDownOutlineMedium', 'IconChevronRightOutlineMedium', 'IconChevronDownOutlineRegular',
+  'IconChevronUpOutlineRegular',
   'IconChevronRightOutlineRegular', 'IconCloseFillRegular', 'IconEditOutlineRegular', 'IconCopyOutlineRegular', 'IconRefreshOutlineRegular', 'IconSettingsOutlineRegular', 'IconShieldOutlineRegular',
-  'IconUserOutlineRegular', 'IconUsersOutlineRegular', 'useAnchoredPosition',
+  'IconUserOutlineRegular', 'IconUsersOutlineRegular',
+  'PermissionIconFullAccessRegular', 'PermissionIconReadOnlyRegular', 'PermissionIconWorkspaceWriteRegular',
+  'IconGlobeOutlineRegular', 'IconQuestionOutlineRegular',
+  'useAnchoredPosition',
   'useDismissOnOutsidePointer', 'useModalLayer', 'modalSelector', 'closeTopModal', 'isBehindModal',
   'observeStickyMenuGroups', 'rankByName', 'Toast', 'FileTypeIcon',
 ])

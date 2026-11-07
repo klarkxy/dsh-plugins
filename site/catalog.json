@@ -243,8 +243,8 @@
         "en": "Model Route"
       },
       "summary": {
-        "zh": "让插件以统一方式描述模型设置，供模型枢纽识别。",
-        "en": "Lets plugins describe model settings the same way so Model Hub can find them."
+        "zh": "让 DSH 插件以统一方式描述模型设置并共享模型列表。",
+        "en": "Lets DSH plugins describe model settings consistently and share model lists."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
@@ -259,12 +259,12 @@
       "category": "models",
       "kind": "plugin",
       "title": {
-        "zh": "模型枢纽",
-        "en": "Model Hub"
+        "zh": "子代理",
+        "en": "Subagents"
       },
       "summary": {
-        "zh": "在一个页面修改各插件和子代理使用的模型，并查看运行中子代理的模型与思考强度。",
-        "en": "Change the models used by your plugins and subagents from one page, and see each running subagent's model and reasoning effort."
+        "zh": "配置子代理的模型与思考强度，并在会话弹层查看最后使用的模型。",
+        "en": "Configure subagent models and reasoning effort, and see each one's last-used model in the conversation popup."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
@@ -303,8 +303,8 @@
         "en": "Font"
       },
       "summary": {
-        "zh": "自定义 Web GUI 的界面字体、对话字体、代码字体与会话字号。",
-        "en": "Customize the interface, conversation, and code fonts and the conversation font size of the Web GUI."
+        "zh": "自定义 Web GUI 的界面字体、对话字体、代码与终端字体及字号。",
+        "en": "Customize the interface, conversation, code and terminal fonts and font sizes of the Web GUI."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",

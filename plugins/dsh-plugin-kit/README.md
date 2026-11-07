@@ -4,9 +4,7 @@
 
 [简体中文](docs/README.zh-CN.md)
 
-A shared support library used by the plugins in this repository; plugins that depend on it install it automatically.
-
-For plugin developers, the source code and type declarations are the reference.
+A shared support library for the plugins in this repository, including the default auxiliary model and independent feature contexts. Plugins that depend on it install it automatically; refer to the source code and type declarations.
 
 ## License
 

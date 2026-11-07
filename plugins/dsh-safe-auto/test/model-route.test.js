@@ -36,6 +36,37 @@ test('fixed model is independent of the conversation and carries effort only whe
   assert.deepEqual(resolveReviewRoute(config({ provider: 'reviewer', model: 'small', reasoningEffort: 'low' })),
     { provider: 'reviewer', model: 'small', reasoningEffort: 'low' });
 });
+test('the global auxiliary default sits between the explicit reviewer and the conversation route', () => {
+  const aux = { provider: 'aux-provider', model: 'aux-model' };
+  assert.deepEqual(resolveReviewRoute(config({ provider: 'reviewer', model: 'small' }), owner(), aux),
+    { provider: 'reviewer', model: 'small' });
+  assert.deepEqual(resolveReviewRoute(config(), owner(), aux), aux);
+  assert.deepEqual(resolveReviewRoute(config(), owner()), selected());
+});
+test('the auxiliary default does not depend on the conversation route', () => {
+  assert.deepEqual(resolveReviewRoute(config(), {}, { provider: 'aux', model: 'm' }), { provider: 'aux', model: 'm' });
+  assert.throws(() => resolveReviewRoute(config(), {}), /UNAVAILABLE/);
+  assert.throws(() => resolveReviewRoute(config(), owner({ model: 'missing-provider' })), /UNAVAILABLE/);
+});
+test('a malformed auxiliary default is a broken setting, not an absent one', () => {
+  for (const bad of [{ provider: 'aux' }, { model: 'm' }, { provider: ' ', model: 'm' }, { provider: 'aux\n', model: 'm' },
+    { provider: 'aux', model: 'm', reasoningEffort: 'low\n' }, 'nope', 42, []]) {
+    assert.throws(() => resolveReviewRoute(config(), owner(), bad), /INVALID_AUXILIARY_MODEL/, JSON.stringify(bad));
+  }
+  // Only a genuinely absent default falls back to the conversation route.
+  assert.deepEqual(resolveReviewRoute(config(), owner(), undefined), selected());
+  assert.deepEqual(resolveReviewRoute(config(), owner(), null), selected());
+  // An explicit reviewer never reads the default, so a broken one cannot
+  // block the model the operator chose.
+  assert.deepEqual(resolveReviewRoute(config({ provider: 'reviewer', model: 'small' }), owner(), { provider: 'aux' }),
+    { provider: 'reviewer', model: 'small' });
+});
+test('the auxiliary default keeps its own effort and the explicit reviewer keeps its own', () => {
+  assert.deepEqual(resolveReviewRoute(config(), owner(), { provider: 'aux', model: 'm', reasoningEffort: 'high' }),
+    { provider: 'aux', model: 'm', reasoningEffort: 'high' });
+  assert.deepEqual(resolveReviewRoute(config({ provider: 'reviewer', model: 'small', reasoningEffort: 'low' }), owner(),
+    { provider: 'aux', model: 'm', reasoningEffort: 'high' }), { provider: 'reviewer', model: 'small', reasoningEffort: 'low' });
+});
 test('options are a fallback only when the accepted request header is absent', () => {
   assert.deepEqual(conversationRoute({ agent: { options: selected() } }), selected());
   assert.throws(() => conversationRoute(owner({ model: 'missing-provider' })), /UNAVAILABLE/);
@@ -58,6 +89,25 @@ test('native request is fresh, tool-free, capped and has no parent session/repla
   assert.equal(received.messages[0].role, 'user');
   assert.equal(received.messages[0].id, undefined);
   assert.equal(received.messages[0].source, undefined);
+  assert.equal(received.sessionId, undefined, 'the reviewer call stays session-free');
+});
+test('the native result keeps the whole usage breakdown next to the total', async () => {
+  const result = await complete(runtime());
+  assert.deepEqual(result.usage, { inputTokens: 10, outputTokens: 5, cacheReadTokens: 20, totalTokens: 35 });
+  const llm = { async *stream() {
+    yield { type: 'block-end', index: 0, block: { type: 'text', text: VERDICT } };
+    yield { type: 'finish', reason: { kind: 'stop' } };
+  } };
+  assert.equal((await nativeCompletion(llm, route, 's', 'i', 4096, signal())).usage, undefined);
+});
+test('reasoning tokens are reported apart and never counted into the total', async () => {
+  const llm = { async *stream() {
+    yield { type: 'block-end', index: 0, block: { type: 'text', text: VERDICT } };
+    yield { type: 'usage', usage: { inputTokens: 100, outputTokens: 50, reasoningTokens: 40, cacheReadTokens: 10 } };
+    yield { type: 'finish', reason: { kind: 'stop' } };
+  } };
+  const result = await nativeCompletion(llm, route, 's', 'i', 4096, signal());
+  assert.deepEqual(result.usage, { inputTokens: 100, outputTokens: 50, cacheReadTokens: 10, reasoningTokens: 40, totalTokens: 160 });
 });
 test('reasoning effort is forwarded only when present', async () => {
   let received;

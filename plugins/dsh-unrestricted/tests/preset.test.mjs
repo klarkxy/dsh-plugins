@@ -70,7 +70,6 @@ const STANDARD_ROSTER = [
   ["tool-result-pruner", "@deepseek-ai/dsh-compaction-tool-result-pruner"],
   ["delegation", "cordis:group"],
   ["tool-subagent-control", "@deepseek-ai/dsh-tool-subagent-control"],
-  ["tool-subagent-list-agents", "@deepseek-ai/dsh-tool-subagent-control/list-agents"],
   ["tool-subagent", "@deepseek-ai/dsh-tool-subagent"],
   ["tool-subagent-fork", "@deepseek-ai/dsh-tool-subagent"],
   ["tool-subagent-codex", "@deepseek-ai/dsh-tool-subagent"],
@@ -219,8 +218,35 @@ test("tool roster matches the installed target host apart from retained disabled
   const hostManifest = import.meta.resolve('@deepseek-ai/dsh-web-app/package.json');
   const host = readFileSync(new URL('./presets/standard.patch.yml', hostManifest), 'utf8');
   const retained = new Set(['tool-subagent-codex', 'tool-subagent-claude-code', 'tool-ralph']);
-  assert.deepEqual(roster(patch).filter(([id]) => !retained.has(id)), roster(host));
+  // `list-agents` is the one host row this preset must not mirror: the control
+  // package registers `list_agents` itself and dropped its `./list-agents`
+  // subpath, so a row naming that subpath stops resolving and takes the whole
+  // preset down. A host pinned before that removal still declares the row.
+  const dropped = new Set(['tool-subagent-list-agents']);
+  const ours = roster(patch).filter(([id]) => !retained.has(id));
+  const theirs = roster(host).filter(([id]) => !retained.has(id) && !dropped.has(id));
+  assert.deepEqual(ours, theirs);
   assert.equal(JSON.parse(readFileSync(new URL(hostManifest), 'utf8')).version, manifest.devDependencies['@deepseek-ai/dsh']);
+});
+
+test("no row names a package path the host removed", () => {
+  // A row naming a package or subpath the host no longer exports mounts no
+  // plugin; the preset then reports a diagnostic, and the new-session picker
+  // offers healthy presets only, so the mode disappears without an error there.
+  assert.doesNotMatch(patch, /dsh-tool-subagent-control\/list-agents/);
+});
+
+test("delegation config uses the keys the installed host declares", () => {
+  // The host renamed `modelSelectionSettings` to `modelSelection` and split
+  // discovery into `modelDiscovery`. An unknown key is dropped rather than
+  // rejected, so a stale name fails silently instead of failing the preset.
+  const row = patch.slice(patch.indexOf("- id: tool-subagent\n"));
+  const body = row.slice(0, row.indexOf("- id: tool-subagent-fork"));
+  assert.doesNotMatch(body, /modelSelectionSettings:/);
+  assert.match(body, /modelSelection: true/);
+  // Selection no longer registers discovery implicitly; keep the lookup tool
+  // available so the agent can inspect the allowed routes before choosing one.
+  assert.match(body, /modelDiscovery: true/);
 });
 
 test("tool roster keeps the standard platform and disabled flags", () => {
@@ -265,7 +291,9 @@ test("package manifest follows the repository release conventions", () => {
     access: "public",
     registry: "https://registry.npmjs.org/",
   });
-  assert.equal(manifest.engines.dsh, `>=${manifest.devDependencies['@deepseek-ai/dsh']}`);
+  // The preset uses modelSelection and the merged control tool from this host;
+  // its small browser entry still compiles against the shared development baseline.
+  assert.equal(manifest.engines.dsh, '>=0.2.2-rc.1');
   assert.deepEqual(manifest.dsh, {
     bundle: { patch: "./cordis.patch.yml" },
     client: { platform: "web", inject: ["@deepseek-ai/dsh-client-locale"] },

@@ -94,11 +94,52 @@ function winner(rules: readonly Rule[], target: Target, property: string): { val
 }
 
 describe('git commit client', () => {
+  it('registers only the header action and injects the client plus settings subscriber', async () => {
+    // The model/fallback defaults moved into the commit popover: the plugin no
+    // longer claims a settings.section seat, and the action's inject() must
+    // hand the popover the live client and change subscriber it needs to read
+    // and save the row.
+    const injected: string[] = []
+    const registered: Array<{ spec: { name: string; id: string; inject?: () => unknown }; render: unknown }> = []
+    // The shared auxiliary-model card rendezvouses on the cordis root: its
+    // shared-column contribution and lazy 'remote' resolve happen through the
+    // root face, and the shared services need a real provide/get store. Cordis's
+    // root returns itself from `.root`; the fake mirrors that.
+    const services = new Map<string, unknown>()
+    const fakeRoot = {
+      get: (name: string) => services.get(name),
+      provide: (name: string, value: unknown) => {
+        services.set(name, value)
+        return () => { if (services.get(name) === value) services.delete(name) }
+      },
+      inject: () => ({ dispose() {} }),
+      slots: { inject: () => () => {}, register: () => () => {} },
+      root: undefined as unknown,
+    }
+    fakeRoot.root = fakeRoot
+    apply({
+      provide() {},
+      effect: (fn: () => (() => void) | void) => { fn() },
+      inject: (_deps: string[], callback: (scope: unknown) => void) => callback({ remote: { $mount: async () => async () => {} }, effect() {} }),
+      slots: {
+        inject: (name: string, fn: () => void) => { injected.push(name); fn() },
+        register: (spec: { name: string; id: string }, render: unknown) => { registered.push({ spec, render }) },
+      },
+      root: fakeRoot,
+      locale: { register: () => () => {} },
+    } as never)
+    expect(injected).toEqual(['conversation.session.header.actions'])
+    expect(registered).toHaveLength(1)
+    expect(registered[0]!.spec).toMatchObject({ name: 'conversation.session.header.actions', id: 'git-commit' })
+    const props = registered[0]!.spec.inject?.() as Record<string, unknown>
+    expect(props).toMatchObject({ client: expect.any(Object), subscribeSettings: expect.any(Function) })
+    expect(typeof props.call).toBe('function')
+  })
+
   it('injects its stylesheet once from apply, not inside the header button', async () => {
-    // One stylesheet serves both the header popover and the plugin-page
-    // settings, so the settings page is styled even when no session header is
-    // mounted (see the clientCss comment in client.tsx). Injecting it inside
-    // the button component used to leave the settings page unstyled.
+    // The stylesheet serves the popover (see the clientCss comment in
+    // client.tsx), so apply() mounts it once rather than letting the button
+    // component race its own copy.
     const dom = new JSDOM('<html><head></head><body><div id="root"></div></body></html>')
     const previous = new Map<string, unknown>()
     for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement,
@@ -110,11 +151,24 @@ describe('git commit client', () => {
     const disposers: Array<(() => void) | void> = []
     const owned = () => [...dom.window.document.head.querySelectorAll('style[data-plugin="dsh-git-commit-client"]')]
     try {
+      const services = new Map<string, unknown>()
+      const fakeRoot = {
+        get: (name: string) => services.get(name),
+        provide: (name: string, value: unknown) => {
+          services.set(name, value)
+          return () => { if (services.get(name) === value) services.delete(name) }
+        },
+        inject: () => ({ dispose() {} }),
+        slots: { inject: () => () => {}, register: () => () => {} },
+        root: undefined as unknown,
+      }
+      fakeRoot.root = fakeRoot
       apply({
         provide() {},
         effect: (fn: () => (() => void) | void) => { disposers.push(fn()) },
         inject: (_deps: string[], callback: (scope: unknown) => void) => callback({ remote: { $mount: async () => async () => {} }, effect() {} }),
         slots: { inject: () => () => {}, register: () => () => {} },
+        root: fakeRoot,
         locale: { register: () => () => {} },
       } as never)
       await act(async () => root.render(createElement(GitCommitAction, {

@@ -16,8 +16,7 @@ Enable the plugin in your profile, then reload the page or restart the profile a
 
 ## Use
 
-- On the new-session page, use the **Delegate** chip on the same row as the workspace and preset selectors before sending the first message: the chip shows the theme color when delegation is on. The choice locks once the session starts, including after reopening it. The chip applies to the session's main agent, and its subagents automatically receive matching execution guidance.
-- In **Plugins → Delegation Mode**, **Enable Delegation Mode for new sessions** sets the initial state for sessions created later.
+- On the new-session page, use the **Delegate** chip on the same row as the workspace and preset selectors before sending the first message: the chip shows the theme color when delegation is on. The choice locks once the session starts, including after reopening it. A session forked from an existing one keeps its parent's state. The chip applies to the session's main agent, and its subagents automatically receive matching execution guidance.
 - Simple tasks can be completed directly. For larger tasks, the main agent assigns scoped work to subagents, coordinates shared interfaces, and checks their results before reporting completion.
 
 ## Limits
@@ -25,7 +24,7 @@ Enable the plugin in your profile, then reload the page or restart the profile a
 - Presets that expose subagent tools — Standard and PTC — support delegation; presets without subagent tools (such as Minimal and other complete-persona presets) keep the chip disabled.
 - The chip updates prompt guidance only; tool access and permissions remain unchanged, and delegation is guided rather than strictly enforced.
 - Delegation Mode stays fixed once a session starts, keeping the session's prompt cache stable.
-- Changing the default applies to sessions created afterwards; existing sessions keep their current state.
+- Existing sessions keep their current state; a previously saved global default still applies to newly created sessions.
 - The added prompt section may reduce provider prompt-cache hits.
 
 ## License

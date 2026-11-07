@@ -25,20 +25,20 @@ const presenceModelStore = (() => {
     revision: 0,
     model: null as { provider: string; model: string } | null,
     ghostModel: null as { provider: string; model: string } | null,
+    judgeModel: null as { provider: string; model: string } | null,
+    handoffModel: null as { provider: string; model: string } | null,
   }
-  return {
+  const store = {
     read: () => row,
-    write: async (model: { provider: string; model: string } | null) => {
-      row.model = model
-      row.revision += 1
-      return row.revision
-    },
-    writeGhost: async (model: { provider: string; model: string } | null) => {
-      row.ghostModel = model
+    write: async (model: { provider: string; model: string } | null) => store.writeFeature('model', model),
+    writeGhost: async (model: { provider: string; model: string } | null) => store.writeFeature('ghostModel', model),
+    writeFeature: async (field: 'model' | 'ghostModel' | 'judgeModel' | 'handoffModel', model: { provider: string; model: string } | null) => {
+      row[field] = model
       row.revision += 1
       return row.revision
     },
   }
+  return store
 })()
 
 async function withRpc(
@@ -145,7 +145,7 @@ describe('composed plugin channel', () => {
       const read = await call('config.read', {})
       expect(read.body.result).toEqual({
         ok: true,
-        value: { recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3 },
+        value: { recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, judgeModel: null, handoffModel: null, autoContinueMode: 'off', autoContinueMax: 3 },
       })
       const write = await call('config.write', { patch: { recapMinutes: 30 } })
       expect(write.body.result).toMatchObject({ ok: false, error: { code: 'session-manager/unavailable' } })

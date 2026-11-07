@@ -355,12 +355,12 @@
     {
       "name": "@klarkxy/dsh-model-hub",
       "title": {
-        "zh": "模型枢纽",
-        "en": "Model Hub"
+        "zh": "子代理",
+        "en": "Subagents"
       },
       "description": {
-        "zh": "在一个页面修改各插件和子代理使用的模型，并查看运行中子代理的模型与思考强度。",
-        "en": "Change the models used by your plugins and subagents from one page, and see each running subagent's model and reasoning effort."
+        "zh": "配置子代理的模型与思考强度，并在会话弹层查看最后使用的模型。",
+        "en": "Configure subagent models and reasoning effort, and see each one's last-used model in the conversation popup."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/",
@@ -438,8 +438,8 @@
         "en": "Font"
       },
       "description": {
-        "zh": "自定义 Web GUI 的界面字体、对话字体、代码字体与会话字号。",
-        "en": "Customize the interface, conversation, and code fonts and the conversation font size of the Web GUI."
+        "zh": "自定义 Web GUI 的界面字体、对话字体、代码与终端字体及字号。",
+        "en": "Customize the interface, conversation, code and terminal fonts and font sizes of the Web GUI."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/font/",

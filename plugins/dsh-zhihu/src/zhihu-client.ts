@@ -78,7 +78,7 @@ export async function resolveZhihuToken(
     if (fromCredential && looksLikeToken(fromCredential)) {
       return { token: fromCredential, source: 'credential' }
     }
-    throw new ZhihuSearchError('TOKEN_MISSING', '未配置有效的知乎 Access Secret。请在「插件 → 知乎 → 设置」中填写。')
+    throw new ZhihuSearchError('TOKEN_MISSING', '未配置有效的知乎 Access Secret。请在「设置 → 知乎」中填写。')
   }
   const primary = env[ZHIHU_CREDENTIALS_PRIMARY]?.trim()
   if (primary && looksLikeToken(primary)) return { token: primary, source: 'env-primary' }

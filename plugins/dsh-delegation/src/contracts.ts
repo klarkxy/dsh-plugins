@@ -11,7 +11,11 @@ export const DELEGATION_TOOLS = ['subagent', 'subagent_fork'] as const
 
 export interface DelegationSettings {
   readonly revision: number
-  /** Initial delegation flag for sessions created from now on. */
+  /**
+   * Initial flag seeded into new sessions before the settings switch existed.
+   * No user-facing control writes it anymore; the stored value is still read
+   * as the seed fallback so existing profiles keep their saved preference.
+   */
   readonly defaultEnabled: boolean
 }
 

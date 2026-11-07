@@ -1,7 +1,9 @@
 import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { buildAuxiliaryUserText } from '@klarkxy/dsh-plugin-kit/auxiliary-context'
+import { getAuxiliaryModel } from '@klarkxy/dsh-plugin-kit/contracts'
 import { modelRouteOverride } from '@klarkxy/dsh-model-route'
 import {
-  DEFAULT_MAX_OUTPUT_TOKENS, RECENT_LOG_COUNT,
+  COMMIT_PLAN_FEATURE, DEFAULT_MAX_OUTPUT_TOKENS, MAX_MANIFEST_CHARS, RECENT_LOG_COUNT,
   defaultSettings, normalizeFallback, type CommitGroupResult, type CommitModelInfo, type CommitRunResult,
   type GitCommitSettings, type GitCommitStatus, type PartialCommitResult,
 } from './contracts.ts'
@@ -9,7 +11,7 @@ import {
   commitGroups, diffAgainstHead, execGit, fallbackGroup, isGitMissing, PartialCommitError, pathVersions, recentSubjects, repoInfo,
   untrackedPreview, workspaceSnapshot, workingTreeChanges, type ChangedFile, type ExecutedCommit, type GitRunner, type UntrackedPreview,
 } from './git.ts'
-import { buildPlanInput, parsePlan, planSystemPrompt, type PlanGroup } from './plan.ts'
+import { buildPlanContext, buildPlanText, parsePlan, planSystemPrompt, type PlanGroup } from './plan.ts'
 
 export interface SessionLike {
   readonly id: string
@@ -149,7 +151,16 @@ export class GitCommitService {
 
   private selectedModel(sessionId: string) {
     const page = modelRouteOverride(this.settings.model)
-    return { route: resolveFeatureModel(this.deps.host, page, sessionId), source: page ? 'page' as const : 'default' as const }
+    if (page) return { route: page, source: 'page' as const }
+    const resolved = resolveFeatureModel(this.deps.host, undefined, sessionId)
+    // The shared auxiliary default sits inside resolveFeatureModel's chain;
+    // label it so commit results name the tier the user actually paid for.
+    const auxiliary = getAuxiliaryModel(this.deps.host)
+    const source: CommitModelInfo['source'] = auxiliary && resolved
+      && resolved.provider === auxiliary.provider && resolved.model === auxiliary.model
+      && (resolved.reasoningEffort ?? '') === (auxiliary.reasoningEffort ?? '')
+      ? 'aux' : 'default'
+    return { route: resolved, source }
   }
 
   async updateSettings(patch: Omit<GitCommitSettings, 'revision'>, expectedRevision: number): Promise<GitCommitSettings> {
@@ -284,11 +295,20 @@ export class GitCommitService {
     const planned = this.selectedModel(sessionId)
     if (planned.route) {
       try {
+        const planInput = { files: selected, recentSubjects: subjects, stat, diff, untracked }
+        // Recent subjects are stable style material; the manifest, stat,
+        // diff and previews are this run's live request. The stable block
+        // plus the labelled envelope reserve their share first so the total
+        // wire text still fits the manifest budget.
+        const context = buildPlanContext(planInput)
+        const envelopeBase = buildAuxiliaryUserText({ feature: COMMIT_PLAN_FEATURE, context, text: '' })
         const result = await callLlmText(this.deps.llm, {
           plugin: this.deps.plugin,
+          feature: COMMIT_PLAN_FEATURE,
+          context,
+          text: buildPlanText(planInput, Math.max(1024, MAX_MANIFEST_CHARS - envelopeBase.length)),
           route: planned.route,
           system: planSystemPrompt(),
-          text: buildPlanInput({ files: selected, recentSubjects: subjects, stat, diff, untracked }),
           maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
           signal,
           sessionId,

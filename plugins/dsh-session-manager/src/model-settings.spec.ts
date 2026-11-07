@@ -111,37 +111,61 @@ async function collectProvider(ctx: ReturnType<typeof makeCtx>): Promise<ModelSe
   return owner
 }
 
-it('serves the stored model route, locks on revision and unloads cleanly', async () => {
+const FEATURE_PATHS = [['model'], ['ghostModel'], ['judgeModel'], ['handoffModel']]
+
+it('serves one field per feature route, locks on revision and unloads cleanly', async () => {
   const rowRef: { row: unknown } = { row: { revision: 3, model: { provider: 'p', model: 'old' } } }
   const ctx = makeCtx(rowRef)
   const owner = await collectProvider(ctx)
   const signal = new AbortController().signal
   expect(await owner.read(signal)).toMatchObject({
     revision: 3,
-    fields: [{
-      path: ['model'],
-      label: { zh: '欢迎回来摘要模型', en: 'Welcome-back recap model' },
-      current: { provider: 'p', model: 'old' },
-      allowFollow: true,
-      followLabel: { zh: '当前会话 / 宿主默认模型', en: 'Current conversation / host default' },
-    }],
+    fields: [
+      {
+        path: ['model'],
+        label: { zh: '欢迎回来摘要模型', en: 'Welcome-back recap model' },
+        current: { provider: 'p', model: 'old' },
+        allowFollow: true,
+        followLabel: { zh: '辅助模型 / 会话 / 宿主默认', en: 'Auxiliary / conversation / host default' },
+      },
+      { path: ['ghostModel'], label: { zh: '继续灰影生成模型', en: 'Continue ghost model' } },
+      { path: ['judgeModel'], label: { zh: '自动继续判定模型', en: 'Auto-continue judge model' } },
+      { path: ['handoffModel'], label: { zh: '交接摘要模型', en: 'Handoff summary model' } },
+    ],
   })
   // A write bumps the revision, stores the route and notifies the hub.
   expect(await owner.write(['model'], { provider: 'q', model: 'new', reasoningEffort: 'high' }, 3, signal)).toBe(4)
   expect(rowRef.row).toMatchObject({ revision: 4, model: { provider: 'q', model: 'new', reasoningEffort: 'high' } })
   expect(ctx.notifications).toHaveBeenCalled()
   expect(ctx.notifications.mock.calls.at(-1)?.[1]).toEqual({ ns: '@klarkxy/dsh-session-manager', revision: 4 })
+  // Every feature field lands in the same row with its own revision bump.
+  expect(await owner.write(['ghostModel'], { provider: 'g', model: 'ghost' }, 4, signal)).toBe(5)
+  expect(await owner.write(['judgeModel'], { provider: 'j', model: 'judge' }, 5, signal)).toBe(6)
+  expect(await owner.write(['handoffModel'], { provider: 'h', model: 'handoff' }, 6, signal)).toBe(7)
+  expect(rowRef.row).toMatchObject({
+    revision: 7,
+    ghostModel: { provider: 'g', model: 'ghost' },
+    judgeModel: { provider: 'j', model: 'judge' },
+    handoffModel: { provider: 'h', model: 'handoff' },
+  })
   // Stale revision and unknown paths fail without touching the row.
   await expect(owner.write(['model'], {} as ModelRoute, 3, signal)).rejects.toThrow(/changed/)
-  await expect(owner.write(['prompt'], {} as ModelRoute, 4, signal)).rejects.toThrow(/Unknown/)
-  expect(rowRef.row).toMatchObject({ revision: 4, model: { provider: 'q', model: 'new', reasoningEffort: 'high' } })
+  await expect(owner.write(['prompt'], {} as ModelRoute, 7, signal)).rejects.toThrow(/Unknown/)
+  expect(rowRef.row).toMatchObject({ revision: 7, model: { provider: 'q', model: 'new', reasoningEffort: 'high' } })
   // An empty route clears the selection back to follow-default.
-  expect(await owner.write(['model'], {} as ModelRoute, 4, signal)).toBe(5)
-  expect(rowRef.row).toMatchObject({ revision: 5, model: null })
-  expect(await owner.read(signal)).toMatchObject({ revision: 5, fields: [{ current: undefined }] })
+  expect(await owner.write(['model'], {} as ModelRoute, 7, signal)).toBe(8)
+  expect(rowRef.row).toMatchObject({ revision: 8, model: null })
+  const cleared = await owner.read(signal)
+  expect(cleared.revision).toBe(8)
+  expect(cleared.fields.map(field => [field.path.join('.'), field.current])).toEqual([
+    ['model', undefined],
+    ['ghostModel', { provider: 'g', model: 'ghost' }],
+    ['judgeModel', { provider: 'j', model: 'judge' }],
+    ['handoffModel', { provider: 'h', model: 'handoff' }],
+  ])
   // Unloading tears down the owner instead of answering further writes.
   for (const dispose of ctx.disposers.splice(0).reverse()) await dispose()
-  await expect(owner.write(['model'], { provider: 'q', model: 'late' }, 5, signal)).rejects.toThrow(/unloaded/)
+  await expect(owner.write(['model'], { provider: 'q', model: 'late' }, 8, signal)).rejects.toThrow(/unloaded/)
 })
 
 it('starts from a clean row and tolerates malformed rows', async () => {
@@ -149,11 +173,17 @@ it('starts from a clean row and tolerates malformed rows', async () => {
   const ctx = makeCtx(rowRef)
   const owner = await collectProvider(ctx)
   const signal = new AbortController().signal
-  expect(await owner.read(signal)).toMatchObject({ revision: 0, fields: [{ current: undefined }] })
+  const snapshot = await owner.read(signal)
+  expect(snapshot.revision).toBe(0)
+  expect(snapshot.fields.map(field => field.path)).toEqual(FEATURE_PATHS)
+  expect(snapshot.fields.every(field => field.current === undefined && field.allowFollow === true)).toBe(true)
   rowRef.row = { revision: 'nope', model: 42 }
   const freshCtx = makeCtx(rowRef)
   const fresh = await collectProvider(freshCtx)
-  expect(await fresh.read(signal)).toMatchObject({ revision: 0, fields: [{ current: undefined }] })
+  const malformed = await fresh.read(signal)
+  expect(malformed.revision).toBe(0)
+  expect(malformed.fields.map(field => field.path)).toEqual(FEATURE_PATHS)
+  expect(malformed.fields.every(field => field.current === undefined)).toBe(true)
 })
 
 it('degrades silently without the storageDomain service', async () => {

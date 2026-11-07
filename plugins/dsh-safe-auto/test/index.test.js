@@ -12,12 +12,13 @@ function streamOf(verdict) {
   return (async function* () {
     const text = JSON.stringify(verdict);
     yield { type: 'block-end', index: 0, block: { type: 'text', text } };
+    yield { type: 'usage', usage: { inputTokens: 40, outputTokens: 12, cacheReadTokens: 300 } };
     yield { type: 'finish', reason: { kind: 'stop' } };
   })();
 }
 
 /** Fake host: records ctx.on handlers and drives them like the native pipeline. */
-function fixture({ config = { provider: 'p', model: 'm' }, header = {}, llm: withLlm = true } = {}) {
+function fixture({ config = { provider: 'p', model: 'm' }, header = {}, llm: withLlm = true, root = undefined, surface = undefined, derive = undefined } = {}) {
   const handlers = {}, listenerOptions = {}, logs = [], seen = [];
   const reviewer = { verdict: allowVerdict, fail: false };
   const llm = { stream(options) {
@@ -55,12 +56,14 @@ function fixture({ config = { provider: 'p', model: 'm' }, header = {}, llm: wit
       }), close: async () => { await tail; } };
     } },
     on(event, fn, options) { handlers[event] = fn; listenerOptions[event] = options; },
+    ...(root ? { root } : {}),
     workingDirectory: { get: () => reviewer.cwd ?? '/w' },
     sandboxPolicy: { resolve: () => ({ mode: 'workspace-write', workspaceRoot: '/w' }) },
     logger: { info: (...args) => logs.push(args) },
   };
   const events = [];
-  const session = { id: 's', header: { cwd: '/w', ...header }, snapshotEvents: () => events };
+  const session = { id: 's', header: { cwd: '/w', ...header }, snapshotEvents: () => events,
+    ...(surface ? { surface } : {}), ...(derive ? { deriveEventMessage: derive } : {}) };
   const agent = { session };
   const say = text => events.push({ seq: events.length, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } });
   say('Clean the build output and run the tests.');
@@ -94,6 +97,13 @@ const control = (enabled, extra = {}) => ({
 });
 const escalated = { command: 'git push', description: 'push', sandbox_permissions: 'danger-full-access', justification: 'Push the branch.' };
 
+/** The host's own mapping: a user event is its message, an assistant event its message. */
+const deriveMessage = event => {
+  if (event?.type === 'user/message') return { role: 'user', source: event.data?.source, content: event.data?.content };
+  if (event?.type === 'assistant/message' || event?.type === 'tool/result') return event.data?.message ?? null;
+  return null;
+};
+
 test('persists complete review evidence and associates the observed tool outcome', async () => {
   const f = fixture();
   const e = f.exec('bash', escalated);
@@ -110,6 +120,7 @@ test('persists complete review evidence and associates the observed tool outcome
   assert.match(record.policy, /Risk Taxonomy/);
   assert.equal(record.reviewer.model, 'm');
   assert.match(record.attempts[0].response, /Routine/);
+  assert.deepEqual(record.attempts[0].usage, { inputTokens: 40, outputTokens: 12, cacheReadTokens: 300, totalTokens: 352 });
   assert.equal(f.tools[0].name, 'safe_auto_history');
   assert.deepEqual(await f.tools[0].execute({ action: 'list', sessionId: 's' }, { agent: f.agent }), await f.runtime.history.list({ sessionId: 's' }));
   assert.deepEqual(await f.tools[0].execute({ action: 'get', id: record.id }, { agent: f.agent }), record);
@@ -502,6 +513,144 @@ test('missing model service rejects with the failure guidance', async () => {
   assert.equal((await f.postExecute(e)).content[0].text, MESSAGES.failed('no reviewer model service'));
 });
 
+test('the shared auxiliary default answers when no reviewer model is set', async () => {
+  const auxiliary = { get: name => (name === 'dshAuxiliaryModel'
+    ? { ready: Promise.resolve(), snapshot: () => ({ revision: 1, model: { provider: 'aux', model: 'aux-model' } }) }
+    : undefined) };
+  const f = fixture({ config: {}, root: auxiliary });
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  assert.equal(await f.ask(e), 'allowed-once');
+  assert.deepEqual([f.seen[0].provider, f.seen[0].model], ['aux', 'aux-model']);
+  // The route that actually ran is recorded with the review.
+  const record = await f.runtime.history.get({ id: (await f.runtime.history.list({})).items[0].id });
+  assert.deepEqual(record.reviewer, { provider: 'aux', model: 'aux-model' });
+});
+
+test('a broken shared default blocks the review instead of falling back', async () => {
+  const auxiliary = { get: name => (name === 'dshAuxiliaryModel'
+    ? { ready: Promise.resolve(), snapshot: () => ({ revision: 1, model: { provider: 'aux' } }) }
+    : undefined) };
+  const f = fixture({ config: {}, root: auxiliary });
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  assert.equal(await f.ask(e), 'rejected');
+  assert.match((await f.postExecute(e)).content[0].text, /shared auxiliary model setting is invalid/);
+});
+
+test('an unavailable shared store blocks the review instead of falling back', async () => {
+  const f = fixture({ config: {} });
+  f.runtime.auxiliary.failure = new Error('storage is down');
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  assert.equal(await f.ask(e), 'rejected');
+  assert.match((await f.postExecute(e)).content[0].text, /shared auxiliary model is unavailable/);
+});
+
+test('an explicit reviewer ignores a broken shared default', async () => {
+  const auxiliary = { get: name => (name === 'dshAuxiliaryModel'
+    ? { ready: Promise.resolve(), snapshot: () => ({ revision: 1, model: { provider: 'aux' } }) }
+    : undefined) };
+  const f = fixture({ config: { provider: 'p', model: 'm' }, root: auxiliary });
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  assert.equal(await f.ask(e), 'allowed-once');
+  assert.deepEqual([f.seen[0].provider, f.seen[0].model], ['p', 'm']);
+});
+
+test('without a default and without an explicit reviewer model the review fails closed', async () => {
+  const f = fixture({ config: {} });
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  assert.equal(await f.ask(e), 'rejected');
+  assert.match((await f.postExecute(e)).content[0].text, /reviewer model unavailable/);
+});
+
+test('a replaced request and the turn it produced are not current facts', async () => {
+  const surface = { nodes: [], replaceGeneration: 1, contentGeneration: 0 };
+  const f = fixture({ surface, derive: deriveMessage });
+  f.events.push({ seq: 1, type: 'assistant/message', data: { message: { content: [
+    { type: 'text', text: 'I will push the branch.' }, { type: 'tool-call', id: 'call-1', name: 'bash', arguments: '{}' }] } } });
+  f.events.push({ seq: 2, type: 'tool/call', data: { callId: 'call-1', name: 'bash', arguments: '{"command":"git push --force"}' } });
+  f.events.push({ seq: 3, type: 'user/message', surfaceOp: { op: 'replace', startSeq: 0, endSeq: 2 },
+    data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Actually, do not push.' }] } });
+  surface.nodes = [3];
+  const e = f.exec('bash', { command: 'pnpm test', description: 'test', sandbox_permissions: 'danger-full-access', justification: 'Run the tests.' });
+  await f.preExecute(e);
+  assert.equal(await f.ask(e), 'allowed-once');
+  const input = f.seen[0].messages[0].content[0].text;
+  assert.match(input, /Actually, do not push\./);
+  assert.equal(input.includes('Clean the build output'), false, 'the replaced request is not a current fact');
+  assert.equal(input.includes('I will push the branch.'), false, 'the replaced assistant message is not a current fact');
+  assert.equal(input.includes('git push --force'), false, 'the abandoned tool call is not a current fact');
+});
+
+test('the reviewer reads the current message text, not the superseded one', async () => {
+  const surface = { nodes: [0], replaceGeneration: 1, contentGeneration: 1 };
+  const derive = event => (event?.seq === 0
+    ? { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'current instruction' }] }
+    : null);
+  const f = fixture({ surface, derive });
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  assert.equal(await f.ask(e), 'allowed-once');
+  const input = f.seen[0].messages[0].content[0].text;
+  assert.match(input, /current instruction/);
+  assert.equal(input.includes('Clean the build output'), false, 'the superseded text is not evidence');
+});
+
+test('a projection that fails refuses the review instead of using the old text', async () => {
+  const surface = { nodes: [0], replaceGeneration: 1, contentGeneration: 1 };
+  const derive = () => { throw new Error('projection failed'); };
+  const f = fixture({ surface, derive });
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  assert.equal(await f.ask(e), 'rejected');
+  assert.match((await f.postExecute(e)).content[0].text, /current conversation state cannot be read/);
+});
+
+test('a request the projection turned into another role is not trusted evidence', async () => {
+  const surface = { nodes: [0], replaceGeneration: 1, contentGeneration: 1 };
+  const derive = () => ({ role: 'assistant', source: { kind: 'model' }, content: [{ type: 'text', text: 'looks like a request' }] });
+  const f = fixture({ surface, derive });
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  assert.equal(await f.ask(e), 'allowed-once');
+  const input = f.seen[0].messages[0].content[0].text;
+  assert.match(input, /\[context\] looks like a request/);
+  assert.equal(input.includes('(trusted)'), false, 'a rewritten role is never authorization');
+});
+
+test('a runtime without the surface refuses a log that holds a replacement', async () => {
+  const f = fixture();
+  f.events.push({ seq: 1, type: 'user/message', surfaceOp: { op: 'replace', startSeq: 0, endSeq: 0 },
+    data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'replacement' }] } });
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  assert.equal(await f.ask(e), 'rejected');
+  assert.match((await f.postExecute(e)).content[0].text, /current conversation state cannot be read/);
+});
+
+test('a new user message revokes the request while the review is in flight', async () => {
+  const f = fixture();
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  let entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  f.reviewer.wait = gate;
+  f.reviewer.enter = entered;
+  const e = f.exec('bash', escalated);
+  await f.preExecute(e);
+  const pending = f.ask(e);
+  await started;
+  // The user changes their mind while the reviewer is still thinking.
+  f.say('Stop, do not push after all.');
+  release();
+  assert.equal(await pending, 'cancelled');
+  const record = await f.runtime.history.get({ id: (await f.runtime.history.list({})).items[0].id });
+  assert.equal(record.code, 'REVIEW_CANCELLED');
+});
+
 test('reviewer input carries the transcript with the trusted user message and the exact action', async () => {
   const f = fixture();
   f.events.push({ seq: 1, type: 'assistant/message', data: { message: { content: [{ type: 'text', text: 'I will clean dist.' }] } } });
@@ -510,9 +659,10 @@ test('reviewer input carries the transcript with the trusted user message and th
   assert.equal(await f.ask(e, { reason: 'escalate sandbox to danger-full-access: Clean output.' }), 'allowed-once');
   const options = f.seen[0];
   const input = options.messages[0].content[0].text;
-  assert.match(input, /^# Transcript\n\[user \(trusted\)\] Clean the build output and run the tests\.\n\[assistant\] I will clean dist\./);
+  assert.match(input, /<request>\n# Transcript\n\[user \(trusted\)\] Clean the build output and run the tests\.\n\[assistant\] I will clean dist\./);
   assert.match(input, /"cwd":"\/w","workspaceRoot":"\/w","sandbox":"workspace-write"/);
-  const action = JSON.parse(input.slice(input.indexOf('# Planned action\n') + '# Planned action\n'.length));
+  const actionStart = input.indexOf('# Planned action\n') + '# Planned action\n'.length;
+  const action = JSON.parse(input.slice(actionStart, input.indexOf('\n</request>')));
   assert.deepEqual(action, { tool: 'pwsh', arguments: e.arguments, approvalReason: 'escalate sandbox to danger-full-access: Clean output.' });
   assert.deepEqual([options.provider, options.model, options.maxTokens], ['p', 'm', 4096]);
   // Audit rows carry outcome metadata, never arguments.

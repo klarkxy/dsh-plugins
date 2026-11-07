@@ -53,6 +53,7 @@ import {
   PresenceError,
   type PresenceModelHost,
 } from './welcome-back.ts'
+import { createSharedCalls } from './shared-call.ts'
 import type { SessionQueryEngine } from '@deepseek-ai/dsh-session-query'
 
 const PROFILE_ERROR = 'Session Manager requires the active profile directory'
@@ -95,6 +96,9 @@ export function registerSessionManagerRpc(
   if (sessionQuery === undefined) throw new Error('Session Manager requires the sessionQuery service')
   const profileDir = profile.dir
   const suggestions = createSuggestionCache()
+  // Server-side same-material merge for ghost generations; lives with the RPC
+  // registration so unload releases every waiter.
+  const sharedCalls = createSharedCalls()
   const lifetime = new AbortController()
   let journal: Promise<RetryJournal> | undefined
   const retryJournal = async (): Promise<RetryJournal | undefined> => {
@@ -124,7 +128,7 @@ export function registerSessionManagerRpc(
       }
       if (endpoint === CONTINUE_SUGGEST_ENDPOINT) {
         if (!payloadKeys(payload, ['sessionId', 'knownSeq'])) throw new PresenceError('session-manager/invalid-request', 'invalid continuation request')
-        const value = await suggestContinuation(services, config, models(), suggestions, payload as unknown as ContinueSuggestRequest, merged)
+        const value = await suggestContinuation(services, config, models(), suggestions, sharedCalls, payload as unknown as ContinueSuggestRequest, merged)
         return { ok: true, value }
       }
       if (endpoint === EDIT_PREPARE_ENDPOINT) {

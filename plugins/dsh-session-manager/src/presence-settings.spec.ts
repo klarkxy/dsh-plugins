@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { PresenceSettingsStore } from './presence-settings.ts'
-import type { PresenceSettings } from './storage.ts'
+import { parsePresenceSettings, type PresenceSettings } from './storage.ts'
 
 function deferred() {
   let resolve!: () => void
@@ -25,10 +25,10 @@ describe('presence settings write ownership', () => {
   it('merges deferred concurrent routes and suggestions against the latest row with increasing revisions', async () => {
     const f = fixture()
     const first = f.store.write({ provider: 'p', model: 'recap', reasoningEffort: 'high' })
-    const second = f.store.rememberSuggestion('a', 5, 'first')
+    const second = f.store.rememberSuggestion('a', 5, 'first', 'k1')
     const third = f.store.writeGhost({ provider: 'p', model: 'ghost' })
-    const fourth = f.store.rememberSuggestion('b', 7, null)
-    const fifth = f.store.rememberSuggestion('a', 9, 'latest')
+    const fourth = f.store.rememberSuggestion('b', 7, null, 'k2')
+    const fifth = f.store.rememberSuggestion('a', 9, 'latest', 'k3')
     await Promise.resolve()
     expect(f.put).toHaveBeenCalledTimes(1)
     expect(f.store.read().revision).toBe(0)
@@ -40,7 +40,9 @@ describe('presence settings write ownership', () => {
       revision: 5,
       model: { provider: 'p', model: 'recap', reasoningEffort: 'high' },
       ghostModel: { provider: 'p', model: 'ghost' },
-      suggestions: { a: { seq: 9, text: 'latest' }, b: { seq: 7, text: null } },
+      judgeModel: null,
+      handoffModel: null,
+      suggestions: { a: { seq: 9, text: 'latest', key: 'k3' }, b: { seq: 7, text: null, key: 'k2' } },
     })
   })
 
@@ -50,7 +52,7 @@ describe('presence settings write ownership', () => {
     const stale = f.store.writeGhost(null, { expectedRevision: 0 })
     const staleCheck = expect(stale).rejects.toThrow(/changed/)
     const cancelled = new AbortController()
-    const skipped = f.store.rememberSuggestion('cancelled', 1, null, cancelled.signal)
+    const skipped = f.store.rememberSuggestion('cancelled', 1, null, 'kc', cancelled.signal)
     const skipCheck = expect(skipped).rejects.toMatchObject({ name: 'AbortError' })
     cancelled.abort()
     f.gate.resolve()
@@ -93,9 +95,9 @@ describe('presence settings write ownership', () => {
 
   it('evicts against the queue-time suggestions without dropping concurrent additions', async () => {
     const suggestions = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`s${i}`, { seq: i, text: null }]))
-    const f = fixture({ revision: 8, model: null, ghostModel: null, suggestions })
-    const first = f.store.rememberSuggestion('a', 201, 'a')
-    const second = f.store.rememberSuggestion('b', 202, 'b')
+    const f = fixture({ revision: 8, model: null, ghostModel: null, judgeModel: null, handoffModel: null, suggestions })
+    const first = f.store.rememberSuggestion('a', 201, 'a', 'ka')
+    const second = f.store.rememberSuggestion('b', 202, 'b', 'kb')
     f.gate.resolve()
     await Promise.all([first, second])
     expect(Object.keys(f.store.read().suggestions)).toHaveLength(200)
@@ -103,5 +105,90 @@ describe('presence settings write ownership', () => {
     expect(f.store.suggestion('s1')).toBeUndefined()
     expect(f.store.suggestion('a')?.text).toBe('a')
     expect(f.store.suggestion('b')?.text).toBe('b')
+  })
+})
+
+describe('judgeModel migration', () => {
+  it('copies a legacy explicit ghost route into judgeModel once and persists a strict-valid row', async () => {
+    const legacy = {
+      revision: 2,
+      model: null,
+      ghostModel: { provider: 'p', model: 'ghost', reasoningEffort: 'low' },
+      suggestions: {},
+    } as PresenceSettings
+    const f = fixture(legacy)
+    expect(f.store.read().judgeModel).toEqual({ provider: 'p', model: 'ghost', reasoningEffort: 'low' })
+    f.gate.resolve()
+    // The migration write is a real queued commit: queue a writer behind it so
+    // the durable row has settled before we inspect it.
+    expect(await f.store.write(null)).toBe(4)
+    expect(f.durable()).toMatchObject({
+      revision: 4,
+      judgeModel: { provider: 'p', model: 'ghost', reasoningEffort: 'low' },
+      ghostModel: { provider: 'p', model: 'ghost', reasoningEffort: 'low' },
+    })
+    // The real domain parses stored rows through the strict schema on open.
+    // The transient migration flag must never reach the durable row.
+    const reparsed = parsePresenceSettings(f.durable())
+    expect(reparsed).toMatchObject({
+      judgeModel: { provider: 'p', model: 'ghost', reasoningEffort: 'low' },
+    })
+    expect(reparsed && 'migratedJudge' in reparsed).toBe(false)
+  })
+
+  it('does not migrate when judgeModel is already explicit or absent ghost is untouched', async () => {
+    const explicit = fixture({
+      revision: 2, model: null,
+      ghostModel: { provider: 'p', model: 'ghost' },
+      judgeModel: { provider: 'j', model: 'judge' },
+      handoffModel: null,
+      suggestions: {},
+    })
+    // An explicit human choice is preserved; no migration write happens.
+    expect(explicit.store.read().judgeModel).toEqual({ provider: 'j', model: 'judge' })
+    explicit.gate.resolve()
+    expect(await explicit.store.write(null)).toBe(3)
+    expect(explicit.put).toHaveBeenCalledTimes(1)
+    expect(explicit.durable()).toMatchObject({ judgeModel: { provider: 'j', model: 'judge' } })
+
+    const follow = fixture({
+      revision: 2, model: null,
+      ghostModel: { provider: 'p', model: 'ghost' },
+      judgeModel: null,
+      handoffModel: null,
+      suggestions: {},
+    })
+    // An explicit judge:null means "follow defaults", not "missing": no migration.
+    expect(follow.store.read().judgeModel).toBeNull()
+    follow.gate.resolve()
+    expect(await follow.store.write(null)).toBe(3)
+    expect(follow.put).toHaveBeenCalledTimes(1)
+    expect(follow.durable()).toMatchObject({ judgeModel: null })
+  })
+
+  it('reopens a migrated row as a normal row without migrating twice', async () => {
+    let durable: unknown = {
+      revision: 2, model: null,
+      ghostModel: { provider: 'p', model: 'ghost' },
+      suggestions: {},
+    }
+    const put = vi.fn(async (_key: string, row: unknown) => { durable = row })
+    const domain = {
+      table: () => ({
+        get: () => durable,
+        entries: () => [][Symbol.iterator](),
+        put,
+      }),
+      close: async () => {},
+    }
+    const first = new PresenceSettingsStore(domain)
+    expect(first.read().migratedJudge).toBe(true)
+    await first.write(null)
+    // The reopened store parses the durable row through the strict schema:
+    // judgeModel persists, nothing re-migrates, no extra write fires.
+    const second = new PresenceSettingsStore(domain)
+    expect(second.read().migratedJudge).toBeUndefined()
+    expect(second.read().judgeModel).toEqual({ provider: 'p', model: 'ghost' })
+    expect(put).toHaveBeenCalledTimes(2)
   })
 })

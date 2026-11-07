@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from './client.tsx'
+import { wireSharedSettingsRoot } from './client-test-ctx.ts'
 import { Config } from './index.ts'
 import { failureText } from './ui-copy.ts'
 import { DELETE_DIALOG_ID } from './contracts.ts'
@@ -40,7 +41,7 @@ describe('session manager live locale', () => {
     }
     try {
       await act(async () => {
-        apply(ctx as never)
+        apply(wireSharedSettingsRoot(ctx) as never)
         expect(specs.some(spec => spec.name === 'conversation.hero.workspace' && spec.priority === -10)).toBe(true)
         expect(specs.map(spec => spec.name)).not.toContain('conversation.hero.workspace.item')
         const Picker = renderers.get('conversation.hero.workspace')!, Overlay = renderers.get(DELETE_DIALOG_ID)!

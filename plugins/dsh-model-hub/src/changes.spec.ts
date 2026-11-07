@@ -1,7 +1,9 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
-import { createModelSettingsChanges, watchModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
+import { createModelSettingsChanges, watchModelSettingsChanges, type ModelSettingsChangesController } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
+import * as hub from './index.ts'
+import { CAST_NAMESPACE, CAST_TENDENCIES_NAMESPACE } from './cast.ts'
 
 function events() {
   const listeners = new Map<string, Set<(...args: any[]) => void>>()
@@ -17,6 +19,32 @@ function events() {
   }
 }
 describe('host model settings invalidation service', () => {
+  it('mounts the real plugin stream, forwards both cast stores and releases it on unload', async () => {
+    const ctx = new Context()
+    ctx.provide('profileContext', {} as never)
+    ctx.provide('settings', { describe: () => [], mutate: async () => {} } as never)
+    ctx.provide('systemPrompt', { section: () => () => {}, getSectionOrder: () => 0 } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
+    ctx.provide('connection', { requestRejection: () => undefined } as never)
+    try {
+      const fiber = ctx.plugin(hub)
+      await fiber
+      const identity = modelSettingsChangesIdentity('@klarkxy/dsh-model-hub')
+      const service = ctx.get(identity.service, false) as ModelSettingsChangesController
+      expect(service).toBeDefined()
+      const stream = service.watch(new AbortController().signal)[Symbol.asyncIterator]()
+      expect((await stream.next()).value).toEqual({ kind: 'ready' })
+      await ctx.parallel('settings/document-updated', CAST_NAMESPACE, 1)
+      expect((await stream.next()).value).toEqual({ kind: 'changed', ns: CAST_NAMESPACE, revision: 1 })
+      await ctx.parallel('model-settings/changed', { ns: CAST_TENDENCIES_NAMESPACE, revision: 2 })
+      expect((await stream.next()).value).toEqual({ kind: 'changed', ns: CAST_TENDENCIES_NAMESPACE, revision: 2 })
+      const waiting = expect(stream.next()).rejects.toThrow('owner unloaded')
+      await fiber.dispose()
+      await waiting
+      expect(ctx.get(identity.service, false)).toBeUndefined()
+    } finally { await ctx.fiber.dispose() }
+  })
+
   it('attaches before ready, retains changes during reads, coalesces and cleans up', async () => {
     const bus = events(), abort = new AbortController()
     const iterator = watchModelSettingsChanges(bus, abort.signal)

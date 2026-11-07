@@ -12,7 +12,7 @@ Pick which service answers the model's web searches, set request limits, and let
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-Replace `web` with your profile name. Restart DSH Web, then open **Plugins → Web Search**. Restart the profile after plugin updates as well so the new search code loads.
+Replace `web` with your profile name. Restart DSH Web, then open **Settings → Web Search**. Restart the profile after plugin updates as well so the new search code loads.
 
 ## Set up search
 

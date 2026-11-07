@@ -48,7 +48,7 @@ export async function apply(ctx) {
       const current = { provider: values.provider, model: values.model,
         ...(values.reasoningEffort ? { reasoningEffort: values.reasoningEffort } : {}) };
       return { revision, fields: [{ path: ['model'], label: { zh: '审查模型', en: 'Reviewer model' }, current,
-        followLabel: { zh: '当前会话模型', en: 'Current conversation model' }, allowFollow: true }] };
+        followLabel: { zh: '默认辅助模型', en: 'Default auxiliary model' }, allowFollow: true }] };
     },
     async write(path, route, expectedRevision, signal) {
       if (path.length !== 1 || path[0] !== 'model') throw new Error('Unknown Safe Auto model setting');

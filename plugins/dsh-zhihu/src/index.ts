@@ -156,7 +156,7 @@ export async function apply(ctx: Context, config: ZhihuCallPolicyOptions = {}): 
   const sync = createZhihuSyncService(syncDomain.table('drafts'), {
     resolveCredentials: async () => {
       const [key, secret] = await Promise.all(ZHIHU_SYNC_CREDENTIAL_REFS.map(ref => host.credentials.resolve(credentialRef(ref))))
-      if (!key?.value.trim() || !secret?.value.trim()) throw new ZhihuSyncServiceError('sync-credentials-missing', '请在知乎插件设置中填写发布 App Key 和 App Secret。')
+      if (!key?.value.trim() || !secret?.value.trim()) throw new ZhihuSyncServiceError('sync-credentials-missing', '请在「设置 → 知乎」中填写发布 App Key 和 App Secret。')
       return { appKey: key.value.trim(), appSecret: secret.value.trim() }
     },
   })

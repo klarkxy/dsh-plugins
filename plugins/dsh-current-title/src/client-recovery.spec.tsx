@@ -60,7 +60,7 @@ describe('title background read recovery', () => {
     expect((menu.props.choices as Array<{ label: string }>).map(choice => choice.label))
       .toEqual(['Available provider / New model', 'legacy / saved-model'])
     expect((menu.props.leading as Array<{ label: string; selected?: boolean }>).map(item => [item.label, item.selected === true]))
-      .toEqual([['Use the session model', false]])
+      .toEqual([['Default auxiliary model', false]])
     expect((menu.props.efforts as Array<{ id: string }>).map(effort => effort.id)).toEqual(['high'])
     expect(tree.some(element => element.type === 'select' && descendants(element).some(child => child.props.children === 'Reasoning effort'))).toBe(false)
     // An unrelated edit leaves the legacy route under server ownership.

@@ -13,11 +13,11 @@ klarkxy 的 DeepSeek Harness（DSH）插件。可以在[插件站点](https://kl
 | [`@klarkxy/dsh-delegation`](plugins/dsh-delegation/docs/README.zh-CN.md) | 委派模式：按会话开启，主代理负责拆解、委派和验收，具体工作交给子代理。 |
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.zh-CN.md) | 安全自动：需要审批的请求交给审核模型判断，通过才放行这一次。 |
 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.zh-CN.md) | 会话管理：跨工作目录查找和阅读会话，使用临时工作区；空输入一键继续或在回复提前结束时自动继续，久离回来给出摘要与压缩建议。 |
-| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/docs/README.zh-CN.md) | 模型枢纽：在一个页面修改各插件和子代理使用的模型，并查看运行中子代理的模型与思考强度。 |
+| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/docs/README.zh-CN.md) | 子代理：配置子代理的模型与思考强度，并在会话弹层查看最后使用的模型。 |
 | [`@klarkxy/dsh-magpie`](plugins/dsh-magpie/docs/README.zh-CN.md) | Magpie：把 DSH 连接到本机、局域网或其他位置的 magpie 网关，同步模型、默认模型和网络搜索。 |
 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/docs/README.zh-CN.md) | 网页搜索：在一个设置页管理和排序多家搜索与网页读取服务，包括已安装插件提供的能力。 |
 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/docs/README.zh-CN.md) | 知乎：知乎搜索、智能体工具、知识库、用量统计与草稿管理。 |
-| [`@klarkxy/dsh-font`](plugins/dsh-font/docs/README.zh-CN.md) | 字体：自定义 Web GUI 的界面字体、对话字体、代码字体与会话字号。 |
+| [`@klarkxy/dsh-font`](plugins/dsh-font/docs/README.zh-CN.md) | 字体：自定义 Web GUI 的界面字体、对话字体、代码与终端字体及字号。 |
 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.zh-CN.md) | 破限：解除模型的回答限制、交付完整成果的会话 Preset，只作用于选用它的会话；可能导致账号被封禁。 |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | DSH 文档：在插件页阅读官方文档；创造模式可查文档以及 npm 与 GitHub 上的插件。 |
 

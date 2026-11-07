@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-plugin-kit",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Shared support library for klarkxy DSH plugins.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -66,6 +66,21 @@
       "import": "./lib/model-settings-client.js",
       "default": "./lib/model-settings-client.js"
     },
+    "./auxiliary-model": {
+      "types": "./lib/auxiliary-model.d.ts",
+      "import": "./lib/auxiliary-model.js",
+      "default": "./lib/auxiliary-model.js"
+    },
+    "./auxiliary-context": {
+      "types": "./lib/auxiliary-context.d.ts",
+      "import": "./lib/auxiliary-context.js",
+      "default": "./lib/auxiliary-context.js"
+    },
+    "./auxiliary-model-client": {
+      "types": "./lib/auxiliary-model-client.d.ts",
+      "import": "./lib/auxiliary-model-client.js",
+      "default": "./lib/auxiliary-model-client.js"
+    },
     "./cli-process": {
       "types": "./lib/cli-process.d.ts",
       "import": "./lib/cli-process.js",
@@ -93,6 +108,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-llm": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "@deepseek-ai/dsh-typert-protocol": ">=0.2.0-rc.2",
@@ -101,6 +117,9 @@
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-storage-domain": {
       "optional": true
     },
     "react": {
@@ -121,7 +140,9 @@
   },
   "devDependencies": {
     "zod": "4.4.3",
+    "@deepseek-ai/cordis": "4.0.5",
     "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.1",
     "@deepseek-ai/dsh-llm": "0.2.1-rc.1",
     "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.1",
     "@deepseek-ai/dsh-storage-json": "0.2.1-rc.1",

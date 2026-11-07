@@ -37,9 +37,9 @@ test('DSH development dependencies and workspace overrides share one baseline', 
   assert.deepEqual(overrides, locked, 'workspace and lockfile overrides must agree')
 })
 
-function assertOpenCompatibleRange(range, label) {
+function assertOpenCompatibleRange(range, label, runtimeTarget = target) {
   assert.match(range, /^>=\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, label)
-  assert.ok(semver.satisfies(target, range, { includePrerelease: true }), `${label}: target ${target} is not supported`)
+  assert.ok(semver.satisfies(runtimeTarget, range, { includePrerelease: true }), `${label}: target ${runtimeTarget} is not supported`)
 }
 
 test('DSH host dependencies stay optional peers and injected UI stays development-only', () => {
@@ -57,7 +57,13 @@ test('DSH host dependencies stay optional peers and injected UI stays developmen
       assert.equal(name, '@deepseek-ai/dsh-web-search-exa', `${pkg.name}: host package in dependencies`)
       assertOpenCompatibleRange(range, `${pkg.name}: ${name}`)
     }
-    if (pkg.engines?.dsh) assertOpenCompatibleRange(pkg.engines.dsh, pkg.name)
+    if (pkg.engines?.dsh) {
+      // This YAML preset uses the renamed modelSelection option and merged
+      // list_agents tool. Its browser code retains the common compile baseline,
+      // but the preset must reject hosts older than the new runtime contract.
+      const runtimeTarget = pkg.name === '@klarkxy/dsh-unrestricted' ? '0.2.2-rc.1' : target
+      assertOpenCompatibleRange(pkg.engines.dsh, pkg.name, runtimeTarget)
+    }
     const descriptor = join(root, 'plugins', pkg.name.split('/').at(-1), 'dsh.plugin.json')
     if (existsSync(descriptor)) {
       assert.equal(JSON.parse(readFileSync(descriptor, 'utf8')).engines?.dsh, pkg.engines.dsh, pkg.name)

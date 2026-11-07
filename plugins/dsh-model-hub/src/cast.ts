@@ -3,10 +3,16 @@
  *
  * Edits the host-native `subagent-model-selection-settings` namespace
  * (`enabled` + `allowedModels` routes) through the official settings CAS
- * path, and keeps one user-annotated "task tendency" per route in
- * `<profile>/data/model-hub/cast.json`. Tendencies are advisory hints for
- * the system-prompt injection in index.ts; the main agent still decides
- * which model a delegated subagent receives.
+ * path, and keeps the per-route user preferences in
+ * `<profile>/data/model-hub/cast.json`: the free-text "task tendency" note
+ * and the reasoning effort.
+ *
+ * The native AllowedModelRoute schema carries provider and model only — the
+ * host strips a reasoning effort from the settings value — so the effort is a
+ * plugin-side preference keyed by provider/model and saved with the file's own
+ * CAS. Tendencies and efforts are advisory hints for the system-prompt
+ * injection in index.ts; the main agent still decides which model a delegated
+ * subagent receives.
  */
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -18,7 +24,7 @@ export const CAST_NAMESPACE = 'subagent-model-selection-settings'
 export const CAST_TENDENCIES_NAMESPACE = '@klarkxy/dsh-model-hub/cast-tendencies'
 
 /** Tendency ids are limited like host route ids; notes stay short prompt lines. */
-export const CAST_LIMITS = { id: 250, tendency: 500 } as const
+export const CAST_LIMITS = { id: 250, tendency: 500, effort: 80 } as const
 
 /** One valid route of the cast. `index` is the write handle (see createCast). */
 export interface CastRoute {
@@ -28,6 +34,7 @@ export interface CastRoute {
   index: number
   provider: string
   model: string
+  /** Plugin-side preference; the native schema never carries it. */
   reasoningEffort?: string
   tendency?: string
 }
@@ -36,12 +43,22 @@ export interface CastRoute {
 export interface CastState {
   enabled: boolean
   revision: number
+  /** Revision of the plugin-side preference store (tendencies and efforts). */
   tendencyRevision?: number
   tendencyError?: string
   routes: CastRoute[]
 }
 /** Native saves acknowledge only the commit; getCast owns later reads. */
 export interface CastCommit { committed: true }
+
+/**
+ * One route's plugin-side preferences. An absent field keeps its stored value;
+ * an empty string clears it.
+ */
+export interface RoutePreferences {
+  tendency?: string
+  reasoningEffort?: string
+}
 
 type SettingsOp = { op: 'set'; path: string[]; value: unknown } | { op: 'unset'; path: string[] }
 
@@ -54,7 +71,7 @@ export interface CastDeps {
 }
 
 /** One valid allowedModels entry plus its raw array index. */
-type IndexedRoute = Omit<CastRoute, 'tendency'>
+type IndexedRoute = Omit<CastRoute, 'tendency' | 'reasoningEffort'>
 
 interface RawCast {
   enabled: boolean
@@ -64,11 +81,18 @@ interface RawCast {
   length: number
 }
 
+/** The plugin-side preference store: one revision over both maps. */
+interface PreferenceStore {
+  revision: number
+  tendencies: Record<string, string>
+  efforts: Record<string, string>
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** Tendency store key for one provider/model pair. */
+/** Store key for one provider/model pair; it keys tendencies and efforts. */
 export function tendencyKey(provider: string, model: string): string {
   return JSON.stringify([provider, model])
 }
@@ -79,29 +103,25 @@ function parseAllowedModels(value: unknown): { routes: IndexedRoute[]; length: n
   const routes: IndexedRoute[] = []
   list.forEach((entry, index) => {
     if (!isRecord(entry)) return
-    const { provider, model, reasoningEffort } = entry
+    const { provider, model } = entry
     if (typeof provider !== 'string' || !provider || typeof model !== 'string' || !model) return
-    routes.push({
-      index, provider, model,
-      ...(typeof reasoningEffort === 'string' && reasoningEffort ? { reasoningEffort } : {}),
-    })
+    routes.push({ index, provider, model })
   })
   return { routes, length: list.length }
 }
 
-function normalizeRouteInput(input: unknown): { provider: string; model: string; reasoningEffort?: string } {
+/**
+ * Normalize a native route write. The native schema owns provider and model
+ * only: a reasoning effort is a plugin-side preference and never travels
+ * through the settings CAS.
+ */
+function normalizeRouteInput(input: unknown): { provider: string; model: string } {
   const row = isRecord(input) ? input : {}
   const provider = typeof row.provider === 'string' ? row.provider.trim() : ''
   const model = typeof row.model === 'string' ? row.model.trim() : ''
   if (!provider || !model) throw new Error('A route requires non-empty provider and model ids')
   if (provider.length > CAST_LIMITS.id || model.length > CAST_LIMITS.id) {
     throw new Error(`Route provider and model ids are limited to ${CAST_LIMITS.id} characters`)
-  }
-  if (row.reasoningEffort !== undefined) {
-    const effort = typeof row.reasoningEffort === 'string' ? row.reasoningEffort.trim() : ''
-    if (!effort) throw new Error('A route reasoning effort must be a non-empty string')
-    if (effort.length > CAST_LIMITS.id) throw new Error(`Route reasoning effort is limited to ${CAST_LIMITS.id} characters`)
-    return { provider, model, reasoningEffort: effort }
   }
   return { provider, model }
 }
@@ -120,12 +140,13 @@ function validateIndex(value: unknown): number {
 
 /**
  * Render the injected guidance. Pure: callers resolve enabled state and the
- * tendency-merged routes. Returns '' when the injection should not appear —
+ * preference-merged routes. Returns '' when the injection should not appear —
  * the host prompt renderer drops empty sections.
  */
 export function buildCastPrompt(enabled: boolean, routes: readonly CastRoute[]): string {
   if (!enabled || !routes.length) return ''
   const annotated = routes.filter(route => typeof route.tendency === 'string' && route.tendency.trim())
+  const withEffort = routes.filter(route => typeof route.reasoningEffort === 'string' && route.reasoningEffort.trim())
   // Global settings can differ from a Session's saved route policy. Discovery
   // and the actual tool schema, not this section, determine what it can select.
   const guidance = [
@@ -140,55 +161,72 @@ export function buildCastPrompt(enabled: boolean, routes: readonly CastRoute[]):
     ...annotated.map(route =>
       `- ${JSON.stringify({ provider: route.provider, model: route.model })}${route.reasoningEffort ? ` (reasoning effort: ${route.reasoningEffort})` : ''}: ${route.tendency}`),
   )
+  if (withEffort.length) guidance.push(
+    'Configured reasoning effort (advisory reference configuration, applied when a subagent starts; it does not change subagents that are already running): pass reasoning_effort only when the selected route supports that value and omit it otherwise. When a route\'s provider/model changes, an effort the new route does not support is dropped.',
+    ...withEffort.map(route =>
+      `- ${JSON.stringify({ provider: route.provider, model: route.model })}: reasoning effort "${route.reasoningEffort}"`),
+  )
   return guidance.join('\n')
 }
 
 export function createCast(deps: CastDeps) {
   const castFile = (): string => {
-    if (!deps.profileDir) throw new Error('No profile directory; cast tendencies cannot be stored')
+    if (!deps.profileDir) throw new Error('No profile directory; cast preferences cannot be stored')
     return join(deps.profileDir, 'data', 'model-hub', 'cast.json')
   }
 
-  // Always read the durable revision: another tab or plugin incarnation may
-  // have committed since the last snapshot. Failed reads never become a cache.
-  const readTendencies = (): { revision: number; tendencies: Record<string, string> } => {
-    if (!deps.profileDir) return { revision: 0, tendencies: {} }
+  /**
+   * Always read the durable revision: another tab or plugin incarnation may
+   * have committed since the last snapshot. Failed reads never become a cache.
+   * v1 and v2 stores hold tendencies only; v3 adds the effort map.
+   */
+  const readPreferences = (): PreferenceStore => {
+    if (!deps.profileDir) return { revision: 0, tendencies: {}, efforts: {} }
     let raw: string
     try {
       raw = readFileSync(castFile(), 'utf8')
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { revision: 0, tendencies: {} }
-      throw new Error('Cast tendency store cannot be read; restore access to cast.json and refresh', { cause: error })
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { revision: 0, tendencies: {}, efforts: {} }
+      throw new Error('Cast preference store cannot be read; restore access to cast.json and refresh', { cause: error })
     }
     let parsed: unknown
     try { parsed = JSON.parse(raw) } catch (error) {
-      throw new Error('Cast tendency store is damaged; repair cast.json and refresh', { cause: error })
+      throw new Error('Cast preference store is damaged; repair cast.json and refresh', { cause: error })
     }
-    if (isRecord(parsed) && parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2) {
-      throw new Error('Cast tendency store version is unsupported; use a compatible plugin before saving')
+    const version = isRecord(parsed) ? parsed.schemaVersion : undefined
+    if (version !== 1 && version !== 2 && version !== 3) {
+      throw new Error('Cast preference store version is unsupported; use a compatible plugin before saving')
     }
     try {
-      if (!isRecord(parsed) || !isRecord(parsed.tendencies)) throw new Error('Invalid tendency store schema')
-      if (parsed.schemaVersion === 2 && (!Number.isSafeInteger(parsed.revision) || (parsed.revision as number) < 0)) throw new Error('Invalid tendency store revision')
-      for (const [key, value] of Object.entries(parsed.tendencies)) {
-        const ids: unknown = JSON.parse(key)
-        if (!Array.isArray(ids) || ids.length !== 2 || !ids.every(id => typeof id === 'string' && id.trim()) || typeof value !== 'string') {
-          throw new Error('Invalid tendency store entry')
+      if (!isRecord(parsed) || !isRecord(parsed.tendencies)) throw new Error('Invalid preference store schema')
+      if (version !== 1 && (!Number.isSafeInteger(parsed.revision) || (parsed.revision as number) < 0)) throw new Error('Invalid preference store revision')
+      const efforts = version === 3 ? parsed.efforts : {}
+      if (!isRecord(efforts)) throw new Error('Invalid preference store schema')
+      for (const map of [parsed.tendencies, efforts]) {
+        for (const [key, value] of Object.entries(map)) {
+          const ids: unknown = JSON.parse(key)
+          if (!Array.isArray(ids) || ids.length !== 2 || !ids.every(id => typeof id === 'string' && id.trim()) || typeof value !== 'string') {
+            throw new Error('Invalid preference store entry')
+          }
         }
       }
-      return { revision: parsed.schemaVersion === 1 ? 0 : parsed.revision as number, tendencies: parsed.tendencies as Record<string, string> }
+      return {
+        revision: version === 1 ? 0 : parsed.revision as number,
+        tendencies: parsed.tendencies as Record<string, string>,
+        efforts: efforts as Record<string, string>,
+      }
     } catch (error) {
-      throw new Error('Cast tendency store schema is invalid; repair cast.json and refresh', { cause: error })
+      throw new Error('Cast preference store schema is invalid; repair cast.json and refresh', { cause: error })
     }
   }
 
   /** Atomic store write: temp file plus rename, so a crash never halves JSON. */
-  const writeTendencies = (next: Record<string, string>, revision: number): void => {
+  const writePreferences = (next: { tendencies: Record<string, string>; efforts: Record<string, string> }, revision: number): void => {
     const file = castFile()
     mkdirSync(dirname(file), { recursive: true })
     const temp = `${file}.${process.pid}.tmp`
     try {
-      writeFileSync(temp, JSON.stringify({ schemaVersion: 2, revision, tendencies: next }, null, 2))
+      writeFileSync(temp, JSON.stringify({ schemaVersion: 3, revision, tendencies: next.tendencies, efforts: next.efforts }, null, 2))
       renameSync(temp, file)
     } catch (error) {
       try {
@@ -213,18 +251,25 @@ export function createCast(deps: CastDeps) {
     }
   }
 
-  const mergeTendencies = (routes: readonly IndexedRoute[], stored: Record<string, string>): CastRoute[] => {
+  /** Merge the stored preferences into the native routes. */
+  const mergePreferences = (routes: readonly IndexedRoute[], stored: { tendencies: Record<string, string>; efforts: Record<string, string> }): CastRoute[] => {
     return routes.map(route => {
-      const tendency = stored[tendencyKey(route.provider, route.model)]
-      return tendency ? { ...route, tendency } : { ...route }
+      const key = tendencyKey(route.provider, route.model)
+      const tendency = stored.tendencies[key]
+      const effort = stored.efforts[key]
+      return {
+        ...route,
+        ...(tendency ? { tendency } : {}),
+        ...(effort ? { reasoningEffort: effort } : {}),
+      }
     })
   }
 
   const getCast = (): CastState => {
     const raw = readRaw()
     try {
-      const stored = readTendencies()
-      return { enabled: raw.enabled, revision: raw.revision, tendencyRevision: stored.revision, routes: mergeTendencies(raw.routes, stored.tendencies) }
+      const stored = readPreferences()
+      return { enabled: raw.enabled, revision: raw.revision, tendencyRevision: stored.revision, routes: mergePreferences(raw.routes, stored) }
     } catch (error) {
       // Native controls remain available, including repair of enabled + [].
       return { enabled: raw.enabled, revision: raw.revision, routes: raw.routes, tendencyError: (error as Error).message }
@@ -285,30 +330,50 @@ export function createCast(deps: CastDeps) {
     })
   }
 
+  /**
+   * Save one route's plugin-side preferences with the file's own CAS. The
+   * returned state is the committed one, so the page never waits for a later
+   * refresh that could still carry the previous value.
+   */
+  const setRoutePreferences = (provider: unknown, model: unknown, preferences: unknown, expectedRevision: unknown, signal?: AbortSignal): CastState => {
+    if (typeof provider !== 'string' || !provider.trim() || typeof model !== 'string' || !model.trim()) {
+      throw new Error('A route preference requires non-empty provider and model ids')
+    }
+    if (!deps.profileDir) throw new Error('No profile directory; cast preferences cannot be stored')
+    const revision = validateRevision(expectedRevision)
+    const stored = readPreferences()
+    if (stored.revision !== revision) throw new Error('Cast preferences changed; refresh and retry')
+    if (revision === Number.MAX_SAFE_INTEGER) throw new Error('Cast preference revision limit reached')
+    const patch = isRecord(preferences) ? preferences : {}
+    const next = { tendencies: { ...stored.tendencies }, efforts: { ...stored.efforts } }
+    const key = tendencyKey(provider.trim(), model.trim())
+    if ('tendency' in patch) {
+      if (typeof patch.tendency !== 'string') throw new Error('A tendency must be a string')
+      const text = patch.tendency.trim()
+      if (text.length > CAST_LIMITS.tendency) throw new Error(`A tendency is limited to ${CAST_LIMITS.tendency} characters`)
+      if (text) next.tendencies[key] = text
+      else Reflect.deleteProperty(next.tendencies, key)
+    }
+    if ('reasoningEffort' in patch) {
+      if (typeof patch.reasoningEffort !== 'string') throw new Error('A reasoning effort must be a string')
+      const effort = patch.reasoningEffort.trim()
+      if (effort.length > CAST_LIMITS.effort) throw new Error(`A reasoning effort is limited to ${CAST_LIMITS.effort} characters`)
+      if (effort) next.efforts[key] = effort
+      else Reflect.deleteProperty(next.efforts, key)
+    }
+    // Resolve native state before committing so a later aggregate read cannot
+    // turn a completed preference save into a rejected RPC.
+    const raw = readRaw()
+    signal?.throwIfAborted()
+    writePreferences(next, revision + 1)
+    try { deps.notifyTendenciesChanged?.(revision + 1) } catch { /* Already committed. */ }
+    return { enabled: raw.enabled, revision: raw.revision, tendencyRevision: revision + 1, routes: mergePreferences(raw.routes, next) }
+  }
+
   /** Synchronous read/CAS/rename in one host turn; no native settings write. */
   const setTendency = (provider: unknown, model: unknown, tendency: unknown, expectedRevision: unknown, signal?: AbortSignal): CastState => {
-    if (typeof provider !== 'string' || !provider.trim() || typeof model !== 'string' || !model.trim()) {
-      throw new Error('A tendency requires non-empty provider and model ids')
-    }
     if (typeof tendency !== 'string') throw new Error('A tendency must be a string')
-    const text = tendency.trim()
-    if (text.length > CAST_LIMITS.tendency) throw new Error(`A tendency is limited to ${CAST_LIMITS.tendency} characters`)
-    if (!deps.profileDir) throw new Error('No profile directory; cast tendencies cannot be stored')
-    const revision = validateRevision(expectedRevision)
-    const stored = readTendencies()
-    if (stored.revision !== revision) throw new Error('Cast tendencies changed; refresh and retry')
-    if (revision === Number.MAX_SAFE_INTEGER) throw new Error('Cast tendency revision limit reached')
-    // Resolve native state before committing so a later aggregate read cannot
-    // turn a completed tendency save into a rejected RPC.
-    const raw = readRaw()
-    const next = { ...stored.tendencies }
-    const key = tendencyKey(provider.trim(), model.trim())
-    if (text) next[key] = text
-    else Reflect.deleteProperty(next, key)
-    signal?.throwIfAborted()
-    writeTendencies(next, revision + 1)
-    try { deps.notifyTendenciesChanged?.(revision + 1) } catch { /* Already committed. */ }
-    return { enabled: raw.enabled, revision: raw.revision, tendencyRevision: revision + 1, routes: mergeTendencies(raw.routes, next) }
+    return setRoutePreferences(provider, model, { tendency }, expectedRevision, signal)
   }
 
   /**
@@ -334,15 +399,15 @@ export function createCast(deps: CastDeps) {
       }
     }
     try {
-      return buildCastPrompt(snapshot.enabled, mergeTendencies(snapshot.routes, readTendencies().tendencies))
+      return buildCastPrompt(snapshot.enabled, mergePreferences(snapshot.routes, readPreferences()))
     } catch (error) {
-      deps.logger?.warn('model-hub: cast tendencies unavailable: %s', (error as Error).message)
+      deps.logger?.warn('model-hub: cast preferences unavailable: %s', (error as Error).message)
       // Optional user notes must not suppress the generic selection guidance.
       return buildCastPrompt(snapshot.enabled, snapshot.routes)
     }
   }
 
-  return { getCast, setEnabled, addRoute, setRoute, removeRoute, setTendency, promptText }
+  return { getCast, setEnabled, addRoute, setRoute, removeRoute, setTendency, setRoutePreferences, promptText }
 }
 
 export type Cast = ReturnType<typeof createCast>

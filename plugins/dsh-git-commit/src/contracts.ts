@@ -14,6 +14,8 @@ export const PURPOSE_ID = 'git-commit.plan'
 export const RPC_CHANNEL = '/dsh-git-commit'
 export const GIT_COMMIT_CLIENT_SERVICE = 'dshGitCommitClient'
 export const PROMPT_VERSION = 'git-commit.v1'
+/** Feature id stamped on the auxiliary-context envelope for this call. */
+export const COMMIT_PLAN_FEATURE = 'git-commit-plan'
 export const SCHEMA_VERSION = 'commit-plan-json.v1'
 export const CONTRACT_VERSION = 1
 
@@ -60,8 +62,8 @@ export function normalizeFallback(value: unknown): boolean {
 export interface CommitModelInfo {
   readonly provider: string
   readonly model: string
-  /** 'page' is the plugin-page selection; 'default' follows the session or host chat model. */
-  readonly source: 'page' | 'default'
+  /** 'page' is the plugin-page selection; 'aux' the shared default auxiliary model; 'default' follows the session or host chat model. */
+  readonly source: 'page' | 'aux' | 'default'
 }
 
 export interface GitCommitStatus {

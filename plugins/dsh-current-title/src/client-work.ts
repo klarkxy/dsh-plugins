@@ -3,6 +3,7 @@ import type { RpcResult, TitleCadence, TitleModelRoute, TitleStatus } from './co
 export const titleCopy = {
   zh: {
     label: '自动标题',
+    groupHint: '标题模型、提示词与更新节奏',
     session: '当前会话',
     noSession: '没有打开的会话。打开一个会话后，可以在这里查看并重新生成标题。',
     pinned: '已手动命名',
@@ -14,7 +15,8 @@ export const titleCopy = {
     promptHint: '留空用内置说明，仍返回类型和摘要；离开输入框即保存。',
     loading: '正在读取标题设置…',
     model: '标题模型',
-    modelDefault: '跟随会话模型',
+    modelDefault: '默认辅助模型',
+    modelHint: '使用全局默认辅助模型；未设置时跟随当前会话模型，再回落到宿主默认对话模型。',
     cadence: '更新节奏',
     cadenceAll: '跟随当前任务（每条消息）',
     cadenceFirst: '仅首条消息',
@@ -29,6 +31,7 @@ export const titleCopy = {
   },
   en: {
     label: 'Auto Title',
+    groupHint: 'Title model, prompt and update cadence',
     session: 'Current session',
     noSession: 'No session is open. Open one to see its title and regenerate it here.',
     pinned: 'Renamed manually',
@@ -40,7 +43,8 @@ export const titleCopy = {
     promptHint: 'Empty uses the built-in instruction; a type and summary are still returned. Saves on blur.',
     loading: 'Loading title settings…',
     model: 'Title model',
-    modelDefault: 'Use the session model',
+    modelDefault: 'Default auxiliary model',
+    modelHint: 'Uses the global default auxiliary model; when none is set, the current conversation model, then the host default chat model.',
     cadence: 'Update cadence',
     cadenceAll: 'Track the current task (every message)',
     cadenceFirst: 'First message only',

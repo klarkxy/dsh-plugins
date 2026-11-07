@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-session-manager",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "description": "Find and read DeepSeek Harness sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, and get a welcome-back recap after time away.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",

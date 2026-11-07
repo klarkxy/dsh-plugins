@@ -26,12 +26,44 @@ export function conversationRoute(owner = {}) {
   return Object.freeze({ provider: selected.provider, model: selected.model });
 }
 
-/** Snapshot the route once per review. No implicit fallback to another provider. */
-export function resolveReviewRoute(config, owner) {
+/**
+ * The global auxiliary default, when one is configured.
+ *
+ * It is a complete route or nothing. A default that is present but malformed
+ * is a broken setting, not an absent one: it throws instead of quietly
+ * sending the review to another model. Only `null`/`undefined` means "no
+ * default", and only that case falls back to the accepted conversation route.
+ */
+export function auxiliaryRoute(auxiliary) {
+  if (auxiliary === undefined || auxiliary === null) return undefined;
+  if (typeof auxiliary !== 'object' || Array.isArray(auxiliary)) throw new Error('INVALID_AUXILIARY_MODEL');
+  const provider = auxiliary.provider;
+  const model = auxiliary.model;
+  const effort = auxiliary.reasoningEffort ?? '';
+  if (!id(provider) || !id(model)) throw new Error('INVALID_AUXILIARY_MODEL');
+  if (effort !== '' && !id(effort)) throw new Error('INVALID_AUXILIARY_MODEL');
+  return Object.freeze(effort ? { provider, model, reasoningEffort: effort } : { provider, model });
+}
+
+/**
+ * Route for one review, resolved once and frozen:
+ * an explicit reviewer model wins, then the global auxiliary default, then the
+ * accepted conversation route. There is no other fallback — a session without
+ * an accepted route cannot be reviewed, and no deployment default is used.
+ */
+export function resolveReviewRoute(config, owner, auxiliary) {
   validateModelConfig(config);
-  const selected = config.provider ? { provider: config.provider, model: config.model } : conversationRoute(owner);
-  return Object.freeze({ ...selected,
-    ...(config.reasoningEffort ? { reasoningEffort: config.reasoningEffort } : {}) });
+  if (config.provider) {
+    return Object.freeze({ provider: config.provider, model: config.model,
+      ...(config.reasoningEffort ? { reasoningEffort: config.reasoningEffort } : {}) });
+  }
+  const aux = auxiliaryRoute(auxiliary);
+  if (aux) {
+    // The reviewer's own effort wins; otherwise the default's effort carries.
+    return Object.freeze({ ...aux,
+      ...(config.reasoningEffort ? { reasoningEffort: config.reasoningEffort } : {}) });
+  }
+  return conversationRoute(owner);
 }
 
 function usageTotal(usage) {
@@ -41,6 +73,25 @@ function usageTotal(usage) {
   if (!fields.every(value => Number.isSafeInteger(value) && value >= 0)) return undefined;
   const total = fields.reduce((a, b) => a + b, 0);
   return Number.isSafeInteger(total) ? total : undefined;
+}
+
+/**
+ * The full native usage breakdown. Cache counters stay separate from the
+ * prompt and completion counters, so a review record shows what the model
+ * actually cached instead of one opaque total. Reasoning tokens are reported
+ * as their own field and never counted into the total: the provider already
+ * includes them in the completion count.
+ */
+function usageBreakdown(usage) {
+  if (!usage || typeof usage !== 'object') return undefined;
+  const out = {};
+  for (const field of ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'reasoningTokens']) {
+    const value = usage[field];
+    if (Number.isSafeInteger(value) && value >= 0) out[field] = value;
+  }
+  const total = usageTotal(usage);
+  if (total !== undefined) out.totalTokens = total;
+  return Object.keys(out).length === 0 ? undefined : Object.freeze(out);
 }
 
 /** Bounded native DSH one-shot. It never constructs an Agent or runs returned tools. */
@@ -67,7 +118,7 @@ export async function nativeCompletion(llm, route, system, input, maxTokens, sig
       finish = chunk.reason.kind;
       continue;
     }
-    if (chunk.type === 'usage') { usage = usageTotal(chunk.usage); continue; }
+    if (chunk.type === 'usage') { usage = chunk.usage; continue; }
     if (!Number.isSafeInteger(chunk.index) || chunk.index < 0 || chunk.index > 255) throw new Error('INVALID_NATIVE_BLOCK');
     if (chunk.type === 'block-start') {
       if (!['text', 'reasoning'].includes(chunk.blockType)) throw new Error('UNEXPECTED_REVIEWER_TOOL');
@@ -99,5 +150,6 @@ export async function nativeCompletion(llm, route, system, input, maxTokens, sig
   const text = [...blocks.entries()].sort(([a], [b]) => a - b)
     .filter(([, block]) => block.type === 'text').map(([, block]) => block.text).join('');
   if (!text || Buffer.byteLength(text) > MAX_TEXT_BYTES) throw new Error('INVALID_COMPLETION');
-  return { text, totalTokens: usage };
+  const breakdown = usageBreakdown(usage);
+  return { text, totalTokens: breakdown?.totalTokens, usage: breakdown };
 }

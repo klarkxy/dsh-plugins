@@ -21,8 +21,22 @@ const client = await import(`data:text/javascript;base64,${Buffer.from(source
   .replace("from '@klarkxy/dsh-model-route'", `from '${resolve('@klarkxy/dsh-model-route')}'`)
   .replace("from '@klarkxy/dsh-plugin-kit/official-ui'", `from '${resolve('@klarkxy/dsh-plugin-kit/official-ui')}'`)
   .replace("from '@klarkxy/dsh-plugin-kit/client-utils'", `from '${resolve('@klarkxy/dsh-plugin-kit/client-utils')}'`)
+  .replace("from '@klarkxy/dsh-plugin-kit/auxiliary-model-client'", `from '${new URL('./auxiliary-model-client-stub.mjs', import.meta.url).href}'`)
   .replace("from '@klarkxy/dsh-plugin-kit/model-settings-client'", `from '${resolve('@klarkxy/dsh-plugin-kit/model-settings-client')}'`)).toString('base64')}`);
 const render = (Component, props) => renderToStaticMarkup(React.createElement(Component, props));
+/* Test wiring for the shared settings-page contract: the kit's
+ * registerSessionSettingsItem resolves its rendezvous service through
+ * `ctx.root.get`/`ctx.root.provide`, so every apply() stub needs a
+ * cordis-shaped root. The provided-services map keeps provide() visible to a
+ * later get() and unprovides on release, matching the real lifecycle. */
+const wireSharedSettingsRoot = ctx => {
+  const services = new Map();
+  ctx.root = ctx.root ?? ctx;
+  ctx.get ??= name => (services.has(name) ? services.get(name) : ctx[name]);
+  ctx.provide ??= (name, value) => { services.set(name, value); return () => { if (services.get(name) === value) services.delete(name); }; };
+  ctx.set ??= (name, value) => services.set(name, value);
+  return ctx;
+};
 const values = { provider: 'retired', model: 'legacy', reasoningEffort: 'unlisted', reviewerPrompt: '' };
 const catalog = { groups: [{ id: 'provider', name: 'Provider', models: [{ id: 'reasoner', name: 'Reasoner', reasoning: { efforts: [{ id: 'medium', name: 'Medium' }] } }, { id: 'plain', name: 'Plain' }] }] };
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
@@ -30,22 +44,67 @@ const snapshot = (extra = {}) => ({ revision: '1:0', current: 'workspace-write',
   options: [{ value: 'read-only', name: 'read-only' }, { value: 'workspace-write', name: 'workspace-write' },
     { value: 'danger-full-access', name: 'danger-full-access' }, { value: 'safe-auto', name: 'Safe Auto' }], ...extra });
 
-test('exact slot registrations use injection, replacement priority and bundle key; registration does not write', () => {
+test('the permission seat keeps its replacement wait; settings join the shared Session Management column', () => {
   const waiting = [], registered = [], calls = [], dependencies = [];
-  client.apply({ effect: fn => { fn(); }, slots: { inject: (name, fn) => waiting.push([name, fn]), register: (options, component) => registered.push({ options, component }) }, connection: { rpc: { call: (...args) => { calls.push(args); return Promise.resolve({ ok: true, value: {} }); } } }, remote: { session: { modelCatalog: () => catalog } }, inject: (names, callback) => { dependencies.push(names); callback({ remote: { $mount: async () => async () => {} }, effect: () => {} }); } });
+  const ctx = wireSharedSettingsRoot({
+    effect: fn => { const cleanup = fn(); return typeof cleanup === 'function' ? cleanup : () => {}; },
+    slots: {
+      inject: (name, fn) => { waiting.push([name, fn]); return () => {}; },
+      register: (options, component) => { registered.push({ options, component }); return () => {}; },
+    },
+    locale: { getSnapshot: () => ({ active: 'zh-CN' }), subscribe: () => () => {} },
+    connection: { rpc: { call: (...args) => { calls.push(args); return Promise.resolve({ ok: true, value: {} }); } } },
+    remote: { session: { modelCatalog: () => catalog } },
+    inject: (names, callback) => { dependencies.push(names); callback({ remote: { $mount: async () => async () => {} }, effect: () => {} }); },
+  });
+  client.apply(ctx);
   assert.deepEqual(client.inject, ['slots', 'connection', 'remote', 'remote.session', 'locale']);
   assert.deepEqual(dependencies, [['remote']]);
-  assert.deepEqual(waiting.map(([name]) => name), ['conversation.input.permission', 'plugins.bundle.config']);
+  // The composer permission control keeps its own inject(); the shared page's
+  // settings.section wait, this plugin's item wait and the nav-icon wait all
+  // come through the kit helper, so this plugin never spells any of the shared
+  // seat names itself. The shared auxiliary card joined the same column: its
+  // root-side share adds a second item wait and icon wait (its page retain
+  // shares the already-created service).
+  assert.deepEqual(waiting.map(([name]) => name),
+    ['conversation.input.permission', 'settings.section', 'dsh.session-settings.item', 'settings.section.icon',
+      'dsh.session-settings.item', 'settings.section.icon']);
   assert.equal(registered.length, 0);
   waiting.forEach(([, fn]) => fn());
-  assert.equal(registered.length, 2);
+  assert.equal(registered.length, 6);
   const menu = registered.find(r => r.component === client.PermissionMenu);
   assert.equal(menu.options.name, 'conversation.input.permission');
   assert.equal(menu.options.priority, -10);
-  const panel = registered.find(r => r.component === client.SettingsPanel);
-  assert.equal(panel.options.key, '@klarkxy/dsh-safe-auto');
+  const section = registered.find(r => r.options.name === 'settings.section');
+  assert.equal(section.options.id, 'session-manager');
+  assert.equal(section.options.order, 30);
+  assert.equal(section.options.label(), '会话管理');
+  assert.deepEqual(section.options.children, { 'dsh.session-settings.item': { kind: 'list', scope: 'root' } });
+  const item = registered.find(r => r.options.name === 'dsh.session-settings.item');
+  assert.equal(item.options.id, 'safe-auto');
+  assert.equal(item.options.order, 80);
+  assert.equal(typeof item.options.inject, 'undefined');
+  // The shared section icon mirrors this row's order as both order and
+  // priority: every contributor registers the same icon id, and the host
+  // renders a single winner for the nav cell.
+  const icon = registered.find(r => r.options.name === 'settings.section.icon');
+  assert.equal(icon.options.id, 'session-manager');
+  assert.equal(icon.options.order, 80);
+  assert.equal(icon.options.priority, 80);
+  assert.match(render(icon.component, { size: 16, active: true }), /^<svg[^>]*viewBox="0 0 16 16"/);
+  // The shared default auxiliary model card is root-owned infrastructure: this
+  // plugin only retains it, so the card appears once no matter how many
+  // features follow the global default — as the 'auxiliary-model' row of the
+  // same shared column, with its own nav-icon share at its row's order.
+  const items = registered.filter(r => r.options.name === 'dsh.session-settings.item');
+  const auxiliary = items.find(r => r.options.id === 'auxiliary-model');
+  assert.equal(auxiliary.options.order, 55);
+  const auxIcon = registered.filter(r => r.options.name === 'settings.section.icon')
+    .find(r => r.options.priority === 55);
+  assert.equal(auxIcon.options.id, 'session-manager');
+  // No per-plugin page, no General fallback row, and registration never writes.
+  assert.equal(registered.some(r => String(r.options.name).startsWith('settings.general')), false);
   assert.deepEqual(calls, []);
-  assert.deepEqual(Object.keys(panel.options.inject()), ['api', 'locale']);
 });
 
 test('apply injects one head stylesheet with the official tokens and cleans it up', () => {
@@ -54,13 +113,13 @@ test('apply injects one head stylesheet with the official tokens and cleans it u
   for (const [key, value] of Object.entries({ document: dom.window.document })) { previous.set(key, globalThis[key]); Object.defineProperty(globalThis, key, { configurable: true, writable: true, value }); }
   try {
     const cleanups = [];
-    const ctx = {
-      effect: fn => { const cleanup = fn?.(); if (typeof cleanup === 'function') cleanups.push(cleanup); },
-      slots: { inject: () => {}, register: () => () => {} },
+    const ctx = wireSharedSettingsRoot({
+      effect: fn => { const cleanup = fn?.(); if (typeof cleanup === 'function') cleanups.push(cleanup); return typeof cleanup === 'function' ? cleanup : () => {}; },
+      slots: { inject: () => () => {}, register: () => () => {} },
       connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
       remote: { session: { modelCatalog: () => catalog } },
       inject: (names, callback) => callback({ remote: { $mount: async () => async () => {} }, effect: () => {} }),
-    };
+    });
     client.apply(ctx);
     const owned = () => [...dom.window.document.head.querySelectorAll('style[data-plugin="@klarkxy/dsh-safe-auto"]')];
     assert.equal(owned().length, 1);
@@ -253,7 +312,7 @@ test('permission menu zh anchor uses the localized labels', () => {
 
 test('settings render as a tablist: reviewer tab selected, other panels hidden', () => {
   const policyLimits = { timeoutMs: 90000, outputTokens: 4096, maxTranscriptBytes: 48000 };
-  const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values, policyLimits }, initialCatalog: catalog });
+  const html = render(client.SettingsPanel, { api: {}, initialSettings: { revision: 'r', values, policyLimits }, initialCatalog: catalog });
   assert.equal((html.match(/role="tab"/g) || []).length, 4);
   assert.equal((html.match(/role="tabpanel"/g) || []).length, 4);
   assert.match(html, /aria-selected="true"[^>]*>Reviewer/);
@@ -267,22 +326,22 @@ test('settings render as a tablist: reviewer tab selected, other panels hidden',
 });
 
 test('the limits tab exists only while the host reports policy limits', () => {
-  const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog });
+  const html = render(client.SettingsPanel, { api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog });
   assert.equal((html.match(/role="tab"/g) || []).length, 3);
   assert.doesNotMatch(html, /-limits-panel"/);
   // A stale limits selection falls back to the reviewer tab.
-  const stale = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog, initialTab: 'limits' });
+  const stale = render(client.SettingsPanel, { api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog, initialTab: 'limits' });
   assert.match(stale, /aria-selected="true"[^>]*>Reviewer/);
 });
 
 test('tab controls reference their panels by id', () => {
-  const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog });
+  const html = render(client.SettingsPanel, { api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog });
   for (const [, panelId] of html.matchAll(/aria-controls="([^"]+)"/g)) assert.match(html, new RegExp(`id="${panelId}"`));
   for (const [, tabId] of html.matchAll(/aria-labelledby="([^"]+)"/g)) assert.match(html, new RegExp(`id="${tabId}"`));
 });
 
 test('reviewer tab shows prompt limits and retains unknown saved values', () => {
-  const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog });
+  const html = render(client.SettingsPanel, { api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog });
   assert.match(html, /Additional reviewer prompt/);
   assert.match(html, /maxLength="4096"/i);
   assert.match(html, /never expand authorization/);
@@ -291,7 +350,7 @@ test('reviewer tab shows prompt limits and retains unknown saved values', () => 
 });
 
 test('copy renders in one language chosen from the host locale', () => {
-  const props = { view: 'page', api: {}, initialSettings: { revision: 1, values }, initialCatalog: catalog };
+  const props = { api: {}, initialSettings: { revision: 1, values }, initialCatalog: catalog };
   const en = render(client.SettingsPanel, props);
   const zh = render(client.SettingsPanel, { ...props, locale: zhLocale });
   assert.match(en, />Reviewer</);
@@ -303,13 +362,13 @@ test('copy renders in one language chosen from the host locale', () => {
 });
 
 test('prompt counter describes the textarea', () => {
-  const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 1, values }, initialCatalog: catalog });
+  const html = render(client.SettingsPanel, { api: {}, initialSettings: { revision: 1, values }, initialCatalog: catalog });
   assert.match(html, /<textarea[^>]*aria-describedby="sa-prompt-hint"/);
   assert.match(html, /id="sa-prompt-hint"[^>]*>0\/4096/);
 });
 
 test('the safety tab explains scope, reviewer input and the circuit breaker', () => {
-  const props = { view: 'page', api: {}, initialSettings: { revision: 1, values }, initialCatalog: catalog, locale: zhLocale };
+  const props = { api: {}, initialSettings: { revision: 1, values }, initialCatalog: catalog, locale: zhLocale };
   const closed = render(client.SettingsPanel, props);
   assert.match(closed, /安全说明/);
   assert.match(closed, /id="[^"]*-details-panel" aria-labelledby="[^"]*-details-tab" hidden=""/, 'the safety panel stays hidden until its tab is selected');
@@ -328,21 +387,21 @@ test('the safety tab explains scope, reviewer input and the circuit breaker', ()
 
 test('the limits tab shows one line built from the reported limits', () => {
   const policyLimits = { timeoutMs: 90000, outputTokens: 4096, maxTranscriptBytes: 48000 };
-  const html = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values, policyLimits }, initialCatalog: catalog, initialTab: 'limits' });
+  const html = render(client.SettingsPanel, { api: {}, initialSettings: { revision: 'r', values, policyLimits }, initialCatalog: catalog, initialTab: 'limits' });
   assert.match(html, /Review timeout 90 s · Output cap 4096 tokens · Transcript cap 48000 bytes/);
   assert.match(html, /configured in the profile/);
   // The retired limitsFuses second line (dropped in the approval-flow rebuild) must not return.
   assert.doesNotMatch(source, /limitsFuses/);
-  const zh = render(client.SettingsPanel, { view: 'page', api: {}, initialSettings: { revision: 'r', values, policyLimits }, initialCatalog: catalog, initialTab: 'limits', locale: zhLocale });
+  const zh = render(client.SettingsPanel, { api: {}, initialSettings: { revision: 'r', values, policyLimits }, initialCatalog: catalog, initialTab: 'limits', locale: zhLocale });
   assert.match(zh, /单次审核超时 90 秒 · 输出上限 4096 tokens · 对话记录上限 48000 bytes/);
 });
 
-test('follow-conversation picks the leading row and keeps a saved nondefault effort warned', () => {
+test('the default auxiliary model picks the leading row and keeps a saved nondefault effort warned', () => {
   const html = render(client.ReviewerFields, { values: { provider: '', model: '', reasoningEffort: 'high', reviewerPrompt: '' }, catalog, onChange() {} });
   assert.ok(!html.includes('<select'), 'the native select is gone; the contract editor replaces it');
   assert.match(html, /aria-haspopup="menu"/);
   // The follow row is the checked leading item; the effort pane stays empty.
-  assert.match(html, /role="menuitemradio" aria-checked="true"[^>]*>Follow conversation/);
+  assert.match(html, /role="menuitemradio" aria-checked="true"[^>]*>Default auxiliary model/);
   assert.match(html, /class="stub-efforts" data-selected="high"><\/span>/);
   assert.match(html, /Saved effort .* retained/);
   assert.doesNotMatch(html, /clears the reasoning effort/, 'the clear-effort hint only applies to an explicit model');
@@ -359,11 +418,45 @@ test('an explicit reviewer model offers its advertised efforts and clears on swi
   assert.deepEqual([next.provider, next.model, next.reasoningEffort], ['', '', '']);
 });
 
-test('summary view contains no editing form', () => {
-  const summary = render(client.SettingsPanel, { view: 'summary', api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog });
-  assert.ok(!summary.includes('<select'));
-  assert.ok(!summary.includes('<textarea'));
-  assert.match(summary, /a reviewer model answers approval requests/);
+test('the settings section always renders the full editing panel', () => {
+  const html = render(client.SettingsPanel, { api: {}, initialSettings: { revision: 'r', values }, initialCatalog: catalog });
+  assert.match(html, /<textarea/);
+  assert.equal((html.match(/role="tab"/g) || []).length, 3);
+  // The settings page renders one panel; the plugins page no longer provides a
+  // separate summary view.
+  assert.doesNotMatch(source, /view === 'summary'/);
+});
+
+test('the shared-column item mounts its panel on first expand and keeps it mounted after collapsing', async () => {
+  const dom = new JSDOM('<div id="root"></div>'); const previous = new Map();
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, Event: dom.window.Event, IS_REACT_ACT_ENVIRONMENT: true })) {
+    previous.set(key, globalThis[key]); Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  }
+  const root = createRoot(dom.window.document.getElementById('root'));
+  let reads = 0, catalogs = 0;
+  const api = { getSettings: async () => { reads++; return { revision: 1, values: { provider: '', model: '', reasoningEffort: '', reviewerPrompt: '' } }; }, modelCatalog: async () => { catalogs++; return { groups: [] }; } };
+  try {
+    await act(async () => root.render(React.createElement(client.SafeAutoSettingsItem, { api, locale: zhLocale })));
+    const details = dom.window.document.querySelector('details.sa-item');
+    assert.ok(details);
+    assert.equal(details.open, false);
+    const summary = details.querySelector('summary');
+    assert.match(summary.textContent, /安全自动/);
+    assert.match(summary.textContent, /审核模型、审核说明与审核历史/);
+    // Collapsed by default: no settings read and no model-catalog request.
+    assert.equal(dom.window.document.querySelector('textarea'), null);
+    assert.equal(reads, 0); assert.equal(catalogs, 0);
+    await act(async () => { details.open = true; details.dispatchEvent(new dom.window.Event('toggle')); });
+    assert.equal(reads, 1);
+    assert.ok(dom.window.document.querySelector('textarea'));
+    assert.equal(catalogs > 0, true);
+    await act(async () => { details.open = false; details.dispatchEvent(new dom.window.Event('toggle')); });
+    // Collapsing keeps the mounted subtree, so an unsaved draft survives.
+    assert.ok(dom.window.document.querySelector('textarea'));
+  } finally {
+    await act(async () => root.unmount()); dom.window.close();
+    for (const [key, value] of previous) { if (value === undefined) delete globalThis[key]; else Object.defineProperty(globalThis, key, { configurable: true, writable: true, value }); }
+  }
 });
 
 test('request scope drops stale reads, closed view responses and unmounted responses', async () => {

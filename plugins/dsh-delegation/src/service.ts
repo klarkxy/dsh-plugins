@@ -178,7 +178,7 @@ export class DelegationService {
   /**
    * `agent/created` seeding. Only a fresh ('startup') non-subagent session gets
    * an initial row: a human fork inherits its parent's flag, every other new
-   * top-level session takes the current `defaultEnabled`. Resumed, cleared and
+   * top-level session takes the stored `defaultEnabled`. Resumed, cleared and
    * compacted sessions keep whatever they already have — and stay off when
    * they predate the plugin.
    */

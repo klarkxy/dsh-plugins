@@ -28,22 +28,26 @@ describe('Zhihu configuration capability navigation', () => {
     const html = renderToStaticMarkup(<CapabilitiesNote defaultOpen />)
     for (const copy of ['问题推荐', '回答摘要', '本人已发布内容及评论', '单篇创作数据', '官方剩余额度', 'OAuth', '@klarkxy/dsh-zhihu/tools', '不会自动重试']) expect(html).toContain(copy)
   })
-  it('retains the bundle configuration seat and package key', () => {
-    let seat = ''
-    let registration: unknown
+  it('registers the settings section with its stable id', () => {
+    const seats: string[] = []
+    const registrations: unknown[] = []
     let render: ((props: unknown) => ReactNode) | undefined
     const context = {
       connection: { rpc: { call: async () => { throw new Error('unexpected RPC') } } },
       remote: { credentials: {} },
       effect(callback: () => unknown) { callback() },
       slots: {
-        inject(key: string, callback: () => unknown) { seat = key; callback(); return () => {} },
-        register(spec: unknown, callback: (props: unknown) => ReactNode) { registration = spec; render = callback },
+        inject(key: string, callback: () => unknown) { seats.push(key); callback(); return () => {} },
+        register(spec: unknown, callback: (props: unknown) => ReactNode) {
+          registrations.push(spec)
+          if ((spec as { name?: string }).name === 'settings.section') render = callback
+        },
       },
     }
     apply(context as unknown as Context)
-    expect(seat).toBe('plugins.bundle.config')
-    expect(registration).toMatchObject({ name: 'plugins.bundle.config', key: '@klarkxy/dsh-zhihu' })
+    expect(seats).toEqual(['settings.section', 'settings.section.icon'])
+    expect(registrations[0]).toMatchObject({ name: 'settings.section', id: 'zhihu', order: 160 })
+    expect(registrations[1]).toMatchObject({ name: 'settings.section.icon', id: 'zhihu', order: 160 })
     const html = renderToStaticMarkup(render!({}) as ReactNode)
     // The tab strip is the official primitive: it still emits the same five
     // tabs and still names the same panel ids, so the panel below is unchanged.

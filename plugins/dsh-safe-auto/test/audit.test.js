@@ -90,6 +90,23 @@ test('begin allows missing review fields; prepare fills them before the call and
   await store.close();
 });
 
+test('an attempt keeps the native usage breakdown and older records still read back', async () => {
+  const { storageDomain } = fakeBackend();
+  const store = await openAudit(storageDomain);
+  const id = await store.begin(baseRecord());
+  await store.prepare(id, { attempts: [{ attempt: 1, startedAt: '2026-10-23T00:00:00Z', finishedAt: '2026-10-23T00:00:01Z',
+    response: '{"outcome":"allow"}',
+    usage: { inputTokens: 120, outputTokens: 30, cacheReadTokens: 900, cacheWriteTokens: 15, totalTokens: 1065 } }] });
+  const row = store.get({ id });
+  assert.deepEqual(row.attempts[0].usage, { inputTokens: 120, outputTokens: 30, cacheReadTokens: 900, cacheWriteTokens: 15, totalTokens: 1065 });
+  // A record written before usage was kept has no usage field and still reads back.
+  const legacy = await store.begin(baseRecord());
+  await store.prepare(legacy, { attempts: [{ attempt: 1, startedAt: '2026-10-23T00:00:00Z', finishedAt: '2026-10-23T00:00:01Z',
+    response: '{"outcome":"allow"}' }] });
+  assert.equal(store.get({ id: legacy }).attempts[0].usage, undefined);
+  await store.close();
+});
+
 test('prepare rejects unknown fields and finished records', async () => {
   const { storageDomain } = fakeBackend();
   const store = await openAudit(storageDomain);

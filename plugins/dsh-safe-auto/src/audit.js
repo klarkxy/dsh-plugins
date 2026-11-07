@@ -76,6 +76,17 @@ const attemptSchema = z.object({
   finishedAt: bounded(64),
   response: bounded(MAX_ATTEMPT_TEXT).optional(), // raw reviewer reply, redacted
   error: bounded(MAX_TEXT).optional(),
+  // The native usage breakdown of this attempt. Optional: records written
+  // before usage was kept simply have no usage field. Reasoning tokens are
+  // reported apart and are not part of the total.
+  usage: z.object({
+    inputTokens: z.number().int().nonnegative().optional(),
+    outputTokens: z.number().int().nonnegative().optional(),
+    cacheReadTokens: z.number().int().nonnegative().optional(),
+    cacheWriteTokens: z.number().int().nonnegative().optional(),
+    reasoningTokens: z.number().int().nonnegative().optional(),
+    totalTokens: z.number().int().nonnegative().optional(),
+  }).strict().optional(),
 }).strict();
 
 const executionSchema = z.object({

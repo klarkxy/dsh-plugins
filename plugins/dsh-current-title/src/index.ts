@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { retainAuxiliaryModel } from '@klarkxy/dsh-plugin-kit/auxiliary-model'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
 import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
@@ -38,6 +39,13 @@ type Host = Context & HostRpcContext & {
 
 export async function apply(ctx: Context, config: { locale?: TitleLocaleMode } = {}): Promise<void> {
   createModelSettingsChanges(ctx, modelSettingsChangesIdentity(PLUGIN_NAME), PLUGIN_NAME)
+  // Keep the shared auxiliary default alive while this plugin is mounted: it
+  // is the global default title generation follows when no title model is
+  // set. A store that fails to open must fail this apply — silently falling
+  // back to another tier would run generations on a model the user did not
+  // choose.
+  const release = await retainAuxiliaryModel(ctx)
+  ctx.effect(() => release, 'current-title.auxiliary-model')
   const host = ctx as Host
   const domain = await host.storageDomain.open(titleDomain)
   const table = domain.table('settings')
@@ -67,7 +75,7 @@ export async function apply(ctx: Context, config: { locale?: TitleLocaleMode } =
       signal.throwIfAborted()
       const settings = service.status().settings
       return { revision: settings.revision, fields: [{ path: ['model'], label: { zh: '标题模型', en: 'Title model' }, current: settings.model,
-        followLabel: { zh: '当前会话 / 宿主默认模型', en: 'Current conversation / host default' }, allowFollow: true }] }
+        followLabel: { zh: '默认辅助模型', en: 'Default auxiliary model' }, allowFollow: true }] }
     },
     async write(path, route, expectedRevision, signal) {
       if (path.length !== 1 || path[0] !== 'model') throw new Error('Unknown Current Title model setting')

@@ -12,6 +12,7 @@ import {
 } from 'react';
 import {
   DisclosureRow,
+  IconQuestionOutlineRegular,
   IconThinkOutlineRegular,
   Modal,
   Pill,
@@ -35,8 +36,7 @@ import { ZhihuSyncCredentials } from './client-sync-credentials.tsx'
 export const name = 'dsh-zhihu-client'
 export const inject = ['slots', 'connection', 'remote', 'remote.credentials', 'locale'] as const
 
-const PACKAGE_NAME = '@klarkxy/dsh-zhihu'
-const SLOT_ORDER = 120
+const SLOT_ORDER = 160
 
 /* 活动暗示用官方 TextShimmer：高亮在文本上流动，reduced-motion 与朗读语义
    都由 primitives 统一处理，插件不再自绘三点呼吸动画。 */
@@ -57,7 +57,7 @@ type CredentialsApi = {
 
 type SlotHandle = {
   inject: (key: string, callback: () => unknown) => () => void
-  register: (spec: { name: string; key: string; order?: number; label?: string }, render: unknown) => unknown
+  register: (spec: { name: string; id: string; order?: number; label?: string | (() => string) }, render: unknown) => unknown
 }
 
 type RemoteCredentials = {
@@ -1522,7 +1522,13 @@ export function apply(ctx: Context): void {
     rpc={client.connection.rpc}
     credentials={wrapCredentials(client.remote.credentials)}
     locale={locale} />
-  // DSH 0.1.7-rc.2 renders a bundle's configuration on its Plugins detail page.
-  ctx.effect(() => client.slots.inject('plugins.bundle.config', () =>
-    client.slots.register({ name: 'plugins.bundle.config', key: PACKAGE_NAME, order: SLOT_ORDER }, settingsRender)), 'zhihu.settings')
+  // The settings page mounts this section through the shared contract; the
+  // thunked label follows the host locale without re-registration.
+  ctx.effect(() => client.slots.inject('settings.section', () => [
+    client.slots.register({ name: 'settings.section', id: 'zhihu', order: SLOT_ORDER,
+      label: () => ((locale ? locale.getSnapshot().active : 'zh').startsWith('zh') ? '知乎' : 'Zhihu') }, settingsRender),
+    // 导航图标席位独立于分区列表声明：问号图标沿用同一等待周期。
+    client.slots.inject('settings.section.icon', () =>
+      client.slots.register({ name: 'settings.section.icon', id: 'zhihu', order: SLOT_ORDER }, IconQuestionOutlineRegular)),
+  ]), 'zhihu.settings')
 }

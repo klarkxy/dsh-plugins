@@ -1,10 +1,22 @@
 import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { buildAuxiliaryUserText } from '@klarkxy/dsh-plugin-kit/auxiliary-context'
 import type { ModelRoute } from '@klarkxy/dsh-model-route'
 import type { GenerateConfig, TitleMessage, TitleModelRoute } from './contracts.ts'
-import { DEFAULT_TIMEOUT_MS, PLUGIN_NAME } from './contracts.ts'
-import { frameMessages, selectRecentMessages } from './input.ts'
+import { DEFAULT_TIMEOUT_MS, PLUGIN_NAME, TITLE_CALL_FEATURE } from './contracts.ts'
+import { FRAME_PREFIX, frameMessages, selectRecentMessages, utf8Bytes } from './input.ts'
 import { formatTitle, normalizeSessionTitle, parseModelTitle, resolveTitleLocale, type TitleLocaleMode } from './output.ts'
 import { sourceVersionOf } from './messages.ts'
+
+/**
+ * Fixed bytes the auxiliary-context envelope adds around the selected
+ * messages, so maxInputBytes keeps bounding the wire text. The stable block
+ * carries the framing rule and the request block the JSON message list —
+ * selectRecentMessages measures that same pair through frameMessages, so
+ * only the constant envelope overhead is new.
+ */
+const ENVELOPE_OVERHEAD_BYTES = utf8Bytes(
+  buildAuxiliaryUserText({ feature: TITLE_CALL_FEATURE, context: FRAME_PREFIX, text: '[]' }),
+) - utf8Bytes(frameMessages([]))
 
 export interface GeneratedTitle {
   readonly title: string
@@ -60,16 +72,20 @@ export async function generateCurrentTitle(options: {
   const selected = selectRecentMessages(
     options.messages,
     options.config.maxRecentMessages,
-    options.config.maxInputBytes,
+    options.config.maxInputBytes - ENVELOPE_OVERHEAD_BYTES,
   )
   if (selected.length === 0) throw new Error('dsh-current-title: at least one source message is required')
   const route = resolveFeatureModel(options.host, titleModelRoute(options.model), options.sessionId)
-  if (!route) throw new Error('dsh-current-title: 请在插件页选择模型，或设置宿主默认对话模型。')
+  if (!route) throw new Error('dsh-current-title: 请在设置页选择模型，或设置默认辅助模型 / 宿主默认对话模型。')
   // Like the bundled title provider, select the first (least) advertised
   // effort inside prepareCall, before adapter defaults are materialized.
   const callRoute = { provider: route.provider, model: route.model }
 
-  const framedInput = frameMessages(selected)
+  // The wire text carries the stable framing line inside the labelled
+  // auxiliary-context block (fixed rules first) and the message list —
+  // already ordered oldest to newest — inside the request block. Neither
+  // side embeds a generated date.
+  const framedInput = JSON.stringify(selected)
   const locale = resolveTitleLocale(
     options.localeMode ?? options.config.locale,
     selected.map(message => message.text),
@@ -87,6 +103,8 @@ export async function generateCurrentTitle(options: {
       plugin: PLUGIN_NAME,
       route: callRoute,
       system: systemPrompt(options.config, options.prompt),
+      feature: TITLE_CALL_FEATURE,
+      context: FRAME_PREFIX,
       text: framedInput,
       maxTokens: options.config.maxOutputTokens,
       purpose: 'session-title',

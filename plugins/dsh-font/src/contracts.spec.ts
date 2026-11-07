@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   CODE_FONT_PRESETS, CODE_FONT_VARIABLE, CONVERSATION_FONT_SELECTOR, CONVERSATION_STORAGE_KEY,
-  FONT_SIZE_MAX, FONT_SIZE_MIN, STORAGE_KEY, TEXT_DEFAULT_FONT_VARIABLE, UI_FONT_PRESETS, UI_FONT_VARIABLE,
+  FONT_SIZE_SPECS, STORAGE_KEY, TEXT_DEFAULT_FONT_VARIABLE, UI_FONT_PRESETS, UI_FONT_VARIABLE,
   applyFontSettings, clearFontSettings, conversationFontDeclarations, createConversationFontStore,
   createFontSettingsStore, cssVar, defaultFontSettings,
   fontStackFor, fontTokenDeclarations, normalizeFontFamily, parseFontSettings, presetFor,
@@ -74,8 +74,11 @@ describe('css variable application', () => {
     expect(UI_FONT_VARIABLE).toBe('--dsw-font-family')
     expect(CODE_FONT_VARIABLE).toBe('--ds-font-family-code')
     expect(CONVERSATION_FONT_SELECTOR).toBe('[data-conversation-region="chat"]')
-    expect(FONT_SIZE_MIN).toBe(10)
-    expect(FONT_SIZE_MAX).toBe(22)
+    expect(FONT_SIZE_SPECS).toEqual({
+      text: { min: 10, max: 22, default: 14 },
+      code: { min: 10, max: 16, default: 11 },
+      terminal: { min: 10, max: 20, default: 13 },
+    })
   })
 
   function recorder() {

@@ -23,7 +23,14 @@ export class PresenceSettingsStore implements PresenceModelStore {
 
   constructor(private readonly domain: PresenceDomainHandle) {
     this.row = parsePresenceSettings(domain.table('settings').get(SETTINGS_KEY))
-      ?? { revision: 0, model: null, ghostModel: null, suggestions: {} }
+      ?? { revision: 0, model: null, ghostModel: null, judgeModel: null, handoffModel: null, suggestions: {} }
+    if (this.row.migratedJudge) {
+      // Persist the one-time judgeModel migration (revision bump is part of
+      // the migration semantics): the copied route must survive a reload,
+      // otherwise every open would redo the copy. A failed migration write is
+      // lost work only — reads already see the migrated value.
+      this.commit(row => row).catch(() => {})
+    }
   }
 
   read(): PresenceSettings { return this.row }
@@ -33,14 +40,23 @@ export class PresenceSettingsStore implements PresenceModelStore {
   }
 
   writeGhost(ghostModel: ModelRoute | null, options?: PresenceWriteOptions): Promise<number> {
-    return this.commit(row => ({ ...row, ghostModel }), options)
+    return this.writeFeature('ghostModel', ghostModel, options)
+  }
+
+  /** Per-feature override write shared by every configurable model field. */
+  writeFeature(
+    field: 'model' | 'ghostModel' | 'judgeModel' | 'handoffModel',
+    route: ModelRoute | null,
+    options?: PresenceWriteOptions,
+  ): Promise<number> {
+    return this.commit(row => ({ ...row, [field]: route }), options)
   }
 
   suggestion(sessionId: string) { return this.row.suggestions[sessionId] }
 
-  async rememberSuggestion(sessionId: string, seq: number, text: string | null, signal?: AbortSignal): Promise<void> {
+  async rememberSuggestion(sessionId: string, seq: number, text: string | null, key: string, signal?: AbortSignal): Promise<void> {
     await this.commit(row => {
-      const suggestions = { ...row.suggestions, [sessionId]: { seq, text } }
+      const suggestions = { ...row.suggestions, [sessionId]: { seq, text, key } }
       const ids = Object.keys(suggestions)
       if (ids.length > MAX_GHOST_SUGGESTIONS) delete suggestions[ids[0]!]
       return { ...row, suggestions }
@@ -56,9 +72,14 @@ export class PresenceSettingsStore implements PresenceModelStore {
         throw new Error('Session Manager settings changed; refresh and retry')
       }
       const next = { ...transform(this.row), revision: this.row.revision + 1 }
+      // `migratedJudge` is transient parse-time state, not durable data: the
+      // strict schema rejects unknown keys, so writing it would poison the row
+      // on the next open. Strip it before put; the migration replays at most
+      // once because the copied judgeModel is what actually persists.
+      const { migratedJudge: _transient, ...durable } = next
       // No await between the live-row transform/CAS and put admission. Once
       // admitted, cancellation cannot roll back the durable write.
-      await this.domain.table('settings').put(SETTINGS_KEY, next)
+      await this.domain.table('settings').put(SETTINGS_KEY, durable)
       this.row = next
       return next.revision
     })

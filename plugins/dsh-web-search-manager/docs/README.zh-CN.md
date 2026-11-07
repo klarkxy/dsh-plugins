@@ -12,7 +12,7 @@
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-把 `web` 换成你的 profile 名。重启 DSH Web 后打开「插件 → 网页搜索」。更新插件后同样重启 profile，以加载新版搜索代码。
+把 `web` 换成你的 profile 名。重启 DSH Web 后打开「设置 → 网页搜索」。更新插件后同样重启 profile，以加载新版搜索代码。
 
 ## 配置搜索
 

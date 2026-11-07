@@ -32,12 +32,16 @@ function domain() {
 
 function fixture(failRegistration = false) {
   let mount!: (scope: unknown) => void
+  let auxMount!: (scope: unknown) => void
   const disposers: Array<() => unknown> = []
   const ctx = Object.assign(new Context(), {
     effect: (fn: () => unknown) => { const dispose = fn(); if (typeof dispose === 'function') disposers.push(dispose) },
     on: (name: string) => { if (failRegistration && name === 'model-settings/collect') throw new Error('registration failed'); return () => {} },
     inject(services: string[], callback: (scope: unknown) => void) {
-      if (services.includes('storageDomain')) mount = callback
+      // Two injects declare storageDomain: the shared auxiliary owner
+      // (storageDomain+webServer+connection) and the plugin settings store.
+      if (services.includes('storageDomain') && services.includes('webServer')) auxMount = callback
+      else if (services.includes('storageDomain')) mount = callback
       else callback({ effect: (fn: () => unknown) => fn() })
     },
   })
@@ -55,6 +59,31 @@ function fixture(failRegistration = false) {
         effect(fn: () => () => Promise<void>) { dispose = fn() },
       })
       return () => dispose()
+    },
+    /**
+     * Mounts the shared auxiliary inject: the inner ctx's root carries the
+     * service rendezvous retainAuxiliaryModel uses, and opening the shared
+     * domain can be driven to fail. The open is lazy so a rejection is always
+     * created with its consumer already attached.
+     */
+    mountAux(open: () => Promise<unknown>) {
+      const services = new Map<string, unknown>([
+        ['storageDomain', { open }],
+        ['webServer', {}],
+        ['connection', {}],
+      ])
+      const root = {
+        get: (name: string) => services.get(name),
+        provide: (name: string, value: unknown) => { services.set(name, value); return () => services.delete(name) },
+        inject(_deps: readonly string[], callback: (scope: unknown) => void) {
+          callback({
+            storageDomain: services.get('storageDomain'),
+            effect: (fn: () => unknown) => fn(),
+          })
+          return { dispose: async () => {}, then: (resolve: (value: unknown) => void) => resolve(undefined) }
+        },
+      }
+      auxMount({ root, effect: (fn: () => unknown) => fn() })
     },
   }
 }
@@ -127,9 +156,19 @@ describe('presence domain mount lifecycle', () => {
     await tick()
     await disposeOld()
     expect(captured.signal.aborted).toBe(true)
-    await expect(captured.rememberSuggestion!('s', 5, 'old', captured.signal)).rejects.toThrow(/unloaded/)
+    await expect(captured.rememberSuggestion!('s', 5, 'old', 'k', captured.signal)).rejects.toThrow(/unloaded/)
     expect(next.put).not.toHaveBeenCalled()
     expect(f.store()).toBeDefined()
     await disposeNew()
+  })
+
+  it('marks a failed shared auxiliary mount instead of silently falling back', async () => {
+    const f = fixture()
+    // The rejection is created inside open(): it is awaited by the mount path
+    // in the same turn, so nothing is transiently unhandled.
+    f.mountAux(() => Promise.reject(new Error('auxiliary domain corrupt')))
+    // The init failure surfaces through captured model state: features without
+    // an explicit route degrade rather than billing the conversation model.
+    await vi.waitFor(() => expect(f.models().auxBroken).toBe(true))
   })
 })

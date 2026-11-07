@@ -14,12 +14,16 @@ describe('plugin wiring', () => {
   it('disposes the service before closing its storage domain on unload', async () => {
     const order: string[] = []
     const ctx = new Context()
-    Object.assign(ctx, {
-      storageDomain: { open: async () => ({
-        table: () => ({ get: () => undefined, put: async () => {} }),
-        close: async () => { order.push('domain.close') },
-      }) },
-    })
+    const provide = ctx.provide.bind(ctx) as (name: string, value: unknown) => void
+    // The shared auxiliary store opens its own 'dsh_auxiliary' domain through
+    // the same facility and requires storageDomain/webServer/connection to be
+    // genuinely provided; its close is not part of the ordering claim.
+    provide('storageDomain', { open: async (spec?: { name?: string }) => ({
+      table: () => ({ get: () => undefined, put: async () => {} }),
+      close: async () => { if (spec?.name !== 'dsh_auxiliary') order.push('domain.close') },
+    }) })
+    provide('webServer', {})
+    provide('connection', {})
     await apply(ctx as never)
     const service = (ctx as unknown as { currentTitle: { dispose(): Promise<void> } }).currentTitle
     const dispose = service.dispose.bind(service)

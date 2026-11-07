@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-font",
   "version": "0.2.2",
-  "description": "Font: customize the interface, conversation, and code fonts and the conversation font size of the DeepSeek Harness Web GUI.",
+  "description": "Font: customize the interface, conversation, code and terminal fonts and font sizes of the DeepSeek Harness Web GUI.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",

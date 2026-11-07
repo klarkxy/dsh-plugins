@@ -266,15 +266,21 @@
               - id: tool-subagent-control
                 name: '@deepseek-ai/dsh-tool-subagent-control'
 
-              - id: tool-subagent-list-agents
-                name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+              # No `list-agents` row: the control package registers `list_agents`
+              # itself since 0.2.2-rc.1, and its `./list-agents` subpath export is
+              # gone. A row pointing at that subpath no longer resolves, which
+              # fails the whole preset and drops it from the new-session picker.
 
               - id: tool-subagent
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
                   provider: spawn
                   toolName: subagent
-                  modelSelectionSettings: true
+                  # The host renamed `modelSelectionSettings` to `modelSelection`
+                  # (and split discovery into `modelDiscovery`); an unknown key is
+                  # dropped, so the old name silently disabled model selection.
+                  modelSelection: true
+                  modelDiscovery: true
                   # The host's `subagent` service caps recursion at maxDepth 1, so a
                   # child cannot delegate again. A deliverable that spans several
                   # independent pieces — an audit over many files, a migration, a

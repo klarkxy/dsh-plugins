@@ -4,7 +4,7 @@ import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
  * The shared contract paints this page: the type tiers, the card, the field,
  * the banners, the empty state, the focus ring and every control's own recipe.
  * What is left here is only the geometry the contract does not cover — the
- * reading width of the plugin page, two inline SVG charts, the quota matrix and
+ * reading width of the settings page, two inline SVG charts, the quota matrix and
  * the day table.
  *
  * Nothing below declares a colour of its own beyond naming a host token for a

@@ -79,6 +79,8 @@ describe('getCast', () => {
       'junk',
       null,
       { provider: '', model: 'x' },
+      // The native schema carries provider and model only; an effort in the
+      // settings value is not part of the route state.
       { provider: 'ocg', model: 'b', reasoningEffort: 'high' },
     ] })
     const cast = createCast(castDeps(target).deps)
@@ -88,7 +90,7 @@ describe('getCast', () => {
       tendencyRevision: 0,
       routes: [
         { index: 0, provider: 'ocg', model: 'a' },
-        { index: 4, provider: 'ocg', model: 'b', reasoningEffort: 'high' },
+        { index: 4, provider: 'ocg', model: 'b' },
       ],
     })
   })
@@ -173,13 +175,15 @@ describe('cast writes', () => {
     const target = host({ enabled: false, allowedModels: ['junk', { provider: 'a', model: 'one' }] })
     const cast = createCast(castDeps(target).deps)
     const commit = await cast.addRoute({ provider: ' b ', model: ' two ', reasoningEffort: 'high' }, 3)
+    // The native CAS owns provider and model; an effort is a plugin-side
+    // preference and never travels through the settings write.
     expect(target.mutate).toHaveBeenCalledWith(CAST_NAMESPACE, [
-      { op: 'set', path: ['allowedModels', '2'], value: { provider: 'b', model: 'two', reasoningEffort: 'high' } },
+      { op: 'set', path: ['allowedModels', '2'], value: { provider: 'b', model: 'two' } },
     ], 3)
     expect(commit).toEqual({ committed: true })
     expect(cast.getCast().routes).toEqual([
       { index: 1, provider: 'a', model: 'one' },
-      { index: 2, provider: 'b', model: 'two', reasoningEffort: 'high' },
+      { index: 2, provider: 'b', model: 'two' },
     ])
     await expect(cast.addRoute({ provider: 'b', model: 'two' }, 4)).rejects.toThrow('Route "b/two" already exists')
     expect(target.mutate).toHaveBeenCalledTimes(1)
@@ -191,8 +195,6 @@ describe('cast writes', () => {
     await expect(cast.addRoute({ provider: '', model: 'm' }, 3)).rejects.toThrow('non-empty provider and model ids')
     await expect(cast.addRoute({ provider: 'p' }, 3)).rejects.toThrow('non-empty provider and model ids')
     await expect(cast.addRoute({ provider: 'p'.repeat(251), model: 'm' }, 3)).rejects.toThrow('limited to 250 characters')
-    await expect(cast.addRoute({ provider: 'p', model: 'm', reasoningEffort: ' ' }, 3)).rejects.toThrow('reasoning effort must be a non-empty string')
-    await expect(cast.addRoute({ provider: 'p', model: 'm', reasoningEffort: 42 }, 3)).rejects.toThrow('reasoning effort must be a non-empty string')
     expect(target.mutate).not.toHaveBeenCalled()
   })
 
@@ -291,7 +293,7 @@ describe('tendency store', () => {
     expect(second.getCast().routes[0]!.tendency).toBe('new')
     expect(second.setTendency('b', 'two', 'changed', 1).tendencyRevision).toBe(2)
     expect(first.getCast().routes.map(route => route.tendency)).toEqual(['new', 'changed'])
-    expect(JSON.parse(readFileSync(file, 'utf8'))).toMatchObject({ schemaVersion: 2, revision: 2 })
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toMatchObject({ schemaVersion: 3, revision: 2 })
     expect(target.mutate).not.toHaveBeenCalled()
   })
 
@@ -314,8 +316,9 @@ describe('tendency store', () => {
     expect(state.routes[1]).toEqual({ index: 1, provider: 'b', model: 'two' })
     const file = join(profileDir, 'data', 'model-hub', 'cast.json')
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({
-      schemaVersion: 2, revision: 1,
+      schemaVersion: 3, revision: 1,
       tendencies: { [tendencyKey('a', 'one')]: 'careful code reviews' },
+      efforts: {},
     })
     // A fresh instance reads the persisted store.
     const reloaded = createCast(castDeps(target, profileDir).deps)
@@ -341,6 +344,73 @@ describe('tendency store', () => {
     const cast = createCast(castDeps(target).deps)
     expect(() => setTendency(cast, 'a', 'one', 'note')).toThrow('No profile directory')
     expect(cast.getCast().routes[0]).toEqual({ index: 0, provider: 'a', model: 'one' })
+  })
+})
+
+describe('route preferences', () => {
+  it('saves a reasoning effort beside the tendency and answers with the committed state', () => {
+    const profileDir = tempProfile()
+    const target = host({ enabled: true, allowedModels: [{ provider: 'a', model: 'one' }] })
+    const notify = vi.fn()
+    const cast = createCast({ ...castDeps(target, profileDir).deps, notifyTendenciesChanged: notify })
+    const state = cast.setRoutePreferences('a', 'one', { reasoningEffort: 'high' }, 0)
+    expect(state).toMatchObject({ enabled: true, revision: 3, tendencyRevision: 1 })
+    expect(state.routes[0]).toEqual({ index: 0, provider: 'a', model: 'one', reasoningEffort: 'high' })
+    expect(notify).toHaveBeenCalledExactlyOnceWith(1)
+    // The native CAS stays untouched: an effort is a plugin-side preference.
+    expect(target.mutate).not.toHaveBeenCalled()
+    const file = join(profileDir, 'data', 'model-hub', 'cast.json')
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({
+      schemaVersion: 3, revision: 1,
+      tendencies: {},
+      efforts: { [tendencyKey('a', 'one')]: 'high' },
+    })
+    // A fresh instance reads the persisted effort back.
+    expect(createCast(castDeps(target, profileDir).deps).getCast().routes[0]!.reasoningEffort).toBe('high')
+  })
+
+  it('keeps the tendency when the effort is cleared, and clears the effort with an empty value', () => {
+    const profileDir = tempProfile()
+    const target = host({ enabled: true, allowedModels: [{ provider: 'a', model: 'one' }] })
+    const cast = createCast(castDeps(target, profileDir).deps)
+    cast.setRoutePreferences('a', 'one', { tendency: 'careful reviews' }, 0)
+    const state = cast.setRoutePreferences('a', 'one', { reasoningEffort: 'high' }, 1)
+    expect(state.routes[0]).toEqual({ index: 0, provider: 'a', model: 'one', tendency: 'careful reviews', reasoningEffort: 'high' })
+    const cleared = cast.setRoutePreferences('a', 'one', { reasoningEffort: '' }, 2)
+    expect(cleared.routes[0]).toEqual({ index: 0, provider: 'a', model: 'one', tendency: 'careful reviews' })
+    const file = join(profileDir, 'data', 'model-hub', 'cast.json')
+    expect(JSON.parse(readFileSync(file, 'utf8')).efforts).toEqual({})
+    expect(JSON.parse(readFileSync(file, 'utf8')).tendencies).toEqual({ [tendencyKey('a', 'one')]: 'careful reviews' })
+  })
+
+  it('rejects a stale preference revision and invalid values without touching the file', () => {
+    const profileDir = tempProfile()
+    const target = host({ enabled: true, allowedModels: [{ provider: 'a', model: 'one' }] })
+    const cast = createCast(castDeps(target, profileDir).deps)
+    expect(() => cast.setRoutePreferences('a', 'one', { reasoningEffort: 'high' }, 3)).toThrow('refresh and retry')
+    expect(() => cast.setRoutePreferences('', 'one', { reasoningEffort: 'high' }, 0)).toThrow('non-empty provider and model ids')
+    expect(() => cast.setRoutePreferences('a', 'one', { reasoningEffort: 42 }, 0)).toThrow('A reasoning effort must be a string')
+    expect(() => cast.setRoutePreferences('a', 'one', { reasoningEffort: 'x'.repeat(81) }, 0)).toThrow('limited to 80 characters')
+    expect(() => cast.setRoutePreferences('a', 'one', { tendency: 'x'.repeat(501) }, 0)).toThrow('limited to 500 characters')
+    expect(() => readFileSync(join(profileDir, 'data', 'model-hub', 'cast.json'))).toThrow()
+  })
+
+  it('reads v1 and v2 stores and upgrades them on the next write', () => {
+    for (const [version, contents] of [
+      [1, JSON.stringify({ schemaVersion: 1, tendencies: { [tendencyKey('a', 'one')]: 'old' } })],
+      [2, JSON.stringify({ schemaVersion: 2, revision: 4, tendencies: { [tendencyKey('a', 'one')]: 'old' } })],
+    ] as const) {
+      const profileDir = tempProfile()
+      const file = join(profileDir, 'data', 'model-hub', 'cast.json')
+      mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, contents)
+      const target = host({ enabled: true, allowedModels: [{ provider: 'a', model: 'one' }] })
+      const cast = createCast(castDeps(target, profileDir).deps)
+      expect(cast.getCast()).toMatchObject({ tendencyRevision: version === 1 ? 0 : 4 })
+      expect(cast.getCast().routes[0]).toEqual({ index: 0, provider: 'a', model: 'one', tendency: 'old' })
+      const state = cast.setRoutePreferences('a', 'one', { reasoningEffort: 'medium' }, version === 1 ? 0 : 4)
+      expect(state.tendencyRevision).toBe((version === 1 ? 0 : 4) + 1)
+      expect(JSON.parse(readFileSync(file, 'utf8'))).toMatchObject({ schemaVersion: 3, revision: (version === 1 ? 0 : 4) + 1 })
+    }
   })
 })
 
@@ -382,6 +452,19 @@ describe('buildCastPrompt', () => {
     expect(text).toContain('- {"provider":"a","model":"team/one"} (reasoning effort: high): careful reviews')
     expect(text).toContain('- {"provider":"c","model":"c/three"}: fast drafts')
     expect(text).not.toContain('b/two')
+  })
+
+  it('suggests a reasoning effort for every route that carries one, not only the annotated ones', () => {
+    const text = buildCastPrompt(true, [
+      { index: 0, provider: 'a', model: 'one', reasoningEffort: 'high' },
+      { index: 1, provider: 'b', model: 'two' },
+    ])
+    expect(text).toContain('Configured reasoning effort')
+    expect(text).toContain('applied when a subagent starts')
+    expect(text).toContain('it does not change subagents that are already running')
+    expect(text).toContain('- {"provider":"a","model":"one"}: reasoning effort "high"')
+    expect(text).not.toContain('b/two')
+    expect(buildCastPrompt(true, [{ index: 0, provider: 'b', model: 'two' }])).not.toContain('Configured reasoning effort')
   })
 })
 

@@ -13,11 +13,11 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse them on the [plugin site](http
 | [`@klarkxy/dsh-delegation`](plugins/dsh-delegation/README.md) | Delegation Mode: a per-session switch where the main agent plans, delegates, and reviews while subagents do the work. |
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: a reviewer model answers approval requests; only calls that pass go ahead. |
 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: find and read sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, and get a welcome-back recap after time away. |
-| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Model Hub: change the models used by your plugins and subagents from one page, and see each running subagent's model and reasoning effort. |
+| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Subagents: configure models and reasoning effort for new subagents, and see their last-used model in the conversation popup. |
 | [`@klarkxy/dsh-magpie`](plugins/dsh-magpie/README.md) | Magpie: connect DSH to a magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search. |
 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/README.md) | Web Search: manage and rank search and page-reading services, including providers from installed plugins, in one settings page. |
 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | Zhihu: Zhihu search, agent tools, knowledge bases, usage tracking, and draft management. |
-| [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface, conversation, and code fonts and the conversation font size of the Web GUI. |
+| [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface, conversation, code and terminal fonts and font sizes of the Web GUI. |
 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | Unrestricted: a session preset that removes the limits on what the model answers and delivers complete results, only in sessions that pick it; may get your account banned. |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: read the official DSH docs in the Plugins page; Creator mode can look up docs and plugins on npm and GitHub. |
 

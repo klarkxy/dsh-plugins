@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Font",
-    "description": "Customize the interface, conversation, and code fonts and the conversation font size of the Web GUI."
+    "description": "Customize the interface, conversation, code and terminal fonts and font sizes of the Web GUI."
   }
 }

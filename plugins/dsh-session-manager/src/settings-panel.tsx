@@ -16,10 +16,14 @@ interface DraftState {
   continueMode: 'fixed' | 'auto'
   autoContinueMode: AutoContinueMode
   autoContinueMax: string
-  /** '' follows the conversation / host default. */
+  /** '' follows the default auxiliary model. */
   model: string
-  /** '' follows the conversation / host default for the ghost. */
+  /** '' follows the default auxiliary model for the ghost. */
   ghostModel: string
+  /** '' follows the default auxiliary model for the auto-continue judge. */
+  judgeModel: string
+  /** '' follows the default auxiliary model for read_session handoff summaries. */
+  handoffModel: string
 }
 
 function toDraft(values: ConfigView): DraftState {
@@ -36,6 +40,8 @@ function toDraft(values: ConfigView): DraftState {
     autoContinueMax: String(values.autoContinueMax),
     model: values.model === null ? '' : modelRouteKey(values.model.provider, values.model.model),
     ghostModel: values.ghostModel === null ? '' : modelRouteKey(values.ghostModel.provider, values.ghostModel.model),
+    judgeModel: values.judgeModel === null ? '' : modelRouteKey(values.judgeModel.provider, values.judgeModel.model),
+    handoffModel: values.handoffModel === null ? '' : modelRouteKey(values.handoffModel.provider, values.handoffModel.model),
   }
 }
 
@@ -64,6 +70,8 @@ function sameDraft(left: DraftState, right: DraftState): boolean {
     && left.autoContinueMax === right.autoContinueMax
     && left.model === right.model
     && left.ghostModel === right.ghostModel
+    && left.judgeModel === right.judgeModel
+    && left.handoffModel === right.handoffModel
 }
 
 const missingCatalog = async (): Promise<unknown> => { throw new Error('Model catalog service unavailable') }
@@ -81,6 +89,8 @@ export function SessionManagerSettings(props: {
   const catalog = useModelCatalog(props.modelCatalog ?? missingCatalog, { subscribe: props.subscribeCatalog })
   const [menuOpen, setMenuOpen] = useState(false)
   const [ghostMenuOpen, setGhostMenuOpen] = useState(false)
+  const [judgeMenuOpen, setJudgeMenuOpen] = useState(false)
+  const [handoffMenuOpen, setHandoffMenuOpen] = useState(false)
   const [externalChange, setExternalChange] = useState(false)
   const dirty = useRef(false)
   const baseline = useRef<DraftState>()
@@ -122,14 +132,23 @@ export function SessionManagerSettings(props: {
       </p>
     )
   }
-  // Keep the draft route visible through catalog refreshes and partial outages.
+  // Keep every draft route visible through catalog refreshes and partial outages.
   const selectedRoute = parseModelRouteKey(draft.model)
   const ghostRoute = parseModelRouteKey(draft.ghostModel)
-  const selectableChoices = parseModelMenuChoices(catalog.catalog, selectedRoute ?? ghostRoute)
-  const selectedLabel = selectableChoices.find(choice => modelRouteKey(choice.provider, choice.model) === draft.model)?.label
-    ?? copy('modelFollowOption')
-  const ghostLabel = selectableChoices.find(choice => modelRouteKey(choice.provider, choice.model) === draft.ghostModel)?.label
-    ?? copy('modelFollowOption')
+  const judgeRoute = parseModelRouteKey(draft.judgeModel)
+  const handoffRoute = parseModelRouteKey(draft.handoffModel)
+  const selectableChoices = parseModelMenuChoices(catalog.catalog)
+  for (const bound of [selectedRoute, ghostRoute, judgeRoute, handoffRoute]) {
+    if (bound && !selectableChoices.some(choice => choice.provider === bound.provider && choice.model === bound.model)) {
+      selectableChoices.push({ provider: bound.provider, model: bound.model, label: `${bound.provider} / ${bound.model}`, efforts: [] })
+    }
+  }
+  const routeLabel = (key: string) =>
+    selectableChoices.find(choice => modelRouteKey(choice.provider, choice.model) === key)?.label ?? copy('modelFollowOption')
+  const selectedLabel = routeLabel(draft.model)
+  const ghostLabel = routeLabel(draft.ghostModel)
+  const judgeLabel = routeLabel(draft.judgeModel)
+  const handoffLabel = routeLabel(draft.handoffModel)
   const recapMinutes = draft.recapEnabled ? minutesOf(draft.recapMinutes) : 0
   const compactMinutes = draft.compactEnabled ? minutesOf(draft.compactMinutes) : 0
   const autoContinueMax = autoMaxOf(draft.autoContinueMax)
@@ -141,8 +160,13 @@ export function SessionManagerSettings(props: {
   const autoPanelId = `${tabsId}-auto-panel`
   const save = () => {
     if (invalid) return
-    const route = parseModelRouteKey(draft.model)
-    const ghost = parseModelRouteKey(draft.ghostModel)
+    const routePatch = (key: 'model' | 'ghostModel' | 'judgeModel' | 'handoffModel') => {
+      // An untouched selector must not replace a route carrying an effort.
+      // A different model deliberately starts without the old model's effort.
+      if (draft[key] === baseline.current?.[key]) return {}
+      const parsed = parseModelRouteKey(draft[key])
+      return { [key]: parsed === undefined ? null : { provider: parsed.provider, model: parsed.model } }
+    }
     // Keep the draft protected until the confirmed snapshot matches it.
     // A rejected save or an in-flight settings notification must not discard it.
     setExternalChange(false)
@@ -153,14 +177,10 @@ export function SessionManagerSettings(props: {
       continueMode: draft.continueMode,
       autoContinueMode: draft.autoContinueMode,
       autoContinueMax: autoContinueMax!,
-      // An untouched selector must not replace a route carrying an effort.
-      // A different model deliberately starts without the old model's effort.
-      ...draft.model === baseline.current?.model ? {} : {
-        model: route === undefined ? null : { provider: route.provider, model: route.model },
-      },
-      ...draft.ghostModel === baseline.current?.ghostModel ? {} : {
-        ghostModel: ghost === undefined ? null : { provider: ghost.provider, model: ghost.model },
-      },
+      ...routePatch('model'),
+      ...routePatch('ghostModel'),
+      ...routePatch('judgeModel'),
+      ...routePatch('handoffModel'),
     })
   }
   return (
@@ -267,6 +287,53 @@ export function SessionManagerSettings(props: {
               </label>
               <p className="dsh-ui-hint">{copy('autoContinueMaxHint')}</p>
               {autoMaxInvalid ? <p id={`${tabsId}-auto-max-error`} className="dsh-ui-error" role="alert">{copy('autoContinueMaxInvalid')}</p> : null}
+            </div>
+            <div className="dsh-ui-field dsm-model-field">
+              <span className="dsh-ui-label">{copy('judgeModelLabel')}</span>
+              <ModelMenu
+                locale={props.locale}
+                open={judgeMenuOpen}
+                onOpenChange={setJudgeMenuOpen}
+                listClassName={FREE_CHAT_ROOT}
+                anchor={<button type="button" className="dsh-model-menu-trigger" aria-label={`${copy('judgeModelLabel')}: ${judgeLabel}`} aria-haspopup="menu" aria-expanded={judgeMenuOpen}>
+                  <span className="dsh-model-menu-triggerLabel">{judgeLabel}</span>
+                  <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${judgeMenuOpen ? ' dsh-model-menu-chevronOpen' : ''}`} />
+                </button>}
+                choices={selectableChoices}
+                selected={judgeRoute}
+                onPick={route => edit({ ...draft, judgeModel: modelRouteKey(route.provider, route.model) })}
+                leading={[{ id: 'follow', label: copy('modelFollowOption'), selected: !judgeRoute }]}
+                onPickLeading={() => edit({ ...draft, judgeModel: '' })}
+                modelValue={judgeLabel}
+              />
+              <span className="dsh-ui-hint">{copy('judgeModelHint')}</span>
+            </div>
+          </div>
+        </section>
+        <section className="dsm-setting" aria-labelledby={`${tabsId}-handoff-heading`}>
+          <header className="dsm-setting-header">
+            <h3 id={`${tabsId}-handoff-heading`} className="dsh-ui-title">{copy('handoffGroup')}</h3>
+          </header>
+          <div className="dsm-feature-options">
+            <div className="dsh-ui-field dsm-model-field">
+              <span className="dsh-ui-label">{copy('handoffModelLabel')}</span>
+              <ModelMenu
+                locale={props.locale}
+                open={handoffMenuOpen}
+                onOpenChange={setHandoffMenuOpen}
+                listClassName={FREE_CHAT_ROOT}
+                anchor={<button type="button" className="dsh-model-menu-trigger" aria-label={`${copy('handoffModelLabel')}: ${handoffLabel}`} aria-haspopup="menu" aria-expanded={handoffMenuOpen}>
+                  <span className="dsh-model-menu-triggerLabel">{handoffLabel}</span>
+                  <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${handoffMenuOpen ? ' dsh-model-menu-chevronOpen' : ''}`} />
+                </button>}
+                choices={selectableChoices}
+                selected={handoffRoute}
+                onPick={route => edit({ ...draft, handoffModel: modelRouteKey(route.provider, route.model) })}
+                leading={[{ id: 'follow', label: copy('modelFollowOption'), selected: !handoffRoute }]}
+                onPickLeading={() => edit({ ...draft, handoffModel: '' })}
+                modelValue={handoffLabel}
+              />
+              <span className="dsh-ui-hint">{copy('handoffModelHint')}</span>
             </div>
           </div>
         </section>

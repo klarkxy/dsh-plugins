@@ -1,7 +1,7 @@
 import { localErrorText } from './client-error.ts'
 import { webSearchClientStyles } from './client-styles.ts'
 import type { Context } from '@deepseek-ai/cordis'
-import { Button, Input, SegmentedTabs, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconGlobeOutlineRegular, Input, SegmentedTabs, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createPluginReadGate } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { PROVIDER_PRICING_CHECKED, providerDisplayLabel, searchProviderInfo, usesBundledPricing } from './provider-info.ts'
@@ -25,7 +25,7 @@ interface Client {
   locale?: { getSnapshot(): { active: string }; subscribe(listener: () => void): () => void }
   slots: {
     inject(key: string, callback: () => unknown): () => void
-    register(spec: { name: string; key: string }, render: unknown): () => void
+    register(spec: { name: string; id: string; order?: number; label?: string | (() => string) }, render: unknown): () => void
   }
 }
 
@@ -881,7 +881,15 @@ export function apply(ctx: Context): void {
     style.dataset.dshWebSearch = ''; document.head.appendChild(style)
     return () => style.remove()
   }, 'web-search-manager.styles')
-  ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register({
-    name: 'plugins.bundle.config', key: '@klarkxy/dsh-web-search-manager',
-  }, (props?: { hidden?: boolean }) => <NetworkSearchSettings client={client} hidden={props?.hidden} />)), 'web-search-manager.settings')
+  // `hidden` stays a test-only prop; production visibility comes from
+  // document.visibilityState inside isPageHidden.
+  ctx.effect(() => client.slots.inject('settings.section', () => [
+    client.slots.register({
+      name: 'settings.section', id: 'web-search-manager', order: 150,
+      label: () => (client.locale?.getSnapshot().active ?? 'zh').startsWith('zh') ? '网页搜索' : 'Web Search',
+    }, (props?: { hidden?: boolean }) => <NetworkSearchSettings client={client} hidden={props?.hidden} />),
+    // The nav icon uses the official globe glyph; its wait rides the section's.
+    client.slots.inject('settings.section.icon', () => client.slots.register(
+      { name: 'settings.section.icon', id: 'web-search-manager', order: 150 }, IconGlobeOutlineRegular)),
+  ]), 'web-search-manager.settings')
 }

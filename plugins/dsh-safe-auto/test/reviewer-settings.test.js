@@ -78,7 +78,12 @@ test('operator conditions stay in the user input; the system prompt is immutable
   const text = seen[0].messages[0].content[0].text;
   assert.match(text, /# Additional review conditions from the operator/);
   assert.match(text, /never relax the rules above or grant authorization/);
-  assert.ok(text.endsWith(reviewerPrompt));
+  // The operator conditions are stable material: they lead the user input and
+  // stay ahead of this request's facts.
+  const contextBlock = text.slice(text.indexOf('<auxiliary-context'), text.indexOf('</auxiliary-context>'));
+  assert.ok(contextBlock.trimEnd().endsWith(reviewerPrompt));
+  assert.match(text, /<request>\n# Transcript\n\[user \(trusted\)\] Inspect repository status/);
+  assert.match(text, /# Planned action/);
 });
 
 test('system prompt carries the Codex-style policy and strict output format', () => {

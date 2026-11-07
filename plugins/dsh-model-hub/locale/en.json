@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Model Settings",
-    "description": "Change the models used by plugins and subagents from one page, and see each running subagent's model and reasoning effort."
+    "title": "Subagents",
+    "description": "Configure subagent models and reasoning effort, and see each one's last-used model in the conversation popup."
   }
 }

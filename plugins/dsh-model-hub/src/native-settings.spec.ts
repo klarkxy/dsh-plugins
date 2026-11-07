@@ -99,22 +99,11 @@ describe('native SettingsForms 0.2.0-rc.2 projection and mutation', () => {
     expect(host.read()).toEqual({ prompt: 'keep' })
     expect(listModelFields(host.descriptors())[0]!.fields[0]!.current).toEqual({ provider: 'default', model: 'base' })
   })
-  it('projects both hub self-test fields, preserving marker metadata and filtering ordinary fields', async () => {
+  it('projects no obsolete self-test settings after the field hub is removed', async () => {
     const schema = Schema.object({ ...Config.dict, ordinary: Schema.string() })
-    const host = await nativeSettings(schema, { ordinary: 'private ordinary config', selfTestMeta: { provider: 'a', model: 'one' }, selfTestRole: { provider: 'b', model: 'two' } })
-    const [descriptor] = host.descriptors()
-    expect(descriptor!.schema).toHaveProperty('uid')
-    expect(descriptor!.schema).toHaveProperty('refs')
-    expect(descriptor!.value).not.toHaveProperty('ordinary')
-    expect(buildProbeReport(host.descriptors()).selfTest).toMatchObject({ extraKey: 'marker', role: 'marker' })
-    const fields = detectModelFields(descriptor!.schema, { value: descriptor!.value })
-    expect(fields).toEqual([
-      { path: ['selfTestMeta'], via: 'marker', marker: { purpose: 'self-test-meta', label: { zh: '自检字段（自定义键通道）', en: 'Self-test field (custom key)' } }, current: { provider: 'a', model: 'one' } },
-      { path: ['selfTestRole'], via: 'marker', marker: { purpose: 'self-test-role', label: { zh: '自检字段（role 通道）', en: 'Self-test field (role)' } }, current: { provider: 'b', model: 'two' } },
-    ])
-    await host.mutate({ ns: descriptor!.ns, path: ['selfTestMeta'], route: { provider: 'new', model: 'route' } })
-    expect(host.read().ordinary).toBe('private ordinary config')
-    expect(host.read().selfTestRole).toEqual({ provider: 'b', model: 'two' })
+    const host = await nativeSettings(schema, { ordinary: 'private ordinary config' })
+    expect(host.descriptors()).toEqual([])
+    expect(buildProbeReport(host.descriptors()).selfTest).toMatchObject({ extraKey: 'absent', role: 'absent' })
   })
 
   it('detects unmarked native shapes and role markers without matching non-model fields', async () => {

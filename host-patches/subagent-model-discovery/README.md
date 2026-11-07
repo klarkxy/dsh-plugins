@@ -18,7 +18,7 @@ The installer verifies the original and prepared archives, preserves the origina
 
 Ask the agent to call `list_subagent_models` with no arguments. Each row contains separate `provider` and `model` values, model metadata, reasoning efforts, and any discovery failure. Pass those separate IDs when selecting a child model.
 
-Allowed routes are saved per conversation. Editing the model list applies to new top-level conversations; existing conversations and their subagents retain their saved lists. The Model Hub plugin also notes this on its settings page.
+Allowed routes are saved per conversation. Editing the model list applies to new top-level conversations; existing conversations and their subagents retain their saved lists. The Model Management plugin also notes this on its settings page.
 
 To restore the original archive, completely quit DeepSeek Harness and run the same command with `-Action restore`. Use `-Action check` to inspect the installation state read-only.
 

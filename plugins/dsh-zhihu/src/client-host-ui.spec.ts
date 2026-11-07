@@ -116,11 +116,18 @@ describe('public zhihu host compatibility', () => {
       remote: { credentials },
     }
     apply(ctx as never)
-    expect(injected).toEqual(['plugins.bundle.config'])
-    expect(registrations).toEqual([{
-      name: 'plugins.bundle.config', key: '@klarkxy/dsh-zhihu', order: 120,
-    }])
-    expect(renders).toHaveLength(1)
+    expect(injected).toEqual(['settings.section', 'settings.section.icon'])
+    expect(registrations).toHaveLength(2)
+    expect(registrations[0]).toMatchObject({ name: 'settings.section', id: 'zhihu', order: 160 })
+    // The nav icon shares the section's id/order seat.
+    expect(registrations[1]).toMatchObject({ name: 'settings.section.icon', id: 'zhihu', order: 160 })
+    // The section label is a thunk that follows the host locale.
+    expect((registrations[0] as { label(): string }).label()).toBe('知乎')
+    expect(renders).toHaveLength(2)
+    // The icon render receives owner props only and is the official question glyph.
+    const iconElement = renders[1]!({ size: 18, active: true })
+    expect(iconElement.props['data-icon']).toBe('question')
+    expect(iconElement.props['aria-hidden']).toBe('true')
     const standalone = renders[0]!({ view: 'page' })
     const html = renderToStaticMarkup(standalone as never)
     expect(html).toContain('zhihu-settings-embed')

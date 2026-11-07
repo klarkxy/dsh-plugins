@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-unrestricted",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Unrestricted: a session preset that removes the limits on what the model answers and delivers complete results, only in sessions that pick it. May get your account banned.",
   "icon": "./icon.svg",
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/unrestricted/",
@@ -56,7 +56,7 @@
   },
   "engines": {
     "node": ">=24.0.0",
-    "dsh": ">=0.2.1-rc.1"
+    "dsh": ">=0.2.2-rc.1"
   },
   "scripts": {
     "build": "tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-unrestricted",

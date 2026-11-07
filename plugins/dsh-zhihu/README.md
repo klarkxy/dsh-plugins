@@ -16,7 +16,7 @@ Replace `web` with your profile name and restart DSH Web. Always specify the ful
 
 ## Use
 
-Open **Plugins → Zhihu** and enter your Access Secret under **Settings**. Other tabs:
+Open **Settings → Zhihu** and enter your Access Secret under **Settings**. Other tabs:
 
 - **Stats**: local daily calls, failures, and result counts;
 - **Official quota**: remaining free allowance as reported by Zhihu;
@@ -27,7 +27,7 @@ With the Web Search plugin installed, Zhihu web search also appears in its provi
 
 ## Drafts and media
 
-In **Plugins → Zhihu → Settings**, configure the publishing App Key and App Secret obtained from the [Zhihu publishing assistant](https://www.zhihu.com/playground/zhihu-publisher). These are separate from the search Access Secret. You can also paste Zhihu’s authorization text directly into the App Secret field when both credentials appear as `ZHIHU_OPENAPI_APP_KEY:"…"` and `ZHIHU_OPENAPI_APP_SECRET:"…"`; the plugin extracts and keeps those two values only. The `zhihu_sync` tool then lets the model save, list, read, and validate drafts for articles, questions, or pins, and upload images for them. Drafts persist across DSH restarts. This plugin covers draft preparation and validation; publishing is done on Zhihu.
+In **Settings → Zhihu → Settings**, configure the publishing App Key and App Secret obtained from the [Zhihu publishing assistant](https://www.zhihu.com/playground/zhihu-publisher). These are separate from the search Access Secret. You can also paste Zhihu’s authorization text directly into the App Secret field when both credentials appear as `ZHIHU_OPENAPI_APP_KEY:"…"` and `ZHIHU_OPENAPI_APP_SECRET:"…"`; the plugin extracts and keeps those two values only. The `zhihu_sync` tool then lets the model save, list, read, and validate drafts for articles, questions, or pins, and upload images for them. Drafts persist across DSH restarts. This plugin covers draft preparation and validation; publishing is done on Zhihu.
 
 ## Give the tools to the model
 

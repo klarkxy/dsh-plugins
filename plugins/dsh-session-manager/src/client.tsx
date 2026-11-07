@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useSyncExternalStore } from 'react'
+import { IconChevronDownOutlineRegular, MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useState, useSyncExternalStore } from 'react'
 import { copyLocale, type CopyLocale } from './ui-copy.ts'
 import {
   CONTINUE_GHOST_ID,
@@ -12,20 +12,23 @@ import {
   USER_ACTIONS_SLOT,
   WELCOME_BACK_CARD_ID,
   TURN_TAIL_SLOT,
+  SESSION_SETTINGS_ITEM_ID,
 } from './contracts.ts'
 import { installContextMenuForwarding } from './context-menu.ts'
 import { CreateNoticeDialog, DeleteChatDialog } from './free-panel.tsx'
 import { installTemporaryWorkspacePicker, TemporaryWorkspaceNotice, type PickerRegistry } from './temporary-picker.tsx'
 import { bindTemporaryWorkspaceHost, createTemporaryWorkspaceModel } from './temporary-workspace.ts'
 import { bindHost, createFreeChatModel, createRetryModel, type FreeChatModel, type RetryModel } from './session-actions.ts'
-import { bindPresenceHost, createContinueModel, createPresenceConfigModel, createWelcomeBackModel } from './presence-model.ts'
+import { bindPresenceHost, createContinueModel, createPresenceConfigModel, createWelcomeBackModel, type PresenceConfigModel } from './presence-model.ts'
 import { AutoContinueOption } from './auto-continue-option.tsx'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { registerSessionSettingsItem } from '@klarkxy/dsh-plugin-kit/client-utils'
+import { registerAuxiliaryModelSettings } from '@klarkxy/dsh-plugin-kit/auxiliary-model-client'
 import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import { MODEL_CATALOG_INJECT, readModelCatalog } from '@klarkxy/dsh-model-route'
 import { ContinueGhost, WelcomeBackCard, type WelcomeBackTurn } from './presence-panel.tsx'
 import { SessionManagerSettings } from './settings-panel.tsx'
-import { freeChatCss } from './styles.ts'
+import { freeChatCss, FREE_CHAT_ROOT } from './styles.ts'
 import { UserMessageActions } from './user-actions.tsx'
 import { UserNodeWithEdit } from './user-node.tsx'
 import { bindEditHost } from './edit-host.ts'
@@ -189,19 +192,25 @@ export function apply(ctx: Context): void {
         />
       ))
     )))
-    stops.push(client.slots.inject('plugins.bundle.config', () => (
-      client.slots.register({
-        name: 'plugins.bundle.config',
-        key: '@klarkxy/dsh-session-manager',
-      }, () => (
-        <SessionManagerSettings
+    // Session preferences contribute one row to the shared Session Management
+    // settings section. The kit-owned base service owns the page, so this
+    // plugin neither registers a section itself nor falls back to the General
+    // page. The row's body mounts on first expand only, so model-catalog and
+    // config reads do not run until the user opens it, and stays mounted while
+    // collapsed so a fold never drops an unsaved draft.
+    stops.push(registerSessionSettingsItem(
+      ctx,
+      { id: SESSION_SETTINGS_ITEM_ID, order: 65 },
+      () => (
+        <SessionManagerSettingsItem
           model={presenceConfig}
           locale={useLiveLocale(client.locale)}
           modelCatalog={modelCatalog}
           subscribeCatalog={subscribeCatalog}
+          subscribeSettings={subscribeSettings}
         />
-      ))
-    )))
+      ),
+    ))
     stops.push(client.slots.inject('shell.overlay', () => (
       client.slots.register({
         name: 'shell.overlay',
@@ -219,6 +228,9 @@ export function apply(ctx: Context): void {
         )
       })
     )))
+    // Shared "default auxiliary model" card on the Models settings page: one
+    // root-owned card for every participant plugin, released with this effect.
+    stops.push(registerAuxiliaryModelSettings(ctx))
     // Return triggers: window refocus, tab visibility, current-session switch, first mount.
     const findCurrent = () => Object.values(client.sessions?.list.getSnapshot().byId ?? {})
       .find(row => (row?.retainedBy?.mainView ?? 0) > 0)?.id ?? ''
@@ -307,6 +319,48 @@ function DeleteMenuItem(props: MenuProps & { locale?: LocaleService; model: Free
     }}>
       {uiText(locale, 'deleteChat')}
     </MenuItemButton>
+  )
+}
+
+/**
+ * Session Management item: a named native details group. The body mounts on
+ * the first expand only — the settings page must not fire every plugin's
+ * config and model reads — and stays mounted afterwards so collapsing never
+ * drops an unsaved draft or the settings-change subscription.
+ */
+export function SessionManagerSettingsItem(props: {
+  model: PresenceConfigModel
+  locale: CopyLocale
+  modelCatalog?: () => Promise<unknown>
+  subscribeCatalog?: (onChange: () => void) => (() => void) | undefined
+  subscribeSettings?: (onChange: () => void, onError?: (message: string) => void) => () => void
+}): React.ReactElement {
+  const [visited, setVisited] = useState(false)
+  return (
+    <details
+      className={`${FREE_CHAT_ROOT} dsm-item`}
+      data-testid="session-manager-settings-item"
+      onToggle={event => { if ((event.currentTarget as HTMLDetailsElement).open) setVisited(true) }}
+    >
+      <summary className="dsm-item-summary">
+        <span>
+          <span className="dsm-item-title">{uiText(props.locale, 'settingsGroupTitle')}</span>
+          <span className="dsm-item-desc">{uiText(props.locale, 'settingsGroupHint')}</span>
+        </span>
+        <IconChevronDownOutlineRegular className="dsm-item-chevron" aria-hidden="true" />
+      </summary>
+      {visited ? (
+        <div className="dsm-item-body">
+          <SessionManagerSettings
+            model={props.model}
+            locale={props.locale}
+            modelCatalog={props.modelCatalog}
+            subscribeCatalog={props.subscribeCatalog}
+            subscribeSettings={props.subscribeSettings}
+          />
+        </div>
+      ) : null}
+    </details>
   )
 }
 

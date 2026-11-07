@@ -4,6 +4,7 @@ import { AutoContinueRunner, type AutoContinueRunnerDeps } from './auto-runner.t
 import type { AutoContinueService } from './auto-continue.ts'
 import type { SessionAutoContinue } from './storage.ts'
 import { resolveConfig } from './contracts.ts'
+import type { ModelRoute } from '@klarkxy/dsh-model-route'
 import type { PresenceModelHost } from './welcome-back.ts'
 
 const ev = (type: string, seq: number, data: unknown = {}) =>
@@ -17,13 +18,39 @@ const assistant = (seq: number, turn: number, text = '') =>
 
 const ENDED = [turnStart(1, 1), user(2, 'fix it'), assistant(3, 1, 'halfway'), turnEnd(4, 1)]
 
-function judgeModel(answer: string | Error | Promise<never>) {
-  const prepareCall = vi.fn(async () => {
+interface JudgeModelOptions {
+  savedJudge?: () => ModelRoute | null
+  savedGhost?: () => ModelRoute | null
+  /** Shared auxiliary default published on host.root where getAuxiliaryModel reads it. */
+  auxModel?: ModelRoute
+  auxBroken?: boolean
+  /** Receives each generated user message (auxiliary-context block + request). */
+  onUserText?: (text: string) => void
+  /** Receives each prepared model config. */
+  onPrepared?: (config: Record<string, unknown>) => void
+}
+
+function judgeModel(answer: string | Error | Promise<never>, options: JudgeModelOptions = {}) {
+  const services = new Map<string, unknown>()
+  if (options.auxModel !== undefined) {
+    services.set('dshAuxiliaryModel', {
+      ready: Promise.resolve(),
+      snapshot: () => ({ revision: 1, model: options.auxModel }),
+    })
+  }
+  const prepareCall = vi.fn(async (config: Record<string, unknown>) => {
     if (answer instanceof Error) throw answer
     const text = typeof answer === 'string' ? answer : await answer
+    options.onPrepared?.(config)
     return {
       config: {},
-      stream: async function* () {
+      stream: async function* (generated: { messages?: { content?: { type: string; text?: string }[] }[] }) {
+        const userText = (generated.messages ?? [])
+          .flatMap(message => message.content ?? [])
+          .filter(part => part.type === 'text')
+          .map(part => part.text ?? '')
+          .join('')
+        options.onUserText?.(userText)
         yield { type: 'text-delta', index: 0, text }
         yield { type: 'finish', reason: { kind: 'stop' } }
       },
@@ -31,7 +58,17 @@ function judgeModel(answer: string | Error | Promise<never>) {
   })
   const host: PresenceModelHost & { prepareCall: typeof prepareCall } = {
     prepareCall,
-    host: { llm: { prepareCall }, agentDefaultModel: { currentSelection: () => ({ provider: 'p', model: 'm' }) } },
+    host: {
+      llm: { prepareCall },
+      agentDefaultModel: { currentSelection: () => ({ provider: 'p', model: 'm' }) },
+      root: {
+        get: (name: string) => services.get(name),
+        provide: (name: string, value: unknown) => { services.set(name, value); return () => services.delete(name) },
+      },
+    },
+    ...options.savedJudge ? { savedJudge: options.savedJudge } : {},
+    ...options.savedGhost ? { savedGhost: options.savedGhost } : {},
+    ...options.auxBroken === undefined ? {} : { auxBroken: options.auxBroken },
     signal: new AbortController().signal,
   }
   return host
@@ -134,5 +171,81 @@ describe('auto-continue runner', () => {
     await vi.waitFor(() => expect((runner as never as { inflight: Map<string, unknown> }).inflight.size).toBe(1))
     await runner.dispose()
     expect(followup).not.toHaveBeenCalled()
+  })
+
+  it('resolves the judge route from its own override, then the shared auxiliary default, never the ghost field', async () => {
+    const prepared: Record<string, unknown>[] = []
+    const judgeStub = judgeModel('{"verdict":"done","reason":"ok","prompt":""}', {
+      savedJudge: () => ({ provider: 'judge-p', model: 'judge-m' }),
+      savedGhost: () => ({ provider: 'ghost-p', model: 'ghost-m' }),
+      auxModel: { provider: 'aux-p', model: 'aux-m' },
+      onPrepared: config => prepared.push(config),
+    })
+    const judgeFirst = harness({ model: judgeStub })
+    judgeFirst.runner.onSessionEvent({ id: 's1' }, ENDED.at(-1)!)
+    await vi.waitFor(() => expect(judgeStub.prepareCall).toHaveBeenCalledOnce())
+    expect(prepared[0]).toMatchObject({ provider: 'judge-p', model: 'judge-m' })
+
+    // Explicit judge:null means "follow the auxiliary default": the ghost
+    // override is a different feature and must not leak into the judge route.
+    const followStub = judgeModel('{"verdict":"done","reason":"ok","prompt":""}', {
+      savedJudge: () => null,
+      savedGhost: () => ({ provider: 'ghost-p', model: 'ghost-m' }),
+      auxModel: { provider: 'aux-p', model: 'aux-m' },
+      onPrepared: config => prepared.push(config),
+    })
+    const followAux = harness({ model: followStub })
+    followAux.runner.onSessionEvent({ id: 's1' }, ENDED.at(-1)!)
+    await vi.waitFor(() => expect(followStub.prepareCall).toHaveBeenCalledOnce())
+    expect(prepared[1]).toMatchObject({ provider: 'aux-p', model: 'aux-m' })
+
+    // Neither explicit field set: the shared auxiliary default still wins over
+    // the host fallback.
+    const auxStub = judgeModel('{"verdict":"done","reason":"ok","prompt":""}', {
+      auxModel: { provider: 'aux-p', model: 'aux-m' },
+      onPrepared: config => prepared.push(config),
+    })
+    const plainAux = harness({ model: auxStub })
+    plainAux.runner.onSessionEvent({ id: 's1' }, ENDED.at(-1)!)
+    await vi.waitFor(() => expect(auxStub.prepareCall).toHaveBeenCalledOnce())
+    expect(prepared[2]).toMatchObject({ provider: 'aux-p', model: 'aux-m' })
+  })
+
+  it('packs the judge request as its own feature context, isolated from ghost material', async () => {
+    let userText = ''
+    const stub = judgeModel('{"verdict":"done","reason":"ok","prompt":""}', { onUserText: text => { userText = text } })
+    const { runner } = harness({ model: stub })
+    runner.onSessionEvent({ id: 's1' }, ENDED.at(-1)!)
+    await vi.waitFor(() => expect(stub.prepareCall).toHaveBeenCalledOnce())
+    const envelope = userText.match(/^<auxiliary-context feature="session-manager\.judge">\n([\s\S]*?)\n<\/auxiliary-context>\n<request>\n([\s\S]*?)\n<\/request>$/)
+    expect(envelope).not.toBeNull()
+    const context = JSON.parse(envelope![1]!) as Record<string, unknown>
+    const requestBody = JSON.parse(envelope![2]!) as Record<string, unknown>
+    // The judge sees the human request as stable context — never the ghost's
+    // objective/recentTurns material — and live evidence in the request half.
+    expect(Object.keys(context)).toEqual(['request'])
+    expect(context.request).toBe('fix it')
+    expect(Object.keys(requestBody).sort()).toEqual(['autoContinues', 'response', 'tools'])
+    expect(requestBody.response).toBe('halfway')
+  })
+
+  it('degrades the judge when the shared auxiliary store broke, unless its own override exists', async () => {
+    const prepared: Record<string, unknown>[] = []
+    const brokenStub = judgeModel('{}', { auxBroken: true, onPrepared: config => prepared.push(config) })
+    const broken = harness({ model: brokenStub })
+    broken.runner.onSessionEvent({ id: 's1' }, ENDED.at(-1)!)
+    await tick()
+    expect(brokenStub.prepareCall).not.toHaveBeenCalled()
+    expect(broken.followup).not.toHaveBeenCalled()
+
+    const explicitStub = judgeModel('{"verdict":"done","reason":"ok","prompt":""}', {
+      auxBroken: true,
+      savedJudge: () => ({ provider: 'judge-p', model: 'judge-m' }),
+      onPrepared: config => prepared.push(config),
+    })
+    const explicit = harness({ model: explicitStub })
+    explicit.runner.onSessionEvent({ id: 's1' }, ENDED.at(-1)!)
+    await vi.waitFor(() => expect(explicitStub.prepareCall).toHaveBeenCalledOnce())
+    expect(prepared[0]).toMatchObject({ provider: 'judge-p', model: 'judge-m' })
   })
 })

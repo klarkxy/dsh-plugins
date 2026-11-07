@@ -63,6 +63,21 @@ describe('Git Commit live locale', () => {
   it('localizes owned rejection codes and an empty fallback while preserving external diagnostics', async () => {
     let dictionaries: Record<string, Record<string, string>> = {}
     const cleanup: Array<unknown> = []
+    // The shared auxiliary-model card rendezvouses on the cordis root: its
+    // shared-column contribution resolves slots through `ctx.root`, and Cordis's
+    // root returns itself from `.root` — the fake mirrors that.
+    const services = new Map<string, unknown>()
+    const fakeRoot = {
+      get: (name: string) => services.get(name),
+      provide: (name: string, value: unknown) => {
+        services.set(name, value)
+        return () => { if (services.get(name) === value) services.delete(name) }
+      },
+      inject: () => ({ dispose() {} }),
+      slots: { inject() { return () => {} }, register() { return () => {} } },
+      root: undefined as unknown,
+    }
+    fakeRoot.root = fakeRoot
     apply({
       provide() {},
       inject(deps: string[], callback?: (scope: unknown) => void) {
@@ -72,6 +87,7 @@ describe('Git Commit live locale', () => {
       effect(fn: () => unknown) { const dispose = fn(); if (typeof dispose === 'function') cleanup.push(dispose) },
       locale: { register(_ns: string, value: typeof dictionaries) { dictionaries = value; return () => {} } },
       slots: { inject() { return () => {} } },
+      root: fakeRoot,
     } as never)
     try { await mount(async (dom, root) => {
       for (const failure of [{ code: 'workspace-changed', message: 'local diagnostic' }, { code: 'unknown', message: '' }, { code: 'external', message: 'provider detail 用户数据' }]) {

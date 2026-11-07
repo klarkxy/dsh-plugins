@@ -3,3 +3,6 @@ export { CHAT_EVENTS_SLOT, projectIdFromCwd, producerMessageSource } from './con
 export { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
 export { openCompatibleDomain } from './domain.ts'
 export { callLlmText, resolveFeatureModel, type FeatureModelRoute, type LlmTextCaller } from './llm-call.ts'
+export {
+  buildAuxiliaryUserText, packAuxiliaryContext, AuxiliaryContextTooLargeError,
+} from './auxiliary-context.ts'

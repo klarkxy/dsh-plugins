@@ -35,7 +35,14 @@ describe('Zhihu host locale subscription', () => {
     try {
       apply({ locale, connection: { rpc: { call } }, remote: { credentials: { set, describe: async () => ({ ok: true, value: { [ZHIHU_CREDENTIAL_REF]: { configured: false, writable: true } } }) } },
         effect(callback: () => unknown) { const dispose = callback(); if (typeof dispose === 'function') cleanup.push(dispose as () => void) },
-        slots: { inject(_key: string, register: () => unknown) { register(); return () => {} }, register(_spec: unknown, view: typeof render) { render = view } },
+        slots: {
+          inject(_key: string, register: () => unknown) { register(); return () => {} },
+          // Only the settings.section view is captured; the nav-icon
+          // registration that follows it must not overwrite `render`.
+          register(spec: unknown, view: typeof render) {
+            if ((spec as { name?: string }).name === 'settings.section') render = view
+          },
+        },
       } as never)
       await act(async () => root.render(render({})))
       const key = dom.window.document.querySelector<HTMLInputElement>('input[type="password"]')!

@@ -10,6 +10,7 @@ const replacements = {
   react: import.meta.resolve('react'),
   '@deepseek-ai/dsh-client-ui-primitives': new URL('./client-primitives-stub.mjs', import.meta.url).href,
   '@klarkxy/dsh-model-route/ui': new URL('./model-menu-stub.mjs', import.meta.url).href,
+  '@klarkxy/dsh-plugin-kit/auxiliary-model-client': new URL('./auxiliary-model-client-stub.mjs', import.meta.url).href,
   ...Object.fromEntries(['@klarkxy/dsh-model-route', '@klarkxy/dsh-plugin-kit/official-ui', '@klarkxy/dsh-plugin-kit/client-utils', '@klarkxy/dsh-plugin-kit/model-settings-client'].map(name => [name, import.meta.resolve(name)])),
 };
 const transformed = Object.entries(replacements).reduce((text, [name, url]) => text.replace(`from '${name}'`, `from '${url}'`), source);

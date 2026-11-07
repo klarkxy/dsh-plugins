@@ -37,7 +37,7 @@ async function useDom(run: (dom: JSDOM) => Promise<void>): Promise<void> {
 }
 
 const initial: ConfigView = {
-  recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3,
+  recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, judgeModel: null, handoffModel: null, autoContinueMode: 'off', autoContinueMax: 3,
 }
 
 function headings(dom: JSDOM): string[] {
@@ -50,6 +50,17 @@ function button(dom: JSDOM, text: string): HTMLElement {
 
 function switchRow(dom: JSDOM, label: string): HTMLElement {
   return [...dom.window.document.querySelectorAll('[role="switch"]')].find(item => item.getAttribute('aria-label') === label) as unknown as HTMLElement
+}
+
+/**
+ * The panel mounts one ModelMenu trigger per feature (recap, ghost, judge,
+ * handoff); position is meaningless, so callers name the feature label.
+ */
+function modelTrigger(dom: JSDOM, label: string): HTMLButtonElement {
+  const trigger = [...dom.window.document.querySelectorAll<HTMLButtonElement>('.dsh-model-menu-trigger')]
+    .find(item => item.getAttribute('aria-label')?.startsWith(`${label}: `))
+  if (!trigger) throw new Error(`missing model trigger for ${label}`)
+  return trigger
 }
 
 function change(dom: JSDOM, element: HTMLElement, value: string): void {
@@ -87,7 +98,7 @@ describe('presence settings page', () => {
           root.render(<SessionManagerSettings model={model} locale="en" modelCatalog={catalog} />)
         })
         // Pick the same route again. That selection must retain its effort.
-        await act(async () => { dom.window.document.querySelector<HTMLButtonElement>('.dsh-model-menu-trigger')!.click() })
+        await act(async () => { modelTrigger(dom, 'Recap model').click() })
         await act(async () => { dom.window.document.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click() })
         await act(async () => {
           const old = [...dom.window.document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')]
@@ -110,7 +121,7 @@ describe('presence settings page', () => {
         expect(current.model?.reasoningEffort).toBe('low')
         expect(current.model?.model).toBe('external')
 
-        await act(async () => { dom.window.document.querySelector<HTMLButtonElement>('.dsh-model-menu-trigger')!.click() })
+        await act(async () => { modelTrigger(dom, 'Recap model').click() })
         await act(async () => { dom.window.document.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click() })
         await act(async () => {
           const next = [...dom.window.document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')]
@@ -142,19 +153,19 @@ describe('presence settings page', () => {
           root = createRoot(dom.window.document.getElementById('root')!)
           root.render(<SessionManagerSettings model={model} locale="zh" />)
         })
-        // Two flat sections share one reading surface. The recap model lives
+        // Flat feature sections share one reading surface. The recap model lives
         // beside its threshold under the recap switch, not in a separate card.
-        expect(headings(dom)).toEqual(['继续灰影', '自动继续', '回到会话时'])
-        expect(dom.window.document.querySelectorAll('.dsm-settings > .dsm-setting')).toHaveLength(3)
+        expect(headings(dom)).toEqual(['继续灰影', '自动继续', '交接摘要', '回到会话时'])
+        expect(dom.window.document.querySelectorAll('.dsm-settings > .dsm-setting')).toHaveLength(4)
         expect(dom.window.document.querySelector('.dsh-ui-card')).toBeNull()
-        // Fixed mode shows the text field. The remaining model picker is the recap's.
+        // Fixed mode shows the text field. The ghost picker stays hidden.
         expect(dom.window.document.body.textContent).toContain('固定文本内容')
         expect(dom.window.document.body.textContent).not.toContain('生成模型')
         // Welcome-back card: two switches, each gating its nested threshold inputs.
         expect(switchRow(dom, '显示会话摘要').getAttribute('aria-checked')).toBe('true')
         expect(switchRow(dom, '建议压缩上下文').getAttribute('aria-checked')).toBe('true')
-        const trigger = dom.window.document.querySelector('.dsh-model-menu-trigger')!
-        expect(trigger.getAttribute('aria-label')).toBe('摘要模型: 当前会话 / 宿主默认模型')
+        const trigger = modelTrigger(dom, '摘要模型')
+        expect(trigger.getAttribute('aria-label')).toBe('摘要模型: 默认辅助模型')
         expect(trigger.getAttribute('aria-haspopup')).toBe('menu')
         expect(trigger.closest('.dsm-model-field')).not.toBeNull()
         expect(dom.window.document.querySelectorAll('.dsm-minutes-control .dsh-ui-meta')).toHaveLength(2)
@@ -240,13 +251,13 @@ describe('presence settings page', () => {
         expect(compactInput.value).toBe('60')
         expect(compactInput.disabled).toBe(true)
         // Pick a model from the catalog while the recap switch still gates an enabled picker.
-        await act(async () => { dom.window.document.querySelector<HTMLButtonElement>('.dsh-model-menu-trigger')!.click() })
+        await act(async () => { modelTrigger(dom, '摘要模型').click() })
         await act(async () => { dom.window.document.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click() })
         const choice = [...dom.window.document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find(item => item.textContent?.includes('Model'))!
         await act(async () => { choice.click() })
         // Turning the recap switch off disables its nested fields and writes 0.
         await act(async () => { switchRow(dom, '显示会话摘要').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
-        expect(dom.window.document.querySelector<HTMLButtonElement>('.dsh-model-menu-trigger')!.disabled).toBe(true)
+        expect(modelTrigger(dom, '摘要模型').disabled).toBe(true)
         await act(async () => { button(dom, '保存').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
         const write = calls.find(call => call.endpoint === CONFIG_WRITE_ENDPOINT)
         expect(write?.payload).toEqual({
@@ -278,7 +289,7 @@ describe('presence settings page', () => {
         expect(load).toHaveBeenCalledTimes(2)
         expect(fixed.value).toBe('keep my draft')
         expect(dom.window.document.body.textContent).not.toContain('catalog offline')
-        await act(async () => { dom.window.document.querySelector<HTMLButtonElement>('.dsh-model-menu-trigger')!.click() })
+        await act(async () => { modelTrigger(dom, 'Recap model').click() })
         await act(async () => { dom.window.document.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click() })
         expect(dom.window.document.body.textContent).toContain('Recovered')
       } finally {
@@ -337,8 +348,7 @@ describe('presence settings page', () => {
         })
         current = { ...current, model: { provider: 'p', model: 'remote' } }
         await act(async () => { notify?.() })
-        const trigger = dom.window.document.querySelector('.dsh-model-menu-trigger')!
-        expect(trigger.textContent).toContain('p / remote')
+        expect(modelTrigger(dom, 'Recap model').textContent).toContain('p / remote')
       } finally {
         await act(async () => { root?.unmount() })
       }

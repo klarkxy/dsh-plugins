@@ -18,13 +18,13 @@ Replace `web` with your profile name and restart the profile.
 
 Pick **Safe Auto** from the permission menu next to the chat input. It applies only to that session once selected; choosing any other level turns it off.
 
-Under **Plugins → Safe Auto** choose the reviewer model (empty follows the current session model), its reasoning effort, and extra review rules. Changes made elsewhere update this page on their own, and the page works independently of Model Hub.
+Under **Settings → Session Management → Safe Auto** choose the reviewer model, its reasoning effort, and extra review rules. Leaving the model empty follows the default auxiliary model; with no default set, it follows the current session model. The default auxiliary model is shared: set it once under **Settings → Session Management**, and every feature that follows it uses the same one. Changes made elsewhere update this page on their own.
 
 When the model list fails to load or some providers are unavailable, use **Retry** in the settings panel. Retrying keeps your reviewer settings and unsaved draft.
 
 ## Review history
 
-Open **Plugins → Safe Auto → Review history** to read every review this plugin recorded. Filter by search text, session, tool, result, risk, and a start and end time, then page through the matches. Opening a record shows the complete review: what triggered it, the arguments sent, the review input, the verdict, and whether the approved call ran afterwards.
+Open **Settings → Session Management → Safe Auto → Review history** to read every review this plugin recorded. Filter by search text, session, tool, result, risk, and a start and end time, then page through the matches. Opening a record shows the complete review: what triggered it, the arguments sent, the review input, the verdict, the token usage of each attempt, and whether the approved call ran afterwards.
 
 Export one record, or every record matching the current filters, as JSON. Exporting all matches walks the pages one at a time and can be cancelled at any point; a file is written only when the export finishes cleanly.
 
@@ -34,7 +34,7 @@ Recording covers reviews run after installing the review-history feature. Record
 
 | Tool | What it does |
 |---|---|
-| `safe_auto_history` | Read-only lookup of the current session's review history. `list` returns summaries and includes a next-page cursor when more records remain; `get` returns one complete record. Use the Plugins page to read history across sessions. Reading history is purely local and leaves the reviewer model idle. |
+| `safe_auto_history` | Read-only lookup of the current session's review history. `list` returns summaries and includes a next-page cursor when more records remain; `get` returns one complete record. Use Settings → Session Management → Safe Auto to read history across sessions. Reading history is purely local and leaves the reviewer model idle. |
 
 ## What gets reviewed
 
@@ -46,9 +46,11 @@ Reading files, searching, building, and testing run directly without review.
 
 ## How the reviewer decides
 
-- The reviewer sees the conversation, the current working directory, the sandbox workspace boundary, and the complete action arguments. Only your own messages count as authorization; the agent's explanations, tool output, and file contents serve as evidence.
+- The reviewer sees the conversation, the current working directory, the sandbox workspace boundary, and the complete action arguments. Only your own messages count as authorization; the agent's explanations, tool output, and file contents serve as evidence. An earlier approval outcome is a record of another call, never authorization for this one.
+- The reviewer reads the conversation as it stands now: a request you replaced and the turn it produced are no longer evidence, and a message that arrives while a review runs cancels that review.
 - Low- and medium-risk actions are approved. High-risk actions are approved only when you clearly asked for them and the scope is narrow. Critical actions, such as sending secrets to an external destination or broad irreversible deletion, are always denied.
 - If review times out, returns missing or unknown verdict fields, fails, or lacks an available model, the request is denied as a review failure: the agent may retry once or ask you.
+- The shared default auxiliary model is read before every review that follows it. If it cannot be read, the request is denied as a review failure rather than reviewed by a model you did not choose.
 - After 3 consecutive denials, or 10 denials among the last 50 reviews in one turn, automatic approval pauses until your next message.
 
 ## Limits

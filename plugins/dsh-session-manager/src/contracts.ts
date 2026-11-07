@@ -23,6 +23,19 @@ export const CONFIG_READ_ENDPOINT = 'config.read'
 export const CONFIG_WRITE_ENDPOINT = 'config.write'
 export const AUTO_CONTINUE_STATUS_ENDPOINT = 'autocontinue.status'
 export const AUTO_CONTINUE_UPDATE_ENDPOINT = 'autocontinue.update'
+/** This plugin's own row inside the shared Session Management settings list. */
+export const SESSION_SETTINGS_ITEM_ID = 'session-manager'
+
+/**
+ * Stable feature ids stamped on `callLlmText` requests: each generated call is
+ * attributed to its own per-session × feature context. The ghost bucket is
+ * never shared with the judge — see buildAuxiliaryUserText in the kit.
+ */
+export const FEATURE_RECAP = 'session-manager.recap'
+export const FEATURE_GHOST = 'session-manager.ghost'
+export const FEATURE_JUDGE = 'session-manager.judge'
+export const FEATURE_HANDOFF = 'session-manager.handoff'
+
 /** Card entry id in the chat flow; the recap renders at the latest completed turn's tail. */
 export const WELCOME_BACK_CARD_ID = '@klarkxy/dsh-session-manager.welcome-back'
 export const TURN_TAIL_SLOT = 'conversation.chat.turnTail'
@@ -147,10 +160,14 @@ export interface ConfigView {
   readonly compactMinutes: number
   readonly continueText: string
   readonly continueMode: ContinueMode
-  /** Plugin-owned welcome-back recap model; null follows the conversation / host default model. */
+  /** Plugin-owned welcome-back recap model; null follows the default auxiliary model. */
   readonly model: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
-  /** Plugin-owned ghost model; null follows the conversation / host default model. */
+  /** Plugin-owned ghost model; null follows the default auxiliary model. */
   readonly ghostModel: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
+  /** Plugin-owned auto-continue judge model; null follows the default auxiliary model. */
+  readonly judgeModel: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
+  /** Plugin-owned read_session handoff model; null follows the default auxiliary model. */
+  readonly handoffModel: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
   /** Initial auto-continue mode for sessions created later. */
   readonly autoContinueMode: AutoContinueMode
   /** Automatic continuations allowed after each human message in an auto-continue session. */
@@ -163,10 +180,14 @@ export interface ConfigPatch {
   readonly compactMinutes?: number
   readonly continueText?: string
   readonly continueMode?: ContinueMode
-  /** Null resumes following the conversation / host default model. */
+  /** Null resumes following the default auxiliary model. */
   readonly model?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
-  /** Null resumes following the conversation / host default model for the ghost. */
+  /** Null resumes following the default auxiliary model for the ghost. */
   readonly ghostModel?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
+  /** Null resumes following the default auxiliary model for the auto-continue judge. */
+  readonly judgeModel?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
+  /** Null resumes following the default auxiliary model for read_session handoff summaries. */
+  readonly handoffModel?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
   readonly autoContinueMode?: AutoContinueMode
   readonly autoContinueMax?: number
 }

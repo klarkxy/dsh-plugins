@@ -261,7 +261,7 @@ export function createPresenceConfigModel(host: PresenceHost, delay: (ms: number
   function same(view: ConfigView | undefined, patch: ConfigPatch): boolean {
     if (view === undefined) return false
     return Object.entries(patch).every(([key, value]) => {
-      if (key === 'model' || key === 'ghostModel') return sameRoute(view[key], value)
+      if (key === 'model' || key === 'ghostModel' || key === 'judgeModel' || key === 'handoffModel') return sameRoute(view[key], value)
       return view[key as keyof ConfigView] === value
     })
   }

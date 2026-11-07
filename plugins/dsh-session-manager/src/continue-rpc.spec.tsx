@@ -63,7 +63,7 @@ async function withContinuation(
       host: { llm: { prepareCall: prepare }, agentDefaultModel: { currentSelection: () => ({ provider: 'fixture', model: 'same' }) } },
       signal: AbortSignal.any([signal, owned.signal]),
       suggestion: id => owned.suggestion(id),
-      rememberSuggestion: (id, seq, text, requestSignal) => owned.rememberSuggestion(id, seq, text, requestSignal),
+      rememberSuggestion: (id, seq, text, key, requestSignal) => owned.rememberSuggestion(id, seq, text, key, requestSignal),
     }
   }
   let models = capture(owner.signal)
@@ -195,7 +195,9 @@ describe('continuation cancellation across registered RPC', () => {
         await vi.waitFor(() => expect(f.model.getSnapshot('rpc-continue')).toEqual({ seq: f.seq, text: null }))
       })
       expect(f.calls[0]!.result).toEqual({ ok: true, value: { seq: f.seq, text: null } })
-      expect(f.store.suggestion('rpc-continue')).toEqual({ seq: f.seq, text: null })
+      // A settled failure is persisted with its fingerprint: the null pins
+      // this cut but stays regenerable after inputs change.
+      expect(f.store.suggestion('rpc-continue')).toEqual({ seq: f.seq, text: null, key: expect.any(String) })
       await act(async () => {
         f.model.invalidate('rpc-continue')
         f.model.load('rpc-continue')

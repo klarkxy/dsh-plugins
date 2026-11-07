@@ -53,12 +53,20 @@ const INDEX_HTML = `<!doctype html>
         },
         slots: {
           inject(name, run) {
-            if (name !== 'plugins.bundle.config') throw new Error('Unexpected settings slot: ' + name)
+            // The nav-icon seat is a separate official slot; accept its wait
+            // like the section's so the icon registration rides the page wait.
+            if (name !== 'settings.section' && name !== 'settings.section.icon') {
+              throw new Error('Unexpected settings slot: ' + name)
+            }
             return run()
           },
           register(spec, render) {
-            if (spec.name !== 'plugins.bundle.config' || spec.key !== '@klarkxy/dsh-web-search-manager') {
-              throw new Error('Settings must be registered on the web-search plugin page')
+            // Icon contributions register under their own seat and id; the
+            // fixture only mounts the settings page, so they are allowed but
+            // not captured.
+            if (spec.name === 'settings.section.icon') return () => {}
+            if (spec.name !== 'settings.section' || spec.id !== 'web-search-manager') {
+              throw new Error('Settings must be registered as the web-search-manager settings section')
             }
             settingsRender = render
             return () => { settingsRender = undefined }

@@ -2,7 +2,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
-import { DelegationAction, DelegationSettingsPanel } from './client.tsx'
+import { apply, DelegationAction } from './client.tsx'
 
 const ok = (value: unknown) => ({ ok: true, value })
 const fail = (code: string, message = code) => ({ ok: false, error: { code, message } })
@@ -211,36 +211,33 @@ describe('delegation new-session option', () => {
   })
 })
 
-describe('delegation settings panel', () => {
-  const clientFor = (call: (channel: string, endpoint: string, payload: unknown) => Promise<unknown>) => ({
-    connection: { rpc: { call }, generation: { subscribe: () => () => {} } },
-    locale: {},
-  }) as never
-
-  it('sends expectedRevision when the switch flips', async () => {
-    let current = { revision: 1, defaultEnabled: false }
-    const call = vi.fn(async (_channel: string, endpoint: string, payload: { defaultEnabled?: boolean } = {}) =>
-      endpoint === 'settings.update'
-        ? ok(current = { revision: 2, defaultEnabled: payload.defaultEnabled === true })
-        : ok(current))
-    await mount(async (dom, render) => {
-      await render(<DelegationSettingsPanel client={clientFor(call)} locale="zh" />)
-      const toggle = dom.window.document.querySelector<HTMLButtonElement>('[role="switch"]')!
-      expect(toggle.getAttribute('aria-checked')).toBe('false')
-      await act(async () => toggle.click())
-      expect(call).toHaveBeenCalledWith(expect.any(String), 'settings.update', { defaultEnabled: true, expectedRevision: 1 })
-      expect(dom.window.document.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true')
-      expect(dom.window.document.body.textContent).toContain('已保存。')
-    })
-  })
-
-  it('shows the stale notice when the write is rejected', async () => {
-    const call = vi.fn(async (_channel: string, endpoint: string) =>
-      endpoint === 'settings.update' ? fail('stale') : ok({ revision: 1, defaultEnabled: false }))
-    await mount(async (dom, render) => {
-      await render(<DelegationSettingsPanel client={clientFor(call)} locale="zh" />)
-      await act(async () => dom.window.document.querySelector<HTMLButtonElement>('[role="switch"]')!.click())
-      expect(dom.window.document.body.textContent).toContain('设置已更新，请刷新后重试。')
-    })
+describe('delegation client registration', () => {
+  it('contributes only the hero option and no settings seat', () => {
+    const registered: Array<{ spec: Record<string, unknown>; view: () => unknown }> = []
+    const injected: string[] = []
+    const ctx = {
+      provide() {},
+      effect(callback: () => unknown) { callback(); return () => {} },
+      slots: {
+        inject(key: string, callback: () => unknown) {
+          injected.push(key)
+          callback()
+          return () => {}
+        },
+        register(spec: Record<string, unknown>, view: () => unknown) {
+          registered.push({ spec, view })
+          return () => {}
+        },
+      },
+      locale: { register: () => () => {} },
+      connection: { rpc: { call: async () => ok(status()) }, generation: { subscribe: () => () => {} } },
+    }
+    apply(ctx as never)
+    expect(injected).toEqual(['conversation.hero.options'])
+    // Delegation is chosen per session on the hero: no settings row at all,
+    // not on the shared column, the native groups, or a plugin page.
+    const option = registered.find(entry => entry.spec.name === 'conversation.hero.options')!
+    expect(option.spec).toMatchObject({ id: 'delegation', order: 20 })
+    expect(registered.find(entry => String(entry.spec.name).startsWith('settings'))).toBeUndefined()
   })
 })

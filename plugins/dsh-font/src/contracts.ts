@@ -8,14 +8,23 @@ export const PLUGIN_NAME = '@klarkxy/dsh-font'
  * The active panel reads and writes the host's role-specific preferences. */
 export const STORAGE_KEY = 'klarkxy.dsh-font.v1'
 
-/** Host text-role bounds, shared by the native conversation-size stepper. */
-export const FONT_SIZE_MIN = 10
-export const FONT_SIZE_MAX = 22
-export const FONT_SIZE_DEFAULT = 14
+/** Host per-role font-size bounds and defaults, matching the ui-theme
+ * `FONT_SIZE_SPECS` contract (stepper clamps at both ends, integer px). */
+export interface FontSizeSpec {
+  readonly min: number
+  readonly max: number
+  readonly default: number
+}
+export const FONT_SIZE_SPECS = {
+  text: { min: 10, max: 22, default: 14 },
+  code: { min: 10, max: 16, default: 11 },
+  terminal: { min: 10, max: 20, default: 13 },
+} as const satisfies Record<string, FontSizeSpec>
 
-/** Root font overrides reach derived Markdown, brand and terminal fonts.
- * These are the host variables this feature changes, rather than a private
- * palette used to style the plugin's settings page. */
+/** Root font variables the legacy local-storage model overrode directly:
+ * derived Markdown and brand fonts follow the interface variable. Kept as
+ * migration data for the pre-theme-service storage; live writes now go
+ * through theme.setFontFamily per role instead. */
 export const UI_FONT_VARIABLE = '--dsw-font-family'
 export const CODE_FONT_VARIABLE = '--ds-font-family-code'
 
@@ -34,10 +43,13 @@ export function cssVar(name: string): string {
  * the scope for the Obsidian-style third font kind. */
 export const CONVERSATION_FONT_SELECTOR = '[data-conversation-region="chat"]'
 
-/** Browser-local conversation stack: the host persists only its text/code
- * roles, so this third kind keeps its own key in the same storage. */
+/** Browser-local conversation stack: the host persists its own three roles
+ * (text/code/terminal), while the plugin-owned conversation kind keeps this
+ * separate key in the same storage. */
 export const CONVERSATION_STORAGE_KEY = 'klarkxy.dsh-font.conversation.v1'
 
+/** Legacy browser-local settings shape: written before the theme service
+ * owned per-role families; kept so the one-time migration can read it. */
 export interface FontSettings {
   /** Full CSS font-family stack for the interface; empty keeps the host default. */
   uiFont: string

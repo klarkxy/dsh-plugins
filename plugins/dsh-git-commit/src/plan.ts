@@ -34,12 +34,21 @@ function truncateMiddle(text: string, maxChars: number): string {
   return `${text.slice(0, half)}\n… [${text.length - maxChars} chars omitted] …\n${text.slice(-half)}`
 }
 
-export function buildPlanInput(input: PlanInput): string {
+/**
+ * Stable style material for the auxiliary-context block: the recent commit
+ * subjects, ordered oldest to newest as recorded. Kept within a quarter of
+ * the manifest budget so the live change set always dominates the request.
+ */
+export function buildPlanContext(input: PlanInput): string[] {
+  if (input.recentSubjects.length === 0) return []
+  const section = ['Recent commit subjects (style reference):', ...input.recentSubjects.map(subject => `- ${subject}`)].join('\n')
+  return [truncateMiddle(section, Math.floor(MAX_MANIFEST_CHARS / 4))]
+}
+
+/** The live request: scope, manifest, diff stat, diff and new-file previews. */
+export function buildPlanText(input: PlanInput, maxChars: number = MAX_MANIFEST_CHARS): string {
   const sections: string[] = []
   sections.push('Scope: all current workspace changes of the repository.')
-  if (input.recentSubjects.length > 0) {
-    sections.push(['Recent commit subjects (style reference):', ...input.recentSubjects.map(s => `- ${s}`)].join('\n'))
-  }
   const manifest = input.files.map(file => `- ${statusLetter(file.status)} ${file.origin ? `${file.origin} ${file.status === 'copied' ? '=>' : '->'} ` : ''}${file.path}`).join('\n')
   sections.push(`Changed files:\n${manifest}`)
   if (input.stat.trim()) sections.push(`Diff stat:\n${input.stat.trim()}`)
@@ -49,7 +58,18 @@ export function buildPlanInput(input: PlanInput): string {
       ? `New binary file: ${untracked.path}`
       : `New file ${untracked.path}:\n${untracked.preview}`)
   }
-  return truncateMiddle(sections.join('\n\n'), MAX_MANIFEST_CHARS)
+  return truncateMiddle(sections.join('\n\n'), maxChars)
+}
+
+/**
+ * The complete single-message input kept for callers that cannot split
+ * stable context from the live request; identical material to
+ * buildPlanContext + buildPlanText laid out in the same order as before.
+ */
+export function buildPlanInput(input: PlanInput): string {
+  const context = buildPlanContext(input)
+  const text = buildPlanText(input, MAX_MANIFEST_CHARS - (context.length ? context.join('\n').length + 2 : 0))
+  return context.length ? `${context.join('\n')}\n\n${text}` : text
 }
 
 export function sanitizeMessage(raw: unknown): string | undefined {

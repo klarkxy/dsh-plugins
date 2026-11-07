@@ -1,10 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { NativeSurfaceClient } from '@klarkxy/dsh-plugin-kit/client-utils'
-import { createPluginReadGate, useFeatureRefresh, useNativeSeat } from '@klarkxy/dsh-plugin-kit/client-utils'
+import { createPluginReadGate, registerSessionSettingsItem, useFeatureRefresh, useNativeSeat } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { Button, IconChevronDownOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
 import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client'
+import { registerAuxiliaryModelSettings } from '@klarkxy/dsh-plugin-kit/auxiliary-model-client'
 import {
   MODEL_CATALOG_INJECT, readModelCatalog, modelMenuEffortLabel, modelMenuEffortOptions, parseModelMenuChoices,
 } from '@klarkxy/dsh-model-route'
@@ -26,10 +27,6 @@ type Client = NativeSurfaceClient & {
     rpc: { call(channel: string, endpoint: string, payload: unknown): Promise<unknown> }
   }
   remote?: { session?: { modelCatalog?: () => Promise<unknown> } }
-  slots: {
-    inject(key: string, callback: () => unknown): () => void
-    register(spec: { name: string; key: string }, render: unknown): () => void
-  }
 }
 
 export function TitleSettings(props: {
@@ -210,7 +207,7 @@ export function TitleSettings(props: {
     })
   }
 
-  return <section className="current-title-settings ct-root dsh-ui-page" lang={seat.locale} data-testid="current-title-settings">
+  return <section className="current-title-settings ct-root" lang={seat.locale} data-testid="current-title-settings">
     {!status && !error ? <p role="status" className="dsh-ui-hint">{text.loading}</p> : null}
     <article className="dsh-ui-card" data-testid="current-title-session">
       <h3 className="dsh-ui-heading">{text.session}</h3>
@@ -315,6 +312,7 @@ export function TitleSettings(props: {
         modelValue={currentLabel}
         defaultEffortLabel={text.modelDefault}
       />
+      <p className="dsh-ui-meta">{text.modelHint}</p>
     </div>
     <label className="dsh-ui-field">
       <span className="dsh-ui-label">{text.cadence}</span>
@@ -334,12 +332,55 @@ export function TitleSettings(props: {
   </section>
 }
 
+/**
+ * The settings row: a named native details group. The content mounts
+ * on the first expand only — the shared page must not fire every plugin's
+ * model/status requests — and stays mounted afterwards so a collapsed group
+ * never drops an unsaved prompt draft or an in-flight write.
+ */
+export function TitleSettingsItem(props: { client: Client; marker: { active: boolean }; subscribeSettings?: (change: () => void, error?: (message: string) => void) => () => void }) {
+  const seat = useNativeSeat(props.client)
+  const text = titleCopy[seat.locale]
+  const [visited, setVisited] = useState(false)
+  return (
+    <details
+      className="ct-root ct-item"
+      lang={seat.locale}
+      data-testid="current-title-settings-item"
+      onToggle={event => { if ((event.currentTarget as HTMLDetailsElement).open) setVisited(true) }}
+    >
+      <summary className="ct-item-summary">
+        <span>
+          <span className="ct-item-title">{text.label}</span>
+          <span className="ct-item-desc">{text.groupHint}</span>
+        </span>
+        <IconChevronDownOutlineRegular className="ct-item-chevron" aria-hidden="true" />
+      </summary>
+      {visited ? (
+        <div className="ct-item-body">
+          <TitleSettings client={props.client} marker={props.marker} subscribeSettings={props.subscribeSettings} />
+        </div>
+      ) : null}
+    </details>
+  )
+}
+
 /* The contract owns every type tier, the field rhythm, the focus ring, the
  * select shell and the textarea shell. The only geometry left here is this
- * panel's own: its reading width, and a taller prompt box. Every rule stays
- * under the plugin root so nothing leaks into the host document. */
+ * panel's own: its reading width, a taller prompt box, and the settings
+ * group's row geometry (mirroring the native item rows: 16px padding, a 0.5px
+ * l2 rule the shell drops on the last item, 24px label-control gutter). */
 export const currentTitleOwnCss = `
 .ct-root .ct-prompt { min-height: 96px; }
+.ct-root.ct-item { padding: 0; border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
+.ct-root .ct-item-summary { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0; list-style: none; cursor: pointer; }
+.ct-root .ct-item-summary::-webkit-details-marker { display: none; }
+.ct-root .ct-item-summary > span:first-child { min-width: 0; }
+.ct-root .ct-item-title { display: block; font-size: 14px; line-height: 20px; color: var(--dsw-alias-label-primary); }
+.ct-root .ct-item-desc { display: block; margin-top: 4px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
+.ct-root .ct-item-chevron { width: 14px; height: 14px; color: var(--dsw-alias-label-secondary); transition: transform 0.15s ease; }
+.ct-root.ct-item[open] > .ct-item-summary .ct-item-chevron { transform: rotate(180deg); }
+.ct-root .ct-item-body { padding: 0 0 16px; }
 `
 export const currentTitleStyles = `${officialUiCss('ct-root')}${modelMenuCss}${currentTitleOwnCss}`
 const styles = currentTitleStyles
@@ -364,14 +405,22 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'current-title.styles')
-  ctx.effect(() => client.slots.inject('plugins.bundle.config', () => client.slots.register(
-    { name: 'plugins.bundle.config', key: '@klarkxy/dsh-current-title' },
+  // The settings group is one row on the shared Session Management page; the
+  // page is root-owned shared infrastructure, so this plugin contributes only
+  // its row and never depends on another plugin.
+  ctx.effect(() => registerSessionSettingsItem(
+    ctx,
+    { id: 'current-title', order: 70 },
     // A slot component never receives `ctx`: the host composes its own props, and a
     // Cordis context throws on any undeclared property read (so feeding one back
-    // through `useNativeSeat` crashed the entry and abdicated the keyed cell).
+    // through `useNativeSeat` crashed the entry and abdicated its keyed cell).
     // The client and marker stay in the apply closure instead.
-    () => <TitleSettings client={client} marker={marker} subscribeSettings={subscribeSettings} />,
-  )), 'current-title.settings')
+    () => <TitleSettingsItem client={client} marker={marker} subscribeSettings={subscribeSettings} />,
+  ), 'current-title.settings')
+  // The shared "default auxiliary model" card is root-owned infrastructure:
+  // this plugin retains one share while enabled and the card unloads with the
+  // last participant, never depending on another plugin.
+  ctx.effect(() => registerAuxiliaryModelSettings(ctx), 'current-title.auxiliary-model')
   ctx.effect(() => {
     let live = true
     void client.connection.rpc.call(RPC_CHANNEL, 'status', {}).then(result => {

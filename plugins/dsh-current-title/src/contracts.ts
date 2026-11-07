@@ -11,6 +11,8 @@ export const PURPOSE_ID = 'current-title.generate'
 export const RPC_CHANNEL = '/dsh-current-title'
 export const TITLE_CLIENT_SERVICE = 'dshCurrentTitleClient'
 export const PROMPT_VERSION = 'current-title.v2'
+/** Feature id stamped on the auxiliary-context envelope for this call. */
+export const TITLE_CALL_FEATURE = 'session-title'
 export const SCHEMA_VERSION = 'title-json.v1'
 export const CONTRACT_VERSION = 1
 export const SETTINGS_KEY = 'current'

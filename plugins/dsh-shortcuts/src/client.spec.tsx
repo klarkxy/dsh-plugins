@@ -59,10 +59,20 @@ describe('Cordis command palette integration', () => {
     vi.stubGlobal('localStorage', { getItem: (key: string) => memory.get(key) ?? null, setItem: (key: string, value: string) => { memory.set(key, value) }, removeItem: (key: string) => { memory.delete(key) }, clear: () => { memory.clear() }, key: (index: number) => [...memory.keys()][index] ?? null, get length() { return memory.size } })
     const plugin = root.plugin({ name: 'shortcuts-under-test', apply })
     await new Promise(resolve => setTimeout(resolve, 0))
-    expect(registrations.get('plugins.bundle.config')?.spec.key).toBe('@klarkxy/dsh-shortcuts')
+    expect(registrations.get('settings.section')?.spec.id).toBe('shortcuts')
+    expect(registrations.get('settings.section')?.spec.order).toBe(200)
+    expect(registrations.get('settings.section')?.spec.label()).toBe('Shortcuts')
+    // The nav icon mirrors the section id and renders owner {size, active}.
+    const iconSpec = registrations.get('settings.section.icon')?.spec
+    expect(iconSpec).toMatchObject({ id: 'shortcuts', order: 200 })
+    const iconElement = registrations.get('settings.section.icon')!.render({ size: 18, active: true }) as { type: string; props: Record<string, unknown> }
+    expect(iconElement.type).toBe('svg')
+    expect(iconElement.props['aria-hidden']).toBe('true')
+    expect(iconElement.props.width).toBe(18)
+    expect(iconElement.props.stroke).toBe('currentColor')
     expect(registrations.get('shell.overlay')?.spec.id).toBe('@klarkxy/dsh-shortcuts.palette')
     expect(commands.has(PALETTE_ID)).toBe(true)
-    const injected = registrations.get('plugins.bundle.config')!.spec.inject()
+    const injected = registrations.get('settings.section')!.spec.inject()
     const revision = injected.hooks.fixedBindings.getSnapshot().revision
     expect(injected.fixedModel.setSlot('fixed.send', 0, { code: 'F8', modifiers: [] }, revision).status).toBe('saved')
     expect(injected.hooks.fixedBindings.getSnapshot().rows[0].bindingKeys).toEqual([['F8']])

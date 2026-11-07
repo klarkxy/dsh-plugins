@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { defineConfig, type UserConfig } from 'tsdown'
+import { lowerNativeRemoteDecorators } from '../../scripts/editor-plugins/native-remote-decorators.mjs'
 
 const wrapClient: NonNullable<UserConfig['plugins']>[number] = {
   name: 'wrap-dsh-client',
@@ -23,10 +24,16 @@ export default defineConfig([
     target: 'node22',
     sourcemap: true,
     hash: false,
+    // Host half bundles the kit internals it uses: profile-linked entries are
+    // the only modules the official loader evicts and re-imports on reload, so
+    // fixes must land inside lib/index.js instead of an external kit copy.
+    plugins: [lowerNativeRemoteDecorators()],
     deps: {
       alwaysBundle: [
         '@klarkxy/dsh-plugin-kit/host-rpc',
         '@klarkxy/dsh-plugin-kit/llm-call',
+        '@klarkxy/dsh-plugin-kit/auxiliary-model',
+        '@klarkxy/dsh-plugin-kit/model-settings-changes',
         '@klarkxy/dsh-plugin-kit/contracts',
         '@klarkxy/dsh-plugin-kit/domain',
         '@klarkxy/dsh-plugin-kit/model-settings',
@@ -62,6 +69,7 @@ export default defineConfig([
       alwaysBundle: [
         '@klarkxy/dsh-plugin-kit/official-ui',
         '@klarkxy/dsh-plugin-kit/client-utils',
+        '@klarkxy/dsh-plugin-kit/auxiliary-model-client',
         '@klarkxy/dsh-plugin-kit/model-settings-client',
         '@klarkxy/dsh-plugin-kit/contracts',
         '@klarkxy/dsh-model-route',

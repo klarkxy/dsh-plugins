@@ -1,5 +1,6 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconKeyboardSettings, registerSettingsSectionIcon } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { useRef, useState } from 'react'
 import type { Shortcuts, ShortcutContext } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/protocol'
@@ -41,7 +42,7 @@ type Client = {
   locale: Source<{ active: string }>
   slots: {
     inject(key: string, callback: () => () => void): () => void
-    register(spec: { name: string; id?: string; key?: string; inject(): object }, component: unknown): () => void
+    register(spec: { name: string; id?: string; key?: string; order?: number; label?: string | (() => string); inject(): object }, component: unknown): () => void
   }
 }
 interface ScreenProps extends Omit<ShortcutsSettingsProps, 'locale' | 'openPalette'>, Omit<TriggerSettingsProps, 'locale' | 'runtime'> {
@@ -56,7 +57,6 @@ interface ScreenProps extends Omit<ShortcutsSettingsProps, 'locale' | 'openPalet
   execute(id: ShortcutCommandId): Promise<boolean>
   clearError(): void
   clearDispatchError(): void
-  view?: 'summary' | 'page'
 }
 function SettingsContent(props: ScreenProps) {
   const locale = props.useLocale(value => value.active.startsWith('zh') ? 'zh' as const : 'en' as const)
@@ -69,11 +69,6 @@ function SettingsContent(props: ScreenProps) {
     <TriggerSettings {...props} locale={locale} />
     <ShortcutsSettings {...props} locale={locale} fixedSettings={{ useFixedBindings: props.useFixedBindings, model: props.fixedModel }} />
   </div>
-}
-function SettingsPage(props: ScreenProps) {
-  const locale = props.useLocale(value => value.active)
-  if (props.view === 'summary') return <span className="shortcuts-root">{locale.startsWith('zh') ? '快捷键列表、改键与命令面板' : 'Shortcut list, key bindings, and command palette'}</span>
-  return <SettingsContent {...props} />
 }
 function Overlay(props: ScreenProps) {
   const locale = props.useLocale(value => value.active.startsWith('zh') ? 'zh' as const : 'en' as const)
@@ -212,6 +207,16 @@ export function apply(ctx: Context): void {
     saveTrigger: trigger.save, conflicts: (binding: Parameters<typeof trigger.save>[0]) => [...triggerConflicts(shortcuts, binding), ...fixed.state.getSnapshot().rows.filter(row => binding && row.bindings.some(other => other && fixedBindingsOverlap(binding, other, shortcuts.platform))).map(row => row.label)], claim: () => claimPaletteKey(shortcuts),
   }
   const injection = () => injected
-  client.slots.inject('plugins.bundle.config', () => client.slots.register({ name: 'plugins.bundle.config', key: PACKAGE, inject: injection }, SettingsPage))
+  // Settings live on the Settings page: one section per plugin. The nav label
+  // follows the active locale, and the section renders the whole manager.
+  const sectionLabel = () => client.locale.getSnapshot().active.startsWith('zh') ? '快捷键' : 'Shortcuts'
+  client.slots.inject('settings.section', () => {
+    const unregister = client.slots.register({
+      name: 'settings.section', id: 'shortcuts', order: 200, label: sectionLabel, inject: injection,
+    }, SettingsContent)
+    // The keyboard glyph shares the section wait so it unloads with the page.
+    const stopIcon = registerSettingsSectionIcon(ctx, 'shortcuts', 200, IconKeyboardSettings)
+    return () => { stopIcon(); unregister() }
+  })
   client.slots.inject('shell.overlay', () => client.slots.register({ name: 'shell.overlay', id: `${PACKAGE}.palette`, inject: injection }, Overlay))
 }

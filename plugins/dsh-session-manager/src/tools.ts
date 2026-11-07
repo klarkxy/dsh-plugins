@@ -6,6 +6,7 @@ import type { CursorKey } from './cursor.ts'
 import { listSessions, readSession, searchSessions, type ToolOutcome } from './query.ts'
 import { nativeHandoffSummarizer } from './handoff.ts'
 import { callerFromExecution } from './caller.ts'
+import type { PresenceModelHost } from './welcome-back.ts'
 
 type ToolHost = Context & { tools: { register: (definition: unknown) => () => void }; sessionQuery: SessionQueryEngine }
 
@@ -14,8 +15,19 @@ const TEXT_OUTPUT = {
   render: (_args: unknown, value: string) => [{ type: 'text' as const, text: value }],
 }
 
-/** Register the three read-only discovery tools and return their combined disposer. */
-export function registerSessionTools(ctx: Context, config: ResolvedConfig, cursors: CursorKey): () => void {
+/**
+ * Register the three read-only discovery tools and return their combined
+ * disposer. `modelAccess` is the same captured presence models the RPC
+ * endpoints use, so handoff summaries honour the saved handoffModel override,
+ * the auxiliary default and the store lifetime; absent capture functions keep
+ * the legacy host-default behaviour.
+ */
+export function registerSessionTools(
+  ctx: Context,
+  config: ResolvedConfig,
+  cursors: CursorKey,
+  modelAccess?: () => PresenceModelHost | undefined,
+): () => void {
   const host = ctx as ToolHost
   const lifetime = new AbortController()
   let summaryHost: unknown
@@ -120,8 +132,12 @@ export function registerSessionTools(ctx: Context, config: ResolvedConfig, curso
         cursor: field(args, 'cursor'),
       }, { ...exec, signal: AbortSignal.any([exec.signal, lifetime.signal,
         ...bool(args, 'summarize') === true && summarySignal ? [summarySignal] : [],
+        ...bool(args, 'summarize') === true && modelAccess?.() ? [modelAccess!()!.signal] : [],
       ]) }, config, cursors,
-      nativeHandoffSummarizer(summaryHost, callerFromExecution(exec).sessionId))),
+      nativeHandoffSummarizer(summaryHost, callerFromExecution(exec).sessionId, {
+        savedHandoff: () => modelAccess?.()?.savedHandoff?.() ?? null,
+        get auxBroken() { return modelAccess?.()?.auxBroken ?? false },
+      }))),
       presentCall: args => ({ card: 'generic', title: 'Read session', kind: 'read', rawInput: (args as { session_id?: unknown }).session_id }),
     })),
   ]

@@ -3,6 +3,7 @@ import { act, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from './client.tsx'
+import { wireSharedSettingsRoot } from './client-test-ctx.ts'
 import { CONFIG_READ_ENDPOINT, CONTINUE_GHOST_SLOT, CONTINUE_SUGGEST_ENDPOINT, WELCOME_BACK_PREPARE_ENDPOINT, type ConfigView } from './contracts.ts'
 
 const settingsChanges = vi.hoisted(() => ({ listeners: new Set<() => void>() }))
@@ -45,7 +46,7 @@ describe('presence triggers', () => {
       Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
     }
     let config: ConfigView = {
-      recapMinutes: 15, compactMinutes: 60, continueText: 'A', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3,
+      recapMinutes: 15, compactMinutes: 60, continueText: 'A', continueMode: 'fixed', model: null, ghostModel: null, judgeModel: null, handoffModel: null, autoContinueMode: 'off', autoContinueMax: 3,
     }
     let unload = () => {}
     let renderGhost!: (props: unknown) => ReactNode
@@ -86,7 +87,7 @@ describe('presence triggers', () => {
     const suggestCount = () => call.mock.calls.filter(([, endpoint]) => endpoint === CONTINUE_SUGGEST_ENDPOINT).length
     try {
       await act(async () => {
-        apply(ctx as never)
+        apply(wireSharedSettingsRoot(ctx) as never)
         const Ghost = renderGhost
         root.render(<div data-composer-card="">
           <div data-composer-input="" data-placeholder="Native" />
@@ -162,7 +163,7 @@ describe('presence triggers', () => {
       sessions: { list: sessionList('alpha').list },
       connection: { rpc: { call: async (_channel: string, endpoint: string) => {
         if (endpoint === CONFIG_READ_ENDPOINT) return { ok: true, value: {
-          recapMinutes: minutes, compactMinutes: minutes, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3,
+          recapMinutes: minutes, compactMinutes: minutes, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, judgeModel: null, handoffModel: null, autoContinueMode: 'off', autoContinueMax: 3,
         } }
         if (endpoint === WELCOME_BACK_PREPARE_ENDPOINT) prepared.push(minutes)
         return { ok: true, value: { show: false } }
@@ -170,7 +171,7 @@ describe('presence triggers', () => {
       remote: { session: { prompt: vi.fn() } },
     }
     try {
-      apply(ctx as never)
+      apply(wireSharedSettingsRoot(ctx) as never)
       await vi.advanceTimersByTimeAsync(1_500)
       expect(prepared).toEqual([60])
       await vi.advanceTimersByTimeAsync(28_500)
@@ -220,7 +221,7 @@ describe('presence triggers', () => {
           rpc: {
             call: vi.fn(async (_channel: string, endpoint: string, payload: { sessionId?: string }) => {
               if (endpoint === CONFIG_READ_ENDPOINT) return { ok: true, value: {
-                recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, autoContinueMode: 'off', autoContinueMax: 3,
+                recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, judgeModel: null, handoffModel: null, autoContinueMode: 'off', autoContinueMax: 3,
               } }
               if (endpoint === WELCOME_BACK_PREPARE_ENDPOINT) calls.push(payload.sessionId ?? '')
               return { ok: true, value: { show: false } }
@@ -231,7 +232,7 @@ describe('presence triggers', () => {
       }
       const addSpy = vi.spyOn(dom.window, 'addEventListener')
       const removeSpy = vi.spyOn(dom.window, 'removeEventListener')
-      apply(ctx as never)
+      apply(wireSharedSettingsRoot(ctx) as never)
       expect(addSpy).toHaveBeenCalledWith('focus', expect.any(Function))
       dom.window.dispatchEvent(new dom.window.Event('focus'))
       await vi.waitFor(() => { expect(calls).toEqual(['alpha']) })

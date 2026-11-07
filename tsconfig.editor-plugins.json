@@ -56,6 +56,15 @@
       "@klarkxy/dsh-plugin-kit/llm-call": [
         "plugins/dsh-plugin-kit/src/llm-call.ts"
       ],
+      "@klarkxy/dsh-plugin-kit/auxiliary-model": [
+        "plugins/dsh-plugin-kit/src/auxiliary-model.ts"
+      ],
+      "@klarkxy/dsh-plugin-kit/auxiliary-context": [
+        "plugins/dsh-plugin-kit/src/auxiliary-context.ts"
+      ],
+      "@klarkxy/dsh-plugin-kit/auxiliary-model-client": [
+        "plugins/dsh-plugin-kit/src/auxiliary-model-client.tsx"
+      ],
       "@klarkxy/dsh-plugin-kit/official-ui": [
         "plugins/dsh-plugin-kit/src/official-ui.ts"
       ],

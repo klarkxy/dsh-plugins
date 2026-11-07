@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as kit from '@klarkxy/dsh-plugin-kit'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { AUXILIARY_MODEL_SERVICE } from '@klarkxy/dsh-plugin-kit/contracts'
 import { GitCommitService, type SessionStoreLike } from './service.ts'
 import type { GitRunner } from './git.ts'
-import { defaultSettings, type GitCommitSettings } from './contracts.ts'
+import { COMMIT_PLAN_FEATURE, defaultSettings, type GitCommitSettings } from './contracts.ts'
 import { handleRpc } from './index.ts'
 
 const NUL = String.fromCharCode(0)
@@ -241,6 +242,50 @@ describe('GitCommitService.status', () => {
 })
 
 describe('GitCommitService model selection', () => {
+  it('labels a resolved shared auxiliary default as aux and lets the page win', async () => {
+    const auxRoute = { provider: 'aux-provider', model: 'aux-model', reasoningEffort: 'low' }
+    // The shared store lives on the cordis root; resolveFeatureModel reads it
+    // through the same getAuxiliaryModel helper this service compares with.
+    const hostWithAux = {
+      ...modelHost(liveRoute),
+      root: { get: (name: string, strict?: boolean) => name === AUXILIARY_MODEL_SERVICE
+        ? { ready: Promise.resolve(), snapshot: () => ({ revision: 1, model: auxRoute }) }
+        : undefined },
+    }
+    const plan = JSON.stringify({ groups: [{ message: 'fix', files: ['src/a.ts', 'src/b.ts', 'docs/c.md'] }] })
+    const call = vi.spyOn(kit, 'callLlmText').mockImplementation(async (_llm, request) => ({ text: plan, ...request.route }))
+    const runner = makeRunner({
+      'rev-parse --show-toplevel': 'D:/repo\n',
+      'symbolic-ref': 'main\n',
+      'status --porcelain': porcelain,
+      'log -10 --pretty=%s': 'feat: earlier\nchore: before that\n',
+      'rev-parse --short': 'abc1234\n',
+    })
+    const service = new GitCommitService({
+      plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), host: hostWithAux, sessions: makeSessions(), run: runner,
+      preview: async (_root, path) => ({ path, preview: '', binary: false }),
+    })
+    // Status only resolves and labels the route; the model is never called
+    // until a commit run needs a plan.
+    expect((await service.status('s1')).model).toEqual({ provider: 'aux-provider', model: 'aux-model', source: 'aux' })
+    expect(call).not.toHaveBeenCalled()
+    const result = await service.commit('s1')
+    expect(call).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      feature: COMMIT_PLAN_FEATURE, route: auxRoute, sessionId: 's1',
+      context: [expect.stringContaining('feat: earlier')],
+    }))
+    expect(result.model).toEqual({ provider: 'aux-provider', model: 'aux-model', source: 'aux' })
+    await service.dispose()
+
+    const explicit = new GitCommitService({
+      plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' }, llm: makeLlm(), host: hostWithAux, sessions: makeSessions(), run: repoRunner(),
+      preview: async (_root, path) => ({ path, preview: '', binary: false }),
+      settings: { load: async () => ({ ...defaultSettings(), model: pageRoute }), save: async () => {} },
+    })
+    expect((await explicit.status('s1')).model).toEqual({ provider: pageRoute.provider, model: pageRoute.model, source: 'page' })
+    await explicit.dispose()
+  })
+
   it.each([
     { name: 'explicit page before pending session', route: pageRoute, host: modelHost(pendingRoute), expected: pageRoute, source: 'page' },
     { name: 'pending session before recorded session', route: undefined, host: modelHost(pendingRoute), expected: pendingRoute, source: 'default' },

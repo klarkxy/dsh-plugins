@@ -4,7 +4,7 @@
 
 [简体中文](docs/README.zh-CN.md)
 
-Connects DSH to a [magpie](https://usemagpie.ai) gateway running on this computer, your local network, or elsewhere. From the plugin's settings page you point DSH at the gateway, and it fetches the gateway's model list and writes the same provider routes that `magpie dsh` writes — Magpie, Magpie · Responses, and Magpie · Anthropic — plus the default model and web search, so the models show up in the model picker.
+Connects DSH to a [magpie](https://usemagpie.ai) gateway running on this computer, your local network, or elsewhere. From the Models section of the Settings page you point DSH at the gateway, and it fetches the gateway's model list and writes the same provider routes that `magpie dsh` writes — Magpie, Magpie · Responses, and Magpie · Anthropic — plus the default model and web search, so the models show up in the model picker.
 
 ## Install
 
@@ -16,11 +16,9 @@ Replace `<name>` with your profile name and restart the profile.
 
 ## Use
 
-- Open **Plugins → Magpie**. Enter the gateway address (the local default is `http://127.0.0.1:3425`), paste the gateway key if the gateway requires one, and choose **Save**, then **Sync now**.
+- Open **Settings → Models → Magpie**. Enter the gateway address (the local default is `http://127.0.0.1:3425`), paste the gateway key if the gateway requires one, and choose **Save**, then **Sync now**.
 - **Test** checks the connection without changing anything.
-- Choose a **default model** for new conversations, and turn on **web search** to run it through the gateway's model.
-- **Sync at startup** refreshes the routes once per profile start.
-- **Disconnect** removes the magpie routes and reverts the default model and web search; your saved key is kept.
+- **Advanced** holds the rest: the **default model** for new conversations, the **web search** switch that runs it through the gateway's model, **Sync at startup**, and **Disconnect**, which removes the magpie routes and reverts the default model and web search; your saved key is kept.
 
 ## Limits
 

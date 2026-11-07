@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { LlmTextCaller, LlmTextRequest, LlmTextResult } from '@klarkxy/dsh-plugin-kit'
-import { defaultGenerateConfig } from './contracts.ts'
+import { defaultGenerateConfig, TITLE_CALL_FEATURE } from './contracts.ts'
 import { generateCurrentTitle, systemPrompt, titleModelRoute } from './generate.ts'
+import { FRAME_PREFIX } from './input.ts'
 
 const llm: LlmTextCaller = {
   prepareCall: async () => { throw new Error('unused') },
@@ -60,6 +61,11 @@ describe('generateCurrentTitle', () => {
     expect(result.messageSeqs).toEqual([1, 2])
     expect(result.model).toEqual({ provider: 'host', model: 'chat' })
     expect(seen[0]?.route).toEqual({ provider: 'host', model: 'chat' })
+    // The stable framing rule is packed as auxiliary context before the
+    // live message list, stamped with this feature's id.
+    expect(seen[0]?.feature).toBe(TITLE_CALL_FEATURE)
+    expect(seen[0]?.context).toBe(FRAME_PREFIX)
+    expect(seen[0]?.text).toBe(JSON.stringify([{ seq: 1, text: '旧任务已经完成' }, { seq: 2, text: '现在修复登录回调失败' }]))
     expect(seen[0]?.text).toContain('现在修复登录回调失败')
     vi.useRealTimers()
   })

@@ -14,18 +14,18 @@ Enable the plugin in your GUI profile, then reload the page or restart the profi
 
 ## Use
 
-Open **Plugins → Shortcuts**:
+Open **Settings → Shortcuts**:
 
 - Browse current native command shortcuts and fixed local actions; the list updates as commands are added or removed.
 - Change, unbind, or restore application shortcuts and recognized local actions: send, newline, complementary send, `/`, `@`, approval allow/reject, menu movement/selection/dismissal, and double-press stop.
 - In **Additional shortcuts**, each binding has its own edit, unbind, and restore controls, showing original and effective keys together. Menu Up/Down and complementary Control/Meta bindings are edited separately.
 - Stop keeps its double-press confirmation: choose one unmodified key, such as F8, and press it twice.
 - Open the command palette to find and run commands registered by plugins. This plugin's commands also appear in the native shortcut list.
-- When a local shortcut fails, a brief notification appears, and the plugin settings page shows the same failure while the notification is active.
+- When a local shortcut fails, a brief notification appears, and the settings page shows the same failure while the notification is active.
 
-In the **Web GUI**, the additional palette shortcut defaults to **Ctrl+Shift+P**, matching VS Code. Change this local opening shortcut in the plugin settings, including choosing **Ctrl+K**. It runs when the browser delivers the keypress to the page.
+In the **Web GUI**, the additional palette shortcut defaults to **Ctrl+Shift+P**, matching VS Code. Change this local opening shortcut in the settings page, including choosing **Ctrl+K**. It runs when the browser delivers the keypress to the page.
 
-On **Desktop**, the palette also defaults to **Ctrl+Shift+P**, changeable in the plugin settings. **Ctrl+K** is assigned to session search (`session.search`) by default; to use it for the palette, review and explicitly confirm the binding change in the plugin settings to replace the session search binding.
+On **Desktop**, the palette also defaults to **Ctrl+Shift+P**, changeable in the settings page. **Ctrl+K** is assigned to session search (`session.search`) by default; to use it for the palette, review and explicitly confirm the binding change in the settings page to replace the session search binding.
 
 DSH saves native shortcut changes: in the browser for Web, and on the current computer for Desktop. This plugin saves the extra Web palette shortcut and local-action overrides locally, separated by Web/Desktop and operating system.
 

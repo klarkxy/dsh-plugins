@@ -1,5 +1,5 @@
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
-import type { ModelRoute } from '@klarkxy/dsh-model-route'
+import { modelRouteOverride, type ModelRoute } from '@klarkxy/dsh-model-route'
 
 /**
  * The canonical home is @klarkxy/dsh-model-route; re-exported here so existing
@@ -225,3 +225,81 @@ export interface DshWebManagementDescriptor {
  * Plugins that gate Creator-only tools or prompt sections compare against this.
  */
 export const CREATOR_PRESET_ID = 'cordis'
+
+/**
+ * Shared "Session Management" settings section id. The section is provided by
+ * shared infrastructure (see `registerSessionSettingsItem` in `client-utils`),
+ * not by any one business plugin: every participant registers only a row into
+ * {@link SESSION_SETTINGS_ITEM_SLOT}, so any enabled subset yields the same page.
+ */
+export const SESSION_SETTINGS_SECTION_ID = 'session-manager'
+
+/**
+ * Child list slot declared by the shared Session Management page. Neutral
+ * naming on purpose: participants never import each other, they only
+ * contribute `{id, order}` rows into this slot while the page is alive.
+ */
+export const SESSION_SETTINGS_ITEM_SLOT = 'dsh.session-settings.item'
+
+/**
+ * Host-owned nav icon seat: a root-scoped list where each entry's `id` must
+ * equal the `settings.section` id it decorates. Owner props are
+ * `{size, active}`; icons stay `aria-hidden` so the section label remains the
+ * accessible name. Contributors into a shared section may register the same
+ * icon `id` with different priorities — the ledger keeps every entry while the
+ * host renders one icon per section.
+ */
+export const SETTINGS_SECTION_ICON_SLOT = 'settings.section.icon'
+
+/* Shared auxiliary-model default. Feature plugins may store a global default
+ * route that fills the tier between their own saved override and the live
+ * session model. The durable state is a root-context singleton (like the
+ * shared session-settings page): it exists while any participant retains it
+ * and is never owned by a business plugin. See `auxiliary-model.ts`. */
+
+/** Root context service key holding the shared auxiliary-model state. */
+export const AUXILIARY_MODEL_SERVICE = 'dshAuxiliaryModel'
+
+/** Authenticated host-RPC channel for get/set of the shared default. */
+export const AUXILIARY_MODEL_CHANNEL = '/dsh-auxiliary-model'
+
+/** Model-settings namespace under which the shared default is published. */
+export const AUXILIARY_MODEL_NS = '@klarkxy/dsh-plugin-kit/auxiliary-model'
+
+/**
+ * Typert identity of the shared change stream. Mounted on the root context
+ * with ownerNs filtering, so frames only carry {@link AUXILIARY_MODEL_NS}.
+ */
+export const AUXILIARY_MODEL_CHANGES_IDENTITY = modelSettingsChangesIdentity('@klarkxy/dsh-plugin-kit')
+
+/** The value the shared default persists: `model: null` means follow the live session/host model. */
+export interface AuxiliaryModelDefaults {
+  readonly revision: number
+  readonly model: ModelRoute | null
+}
+
+/** Shape of the root singleton; produced and owned by `auxiliary-model.ts`. */
+export interface AuxiliaryModelShared {
+  readonly ready: Promise<void>
+  snapshot(): AuxiliaryModelDefaults
+}
+
+function sharedAuxiliaryModel(host: unknown): AuxiliaryModelShared | undefined {
+  const root = (host as { root?: unknown } | undefined)?.root as { get?(name: string, strict?: boolean): unknown } | undefined
+  try {
+    const shared = root?.get?.(AUXILIARY_MODEL_SERVICE, false) as AuxiliaryModelShared | undefined
+    return shared && typeof shared.snapshot === 'function' ? shared : undefined
+  } catch { return undefined }
+}
+
+/**
+ * Synchronously read the shared auxiliary default; `undefined` only when no
+ * participant retains the singleton or the default is legitimately unset.
+ * An initialization or snapshot failure propagates: silently falling back to
+ * a different model after a storage error would spend the wrong budget.
+ */
+export function getAuxiliaryModel(host: unknown): ModelRoute | undefined {
+  const shared = sharedAuxiliaryModel(host)
+  if (!shared) return undefined
+  return modelRouteOverride(shared.snapshot().model ?? undefined)
+}

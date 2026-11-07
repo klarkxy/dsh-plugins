@@ -1,11 +1,12 @@
-import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts';
+import { isSubagentSession, AUXILIARY_MODEL_SERVICE } from '@klarkxy/dsh-plugin-kit/contracts';
+import { retainAuxiliaryModel } from '@klarkxy/dsh-plugin-kit/auxiliary-model';
 import { parseConfig } from './config.js';
 import { isPermissionEvent } from './control.js';
 import { dangerousCommand } from './dangerous.js';
-import { buildTranscript } from './transcript.js';
+import { buildTranscript, currentEvents } from './transcript.js';
 import { review, reviewInput, SYSTEM_PROMPT } from './reviewer.js';
 import { openAudit, auditedCapture } from './audit.js';
-import { resolveReviewRoute } from './model-route.js';
+import { resolveReviewRoute, auxiliaryRoute } from './model-route.js';
 export { Config } from './config.js';
 
 export const name = 'dsh-safe-auto';
@@ -77,6 +78,17 @@ function humanTurn(session) {
   return undefined;
 }
 
+/**
+ * The surface generation of a session: it changes when a message is replaced
+ * or rewritten, so a review bound to it cannot outlive the conversation it
+ * was written for.
+ */
+function surfaceMark(session) {
+  const surface = session?.surface;
+  if (!surface) return 'none';
+  return `${surface.contentGeneration ?? ''}:${surface.replaceGeneration ?? ''}`;
+}
+
 export function createBreaker() {
   const sessions = new WeakMap();
   const state = (session, turn) => {
@@ -115,12 +127,71 @@ export function apply(ctx, raw = {}) {
     async list(payload) { return (await ready).list(payload); },
     async get(payload) { return (await ready).get(payload); },
   };
-  ctx.provide?.('safeAutoRuntime', { base, history, attach(next) {
+  const auxiliary = { failure: undefined };
+  let settleAuxiliary;
+  const auxiliaryGate = new Promise(resolve => { settleAuxiliary = resolve; });
+  ctx.provide?.('safeAutoRuntime', { base, history, auxiliary, attach(next) {
     if (control) throw new Error('Safe Auto controls already attached');
     control = next; attachedOnce = true;
     const epoch = ++controlEpoch;
     return () => { if (control === next && controlEpoch === epoch) { control = undefined; ++controlEpoch; } };
   } });
+  // The shared auxiliary default is global infrastructure: the reviewer
+  // follows it when no explicit reviewer model is set. The review side
+  // retains the store, so the default exists before the first review and the
+  // review path can await its readiness instead of reading a store that has
+  // not mounted yet. A store that cannot be opened blocks the reviews that
+  // depend on it; only a genuinely absent default falls back.
+  ctx.inject?.(['storageDomain', 'webServer', 'connection'], scope => {
+    void retainAuxiliaryModel(scope).then(release => {
+      scope.effect(() => release);
+      settleAuxiliary('ready');
+    }, error => {
+      auxiliary.failure = error;
+      settleAuxiliary('failed');
+    });
+  });
+  /** True when this runtime can host the shared auxiliary store at all. */
+  const sharesAuxiliaryStore = () => {
+    const root = ctx.root;
+    if (!root || typeof root.get !== 'function') return false;
+    return Boolean(root.get('webServer', false) && root.get('connection', false) && root.get('storageDomain', false));
+  };
+  /** Resolve a promise, or fail with the review's cancellation. */
+  const settle = (signal, promise) => new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new Error('REVIEW_CANCELLED')); return; }
+    const onAbort = () => reject(new Error('REVIEW_CANCELLED'));
+    signal?.addEventListener?.('abort', onAbort, { once: true });
+    Promise.resolve(promise).then(
+      value => { signal?.removeEventListener?.('abort', onAbort); resolve(value); },
+      error => { signal?.removeEventListener?.('abort', onAbort); reject(error); });
+  });
+  /**
+   * The shared default, or undefined when this runtime has none.
+   *
+   * A store that cannot be read blocks the review instead of quietly sending
+   * it to another model; only a stored `null` — no default at all — falls
+   * back to the accepted conversation route.
+   */
+  const readAuxiliaryRoute = async signal => {
+    if (auxiliary.failure) throw new Error('AUXILIARY_MODEL_UNAVAILABLE');
+    const shared = () => ctx.root?.get?.(AUXILIARY_MODEL_SERVICE, false);
+    const store = shared();
+    if (store && typeof store.snapshot === 'function') {
+      await settle(signal, store.ready);
+      const stored = store.snapshot().model ?? null;
+      return stored === null ? undefined : auxiliaryRoute(stored);
+    }
+    if (sharesAuxiliaryStore()) {
+      // The store may still be opening: wait for our own retain to settle.
+      const state = await settle(signal, auxiliaryGate);
+      if (state === 'failed' || auxiliary.failure) throw new Error('AUXILIARY_MODEL_UNAVAILABLE');
+      const opened = shared();
+      const stored = opened?.snapshot?.().model ?? null;
+      return stored === null ? undefined : auxiliaryRoute(stored);
+    }
+    return undefined;
+  };
   ctx.effect(() => async () => {
     lifetime.abort();
     await Promise.allSettled([...pendingWrites]);
@@ -129,7 +200,7 @@ export function apply(ctx, raw = {}) {
   // The query tool and the page share the same read-only store operations.
   ctx.inject?.(['tools'], scope => scope.effect(() => scope.tools.register({
     name: 'safe_auto_history',
-    description: 'Query persisted Safe Auto reviews for the current session. List returns summaries and a pagination cursor; get returns the full redacted audit record, including review input and rationale. The Plugins page provides profile-wide audit history.',
+    description: 'Query persisted Safe Auto reviews for the current session. List returns summaries and a pagination cursor; get returns the full redacted audit record, including review input and rationale. The Safe Auto group under Settings → Session Management provides profile-wide audit history.',
     parameters: { type: 'object', properties: {
       action: { type: 'string', enum: ['list', 'get'] },
       id: { type: 'string', description: 'Review ID, required for get.' },
@@ -390,30 +461,58 @@ export function apply(ctx, raw = {}) {
     };
     if (breaker.open(session, turn)) return finish('rejected', { code: 'CIRCUIT_OPEN' }, MESSAGES.breaker);
     let route;
-    try { route = resolveReviewRoute(config, { agent: req.agent, session }); }
-    catch (error) { return finish('rejected', { code: error.message }, MESSAGES.failed('reviewer model unavailable')); }
+    try {
+      // An explicit reviewer model never reads the shared default: a broken
+      // global setting must not block a reviewer the operator chose.
+      const shared = config.provider ? undefined : await readAuxiliaryRoute(signal);
+      route = resolveReviewRoute(config, { agent: req.agent, session }, shared);
+    }
+    catch (error) {
+      const detail = error.message === 'AUXILIARY_MODEL_UNAVAILABLE' ? 'the shared auxiliary model is unavailable'
+        : error.message === 'INVALID_AUXILIARY_MODEL' ? 'the shared auxiliary model setting is invalid'
+        : 'reviewer model unavailable';
+      return finish('rejected', { code: error.message }, MESSAGES.failed(detail));
+    }
     const agent = req.agent, callId = String(req.callId), token = exec.token;
     const environment = () => {
       const sandbox = ctx.sandboxPolicy.resolve({ session });
       return JSON.stringify({ platform: process.platform, cwd: ctx.workingDirectory.get(session),
         workspaceRoot: sandbox?.workspaceRoot, sandbox: sandbox?.mode });
     };
-    let rawAction, rawEnvironment, revision, input;
+    let rawAction, rawEnvironment, revision, input, authorization, surfaceState;
     try {
       const state = owner?.state(session);
       if (owner && state?.active !== true) return finish('cancelled', { code: 'REVIEW_INVALIDATED' });
       revision = state?.revision;
       rawAction = serializeAction(exec, req);
       rawEnvironment = environment();
+      // The reviewer reads the conversation as it stands now: the live
+      // surface projection, never a superseded request or an abandoned turn.
+      // The derived message carries the current text of an event, so a
+      // rewritten message is read as it reads now. A projection that fails
+      // refuses the review: the old text may still carry the old
+      // authorization.
+      const derive = typeof session.deriveEventMessage === 'function'
+        ? event => {
+          try { return session.deriveEventMessage(event); }
+          catch { throw new Error('SESSION_SURFACE_UNAVAILABLE'); }
+        }
+        : undefined;
       input = reviewInput({
-        transcript: buildTranscript(session.snapshotEvents?.() ?? [], config.maxTranscriptBytes),
+        transcript: buildTranscript(currentEvents(session, derive), config.maxTranscriptBytes, derive),
         environment: JSON.parse(rawEnvironment),
         action: JSON.parse(rawAction),
         reviewerPrompt: config.reviewerPrompt,
       });
+      // The authorization snapshot and the surface state bind this review to
+      // the conversation it was written for.
+      authorization = humanTurn(session);
+      surfaceState = surfaceMark(session);
     } catch (error) {
       return finish('rejected', { code: error.message }, MESSAGES.failed(
-        error.message === 'REVIEW_INPUT_TOO_LARGE' ? 'the complete action exceeds the review input limit' : 'the complete action could not be captured'));
+        error.message === 'REVIEW_INPUT_TOO_LARGE' ? 'the complete action exceeds the review input limit'
+          : error.message === 'SESSION_SURFACE_UNAVAILABLE' ? 'the current conversation state cannot be read'
+          : 'the complete action could not be captured'));
     }
     // Raw identity stays local: redacted secrets must not make different actions equal.
     const current = () => {
@@ -427,7 +526,10 @@ export function apply(ctx, raw = {}) {
         if (!configNow || JSON.stringify(configNow) !== JSON.stringify(config)) return false;
         const state = owner?.state(session);
         return (!owner || (state.active === true && state.revision === revision))
-          && environment() === rawEnvironment && serializeAction(exec, req) === rawAction;
+          && environment() === rawEnvironment && serializeAction(exec, req) === rawAction
+          // A new user message or a replaced message revokes the request this
+          // review was written for.
+          && humanTurn(session) === turn && surfaceMark(session) === surfaceState;
       } catch { return false; }
     };
     if (!current()) return finish('cancelled', { code: 'REVIEW_INVALIDATED' });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ChangedFile } from './git.ts'
-import { buildPlanInput, extractJsonObject, parsePlan, sanitizeMessage } from './plan.ts'
+import { buildPlanContext, buildPlanInput, buildPlanText, extractJsonObject, parsePlan, sanitizeMessage } from './plan.ts'
 
 const files: ChangedFile[] = [
   { path: 'src/a.ts', status: 'modified', staged: false },
@@ -75,5 +75,30 @@ describe('buildPlanInput', () => {
     expect(input).toContain('? docs/c.md')
     expect(input).toContain('feat: earlier')
     expect(input).toContain('# hello')
+  })
+})
+
+describe('buildPlanContext + buildPlanText', () => {
+  it('splits stable style subjects from the live change set', () => {
+    const input = {
+      files,
+      recentSubjects: ['feat: earlier'],
+      stat: ' 1 file changed',
+      diff: 'diff --git a/src/a.ts b/src/a.ts',
+      untracked: [{ path: 'docs/c.md', preview: '# hello', binary: false }],
+    }
+    const context = buildPlanContext(input)
+    expect(context).toHaveLength(1)
+    expect(context[0]).toContain('Recent commit subjects (style reference):')
+    expect(context[0]).toContain('feat: earlier')
+    const text = buildPlanText(input)
+    expect(text).toContain('M src/a.ts')
+    expect(text).toContain('? docs/c.md')
+    expect(text).toContain('# hello')
+    expect(text).not.toContain('feat: earlier')
+  })
+
+  it('emits no context when the log has no subjects', () => {
+    expect(buildPlanContext({ files, recentSubjects: [], stat: '', diff: '', untracked: [] })).toEqual([])
   })
 })

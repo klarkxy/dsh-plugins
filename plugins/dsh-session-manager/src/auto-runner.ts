@@ -18,7 +18,7 @@ import {
   parseVerdict,
   preJudge,
 } from './auto-judge.ts'
-import { PLUGIN_NAME, type ResolvedConfig } from './contracts.ts'
+import { FEATURE_JUDGE, PLUGIN_NAME, type ResolvedConfig } from './contracts.ts'
 import { activeEventsOf, type PresenceModelHost } from './welcome-back.ts'
 
 export interface RunnerSessionLike {
@@ -161,7 +161,12 @@ export class AutoContinueRunner {
     }
   }
 
-  /** One judge call on the ghost model; every failure stops silently. */
+  /**
+   * One judge call. The judge has its own model field and its own context
+   * bucket: it never reuses the ghost material or route. An explicit
+   * judgeModel:null means "follow the default chain" — legacy ghost rows are
+   * migrated once by the store, so there is no runtime ghost fallback.
+   */
   private async judge(
     material: ReturnType<typeof buildJudgeMaterial>,
     mode: 'cautious' | 'bold',
@@ -171,11 +176,17 @@ export class AutoContinueRunner {
     const models = this.deps.models()
     if (models === undefined) return undefined
     try {
-      const route = resolveFeatureModel(models.host, models.savedGhost?.() ?? undefined, sessionId)
+      const saved = models.savedJudge?.() ?? undefined
+      // A broken auxiliary store forbids the silent paid-model fallback.
+      if (saved === undefined && models.auxBroken) return undefined
+      const route = resolveFeatureModel(models.host, saved, sessionId)
       const llm = (models.host as { llm?: LlmTextCaller } | undefined)?.llm
       if (!route || !llm) return undefined
       const result = await callLlmText(llm, {
         plugin: PLUGIN_NAME,
+        feature: FEATURE_JUDGE,
+        // Judge context is the human request alone — never the ghost context.
+        context: [JSON.stringify({ request: material.request })],
         route,
         sessionId,
         signal: AbortSignal.any([signal, models.signal]),
@@ -185,7 +196,12 @@ export class AutoContinueRunner {
           return { ...controls, ...(effort === undefined ? {} : { reasoningEffort: effort }) }
         },
         system: judgeSystem(mode),
-        text: JSON.stringify(material),
+        text: JSON.stringify({
+          response: material.response,
+          tools: material.tools,
+          ...material.todos === undefined ? {} : { todos: material.todos },
+          autoContinues: material.autoContinues,
+        }),
       })
       const verdict = parseVerdict(result.text, mode)
       if (verdict === undefined) {

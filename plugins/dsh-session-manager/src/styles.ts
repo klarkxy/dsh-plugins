@@ -125,8 +125,48 @@ ${modelMenuCss}
   font-size: 13px;
   line-height: 18px;
 }
-/* Settings page: one quiet reading surface. Rules, not nested wells, separate
- * sections; dependent controls align with the feature they belong to. */
+/* General-section item: a named details group mirroring the host's native
+ * item rows (16px vertical padding, a 0.5px l2 rule the shell drops on the
+ * last item, 24px label-control gutter). The body mounts on first expand and
+ * stays mounted while collapsed, so a fold never drops an unsaved draft. */
+.${FREE_CHAT_ROOT}.dsm-item {
+  padding: 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+.${FREE_CHAT_ROOT} .dsm-item-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 0;
+  list-style: none;
+  cursor: pointer;
+}
+.${FREE_CHAT_ROOT} .dsm-item-summary::-webkit-details-marker { display: none; }
+.${FREE_CHAT_ROOT} .dsm-item-summary > span:first-child { min-width: 0; }
+.${FREE_CHAT_ROOT} .dsm-item-title {
+  display: block;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+}
+.${FREE_CHAT_ROOT} .dsm-item-desc {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+.${FREE_CHAT_ROOT} .dsm-item-chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--dsw-alias-label-secondary);
+  transition: transform 0.15s ease;
+}
+.${FREE_CHAT_ROOT}.dsm-item[open] > .dsm-item-summary .dsm-item-chevron { transform: rotate(180deg); }
+.${FREE_CHAT_ROOT} .dsm-item-body { padding: 0 0 16px; }
+/* Settings group body: one quiet reading surface. Rules, not nested wells,
+ * separate sections; dependent controls align with the feature they belong to. */
 .${FREE_CHAT_ROOT} .dsm-settings {
   display: flex;
   flex-direction: column;

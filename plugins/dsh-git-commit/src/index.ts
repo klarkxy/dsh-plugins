@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import { retainAuxiliaryModel } from '@klarkxy/dsh-plugin-kit/auxiliary-model'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
 import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
@@ -105,8 +106,14 @@ export async function handleRpc(
   }
 }
 
-export function apply(ctx: Context): void {
+export async function apply(ctx: Context): Promise<void> {
   createModelSettingsChanges(ctx, modelSettingsChangesIdentity(PLUGIN_NAME), PLUGIN_NAME)
+  // Keep the shared auxiliary default alive while this plugin is mounted: it
+  // is the global default commit planning follows when no planning model is
+  // set. A store that fails to open must fail this apply — silently falling
+  // back to another tier would run plans on a model the user did not choose.
+  const release = await retainAuxiliaryModel(ctx)
+  ctx.effect(() => release, 'git-commit.auxiliary-model')
   const host = ctx as Host
   // Publish immediately; service operations wait for the initial stored row.
   const domainPromise = host.storageDomain.open(gitCommitDomain)
@@ -137,7 +144,7 @@ export function apply(ctx: Context): void {
       await service.ready(); signal.throwIfAborted()
       const settings = service.getSettings()
       return { revision: settings.revision, fields: [{ path: ['model'], label: { zh: '提交模型', en: 'Commit model' }, current: settings.model,
-        followLabel: { zh: '当前会话 / 宿主默认模型', en: 'Current conversation / host default' }, allowFollow: true }] }
+        followLabel: { zh: '默认辅助模型', en: 'Default auxiliary model' }, allowFollow: true }] }
     },
     async write(path, route, expectedRevision, signal) {
       if (path.length !== 1 || path[0] !== 'model') throw new Error('Unknown Git Commit model setting')

@@ -1,7 +1,7 @@
 /**
  * 知乎发布助手的应用凭据设置。
  *
- * 只有插件设置页（plugins.bundle.config）里才有这段表单：右侧栏工作台不发凭据，
+ * 只有设置页的知乎分区（settings.section）里才有这段表单：右侧栏工作台不发凭据，
  * 也不重复提供入口。凭据本身由宿主管理（remote.credentials），插件只读写引用。
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'

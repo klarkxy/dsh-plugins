@@ -4,7 +4,8 @@ import { Button, Input, IconChevronDownOutlineRegular, IconChevronUpOutlineRegul
 import { MODEL_CATALOG_INJECT, readModelCatalog, modelMenuEffortLabel, modelMenuEffortOptions, parseModelMenuChoices } from '@klarkxy/dsh-model-route';
 import { ModelCatalogStatus, ModelMenu, modelMenuCss, useModelCatalog } from '@klarkxy/dsh-model-route/ui';
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui';
-import { createPluginReadGate } from '@klarkxy/dsh-plugin-kit/client-utils';
+import { createPluginReadGate, registerSessionSettingsItem } from '@klarkxy/dsh-plugin-kit/client-utils';
+import { registerAuxiliaryModelSettings } from '@klarkxy/dsh-plugin-kit/auxiliary-model-client';
 import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client';
 
 const h = React.createElement;
@@ -36,7 +37,7 @@ const TEXT = {
     unknownConfigField: field => `未知配置项：${field}`,
     externalChange: '配置已在别处修改。草稿已保留，请刷新并丢弃草稿后重新确认。',
     syncUnavailable: '自动刷新不可用，请手动刷新配置。',
-    follow: '跟随当前对话',
+    follow: '默认辅助模型',
     searchModels: '搜索模型…',
     noModels: '没有匹配的模型',
     clearSearch: '清除搜索',
@@ -44,7 +45,7 @@ const TEXT = {
     model: '模型',
     effort: '思考强度',
     effortDefault: '默认',
-    followHelp: '跟随对话：使用当前会话的模型与默认思考强度。',
+    followHelp: '默认辅助模型：优先使用全局辅助模型，未设置时使用当前会话的模型与默认思考强度。',
     savedEffortRetained: effort => `已保存的强度「${effort}」保留，需在 profile 中检查。`,
     modelAbsent: '当前模型不在目录中，保留已保存配置。',
     effortAbsent: '已保存的思考强度不在目录中，不会自动替换。',
@@ -54,6 +55,7 @@ const TEXT = {
     workspaceWrite: '工作区内修改',
     fullAccess: '完全权限',
     safeAuto: '安全自动',
+    groupHint: '审核模型、审核说明与审核历史',
     unavailableShort: '当前不可用',
     refreshRetry: message => `${message}。重新打开菜单后重试。`,
     panelLabel: '安全自动设置',
@@ -74,7 +76,6 @@ const TEXT = {
     refreshDiscard: '刷新（丢弃草稿）',
     saveFailed: message => `${message}。草稿已保留，刷新后重新编辑，不会自动重试。`,
     saved: '已保存',
-    summary: '安全自动：需要审批的请求交给审核模型判断，通过才放行这一次。',
   },
   en: {
     requestFailed: 'Request failed',
@@ -97,7 +98,7 @@ const TEXT = {
     unknownConfigField: field => `Unknown configuration field: ${field}`,
     externalChange: 'Settings changed elsewhere. Draft preserved; refresh and discard it before reviewing changes.',
     syncUnavailable: 'Automatic refresh unavailable; refresh settings manually.',
-    follow: 'Follow conversation',
+    follow: 'Default auxiliary model',
     searchModels: 'Search models…',
     noModels: 'No matching models',
     clearSearch: 'Clear search',
@@ -105,7 +106,7 @@ const TEXT = {
     model: 'Model',
     effort: 'Reasoning effort',
     effortDefault: 'Default',
-    followHelp: 'Follows the conversation model with the default reasoning effort.',
+    followHelp: 'The global auxiliary model when it is set; otherwise the current conversation model with the default reasoning effort.',
     savedEffortRetained: effort => `Saved effort "${effort}" retained; check the profile.`,
     modelAbsent: 'This model is not in the catalog; the saved configuration is kept.',
     effortAbsent: 'The saved effort is not advertised; it will not be replaced automatically.',
@@ -115,6 +116,7 @@ const TEXT = {
     workspaceWrite: 'Workspace Write',
     fullAccess: 'Full Access',
     safeAuto: 'Safe Auto',
+    groupHint: 'Reviewer model, safety notes and review history',
     unavailableShort: 'unavailable',
     refreshRetry: message => `${message}. Reopen the menu and retry.`,
     panelLabel: 'Safe Auto settings',
@@ -135,7 +137,6 @@ const TEXT = {
     refreshDiscard: 'Refresh (discard draft)',
     saveFailed: message => `${message}. Draft retained; refresh before editing again. No automatic retry.`,
     saved: 'Saved',
-    summary: 'Safe Auto: a reviewer model answers approval requests and approves only the calls that pass.',
   },
 };
 
@@ -274,6 +275,17 @@ const css = `${officialUiCss('dsh-safe-auto')}${modelMenuCss}
 /* A fieldset is the settings group and takes the contract's card surface; its
  * legend keeps the UA inline padding from indenting the group title. */
 .dsh-safe-auto legend { padding: 0; }
+/* The shared column row mirrors the other items' geometry: 16px padding, a
+ * 0.5px l2 rule the shell drops on the last item, 24px label-control gutter. */
+.dsh-safe-auto.sa-item { padding: 0; border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
+.dsh-safe-auto .sa-item-summary { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0; list-style: none; cursor: pointer; }
+.dsh-safe-auto .sa-item-summary::-webkit-details-marker { display: none; }
+.dsh-safe-auto .sa-item-summary > span:first-child { min-width: 0; }
+.dsh-safe-auto .sa-item-title { display: block; font-size: 14px; line-height: 20px; color: var(--dsw-alias-label-primary); }
+.dsh-safe-auto .sa-item-desc { display: block; margin-top: 4px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
+.dsh-safe-auto .sa-item-chevron { width: 14px; height: 14px; color: var(--dsw-alias-label-secondary); transition: transform 0.15s ease; }
+.dsh-safe-auto.sa-item[open] > .sa-item-summary .sa-item-chevron { transform: rotate(180deg); }
+.dsh-safe-auto .sa-item-body { padding: 0 0 16px; }
 `;
 function ErrorText({ error, t }) { return error ? h('p', { role: 'alert', className: 'dsh-ui-error dsh-ui-wrap' }, errorText(t, error)) : null; }
 
@@ -493,7 +505,7 @@ export function HistoryPanel({ api, locale, initialPage = null, download = downl
       h('pre', { className: 'dsh-ui-wrap', style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: '60vh', overflow: 'auto' } }, JSON.stringify(detail, null, 2))));
 }
 
-export function SettingsPanel({ view, api, locale, initialSettings = null, initialCatalog = null, initialTab = 'reviewer' }) {
+export function SettingsPanel({ api, locale, initialSettings = null, initialCatalog = null, initialTab = 'reviewer' }) {
   const t = useText(locale);
   const [settings, setSettings] = useState(initialSettings);
   const [values, setValues] = useState(initialSettings?.values || null);
@@ -585,8 +597,6 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
     role: 'tabpanel', id: `${tabsId}-${value}-panel`, 'aria-labelledby': `${tabsId}-${value}-tab`,
     hidden: activeTab !== value, tabIndex: 0, className,
   }, children);
-  if (view === 'summary') return h('div', { className: 'dsh-safe-auto' },
-    h('p', { className: 'dsh-ui-compact dsh-ui-wrap' }, t('summary')), h(ErrorText, { error, t }));
   return h('section', { className: 'dsh-safe-auto dsh-ui-page', 'aria-label': t('panelLabel'), 'aria-busy': busy },
     h('p', { className: 'dsh-ui-compact dsh-ui-wrap' }, t('intro')),
     !values && h('p', { className: 'dsh-ui-loading' }, t('loading')),
@@ -619,6 +629,28 @@ export function SettingsPanel({ view, api, locale, initialSettings = null, initi
     saved && h('p', { role: 'status', className: 'dsh-ui-notice' }, t('saved')));
 }
 
+/**
+ * The shared-column row: a named native details group. The panel mounts on the
+ * first expand only — the shared page must not fire every plugin's settings
+ * and model-catalog reads — and stays mounted afterwards so a collapsed group
+ * never drops an unsaved reviewer draft or an in-flight save.
+ */
+export function SafeAutoSettingsItem({ api, locale }) {
+  const t = useText(locale);
+  const [visited, setVisited] = useState(false);
+  return h('details', {
+    className: 'dsh-safe-auto sa-item',
+    'data-testid': 'safe-auto-settings-item',
+    onToggle: event => { if (event.currentTarget.open) setVisited(true); },
+  },
+    h('summary', { className: 'sa-item-summary' },
+      h('span', null,
+        h('span', { className: 'sa-item-title' }, t('safeAuto')),
+        h('span', { className: 'sa-item-desc' }, t('groupHint'))),
+      h(IconChevronDownOutlineRegular, { className: 'sa-item-chevron', 'aria-hidden': 'true' })),
+    visited ? h('div', { className: 'sa-item-body' }, h(SettingsPanel, { api, locale })) : null);
+}
+
 export function apply(ctx) {
   // Each plugin lifetime owns its stylesheet; individual seats do not inject
   // copies. A second lifetime must survive disposal of the first one.
@@ -649,7 +681,15 @@ export function apply(ctx) {
   ctx.slots.inject('conversation.input.permission', () => ctx.slots.register({
     name: 'conversation.input.permission', priority: -10, inject: () => ({ api, locale: ctx.locale }),
   }, PermissionMenu));
-  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
-    name: 'plugins.bundle.config', key: BUNDLE, inject: () => ({ api, locale: ctx.locale }),
-  }, SettingsPanel));
+  // Settings contribute one row to the shared Session Management page; the
+  // kit-owned root service owns that page, so this plugin registers only its
+  // row and never depends on another business plugin. The helper takes no
+  // inject(): the item mounts on first expand and the wrapper closure keeps
+  // the same api object and locale service the seat used to receive.
+  ctx.effect(() => registerSessionSettingsItem(ctx, { id: 'safe-auto', order: 80 },
+    () => h(SafeAutoSettingsItem, { api, locale: ctx.locale })));
+  // The default auxiliary model is shared infrastructure: the kit mounts one
+  // card in the model settings footer while at least one participant lives,
+  // so this plugin never depends on another business plugin for the entry.
+  ctx.effect(() => registerAuxiliaryModelSettings(ctx));
 }
