@@ -60,14 +60,18 @@
           "dsh-plugin",
           "dsh-plugins",
           "deepseek-harness",
+          "deepseek-harness-plugin",
           "git",
-          "commit"
+          "commit",
+          "git-commit",
+          "auto-commit",
+          "commit-message"
         ]
       },
       "versions": [
         {
-          "version": "0.3.2",
-          "publishTimestamp": 1794029788,
+          "version": "0.3.3",
+          "publishTimestamp": 1794071698,
           "source": {
             "type": "npm"
           },
@@ -100,14 +104,18 @@
           "dsh-plugin",
           "dsh-plugins",
           "deepseek-harness",
+          "deepseek-harness-plugin",
           "delegation",
-          "subagent"
+          "delegation-mode",
+          "subagent",
+          "multi-agent",
+          "orchestration"
         ]
       },
       "versions": [
         {
-          "version": "0.1.2",
-          "publishTimestamp": 1794029958,
+          "version": "0.1.3",
+          "publishTimestamp": 1794071665,
           "source": {
             "type": "npm"
           },
@@ -140,14 +148,17 @@
           "dsh-plugin",
           "dsh-plugins",
           "deepseek-harness",
+          "deepseek-harness-plugin",
           "session-title",
-          "title-generation"
+          "title-generation",
+          "auto-rename",
+          "session-name"
         ]
       },
       "versions": [
         {
-          "version": "0.3.2",
-          "publishTimestamp": 1794029702,
+          "version": "0.3.3",
+          "publishTimestamp": 1794071683,
           "source": {
             "type": "npm"
           },
@@ -180,17 +191,28 @@
           "dsh-plugin",
           "dsh-plugins",
           "deepseek-harness",
+          "deepseek-harness-plugin",
           "web-search",
+          "web-fetch",
+          "web_search",
+          "web_fetch",
           "search-provider",
           "page-fetching",
           "duckduckgo",
-          "tavily"
+          "exa",
+          "tavily",
+          "brave",
+          "bocha",
+          "serper",
+          "perplexity",
+          "firecrawl",
+          "jina"
         ]
       },
       "versions": [
         {
-          "version": "0.3.2",
-          "publishTimestamp": 1794029758,
+          "version": "0.3.3",
+          "publishTimestamp": 1794071698,
           "source": {
             "type": "npm"
           },
@@ -223,16 +245,23 @@
           "dsh-plugin",
           "dsh-plugins",
           "deepseek-harness",
+          "deepseek-harness-plugin",
           "zhihu",
           "zhihu-search",
+          "zhida",
+          "hot-list",
           "knowledge-base",
-          "web-search"
+          "web-search",
+          "questions",
+          "answers",
+          "creator-stats",
+          "drafts"
         ]
       },
       "versions": [
         {
-          "version": "0.2.10",
-          "publishTimestamp": 1794029812,
+          "version": "0.2.11",
+          "publishTimestamp": 1794071700,
           "source": {
             "type": "npm"
           },
@@ -261,17 +290,30 @@
       "metadata": {
         "category": "dev",
         "keywords": [
+          "dsh",
           "dsh-plugin",
-          "deepseek-harness",
           "dsh-plugins",
+          "deepseek-harness",
+          "deepseek-harness-plugin",
           "dsh-dev-index",
-          "creator-mode"
+          "creator-mode",
+          "docs",
+          "documentation",
+          "plugin-development",
+          "plugin-search",
+          "npm",
+          "github",
+          "dsh_docs_search",
+          "dsh_docs_fetch",
+          "dsh_plugins_search",
+          "dsh_plugins_fetch",
+          "dsh_github_fetch"
         ]
       },
       "versions": [
         {
-          "version": "0.2.8",
-          "publishTimestamp": 1794029708,
+          "version": "0.2.9",
+          "publishTimestamp": 1794071689,
           "source": {
             "type": "npm"
           },
@@ -300,16 +342,23 @@
       "metadata": {
         "category": "workflow",
         "keywords": [
+          "dsh",
           "dsh-plugin",
+          "dsh-plugins",
           "deepseek-harness",
+          "deepseek-harness-plugin",
           "approval",
-          "security"
+          "security",
+          "safe-auto",
+          "approval-workflow",
+          "auto-review",
+          "audit"
         ]
       },
       "versions": [
         {
-          "version": "0.5.3",
-          "publishTimestamp": 1794029727,
+          "version": "0.5.4",
+          "publishTimestamp": 1794071728,
           "source": {
             "type": "npm"
           },
@@ -337,12 +386,23 @@
       },
       "metadata": {
         "category": "sessions",
-        "keywords": []
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "deepseek-harness-plugin",
+          "session-manager",
+          "session-search",
+          "resume-session",
+          "temporary-workspace",
+          "context-compaction"
+        ]
       },
       "versions": [
         {
-          "version": "0.4.0",
-          "publishTimestamp": 1794029803,
+          "version": "0.4.1",
+          "publishTimestamp": 1794071691,
           "source": {
             "type": "npm"
           },
@@ -373,15 +433,21 @@
         "keywords": [
           "dsh",
           "dsh-plugin",
+          "dsh-plugins",
           "deepseek-harness",
+          "deepseek-harness-plugin",
           "model-route",
-          "llm"
+          "llm",
+          "subagent",
+          "reasoning-effort",
+          "model-selection",
+          "llm-routing"
         ]
       },
       "versions": [
         {
-          "version": "0.2.0",
-          "publishTimestamp": 1794029795,
+          "version": "0.2.1",
+          "publishTimestamp": 1794071703,
           "source": {
             "type": "npm"
           },
@@ -414,14 +480,19 @@
           "dsh-plugin",
           "dsh-plugins",
           "deepseek-harness",
+          "deepseek-harness-plugin",
           "magpie",
-          "llm"
+          "llm",
+          "gateway",
+          "local-llm",
+          "openai-compatible",
+          "llm-gateway"
         ]
       },
       "versions": [
         {
-          "version": "0.1.1",
-          "publishTimestamp": 1794029720,
+          "version": "0.1.2",
+          "publishTimestamp": 1794071812,
           "source": {
             "type": "npm"
           },
@@ -454,16 +525,19 @@
           "dsh-plugin",
           "dsh-plugins",
           "deepseek-harness",
+          "deepseek-harness-plugin",
           "font",
           "font-family",
           "font-size",
-          "theme"
+          "theme",
+          "typography",
+          "ui-customization"
         ]
       },
       "versions": [
         {
-          "version": "0.2.3",
-          "publishTimestamp": 1794029712,
+          "version": "0.2.4",
+          "publishTimestamp": 1794071692,
           "source": {
             "type": "npm"
           },
@@ -492,15 +566,23 @@
       "metadata": {
         "category": "workflow",
         "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
           "deepseek-harness",
+          "deepseek-harness-plugin",
           "dsh-preset",
-          "unrestricted"
+          "preset",
+          "session-preset",
+          "unrestricted",
+          "jailbreak",
+          "bypass"
         ]
       },
       "versions": [
         {
-          "version": "0.3.0",
-          "publishTimestamp": 1794029754,
+          "version": "0.3.1",
+          "publishTimestamp": 1794071693,
           "source": {
             "type": "npm"
           },
