@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-dev-index",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "DSH Docs: read the official DSH documentation in the Plugins page; Creator mode searches docs and checks plugin metadata on npm and GitHub with native tools.",
   "icon": "./icon.svg",
   "keywords": [
@@ -113,6 +113,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "a2daf4a6e10ea93df0733a844d8e8eee52a8d946908b0efec797b1dec2467896"
+    "contentHash": "de442e4da0d9f144bde20dde12730db1c2e4031f30c62447eb49771cf6395fcc"
   }
 }

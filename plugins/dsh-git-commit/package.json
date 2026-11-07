@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-git-commit",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Git Commit: commit workspace changes from the conversation header, with model-planned commit groups.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -134,6 +134,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "3f83b7742c2c11ddbc2d03595c4338fb8f5ebd60f427ef911617f192ee34e48e"
+    "contentHash": "940289b29570ab1f709f1d2226d14d8180886e3fbc8e64a4e5bed566f49acb36"
   }
 }

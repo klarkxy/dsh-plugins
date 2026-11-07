@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-safe-auto",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Safe Auto: a reviewer model answers native approval requests, Codex auto-review style; only a pass approves that one call.",
   "icon": "./icon.svg",
   "type": "module",
@@ -90,6 +90,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "3db2e0e31a5b3133fd7e366fa76e6a2a6e1df1f249731a51221ce64189d1323c"
+    "contentHash": "cfa944cf1f16125ee893d0e6c1ea8fda43fdc594733b3b4478f2f9b636e1444f"
   }
 }
