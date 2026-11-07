@@ -95,9 +95,12 @@
     "dsh-plugin",
     "dsh-plugins",
     "deepseek-harness",
+    "deepseek-harness-plugin",
     "shortcuts",
     "keyboard",
-    "command-palette"
+    "command-palette",
+    "hotkeys",
+    "keybindings"
   ],
   "repository": {
     "type": "git",

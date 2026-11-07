@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-unrestricted",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Unrestricted: a session preset that removes the limits on what the model answers and delivers complete results, only in sessions that pick it. May get your account banned.",
   "icon": "./icon.svg",
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/unrestricted/",
@@ -18,9 +18,17 @@
     "directory": "plugins/dsh-unrestricted"
   },
   "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-plugins",
     "deepseek-harness",
+    "deepseek-harness-plugin",
     "dsh-preset",
-    "unrestricted"
+    "preset",
+    "session-preset",
+    "unrestricted",
+    "jailbreak",
+    "bypass"
   ],
   "exports": {
     ".": {
@@ -78,6 +86,6 @@
     "@deepseek-ai/dsh-web-app": "0.2.1-rc.1"
   },
   "dshRelease": {
-    "contentHash": "bd660d10571c79c51df7a755d2c9a189027343511030a929703764e2acf511d1"
+    "contentHash": "343eee3ba045742aba289e664db26c2bc6167247b6698d6bb633a27ca19b8a08"
   }
 }

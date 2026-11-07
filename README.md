@@ -8,18 +8,18 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse them on the [plugin site](http
 
 | Package | What it does |
 | --- | --- |
-| [`@klarkxy/dsh-current-title`](plugins/dsh-current-title/README.md) | Auto Title: session titles follow the latest task; names you set by hand stay put. |
-| [`@klarkxy/dsh-git-commit`](plugins/dsh-git-commit/README.md) | Git Commit: commit workspace changes from the conversation, with the model grouping the commits. |
-| [`@klarkxy/dsh-delegation`](plugins/dsh-delegation/README.md) | Delegation Mode: a per-session switch where the main agent plans, delegates, and reviews while subagents do the work. |
-| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: a reviewer model answers approval requests; only calls that pass go ahead. |
-| [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: find and read sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, and get a welcome-back recap after time away. |
-| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Subagents: configure models and reasoning effort for new subagents, and see their last-used model in the conversation popup. |
-| [`@klarkxy/dsh-magpie`](plugins/dsh-magpie/README.md) | Magpie: connect DSH to a magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search. |
+| [`@klarkxy/dsh-current-title`](plugins/dsh-current-title/README.md) | Auto Title: session titles follow the latest task automatically; names you set by hand stay put. Auto-rename and manual naming coexist. |
+| [`@klarkxy/dsh-git-commit`](plugins/dsh-git-commit/README.md) | Git Commit: commit workspace changes from the conversation, with the model grouping commits and generating commit messages. |
+| [`@klarkxy/dsh-delegation`](plugins/dsh-delegation/README.md) | Delegation Mode: per-session switch where the main agent plans, delegates, and reviews while subagents carry out the work, enabling multi-agent orchestration. |
+| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: adds a Safe Auto approval level where a reviewer model answers approval requests one call at a time, with full review history and audit trails. |
+| [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: search and read sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, and get a welcome-back recap with context-compaction hints after time away. |
+| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Subagents: configure the model and reasoning effort for new subagents, and see their last-used model in the conversation popup. |
+| [`@klarkxy/dsh-magpie`](plugins/dsh-magpie/README.md) | Magpie: connect DSH to a Magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search; supports local LLMs and OpenAI-compatible endpoints. |
 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/README.md) | Web Search: manage and rank search and page-reading services, including providers from installed plugins, in one settings page. |
-| [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | Zhihu: Zhihu search, agent tools, knowledge bases, usage tracking, and draft management. |
+| [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | Zhihu: search Zhihu and the web, check hot lists, Zhida AI answers, Q&A, comments, knowledge bases, creator stats, and quotas, and manage article, question, and pin drafts with image uploads. |
 | [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface, conversation, code and terminal fonts and font sizes of the Web GUI. |
 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | Unrestricted: a session preset that removes the limits on what the model answers and delivers complete results, only in sessions that pick it; may get your account banned. |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: read the official DSH docs in the Plugins page; Creator mode can look up docs and plugins on npm and GitHub. |
+| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: read official DeepSeek Harness documentation in the Plugins page; Creator mode searches DSH docs and discovers or inspects plugins across the catalog, npm, and GitHub with read-only tools. |
 
 `@klarkxy/dsh-plugin-kit` and `@klarkxy/dsh-model-route` are shared libraries that other plugins install automatically.
 

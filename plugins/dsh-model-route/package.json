@@ -1,7 +1,8 @@
 {
   "name": "@klarkxy/dsh-model-route",
-  "version": "0.2.6",
-  "description": "Shared library that lets DSH plugins describe model settings the same way.",
+  "version": "0.2.7",
+  "description": "Shared library that lets DSH plugins describe provider, model, and reasoning-effort settings consistently and share model lists and picker menus; installed automatically by dependent plugins.",
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-route/",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -77,9 +78,14 @@
   "keywords": [
     "dsh",
     "dsh-plugin",
+    "dsh-plugins",
     "deepseek-harness",
+    "deepseek-harness-plugin",
     "model-route",
-    "llm"
+    "model-picker",
+    "reasoning-effort",
+    "llm",
+    "shared-library"
   ],
   "repository": {
     "type": "git",
@@ -91,6 +97,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "d0b53c3c2946959a6826cdf50afc57e563ee487741271669b38c01029ca1643b"
+    "contentHash": "47003b0bcc829a83e149ffe54c453191acd806fd3248067e57d8c7fc688882b9"
   }
 }

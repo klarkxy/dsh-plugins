@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Subagents",
-    "description": "Configure subagent models and reasoning effort, and see each one's last-used model in the conversation popup."
+    "description": "Configure the model and reasoning effort for subagents, and see each one's last-used model in the conversation popup."
   }
 }

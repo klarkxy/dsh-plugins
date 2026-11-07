@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-current-title",
-  "version": "0.3.1",
+  "version": "0.3.3",
   "description": "Auto Title: keep session titles following the latest task; names you set by hand stay put.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -113,8 +113,11 @@
     "dsh-plugin",
     "dsh-plugins",
     "deepseek-harness",
+    "deepseek-harness-plugin",
     "session-title",
-    "title-generation"
+    "title-generation",
+    "auto-rename",
+    "session-name"
   ],
   "repository": {
     "type": "git",
@@ -130,6 +133,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "afd30e099c63e4774f50d1dbe242b28230fa5fa3adc446208965f69576ba6104"
+    "contentHash": "b95aefc88e0f1236c22005fc6d6d60968e6111187aa3824e3b746d64bde2bcf5"
   }
 }

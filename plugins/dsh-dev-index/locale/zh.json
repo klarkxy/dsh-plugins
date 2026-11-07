@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "DSH 文档",
-    "description": "在插件页读 DSH 官方文档；创造模式用原生工具查文档，查核 npm 与 GitHub 上的插件。"
+    "description": "在插件页浏览 DSH 官方开发文档；创造模式提供五个只读工具检索文档与核对插件（dsh_docs_search、dsh_docs_fetch、dsh_plugins_search、dsh_plugins_fetch、dsh_github_fetch）。"
   }
 }

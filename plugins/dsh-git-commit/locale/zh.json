@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Git 提交",
-    "description": "从会话顶栏提交工作区改动，由模型分组。"
+    "description": "在对话里提交工作区改动，由模型分组并生成 Git 提交信息。"
   }
 }

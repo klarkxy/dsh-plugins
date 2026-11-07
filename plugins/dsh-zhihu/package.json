@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-zhihu",
-  "version": "0.2.9",
-  "description": "Zhihu search, agent tools, knowledge bases, usage tracking, and draft management for DeepSeek Harness.",
+  "version": "0.2.11",
+  "description": "Zhihu site and web search, hot list, Zhida AI answers, knowledge bases, question recommendations and answer summaries, published content and comments, creator stats, quota tracking, and draft sync with image uploads.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -136,10 +136,17 @@
     "dsh-plugin",
     "dsh-plugins",
     "deepseek-harness",
+    "deepseek-harness-plugin",
     "zhihu",
     "zhihu-search",
+    "zhida",
+    "hot-list",
     "knowledge-base",
-    "web-search"
+    "web-search",
+    "questions",
+    "answers",
+    "creator-stats",
+    "drafts"
   ],
   "repository": {
     "type": "git",
@@ -155,6 +162,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "f779e43a9c5243207ab47db1003f5149a382fc5d2ac4bd8c9128179a5107ff29"
+    "contentHash": "4faffe9c1dee7fc658df7fdece0992bea761976d3fd97c9694a277408162261a"
   }
 }

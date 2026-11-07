@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Delegation Mode",
-    "description": "Per-session switch: the main agent plans, delegates, and reviews while subagents do the work."
+    "description": "Per-session Delegation Mode: the main agent plans, delegates, and reviews while subagents carry out the work, enabling multi-agent orchestration."
   }
 }

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Shortcuts",
-    "description": "Customize application and recognized local shortcuts, and run participating plugins' commands from a command palette."
+    "description": "Customize application and local keyboard shortcuts, and run participating plugins' commands from an extensible command palette."
   }
 }

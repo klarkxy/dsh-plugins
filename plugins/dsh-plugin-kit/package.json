@@ -1,7 +1,8 @@
 {
   "name": "@klarkxy/dsh-plugin-kit",
-  "version": "0.6.0",
-  "description": "Shared support library for klarkxy DSH plugins.",
+  "version": "0.6.1",
+  "description": "Shared support library for klarkxy DSH plugins, providing the default auxiliary model, shared session settings, independent feature contexts, RPC and UI helpers; installed automatically by dependent plugins.",
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/plugin-kit/",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -158,7 +159,12 @@
   "keywords": [
     "dsh",
     "dsh-plugin",
-    "deepseek-harness"
+    "dsh-plugins",
+    "deepseek-harness",
+    "deepseek-harness-plugin",
+    "plugin-kit",
+    "shared-library",
+    "auxiliary-model"
   ],
   "repository": {
     "type": "git",
@@ -170,6 +176,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "0bb765dc0683f03b0729dff4a6857953abd5aad6fe27193d0a381726c3465e7a"
+    "contentHash": "a27f7f9426570611fca73875f5808202de10e6de5dde911f8e2fe9051d90b8b4"
   }
 }

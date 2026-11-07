@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-git-commit",
-  "version": "0.3.1",
-  "description": "Git Commit: commit workspace changes from the conversation header, with model-planned commit groups.",
+  "version": "0.3.3",
+  "description": "Git Commit: commit workspace changes from the conversation, with the model grouping commits and generating commit messages.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -117,8 +117,12 @@
     "dsh-plugin",
     "dsh-plugins",
     "deepseek-harness",
+    "deepseek-harness-plugin",
     "git",
-    "commit"
+    "commit",
+    "git-commit",
+    "auto-commit",
+    "commit-message"
   ],
   "repository": {
     "type": "git",
@@ -134,6 +138,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "3f83b7742c2c11ddbc2d03595c4338fb8f5ebd60f427ef911617f192ee34e48e"
+    "contentHash": "05f29993223a55ec7aa914dccf4aba30049fb38f78794c22b9a321ae248cdcef"
   }
 }

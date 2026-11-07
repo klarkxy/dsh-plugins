@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-session-manager",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Find and read DeepSeek Harness sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, and get a welcome-back recap after time away.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -132,6 +132,18 @@
     "@types/jsdom": "^28.0.3",
     "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.1"
   },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-plugins",
+    "deepseek-harness",
+    "deepseek-harness-plugin",
+    "session-manager",
+    "session-search",
+    "resume-session",
+    "temporary-workspace",
+    "context-compaction"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/klarkxy/dsh-plugins.git",
@@ -143,6 +155,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/",
   "dshRelease": {
-    "contentHash": "2c4c3519ad1591cedb10132143f1fe18c06cd1ed8f6d92e1f957087535cb3142"
+    "contentHash": "64a4d50687f52261cedfae0ea262c46a354fad6dc440dbf02b3e57c2d3ef46ac"
   }
 }

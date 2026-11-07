@@ -1,8 +1,8 @@
 {
   "id": "@klarkxy/dsh-dev-index",
-  "version": "0.2.7",
+  "version": "0.2.9",
   "main": "lib/index.js",
-  "description": "DSH Docs: read the official DSH documentation in the Plugins page; Creator mode searches docs and checks plugin metadata on npm and GitHub with native tools.",
+  "description": "DSH Docs: browse official DSH developer documentation in the Plugins page; Creator mode gets read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs_search, dsh_docs_fetch, dsh_plugins_search, dsh_plugins_fetch, dsh_github_fetch).",
   "engines": {
     "dsh": ">=0.2.0-rc.2"
   },

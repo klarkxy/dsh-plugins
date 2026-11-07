@@ -1,9 +1,10 @@
 {
   "name": "@klarkxy/dsh-safe-auto",
-  "version": "0.5.2",
-  "description": "Safe Auto: a reviewer model answers native approval requests, Codex auto-review style; only a pass approves that one call.",
+  "version": "0.5.4",
+  "description": "Safe Auto: a reviewer model answers approval requests one call at a time; includes review history with full audit trails.",
   "icon": "./icon.svg",
   "type": "module",
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/safe-auto/",
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
@@ -37,10 +38,17 @@
     "directory": "plugins/dsh-safe-auto"
   },
   "keywords": [
+    "dsh",
     "dsh-plugin",
+    "dsh-plugins",
     "deepseek-harness",
+    "deepseek-harness-plugin",
     "approval",
-    "security"
+    "security",
+    "safe-auto",
+    "approval-workflow",
+    "auto-review",
+    "audit"
   ],
   "dsh": {
     "bundle": {
@@ -90,6 +98,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "3db2e0e31a5b3133fd7e366fa76e6a2a6e1df1f249731a51221ce64189d1323c"
+    "contentHash": "77c467f7f55eb6450ea073f7c61a30b78619b38bf50c6be74e27357318ade841"
   }
 }

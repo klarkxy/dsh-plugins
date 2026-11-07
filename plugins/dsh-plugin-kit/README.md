@@ -4,7 +4,7 @@
 
 [简体中文](docs/README.zh-CN.md)
 
-A shared support library for the plugins in this repository, including the default auxiliary model and independent feature contexts. Plugins that depend on it install it automatically; refer to the source code and type declarations.
+Shared runtime and UI support library for the DeepSeek Harness plugins in this repository — covering the default auxiliary model, shared session settings, storage and host-client helpers, official UI styling, and subagent session detection. Plugins that depend on it install it automatically; plugin developers should refer to the source code and type declarations.
 
 ## License
 

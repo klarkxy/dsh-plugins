@@ -1,14 +1,27 @@
 {
   "name": "@klarkxy/dsh-dev-index",
-  "version": "0.2.7",
-  "description": "DSH Docs: read the official DSH documentation in the Plugins page; Creator mode searches docs and checks plugin metadata on npm and GitHub with native tools.",
+  "version": "0.2.9",
+  "description": "DSH Docs: browse official DSH developer documentation in the Plugins page; Creator mode gets read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs_search, dsh_docs_fetch, dsh_plugins_search, dsh_plugins_fetch, dsh_github_fetch).",
   "icon": "./icon.svg",
   "keywords": [
+    "dsh",
     "dsh-plugin",
-    "deepseek-harness",
     "dsh-plugins",
+    "deepseek-harness",
+    "deepseek-harness-plugin",
     "dsh-dev-index",
-    "creator-mode"
+    "creator-mode",
+    "docs",
+    "documentation",
+    "plugin-development",
+    "plugin-search",
+    "npm",
+    "github",
+    "dsh_docs_search",
+    "dsh_docs_fetch",
+    "dsh_plugins_search",
+    "dsh_plugins_fetch",
+    "dsh_github_fetch"
   ],
   "repository": {
     "type": "git",
@@ -113,6 +126,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "a2daf4a6e10ea93df0733a844d8e8eee52a8d946908b0efec797b1dec2467896"
+    "contentHash": "8c755b74cded3c4c7cd297375c596dc0cce268259f42dc3ab52e15834ada884c"
   }
 }

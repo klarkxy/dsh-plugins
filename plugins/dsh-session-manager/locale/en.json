@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Sessions",
-    "description": "Find and read sessions and use temporary workspaces; continue with one tap or automatically when a reply stops early and get a welcome-back recap after time away."
+    "description": "Search and read sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, and get a welcome-back recap with context-compaction hints after time away."
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-model-hub",
-  "version": "0.2.0",
-  "description": "Configure models and reasoning effort for new DSH subagents, and see each subagent's last-used model in the conversation popup.",
+  "version": "0.2.1",
+  "description": "Subagents: configure the model and reasoning effort for new subagents, and see each one's last-used model in the conversation popup.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -91,9 +91,15 @@
   "keywords": [
     "dsh",
     "dsh-plugin",
+    "dsh-plugins",
     "deepseek-harness",
+    "deepseek-harness-plugin",
     "model-route",
-    "llm"
+    "llm",
+    "subagent",
+    "reasoning-effort",
+    "model-selection",
+    "llm-routing"
   ],
   "repository": {
     "type": "git",
@@ -106,6 +112,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/",
   "dshRelease": {
-    "contentHash": "8aec951ff52ef34e1609f24f8c1cb8571ba481404d386992ac014e75cd8cd857"
+    "contentHash": "1e8f6761f3e4d444374584db696d4ac4be6d6c1dcea78f9ab18660771fcdbcf3"
   }
 }

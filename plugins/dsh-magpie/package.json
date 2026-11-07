@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-magpie",
-  "version": "0.1.0",
-  "description": "Connect DSH to a magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search.",
+  "version": "0.1.2",
+  "description": "Magpie: connect DSH to a Magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search; supports local LLMs and OpenAI-compatible endpoints.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -117,8 +117,13 @@
     "dsh-plugin",
     "dsh-plugins",
     "deepseek-harness",
+    "deepseek-harness-plugin",
     "magpie",
-    "llm"
+    "llm",
+    "gateway",
+    "local-llm",
+    "openai-compatible",
+    "llm-gateway"
   ],
   "repository": {
     "type": "git",
@@ -134,6 +139,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "eb8250cc4d6d4b0883e6c34bb82a7df4a8654cc3657c7037fb6a001e45e3f7d8"
+    "contentHash": "1155fd7aa877db8d2159acedaa57d55b786adde6eb1810523c072f4d27d22a47"
   }
 }

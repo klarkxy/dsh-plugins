@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-web-search-manager",
-  "version": "0.3.1",
-  "description": "Manage and rank search and page-reading services, including providers from installed plugins, in one settings page.",
+  "version": "0.3.3",
+  "description": "Manage and rank web search and page-reading providers in one settings page—with built-in DuckDuckGo, Exa, Tavily, and others—for the model's web_search and web_fetch tools.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -132,11 +132,22 @@
     "dsh-plugin",
     "dsh-plugins",
     "deepseek-harness",
+    "deepseek-harness-plugin",
     "web-search",
+    "web-fetch",
+    "web_search",
+    "web_fetch",
     "search-provider",
     "page-fetching",
     "duckduckgo",
-    "tavily"
+    "exa",
+    "tavily",
+    "brave",
+    "bocha",
+    "serper",
+    "perplexity",
+    "firecrawl",
+    "jina"
   ],
   "repository": {
     "type": "git",
@@ -152,6 +163,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "b13ef2869d849beeed7fa30c94ddb05a2ec803a59d0d258a098c92c211b8a91f"
+    "contentHash": "2c221f61642a8ea6eb33c32e3785d856f118e161daef26448aab287f07b9e5bf"
   }
 }

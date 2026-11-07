@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Git Commit",
-    "description": "Commit workspace changes from the conversation header, with the model grouping the commits."
+    "description": "Commit workspace changes from the conversation, with the model grouping commits and generating commit messages."
   }
 }

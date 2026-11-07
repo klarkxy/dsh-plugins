@@ -44,8 +44,8 @@
         "en": "Git Commit"
       },
       "description": {
-        "zh": "在对话里提交工作区改动，由模型分组并生成提交信息。",
-        "en": "Commit workspace changes from the conversation, with the model grouping the commits."
+        "zh": "在对话里提交工作区改动，由模型分组并生成 Git 提交信息。",
+        "en": "Commit workspace changes from the conversation, with the model grouping commits and generating commit messages."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/git-commit/",
@@ -66,8 +66,8 @@
       },
       "versions": [
         {
-          "version": "0.3.1",
-          "publishTimestamp": 1792747993,
+          "version": "0.3.2",
+          "publishTimestamp": 1794029788,
           "source": {
             "type": "npm"
           },
@@ -84,8 +84,8 @@
         "en": "Delegation Mode"
       },
       "description": {
-        "zh": "按会话开启：主代理负责拆解、委派和验收，具体工作交给子代理。",
-        "en": "Per-session switch: the main agent plans, delegates, and reviews while subagents do the work."
+        "zh": "按会话开启委派模式：主代理负责拆解、委派和验收，子代理执行具体任务，支持多智能体协作。",
+        "en": "Per-session Delegation Mode: the main agent plans, delegates, and reviews while subagents carry out the work, enabling multi-agent orchestration."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/delegation/",
@@ -106,8 +106,8 @@
       },
       "versions": [
         {
-          "version": "0.1.1",
-          "publishTimestamp": 1793710544,
+          "version": "0.1.2",
+          "publishTimestamp": 1794029958,
           "source": {
             "type": "npm"
           },
@@ -124,8 +124,8 @@
         "en": "Auto Title"
       },
       "description": {
-        "zh": "会话标题跟随最新任务自动更新，你手动改过的名字不会被覆盖。",
-        "en": "Session titles follow the latest task automatically; names you set by hand stay put."
+        "zh": "会话标题跟随最新任务自动更新，手动改过的名字不会被覆盖；自动重命名与人工命名两不误。",
+        "en": "Session titles follow the latest task automatically; names you set by hand stay put. Auto-rename and manual naming coexist."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/current-title/",
@@ -146,8 +146,8 @@
       },
       "versions": [
         {
-          "version": "0.3.1",
-          "publishTimestamp": 1792747975,
+          "version": "0.3.2",
+          "publishTimestamp": 1794029702,
           "source": {
             "type": "npm"
           },
@@ -164,8 +164,8 @@
         "en": "Web Search"
       },
       "description": {
-        "zh": "在一个设置页管理和排序多家搜索与网页读取服务，包括已安装插件提供的能力。",
-        "en": "Manage and rank search and page-reading services, including providers from installed plugins, in one settings page."
+        "zh": "在一个设置页管理和排序联网搜索与网页读取（抓取）服务，内置 DuckDuckGo、Exa、Tavily 等，并整合其他插件的搜索源，为模型提供 web_search 与 web_fetch。",
+        "en": "Manage and rank web search and page-reading providers (DuckDuckGo, Exa, Tavily, Brave, Bocha, Serper, Firecrawl, Perplexity, Jina, and plugin sources) in one settings page for web_search and web_fetch."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/web-search-manager/",
@@ -189,8 +189,8 @@
       },
       "versions": [
         {
-          "version": "0.3.1",
-          "publishTimestamp": 1792748025,
+          "version": "0.3.2",
+          "publishTimestamp": 1794029758,
           "source": {
             "type": "npm"
           },
@@ -207,8 +207,8 @@
         "en": "Zhihu"
       },
       "description": {
-        "zh": "知乎搜索、智能体工具、知识库、用量统计与草稿管理。",
-        "en": "Zhihu search, agent tools, knowledge bases, usage tracking, and draft management."
+        "zh": "知乎站内与全网搜索、热榜、Zhida 直答、知识库、问题推荐与回答摘要、内容与评论读取、创作数据与额度统计，以及草稿管理和配图上传。",
+        "en": "Search Zhihu and the web, check hot lists, Zhida AI answers, Q&A, comments, knowledge bases, creator stats, and quotas, and manage article, question, and pin drafts with image uploads."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/zhihu/",
@@ -231,8 +231,8 @@
       },
       "versions": [
         {
-          "version": "0.2.9",
-          "publishTimestamp": 1793371395,
+          "version": "0.2.10",
+          "publishTimestamp": 1794029812,
           "source": {
             "type": "npm"
           },
@@ -249,8 +249,8 @@
         "en": "DSH Docs"
       },
       "description": {
-        "zh": "在插件页阅读 DSH 官方文档；创造模式用原生工具搜索文档、查核 npm 与 GitHub 上的插件信息。",
-        "en": "Read the official DSH docs in the Plugins page; Creator mode searches docs and checks plugins on npm and GitHub with native tools."
+        "zh": "在插件页阅读 DeepSeek Harness 官方开发文档；创造模式用只读工具查找与检索文档，并在插件目录、npm 与 GitHub 搜索和核对插件。",
+        "en": "Read official DeepSeek Harness documentation in the Plugins page; Creator mode searches DSH docs and discovers or inspects plugins across the catalog, npm, and GitHub with read-only tools."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/dev-index/",
@@ -270,8 +270,8 @@
       },
       "versions": [
         {
-          "version": "0.2.7",
-          "publishTimestamp": 1792748001,
+          "version": "0.2.8",
+          "publishTimestamp": 1794029708,
           "source": {
             "type": "npm"
           },
@@ -288,8 +288,8 @@
         "en": "Safe Auto"
       },
       "description": {
-        "zh": "需要审批的请求交给审核模型判断，通过才放行这一次。",
-        "en": "A reviewer model answers approval requests; only calls that pass go ahead."
+        "zh": "新增「Safe Auto」审批档位：需要审批的请求交给审核模型判断，通过才放行，并记录完整的审核历史。",
+        "en": "Adds a Safe Auto approval level: a reviewer model answers approval requests one call at a time, with full review history and audit trails."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/safe-auto/",
@@ -308,8 +308,8 @@
       },
       "versions": [
         {
-          "version": "0.5.2",
-          "publishTimestamp": 1793493599,
+          "version": "0.5.3",
+          "publishTimestamp": 1794029727,
           "source": {
             "type": "npm"
           },
@@ -326,8 +326,8 @@
         "en": "Session Manager"
       },
       "description": {
-        "zh": "跨工作目录查找和阅读会话，使用临时工作区；空输入一键继续或在回复提前结束时自动继续，久离回来给出摘要与压缩建议。",
-        "en": "Find and read sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, and get a welcome-back recap after time away."
+        "zh": "跨工作目录搜索和阅读历史会话，使用临时工作区；空输入一键续写或自动继续，久离回来给出摘要与上下文压缩建议。",
+        "en": "Search and read sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, and get a welcome-back recap with context-compaction hints after time away."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/",
@@ -341,8 +341,8 @@
       },
       "versions": [
         {
-          "version": "0.3.4",
-          "publishTimestamp": 1793710548,
+          "version": "0.4.0",
+          "publishTimestamp": 1794029803,
           "source": {
             "type": "npm"
           },
@@ -359,8 +359,8 @@
         "en": "Subagents"
       },
       "description": {
-        "zh": "配置子代理的模型与思考强度，并在会话弹层查看最后使用的模型。",
-        "en": "Configure subagent models and reasoning effort, and see each one's last-used model in the conversation popup."
+        "zh": "配置子代理的模型与推理强度（思考强度），并在会话弹层查看最后使用的模型。",
+        "en": "Configure the model and reasoning effort for subagents, and see each one's last-used model in the conversation popup."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/",
@@ -380,8 +380,8 @@
       },
       "versions": [
         {
-          "version": "0.1.8",
-          "publishTimestamp": 1793493596,
+          "version": "0.2.0",
+          "publishTimestamp": 1794029795,
           "source": {
             "type": "npm"
           },
@@ -398,8 +398,8 @@
         "en": "Magpie"
       },
       "description": {
-        "zh": "把 DSH 连接到本机、局域网或其他位置的 magpie 网关，同步模型、默认模型和网络搜索。",
-        "en": "Connect DSH to a magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search."
+        "zh": "把 DSH 连接到本机、局域网或其他位置的 Magpie 网关，同步模型、默认模型和网络搜索；支持本地 LLM 与 OpenAI 兼容接口。",
+        "en": "Connect DSH to a Magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search; supports local LLMs and OpenAI-compatible endpoints."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/magpie/",
@@ -420,8 +420,8 @@
       },
       "versions": [
         {
-          "version": "0.1.0",
-          "publishTimestamp": 1793713660,
+          "version": "0.1.1",
+          "publishTimestamp": 1794029720,
           "source": {
             "type": "npm"
           },
@@ -438,8 +438,8 @@
         "en": "Font"
       },
       "description": {
-        "zh": "自定义 Web GUI 的界面字体、对话字体、代码与终端字体及字号。",
-        "en": "Customize the interface, conversation, code and terminal fonts and font sizes of the Web GUI."
+        "zh": "自定义 Web GUI 的界面、对话、代码与终端字体及字号，支持更换字体族与调整排版。",
+        "en": "Customize the interface, conversation, code and terminal fonts and font sizes of the Web GUI; change font families and adjust typography."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/font/",
@@ -462,8 +462,8 @@
       },
       "versions": [
         {
-          "version": "0.2.2",
-          "publishTimestamp": 1793701422,
+          "version": "0.2.3",
+          "publishTimestamp": 1794029712,
           "source": {
             "type": "npm"
           },
@@ -480,8 +480,8 @@
         "en": "Unrestricted"
       },
       "description": {
-        "zh": "解除模型的回答限制、交付完整成果的会话 Preset，只作用于选用它的会话；可能导致账号被封禁。",
-        "en": "A session preset that removes the limits on what the model answers and delivers complete results, only in sessions that pick it; may get your account banned."
+        "zh": "解除模型回答限制并交付完整成果的会话预设（Preset），只作用于选用它的会话；可能导致账号被封禁。",
+        "en": "A session preset that removes the model's answer limits and delivers complete results, only in sessions that pick it; may get your account banned."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/unrestricted/",
@@ -499,13 +499,13 @@
       },
       "versions": [
         {
-          "version": "0.2.0",
-          "publishTimestamp": 1792748021,
+          "version": "0.3.0",
+          "publishTimestamp": 1794029754,
           "source": {
             "type": "npm"
           },
           "engines": {
-            "dsh": ">=0.2.1-rc.1"
+            "dsh": ">=0.2.2-rc.1"
           }
         }
       ]
