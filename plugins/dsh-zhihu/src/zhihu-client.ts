@@ -198,6 +198,10 @@ export async function zhihuFetchJson(
       stopWaiting = () => controller.signal.removeEventListener('abort', rejectAbort)
     }
   })
+  // Cancellation can arrive while the local policy is still waiting for its lock,
+  // before any network race observes this promise. Observe that rejection now;
+  // the original promise still rejects every later race with the same reason.
+  void aborted.catch(() => {})
   try {
     const request = async () => {
       controller.signal.throwIfAborted()

@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 
-/** Compatible with zhihu-search/call_policy.py; never contains credentials. */
-export type ZhihuCallPolicyOptions = { allowPaid?: boolean; dailyCallLimit?: number; directory?: string; lockTimeoutMs?: number }
+/** Ledger format is shared with zhihu-search/call_policy.py; counters are not limits. */
+export type ZhihuCallPolicyOptions = { allowPaid?: boolean; directory?: string; lockTimeoutMs?: number }
 export class ZhihuCallPolicyError extends Error {}
 const blocked = (message: string): never => { throw new ZhihuCallPolicyError(message) }
 const GROUPS: Record<string, string> = {
@@ -29,11 +29,8 @@ export function resolveZhihuCallPolicy(env: NodeJS.ProcessEnv = process.env, opt
   const raw = (env.ZHIHU_ALLOW_PAID ?? 'false').toLowerCase()
   if (options.allowPaid === undefined && !['true', 'false', '1', '0'].includes(raw)) blocked('ZHIHU_ALLOW_PAID 必须是 true/false 或 1/0。')
   const allowPaid = options.allowPaid ?? ['true', '1'].includes(raw)
-  const capText = env.ZHIHU_DAILY_CALL_LIMIT ?? '100'
-  if (options.dailyCallLimit === undefined && !/^\d+$/.test(capText)) blocked('每日调用上限必须是 1-100000 的整数。')
-  const dailyCallLimit = options.dailyCallLimit ?? Number(capText)
-  if (typeof allowPaid !== 'boolean' || !Number.isInteger(dailyCallLimit) || dailyCallLimit < 1 || dailyCallLimit > 100000) blocked('付费开关必须是布尔值，每日调用上限必须是 1-100000 的整数。')
-  return { allowPaid, dailyCallLimit }
+  if (typeof allowPaid !== 'boolean') blocked('付费开关必须是布尔值。')
+  return { allowPaid }
 }
 type Ledger = { version: 1; day: string; calls: number; uncertain: Record<string, number>; free: Record<string, number> }
 const integer = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
@@ -86,7 +83,6 @@ export async function withZhihuCallPolicy<T>(path: string, body: unknown, quota:
     }
     options.signal?.throwIfAborted()
     const row = await readLedger(directory)
-    if (row.calls >= policy.dailyCallLimit) blocked('已达到本地北京时间每日业务调用上限；额度查询仍可使用。')
     if (!policy.allowPaid) {
       let rows: unknown
       try { rows = await quota(group) }

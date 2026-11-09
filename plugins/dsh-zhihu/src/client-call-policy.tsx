@@ -2,21 +2,21 @@ import { useEffect, useState } from 'react'
 import { ZHIHU_RPC_CHANNEL } from './contracts.ts'
 import { useT } from './client-locale.ts'
 
-export function ZhihuCallPolicySummary({ policy }: { policy: { allowPaid: boolean; dailyCallLimit: number } }) {
+export function ZhihuCallPolicySummary({ policy }: { policy: { allowPaid: boolean } }) {
   const t = useT()
-  return <p className="dsh-ui-help">{t(`${policy.allowPaid ? '已显式允许付费' : '仅使用免费额度'} · 每日上限 ${policy.dailyCallLimit} 次（北京时间）`, `${policy.allowPaid ? 'Paid calls explicitly enabled' : 'Free allowance only'} · ${policy.dailyCallLimit} calls per Beijing day`)}</p>
+  return <p className="dsh-ui-help">{policy.allowPaid ? t('已显式允许付费', 'Paid calls explicitly enabled') : t('按各接口官方免费额度调用', 'Official free allowance per API')}</p>
 }
 
 export function ZhihuCallPolicySection({ rpc }: { rpc: { call(channel: string, endpoint: string, payload: unknown): Promise<unknown> } }) {
   const t = useT()
-  const [policy, setPolicy] = useState<{ allowPaid: boolean; dailyCallLimit: number } | null>(null)
+  const [policy, setPolicy] = useState<{ allowPaid: boolean } | null>(null)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     let alive = true
     rpc.call(ZHIHU_RPC_CHANNEL, 'policy.status', {}).then(result => {
       if (!alive) return
-      const value = (result as { ok?: boolean; value?: { allowPaid?: unknown; dailyCallLimit?: unknown } })
-      if (value?.ok && typeof value.value?.allowPaid === 'boolean' && typeof value.value.dailyCallLimit === 'number') setPolicy(value.value as { allowPaid: boolean; dailyCallLimit: number })
+      const value = (result as { ok?: boolean; value?: { allowPaid?: unknown } })
+      if (value?.ok && typeof value.value?.allowPaid === 'boolean') setPolicy(value.value as { allowPaid: boolean })
       else setFailed(true)
     }, () => { if (alive) setFailed(true) })
     return () => { alive = false }

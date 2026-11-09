@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setImmediate as nextTurn } from 'node:timers/promises'
 import { mkdtemp, readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,7 +18,7 @@ const quota = async (group: string) => [{ APIID: group, RemainingQuota: 10 }]
 const business = '/api/v1/content/zhihu_search'
 const signal = () => new AbortController().signal
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'zhihu-policy-')) })
-afterEach(async () => { await rm(directory, { recursive: true, force: true }) })
+afterEach(async () => { vi.restoreAllMocks(); await rm(directory, { recursive: true, force: true }) })
 const options = () => ({ directory, env: {}, lockTimeoutMs: 500 })
 const ledger = async () => JSON.parse(await readFile(join(directory, 'daily.json'), 'utf8'))
 
@@ -25,10 +26,10 @@ describe('actual default call protection', () => {
   it('shares atomic reservations across independent options and checks quota every time', async () => {
     const events: string[] = []
     const outcomes = await Promise.allSettled(Array.from({ length: 5 }, () => withZhihuCallPolicy(business, undefined,
-      async group => { events.push('quota'); return quota(group) },
-      async () => { events.push('business'); return 'ok' }, { ...options(), dailyCallLimit: 2 })))
+      async group => { events.push('quota'); return [{ APIID: group, RemainingQuota: 2 }] },
+      async () => { events.push('business'); return 'ok' }, options())))
     expect(outcomes.filter(v => v.status === 'fulfilled')).toHaveLength(2)
-    expect(events).toEqual(['quota', 'business', 'quota', 'business'])
+    expect(events).toEqual(['quota', 'business', 'quota', 'business', 'quota', 'quota', 'quota'])
     expect((await ledger()).calls).toBe(2)
   })
   it.each([[], null, {}, [{ APIID: 'zhihu_search', RemainingQuota: 0 }], [{ APIID: 'zhihu_search', RemainingQuota: '10' }], [{ APIID: 'zhihu_search', RemainingQuota: true }], [{ APIID: 'zhihu_search', RemainingQuota: -1 }], [{ APIID: 'zhihu_search', RemainingQuota: Number.MAX_SAFE_INTEGER + 1 }], [{ APIID: 'zhihu_search', RemainingQuota: 10 }, { APIID: 'zhihu_search', RemainingQuota: 10 }]])('blocks unusable free quota: %j', async rows => {
@@ -42,11 +43,11 @@ describe('actual default call protection', () => {
     await expect(withZhihuCallPolicy(business, undefined, async () => { checks++; throw new Error('offline') }, async () => { throw new Error('must not send') }, options())).rejects.toThrow('预查失败')
     expect(checks).toBe(1)
   })
-  it('paid mode requires explicit opt-in, stays capped and does not enable unpriced capabilities', async () => {
+  it('paid mode requires explicit opt-in and does not enable unpriced capabilities', async () => {
     let checks = 0
-    const paid = { ...options(), allowPaid: true, dailyCallLimit: 1 }
+    const paid = { ...options(), allowPaid: true }
     expect(await withZhihuCallPolicy(business, undefined, async () => { checks++; return [] }, async () => 'ok', paid)).toBe('ok')
-    await expect(withZhihuCallPolicy(business, undefined, quota, async () => 'bad', paid)).rejects.toThrow('每日业务调用上限')
+    expect(await withZhihuCallPolicy(business, undefined, async () => { checks++; return [] }, async () => 'ok', paid)).toBe('ok')
     expect(checks).toBe(0)
     for (const [path, body] of [['/api/v1/user/question_recommendations', undefined], ['/v1/chat/completions', { model: 'zhida-thinking-1p5' }], ['/v1/chat/completions', { model: 'zhida-fast-1p5' }], ['/api/v1/pdf-parse/tasks', {}], ['/unknown', {}]] as const) {
       await expect(withZhihuCallPolicy(path, body, quota, async () => 'bad', paid)).rejects.toThrow('未确认')
@@ -81,37 +82,58 @@ describe('actual default call protection', () => {
     await withZhihuCallPolicy(business, undefined, quota, async () => true, options())
     expect(await ledger()).toMatchObject({ calls: 1, uncertain: { hot_list: 2 } })
   })
-  it('rejects invalid config rather than enabling paid calls or dropping limits', () => {
-    for (const env of [{ ZHIHU_ALLOW_PAID: 'yes' }, { ZHIHU_DAILY_CALL_LIMIT: '0' }, { ZHIHU_DAILY_CALL_LIMIT: 'Infinity' }, { ZHIHU_DAILY_CALL_LIMIT: '100001' }]) expect(() => resolveZhihuCallPolicy(env)).toThrow()
-    expect(resolveZhihuCallPolicy({})).toEqual({ allowPaid: false, dailyCallLimit: 100 })
+  it('rejects invalid paid-call settings and ignores retired daily-limit settings', () => {
+    expect(() => resolveZhihuCallPolicy({ ZHIHU_ALLOW_PAID: 'yes' })).toThrow()
+    expect(() => resolveZhihuCallPolicy({}, { allowPaid: 'yes' as never })).toThrow()
+    for (const value of ['0', '1', '100', 'Infinity', '100001']) {
+      expect(resolveZhihuCallPolicy({ ZHIHU_DAILY_CALL_LIMIT: value })).toEqual({ allowPaid: false })
+    }
+    expect(resolveZhihuCallPolicy({})).toEqual({ allowPaid: false })
+  })
+  it.each([100, 1000])('uses official quota after %i local calls, including old persisted settings', async calls => {
+    const row = { version: 1, day: new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10), calls, uncertain: {}, free: { global_search: 4900 } }
+    await writeFile(join(directory, 'daily.json'), JSON.stringify(row))
+    const legacyOptions = { ...options(), dailyCallLimit: 1, env: { ZHIHU_DAILY_CALL_LIMIT: '1' } }
+    let checked = 0, sent = 0
+    expect(await withZhihuCallPolicy('/api/v1/content/global_search', {}, async group => {
+      checked++
+      expect(group).toBe('global_search')
+      return [{ APIID: group, RemainingQuota: 4900 }]
+    }, async () => ++sent, legacyOptions)).toBe(1)
+    expect(checked).toBe(1)
+    expect(sent).toBe(1)
+    expect(await ledger()).toMatchObject({ calls: calls + 1, free: { global_search: 4899 } })
   })
 })
 
-function fixture(count = 10) {
+function fixture(count = 1) {
   const paths: string[] = []
   const fetcher: ZhihuSearchFetcher = async url => {
     const parsed = new URL(url); paths.push(parsed.pathname)
     const body = { Code: 0, Data: parsed.pathname === '/api/v1/quota' ? [{ APIID: parsed.searchParams.get('APIIDs'), RemainingQuota: count }] : { Items: [] } }
     return { ok: true, status: 200, async text() { return JSON.stringify(body) }, async json() { return body } }
   }
-  const client = { fetcher, env: { ZHIHU_ACCESS_TOKEN: 'fixture-only-token' }, resolveCredential: async () => 'fixture-only-token', callPolicy: { directory, dailyCallLimit: 1 } }
+  const client = { fetcher, env: { ZHIHU_ACCESS_TOKEN: 'fixture-only-token' }, resolveCredential: async () => 'fixture-only-token', callPolicy: { directory } }
   const service = createZhihuService(client, { async record() {}, async read() { return [] } })
   return { paths, client, service }
 }
 
 describe('actual protection across public DSH entries', () => {
-  it('RPC, optional tool, direct client and native web share the same daily cap', async () => {
+  it('RPC, tools and native web use each API allowance independently', async () => {
     const { paths, client, service } = fixture()
     expect((await service.call('search', { query: '普通资料' }, signal())).ok).toBe(true)
     const tool = createZhihuResearchTool(service.toolOptions)
     await expect(tool.execute({ action: 'search', query: '普通资料', count: 1 }, { signal: signal() } as never)).rejects.toMatchObject({ code: 'CALL_BLOCKED' })
-    await expect(zhihuFetchJson('/api/v1/content/hot_list', {}, '热榜', client)).rejects.toMatchObject({ code: 'CALL_BLOCKED' })
+    await expect(zhihuFetchJson(business, {}, '搜索', client)).rejects.toMatchObject({ code: 'CALL_BLOCKED' })
+    await expect(zhihuFetchJson('/api/v1/content/hot_list', {}, '热榜', client)).resolves.toBeDefined()
     const provider = createZhihuWebSearchProvider({ ...client, apiKey: 'fixture-only-token' })
+    await expect(provider.search({ query: '普通资料' }, signal())).resolves.toMatchObject({ sources: [] })
     await expect(provider.search({ query: '普通资料' }, signal())).rejects.toMatchObject({ code: 'CALL_BLOCKED' })
     let native: { search(request: { query: string }, signal?: AbortSignal): Promise<unknown> } | undefined
     registerZhihuGlobalSearchProvider({ registerSearchProvider(value) { native = value; return () => {} } }, service, () => true)
     await expect(native!.search({ query: '普通资料' }, signal())).rejects.toMatchObject({ code: 'CALL_BLOCKED' })
-    expect(paths).toEqual(['/api/v1/quota', business])
+    expect(paths.filter(path => path !== '/api/v1/quota')).toEqual([business, '/api/v1/content/hot_list', '/api/v1/content/global_search'])
+    expect(paths.filter(path => path === '/api/v1/quota')).toHaveLength(7)
     await service.dispose()
   })
   it('quota itself is not guarded, counted or recursively preflighted; legacy ID is normalized', async () => {
@@ -147,6 +169,62 @@ describe('actual protection across public DSH entries', () => {
     await mkdir(join(directory, 'request.lock'))
     await service.dispose()
   })
+  it('cancels a request waiting for the policy lock without leaking an abort rejection', async () => {
+    await mkdir(join(directory, 'request.lock'))
+    const controller = new AbortController()
+    const connected = Promise.withResolvers<void>()
+    const addListener = controller.signal.addEventListener.bind(controller.signal)
+    vi.spyOn(controller.signal, 'addEventListener').mockImplementation((type, listener, options) => {
+      addListener(type, listener, options)
+      if (type === 'abort') connected.resolve()
+    })
+    const { paths, client, service } = fixture()
+    const pending = zhihuFetchJson(business, {}, '搜索', { ...client, signal: controller.signal }).catch(error => error)
+    await connected.promise
+    controller.abort(new Error('another search reached its local limit'))
+    expect(await pending).toMatchObject({ code: 'CANCELLED' })
+    // Give Node a turn to report detached rejections; Vitest fails the run if any escape.
+    await nextTurn()
+    expect(paths).toEqual([])
+    await expect(mkdir(join(directory, 'request.lock'))).rejects.toMatchObject({ code: 'EEXIST' })
+    await expect(readFile(join(directory, 'daily.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await service.dispose()
+  })
+  it('times out while waiting for the policy lock without leaking a rejection or removing the lock', async () => {
+    await mkdir(join(directory, 'request.lock'))
+    const { paths, client, service } = fixture()
+    await expect(zhihuFetchJson(business, {}, '搜索', { ...client, timeoutMs: 10 })).rejects.toMatchObject({ code: 'TIMEOUT' })
+    await nextTurn()
+    expect(paths).toEqual([])
+    await expect(mkdir(join(directory, 'request.lock'))).rejects.toMatchObject({ code: 'EEXIST' })
+    await expect(readFile(join(directory, 'daily.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await service.dispose()
+  })
+  it('settles parallel searches cancelled by exhausted official quota without sending business requests', async () => {
+    const row = { version: 1, day: new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10), calls: 1, uncertain: {}, free: { global_search: 4900 } }
+    await writeFile(join(directory, 'daily.json'), JSON.stringify(row))
+    const { paths, client, service } = fixture(0)
+    const provider = createZhihuWebSearchProvider({ ...client, apiKey: 'fixture-only-token' })
+    const controller = new AbortController()
+    let first: unknown
+    const searches = ['资料甲', '资料乙', '资料丙'].map(async query => {
+      try { return await provider.search({ query }, controller.signal) }
+      catch (error) {
+        first ??= error
+        controller.abort(first)
+        throw error
+      }
+    })
+    const outcomes = await Promise.allSettled(searches)
+    await nextTurn()
+    expect(first).toMatchObject({ code: 'CALL_BLOCKED' })
+    expect((first as Error).message).toContain('免费额度不足')
+    expect(outcomes.every(outcome => outcome.status === 'rejected')).toBe(true)
+    expect(paths).toEqual(['/api/v1/quota'])
+    expect(await ledger()).toEqual(row)
+    await mkdir(join(directory, 'request.lock'))
+    await service.dispose()
+  })
   it('shows explicit protection limits without pretending to know wallet balances', () => {
     const html = renderToStaticMarkup(createElement(ZhihuCallPolicySection, { rpc: { async call() { throw new Error('SSR must not fetch') } } }))
     expect(html).toContain('调用统计不是账单')
@@ -169,12 +247,12 @@ it.each([
 
 it('reports the applied server policy without reading official quota or billing', async () => {
   const { paths, service } = fixture()
-  expect(await service.call('policy.status', {}, signal())).toMatchObject({ ok: true, value: { allowPaid: false, dailyCallLimit: 1 } })
+  expect(await service.call('policy.status', {}, signal())).toMatchObject({ ok: true, value: { allowPaid: false } })
   expect(paths).toEqual([])
   for (const allowPaid of [false, true]) {
-    const html = renderToStaticMarkup(createElement(ZhihuCallPolicySummary, { policy: { allowPaid, dailyCallLimit: 50 } }))
-    expect(html).toContain(allowPaid ? '已显式允许付费' : '仅使用免费额度')
-    expect(html).toContain('每日上限 50 次（北京时间）')
+    const html = renderToStaticMarkup(createElement(ZhihuCallPolicySummary, { policy: { allowPaid } }))
+    expect(html).toContain(allowPaid ? '已显式允许付费' : '按各接口官方免费额度调用')
+    expect(html).not.toContain('每日上限')
   }
   await service.dispose()
 })

@@ -43,12 +43,11 @@ Site search and web search return an empty list when nothing matches, along with
 
 ## Cost protection
 
-By default research requests use only Zhihu's free allowance: before each request the plugin checks the official quota and sends the request only when free quota remains. It also caps usage at 100 requests per day (Beijing time). Both are configurable:
+By default research requests use only Zhihu's free allowance: before each request the plugin checks the official quota for that API and sends the request only when free quota remains. There is no extra local daily call limit. Paid use remains an explicit setting:
 
 ```yaml
 config:
   allowPaid: false
-  dailyCallLimit: 100
 ```
 
 Paid use is enabled only when you set `allowPaid: true` yourself.

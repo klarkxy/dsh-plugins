@@ -227,6 +227,7 @@ export function ZhihuQuotaSection({ rpc }: { rpc: ZhihuOpenPlatformRpc }) {
     <ZhihuDetails title={t('说明', 'Details')}>
       <li>{t('仅显示官方返回字段，不补零，不推算费用。', 'Shows only the fields Zhihu returns; nothing is zero-filled or priced.')}</li>
       <li>{t('官方额度与本地每日调用计数分开，额度查询不计入本地调用次数。', 'Official quota is separate from local daily counts; quota checks are not counted locally.')}</li>
+      <li>{t('调用前查询对应接口的官方免费额度，不设置额外的本地每日次数上限。', 'Each call checks its API’s official free allowance. There is no extra local daily call limit.')}</li>
     </ZhihuDetails>
     <div className="dsh-ui-actions">
       <ZhihuButton variant="primary" disabled={loading} onClick={refresh}>{t('刷新官方额度', 'Refresh quota')}</ZhihuButton>
