@@ -34,7 +34,6 @@ const exempted = new Map([
 const mergedSeats = new Map([
   ['plugins/dsh-current-title/src/client.tsx', 'the shared Session Management column'],
   ['plugins/dsh-git-commit/src/client.tsx', 'conversation.session.header.actions'],
-  ['plugins/dsh-magpie/src/client.tsx', 'settings.models.footer'],
   ['plugins/dsh-safe-auto/src/client.jsx', 'the shared Session Management column'],
   ['plugins/dsh-session-manager/src/client.tsx', 'the shared Session Management column'],
 ])

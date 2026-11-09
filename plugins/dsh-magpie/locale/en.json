@@ -1,6 +1,0 @@
-{
-  "meta": {
-    "title": "Magpie",
-    "description": "Connect DSH to a Magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search; supports local LLMs and OpenAI-compatible endpoints."
-  }
-}

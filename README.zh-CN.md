@@ -14,7 +14,6 @@ klarkxy 的 DeepSeek Harness（DSH）插件。可以在[插件站点](https://kl
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.zh-CN.md) | 安全自动：新增「Safe Auto」审批档位，需要审批的请求交给审核模型判断，通过才放行，并记录完整的审核历史。 |
 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.zh-CN.md) | 会话管理：跨工作目录搜索和阅读 DeepSeek Harness 会话，使用临时工作区；空输入一键续写或自动继续，久离回来给出摘要与上下文压缩建议；可选择让 agent 分叉当前会话或向其他会话发送消息。 |
 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/docs/README.zh-CN.md) | 子代理：配置子代理的模型与推理强度（思考强度），并在会话弹层查看最后使用的模型。 |
-| [`@klarkxy/dsh-magpie`](plugins/dsh-magpie/docs/README.zh-CN.md) | Magpie：把 DSH 连接到本机、局域网或其他位置的 Magpie 网关，同步模型、默认模型和网络搜索；支持本地 LLM 与 OpenAI 兼容接口。 |
 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/docs/README.zh-CN.md) | 网页搜索：在一个设置页管理和排序多家搜索与网页读取服务，包括已安装插件提供的能力。 |
 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/docs/README.zh-CN.md) | 知乎：知乎站内与全网搜索、热榜、Zhida 直答、知识库、问题推荐与回答摘要、内容与评论读取、创作数据与额度统计，以及草稿管理和配图上传。 |
 | [`@klarkxy/dsh-font`](plugins/dsh-font/docs/README.zh-CN.md) | 字体：自定义 Web GUI 的界面字体、对话字体、代码与终端字体及字号。 |
@@ -65,7 +64,6 @@ pnpm check
 | [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-font](plugins/dsh-font/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
-| [@klarkxy/dsh-magpie](plugins/dsh-magpie/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-model-hub](plugins/dsh-model-hub/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-model-picker](plugins/dsh-model-picker/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |

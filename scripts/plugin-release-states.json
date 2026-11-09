@@ -230,14 +230,15 @@
       "name": "@klarkxy/dsh-magpie",
       "state": "published",
       "reason": {
-        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
-        "en": "Published on npm; subsequent versions follow the normal update workflow."
+        "zh": "源码已移除；保留历史发布凭据，已移出构建与发布。",
+        "en": "Source removed; retains historical publication proof and stays outside builds and releases."
       },
       "publication": {
         "version": "0.1.0",
         "publishedAt": "2026-11-03T13:47:40.833Z",
         "integrity": "sha512-t2xkGnfpLCI4iwi6A77Xtlmj01fRFLPLEqGcwbawPnu95IMJ7J/0+3H2wuW0Ql3TjEGxYMypLan9MSfyQm7TyQ=="
-      }
+      },
+      "retired": true
     },
     {
       "name": "@klarkxy/dsh-shortcuts",

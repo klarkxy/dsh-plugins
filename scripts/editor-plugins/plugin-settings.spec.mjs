@@ -5,7 +5,6 @@ import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots'
 import { apply as currentTitle } from '../../plugins/dsh-current-title/src/client.tsx'
 import { apply as font } from '../../plugins/dsh-font/src/client.tsx'
 import { apply as gitCommit } from '../../plugins/dsh-git-commit/src/client.tsx'
-import { apply as magpie } from '../../plugins/dsh-magpie/src/client.tsx'
 import { apply as modelHub } from '../../plugins/dsh-model-hub/src/client.tsx'
 import { apply as safeAuto } from '../../plugins/dsh-safe-auto/src/client.jsx'
 import { apply as sessionManager } from '../../plugins/dsh-session-manager/src/client.tsx'
@@ -383,7 +382,6 @@ function createHost(initialSeats = []) {
 // settings.section owner receives `close`; merged group items receive none).
 const plugins = [
   { pkg: '@klarkxy/dsh-font', apply: font, seat: SECTION, id: 'font', order: 5 },
-  { pkg: '@klarkxy/dsh-magpie', apply: magpie, seat: MODELS_FOOTER, id: 'magpie', order: 100 },
   { pkg: '@klarkxy/dsh-web-search-manager', apply: webSearch, seat: SECTION, id: 'web-search-manager', order: 150 },
   { pkg: '@klarkxy/dsh-zhihu', apply: zhihu, seat: SECTION, id: 'zhihu', order: 160 },
   { pkg: '@klarkxy/dsh-model-hub', apply: modelHub, seat: SECTION, id: 'model-hub', order: 180 },

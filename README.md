@@ -14,7 +14,6 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse them on the [plugin site](http
 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: adds a Safe Auto approval level where a reviewer model answers approval requests one call at a time, with full review history and audit trails. |
 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: search and read DeepSeek Harness sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, recap on return with context-compaction hints, and optionally let the agent fork the current session or message other sessions. |
 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Subagents: configure the model and reasoning effort for new subagents, and see their last-used model in the conversation popup. |
-| [`@klarkxy/dsh-magpie`](plugins/dsh-magpie/README.md) | Magpie: connect DSH to a Magpie gateway on this computer, your local network or elsewhere, and sync its models, default model and web search; supports local LLMs and OpenAI-compatible endpoints. |
 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/README.md) | Web Search: manage and rank search and page-reading services, including providers from installed plugins, in one settings page. |
 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | Zhihu: search Zhihu and the web, check hot lists, Zhida AI answers, Q&A, comments, knowledge bases, creator stats, and quotas, and manage article, question, and pin drafts with image uploads. |
 | [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface, conversation, code and terminal fonts and font sizes of the Web GUI. |
@@ -65,7 +64,6 @@ The code is the developer documentation. Releases follow the [release guide](REL
 | [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-font](plugins/dsh-font/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-magpie](plugins/dsh-magpie/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-model-hub](plugins/dsh-model-hub/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-model-picker](plugins/dsh-model-picker/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
