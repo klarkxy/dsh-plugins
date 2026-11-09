@@ -31,10 +31,15 @@
     },
     {
       "name": "@klarkxy/dsh-context-cleaner",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "已进入首次发布检查；发布并验证 npm 归档后转为已发布。",
-        "en": "Undergoing first-release checks; moves to Published after the npm archive is published and verified."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-11-09T12:03:56.756Z",
+        "integrity": "sha512-EA3wi4mTknZ9sboh7YtYx7zo2RO9ZfLZD2p855jra/ZVkSxHWB5cs/TptaGijV8jdDCu2ah5AIFp4H1sssnOgw=="
       }
     },
     {
@@ -52,10 +57,15 @@
     },
     {
       "name": "@klarkxy/dsh-deep-view",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "已进入首次发布检查；发布并验证 npm 归档后转为已发布。",
-        "en": "Undergoing first-release checks; moves to Published after the npm archive is published and verified."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-11-09T12:05:14.851Z",
+        "integrity": "sha512-OuVwqMQcBrVPJzjy932uhwPO2PUO2tn8MJbKjDiHBXmI4gLrZSw2S+F4Acs0iqOGwar+rYvs1r+OcMx/vt4bGQ=="
       }
     },
     {
@@ -153,10 +163,15 @@
     },
     {
       "name": "@klarkxy/dsh-model-picker",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "已进入首次发布检查；发布并验证 npm 归档后转为已发布。",
-        "en": "Undergoing first-release checks; moves to Published after the npm archive is published and verified."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-11-09T12:04:27.271Z",
+        "integrity": "sha512-PGLIECjk1CMlu2CmY/8wIIDQjAGaqbMJUiCbn5epT7u4aa+XFLs8oKrVSBKs2uMStam8JhyQlVKhpy4TUQOc6g=="
       }
     },
     {

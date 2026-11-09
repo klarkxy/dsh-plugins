@@ -55,16 +55,16 @@ pnpm check
 <!-- plugin-release-states:start -->
 | 包 | 生命周期 | 说明 |
 | --- | --- | --- |
-| [@klarkxy/dsh-context-cleaner](plugins/dsh-context-cleaner/README.md) | 测试中 (`testing`) | 已进入首次发布检查；发布并验证 npm 归档后转为已发布。 |
+| [@klarkxy/dsh-context-cleaner](plugins/dsh-context-cleaner/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-current-title](plugins/dsh-current-title/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
-| [@klarkxy/dsh-deep-view](plugins/dsh-deep-view/README.md) | 测试中 (`testing`) | 已进入首次发布检查；发布并验证 npm 归档后转为已发布。 |
+| [@klarkxy/dsh-deep-view](plugins/dsh-deep-view/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-delegation](plugins/dsh-delegation/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-font](plugins/dsh-font/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-magpie](plugins/dsh-magpie/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-model-hub](plugins/dsh-model-hub/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
-| [@klarkxy/dsh-model-picker](plugins/dsh-model-picker/README.md) | 测试中 (`testing`) | 已进入首次发布检查；发布并验证 npm 归档后转为已发布。 |
+| [@klarkxy/dsh-model-picker](plugins/dsh-model-picker/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |

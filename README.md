@@ -55,16 +55,16 @@ The code is the developer documentation. Releases follow the [release guide](REL
 <!-- plugin-release-states:start -->
 | Package | Lifecycle | Notes |
 | --- | --- | --- |
-| [@klarkxy/dsh-context-cleaner](plugins/dsh-context-cleaner/README.md) | Testing (`testing`) | Undergoing first-release checks; moves to Published after the npm archive is published and verified. |
+| [@klarkxy/dsh-context-cleaner](plugins/dsh-context-cleaner/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-current-title](plugins/dsh-current-title/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-deep-view](plugins/dsh-deep-view/README.md) | Testing (`testing`) | Undergoing first-release checks; moves to Published after the npm archive is published and verified. |
+| [@klarkxy/dsh-deep-view](plugins/dsh-deep-view/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-delegation](plugins/dsh-delegation/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-font](plugins/dsh-font/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-magpie](plugins/dsh-magpie/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-model-hub](plugins/dsh-model-hub/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-model-picker](plugins/dsh-model-picker/README.md) | Testing (`testing`) | Undergoing first-release checks; moves to Published after the npm archive is published and verified. |
+| [@klarkxy/dsh-model-picker](plugins/dsh-model-picker/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
