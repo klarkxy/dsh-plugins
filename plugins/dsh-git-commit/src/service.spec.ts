@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as kit from '@klarkxy/dsh-plugin-kit'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import { AUXILIARY_MODEL_SERVICE } from '@klarkxy/dsh-plugin-kit/contracts'
@@ -70,6 +71,42 @@ function makeLlm(): LlmTextCaller {
 beforeEach(() => { vi.restoreAllMocks() })
 
 describe('Git Commit partial results and unload', () => {
+  it('plans 327 files through the native text caller without adding an output cap', async () => {
+    const files = Array.from({ length: 327 }, (_, index) => `src/feature-${index}/implementation.ts`)
+    const plan = JSON.stringify({ groups: [{ message: 'fix: update workspace', files }] })
+    const seen: GenerateOptions[] = []
+    const prepareCall = vi.fn(async (config: Parameters<LlmTextCaller['prepareCall']>[0]) => ({
+      config,
+      stream: async function* (options: GenerateOptions): AsyncIterable<StreamChunk> {
+        seen.push(options)
+        yield { type: 'block-end', index: 0, block: { type: 'text', text: plan } }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      },
+    }))
+    const run = makeRunner({
+      'rev-parse --show-toplevel': 'D:/repo\n',
+      'symbolic-ref': 'main\n',
+      'status --porcelain': [...files.map(path => ` M ${path}`), ''].join(NUL),
+      'rev-parse --short': 'abc1234\n',
+    })
+    const service = new GitCommitService({
+      plugin: 'test', workingDirectory: { get: session => session.header?.cwd ?? 'D:/repo' },
+      llm: { prepareCall, resolveCallConfig: vi.fn() } as unknown as LlmTextCaller,
+      host, sessions: makeSessions(), run,
+    })
+    try {
+      const result = await service.commit('s1')
+      expect(prepareCall).toHaveBeenCalledTimes(1)
+      expect(prepareCall.mock.calls[0]?.[0]).not.toHaveProperty('maxTokens')
+      expect(seen).toHaveLength(1)
+      expect(seen[0]).not.toHaveProperty('maxTokens')
+      expect(result.fallback).toBe(false)
+      expect(result.commits).toEqual([{ hash: 'abc1234', message: 'fix: update workspace', files }])
+    } finally {
+      await service.dispose()
+    }
+  })
+
   it('passes completed groups and remaining failure through the RPC response', async () => {
     const inner = repoRunner()
     let commits = 0

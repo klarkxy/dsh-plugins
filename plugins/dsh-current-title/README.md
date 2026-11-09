@@ -27,6 +27,8 @@ Titles update automatically. Expand **Auto Title** under **Settings → Session 
 - pick a title model (empty follows the default auxiliary model);
 - regenerate the title of the open session.
 
+With the optional **Model Picker** plugin installed, these model menus upgrade to the shared searchable picker with a reasoning-effort slider; without it they keep working as today.
+
 When the title model is left empty the feature follows the **default auxiliary model**; with no default set it uses the current session model, then the host default chat model. The default auxiliary model is shared: set it once under **Settings → Session Management**, and every feature that follows it uses the same one.
 
 When the model list fails to load or some providers are unavailable, use **Retry** beside the model picker; retrying keeps your saved model and prompt draft.

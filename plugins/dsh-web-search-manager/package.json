@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-web-search-manager",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Manage and rank web search and page-reading providers in one settings page—with built-in DuckDuckGo, Exa, Tavily, and others—for the model's web_search and web_fetch tools.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -116,14 +116,14 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-credentials": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-tool-web": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-web": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-web-fetch-http": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-web-search-deepseek": "0.2.1-rc.1",
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-credentials": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tool-web": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-web": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-web-fetch-http": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-web-search-deepseek": "0.2.2-rc.1",
     "@types/react": "18.3.31",
     "react": "^18.2.0"
   },
@@ -163,6 +163,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "2da4175be7618890a273cbebf20821a169bc3f942ff7a630df167ade2da67458"
+    "contentHash": "c9f6ae443df9e08b93e76f98795aaac4fbf39edc9174fc2256a9267c710afe88"
   }
 }

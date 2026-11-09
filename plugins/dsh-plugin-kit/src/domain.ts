@@ -13,9 +13,12 @@ type PluginDomainHandle = {
 
 /**
  * Open table-only plugin state using the host's lossless legacy bootstrap.
- * The JSON backend ignores compatibleVersions in single layout, and treats
- * unsupported/malformed legacy files as absent in per-record layout. Probe
- * an empty result so persistent settings cannot silently become defaults.
+ * The JSON backend treats unsupported/malformed legacy files as absent in
+ * per-record layout; the probe below opens `single` with compatibleVersions
+ * emptied so a legacy stamp reports `version-mismatch` (whether or not the
+ * installed backend accepts compatible stamps in single layout, which
+ * storage-json began doing at 0.2.2). Probe an empty result so persistent
+ * settings cannot silently become defaults.
  * A populated per-record tree is authoritative; the retained legacy source
  * is an initial backup, not a current-data rollback after subsequent writes.
  */

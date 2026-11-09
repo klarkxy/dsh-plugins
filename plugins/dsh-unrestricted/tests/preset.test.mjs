@@ -9,6 +9,10 @@ const pkgRoot = fileURLToPath(new URL("..", import.meta.url));
 const patch = readFileSync(patchUrl, "utf8");
 const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const contracts = readFileSync(new URL("../src/contracts.ts", import.meta.url), "utf8");
+/** The repository-wide development baseline every package's devDependencies pin to. */
+const workspaceBaseline = JSON.parse(
+  readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
+).devDependencies;
 
 /** The string literals of one exported TS constant, however the declaration wraps them. */
 function tsStrings(source, name) {
@@ -307,7 +311,9 @@ test("package manifest declares the browser half the bundle row loads", () => {
   assert.deepEqual(manifest.dsh.client.inject, ["@deepseek-ai/dsh-client-locale"]);
   assert.equal(manifest.peerDependencies["@deepseek-ai/cordis"], ">=4.0.4");
   assert.deepEqual(manifest.peerDependenciesMeta["@deepseek-ai/cordis"], { optional: true });
-  assert.equal(manifest.devDependencies["@deepseek-ai/cordis"], "4.0.5");
+  // The development baseline is the repository-wide pin, not a private copy:
+  // a drifted pin here would typecheck against a Cordis the host never runs.
+  assert.equal(manifest.devDependencies["@deepseek-ai/cordis"], workspaceBaseline["@deepseek-ai/cordis"]);
   assert.equal(manifest.scripts.build,
     "tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-unrestricted");
 });

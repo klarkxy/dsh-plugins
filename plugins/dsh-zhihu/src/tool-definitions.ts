@@ -1,6 +1,6 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { reportExecuted, type ZhihuClientOptions } from './zhihu-client.ts'
-import { ZHIHU_SEARCH_TOOL_NAME, ZHIHU_GLOBAL_SEARCH_TOOL_NAME, ZHIHU_HOT_LIST_TOOL_NAME, ZHIHU_ASK_TOOL_NAME, ZHIHU_KNOWLEDGE_SEARCH_TOOL_NAME } from './contracts.ts'
+import { reportExecuted, ZhihuSearchError, type ZhihuClientOptions } from './zhihu-client.ts'
+import { ZHIHU_RESEARCH_TOOL_NAME } from './contracts.ts'
 import { executeZhihuSearch, renderZhihuSearch, ZHIHU_SEARCH_DEFAULT_COUNT, ZHIHU_SEARCH_MAX_COUNT, type ZhihuSearchResult } from './search-api.ts'
 import {
   ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT, ZHIHU_GLOBAL_SEARCH_MAX_COUNT,
@@ -20,274 +20,88 @@ export type CreateZhihuSearchToolOptions = ZhihuClientOptions & {
   onExecuted?: (event: { ok: boolean; results: number }) => void
 }
 
-const SEARCH_ITEM_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    title: { type: 'string', required: true },
-    type: { type: 'string', required: true },
-    url: { type: 'string', required: true },
-    summary: { type: 'string', required: true },
-    votes: { type: 'integer', required: true },
-    comments: { type: 'integer', required: true },
-    author: { type: 'string', required: true },
-    authority: { type: 'string', required: true },
-    editTime: { type: 'string', required: true },
-  },
-} as const
+const ZHIHU_RESEARCH_ACTIONS = ['search', 'global_search', 'hot_list', 'ask', 'knowledge_search'] as const
+export type ZhihuResearchAction = (typeof ZHIHU_RESEARCH_ACTIONS)[number]
 
-export function createZhihuSearchTool(options: CreateZhihuSearchToolOptions = {}) {
+/** 合并前的五个检索工具各自执行逻辑不变，这里只按 action 分发。 */
+function executeResearch(
+  action: ZhihuResearchAction,
+  args: { query?: string; count?: number; limit?: number; searchDb?: string; model?: string; recallScopes?: unknown },
+  client: ZhihuClientOptions,
+  signal: AbortSignal,
+): Promise<{ result: ZhihuSearchResult | ZhihuGlobalSearchResult | ZhihuHotListResult | ZhihuAskResult | ZhihuKnowledgeSearchResult; results: number }> {
+  const options = { ...client, signal }
+  if (action === 'search') {
+    return executeZhihuSearch(args.query!, args.count ?? ZHIHU_SEARCH_DEFAULT_COUNT, options)
+      .then(result => ({ result, results: result.items.length }))
+  }
+  if (action === 'global_search') {
+    const searchDb: ZhihuGlobalSearchDb = args.searchDb === 'realtime' || args.searchDb === 'static' ? args.searchDb : 'all'
+    return executeZhihuGlobalSearch(args.query!, args.count ?? ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT, searchDb, options)
+      .then(result => ({ result, results: result.items.length }))
+  }
+  if (action === 'hot_list') {
+    return executeZhihuHotList(args.limit ?? ZHIHU_HOT_LIST_DEFAULT_LIMIT, options)
+      .then(result => ({ result, results: result.items.length }))
+  }
+  if (action === 'ask') {
+    const model: ZhihuAskModel = (ZHIHU_ASK_MODELS as readonly string[]).includes(args.model ?? '')
+      ? (args.model as ZhihuAskModel)
+      : ZHIHU_ASK_DEFAULT_MODEL
+    return executeZhihuAsk(args.query!, model, options).then(result => ({ result, results: result.content ? 1 : 0 }))
+  }
+  return executeZhihuKnowledgeSearch(args.query!, args.limit ?? ZHIHU_KNOWLEDGE_SEARCH_DEFAULT_LIMIT, normalizeRecallScopes(args.recallScopes), options)
+    .then(result => ({ result, results: result.items.length }))
+}
+
+function renderResearch(action: ZhihuResearchAction, value: unknown): string {
+  if (action === 'search') return renderZhihuSearch(value as ZhihuSearchResult)
+  if (action === 'global_search') return renderZhihuGlobalSearch(value as ZhihuGlobalSearchResult)
+  if (action === 'hot_list') return renderZhihuHotList(value as ZhihuHotListResult)
+  if (action === 'ask') return renderZhihuAsk(value as ZhihuAskResult)
+  return renderZhihuKnowledgeSearch(value as ZhihuKnowledgeSearchResult)
+}
+
+export function createZhihuResearchTool(options: ZhihuToolOptions = {}) {
   const { onExecuted, ...client } = options
   return defineTool({
-    name: ZHIHU_SEARCH_TOOL_NAME,
-    description: '知乎站内搜索（GET /api/v1/content/zhihu_search），取社区证据；仅作社区/读者反馈参考，不构成 canon，不写入项目文件。',
+    name: ZHIHU_RESEARCH_TOOL_NAME,
+    description:
+      '知乎调研检索与问答，结果仅作社区参考，不构成 canon，不写入项目文件。' +
+      'action：search 站内；global_search 站外；hot_list 热榜；ask 直答；knowledge_search 知识库。',
     parameters: {
-      query: { type: 'string', required: true, description: '搜索词，2-100 字符。' },
-      count: { type: 'integer', description: `返回条数，1-${ZHIHU_SEARCH_MAX_COUNT}，默认 ${ZHIHU_SEARCH_DEFAULT_COUNT}。` },
+      action: { type: 'string', enum: ZHIHU_RESEARCH_ACTIONS, required: true },
+      query: { type: 'string', description: '检索词，2-100 字符；除 hot_list 外必填。' },
+      count: { type: 'integer', description: `search 1-${ZHIHU_SEARCH_MAX_COUNT}（默认 ${ZHIHU_SEARCH_DEFAULT_COUNT}）、global_search 1-${ZHIHU_GLOBAL_SEARCH_MAX_COUNT}（默认 ${ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT}）。` },
+      limit: { type: 'integer', description: `hot_list 1-${ZHIHU_HOT_LIST_MAX_LIMIT}（默认 ${ZHIHU_HOT_LIST_DEFAULT_LIMIT}）、knowledge_search 1-${ZHIHU_KNOWLEDGE_SEARCH_MAX_LIMIT}（默认 ${ZHIHU_KNOWLEDGE_SEARCH_DEFAULT_LIMIT}）。` },
+      searchDb: { type: 'string', enum: ['all', 'realtime', 'static'], description: 'global_search 检索库，默认 all。' },
+      model: { type: 'string', description: 'ask 模型：zhida-thinking-1p5（默认，带思考）、zhida-fast-1p5（简单事实）、zhida-agent（最慢最强，仅明确要求时用）；免费额度不足被拒绝。' },
+      recallScopes: { type: 'array', description: 'knowledge_search 召回范围，默认 public；可加 personal/subscription。', items: { type: 'string', enum: [...ZHIHU_RECALL_SCOPES] } },
     },
     output: {
       schema: {
         type: 'object',
-        additionalProperties: false,
-        properties: {
-          version: { type: 'integer', required: true },
-          query: { type: 'string', required: true },
-          count: { type: 'integer', required: true },
-          items: {
-            type: 'array',
-            required: true,
-            items: SEARCH_ITEM_SCHEMA,
-          },
-          emptyReason: { type: 'string' },
-        },
+        additionalProperties: true,
+        properties: {},
       },
-      render(_args, value) {
-        return [{ type: 'text' as const, text: renderZhihuSearch(value as ZhihuSearchResult) }]
+      render(args, value) {
+        return [{ type: 'text' as const, text: renderResearch((args as { action: ZhihuResearchAction }).action, value) }]
       },
     },
     isConcurrencySafe() { return true },
     async execute(args, exec) {
-      const typed = args as { query: string; count?: number }
+      const typed = args as { action: ZhihuResearchAction; query?: string; count?: number; limit?: number; searchDb?: string; model?: string; recallScopes?: unknown }
+      if (typed.action !== 'hot_list' && (typeof typed.query !== 'string' || !typed.query.trim())) {
+        throw new ZhihuSearchError('INVALID_ARGUMENTS', `action ${typed.action} 需要 query 参数。`)
+      }
       try {
-        const result = await executeZhihuSearch(typed.query, typed.count ?? ZHIHU_SEARCH_DEFAULT_COUNT, {
-          ...client,
-          signal: exec.signal,
-        })
-        reportExecuted(onExecuted, { ok: true, results: result.items.length })
+        const { result, results } = await executeResearch(typed.action, typed, client, exec.signal)
+        reportExecuted(onExecuted, { ok: true, results })
         return result
       } catch (error) {
         reportExecuted(onExecuted, { ok: false, results: 0 })
         throw error
       }
-    },
-  })
-}
-
-const OTHER_SEARCH_ITEM_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    title: { type: 'string', required: true },
-    type: { type: 'string', required: true },
-    url: { type: 'string', required: true },
-    summary: { type: 'string', required: true },
-    votes: { type: 'integer', required: true },
-    comments: { type: 'integer', required: true },
-    author: { type: 'string', required: true },
-    authority: { type: 'string', required: true },
-    editTime: { type: 'string', required: true },
-  },
-} as const
-
-/** 包一层计量:成功报 results,失败报 ok:false 再原样抛出。 */
-async function metered<T>(onExecuted: ZhihuToolOptions['onExecuted'], run: () => Promise<T>, results: (value: T) => number): Promise<T> {
-  try {
-    const value = await run()
-    reportExecuted(onExecuted, { ok: true, results: results(value) })
-    return value
-  } catch (error) {
-    reportExecuted(onExecuted, { ok: false, results: 0 })
-    throw error
-  }
-}
-
-export function createZhihuGlobalSearchTool(options: ZhihuToolOptions = {}) {
-  const { onExecuted, ...client } = options
-  return defineTool({
-    name: ZHIHU_GLOBAL_SEARCH_TOOL_NAME,
-    description: '知乎开放平台全网搜索（GET /api/v1/content/global_search），检索站外公开网页资料；仅作参考，不构成 canon，不写入项目文件。',
-    parameters: {
-      query: { type: 'string', required: true, description: '搜索词，2-100 字符。' },
-      count: { type: 'integer', description: `返回条数，1-${ZHIHU_GLOBAL_SEARCH_MAX_COUNT}，默认 ${ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT}。` },
-      searchDb: { type: 'string', description: '检索库：all（默认）、realtime（实时）、static（静态）。' },
-    },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          version: { type: 'integer', required: true },
-          query: { type: 'string', required: true },
-          count: { type: 'integer', required: true },
-          searchDb: { type: 'string', required: true },
-          items: { type: 'array', required: true, items: OTHER_SEARCH_ITEM_SCHEMA },
-          emptyReason: { type: 'string' },
-        },
-      },
-      render(_args, value) {
-        return [{ type: 'text' as const, text: renderZhihuGlobalSearch(value as ZhihuGlobalSearchResult) }]
-      },
-    },
-    isConcurrencySafe() { return true },
-    async execute(args, exec) {
-      const typed = args as { query: string; count?: number; searchDb?: string }
-      const searchDb: ZhihuGlobalSearchDb = typed.searchDb === 'realtime' || typed.searchDb === 'static' ? typed.searchDb : 'all'
-      return await metered(onExecuted, () => executeZhihuGlobalSearch(
-        typed.query,
-        typed.count ?? ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT,
-        searchDb,
-        { ...client, signal: exec.signal },
-      ), (result) => result.items.length)
-    },
-  })
-}
-
-export function createZhihuHotListTool(options: ZhihuToolOptions = {}) {
-  const { onExecuted, ...client } = options
-  return defineTool({
-    name: ZHIHU_HOT_LIST_TOOL_NAME,
-    description: '知乎热榜（GET /api/v1/content/hot_list），了解当前社区热点；仅作题材参考，不构成 canon，不写入项目文件。',
-    parameters: {
-      limit: { type: 'integer', description: `返回条数，1-${ZHIHU_HOT_LIST_MAX_LIMIT}，默认 ${ZHIHU_HOT_LIST_DEFAULT_LIMIT}。` },
-    },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          version: { type: 'integer', required: true },
-          limit: { type: 'integer', required: true },
-          items: {
-            type: 'array',
-            required: true,
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                title: { type: 'string', required: true },
-                url: { type: 'string', required: true },
-                summary: { type: 'string', required: true },
-              },
-            },
-          },
-        },
-      },
-      render(_args, value) {
-        return [{ type: 'text' as const, text: renderZhihuHotList(value as ZhihuHotListResult) }]
-      },
-    },
-    isConcurrencySafe() { return true },
-    async execute(args, exec) {
-      const typed = args as { limit?: number }
-      return await metered(onExecuted, () => executeZhihuHotList(
-        typed.limit ?? ZHIHU_HOT_LIST_DEFAULT_LIMIT,
-        { ...client, signal: exec.signal },
-      ), (result) => result.items.length)
-    },
-  })
-}
-
-export function createZhihuAskTool(options: ZhihuToolOptions = {}) {
-  const { onExecuted, ...client } = options
-  return defineTool({
-    name: ZHIHU_ASK_TOOL_NAME,
-    description: '知乎直答（POST /v1/chat/completions，OpenAI 兼容），基于社区内容生成综合回答，适合考据与背景调研；仅作参考，不构成 canon，不写入项目文件。',
-    parameters: {
-      query: { type: 'string', required: true, description: '要问的问题。' },
-      model: { type: 'string', description: 'zhida-thinking-1p5（默认，带思考过程）、zhida-fast-1p5（快，仅适合简单事实查询）或 zhida-agent（最慢最强，仅在明确要求时使用）。fast/thinking 仅在免费额度足够时允许；付费模式拒绝未确认计费的模型。' },
-    },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          version: { type: 'integer', required: true },
-          query: { type: 'string', required: true },
-          model: { type: 'string', required: true },
-          content: { type: 'string', required: true },
-          reasoning: { type: 'string', required: true },
-        },
-      },
-      render(_args, value) {
-        return [{ type: 'text' as const, text: renderZhihuAsk(value as ZhihuAskResult) }]
-      },
-    },
-    isConcurrencySafe() { return true },
-    async execute(args, exec) {
-      const typed = args as { query: string; model?: string }
-      const model: ZhihuAskModel = (ZHIHU_ASK_MODELS as readonly string[]).includes(typed.model ?? '')
-        ? (typed.model as ZhihuAskModel)
-        : ZHIHU_ASK_DEFAULT_MODEL
-      return await metered(onExecuted, () => executeZhihuAsk(
-        typed.query,
-        model,
-        { ...client, signal: exec.signal },
-      ), (result) => (result.content ? 1 : 0))
-    },
-  })
-}
-
-export function createZhihuKnowledgeSearchTool(options: ZhihuToolOptions = {}) {
-  const { onExecuted, ...client } = options
-  return defineTool({
-    name: ZHIHU_KNOWLEDGE_SEARCH_TOOL_NAME,
-    description: '知乎知识库检索（POST /api/v1/knowledge/search，RAG 片段），默认只查公开库；网页端上传过资料后可加 personal/subscription 召回；仅作背景参考，不构成 canon，不写入项目文件。',
-    parameters: {
-      query: { type: 'string', required: true, description: '检索词。' },
-      limit: { type: 'integer', description: `返回条数，1-${ZHIHU_KNOWLEDGE_SEARCH_MAX_LIMIT}，默认 ${ZHIHU_KNOWLEDGE_SEARCH_DEFAULT_LIMIT}。` },
-      recallScopes: {
-        type: 'array',
-        description: '召回范围：public（公开库，默认）、personal（个人库）、subscription（订阅库），可多选。',
-        items: { type: 'string', enum: [...ZHIHU_RECALL_SCOPES] },
-      },
-    },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          version: { type: 'integer', required: true },
-          query: { type: 'string', required: true },
-          limit: { type: 'integer', required: true },
-          recallScopes: { type: 'array', required: true, items: { type: 'string' } },
-          items: {
-            type: 'array',
-            required: true,
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                docName: { type: 'string', required: true },
-                originUrl: { type: 'string', required: true },
-                snippets: { type: 'array', required: true, items: { type: 'string' } },
-              },
-            },
-          },
-        },
-      },
-      render(_args, value) {
-        return [{ type: 'text' as const, text: renderZhihuKnowledgeSearch(value as ZhihuKnowledgeSearchResult) }]
-      },
-    },
-    isConcurrencySafe() { return true },
-    async execute(args, exec) {
-      const typed = args as { query: string; limit?: number; recallScopes?: unknown }
-      return await metered(onExecuted, () => executeZhihuKnowledgeSearch(
-        typed.query,
-        typed.limit ?? ZHIHU_KNOWLEDGE_SEARCH_DEFAULT_LIMIT,
-        normalizeRecallScopes(typed.recallScopes),
-        { ...client, signal: exec.signal },
-      ), (result) => result.items.length)
     },
   })
 }

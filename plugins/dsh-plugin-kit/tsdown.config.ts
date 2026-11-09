@@ -21,6 +21,7 @@ export default defineConfig({
     'model-settings-client': 'src/model-settings-client.ts',
     'client-utils': 'src/client-utils.ts',
     'model-menu': 'src/model-menu.ts',
+    'model-picker': 'src/model-picker.tsx',
     'llm-call': 'src/llm-call.ts',
     'auxiliary-model': 'src/auxiliary-model.ts',
     'auxiliary-context': 'src/auxiliary-context.ts',

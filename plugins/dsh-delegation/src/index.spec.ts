@@ -13,6 +13,7 @@ function domain() {
   const rows = {
     settings: new Map<string, unknown>(),
     sessions: new Map<string, unknown>(),
+    recent: new Map<string, unknown>(),
   }
   // Tables are stable instances: the service keeps the handle it opened.
   const tables = {
@@ -24,12 +25,16 @@ function domain() {
       get: (key: string) => rows.sessions.get(key),
       put: async (key: string, value: unknown) => { rows.sessions.set(key, value) },
     },
+    recent: {
+      get: (key: string) => rows.recent.get(key),
+      put: async (key: string, value: unknown) => { rows.recent.set(key, value) },
+    },
   }
   let closed = 0
   return {
     rows, tables,
     get closed() { return closed },
-    table: (name: 'settings' | 'sessions') => tables[name],
+    table: (name: 'settings' | 'sessions' | 'recent') => tables[name],
     close: async () => { closed++ },
   }
 }
@@ -150,5 +155,32 @@ describe('delegation apply wiring', () => {
     store.tables.sessions.put = async () => { throw new Error('io error') }
     await expect(ctx.serial('agent/created', { agent: agent(top('broken')), source: 'startup' })).resolves.toBeUndefined()
     expect(warn).toHaveBeenCalled()
+  })
+
+  it('remembers the last creation-page choice for later fresh sessions only', async () => {
+    const { ctx, sessions, agents, store } = await mount()
+    const s1 = top('s1')
+    sessions.set('s1', s1)
+    agents.set('s1', agent(s1))
+    await ctx.delegation.updateSession('s1', true, 0)
+    expect(store.rows.recent.get('global')).toEqual({ enabled: true })
+
+    // The remembered choice seeds the next fresh session, including after a
+    // restart: a new service instance reads the same stored row.
+    const s2 = top('s2')
+    sessions.set('s2', s2)
+    agents.set('s2', agent(s2))
+    await ctx.serial('agent/created', { agent: agent(s2), source: 'startup' })
+    expect(store.rows.sessions.get('s2')).toEqual({ enabled: true, revision: 1 } satisfies SessionDelegation)
+
+    // A human fork inherits its parent and must not rewrite the remembered
+    // choice, whichever way its own switch is set.
+    const forked = { id: 'f1', header: { parentSession: 's1', isSeeded: true } }
+    sessions.set('f1', forked)
+    agents.set('f1', agent(forked))
+    await ctx.serial('agent/created', { agent: agent(forked), source: 'startup' })
+    await ctx.delegation.updateSession('f1', false, 1)
+    expect(store.rows.sessions.get('f1')).toEqual({ enabled: false, revision: 2 } satisfies SessionDelegation)
+    expect(store.rows.recent.get('global')).toEqual({ enabled: true })
   })
 })

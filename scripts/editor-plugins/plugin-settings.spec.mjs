@@ -748,18 +748,40 @@ describe('shared Session Management settings column', () => {
     {
       pkg: 'shared-auxiliary-card',
       apply: ctx => ctx.effect(() => registerAuxiliaryModelSettings(ctx)),
-      id: AUX_ROW.id, order: AUX_ROW.order, marker: 'data-testid="auxiliary-model-settings"', aux: true,
+      rows: [{ id: AUX_ROW.id, order: AUX_ROW.order, marker: 'data-testid="auxiliary-model-settings"' }],
+      aux: true,
     },
-    { pkg: '@klarkxy/dsh-session-manager', apply: sessionManager, id: 'session-manager', order: 65, marker: 'data-testid="session-manager-settings-item"', aux: true },
-    { pkg: '@klarkxy/dsh-current-title', apply: currentTitle, id: 'current-title', order: 70, marker: 'data-testid="current-title-settings-item"', aux: true },
-    { pkg: '@klarkxy/dsh-safe-auto', apply: safeAuto, id: 'safe-auto', order: 80, marker: 'data-testid="safe-auto-settings-item"', aux: true },
+    {
+      pkg: '@klarkxy/dsh-session-manager',
+      apply: sessionManager,
+      rows: [
+        { id: 'session-manager.composer', order: 60, marker: 'data-testid="session-manager-composer-settings-item"' },
+        { id: 'session-manager.auto-continue', order: 62, marker: 'data-testid="session-manager-auto-continue-settings-item"' },
+        { id: 'session-manager.return', order: 64, marker: 'data-testid="session-manager-return-settings-item"' },
+        { id: 'session-manager.handoff', order: 66, marker: 'data-testid="session-manager-handoff-settings-item"' },
+        { id: 'session-manager.agent-actions', order: 68, marker: 'data-testid="session-manager-agent-actions-settings-item"' },
+      ],
+      aux: true,
+    },
+    {
+      pkg: '@klarkxy/dsh-current-title',
+      apply: currentTitle,
+      rows: [{ id: 'current-title', order: 70, marker: 'data-testid="current-title-settings-item"' }],
+      aux: true,
+    },
+    {
+      pkg: '@klarkxy/dsh-safe-auto',
+      apply: safeAuto,
+      rows: [{ id: 'safe-auto', order: 80, marker: 'data-testid="safe-auto-settings-item"' }],
+      aux: true,
+    },
   ]
-  const rowOrder = Object.fromEntries(participants.map(entry => [entry.id, entry.order]))
+  const rowOrder = Object.fromEntries(participants.flatMap(entry => entry.rows.map(row => [row.id, row.order])))
   // The rows a subset contributes: its own ids plus the shared card's row
   // whenever any loaded participant retains it, all in nav order.
   const expectedIds = list => [...new Set([
     ...(list.some(entry => entry.aux) ? [AUX_ROW.id] : []),
-    ...list.map(entry => entry.id),
+    ...list.flatMap(entry => entry.rows.map(row => row.id)),
   ])].sort((left, right) => rowOrder[left] - rowOrder[right])
 
   const pageRows = h => h.core.entries(SECTION)
@@ -821,7 +843,7 @@ describe('shared Session Management settings column', () => {
     const h = createHost([SECTION])
     await load(h, participants)
     const html = renderPage(h)
-    for (const entry of participants) expect(html).toContain(entry.marker)
+    for (const entry of participants) for (const row of entry.rows) expect(html).toContain(row.marker)
   })
 
   it('keeps the page when its first creator unloads and releases it with the last participant', async () => {
@@ -870,7 +892,7 @@ describe('shared Session Management settings column', () => {
     h.declare(SECTION)
     await settle()
     expect(pageRows(h)).toHaveLength(1)
-    expect(ids(itemRows(h))).toEqual([participants[0].id])
+    expect(ids(itemRows(h))).toEqual([participants[0].rows[0].id])
   })
 
   it('never writes settings, credentials or models while opening the column', async () => {
@@ -892,12 +914,12 @@ describe('shared Session Management settings column', () => {
     const one = h.scope('copy-a')
     one.ctx.effect(() => first.registerSessionSettingsItem(one.ctx, { id: 'delegation', order: 60 }, () => null))
     const other = h.scope('copy-b')
-    other.ctx.effect(() => second.registerSessionSettingsItem(other.ctx, { id: 'session-manager', order: 65 }, () => null))
+    other.ctx.effect(() => second.registerSessionSettingsItem(other.ctx, { id: 'session-manager.composer', order: 60 }, () => null))
     await settle()
     // Two copies of the helper, one page: the rendezvous is the root service,
     // not a module singleton or a window global.
     expect(pageRows(h)).toHaveLength(1)
-    expect(ids(itemRows(h))).toEqual(['delegation', 'session-manager'])
+    expect(ids(itemRows(h))).toEqual(['delegation', 'session-manager.composer'])
   })
 
   it('mounts the page icon on a late seat and releases it with the column', async () => {

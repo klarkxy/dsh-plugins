@@ -30,6 +30,14 @@
       "retired": true
     },
     {
+      "name": "@klarkxy/dsh-context-cleaner",
+      "state": "testing",
+      "reason": {
+        "zh": "已进入首次发布检查；发布并验证 npm 归档后转为已发布。",
+        "en": "Undergoing first-release checks; moves to Published after the npm archive is published and verified."
+      }
+    },
+    {
       "name": "@klarkxy/dsh-current-title",
       "state": "published",
       "reason": {
@@ -40,6 +48,14 @@
         "version": "0.1.0",
         "publishedAt": "2026-09-23T08:28:55.941Z",
         "integrity": "sha512-QKJvQuJ0ZblvYlHtp+o6w6NwymWtlixFeP1EdSo7bQz+b3mI7vN63FD1xH64hM2XfWqv8OdBfNYuxnbq8SYKUw=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-deep-view",
+      "state": "testing",
+      "reason": {
+        "zh": "已进入首次发布检查；发布并验证 npm 归档后转为已发布。",
+        "en": "Undergoing first-release checks; moves to Published after the npm archive is published and verified."
       }
     },
     {
@@ -133,6 +149,14 @@
         "version": "0.0.0-stage",
         "publishedAt": "2026-10-11T01:40:22.34Z",
         "integrity": "sha512-oO/k4zAa0tQ6/CfS5/wrSttbRslJSqdqj5f28PNCz0BZnKoY8kEfcl3j1V4SlI3TXMUVpSbzUuCQnflD2Up9ww=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-model-picker",
+      "state": "testing",
+      "reason": {
+        "zh": "已进入首次发布检查；发布并验证 npm 归档后转为已发布。",
+        "en": "Undergoing first-release checks; moves to Published after the npm archive is published and verified."
       }
     },
     {

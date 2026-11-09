@@ -11,7 +11,7 @@ it('allows explicit host routes and HTTPS settings links, rejecting unsafe targe
   }
 })
 it('keeps configuration links explicit, owner-independent and safe through discovery', async () => {
-  const web = new WebRuntime(new Context())
+  const web = new WebRuntime(new Context(), { searchProvider: { get: () => undefined }, fetchProvider: { get: () => undefined } } as never)
   const manager = new WebSearchManager({ web, resolveCredential: async () => undefined, save: async () => {} })
   try {
     web.registerSearchProvider({ id: 'external', dshWebManagement: {

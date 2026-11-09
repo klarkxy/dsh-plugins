@@ -7,7 +7,10 @@
  */
 import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import type { AutoContinueMode, AutoContinueStatus, ResolvedConfig } from './contracts.ts'
-import { parseAutoContinue, type SessionAutoContinue } from './storage.ts'
+import {
+  AUTO_CONTINUE_RECENT_KEY, parseAutoContinue, parseAutoContinueRecent,
+  type AutoContinueRecent, type SessionAutoContinue,
+} from './storage.ts'
 
 export class AutoContinueError extends Error {
   readonly code: string
@@ -41,9 +44,21 @@ export interface AutoContinueObservationLike {
   [Symbol.dispose](): void
 }
 
+export interface AutoContinueRecentTableLike {
+  get(key: string): unknown
+  put(key: string, value: AutoContinueRecent): Promise<void>
+}
+
 export interface AutoContinueServiceDeps {
   /** Parsed per-session rows (key: session id); undefined while storage is unmounted. */
   readonly records: () => AutoContinueTableLike | undefined
+  /**
+   * The last successful creation-page choice (one key: 'global'). Fresh
+   * top-level sessions seed from it instead of the configured mode; human
+   * forks inherit their parent and never touch it. May share the records
+   * table's mount lifecycle.
+   */
+  readonly recent?: () => AutoContinueRecentTableLike | undefined
   readonly sessionStore?: { get(id: string): AutoContinueSessionLike | undefined }
   readonly agents?: { get(id: string): AutoContinueAgentLike | undefined }
   /** Durable turn-boundary projection, including inherited and resumed turns. */
@@ -75,6 +90,12 @@ export class AutoContinueService {
   record(sessionId: string): SessionAutoContinue | undefined {
     const table = this.deps.records()
     return table === undefined ? undefined : parseAutoContinue(table.get(sessionId))
+  }
+
+  /** The remembered new-session choice; undefined when none was saved. */
+  recentChoice(): AutoContinueRecent | undefined {
+    const table = this.deps.recent?.()
+    return table === undefined ? undefined : parseAutoContinueRecent(table.get(AUTO_CONTINUE_RECENT_KEY))
   }
 
   private locked(session: AutoContinueSessionLike | undefined, agent: AutoContinueAgentLike | undefined): boolean {
@@ -150,6 +171,20 @@ export class AutoContinueService {
             throw new AutoContinueError('stale', 'session-manager: session state changed; refresh and retry')
           }
           await table.put(sessionId, { mode, max: this.deps.config().autoContinueMax, revision: revision + 1 })
+          // Remember the choice only for genuinely fresh sessions: a human
+          // fork carries parentSession and keeps the remembered default
+          // untouched, whichever way its own switch flips. Best-effort: a
+          // failed memo write must not report a committed update as failed.
+          const forked = typeof (header as { parentSession?: unknown } | undefined)?.parentSession === 'string'
+          const recent = this.deps.recent?.()
+          if (!forked && recent) {
+            try {
+              // Serialized on a shared chain so concurrent updates on
+              // different sessions cannot interleave their memo puts: the
+              // enqueue order here is the commit order in the recent table.
+              await this.enqueue('recent', () => recent.put(AUTO_CONTINUE_RECENT_KEY, { mode }))
+            } catch { /* the session row is committed; a stale memo only costs one fresh default */ }
+          }
         })
       } catch (error) {
         if (!entered) throw new AutoContinueError('session-busy', 'session-manager: session is busy; refresh and retry')
@@ -161,10 +196,12 @@ export class AutoContinueService {
 
   /**
    * `agent/created` seeding. Only a fresh ('startup') non-subagent session gets
-   * an initial row: a human fork inherits its parent's choice, every other new
-   * top-level session takes the configured default. Resumed, cleared and
-   * compacted sessions keep whatever they already have — and stay off when
-   * they predate the plugin.
+   * an initial row: a human fork inherits its parent's choice or the
+   * configured default when the parent has none, every other new top-level
+   * session takes the remembered new-session choice, falling back to the
+   * configured default when none exists. Resumed, cleared and compacted
+   * sessions keep whatever they already have — and stay off when they
+   * predate the plugin.
    */
   async seed(agent: AutoContinueAgentLike, source: string): Promise<void> {
     if (source !== 'startup') return
@@ -180,8 +217,11 @@ export class AutoContinueService {
         : undefined
       const inherited = parentId ? this.record(parentId) : undefined
       const config = this.deps.config()
+      // A fork falls back to the configured default when its parent row is
+      // missing — the remembered choice only applies to genuinely new
+      // sessions, so an old fork keeps its pre-existing semantics.
       await table.put(id, {
-        mode: inherited?.mode ?? config.autoContinueMode,
+        mode: parentId ? inherited?.mode ?? config.autoContinueMode : this.recentChoice()?.mode ?? config.autoContinueMode,
         max: inherited?.max ?? config.autoContinueMax,
         revision: 1,
       })

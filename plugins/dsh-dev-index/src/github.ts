@@ -187,7 +187,7 @@ function codeResult(item: unknown) {
     manifestPath: path,
     url: link(item.html_url),
     installSpec: directory ? `github:${fullName}#path:/${directory}` : `github:${fullName}`,
-    hint: "Resolve a pinned commit with dsh_github_fetch before installing.",
+    hint: 'Resolve a pinned commit with dsh_plugins fetch_github before installing.',
     verification: "candidate-only",
   };
 }

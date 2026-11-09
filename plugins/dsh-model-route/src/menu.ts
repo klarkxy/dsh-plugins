@@ -19,7 +19,7 @@ export function modelMenuEffortLabel(effort: { id: string; name: string }, local
 /** One provider group in the menu, in catalog order, after applying the search query. */
 export interface ModelMenuGroup {
   readonly provider: string
-  /** Provider display name, split from the catalog "Provider / Model" label. */
+  /** Provider display name, from the catalog group or split from the "Provider / Model" label. */
   readonly name: string
   readonly items: readonly ModelMenuChoice[]
 }
@@ -36,12 +36,15 @@ export function groupModelMenuChoices(choices: readonly ModelMenuChoice[], query
   const matched = needle
     ? choices.filter(choice => choice.label.toLowerCase().includes(needle)
       || choice.model.toLowerCase().includes(needle)
-      || choice.provider.toLowerCase().includes(needle))
+      || choice.provider.toLowerCase().includes(needle)
+      // The provider display name is a separate search channel: a catalog may
+      // name a provider differently from its id, and callers search by name.
+      || (choice.providerLabel?.toLowerCase().includes(needle) ?? false))
     : choices
   const groups: Array<{ provider: string; name: string; items: ModelMenuChoice[] }> = []
   for (const choice of matched) {
     const sep = choice.label.indexOf(' / ')
-    const name = sep > 0 ? choice.label.slice(0, sep) : choice.provider
+    const name = choice.providerLabel ?? (sep > 0 ? choice.label.slice(0, sep) : choice.provider)
     const last = groups.at(-1)
     if (last && last.provider === choice.provider) last.items.push(choice)
     else groups.push({ provider: choice.provider, name, items: [choice] })

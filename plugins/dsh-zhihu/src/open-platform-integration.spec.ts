@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import type { Context } from '@deepseek-ai/cordis'
 import { apply as applyTools } from './tools.ts'
 import { createZhihuService } from './index.ts'
-import { createZhihuQuestionRecommendationsTool, ZHIHU_OPEN_PLATFORM_TOOL_FACTORIES } from './open-platform-tools.ts'
+import { createZhihuAccountTool } from './open-platform-tools.ts'
 import { ZHIHU_OPEN_PLATFORM_APIS, type ZhihuOpenPlatformOperation, type ZhihuOpenPlatformResult } from './open-platform.ts'
 import type { ZhihuClientOptions, ZhihuSearchExecuted, ZhihuSearchFetcher } from './zhihu-client.ts'
 import type { ZhihuQuotaId } from './contracts.ts'
@@ -17,13 +17,13 @@ type Tool = {
   output: { render(args: unknown, value: unknown): Array<{ type: string; text: string }> }
 }
 const cases: Array<[ZhihuOpenPlatformOperation, string, Record<string, unknown>]> = [
-  ['question.recommendations', 'zhihu_question_recommendations', {}],
-  ['question.answers', 'zhihu_question_answers', { questionUrl: 'https://www.zhihu.com/question/1' }],
-  ['content.detail', 'zhihu_user_content_detail', { contentUrl: 'https://www.zhihu.com/answer/1' }],
-  ['content.comments', 'zhihu_user_content_comments', { contentUrl: 'https://www.zhihu.com/answer/1' }],
-  ['creator.account.stats', 'zhihu_creator_account_stats', {}],
-  ['creator.content.stats', 'zhihu_creator_content_stats', { contentUrl: 'https://www.zhihu.com/answer/1' }],
-  ['quota', 'zhihu_quota', {}],
+  ['question.recommendations', 'question_recommendations', {}],
+  ['question.answers', 'question_answers', { questionUrl: 'https://www.zhihu.com/question/1' }],
+  ['content.detail', 'content_detail', { contentUrl: 'https://www.zhihu.com/answer/1' }],
+  ['content.comments', 'content_comments', { contentUrl: 'https://www.zhihu.com/answer/1' }],
+  ['creator.account.stats', 'creator_account_stats', {}],
+  ['creator.content.stats', 'creator_content_stats', { contentUrl: 'https://www.zhihu.com/answer/1' }],
+  ['quota', 'quota', {}],
 ]
 function fixture(fetcher?: ZhihuSearchFetcher) {
   const stored: Array<{ ok: boolean; results?: number; quotaId?: ZhihuQuotaId }> = []
@@ -45,37 +45,42 @@ function fixture(fetcher?: ZhihuSearchFetcher) {
   return { service, tools, stored, emitted, paths, options }
 }
 const signal = () => new AbortController().signal
+const accountTool = (tools: Tool[]) => tools.find(tool => tool.name === 'zhihu_account')!
 
 describe('open platform real RPC and optional tool registration', () => {
-  it('registers all 12 unique tools and preserves the five old names', async () => {
+  it('registers the two merged tools that cover all former operations', async () => {
     const { service, tools } = fixture()
-    assert.equal(tools.length, 12)
-    assert.equal(new Set(tools.map(tool => tool.name)).size, 12)
-    for (const name of ['zhihu_search', 'zhihu_global_search', 'zhihu_hot_list', 'zhihu_ask', 'zhihu_knowledge_search', ...cases.map(([, name]) => name)]) {
-      assert.ok(tools.some(tool => tool.name === name), name)
-    }
+    assert.equal(tools.length, 2)
+    assert.deepEqual(tools.map(tool => tool.name).sort(), ['zhihu_account', 'zhihu_research'])
+    const account = accountTool(tools)
+    const actions = (((account.parameters as { properties?: Record<string, { enum?: string[] }> }).properties?.action?.enum) ?? []).sort()
+    assert.deepEqual(actions, [...cases.map(([, action]) => action)].sort())
+    const research = tools.find(tool => tool.name === 'zhihu_research')!
+    assert.deepEqual((((research.parameters as { properties?: Record<string, { enum?: string[] }> }).properties?.action?.enum) ?? []).sort(),
+      ['ask', 'global_search', 'hot_list', 'knowledge_search', 'search'])
     await service.dispose()
   })
-  for (const [operation, name, input] of cases) it(`${operation} has equivalent RPC/tool output and an actual executable route`, async () => {
+  for (const [operation, action, input] of cases) it(`${operation} has equivalent RPC/tool output and an actual executable route`, async () => {
     const { service, tools, paths, stored } = fixture()
     const rpc = await service.call(operation, input, signal())
     assert.equal(rpc.ok, true)
     if (!rpc.ok) throw new Error(rpc.error.message)
-    const tool = tools.find(tool => tool.name === name)!
-    const result = await tool.execute(input, { signal: signal() })
+    const tool = accountTool(tools)
+    const result = await tool.execute({ action, ...input }, { signal: signal() })
     assert.deepEqual(rpc.value, result)
     assert.deepEqual(paths, [ZHIHU_OPEN_PLATFORM_APIS[operation].path, ZHIHU_OPEN_PLATFORM_APIS[operation].path])
     assert.equal(tool.output.render(input, result)[0]?.type, 'text')
     assert.match(tool.description, /Access Secret.*OAuth/)
-    assert.equal(Object.keys(tool.parameters).some(key => /token|secret|oauth/i.test(key)), false)
+    assert.equal(Object.keys((tool.parameters as { properties?: Record<string, unknown> }).properties ?? tool.parameters).some(key => /token|secret|oauth/i.test(key)), false)
     await service.dispose()
     assert.equal(stored.length, operation === 'quota' ? 0 : 2)
   })
   it('serializes one event per concurrent tool/RPC operation, with the correct quota IDs', async () => {
     const { service, tools, stored, emitted } = fixture()
-    await Promise.all(cases.flatMap(([operation, name, input]) => [
+    const tool = accountTool(tools)
+    await Promise.all(cases.flatMap(([operation, action, input]) => [
       service.call(operation.replaceAll('.', '_'), input, signal()),
-      tools.find(tool => tool.name === name)!.execute(input, { signal: signal() }),
+      tool.execute({ action, ...input }, { signal: signal() }),
     ]))
     await service.dispose()
     assert.equal(stored.length, 12, 'six business operations through two entry points; quota is not metered')
@@ -112,7 +117,7 @@ describe('open platform real RPC and optional tool registration', () => {
   it('does not count even failed quota reads as business usage', async () => {
     const { service, tools, stored } = fixture(async () => { throw new Error('network unavailable') })
     assert.equal((await service.call('quota', {}, signal())).ok, false)
-    await assert.rejects(tools.find(tool => tool.name === 'zhihu_quota')!.execute({}, { signal: signal() }))
+    await assert.rejects(accountTool(tools).execute({ action: 'quota' }, { signal: signal() }))
     await service.dispose()
     assert.equal(stored.length, 0)
   })
@@ -135,14 +140,14 @@ describe('open platform real RPC and optional tool registration', () => {
   })
   it('observer failures never turn successful tool results into errors', async () => {
     const { service, options } = fixture()
-    const tool = createZhihuQuestionRecommendationsTool({ ...options, onExecuted() { throw new Error('observer') } }) as unknown as Tool
-    const result = await tool.execute({}, { signal: signal() })
+    const tool = createZhihuAccountTool({ ...options, onExecuted() { throw new Error('observer') } }) as unknown as Tool
+    const result = await tool.execute({ action: 'question_recommendations' }, { signal: signal() })
     assert.equal(result.operation, 'question.recommendations')
     await service.dispose()
   })
   it('counts a failed tool execution exactly once before rethrowing', async () => {
     const { service, tools, stored } = fixture(async () => { throw new Error('offline') })
-    await assert.rejects(tools.find(tool => tool.name === 'zhihu_question_answers')!.execute({ questionUrl: 'https://www.zhihu.com/question/1' }, { signal: signal() }))
+    await assert.rejects(accountTool(tools).execute({ action: 'question_answers', questionUrl: 'https://www.zhihu.com/question/1' }, { signal: signal() }))
     await service.dispose()
     assert.deepEqual(stored, [{ ok: false, results: 0, quotaId: 'question_discovery' }])
   })
@@ -155,8 +160,8 @@ describe('open platform real RPC and optional tool registration', () => {
       return await new Promise(() => {})
     })
     const rpc = service.call('question.recommendations', {}, signal())
-    const tool = tools.find(tool => tool.name === 'zhihu_creator_account_stats')!
-    const execution = tool.execute({}, { signal: signal() }).then(() => undefined, error => error)
+    const tool = accountTool(tools)
+    const execution = tool.execute({ action: 'creator_account_stats' }, { signal: signal() }).then(() => undefined, error => error)
     await waiting
     await service.dispose()
     const rpcResult = await rpc
@@ -165,10 +170,15 @@ describe('open platform real RPC and optional tool registration', () => {
     assert.equal(rpcResult.error.code, 'cancelled')
     assert.ok(await execution instanceof Error)
     assert.deepEqual(stored, [{ ok: false, results: 0, quotaId: 'question_discovery' }, { ok: false, results: 0, quotaId: 'creator' }])
-    await assert.rejects(tool.execute({}, { signal: signal() }))
+    await assert.rejects(tool.execute({ action: 'creator_account_stats' }, { signal: signal() }))
     assert.equal(started, 2)
   })
-  it('exports seven new factories without depending on an RPC-only wrapper', () => {
-    assert.equal(ZHIHU_OPEN_PLATFORM_TOOL_FACTORIES.length, 7)
+  it('rejects a missing required parameter with a clear per-action error', async () => {
+    const { service, tools, stored } = fixture(async () => { throw new Error('offline') })
+    const tool = accountTool(tools)
+    await assert.rejects(tool.execute({ action: 'question_answers' }, { signal: signal() }), /questionUrl 必填/)
+    await assert.rejects(tool.execute({ action: 'content_comments' }, { signal: signal() }), /contentUrl 必填/)
+    await service.dispose()
+    assert.equal(stored.length, 0)
   })
 })

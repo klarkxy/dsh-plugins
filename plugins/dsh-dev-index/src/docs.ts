@@ -31,7 +31,7 @@ function revision(text: string): string {
 // IDs are relative Markdown paths, never arbitrary URLs or filesystem paths.
 export function docUrl(id: string): string {
   if (id.length > 300 || !/^(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.md$/.test(id)) {
-    throw new Error("Invalid document ID. Use an id returned by dsh_docs_search.");
+    throw new Error("Invalid document ID. Use an id returned by dsh_docs search.");
   }
   return `${DOCS_ROOT}${id}`;
 }

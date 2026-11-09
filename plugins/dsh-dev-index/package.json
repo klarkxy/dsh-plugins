@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-dev-index",
-  "version": "0.2.9",
-  "description": "DSH Docs: browse official DSH developer documentation in the Plugins page; Creator mode gets read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs_search, dsh_docs_fetch, dsh_plugins_search, dsh_plugins_fetch, dsh_github_fetch).",
+  "version": "0.3.0",
+  "description": "DSH Docs: browse official DSH developer documentation in the Plugins page; the agent gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs, dsh_plugins).",
   "icon": "./icon.svg",
   "keywords": [
     "dsh",
@@ -17,11 +17,8 @@
     "plugin-search",
     "npm",
     "github",
-    "dsh_docs_search",
-    "dsh_docs_fetch",
-    "dsh_plugins_search",
-    "dsh_plugins_fetch",
-    "dsh_github_fetch"
+    "dsh_docs",
+    "dsh_plugins"
   ],
   "repository": {
     "type": "git",
@@ -113,19 +110,20 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/schemastery": "3.18.5",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-agent-preset-registry": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-scope": "0.2.1-rc.1"
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/schemastery": "3.19.0",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-scope": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-util-values": "0.2.2-rc.1"
   },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "e56ecbbc8a6cfae84292116b0c4900e1becb956ad0e93432236a103f07dd6337"
+    "contentHash": "ae46aaa4f67b638094424aaa1e68587c4c5e295a5b51a460229be35677325deb"
   }
 }

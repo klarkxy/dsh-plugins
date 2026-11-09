@@ -34,7 +34,7 @@ Recording covers reviews run after installing the review-history feature. Record
 
 | Tool | What it does |
 |---|---|
-| `safe_auto_history` | Read-only lookup of the current session's review history. `list` returns summaries and includes a next-page cursor when more records remain; `get` returns one complete record. Use Settings → Session Management → Safe Auto to read history across sessions. Reading history is purely local and leaves the reviewer model idle. |
+| `safe_auto_history` | Read-only lookup of the current session's review history. `list` returns summaries and includes a next-page cursor when more records remain; `get` returns one complete record. Use Settings → Session Management → Safe Auto to read history across sessions. Reading history is purely local and leaves the reviewer model idle. Available only while Safe Auto is enabled in the plugin configuration. |
 
 ## What gets reviewed
 

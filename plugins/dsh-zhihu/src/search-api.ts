@@ -20,7 +20,7 @@ import {
   type ZhihuSearchItem,
 } from './zhihu-client.ts'
 
-export { ZHIHU_SEARCH_TOOL_NAME } from './contracts.ts'
+export { ZHIHU_RESEARCH_TOOL_NAME } from './contracts.ts'
 export {
   resolveZhihuToken,
   ZhihuSearchError,

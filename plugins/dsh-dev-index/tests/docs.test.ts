@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { CACHE_TTL_MS, DOCS_INDEX, DOCS_ROOT, DocsClient, MAX_BYTES, docUrl, parseIndex } from "../src/docs.js";
-import { docsTools } from "../src/docs-tools.js";
+import { docsTool } from "../src/docs-tools.js";
 
 const index = [
   "# DeepSeek Harness",
@@ -111,14 +111,16 @@ describe("official docs", () => {
     await client.dispose(); await rejected2;
     await expect(client.search({ query: "plugin" }, signal())).rejects.toMatchObject({ name: "AbortError" });
   });
-  it("defines real DSH tools with validated arguments and reference-only rendering", async () => {
+  it("defines a real DSH tool with validated arguments and reference-only rendering", async () => {
     const f = fixture();
-    const [search, read] = docsTools(f.client);
-    const exec = { signal: signal() } as Parameters<typeof search.execute>[1];
-    const result = await search.execute({ query: "plugin" }, exec);
-    expect(search.output.render({}, result as never)[0]).toMatchObject({ type: "text", text: expect.stringContaining("untrusted reference data") });
-    await expect(search.execute({ query: 123 }, exec)).rejects.toThrow();
-    const doc = await read.execute({ id: "develop/plugin.md" }, exec);
+    const docs = docsTool(f.client);
+    const exec = { signal: signal() } as Parameters<typeof docs.execute>[1];
+    const result = await docs.execute({ action: "search", query: "plugin" }, exec);
+    expect(docs.output.render({}, result as never)[0]).toMatchObject({ type: "text", text: expect.stringContaining("untrusted reference data") });
+    await expect(docs.execute({ action: "search", query: 123 }, exec)).rejects.toThrow();
+    await expect(docs.execute({ action: "search" }, exec)).rejects.toThrow(/requires query/);
+    const doc = await docs.execute({ action: "fetch", id: "develop/plugin.md" }, exec);
     expect(doc).toMatchObject({ content: pageText, nextOffset: null });
+    await expect(docs.execute({ action: "fetch" }, exec)).rejects.toThrow(/requires an id/);
   });
 });

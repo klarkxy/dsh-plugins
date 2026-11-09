@@ -4,9 +4,10 @@ import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
 import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
-import { CONFIG_READ_ENDPOINT, DELETE_DIALOG_ID, PLUGIN_NAME, SESSION_SETTINGS_ITEM_ID, USER_ACTIONS_SLOT, type ConfigView } from './contracts.ts'
+import { CONFIG_READ_ENDPOINT, DELETE_DIALOG_ID, PLUGIN_NAME, SESSION_SETTINGS_ITEMS, USER_ACTIONS_SLOT, type ConfigView } from './contracts.ts'
 import { wireSharedSettingsRoot } from './client-test-ctx.ts'
-import { apply, SessionManagerSettingsItem } from './client.tsx'
+import { apply } from './client.tsx'
+import { ComposerSettings, SessionSettingsDetails } from './settings-panel.tsx'
 import { createPresenceConfigModel } from './presence-model.ts'
 
 /** Minimal cordis-shaped context: real SlotCore for slots, a map-backed get/provide root. */
@@ -101,11 +102,12 @@ describe('session menu registration', () => {
       'dsh.session-settings.item': { kind: 'list', scope: 'root' },
     })
     // The shared auxiliary-model card contributes its own row into the same
-    // column (root-owned, order 55); this plugin's row follows at order 65.
+    // column (root-owned, order 55); this plugin's rows follow, one per feature.
     const items = core.entriesOfSlot('dsh.session-settings.item')
-    expect(items).toHaveLength(2)
-    expect(items.map(item => item.options.id)).toEqual(['auxiliary-model', SESSION_SETTINGS_ITEM_ID])
-    expect(items[1].options).toMatchObject({ order: 65 })
+    expect(items.map(item => item.options.id)).toEqual(['auxiliary-model', ...SESSION_SETTINGS_ITEMS.map(item => item.id)])
+    expect(items.slice(1).map(item => item.options.order)).toEqual(SESSION_SETTINGS_ITEMS.map(item => item.order))
+    expect(SESSION_SETTINGS_ITEMS.map(item => item.id)).toContain('session-manager.handoff')
+    expect(SESSION_SETTINGS_ITEMS.map(item => item.id)).not.toContain('session-manager.models')
     expect(specs.some(spec => spec['name'] === 'settings.general.item')).toBe(false)
     expect(core.entriesOfSlot('settings.general.item')).toEqual([])
     unload()
@@ -120,6 +122,7 @@ describe('session-manager settings item', () => {
   const values: ConfigView = {
     recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed',
     model: null, ghostModel: null, judgeModel: null, handoffModel: null, autoContinueMode: 'off', autoContinueMax: 3,
+    allowSelfFork: false, allowSendMessage: false,
   }
 
   it('mounts the settings body on first expand and keeps it mounted after collapsing', async () => {
@@ -146,23 +149,27 @@ describe('session-manager settings item', () => {
     const root = createRoot(dom.window.document.getElementById('root')!)
     try {
       await act(async () => {
-        root.render(<SessionManagerSettingsItem model={model} locale="zh" modelCatalog={catalog} />)
+        root.render(
+          <SessionSettingsDetails testId="session-manager-composer-settings-item" titleKey="composerGroupTitle" descKey="composerGroupHint" locale="zh">
+            <ComposerSettings model={model} locale="zh" modelCatalog={catalog} />
+          </SessionSettingsDetails>,
+        )
       })
       const details = dom.window.document.querySelector('details')!
       // Collapsed by default: no config read and no catalog request.
       expect(details.open).toBe(false)
-      expect(dom.window.document.querySelector('.dsm-settings')).toBeNull()
+      expect(dom.window.document.querySelector('.dsm-item-body')).toBeNull()
       expect(read).not.toHaveBeenCalled()
       expect(catalog).not.toHaveBeenCalled()
       const summary = details.querySelector('summary')!
-      expect(summary.textContent).toContain('会话行为')
-      expect(summary.textContent).toContain('继续灰影、自动继续、交接与会话摘要')
+      expect(summary.textContent).toContain('输入框建议')
+      expect(summary.textContent).toContain('输入框为空时显示的下一句建议')
       await act(async () => { details.open = true; details.dispatchEvent(new dom.window.Event('toggle')) })
       expect(read.mock.calls[0]?.[1]).toBe(CONFIG_READ_ENDPOINT)
-      expect(dom.window.document.querySelector('.dsm-settings')).not.toBeNull()
+      expect(dom.window.document.querySelector('.dsm-item-body')).not.toBeNull()
       await act(async () => { details.open = false; details.dispatchEvent(new dom.window.Event('toggle')) })
-      // Collapsing keeps the mounted subtree, so an unsaved draft survives.
-      expect(dom.window.document.querySelector('.dsm-settings')).not.toBeNull()
+      // Collapsing keeps the mounted subtree, so an in-progress draft survives.
+      expect(dom.window.document.querySelector('.dsm-item-body')).not.toBeNull()
     } finally {
       await act(async () => root.unmount())
       dom.window.close()

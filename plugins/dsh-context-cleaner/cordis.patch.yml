@@ -1,0 +1,8 @@
+# Bundle patch layer: the row loads the package's main entry as the host half
+# (a plain Cordis plugin); the `dsh.client` declaration makes the web app load
+# its ./client bundle as the browser half.
+# dsh-context itself is NOT inserted here: its activation stays controlled by
+# the profile's own bundle list. This row only ships a scoped stylesheet.
+- insert:
+    - id: dsh-context-cleaner
+      name: '@klarkxy/dsh-context-cleaner'

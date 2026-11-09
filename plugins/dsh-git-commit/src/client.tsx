@@ -3,6 +3,7 @@ import {
   MODEL_CATALOG_INJECT, readModelCatalog, modelMenuEffortLabel, modelMenuEffortOptions, parseModelMenuChoices,
 } from '@klarkxy/dsh-model-route'
 import { ModelCatalogStatus, ModelMenu, modelMenuCss, useModelCatalog } from '@klarkxy/dsh-model-route/ui'
+import { renderModelPicker, useModelMenuAnchor, type RenderFactorySlot } from '@klarkxy/dsh-plugin-kit/model-picker'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -137,6 +138,8 @@ export interface GitCommitActionProps {
   /** Injected by the slot registration; absent in tests that render the button alone. */
   client?: Client
   subscribeSettings?: (change: () => void, error?: (message: string) => void) => () => void
+  /** Framework-composed factory renderer; absent in tests that render the button alone. */
+  renderFactorySlot?: RenderFactorySlot
 }
 
 async function rpc<T>(
@@ -192,7 +195,7 @@ function GitBranchIcon() {
   )
 }
 
-export function GitCommitAction({ sessionId, useSession, call, t, client, subscribeSettings }: GitCommitActionProps) {
+export function GitCommitAction({ sessionId, useSession, call, t, client, subscribeSettings, renderFactorySlot }: GitCommitActionProps) {
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<GitCommitStatus>()
   const [loading, setLoading] = useState(false)
@@ -412,6 +415,7 @@ export function GitCommitAction({ sessionId, useSession, call, t, client, subscr
                 client={client}
                 subscribeSettings={subscribeSettings}
                 disabled={running}
+                renderFactorySlot={renderFactorySlot}
                 onSaving={markWrite}
                 onWriteFailed={markWriteFailed}
                 onReady={markSeen}
@@ -574,6 +578,8 @@ export function GitCommitSettingsPanel(props: {
   subscribeSettings?: (change: () => void, error?: (message: string) => void) => () => void
   /** Locks the controls while a commit run is in flight. */
   disabled?: boolean
+  /** Framework-composed factory renderer; absent under direct test renders. */
+  renderFactorySlot?: RenderFactorySlot
   /** Write lifecycle: true at dispatch, false when the write settles (even if
    * the panel unmounted by then). The parent counts these, never a read. */
   onSaving?: (active: boolean) => void
@@ -691,6 +697,15 @@ export function GitCommitSettingsPanel(props: {
   }, [call, settings, text.stale, props.disabled])
 
   const locked = busy || controlsLocked
+  const current = settings?.model ?? { provider: '', model: '' }
+  const follow = !current.provider || !current.model
+  const selected = follow ? undefined : choices.find(item => item.provider === current.provider && item.model === current.model)
+  const efforts = follow ? [] : modelMenuEffortOptions(selected, current.reasoningEffort)
+  const currentLabel = follow ? text.modelDefault : selected?.label ?? `${current.provider} / ${current.model}`
+  const selectedEffort = efforts.find(item => item.id === (current.reasoningEffort || ''))
+  const effortName = selectedEffort ? modelMenuEffortLabel(selectedEffort, language) : undefined
+  const anchor = useModelMenuAnchor(`${text.model}: ${settings ? currentLabel : ''}`, undefined,
+    () => setMenuOpen(false))
 
   if (!settings) {
     return (
@@ -704,43 +719,59 @@ export function GitCommitSettingsPanel(props: {
     )
   }
 
-  const current = settings.model
-  const follow = !current.provider || !current.model
-  const selected = follow ? undefined : choices.find(item => item.provider === current.provider && item.model === current.model)
-  const efforts = follow ? [] : modelMenuEffortOptions(selected, current.reasoningEffort)
-  const currentLabel = follow ? text.modelDefault : selected?.label ?? `${current.provider} / ${current.model}`
-  const selectedEffort = efforts.find(item => item.id === (current.reasoningEffort || ''))
-  const effortName = selectedEffort ? modelMenuEffortLabel(selectedEffort, language) : undefined
-
   return (
     <section className="gcm-root gcm-settings dsh-ui-stack" data-testid="git-commit-settings">
       <div className="dsh-ui-field">
         <span className="dsh-ui-label">{text.model}</span>
         <ModelCatalogStatus state={catalogState} locale={language} />
-        <ModelMenu
-          locale={language}
-          open={menuOpen && !locked}
-          onOpenChange={next => setMenuOpen(next && !locked)}
-          listClassName="gcm-root gcm-menu-portal"
-          anchor={<button type="button" className="dsh-model-menu-trigger" disabled={locked} aria-label={`${text.model}: ${currentLabel}`}>
-            <span className="dsh-model-menu-triggerLabel">{currentLabel}</span>
-            {!follow && efforts.length ? <span className="dsh-model-menu-triggerEffort">{effortName ?? text.modelDefault}</span> : null}
-            <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${menuOpen && !locked ? ' dsh-model-menu-chevronOpen' : ''}`} />
-          </button>}
-          choices={choices}
-          selected={follow ? undefined : { provider: current.provider, model: current.model }}
-          onPick={picked => save({ model: { provider: picked.provider, model: picked.model } })}
-          leading={[{ id: 'default', label: text.modelDefault, selected: follow }]}
-          onPickLeading={() => save({ model: { provider: '', model: '' } })}
-          efforts={efforts}
-          selectedEffort={current.reasoningEffort || ''}
-          onPickEffort={effort => save({ model: follow
+        {renderModelPicker(props.renderFactorySlot, {
+          locale: language,
+          disabled: locked,
+          busy: locked,
+          onOpenChange: next => setMenuOpen(next && !locked),
+          listClassName: 'gcm-root gcm-menu-portal',
+          choices,
+          selected: follow ? undefined : { provider: current.provider, model: current.model },
+          onPick: picked => save({ model: { provider: picked.provider, model: picked.model } }),
+          leading: [{ id: 'default', label: text.modelDefault, selected: follow }],
+          onPickLeading: () => save({ model: { provider: '', model: '' } }),
+          efforts,
+          selectedEffort: current.reasoningEffort || '',
+          onPickEffort: effort => save({ model: follow
             ? { provider: '', model: '' }
-            : { provider: current.provider, model: current.model, ...(effort ? { reasoningEffort: effort } : {}) } })}
-          modelLabel={text.model}
-          modelValue={currentLabel}
-          defaultEffortLabel={text.modelDefault}
-        />
+            : { provider: current.provider, model: current.model, ...(effort ? { reasoningEffort: effort } : {}) } }),
+          triggerLabel: currentLabel,
+          triggerEffortLabel: !follow && efforts.length ? (effortName ?? text.modelDefault) : undefined,
+          modelLabel: text.model,
+          modelValue: currentLabel,
+          defaultEffortLabel: text.modelDefault,
+        }, {
+          anchor,
+          fallback: <ModelMenu
+            locale={language}
+            open={menuOpen && !locked}
+            onOpenChange={next => setMenuOpen(next && !locked)}
+            listClassName="gcm-root gcm-menu-portal"
+            anchor={<button type="button" className="dsh-model-menu-trigger" disabled={locked} aria-label={`${text.model}: ${currentLabel}`}>
+              <span className="dsh-model-menu-triggerLabel">{currentLabel}</span>
+              {!follow && efforts.length ? <span className="dsh-model-menu-triggerEffort">{effortName ?? text.modelDefault}</span> : null}
+              <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${menuOpen && !locked ? ' dsh-model-menu-chevronOpen' : ''}`} />
+            </button>}
+            choices={choices}
+            selected={follow ? undefined : { provider: current.provider, model: current.model }}
+            onPick={picked => save({ model: { provider: picked.provider, model: picked.model } })}
+            leading={[{ id: 'default', label: text.modelDefault, selected: follow }]}
+            onPickLeading={() => save({ model: { provider: '', model: '' } })}
+            efforts={efforts}
+            selectedEffort={current.reasoningEffort || ''}
+            onPickEffort={effort => save({ model: follow
+              ? { provider: '', model: '' }
+              : { provider: current.provider, model: current.model, ...(effort ? { reasoningEffort: effort } : {}) } })}
+            modelLabel={text.model}
+            modelValue={currentLabel}
+            defaultEffortLabel={text.modelDefault}
+          />,
+        })}
       </div>
       <p className="dsh-ui-meta">{text.modelHint}</p>
       <div className="gcm-settings-status">

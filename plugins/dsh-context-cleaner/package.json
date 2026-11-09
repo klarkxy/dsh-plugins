@@ -1,0 +1,71 @@
+{
+  "name": "@klarkxy/dsh-context-cleaner",
+  "version": "0.1.0",
+  "description": "Hide the plugin-info and promotion cards at the top of the dsh-context dashboard.",
+  "icon": "./icon.svg",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=24",
+    "dsh": ">=0.2.2-rc.1"
+  },
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "icon.svg",
+    "locale/*.json",
+    "cordis.patch.yml",
+    "README.md",
+    "docs/README.zh-CN.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-context-cleaner/src"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "peerDependencies": {
+    "dsh-context": ">=0.82.2"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-plugins",
+    "deepseek-harness",
+    "deepseek-harness-plugin",
+    "dsh-context",
+    "context-panel",
+    "declutter"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klarkxy/dsh-plugins.git",
+    "directory": "plugins/dsh-context-cleaner"
+  },
+  "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/context-cleaner/",
+  "bugs": {
+    "url": "https://github.com/klarkxy/dsh-plugins/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "dshRelease": {
+    "contentHash": "bce0a919407caafb29e9f20224561fcda4782b7fe9308785559f7941b968a499"
+  }
+}

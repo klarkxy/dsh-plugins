@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { IconChevronDownOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { modelMenuEffortLabel, modelMenuEffortOptions, modelMenuShortName, normalizeModelRoute, parseModelMenuChoices, type ModelRoute } from '@klarkxy/dsh-model-route'
 import { ModelMenu } from '@klarkxy/dsh-model-route/ui'
+import { renderModelPicker, useModelMenuAnchor, type RenderFactorySlot } from '@klarkxy/dsh-plugin-kit/model-picker'
 
 /** The text surface FieldMenu needs; both the fields tab and the cast tab supply it. */
 export interface FieldMenuText {
@@ -18,7 +19,7 @@ export interface FieldMenuText {
  * the current reasoning effort when the new model advertises it, so switching a
  * route does not silently reset the user's choice.
  */
-export function FieldMenu({ t, catalog, current, disabled, label, allowFollow = true, followLabel, reasoningEffort = true, display = 'full', onSet }: {
+export function FieldMenu({ t, catalog, current, disabled, label, allowFollow = true, followLabel, reasoningEffort = true, display = 'full', onSet, renderFactorySlot }: {
   t: FieldMenuText
   catalog: unknown
   current: ModelRoute | undefined
@@ -29,6 +30,8 @@ export function FieldMenu({ t, catalog, current, disabled, label, allowFollow = 
   reasoningEffort?: boolean
   display?: 'full' | 'short'
   onSet: (route: ModelRoute) => void
+  /** Framework-composed factory renderer; absent under direct test renders. */
+  renderFactorySlot?: RenderFactorySlot
 }) {
   const [open, setOpen] = useState(false)
   useEffect(() => { if (disabled) setOpen(false) }, [disabled])
@@ -45,7 +48,43 @@ export function FieldMenu({ t, catalog, current, disabled, label, allowFollow = 
   const currentLabel = display === 'short' && !follow ? (selected ? modelMenuShortName(selected) : route.model) : menuLabel
   const selectedEffort = efforts.find(item => item.id === (route.reasoningEffort || ''))
   const effortName = selectedEffort ? modelMenuEffortLabel(selectedEffort, t.language) : undefined
-  return <ModelMenu
+  const anchor = useModelMenuAnchor(accessible, routeLabel, () => setOpen(false))
+  const pick = (picked: { provider: string; model: string }) => {
+    /* Keep the current effort when the new model lists it; an effort the new
+     * model does not support is dropped rather than carried into a route
+     * that cannot honour it. */
+    const choice = choices.find(item => item.provider === picked.provider && item.model === picked.model)
+    const effort = route.reasoningEffort
+    const supported = Boolean(effort) && Boolean(choice?.efforts.some(item => item.id === effort))
+    onSet({ provider: picked.provider, model: picked.model, ...(supported ? { reasoningEffort: effort } : {}) })
+  }
+  return renderModelPicker(renderFactorySlot, {
+    locale: t.language,
+    disabled,
+    onOpenChange: next => setOpen(next && !disabled),
+    listClassName: 'dsh-model-hub',
+    choices,
+    selected: follow ? undefined : { provider: route.provider, model: route.model },
+    onPick: pick,
+    leading: allowFollow ? [{ id: 'follow', label: followLabel || t('follow'), selected: follow }] : [],
+    onPickLeading: () => onSet({ provider: '', model: '' }),
+    efforts,
+    selectedEffort: route.reasoningEffort || '',
+    onPickEffort: effort => onSet(follow
+      ? { provider: '', model: '' }
+      : { provider: route.provider, model: route.model, ...(effort ? { reasoningEffort: effort } : {}) }),
+    triggerLabel: currentLabel,
+    triggerEffortLabel: !follow && efforts.length ? ` · ${effortName ?? t('effortDefault')}` : undefined,
+    modelLabel: t('model'),
+    modelValue: currentLabel,
+    effortLabel: t('effort'),
+    defaultEffortLabel: t('effortDefault'),
+    searchPlaceholder: t('searchModels'),
+    emptyLabel: t('noModels'),
+    clearSearchLabel: t('clearSearch'),
+  }, {
+    anchor,
+    fallback: <ModelMenu
     locale={t.language}
     open={open && !disabled}
     onOpenChange={next => setOpen(next && !disabled)}
@@ -57,15 +96,7 @@ export function FieldMenu({ t, catalog, current, disabled, label, allowFollow = 
     </button>}
     choices={choices}
     selected={follow ? undefined : { provider: route.provider, model: route.model }}
-    onPick={picked => {
-      /* Keep the current effort when the new model lists it; an effort the new
-       * model does not support is dropped rather than carried into a route
-       * that cannot honour it. */
-      const choice = choices.find(item => item.provider === picked.provider && item.model === picked.model)
-      const effort = route.reasoningEffort
-      const supported = Boolean(effort) && Boolean(choice?.efforts.some(item => item.id === effort))
-      onSet({ provider: picked.provider, model: picked.model, ...(supported ? { reasoningEffort: effort } : {}) })
-    }}
+    onPick={pick}
     leading={allowFollow ? [{ id: 'follow', label: followLabel || t('follow'), selected: follow }] : []}
     onPickLeading={() => onSet({ provider: '', model: '' })}
     efforts={efforts}
@@ -80,7 +111,8 @@ export function FieldMenu({ t, catalog, current, disabled, label, allowFollow = 
     searchPlaceholder={t('searchModels')}
     emptyLabel={t('noModels')}
     clearSearchLabel={t('clearSearch')}
-  />
+  />,
+  })
 }
 
 

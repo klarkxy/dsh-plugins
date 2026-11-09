@@ -3,7 +3,7 @@ import { buildAuxiliaryUserText } from '@klarkxy/dsh-plugin-kit/auxiliary-contex
 import { getAuxiliaryModel } from '@klarkxy/dsh-plugin-kit/contracts'
 import { modelRouteOverride } from '@klarkxy/dsh-model-route'
 import {
-  COMMIT_PLAN_FEATURE, DEFAULT_MAX_OUTPUT_TOKENS, MAX_MANIFEST_CHARS, RECENT_LOG_COUNT,
+  COMMIT_PLAN_FEATURE, MAX_MANIFEST_CHARS, RECENT_LOG_COUNT,
   defaultSettings, normalizeFallback, type CommitGroupResult, type CommitModelInfo, type CommitRunResult,
   type GitCommitSettings, type GitCommitStatus, type PartialCommitResult,
 } from './contracts.ts'
@@ -309,7 +309,6 @@ export class GitCommitService {
           text: buildPlanText(planInput, Math.max(1024, MAX_MANIFEST_CHARS - envelopeBase.length)),
           route: planned.route,
           system: planSystemPrompt(),
-          maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
           signal,
           sessionId,
         })

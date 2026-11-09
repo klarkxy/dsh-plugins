@@ -34,9 +34,16 @@ function fixture(failRegistration = false) {
   let mount!: (scope: unknown) => void
   let auxMount!: (scope: unknown) => void
   const disposers: Array<() => unknown> = []
+  const listeners = new Map<string, Array<(...args: any[]) => unknown>>()
   const ctx = Object.assign(new Context(), {
     effect: (fn: () => unknown) => { const dispose = fn(); if (typeof dispose === 'function') disposers.push(dispose) },
-    on: (name: string) => { if (failRegistration && name === 'model-settings/collect') throw new Error('registration failed'); return () => {} },
+    on: (name: string, callback: (...args: any[]) => unknown) => {
+      if (failRegistration && name === 'model-settings/collect') throw new Error('registration failed')
+      const callbacks = listeners.get(name) ?? []
+      callbacks.push(callback)
+      listeners.set(name, callbacks)
+      return () => { callbacks.splice(callbacks.indexOf(callback), 1) }
+    },
     inject(services: string[], callback: (scope: unknown) => void) {
       // Two injects declare storageDomain: the shared auxiliary owner
       // (storageDomain+webServer+connection) and the plugin settings store.
@@ -52,6 +59,10 @@ function fixture(failRegistration = false) {
   const store = args[4] as () => PresenceModelStore | undefined
   return {
     models, store,
+    async created(id: string) {
+      await Promise.all((listeners.get('agent/created') ?? []).map(callback =>
+        callback({ agent: { id, session: { id, header: {} } }, source: 'startup' })))
+    },
     mount(open: Promise<PresenceDomainHandle>) {
       let dispose!: () => Promise<void>
       mount({
@@ -91,6 +102,29 @@ function fixture(failRegistration = false) {
 const tick = async () => { for (let i = 0; i < 15; ++i) await Promise.resolve() }
 
 describe('presence domain mount lifecycle', () => {
+  it('waits for persisted choices before seeding the first draft after restart', async () => {
+    const f = fixture()
+    const open = deferred<PresenceDomainHandle>()
+    const dispose = f.mount(open.promise)
+    let seeded = false
+    const creating = f.created('first-draft').then(() => { seeded = true })
+    await tick()
+    expect(seeded).toBe(false)
+    const base = domain()
+    const write = vi.fn(async () => {})
+    open.resolve({
+      close: base.close,
+      table: (name: string) => name === 'auto_continue'
+        ? { get: () => undefined, put: write }
+        : name === 'auto_continue_recent'
+          ? { get: () => ({ mode: 'bold' }), put: vi.fn() }
+          : base.table(),
+    } as unknown as PresenceDomainHandle)
+    await creating
+    expect(write).toHaveBeenCalledWith('first-draft', { mode: 'bold', max: 3, revision: 1 })
+    await dispose()
+  })
+
   it('awaits a pending open on unload, closes its late handle and never publishes it', async () => {
     const f = fixture()
     const open = deferred<PresenceDomainHandle>()

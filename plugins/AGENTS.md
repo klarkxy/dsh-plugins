@@ -41,7 +41,7 @@
 | --- | --- |
 | `settings.models.footer` | `magpie`/100 |
 | `settings.section` | `font`/5 |
-| 共享栏目「会话管理」 | `auxiliary-model`/55、`session-manager`/65、`current-title`/70、`safe-auto`/80 |
+| 共享栏目「会话管理」 | `auxiliary-model`/55、`session-manager.composer`/60、`session-manager.auto-continue`/62、`session-manager.return`/64、`session-manager.handoff`/66、`session-manager.agent-actions`/68、`current-title`/70、`safe-auto`/80 |
 
 「默认辅助模型」卡片（共享「会话管理」栏目的 `auxiliary-model` 行）是共享基础设施：由 plugin-kit 的 `registerAuxiliaryModelSettings` 在任一辅助功能插件启用时经 root 服务持有，不归属任何业务插件；它也经 root 持有栏目页面本身，任一辅助插件单独启用即创建栏目；卡片随最后一个参与者卸载，辅助功能的设置行不得各自重复注册同一席位 id。
 

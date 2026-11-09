@@ -51,9 +51,9 @@ describe('checked host catalog', () => {
 describe('host catalog parsing', () => {
   it('flattens the session catalog into provider / model choices', () => {
     expect(parseModelMenuChoices(CATALOG)).toEqual([
-      { provider: 'deepseek', model: 'deepseek-chat', label: 'DeepSeek / Chat', efforts: [{ id: 'off', name: '关闭' }, { id: 'high', name: '高' }] },
-      { provider: 'deepseek', model: 'deepseek-reasoner', label: 'DeepSeek / Reasoner', efforts: [] },
-      { provider: 'openai', model: 'gpt-5', label: 'openai / gpt-5', efforts: [] },
+      { provider: 'deepseek', model: 'deepseek-chat', label: 'DeepSeek / Chat', providerLabel: 'DeepSeek', efforts: [{ id: 'off', name: '关闭' }, { id: 'high', name: '高' }] },
+      { provider: 'deepseek', model: 'deepseek-reasoner', label: 'DeepSeek / Reasoner', providerLabel: 'DeepSeek', efforts: [] },
+      { provider: 'openai', model: 'gpt-5', label: 'openai / gpt-5', providerLabel: 'openai', efforts: [] },
     ])
   })
 
@@ -65,6 +65,7 @@ describe('host catalog parsing', () => {
 
   it('keeps a saved route selectable when the catalog does not list it', () => {
     const choices = parseModelMenuChoices(CATALOG, { provider: 'legacy', model: 'legacy-1' })
+    // A synthetic saved route has no catalog group, so it carries no providerLabel.
     expect(choices.at(-1)).toEqual({ provider: 'legacy', model: 'legacy-1', label: 'legacy / legacy-1', efforts: [] })
   })
 

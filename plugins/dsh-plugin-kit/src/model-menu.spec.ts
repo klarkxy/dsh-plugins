@@ -23,9 +23,9 @@ const bound: ModelMenuRoute = { provider: '', model: '' }
 describe('plugin-page model menu', () => {
   it('flattens the session catalog into provider / model choices', () => {
     expect(parseModelMenuChoices(CATALOG)).toEqual([
-      { provider: 'deepseek', model: 'deepseek-chat', label: 'DeepSeek / Chat', efforts: [{ id: 'off', name: '关闭' }, { id: 'high', name: '高' }] },
-      { provider: 'deepseek', model: 'deepseek-reasoner', label: 'DeepSeek / Reasoner', efforts: [] },
-      { provider: 'openai', model: 'gpt-5', label: 'openai / gpt-5', efforts: [] },
+      { provider: 'deepseek', model: 'deepseek-chat', label: 'DeepSeek / Chat', providerLabel: 'DeepSeek', efforts: [{ id: 'off', name: '关闭' }, { id: 'high', name: '高' }] },
+      { provider: 'deepseek', model: 'deepseek-reasoner', label: 'DeepSeek / Reasoner', providerLabel: 'DeepSeek', efforts: [] },
+      { provider: 'openai', model: 'gpt-5', label: 'openai / gpt-5', providerLabel: 'openai', efforts: [] },
     ])
   })
 

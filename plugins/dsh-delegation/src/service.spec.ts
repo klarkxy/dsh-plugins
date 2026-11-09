@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { DelegationSettings } from './contracts.ts'
 import { DelegationService, type DelegationServiceDeps, type DelegationTableLike } from './service.ts'
-import type { SessionDelegation } from './storage.ts'
+import type { RecentChoice, SessionDelegation } from './storage.ts'
 import type { DelegationSessionLike } from './policy.ts'
 
 const deferred = <T>() => {
@@ -30,6 +30,7 @@ function service(overrides: Partial<DelegationServiceDeps> = {}) {
   return new DelegationService({
     settings: table<DelegationSettings>(),
     records: table<SessionDelegation>(),
+    recent: table<RecentChoice>(),
     hasStarted: () => false,
     agents: { get: id => ({ id, runMaintenance: job => job(new AbortController().signal) }) },
     ...overrides,
@@ -128,6 +129,128 @@ describe('session seeding', () => {
     }
     const svc = service({ records })
     await expect(svc.seedSession({ id: 's1', session: top('s1') }, 'startup')).rejects.toThrow('disk full')
+  })
+})
+
+describe('remembered new-session choice', () => {
+  it('seeds a fresh session from the remembered choice, not the stored default', async () => {
+    const records = table<SessionDelegation>()
+    const recent = table<RecentChoice>({ global: { enabled: true } })
+    const settings = table<DelegationSettings>({ global: { revision: 3, defaultEnabled: false } })
+    const svc = service({ records, recent, settings })
+    await svc.seedSession({ id: 's1', session: top('s1') }, 'startup')
+    expect(records.rows.s1).toEqual({ enabled: true, revision: 1 })
+    // Seeding only reads the memo; it never creates one.
+    expect(recent.puts).toHaveLength(0)
+  })
+
+  it('persists the remembered choice across a service restart (same store, new instance)', async () => {
+    const records = table<SessionDelegation>()
+    const recent = table<RecentChoice>()
+    const sessions = new Map([['s1', top('s1')], ['s2', top('s2')]])
+    const sessionStore = { get: (id: string) => sessions.get(id) }
+    const first = service({ records, recent, sessionStore })
+    await first.updateSession('s1', true, 0)
+    const restarted = service({ records, recent, sessionStore })
+    await restarted.seedSession({ id: 's2', session: top('s2') }, 'startup')
+    expect(records.rows.s2).toEqual({ enabled: true, revision: 1 })
+  })
+
+  it('remembers an explicit off choice just like an on choice', async () => {
+    const records = table<SessionDelegation>()
+    const recent = table<RecentChoice>({ global: { enabled: true } })
+    const settings = table<DelegationSettings>({ global: { revision: 1, defaultEnabled: true } })
+    const sessions = new Map([['s1', top('s1')]])
+    const svc = service({ records, recent, settings, sessionStore: { get: id => sessions.get(id) } })
+    await svc.updateSession('s1', false, 0)
+    expect(recent.rows.global).toEqual({ enabled: false })
+    await svc.seedSession({ id: 's2', session: top('s2') }, 'startup')
+    expect(records.rows.s2).toEqual({ enabled: false, revision: 1 })
+  })
+
+  it('falls back to the stored default when the memo is missing or unreadable', async () => {
+    const settings = table<DelegationSettings>({ global: { revision: 1, defaultEnabled: true } })
+    for (const raw of [undefined, { enabled: 'yes' }, 'true', 1]) {
+      const records = table<SessionDelegation>()
+      const recent: DelegationTableLike<RecentChoice> = {
+        get: () => raw as RecentChoice | undefined,
+        put: async () => {},
+      }
+      const svc = service({ records, recent, settings })
+      await svc.seedSession({ id: 's1', session: top('s1') }, 'startup')
+      expect(records.rows.s1).toEqual({ enabled: true, revision: 1 })
+    }
+    // No recent table at all still seeds from the default.
+    const records = table<SessionDelegation>()
+    const svc = service({ records, settings, recent: undefined })
+    await svc.seedSession({ id: 's1', session: top('s1') }, 'startup')
+    expect(records.rows.s1).toEqual({ enabled: true, revision: 1 })
+  })
+
+  it('keeps the old fork semantics: a missing parent row uses the default, never the memo', async () => {
+    const records = table<SessionDelegation>()
+    const recent = table<RecentChoice>({ global: { enabled: false } })
+    const settings = table<DelegationSettings>({ global: { revision: 1, defaultEnabled: true } })
+    const svc = service({ records, recent, settings })
+    await svc.seedSession({ id: 'f1', session: fork('f1', 'gone') }, 'startup')
+    expect(records.rows.f1).toEqual({ enabled: true, revision: 1 })
+  })
+
+  it('commits concurrent memo writes in enqueue order', async () => {
+    const records = table<SessionDelegation>()
+    const gate = deferred<void>()
+    const entered: boolean[] = []
+    const recent = table<RecentChoice>()
+    const base = recent.put
+    recent.put = async (key, value) => {
+      entered.push(value.enabled)
+      if (entered.length === 1) await gate.promise
+      await base(key, value)
+    }
+    const sessions = new Map([['s1', top('s1')], ['s2', top('s2')]])
+    const svc = service({ records, recent, sessionStore: { get: id => sessions.get(id) } })
+    const first = svc.updateSession('s1', true, 0)
+    await vi.waitFor(() => expect(entered).toEqual([true]))
+    const second = svc.updateSession('s2', false, 0)
+    await vi.waitFor(() => expect(records.rows.s2).toBeDefined())
+    expect(entered).toEqual([true])
+    gate.resolve()
+    await Promise.all([first, second])
+    expect(entered).toEqual([true, false])
+    expect(recent.rows.global).toEqual({ enabled: false })
+  })
+
+  it('lets a fork inherit its parent while leaving the remembered choice untouched', async () => {
+    const records = table<SessionDelegation>({ root: { enabled: false, revision: 2 } })
+    const recent = table<RecentChoice>({ global: { enabled: true } })
+    const sessions = new Map([['f1', fork('f1', 'root')]])
+    const svc = service({ records, recent, sessionStore: { get: id => sessions.get(id) } })
+    await svc.seedSession({ id: 'f1', session: fork('f1', 'root') }, 'startup')
+    expect(records.rows.f1).toEqual({ enabled: false, revision: 1 })
+    await svc.updateSession('f1', true, 1)
+    expect(records.rows.f1).toEqual({ enabled: true, revision: 2 })
+    expect(recent.rows.global).toEqual({ enabled: true })
+    expect(recent.puts).toHaveLength(0)
+  })
+
+  it('does not write the memo when the session update is rejected', async () => {
+    const records = table<SessionDelegation>({ s1: { enabled: true, revision: 2 } })
+    const recent = table<RecentChoice>()
+    const svc = service({ records, recent, hasStarted: () => true, sessionStore: { get: () => top('s1') } })
+    await expect(svc.updateSession('s1', false, 2)).rejects.toMatchObject({ code: 'session-locked' })
+    expect(recent.puts).toHaveLength(0)
+  })
+
+  it('still reports a committed session update when the memo write fails', async () => {
+    const records = table<SessionDelegation>()
+    const recent: DelegationTableLike<RecentChoice> = {
+      get: () => undefined,
+      put: async () => { throw new Error('memo disk full') },
+    }
+    const sessions = new Map([['s1', top('s1')]])
+    const svc = service({ records, recent, sessionStore: { get: id => sessions.get(id) } })
+    await expect(svc.updateSession('s1', true, 0)).resolves.toMatchObject({ enabled: true, revision: 1 })
+    expect(records.rows.s1).toEqual({ enabled: true, revision: 1 })
   })
 })
 

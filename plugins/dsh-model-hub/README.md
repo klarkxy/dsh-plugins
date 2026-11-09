@@ -16,7 +16,7 @@ Replace `web` with your profile name and restart the profile.
 
 ## Use
 
-Open **Settings → Subagents** to add, replace, or remove models, choose their reasoning effort, and add optional task tendencies. These guide the agent when delegating; the agent makes the final choice.
+Open **Settings → Subagents** to add, replace, or remove models, choose their reasoning effort, and add optional task tendencies. These guide the agent when delegating; the agent makes the final choice. With the optional **Model Picker** plugin installed, these model menus upgrade to the shared searchable picker with a reasoning-effort slider; without it they keep working as today.
 
 In a conversation, open the subagent count or switcher to see each child's last-used model and effort. This is read-only.
 

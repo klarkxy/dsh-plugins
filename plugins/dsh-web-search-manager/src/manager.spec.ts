@@ -11,7 +11,7 @@ afterEach(async () => { await Promise.all(fixtures.splice(0).map(manager => mana
 function setup(initial?: WebSettings) {
   vi.stubEnv('DSH_WEB_SEARCH_PROVIDER', undefined)
   vi.stubEnv('DSH_WEB_FETCH_PROVIDER', undefined)
-  const web = new WebRuntime(new Context(), {})
+  const web = new WebRuntime(new Context(), { searchProvider: { get: () => undefined }, fetchProvider: { get: () => undefined } } as never)
   const keys = new Map([['TEST_EXA_KEY', 'fixture-exa-secret'], ['TEST_TAVILY_KEY', 'fixture-tavily-secret']])
   const save = vi.fn(async (_settings: WebSettings) => {})
   const resolveCredential = vi.fn(async (ref: string) => keys.get(ref))

@@ -499,9 +499,10 @@ test('attaching and detaching the UI row without any traffic still ends headless
   assert.equal(f.seen.length, 0);
 });
 
-test('a disabled profile registers nothing but still provides the runtime', () => {
+test('a disabled profile registers neither hooks nor tools but still provides the runtime', () => {
   const f = fixture({ config: { enabled: false } });
   assert.deepEqual(Object.keys(f.handlers), []);
+  assert.deepEqual(f.tools, []);
   assert.equal(f.runtime.base.enabled, false);
 });
 

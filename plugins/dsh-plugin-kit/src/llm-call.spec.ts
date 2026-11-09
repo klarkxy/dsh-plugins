@@ -12,6 +12,27 @@ async function* output(): AsyncIterable<StreamChunk> {
 }
 
 describe('native text call ownership', () => {
+  it.each([
+    { requested: undefined, resolved: undefined, expected: undefined },
+    { requested: undefined, resolved: 8192, expected: 8192 },
+    { requested: 100, resolved: undefined, expected: 100 },
+    { requested: 100, resolved: 8192, expected: 100 },
+    { requested: 100, resolved: 64, expected: 64 },
+  ])('uses output settings requested=$requested resolved=$resolved', async ({ requested, resolved, expected }) => {
+    const seen: GenerateOptions[] = []
+    const prepareCall = vi.fn(async (config: Parameters<LlmTextCaller['prepareCall']>[0]) => ({
+      config: { ...config, maxTokens: resolved },
+      stream: (options: GenerateOptions) => { seen.push(options); return output() },
+    }))
+    const llm = { prepareCall, resolveCallConfig: vi.fn() } as unknown as LlmTextCaller
+    const { maxTokens: _maxTokens, ...base } = request()
+    await callLlmText(llm, { ...base, ...(requested !== undefined ? { maxTokens: requested } : {}) })
+    if (requested === undefined) expect(prepareCall.mock.calls[0]?.[0]).not.toHaveProperty('maxTokens')
+    else expect(prepareCall.mock.calls[0]?.[0].maxTokens).toBe(requested)
+    if (expected === undefined) expect(seen[0]).not.toHaveProperty('maxTokens')
+    else expect(seen[0]?.maxTokens).toBe(expected)
+  })
+
   it('passes configure into preparation and preserves ordinary adapter defaults', async () => {
     const seen: GenerateOptions[] = []
     const prepareCall = vi.fn(async (config: Parameters<LlmTextCaller['prepareCall']>[0], _signal?: AbortSignal, configure?: Parameters<LlmTextCaller['prepareCall']>[2]) => {

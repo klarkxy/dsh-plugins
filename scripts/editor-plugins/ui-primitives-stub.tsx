@@ -450,6 +450,9 @@ export const PermissionIconReadOnlyRegular = icon('permission-read-only')
 export const PermissionIconWorkspaceWriteRegular = icon('permission-workspace-write')
 export const IconGlobeOutlineRegular = icon('globe')
 export const IconQuestionOutlineRegular = icon('question')
+export const IconDataOutlineRegular = icon('data')
+export const IconDataOutlineMedium = icon('data-medium')
+export const IconWarningOutlineRegular = icon('warning')
 
 /* --- Hooks. The real ones measure and listen; under test there is no viewport
  * to measure and no pointer to dismiss with, so these are inert but keep their
@@ -512,6 +515,7 @@ const known = new Set([
   'IconUserOutlineRegular', 'IconUsersOutlineRegular',
   'PermissionIconFullAccessRegular', 'PermissionIconReadOnlyRegular', 'PermissionIconWorkspaceWriteRegular',
   'IconGlobeOutlineRegular', 'IconQuestionOutlineRegular',
+  'IconDataOutlineRegular', 'IconDataOutlineMedium', 'IconWarningOutlineRegular',
   'useAnchoredPosition',
   'useDismissOnOutsidePointer', 'useModalLayer', 'modalSelector', 'closeTopModal', 'isBehindModal',
   'observeStickyMenuGroups', 'rankByName', 'Toast', 'FileTypeIcon',

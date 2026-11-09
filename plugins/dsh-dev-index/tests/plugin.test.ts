@@ -31,7 +31,7 @@ describe("creator documentation guidance", () => {
     } as never, {});
 
     expect(section?.name).toBe("dsh-dev-index.creator-docs");
-    expect(toolNames).toEqual(["dsh_docs_search", "dsh_docs_fetch", "dsh_plugins_search", "dsh_plugins_fetch", "dsh_github_fetch"]);
+    expect(toolNames).toEqual(["dsh_docs", "dsh_plugins"]);
     expect(section?.text({ agent: { ctx: {} as never } })).toBe(CREATOR_GUIDANCE);
     preset = "standard";
     expect(section?.text({ agent: { ctx: {} as never } })).toBe("");
@@ -40,11 +40,11 @@ describe("creator documentation guidance", () => {
     expect(CREATOR_GUIDANCE).toContain(OFFICIAL_REPOSITORY);
     expect(CREATOR_GUIDANCE).toContain("cordis_inspect_list");
     expect(CREATOR_GUIDANCE).toContain("cordis_inspect_query");
-    expect(CREATOR_GUIDANCE).toContain("dsh_docs_search");
-    expect(CREATOR_GUIDANCE).toContain("dsh_docs_fetch");
-    expect(CREATOR_GUIDANCE).toContain("dsh_plugins_search");
-    expect(CREATOR_GUIDANCE).toContain("dsh_plugins_fetch");
-    expect(CREATOR_GUIDANCE).toContain("dsh_github_fetch");
+    expect(CREATOR_GUIDANCE).toContain("dsh_docs action search");
+    expect(CREATOR_GUIDANCE).toContain("action fetch");
+    expect(CREATOR_GUIDANCE).toContain("dsh_plugins action search");
+    expect(CREATOR_GUIDANCE).toContain("action fetch_npm");
+    expect(CREATOR_GUIDANCE).toContain("action fetch_github");
     expect(CREATOR_GUIDANCE).toContain("github:owner/repo#commit");
     expect(CREATOR_GUIDANCE).toContain("official plugin manager");
     expect(CREATOR_GUIDANCE).not.toContain("curl");

@@ -4,7 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { apply as applyTools } from './tools.ts'
 import { createZhihuService } from './index.ts'
 import { createZhihuUsageRecorder, type ZhihuUsageTableLike } from './usage.ts'
-import { createZhihuSearchTool } from './tool-definitions.ts'
+import { createZhihuResearchTool } from './tool-definitions.ts'
 import type { ZhihuSearchFetcher } from './zhihu-client.ts'
 const signal = () => new AbortController().signal
 function fixture(fetcher: ZhihuSearchFetcher) {
@@ -28,15 +28,15 @@ describe('independent Zhihu service', () => {
         return empty(url, init)
       },
     }, usage)
-    const tool = createZhihuSearchTool(service.toolOptions) as unknown as { execute(args: unknown, ctx: { signal: AbortSignal }): Promise<unknown> }
+    const tool = createZhihuResearchTool(service.toolOptions) as unknown as { execute(args: unknown, ctx: { signal: AbortSignal }): Promise<unknown> }
     try {
       expect(await service.call('search', { query: '已保存密钥' }, signal())).toMatchObject({ ok: true })
-      await tool.execute({ query: '已保存密钥' }, { signal: signal() })
+      await tool.execute({ action: 'search', query: '已保存密钥' }, { signal: signal() })
       credential = undefined
       const result = await service.call('search', { query: '已清除密钥' }, signal())
       expect(result).toMatchObject({ ok: false, error: { code: 'token-missing' } })
       expect(JSON.stringify(result)).not.toContain('secret')
-      await expect(tool.execute({ query: '已清除密钥' }, { signal: signal() })).rejects.toMatchObject({ code: 'TOKEN_MISSING' })
+      await expect(tool.execute({ action: 'search', query: '已清除密钥' }, { signal: signal() })).rejects.toMatchObject({ code: 'TOKEN_MISSING' })
       expect(requests).toBe(2)
     } finally {
       await service.dispose()
@@ -44,9 +44,9 @@ describe('independent Zhihu service', () => {
   })
   it('serializes one count per concurrent RPC and Tool call in the existing usage domain',async () => {
     const service=fixture(empty)
-    const tool=createZhihuSearchTool(service.toolOptions) as unknown as {execute(args:unknown,ctx:{signal:AbortSignal}):Promise<unknown>}
+    const tool=createZhihuResearchTool(service.toolOptions) as unknown as {execute(args:unknown,ctx:{signal:AbortSignal}):Promise<unknown>}
     const results=await Promise.all(Array.from({length:12},()=>service.call('search',{query:'普通资料'},signal())))
-    await tool.execute({query:'工具查询'},{signal:signal()})
+    await tool.execute({action:'search',query:'工具查询'},{signal:signal()})
     expect(results.every(result=>result.ok)).toBe(true)
     const summary=await service.usageSummary(1)
     expect(summary.days).toEqual([expect.objectContaining({calls:13,failures:0,results:0})])
@@ -79,9 +79,9 @@ it('tracks optional Tool execution through service unload and flushes its one fa
  const service=fixture(async (_url,init)=>{requests++;started();return await new Promise((_resolve,reject)=>init?.signal?.addEventListener('abort',()=>reject(new DOMException('cancelled','AbortError')),{once:true}))});
  const tools:Array<{name:string;execute(args:unknown,ctx:{signal:AbortSignal}):Promise<unknown>}>=[];
  applyTools({zhihu:service,tools:{register:(tool:typeof tools[number])=>tools.push(tool)}} as unknown as Context);
- const tool=tools.find(tool=>tool.name==='zhihu_search')!;
- const outcome=tool.execute({query:'卸载中的工具'},{signal:signal()}).then(()=>null,error=>error);
+ const tool=tools.find(tool=>tool.name==='zhihu_research')!;
+ const outcome=tool.execute({action:'search',query:'卸载中的工具'},{signal:signal()}).then(()=>null,error=>error);
  await ready;await service.dispose();expect(await outcome).toBeInstanceOf(Error);
  expect((await service.usageSummary(1)).days).toEqual([expect.objectContaining({calls:1,failures:1})]);
- await expect(tool.execute({query:'关闭后工具'},{signal:signal()})).rejects.toBeDefined();expect(requests).toBe(1);
+ await expect(tool.execute({action:'search',query:'关闭后工具'},{signal:signal()})).rejects.toBeDefined();expect(requests).toBe(1);
 });

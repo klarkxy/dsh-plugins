@@ -36,11 +36,13 @@ describe('presence config patches', () => {
     expect(sanitizeConfigPatch({ continueText: '  接着做  ' })).toEqual({ continueText: '接着做' })
     expect(sanitizeConfigPatch({ model: { provider: ' p ', model: ' m ' } })).toEqual({ model: { provider: 'p', model: 'm' } })
     expect(sanitizeConfigPatch({ model: null })).toEqual({ model: null })
+    expect(sanitizeConfigPatch({ allowSelfFork: true, allowSendMessage: false })).toEqual({ allowSelfFork: true, allowSendMessage: false })
     for (const patch of [
       { recapMinutes: -1 }, { compactMinutes: 10_081 }, { recapMinutes: 1.5 }, { recapMinutes: '15' },
       { continueText: 42 }, { continueText: '很'.repeat(201) }, { continueMode: 'sometimes' }, { theme: 'dark' },
       { model: 42 }, { model: 'openai/gpt' }, { model: {} }, { model: { provider: 'p' } }, { model: { provider: ' ', model: 'm' } },
       { model: [] }, null, [],
+      { allowSelfFork: 'yes' }, { allowSendMessage: 1 }, { allowSelfFork: null },
     ]) {
       expect(() => sanitizeConfigPatch(patch)).toThrowError(PresenceError)
     }
@@ -49,6 +51,7 @@ describe('presence config patches', () => {
   it('reads the resolved view and writes through the host config editor', async () => {
     expect(readPresenceConfig(base)).toEqual({
       recapMinutes: 15, compactMinutes: 60, continueText: '', continueMode: 'fixed', model: null, ghostModel: null, judgeModel: null, handoffModel: null, autoContinueMode: 'off', autoContinueMax: 3,
+      allowSelfFork: false, allowSendMessage: false,
     })
     const models = store({ provider: 'p', model: 'm' })
     expect(readPresenceConfig(base, models).model).toEqual({ provider: 'p', model: 'm' })

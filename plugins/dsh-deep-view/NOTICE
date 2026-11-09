@@ -1,0 +1,23 @@
+Deep View for DSH
+
+This package includes adapted source from deep-view 0.1.0:
+https://github.com/Fei2411/deep-view
+
+Source files and migration boundaries:
+- src/core/formula.js: deep-view/src/core/formula.js (safe expression interpreter).
+- src/core/views.js: deep-view/src/core/views.js (validation, evaluation and answers; html removed).
+- src/ui.tsx: deep-view/src/react/ui.js (labels and simple controls).
+- src/chart.tsx: deep-view/src/react/chart.js (SVG chart calculations and interaction).
+- src/widget.tsx: deep-view/src/react/card.js (view composition and local input).
+
+The upstream package is licensed under Apache License 2.0. See LICENSE for the
+complete license text supplied with the upstream source. No upstream NOTICE file
+was present in the inspected deep-view 0.1.0 package.
+
+Changes for this package include TypeScript React migration, dvui-* scoped class
+names, direct official --dsw-* theme token references, locale and Slot/RPC
+integration, removal of the html component and PNG export, and a non-persistent
+validated answer channel. Original icons in icon.svg are new artwork for this
+package, not upstream artwork.
+
+The surrounding DSH integration code is provided under Apache License 2.0.

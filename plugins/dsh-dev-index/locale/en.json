@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "DSH Docs",
-    "description": "Browse official DSH developer documentation in the Plugins page; Creator mode gets read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs_search, dsh_docs_fetch, dsh_plugins_search, dsh_plugins_fetch, dsh_github_fetch)."
+    "description": "Browse official DSH developer documentation in the Plugins page; the agent gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs, dsh_plugins)."
   }
 }

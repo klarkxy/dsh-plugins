@@ -2,9 +2,9 @@ import '../tests/legacy-call-policy.ts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import {
+  ZHIHU_RESEARCH_TOOL_NAME,
   ZHIHU_SEARCH_DEFAULT_COUNT,
   ZHIHU_SEARCH_MAX_COUNT,
-  ZHIHU_SEARCH_TOOL_NAME,
   ZHIHU_SEARCH_VERSION,
   executeZhihuSearch,
   renderZhihuSearch,
@@ -12,7 +12,7 @@ import {
   ZhihuSearchError,
   type ZhihuSearchFetcher,
 } from './search-api.ts'
-import { createZhihuSearchTool } from './tool-definitions.ts'
+import { createZhihuResearchTool } from './tool-definitions.ts'
 
 vi.mock('node:fs/promises', async () => {
   const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
@@ -38,7 +38,7 @@ function makeFetcher(handler: (url: string, init?: { headers?: Record<string, st
   return (input, init) => Promise.resolve(handler(typeof input === 'string' ? input : (input as URL).toString(), init as { headers?: Record<string, string>; signal?: AbortSignal }))
 }
 
-describe('zhihu_search', () => {
+describe('zhihu_research search', () => {
   beforeEach(() => {
     readFileMock.mockReset()
   })
@@ -261,12 +261,12 @@ describe('zhihu_search', () => {
     })
   })
 
-  describe('createZhihuSearchTool', () => {
+  describe('createZhihuResearchTool', () => {
     it('registers the canonical tool name and returns a Markdown content block', () => {
-      const tool = createZhihuSearchTool({ env: { ZHIHU_ACCESS_TOKEN: 'primarytoken1' } })
-      expect(tool.name).toBe(ZHIHU_SEARCH_TOOL_NAME)
+      const tool = createZhihuResearchTool({ env: { ZHIHU_ACCESS_TOKEN: 'primarytoken1' } })
+      expect(tool.name).toBe(ZHIHU_RESEARCH_TOOL_NAME)
       const blocks = (tool as unknown as { output: { render: (args: unknown, value: unknown) => Array<{ type: string; text: string }> } }).output.render(
-        { query: 'q', count: 1 },
+        { action: 'search', query: 'q', count: 1 },
         {
           version: ZHIHU_SEARCH_VERSION,
           query: 'q',
@@ -279,12 +279,12 @@ describe('zhihu_search', () => {
 
     const executeTool = (tool: unknown, args: { query: string; count?: number }) =>
       (tool as { execute: (a: unknown, exec: { signal: AbortSignal }) => Promise<{ items: unknown[] }> })
-        .execute(args, { signal: new AbortController().signal })
+        .execute({ action: 'search', ...args }, { signal: new AbortController().signal })
 
     it('reports success with the item count through onExecuted', async () => {
       const events: Array<{ ok: boolean; results: number }> = []
       const fetcher = makeFetcher(() => jsonResponse(ENVELOPE([{ Title: 't', ContentType: 'x', Url: 'u', ContentText: 's' }])))
-      const tool = createZhihuSearchTool({
+      const tool = createZhihuResearchTool({
         fetcher,
         env: { ZHIHU_ACCESS_TOKEN: 'primarytoken1' },
         onExecuted: (event) => events.push(event),
@@ -297,7 +297,7 @@ describe('zhihu_search', () => {
     it('reports failures through onExecuted and still rethrows', async () => {
       const events: Array<{ ok: boolean; results: number }> = []
       const fetcher = makeFetcher(() => jsonResponse(null, { ok: false, status: 401 }))
-      const tool = createZhihuSearchTool({
+      const tool = createZhihuResearchTool({
         fetcher,
         env: { ZHIHU_ACCESS_TOKEN: 'primarytoken1' },
         onExecuted: (event) => events.push(event),
@@ -308,7 +308,7 @@ describe('zhihu_search', () => {
 
     it('never lets a throwing onExecuted hook break the tool result', async () => {
       const fetcher = makeFetcher(() => jsonResponse(ENVELOPE([])))
-      const tool = createZhihuSearchTool({
+      const tool = createZhihuResearchTool({
         fetcher,
         env: { ZHIHU_ACCESS_TOKEN: 'primarytoken1' },
         onExecuted: () => { throw new Error('metering boom') },

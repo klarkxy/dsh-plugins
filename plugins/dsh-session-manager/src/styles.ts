@@ -165,42 +165,24 @@ ${modelMenuCss}
 }
 .${FREE_CHAT_ROOT}.dsm-item[open] > .dsm-item-summary .dsm-item-chevron { transform: rotate(180deg); }
 .${FREE_CHAT_ROOT} .dsm-item-body { padding: 0 0 16px; }
-/* Settings group body: one quiet reading surface. Rules, not nested wells,
- * separate sections; dependent controls align with the feature they belong to. */
+/* Settings row bodies: each collapsible row edits its own keys and saves on
+ * change, so the body is one flat reading surface — a feature block per
+ * switch/section, dependent controls indented underneath. */
 .${FREE_CHAT_ROOT} .dsm-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-width: 0;
-}
-.${FREE_CHAT_ROOT} .dsm-setting {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
 }
-.${FREE_CHAT_ROOT} .dsm-setting + .dsm-setting {
-  padding-top: 20px;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
-}
-.${FREE_CHAT_ROOT} .dsm-setting-header {
+.${FREE_CHAT_ROOT} .dsm-feature {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-.${FREE_CHAT_ROOT} .dsm-ghost-controls {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
-  align-items: start;
-  gap: 16px;
-}
-/* SegmentedTabs is 42px tall; its adjacent text controls share that baseline. */
-.${FREE_CHAT_ROOT} .dsm-ghost-controls .dsh-model-menu-trigger,
-.${FREE_CHAT_ROOT} .dsm-ghost-controls .dsm-ghost-input {
-  height: 42px;
+  gap: 8px;
+  min-width: 0;
 }
 .${FREE_CHAT_ROOT} .dsm-feature + .dsm-feature {
   margin-top: 4px;
+  padding-top: 4px;
   border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 .${FREE_CHAT_ROOT} .dsm-feature > .dsh-ui-toggle-row { padding: 8px 0; }
@@ -208,20 +190,44 @@ ${modelMenuCss}
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 4px 0 8px;
+  padding: 0 0 8px 24px;
 }
 .${FREE_CHAT_ROOT} .dsm-feature-options[data-disabled='true'] .dsh-ui-label,
 .${FREE_CHAT_ROOT} .dsm-feature-options[data-disabled='true'] .dsh-ui-meta {
   color: var(--dsw-alias-label-tertiary);
 }
-.${FREE_CHAT_ROOT} .dsm-compact-options { max-width: calc(50% - 10px); }
-.${FREE_CHAT_ROOT} .dsm-model-field .dsh-model-menu-root,
-.${FREE_CHAT_ROOT} .dsm-model-field .dsh-model-menu-trigger {
-  width: 100%;
-  max-width: none;
+/* A feature's model picker: label on the left, the menu trigger on the right;
+ * narrow widths wrap the trigger under the label. */
+.${FREE_CHAT_ROOT} .dsm-model-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
-.${FREE_CHAT_ROOT} .dsm-model-field .dsh-model-menu-trigger {
+.${FREE_CHAT_ROOT} .dsm-model-choice .dsh-model-menu-trigger:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: not-allowed;
+}
+.${FREE_CHAT_ROOT} .dsm-model-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
+  gap: 4px 16px;
+}
+.${FREE_CHAT_ROOT} .dsm-model-choice > .dsh-ui-label {
+  flex: 1 1 120px;
+  min-width: 120px;
+}
+.${FREE_CHAT_ROOT} .dsm-model-choice .dsh-model-menu-root {
+  flex: 1 1 200px;
+  min-width: min(200px, 100%);
+  max-width: 280px;
+}
+.${FREE_CHAT_ROOT} .dsm-model-choice .dsh-model-menu-trigger {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
   height: 32px;
   padding: 0 10px;
   border: 0.5px solid var(--dsw-alias-border-l4);
@@ -229,13 +235,13 @@ ${modelMenuCss}
   background: var(--dsw-alias-bg-layer-3);
   color: var(--dsw-alias-label-primary);
 }
-.${FREE_CHAT_ROOT} .dsm-model-field .dsh-model-menu-triggerLabel {
+.${FREE_CHAT_ROOT} .dsm-model-choice .dsh-model-menu-triggerLabel {
   flex: 1;
-  text-align: left;
-}
-.${FREE_CHAT_ROOT} .dsm-settings-footer .dsh-ui-notice--error {
-  flex: 0 0 100%;
   min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .${FREE_CHAT_ROOT} .dsm-minutes-control {
   display: flex;
@@ -243,10 +249,7 @@ ${modelMenuCss}
   gap: 8px;
 }
 .${FREE_CHAT_ROOT} .dsm-minutes { width: 88px; }
-@media (max-width: 560px) {
-  .${FREE_CHAT_ROOT} .dsm-ghost-controls { grid-template-columns: minmax(0, 1fr); }
-  .${FREE_CHAT_ROOT} .dsm-compact-options { max-width: none; }
-}
+.${FREE_CHAT_ROOT} .dsm-text-input { max-width: 320px; }
 /* Welcome-back card: one flat full-width row at the latest turn's tail in the
  * chat flow — a single bordered surface with the recap laid out inline, no
  * nested box. */

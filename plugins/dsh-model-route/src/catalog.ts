@@ -10,6 +10,12 @@ export interface ModelMenuChoice {
   readonly provider: string
   readonly model: string
   readonly label: string
+  /**
+   * Provider display name from the catalog group. Optional: synthetic entries
+   * (a saved route missing from the catalog) have no group, so consumers must
+   * fall back to `provider`. Search matches it alongside the provider id.
+   */
+  readonly providerLabel?: string
   readonly efforts: ReadonlyArray<{ id: string; name: string }>
 }
 
@@ -129,7 +135,7 @@ export function parseModelMenuChoices(value: unknown, bound?: ModelRoute): Model
       const efforts = reasoning && Array.isArray(reasoning.efforts)
         ? reasoning.efforts.flatMap(effort => { const parsed = parseEffort(effort); return parsed ? [parsed] : [] })
         : []
-      choices.push({ provider, model, label: `${providerName} / ${name}`, efforts })
+      choices.push({ provider, model, label: `${providerName} / ${name}`, providerLabel: providerName, efforts })
     }
   }
   if (bound?.provider && bound.model && !choices.some(item => item.provider === bound.provider && item.model === bound.model)) {

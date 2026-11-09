@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-zhihu",
-  "version": "0.2.11",
+  "version": "0.3.0",
   "description": "Zhihu site and web search, hot list, Zhida AI answers, knowledge bases, question recommendations and answer summaries, published content and comments, creator stats, quota tracking, and draft sync with image uploads.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -107,15 +107,15 @@
     "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/dsh-credentials": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.1",
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-credentials": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1",
     "react": "^18.2.0",
     "@types/react": "18.3.31",
     "react-dom": "^18.2.0",
     "@types/react-dom": "^18.3.1",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1"
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -162,6 +162,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "4db29dfd20d63b3c68b1f8d1b7ddae7fdf52edd6225e9fa7b9069afac75bccac"
+    "contentHash": "39b8248595b2a425a42c3a204c213e9183029c926b2eec10b8f54e4c7c2f2d21"
   }
 }

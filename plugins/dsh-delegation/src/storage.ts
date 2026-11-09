@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { defaultSettings, type DelegationSettings } from './contracts.ts'
 
 export const SETTINGS_KEY = 'global'
+export const RECENT_KEY = 'global'
 
 export const settingsSchema = z.object({
   revision: z.number().int().nonnegative(),
@@ -13,6 +14,15 @@ export const sessionSchema = z.object({
   enabled: z.boolean(),
   revision: z.number().int().min(1),
 }).strict()
+
+export const recentSchema = z.object({
+  enabled: z.boolean(),
+}).strict()
+
+/** The remembered new-session choice; a single row under RECENT_KEY. */
+export interface RecentChoice {
+  readonly enabled: boolean
+}
 
 export interface SessionDelegation {
   readonly enabled: boolean
@@ -40,6 +50,7 @@ export const delegationDomain = defineDomain({
   tables: {
     settings: domainTable<string, DelegationSettings>(settingsSchema),
     sessions: domainTable<string, SessionDelegation>(sessionSchema),
+    recent: domainTable<string, RecentChoice>(recentSchema),
   },
 })
 
@@ -55,4 +66,10 @@ export function parseSession(value: unknown): SessionDelegation | undefined {
   const parsed = sessionSchema.safeParse(value)
   if (!parsed.success) return undefined
   return { enabled: parsed.data.enabled, revision: parsed.data.revision }
+}
+
+/** A missing or unreadable recent row reads as "no remembered choice". */
+export function parseRecent(value: unknown): RecentChoice | undefined {
+  const parsed = recentSchema.safeParse(value)
+  return parsed.success ? { enabled: parsed.data.enabled } : undefined
 }

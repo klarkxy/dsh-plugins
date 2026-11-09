@@ -7,8 +7,12 @@ import {
   resolveConfig,
   type Config as PluginConfig,
 } from './contracts.ts'
-import { AutoContinueError, AutoContinueService, type AutoContinueTableLike } from './auto-continue.ts'
+import {
+  AutoContinueError, AutoContinueService,
+  type AutoContinueRecentTableLike, type AutoContinueTableLike,
+} from './auto-continue.ts'
 import { AutoContinueRunner } from './auto-runner.ts'
+import { CreationDefaultsMirror, type CreationDefaultsDeps } from './creation-defaults.ts'
 import { createCursorKey } from './cursor.ts'
 import { registerSessionTools } from './tools.ts'
 import { registerSessionManagerRpc } from './rpc.ts'
@@ -40,6 +44,8 @@ export interface Config {
   continueMode?: 'fixed' | 'auto'
   autoContinueMode?: 'off' | 'cautious' | 'bold'
   autoContinueMax?: number
+  allowSelfFork?: boolean
+  allowSendMessage?: boolean
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -52,6 +58,8 @@ export const Config: Schema<Config> = Schema.object({
   continueMode: Schema.union([Schema.const('fixed' as const), Schema.const('auto' as const)]).default('fixed'),
   autoContinueMode: Schema.union([Schema.const('off' as const), Schema.const('cautious' as const), Schema.const('bold' as const)]).default('off'),
   autoContinueMax: Schema.number().default(3),
+  allowSelfFork: Schema.boolean().default(false),
+  allowSendMessage: Schema.boolean().default(false),
 }).i18n({
   zh: {
     pageChars: '明细与交接模式每页内容的输出上限（UTF-8 字节）；对话预览按轮数分页，不受此限',
@@ -63,6 +71,8 @@ export const Config: Schema<Config> = Schema.object({
     continueMode: 'fixed 使用固定文本；auto 在上一轮结束后用模型生成一次灰影文本，并缓存在这个会话中',
     autoContinueMode: '新会话默认的自动继续形态：off 关闭；cautious 仅在回复有明确未完成依据时自动发送继续；bold 没完成就继续，低风险选择按推荐方案走。会话开始后锁定',
     autoContinueMax: '自动继续会话中，你每发一条消息之后最多自动继续的次数（1–10）',
+    allowSelfFork: '向 agent 开放 fork_session 工具：可由 agent 自行决定分叉当前会话为新会话分支，不再逐次确认',
+    allowSendMessage: '向 agent 开放 send_session_message 工具：可由 agent 自行决定向任意未归档会话发送一条标记为 agent 转发的消息，不再逐次确认',
   },
   en: {
     pageChars: 'Maximum content per details/handoff page (UTF-8 bytes); conversation previews page by turn count instead',
@@ -74,6 +84,8 @@ export const Config: Schema<Config> = Schema.object({
     continueMode: 'fixed sends the configured text; auto generates the ghost once after the previous turn ends and caches it in the session',
     autoContinueMode: 'Default Auto-continue mode for new sessions: off disables it; cautious continues only on clear evidence; bold continues unless done, taking the recommended option on low-risk choices. Locked once a session starts',
     autoContinueMax: 'How many times it may continue automatically after each message you send (1-10)',
+    allowSelfFork: 'Expose the fork_session tool: the agent may fork this session into a new branch at its own discretion, without per-call confirmation',
+    allowSendMessage: 'Expose the send_session_message tool: the agent may send an agent-attributed message to any unarchived session at its own discretion, without per-call confirmation',
   },
 })
 
@@ -104,8 +116,10 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
   // storageDomain the model selector stays hidden and writes fail soft.
   let settings: PresenceSettingsStore | undefined
   let autoContinueTable: AutoContinueTableLike | undefined
+  let autoContinueRecentTable: AutoContinueRecentTableLike | undefined
   let autoContinueService: AutoContinueService | undefined
   let storageGeneration: object | undefined
+  let storageReady: Promise<void> = Promise.resolve()
   ctx.inject(['storageDomain'], injected => {
     const generation = {}
     storageGeneration = generation
@@ -164,6 +178,7 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
         })
         settings = opened
         autoContinueTable = domain.table('auto_continue') as AutoContinueTableLike
+        autoContinueRecentTable = domain.table('auto_continue_recent') as AutoContinueRecentTableLike
       } catch (error) {
         unregister?.()
         if (store !== undefined) await store.close()
@@ -171,10 +186,14 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
         throw error
       }
     })().catch(() => { /* storageDomain unavailable or incompatible: degrade silently */ })
+    storageReady = opening
     injected.effect(() => async () => {
       disposed = true
       unregister?.()
-      autoContinueTable = undefined
+      if (storageGeneration === generation) {
+        autoContinueTable = undefined
+        autoContinueRecentTable = undefined
+      }
       if (settings === store) settings = undefined
       // Close immediately to reject queued work, then wait for a late open too.
       await store?.close()
@@ -226,6 +245,7 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
     }
     const service = new AutoContinueService({
       records: () => autoContinueTable,
+      recent: () => autoContinueRecentTable,
       sessionStore: scoped.sessions as never,
       agents: scoped.agents as never,
       sessionQuery: ctx.sessionQuery as never,
@@ -253,6 +273,9 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
     // here would fail agent creation, so the listener never propagates one.
     inner.effect(() => ctx.on('agent/created', async ({ agent, source }: { agent: { id: string; session?: { id: string; header?: unknown } }; source: string }) => {
       try {
+        // The first draft after a restart may arrive while storage is opening.
+        // Do not seed it with an empty table before its remembered mode loads.
+        await storageReady
         await service.seed(agent as never, source)
       } catch (error) {
         ctx.logger.warn('dsh-session-manager: could not seed auto-continue state: %s', error instanceof Error ? error.message : String(error))
@@ -267,6 +290,23 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
         await runner.dispose()
       }
     }, 'session-manager.autocontinue.runner')
+  })
+  // Native creation chips keep using the host's own defaults and refresh
+  // notifications. This optional bridge remembers only pre-first-turn picks.
+  ctx.inject(['settings', 'sessions', 'sessionProjections', 'permissionPresets', 'agentPresets'], inner => {
+    const host = inner as unknown as CreationDefaultsDeps
+    const mirror = new CreationDefaultsMirror({
+      settings: host.settings,
+      sessions: host.sessions,
+      sessionProjections: host.sessionProjections,
+      permissionPresets: host.permissionPresets,
+      agentPresets: host.agentPresets,
+      log: { warn: message => ctx.logger.warn(message) },
+    })
+    inner.effect(() => {
+      const off = ctx.on('session/event', mirror.onSessionEvent)
+      return () => { off(); mirror.dispose() }
+    }, 'session-manager.creation-defaults')
   })
   // CLI-only hosts still load the query tools; the browser RPC follows its own services.
   ctx.inject(['connection', 'webServer'], inner => {

@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-route",
-  "version": "0.2.7",
+  "version": "0.3.0",
   "description": "Shared library that lets DSH plugins describe provider, model, and reasoning-effort settings consistently and share model lists and picker menus; installed automatically by dependent plugins.",
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-route/",
   "license": "SEE LICENSE IN LICENSE",
@@ -31,6 +31,11 @@
       "import": "./lib/ui.js",
       "default": "./lib/ui.js"
     },
+    "./model-picker": {
+      "types": "./lib/model-picker.d.ts",
+      "import": "./lib/model-picker.js",
+      "default": "./lib/model-picker.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -47,6 +52,7 @@
   "peerDependencies": {
     "zod": "^4.1.5",
     "@deepseek-ai/schemastery": ">=3.18.4",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.2-rc.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
@@ -55,6 +61,9 @@
       "optional": true
     },
     "@deepseek-ai/schemastery": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-slots": {
       "optional": true
     },
     "react": {
@@ -68,8 +77,9 @@
     "jsdom": "29.1.1",
     "@types/jsdom": "28.0.3",
     "zod": "4.4.3",
-    "@deepseek-ai/schemastery": "3.18.5",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
+    "@deepseek-ai/schemastery": "3.19.0",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "@types/react": "18.3.31",
@@ -97,6 +107,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "7d532fe75fc9e5609e46f7293bcc81ceaa2779d4b069f725b59fa0c5640a7092"
+    "contentHash": "19ba2e2816f464064bf57f1335f8d5eff9b49283c3d10bbe1e009bc253d170fb"
   }
 }

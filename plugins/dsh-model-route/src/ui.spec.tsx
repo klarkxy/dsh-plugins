@@ -35,5 +35,29 @@ describe('ModelMenu', () => {
     expect(modelMenuCss).toContain('--dsw-')
     expect(modelMenuCss).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
     expect(modelMenuCss).not.toMatch(/\brgba?\(/)
+    // The enhanced-mode slider keeps the same theme-token-only discipline.
+    expect(modelMenuCss).toContain('.dsh-model-menu-sliderGroup')
+    expect(modelMenuCss).not.toMatch(/:\s*#[0-9a-fA-F]{3,8}\b/)
+    // The transparent native input pins the painted thumb/track geometry so
+    // webkit's 16px default thumb cannot skew the end-point hit mapping.
+    expect(modelMenuCss).toContain('::-webkit-slider-thumb')
+    expect(modelMenuCss).toContain('::-moz-range-thumb')
+    expect(modelMenuCss).toContain('@media (prefers-reduced-motion: reduce)')
+  })
+
+  it('accepts the enhanced-mode props without changing the document-less render', () => {
+    const closed = renderToStaticMarkup(createElement(ModelMenu, {
+      open: false, onOpenChange: () => {}, anchor, choices, onPick: () => {},
+      initialPane: 'model', alwaysShowSearch: true, reasoningSlider: true,
+    }))
+    expect(closed).toContain('dsh-model-menu-root')
+    expect(closed).not.toContain('dsh-model-menu-menu')
+    // Open is still a body portal: no menu markup in SSR, no throw.
+    const open = renderToStaticMarkup(createElement(ModelMenu, {
+      open: true, onOpenChange: () => {}, anchor, choices, onPick: () => {},
+      initialPane: 'model', alwaysShowSearch: true, reasoningSlider: true,
+      efforts: [{ id: 'high', name: '高' }], selectedEffort: 'high', onPickEffort: () => {},
+    }))
+    expect(open).not.toContain('dsh-model-menu-menu')
   })
 })

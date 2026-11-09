@@ -1,0 +1,5 @@
+# Model picker: replaces the composer model seat and offers the shared picker factory.
+- insert:
+    - id: model-picker
+      name: '@klarkxy/dsh-model-picker'
+      disabled: false

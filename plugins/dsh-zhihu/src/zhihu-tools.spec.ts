@@ -11,12 +11,7 @@ import {
   renderZhihuHotList,
   renderZhihuKnowledgeSearch,
 } from './operations.ts'
-import {
-  createZhihuAskTool,
-  createZhihuGlobalSearchTool,
-  createZhihuHotListTool,
-  createZhihuKnowledgeSearchTool,
-} from './tool-definitions.ts'
+import { createZhihuResearchTool } from './tool-definitions.ts'
 
 vi.mock('node:fs/promises', async () => {
   const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
@@ -48,7 +43,7 @@ function makeFetcher(
 
 const execSignal = { signal: new AbortController().signal }
 
-describe('zhihu_global_search', () => {
+describe('zhihu_research global_search', () => {
   it('hits the global_search endpoint with clamped count and SearchDB', async () => {
     const fetcher = makeFetcher((url) => {
       const u = new URL(url)
@@ -77,15 +72,15 @@ describe('zhihu_global_search', () => {
   it('meters executions through onExecuted', async () => {
     const events: Array<{ ok: boolean; results: number }> = []
     const fetcher = makeFetcher(() => jsonResponse(ENVELOPE({ Items: [{ Title: 't' }, { Title: 'u' }] })))
-    const tool = createZhihuGlobalSearchTool({ fetcher, env: ENV, onExecuted: (event) => events.push(event) })
+    const tool = createZhihuResearchTool({ fetcher, env: ENV, onExecuted: (event) => events.push(event) })
     const execute = tool.execute as unknown as (args: unknown, exec: { signal: AbortSignal }) => Promise<{ items: unknown[] }>
-    const result = await execute({ query: 'q' }, execSignal)
+    const result = await execute({ action: 'global_search', query: 'q' }, execSignal)
     expect(result.items).toHaveLength(2)
     expect(events).toEqual([{ ok: true, results: 2 }])
   })
 })
 
-describe('zhihu_hot_list', () => {
+describe('zhihu_research hot_list', () => {
   it('hits the hot_list endpoint with clamped limit and normalizes items', async () => {
     const fetcher = makeFetcher((url) => {
       const u = new URL(url)
@@ -108,14 +103,14 @@ describe('zhihu_hot_list', () => {
   it('meters failures through onExecuted and rethrows', async () => {
     const events: Array<{ ok: boolean; results: number }> = []
     const fetcher = makeFetcher(() => jsonResponse(null, { ok: false, status: 500 }))
-    const tool = createZhihuHotListTool({ fetcher, env: ENV, onExecuted: (event) => events.push(event) })
+    const tool = createZhihuResearchTool({ fetcher, env: ENV, onExecuted: (event) => events.push(event) })
     const execute = tool.execute as unknown as (args: unknown, exec: { signal: AbortSignal }) => Promise<unknown>
-    await expect(execute({}, execSignal)).rejects.toMatchObject({ code: 'HTTP_ERROR', status: 500 })
+    await expect(execute({ action: 'hot_list' }, execSignal)).rejects.toMatchObject({ code: 'HTTP_ERROR', status: 500 })
     expect(events).toEqual([{ ok: false, results: 0 }])
   })
 })
 
-describe('zhihu_ask', () => {
+describe('zhihu_research ask', () => {
   it('posts an OpenAI-compatible request and reads content plus reasoning', async () => {
     const fetcher = makeFetcher((url, init) => {
       expect(new URL(url).pathname).toBe('/v1/chat/completions')
@@ -158,16 +153,16 @@ describe('zhihu_ask', () => {
       seen.push(body.model)
       return jsonResponse({ choices: [{ message: { content: 'ok' } }] })
     })
-    const tool = createZhihuAskTool({ fetcher, env: ENV })
+    const tool = createZhihuResearchTool({ fetcher, env: ENV })
     const execute = tool.execute as unknown as (args: unknown, exec: { signal: AbortSignal }) => Promise<unknown>
-    await execute({ query: 'q' }, execSignal)
-    await execute({ query: 'q', model: 'zhida-agent' }, execSignal)
-    await execute({ query: 'q', model: 'not-a-model' }, execSignal)
+    await execute({ action: 'ask', query: 'q' }, execSignal)
+    await execute({ action: 'ask', query: 'q', model: 'zhida-agent' }, execSignal)
+    await execute({ action: 'ask', query: 'q', model: 'not-a-model' }, execSignal)
     expect(seen).toEqual(['zhida-thinking-1p5', 'zhida-agent', 'zhida-thinking-1p5'])
   })
 })
 
-describe('zhihu_knowledge_search', () => {
+describe('zhihu_research knowledge_search', () => {
   it('posts to the knowledge search endpoint with the public recall scope by default', async () => {
     const fetcher = makeFetcher((url, init) => {
       expect(new URL(url).pathname).toBe('/api/v1/knowledge/search')
@@ -198,9 +193,9 @@ describe('zhihu_knowledge_search', () => {
       expect(body.RecallScopes).toEqual(['personal', 'subscription'])
       return jsonResponse(ENVELOPE({ Items: [] }))
     })
-    const tool = createZhihuKnowledgeSearchTool({ fetcher, env: ENV })
+    const tool = createZhihuResearchTool({ fetcher, env: ENV })
     const execute = tool.execute as unknown as (args: unknown, exec: { signal: AbortSignal }) => Promise<{ recallScopes: string[] }>
-    const result = await execute({ query: 'q', recallScopes: ['personal', 'subscription'] }, execSignal)
+    const result = await execute({ action: 'knowledge_search', query: 'q', recallScopes: ['personal', 'subscription'] }, execSignal)
     expect(result.recallScopes).toEqual(['personal', 'subscription'])
   })
 
@@ -216,5 +211,17 @@ describe('zhihu_knowledge_search', () => {
     expect(text).toContain('1. 文档')
     expect(text).toContain('来源：u')
     expect(text).toContain('- 片段')
+  })
+})
+
+describe('zhihu_research required params', () => {
+  it('rejects missing query for query actions without metering', async () => {
+    const events: Array<{ ok: boolean; results: number }> = []
+    const tool = createZhihuResearchTool({ env: ENV, onExecuted: (event) => events.push(event) })
+    const execute = tool.execute as unknown as (args: unknown, exec: { signal: AbortSignal }) => Promise<unknown>
+    for (const action of ['search', 'global_search', 'ask', 'knowledge_search'] as const) {
+      await expect(execute({ action }, execSignal)).rejects.toMatchObject({ code: 'INVALID_ARGUMENTS' })
+    }
+    expect(events).toEqual([])
   })
 })

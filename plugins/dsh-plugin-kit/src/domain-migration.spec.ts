@@ -272,12 +272,27 @@ async function openPlugin(facility: DomainFacility, spec: DomainSpec) {
 }
 
 describe('legacy-shaped domain fixture layout', () => {
-  it('rejects a recap v3 single file when the host opens current as layout single despite compatibleVersions', async () => {
+  // Since storage-json 0.2.2 the single layout also honours compatibleVersions:
+  // a direct host open of the current spec as `single` ADMITS a legacy stamp.
+  // The kit's openCompatibleDomain stays correct because its probe always
+  // opens `single` with compatibleVersions emptied (see domain.ts).
+  it('admits a recap v3 single file when the host opens current as layout single honouring compatibleVersions', async () => {
     const root = scratchRoot()
     writeSingle(root, recapDomain.name, 3, 'state', 'global', recapRecord(3))
     const original = readFileSync(sourcePath(root, recapDomain.name))
     const facility = openHost(root)
-    await expect(facility.open({ ...recapDomain, layout: 'single' })).rejects.toMatchObject({ code: 'version-mismatch' })
+    const domain = await facility.open({ ...recapDomain, layout: 'single' })
+    expect(domain.table('state').get('global')).toBeTruthy()
+    await domain.close()
+    expect(readFileSync(sourcePath(root, recapDomain.name))).toEqual(original)
+  })
+
+  it('still rejects a recap v3 single file once compatibleVersions is emptied — the kit probe shape', async () => {
+    const root = scratchRoot()
+    writeSingle(root, recapDomain.name, 3, 'state', 'global', recapRecord(3))
+    const original = readFileSync(sourcePath(root, recapDomain.name))
+    const facility = openHost(root)
+    await expect(facility.open({ ...recapDomain, layout: 'single', compatibleVersions: [] })).rejects.toMatchObject({ code: 'version-mismatch' })
     expect(facility.get(recapDomain.name)).toBeUndefined()
     expect(readFileSync(sourcePath(root, recapDomain.name))).toEqual(original)
   })

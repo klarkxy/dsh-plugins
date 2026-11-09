@@ -6,6 +6,7 @@ import { IconModelNetworkSettings, registerSettingsSectionIcon } from '@klarkxy/
 import { createModelSettingsSubscriber, mountModelSettingsChanges, type ModelSettingsSubscriberContext } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import { MODEL_CATALOG_INJECT, readModelCatalog } from '@klarkxy/dsh-model-route'
 import { modelMenuCss } from '@klarkxy/dsh-model-route/ui'
+import type { RenderFactorySlot } from '@klarkxy/dsh-plugin-kit/model-picker'
 import { CAST_WATCH_NAMESPACES, CastPage, type CastApi } from './client-cast.tsx'
 import { SubagentCatalogAction, SubagentHeaderLineage, type SubagentAddress, type LocaleLike } from './client-subagent-catalog.tsx'
 
@@ -20,10 +21,15 @@ function localeActive(locale: Locale): string {
 }
 
 const css = `${officialUiCss('dsh-model-hub')}${modelMenuCss}`
-export function SubagentModelsPage({ api, locale }: { api: CastApi; locale: Locale }) {
+export function SubagentModelsPage({ api, locale, renderFactorySlot }: {
+  api: CastApi
+  locale: Locale
+  /** Framework-composed factory renderer; absent under direct test renders. */
+  renderFactorySlot?: RenderFactorySlot
+}) {
   return <section className="dsh-model-hub dsh-ui-page" aria-label={localeActive(locale).toLowerCase().startsWith('zh') ? '子代理' : 'Subagents'}>
     <style>{css}</style>
-    <CastPage api={api} locale={locale} />
+    <CastPage api={api} locale={locale} renderFactorySlot={renderFactorySlot} />
   </section>
 }
 

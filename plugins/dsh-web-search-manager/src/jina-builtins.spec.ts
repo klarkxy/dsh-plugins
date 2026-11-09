@@ -15,7 +15,7 @@ function response(url: string, content: string, statusCode = 200): WebFetchResul
 async function setup() {
   vi.stubEnv('DSH_WEB_SEARCH_PROVIDER', undefined)
   vi.stubEnv('DSH_WEB_FETCH_PROVIDER', undefined)
-  const web = new WebRuntime(new Context(), {})
+  const web = new WebRuntime(new Context(), { searchProvider: { get: () => undefined }, fetchProvider: { get: () => undefined } } as never)
   const initial = { ...defaultSettings(), maxFetchChars: 1000 }
   const save = vi.fn(async () => {})
   const manager = new WebSearchManager({ web, initial, save, resolveCredential: async () => undefined })

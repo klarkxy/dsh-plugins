@@ -28,7 +28,8 @@ export interface LlmTextRequest {
   route: FeatureModelRoute
   system: string
   text: string
-  maxTokens: number
+  /** Omit to use the selected model's normal output settings. */
+  maxTokens?: number
   signal: AbortSignal
   /** The real session id for host attribution; never a feature-scoped alias. */
   sessionId?: string
@@ -137,14 +138,17 @@ export async function callLlmText(llm: LlmTextCaller, request: LlmTextRequest): 
     provider: request.route.provider,
     model: request.route.model,
     ...(effort ? { reasoningEffort: ReasoningEffortId(effort) } : {}),
-    maxTokens: request.maxTokens,
+    ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
   }, request.signal, request.configure)
   if (!live()) throw Object.assign(new Error('调用已取消。'), { name: 'AbortError' })
+  const maxTokens = request.maxTokens === undefined
+    ? prepared.config.maxTokens
+    : Math.min(request.maxTokens, prepared.config.maxTokens ?? request.maxTokens)
   const options: GenerateOptions = {
     provider: prepared.config.provider,
     model: prepared.config.model,
     ...(prepared.config.reasoningEffort ? { reasoningEffort: prepared.config.reasoningEffort } : {}),
-    ...(prepared.config.maxTokens !== undefined ? { maxTokens: Math.min(request.maxTokens, prepared.config.maxTokens) } : { maxTokens: request.maxTokens }),
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
     ...(prepared.config.temperature !== undefined ? { temperature: prepared.config.temperature } : {}),
     ...(prepared.config.stop ? { stop: [...prepared.config.stop] } : {}),
     system: request.system,

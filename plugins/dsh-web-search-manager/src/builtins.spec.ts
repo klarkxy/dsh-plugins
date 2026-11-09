@@ -16,7 +16,7 @@ describe('builtin web providers', () => {
   it('registers a keyless search engine plus DeepSeek, Exa, and hidden HTTP fetch', async () => {
     vi.stubEnv('DSH_WEB_SEARCH_PROVIDER', undefined)
     vi.stubEnv('DSH_WEB_FETCH_PROVIDER', undefined)
-    const web = new WebRuntime(new Context(), {})
+    const web = new WebRuntime(new Context(), { searchProvider: { get: () => undefined }, fetchProvider: { get: () => undefined } } as never)
     const keys = new Map([['DEEPSEEK_API_KEY', 'fixture-deepseek-secret']])
     const manager = new WebSearchManager({
       web, save: async (_settings: WebSettings) => {},
@@ -64,7 +64,7 @@ describe('integrated Tavily configuration compatibility', () => {
     const original = structuredClone(initial)
     const save = vi.fn(async () => {})
     const resolveCredential = vi.fn(async (ref: string) => ref === 'DSH_EDITOR_WEB_TAVILY_API_KEY' ? 'existing-fixture-key' : undefined)
-    const web = new WebRuntime(new Context(), {})
+    const web = new WebRuntime(new Context(), { searchProvider: { get: () => undefined }, fetchProvider: { get: () => undefined } } as never)
     const manager = new WebSearchManager({ web, initial, save, resolveCredential })
     fixtures.push(manager)
     const off = registerBuiltins(web, { settings: () => manager.status().settings, resolveCredential })

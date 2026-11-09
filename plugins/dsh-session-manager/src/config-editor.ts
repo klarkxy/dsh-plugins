@@ -68,7 +68,16 @@ export function readPresenceConfig(config: ResolvedConfig, store?: PresenceModel
     handoffModel: row?.handoffModel ?? null,
     autoContinueMode: config.autoContinueMode,
     autoContinueMax: config.autoContinueMax,
+    allowSelfFork: config.allowSelfFork,
+    allowSendMessage: config.allowSendMessage,
   }
+}
+
+function flag(value: unknown, name: string): boolean {
+  if (typeof value !== 'boolean') {
+    throw new PresenceError('session-manager/invalid-request', `${name} must be a boolean`)
+  }
+  return value
 }
 
 function minutes(value: unknown, name: string): number {
@@ -143,6 +152,8 @@ export function sanitizeConfigPatch(patch: unknown): ConfigPatch {
     else if (key === 'handoffModel') next.handoffModel = modelRoute(record[key])
     else if (key === 'autoContinueMode') next.autoContinueMode = autoContinueMode(record[key])
     else if (key === 'autoContinueMax') next.autoContinueMax = autoContinueMax(record[key])
+    else if (key === 'allowSelfFork') next.allowSelfFork = flag(record[key], key)
+    else if (key === 'allowSendMessage') next.allowSendMessage = flag(record[key], key)
     else throw new PresenceError('session-manager/invalid-request', `unknown config key: ${key}`)
   }
   return next

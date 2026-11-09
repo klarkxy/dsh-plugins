@@ -225,6 +225,20 @@ export interface PresenceConfigModel {
   cancel(): void
 }
 
+/**
+ * A host that predates the agent-action flags returns a config view without
+ * them, and a malformed one may carry a non-boolean. Both normalize to
+ * false: an absent or unusable flag must never read as granted. Only a real
+ * boolean true keeps the permission on.
+ */
+function normalizeConfigView(view: ConfigView): ConfigView {
+  return {
+    ...view,
+    allowSelfFork: view.allowSelfFork === true,
+    allowSendMessage: view.allowSendMessage === true,
+  }
+}
+
 export function createPresenceConfigModel(host: PresenceHost, delay: (ms: number) => Promise<void> = ms => new Promise(resolve => setTimeout(resolve, ms))): PresenceConfigModel {
   const events = store()
   const lifetime = new AbortController()
@@ -235,6 +249,8 @@ export function createPresenceConfigModel(host: PresenceHost, delay: (ms: number
   let failure: OperationFailure | undefined
   let snapshot: PresenceConfigSnapshot = build()
   let readGeneration = 0
+  /** Several settings rows share this model; collapse concurrent reads into one call. */
+  let inflightLoad: Promise<void> | undefined
 
   function build(): PresenceConfigSnapshot {
     return {
@@ -266,23 +282,28 @@ export function createPresenceConfigModel(host: PresenceHost, delay: (ms: number
     })
   }
 
+  async function doLoad() {
+    const generation = ++readGeneration
+    try {
+      const view = await callPresence<ConfigView>(host, CONFIG_READ_ENDPOINT, {}, lifetime.signal)
+      if (lifetime.signal.aborted || generation !== readGeneration) return
+      values = normalizeConfigView(view)
+      phase = 'ready'
+      failure = undefined
+    } catch (error) {
+      if (lifetime.signal.aborted || generation !== readGeneration) return
+      phase = 'unavailable'
+      failure = readFailure(error)
+    }
+    publish()
+  }
+
   return {
     subscribe: events.subscribe,
     getSnapshot: () => snapshot,
-    async load() {
-      const generation = ++readGeneration
-      try {
-        const view = await callPresence<ConfigView>(host, CONFIG_READ_ENDPOINT, {}, lifetime.signal)
-        if (lifetime.signal.aborted || generation !== readGeneration) return
-        values = view
-        phase = 'ready'
-        failure = undefined
-      } catch (error) {
-        if (lifetime.signal.aborted || generation !== readGeneration) return
-        phase = 'unavailable'
-        failure = readFailure(error)
-      }
-      publish()
+    load() {
+      inflightLoad ??= doLoad().finally(() => { inflightLoad = undefined })
+      return inflightLoad
     },
     async save(patch) {
       if (saving || lifetime.signal.aborted) return
@@ -301,7 +322,7 @@ export function createPresenceConfigModel(host: PresenceHost, delay: (ms: number
           await delay(400)
           let view: ConfigView
           try {
-            view = await callPresence<ConfigView>(host, CONFIG_READ_ENDPOINT, {}, lifetime.signal)
+            view = normalizeConfigView(await callPresence<ConfigView>(host, CONFIG_READ_ENDPOINT, {}, lifetime.signal))
           } catch (error) {
             // A config edit can temporarily remove the RPC while its Host
             // instance is replaced. One failed read is not a failed save.
@@ -310,7 +331,7 @@ export function createPresenceConfigModel(host: PresenceHost, delay: (ms: number
           }
           if (same(view, patch)) {
             ++readGeneration
-            values = view
+            values = normalizeConfigView(view)
             phase = 'ready'
             saved = true
             saving = false

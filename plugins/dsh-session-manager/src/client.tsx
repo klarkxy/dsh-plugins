@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { IconChevronDownOutlineRegular, MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useState, useSyncExternalStore } from 'react'
-import { copyLocale, type CopyLocale } from './ui-copy.ts'
+import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useSyncExternalStore } from 'react'
+import { copyLocale, type CopyLocale, type UiTextKey } from './ui-copy.ts'
 import {
   CONTINUE_GHOST_ID,
   PLUGIN_NAME,
@@ -12,23 +12,31 @@ import {
   USER_ACTIONS_SLOT,
   WELCOME_BACK_CARD_ID,
   TURN_TAIL_SLOT,
-  SESSION_SETTINGS_ITEM_ID,
+  SESSION_SETTINGS_ITEMS,
 } from './contracts.ts'
 import { installContextMenuForwarding } from './context-menu.ts'
 import { CreateNoticeDialog, DeleteChatDialog } from './free-panel.tsx'
 import { installTemporaryWorkspacePicker, TemporaryWorkspaceNotice, type PickerRegistry } from './temporary-picker.tsx'
 import { bindTemporaryWorkspaceHost, createTemporaryWorkspaceModel } from './temporary-workspace.ts'
 import { bindHost, createFreeChatModel, createRetryModel, type FreeChatModel, type RetryModel } from './session-actions.ts'
-import { bindPresenceHost, createContinueModel, createPresenceConfigModel, createWelcomeBackModel, type PresenceConfigModel } from './presence-model.ts'
+import { bindPresenceHost, createContinueModel, createPresenceConfigModel, createWelcomeBackModel } from './presence-model.ts'
 import { AutoContinueOption } from './auto-continue-option.tsx'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
 import { registerSessionSettingsItem } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { registerAuxiliaryModelSettings } from '@klarkxy/dsh-plugin-kit/auxiliary-model-client'
 import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import { MODEL_CATALOG_INJECT, readModelCatalog } from '@klarkxy/dsh-model-route'
+import type { RenderFactorySlot } from '@klarkxy/dsh-plugin-kit/model-picker'
 import { ContinueGhost, WelcomeBackCard, type WelcomeBackTurn } from './presence-panel.tsx'
-import { SessionManagerSettings } from './settings-panel.tsx'
-import { freeChatCss, FREE_CHAT_ROOT } from './styles.ts'
+import {
+  AgentActionsSettings,
+  AutoContinueSettings,
+  ComposerSettings,
+  HandoffSettings,
+  ReturnSettings,
+  SessionSettingsDetails,
+} from './settings-panel.tsx'
+import { freeChatCss } from './styles.ts'
 import { UserMessageActions } from './user-actions.tsx'
 import { UserNodeWithEdit } from './user-node.tsx'
 import { bindEditHost } from './edit-host.ts'
@@ -192,25 +200,68 @@ export function apply(ctx: Context): void {
         />
       ))
     )))
-    // Session preferences contribute one row to the shared Session Management
-    // settings section. The kit-owned base service owns the page, so this
-    // plugin neither registers a section itself nor falls back to the General
-    // page. The row's body mounts on first expand only, so model-catalog and
-    // config reads do not run until the user opens it, and stays mounted while
-    // collapsed so a fold never drops an unsaved draft.
-    stops.push(registerSessionSettingsItem(
+    // Session preferences contribute four rows to the shared Session
+    // Management settings section. The kit-owned base service owns the page,
+    // so this plugin neither registers a section itself nor falls back to the
+    // General page. Every row's body mounts on first expand only, so model-
+    // catalog and config reads do not run until the user opens it, and stays
+    // mounted while collapsed so a fold never drops an in-progress draft.
+    // The rows share presenceConfig (loads dedupe); the live settings change
+    // stream reloads it at the plugin level, so the rows do not subscribe.
+    const registerSettingsRow = (
+      item: (typeof SESSION_SETTINGS_ITEMS)[number],
+      testId: string,
+      titleKey: UiTextKey,
+      descKey: UiTextKey,
+      body: (locale: CopyLocale, renderFactorySlot?: RenderFactorySlot) => React.ReactNode,
+    ) => stops.push(registerSessionSettingsItem(
       ctx,
-      { id: SESSION_SETTINGS_ITEM_ID, order: 65 },
-      () => (
-        <SessionManagerSettingsItem
-          model={presenceConfig}
-          locale={useLiveLocale(client.locale)}
-          modelCatalog={modelCatalog}
-          subscribeCatalog={subscribeCatalog}
-          subscribeSettings={subscribeSettings}
-        />
-      ),
+      item,
+      slotProps => {
+        const locale = useLiveLocale(client.locale)
+        return (
+          <SessionSettingsDetails testId={testId} titleKey={titleKey} descKey={descKey} locale={locale}>
+            {body(locale, (slotProps as { renderFactorySlot?: RenderFactorySlot } | undefined)?.renderFactorySlot)}
+          </SessionSettingsDetails>
+        )
+      },
     ))
+    const catalogProps = { modelCatalog, subscribeCatalog }
+    registerSettingsRow(
+      SESSION_SETTINGS_ITEMS[0],
+      'session-manager-composer-settings-item',
+      'composerGroupTitle',
+      'composerGroupHint',
+      (locale, renderFactorySlot) => <ComposerSettings model={presenceConfig} locale={locale} renderFactorySlot={renderFactorySlot} {...catalogProps} />,
+    )
+    registerSettingsRow(
+      SESSION_SETTINGS_ITEMS[1],
+      'session-manager-auto-continue-settings-item',
+      'autoContinueGroup',
+      'autoContinueGroupHint',
+      (locale, renderFactorySlot) => <AutoContinueSettings model={presenceConfig} locale={locale} renderFactorySlot={renderFactorySlot} {...catalogProps} />,
+    )
+    registerSettingsRow(
+      SESSION_SETTINGS_ITEMS[2],
+      'session-manager-return-settings-item',
+      'returnGroupTitle',
+      'returnGroupHint',
+      (locale, renderFactorySlot) => <ReturnSettings model={presenceConfig} locale={locale} renderFactorySlot={renderFactorySlot} {...catalogProps} />,
+    )
+    registerSettingsRow(
+      SESSION_SETTINGS_ITEMS[3],
+      'session-manager-handoff-settings-item',
+      'handoffGroupTitle',
+      'handoffGroupHint',
+      (locale, renderFactorySlot) => <HandoffSettings model={presenceConfig} locale={locale} renderFactorySlot={renderFactorySlot} {...catalogProps} />,
+    )
+    registerSettingsRow(
+      SESSION_SETTINGS_ITEMS[4],
+      'session-manager-agent-actions-settings-item',
+      'agentActionsGroup',
+      'agentActionsGroupHint',
+      locale => <AgentActionsSettings model={presenceConfig} locale={locale} />,
+    )
     stops.push(client.slots.inject('shell.overlay', () => (
       client.slots.register({
         name: 'shell.overlay',
@@ -319,48 +370,6 @@ function DeleteMenuItem(props: MenuProps & { locale?: LocaleService; model: Free
     }}>
       {uiText(locale, 'deleteChat')}
     </MenuItemButton>
-  )
-}
-
-/**
- * Session Management item: a named native details group. The body mounts on
- * the first expand only — the settings page must not fire every plugin's
- * config and model reads — and stays mounted afterwards so collapsing never
- * drops an unsaved draft or the settings-change subscription.
- */
-export function SessionManagerSettingsItem(props: {
-  model: PresenceConfigModel
-  locale: CopyLocale
-  modelCatalog?: () => Promise<unknown>
-  subscribeCatalog?: (onChange: () => void) => (() => void) | undefined
-  subscribeSettings?: (onChange: () => void, onError?: (message: string) => void) => () => void
-}): React.ReactElement {
-  const [visited, setVisited] = useState(false)
-  return (
-    <details
-      className={`${FREE_CHAT_ROOT} dsm-item`}
-      data-testid="session-manager-settings-item"
-      onToggle={event => { if ((event.currentTarget as HTMLDetailsElement).open) setVisited(true) }}
-    >
-      <summary className="dsm-item-summary">
-        <span>
-          <span className="dsm-item-title">{uiText(props.locale, 'settingsGroupTitle')}</span>
-          <span className="dsm-item-desc">{uiText(props.locale, 'settingsGroupHint')}</span>
-        </span>
-        <IconChevronDownOutlineRegular className="dsm-item-chevron" aria-hidden="true" />
-      </summary>
-      {visited ? (
-        <div className="dsm-item-body">
-          <SessionManagerSettings
-            model={props.model}
-            locale={props.locale}
-            modelCatalog={props.modelCatalog}
-            subscribeCatalog={props.subscribeCatalog}
-            subscribeSettings={props.subscribeSettings}
-          />
-        </div>
-      ) : null}
-    </details>
   )
 }
 

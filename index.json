@@ -278,8 +278,8 @@
         "en": "DSH Docs"
       },
       "description": {
-        "zh": "在插件页阅读 DeepSeek Harness 官方开发文档；创造模式用只读工具查找与检索文档，并在插件目录、npm 与 GitHub 搜索和核对插件。",
-        "en": "Read official DeepSeek Harness documentation in the Plugins page; Creator mode searches DSH docs and discovers or inspects plugins across the catalog, npm, and GitHub with read-only tools."
+        "zh": "在插件页浏览 DSH 官方开发文档；智能体获得两个只读工具检索文档与核对插件（dsh_docs、dsh_plugins）。",
+        "en": "Browse official DSH developer documentation in the Plugins page; the agent gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs, dsh_plugins)."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/dev-index/",
@@ -375,8 +375,8 @@
         "en": "Session Manager"
       },
       "description": {
-        "zh": "跨工作目录搜索和阅读历史会话，使用临时工作区；空输入一键续写或自动继续，久离回来给出摘要与上下文压缩建议。",
-        "en": "Search and read sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, and get a welcome-back recap with context-compaction hints after time away."
+        "zh": "跨工作目录搜索和阅读 DeepSeek Harness 会话，使用临时工作区；空输入一键续写或自动继续，久离回来给出摘要与上下文压缩建议；可选择让 agent 分叉当前会话或向其他会话发送消息。",
+        "en": "Search and read DeepSeek Harness sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, recap on return with context-compaction hints, and optionally let the agent fork the current session or message other sessions."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/",

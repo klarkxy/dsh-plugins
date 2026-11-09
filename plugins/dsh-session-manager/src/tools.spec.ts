@@ -2,10 +2,11 @@ import { resolve } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import Sessions, { SessionId } from '@deepseek-ai/dsh-session'
 import Query from '@deepseek-ai/dsh-session-query'
-import Tools from '@deepseek-ai/dsh-tools'
+import Tools, { projectToolSchema } from '@deepseek-ai/dsh-tools'
+import { ToolExecutionPipeline, executeToolBatch } from '@deepseek-ai/dsh-tools/pipeline'
 import type { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resolveConfig } from './contracts.ts'
+import { resolveConfig, type Config } from './contracts.ts'
 import { createCursorKey } from './cursor.ts'
 import { registerSessionTools } from './tools.ts'
 
@@ -18,13 +19,27 @@ class PromptStub extends Service {
 const contexts: Context[] = []
 afterEach(async () => { for (const ctx of contexts.splice(0)) await ctx.fiber.dispose() })
 
-async function fixture() {
+async function fixture(config: Config = {}, services?: Record<string, unknown>) {
   const ctx = new Context(); contexts.push(ctx)
   await ctx.plugin(PromptStub)
   await ctx.plugin(Tools)
   await ctx.plugin(Sessions)
   await ctx.plugin(Query)
-  ctx.effect(() => registerSessionTools(ctx, resolveConfig({ pageChars: 1_000 }), createCursorKey()))
+  if (services !== undefined) {
+    const base = ctx.get.bind(ctx)
+    ctx.get = ((name: string) => services[name] ?? base(name)) as typeof ctx.get
+  }
+  // The registry only dispatches to a mounted executor now. Install the same
+  // executor the native deployment composes — the official batch scheduler
+  // over the shared pipeline, built from the public dsh-tools/pipeline entry
+  // so no extra dependency is needed.
+  const pipeline = new ToolExecutionPipeline(ctx)
+  ctx.effect(() => ctx.tools.setExecutor({
+    describe: definitions => ({ schemas: definitions.map(definition => projectToolSchema(definition, false)) }),
+    execute: input => executeToolBatch(input, pipeline, () => 10),
+  }))
+  let unregisterTools: (() => void) | undefined
+  ctx.effect(() => unregisterTools = registerSessionTools(ctx, resolveConfig({ pageChars: 1_000, ...config }), createCursorKey()))
   const root = ctx.sessions.create(SessionId('root'), { meta: { cwd: resolve('a') } })
   const child = ctx.sessions.create(SessionId('child'), { meta: { cwd: resolve('b'), parentSession: root.id } })
   for (const session of [root, child]) {
@@ -35,9 +50,16 @@ async function fixture() {
     ;(session.append as (type: string, data: unknown) => void)('session/title', { title: 'alpha', messageSeqs: [], source: { kind: 'user' } })
   }
   let calls = 0
-  const execute = (name: string, args: Record<string, unknown>) => ctx.tools.execute({
-    callId: `call-${++calls}` as ToolCallId, name, arguments: args, signal: new AbortController().signal,
-  })
+  const execute = async (name: string, args: Record<string, unknown>, agent?: unknown) => {
+    const batch = await ctx.tools.execute({
+      calls: [{ type: 'tool-call', id: `call-${++calls}` as ToolCallId, name, arguments: JSON.stringify(args) }],
+      signal: new AbortController().signal,
+      ...agent === undefined ? {} : { agent: agent as never },
+    })
+    const outcome = batch.results[0]
+    if (outcome === undefined) throw new Error(`tool call "${name}" produced no result`)
+    return outcome.result
+  }
   const call = async (name: string, args: Record<string, unknown>) => {
     const result = await execute(name, args)
     expect(result.isError).not.toBe(true)
@@ -48,7 +70,7 @@ async function fixture() {
     const schema = ctx.tools.get(name)!.parameters as { properties: Record<string, unknown>; required?: string[] }
     return Object.fromEntries(Object.keys(schema.properties).filter(key => !schema.required?.includes(key)).map(key => [key, null]))
   }
-  return { ctx, root, child, call, execute, nullable }
+  return { ctx, root, child, call, execute, nullable, unregisterTools: () => unregisterTools!() }
 }
 
 const ids = (result: { items: { sessionId: string }[] }) => result.items.map(item => item.sessionId).sort()
@@ -150,5 +172,124 @@ describe('registered session tools and nullable optional arguments', () => {
     ] as const) {
       expect(await execute(name, args)).toMatchObject({ isError: true, error: { info: { code: 'INVALID_ARGS' } } })
     }
+  })
+})
+
+describe('agent action tools follow their own switches', () => {
+  it.each([
+    [false, false, []],
+    [true, false, ['fork_session']],
+    [false, true, ['send_session_message']],
+    [true, true, ['fork_session', 'send_session_message']],
+  ] as const)('registers only the enabled tools (allowSelfFork=%s, allowSendMessage=%s)', async (fork, send, expected) => {
+    const { ctx } = await fixture({ allowSelfFork: fork, allowSendMessage: send })
+    const names = ctx.tools.schemas().map(schema => schema.name)
+    for (const read of ['list_sessions', 'search_sessions', 'read_session']) {
+      expect(names).toContain(read)
+    }
+    for (const write of ['fork_session', 'send_session_message']) {
+      expect(names.includes(write)).toBe(expected.includes(write))
+    }
+    if (expected.includes('fork_session')) {
+      const schema = ctx.tools.get('fork_session')!.parameters as { properties: Record<string, unknown>; required?: string[] }
+      expect(schema.required).toEqual(['prompt'])
+    }
+    if (expected.includes('send_session_message')) {
+      const schema = ctx.tools.get('send_session_message')!.parameters as { properties: Record<string, unknown>; required?: string[] }
+      expect(schema.required?.sort()).toEqual(['message', 'session_id'])
+    }
+  })
+
+  it('fails closed on an absent caller and on missing host services, without touching the caller log', async () => {
+    const { ctx, root, execute } = await fixture({ allowSelfFork: true, allowSendMessage: true })
+    const callerAgent = { session: root }
+    const eventCount = root.snapshotEvents().length
+    const noCaller = JSON.parse((await execute('fork_session', { prompt: 'go' })).value as string)
+    expect(noCaller).toMatchObject({ status: 'failed', code: 'SESSION_ACTION_INVALID' })
+    const noService = JSON.parse((await execute('fork_session', { prompt: 'go' }, callerAgent)).value as string)
+    expect(noService).toMatchObject({ status: 'failed', code: 'SESSION_ACTION_UNAVAILABLE' })
+    const noSendService = JSON.parse((await execute('send_session_message', { session_id: 'other', message: 'hi' }, callerAgent)).value as string)
+    expect(noSendService).toMatchObject({ status: 'failed', code: 'SESSION_ACTION_UNAVAILABLE' })
+    expect(root.snapshotEvents().length).toBe(eventCount)
+    expect(ctx.tools.get('fork_session') as unknown as { hostEffect?: string }).not.toMatchObject({ hostEffect: 'read-only' })
+  })
+
+  it('forks the caller\'s latest seq and relays the prompt through followup, without the send switch', async () => {
+    const followup = vi.fn()
+    const sessionController = {
+      fork: vi.fn(async () => ({ sessionId: 'child-1' })),
+      resolveAgent: vi.fn(async () => ({ agent: { followup } })),
+    }
+    const { ctx, execute, root } = await fixture(
+      { allowSelfFork: true, allowSendMessage: false },
+      { sessionController, workspaceRegistry: { archivedSessionIds: [] } },
+    )
+    expect(ctx.tools.get('send_session_message')).toBeUndefined()
+    const atSeq = root.snapshotEvents().at(-1)!.seq
+    const outcome = JSON.parse((await execute('fork_session', { prompt: 'audit' }, { session: root })).value as string)
+    expect(outcome).toMatchObject({ status: 'ok', sessionId: 'child-1' })
+    expect(sessionController.fork).toHaveBeenCalledWith({ sessionId: 'root', atSeq })
+    expect(followup).toHaveBeenCalledOnce()
+    const message = followup.mock.calls[0]![0] as { source: Record<string, unknown>; content: { text: string }[] }
+    expect(message.source).toMatchObject({ kind: 'agent-message', form: 'relay', senderSessionId: 'root' })
+  })
+
+  it('delivers an attributed message to a resolvable unarchived target', async () => {
+    const followup = vi.fn()
+    const sessionController = {
+      resolveAgent: vi.fn(async () => ({ agent: { followup } })),
+    }
+    const { execute, root } = await fixture(
+      { allowSendMessage: true },
+      { sessionController, workspaceRegistry: { archivedSessionIds: [] } },
+    )
+    const outcome = JSON.parse((await execute('send_session_message', { session_id: 'child', message: 'ping' }, { session: root })).value as string)
+    expect(outcome).toMatchObject({ status: 'ok', sessionId: 'child' })
+    expect(sessionController.resolveAgent).toHaveBeenCalledWith('child')
+    const message = followup.mock.calls[0]![0] as { source: Record<string, unknown>; content: { text: string }[] }
+    expect(message.source).toMatchObject({ kind: 'agent-message', form: 'relay', senderSessionId: 'root' })
+    expect(message.content[0]).toEqual({ type: 'text', text: 'Agent root sent a message: ping' })
+  })
+
+  it('refuses an archived target without resolving it', async () => {
+    const resolveAgent = vi.fn()
+    const { execute, root } = await fixture(
+      { allowSendMessage: true },
+      { sessionController: { resolveAgent }, workspaceRegistry: { archivedSessionIds: ['child'] } },
+    )
+    const outcome = JSON.parse((await execute('send_session_message', { session_id: 'child', message: 'ping' }, { session: root })).value as string)
+    expect(outcome).toMatchObject({ status: 'failed', code: 'SESSION_ACTION_ARCHIVED' })
+    expect(resolveAgent).not.toHaveBeenCalled()
+  })
+
+  it('a stale definition captured before unload cannot deliver after dispose', async () => {
+    const followup = vi.fn()
+    const resolveAgent = vi.fn(async () => ({ agent: { followup } }))
+    const { ctx, execute, root, unregisterTools } = await fixture(
+      { allowSendMessage: true },
+      { sessionController: { resolveAgent }, workspaceRegistry: { archivedSessionIds: [] } },
+    )
+    const definition = ctx.tools.get('send_session_message') as unknown as {
+      execute: (args: unknown, exec: unknown) => Promise<string>
+    }
+    expect(definition).toBeDefined()
+    // Capture a live definition, then unload: the in-flight resolve settles
+    // after the lifetime aborts, and the delivery must not happen.
+    const pending = definition.execute(
+      { session_id: 'child', message: 'ping' },
+      { agent: { session: root }, signal: new AbortController().signal },
+    )
+    unregisterTools()
+    const outcome = JSON.parse(await pending)
+    expect(outcome).toMatchObject({ status: 'failed' })
+    expect(followup).not.toHaveBeenCalled()
+    // A second call on the same stale definition fails closed too.
+    const second = JSON.parse(await definition.execute(
+      { session_id: 'child', message: 'ping' },
+      { agent: { session: root }, signal: new AbortController().signal },
+    ))
+    expect(second).toMatchObject({ status: 'failed' })
+    expect(followup).not.toHaveBeenCalled()
+    void execute
   })
 })

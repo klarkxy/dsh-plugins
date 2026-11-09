@@ -136,7 +136,7 @@ describe("bundle contract", () => {
       version: packageJson.version,
       main: packageJson.main,
       engines: { dsh: ">=0.2.0-rc.2" },
-      contributes: { tools: ["dsh_docs_search", "dsh_docs_fetch"], skills: [] },
+      contributes: { tools: ["dsh_docs", "dsh_plugins"], skills: [] },
     });
     expect(packageJson.peerDependencies).toMatchObject({
       "@deepseek-ai/dsh-agent-preset-registry": ">=0.2.0-rc.2",

@@ -19,7 +19,6 @@ export const COMMIT_PLAN_FEATURE = 'git-commit-plan'
 export const SCHEMA_VERSION = 'commit-plan-json.v1'
 export const CONTRACT_VERSION = 1
 
-export const DEFAULT_MAX_OUTPUT_TOKENS = 2048
 /** Total character budget for the change manifest sent to the model. */
 export const MAX_MANIFEST_CHARS = 48_000
 /** Per-file preview cap for untracked files. */

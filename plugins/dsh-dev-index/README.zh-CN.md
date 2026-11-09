@@ -4,7 +4,7 @@
 
 [English](README.md)
 
-在 DSH 内直接阅读 DeepSeek Harness 官方文档；创造模式还会获得查文档、安装前核对插件的工具。
+在 DSH 内直接阅读 DeepSeek Harness 官方文档；智能体还会获得查文档、安装前核对插件的工具。
 
 ## 安装
 
@@ -17,7 +17,7 @@ dsh plugin --profile web add @klarkxy/dsh-dev-index
 ## 使用
 
 - 「插件 → DSH 文档」在 DSH 内显示[官方文档站](https://deepseek-harness.github.io/deepseek-harness/)，可切换中文 / English。
-- 创造模式下，智能体获得五个只读工具：`dsh_docs_search` 和 `dsh_docs_fetch` 用于查找和阅读官方文档；`dsh_plugins_search` 和 `dsh_plugins_fetch` 用于在安装前查看插件的 npm 信息（搜索源可选 catalog、npm 或 GitHub 仓库）；`dsh_github_fetch` 用于查看 GitHub 插件仓库的元数据并把分支解析成可锁定的 commit。创造模式还会被提醒用 `cordis_inspect_list` 和 `cordis_inspect_query` 核对运行时接口。
+- 智能体获得两个只读工具：`dsh_docs` 用于查找和阅读官方文档；`dsh_plugins` 用于在安装前查看插件的 npm 信息（搜索源可选 catalog、npm 或 GitHub 仓库），或查看 GitHub 插件仓库的元数据并把分支解析成可锁定的 commit。创造模式下智能体还会被提醒使用这些工具，并用 `cordis_inspect_list` 和 `cordis_inspect_query` 核对运行时接口。
 
 ## 限制
 

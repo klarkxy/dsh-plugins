@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-plugin-kit",
-  "version": "0.6.1",
-  "description": "Shared support library for klarkxy DSH plugins, providing the default auxiliary model, shared session settings, independent feature contexts, RPC and UI helpers; installed automatically by dependent plugins.",
+  "version": "0.7.0",
+  "description": "Shared support library for klarkxy DSH plugins, providing the default auxiliary model, shared session settings, independent feature contexts, RPC, UI helpers and optional shared model picker integration; installed automatically by dependent plugins.",
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/plugin-kit/",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -50,6 +50,11 @@
       "types": "./lib/model-menu.d.ts",
       "import": "./lib/model-menu.js",
       "default": "./lib/model-menu.js"
+    },
+    "./model-picker": {
+      "types": "./lib/model-picker.d.ts",
+      "import": "./lib/model-picker.js",
+      "default": "./lib/model-picker.js"
     },
     "./llm-call": {
       "types": "./lib/llm-call.d.ts",
@@ -141,20 +146,20 @@
   },
   "devDependencies": {
     "zod": "4.4.3",
-    "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-storage-json": "0.2.1-rc.1",
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-storage-json": "0.2.2-rc.1",
     "@types/react": "18.3.31",
     "@types/react-dom": "^18.3.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-api-gateway": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-attachment": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.1"
+    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-api-gateway": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-attachment": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1"
   },
   "keywords": [
     "dsh",
@@ -176,6 +181,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "2c677b08ab53226d8eb4fac7013f29805769003345fa21110a0f438d80e39833"
+    "contentHash": "7b1ee8fcc0ddd058dd74a52b6fc213714b7f7a30229b1584e1e71529892f3ce6"
   }
 }

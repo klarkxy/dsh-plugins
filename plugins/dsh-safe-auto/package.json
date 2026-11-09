@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-safe-auto",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Safe Auto: a reviewer model answers approval requests one call at a time; includes review history with full audit trails.",
   "icon": "./icon.svg",
   "type": "module",
@@ -86,18 +86,18 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.1",
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.1",
     "@klarkxy/dsh-model-route": "workspace:*",
     "jsdom": "29.1.1",
-    "@deepseek-ai/dsh-working-directory": "0.2.1-rc.1"
+    "@deepseek-ai/dsh-working-directory": "0.2.2-rc.1"
   },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "9af2b214ee474d57155a630a9e39e329087ca8fe470781ebc0466ca2a95af2cc"
+    "contentHash": "3ec1690087b3de23a2c61df3a052f24f9aa031eaef7ba9e748fcd418e34aa1d7"
   }
 }

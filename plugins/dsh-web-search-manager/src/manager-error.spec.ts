@@ -5,7 +5,7 @@ import { WebSearchManager } from './manager.ts'
 import { HttpStatusError } from './provider-error.ts'
 
 it('retains HTTP status and provider identity through the manager', async () => {
-  const web = new WebRuntime(new Context())
+  const web = new WebRuntime(new Context(), { searchProvider: { get: () => undefined }, fetchProvider: { get: () => undefined } } as never)
   const manager = new WebSearchManager({
     web,
     resolveCredential: async () => undefined, save: async () => {},
@@ -25,7 +25,7 @@ it('retains HTTP status and provider identity through the manager', async () => 
 })
 it.each(['WEB_CREDENTIAL_MISSING', 'WEB_DISABLED', 'WEB_ABORTED', 'WEB_PROVIDER_ERROR', 'WEB_DNS_ERROR', 'WEB_TLS_ERROR', 'WEB_BLOCKED_URL', 'WEB_REDIRECT_BLOCKED', 'WEB_FETCH_TIMEOUT'])(
   'redacts extension errors even when they use the trusted %s code', async code => {
-    const web = new WebRuntime(new Context())
+    const web = new WebRuntime(new Context(), { searchProvider: { get: () => undefined }, fetchProvider: { get: () => undefined } } as never)
     const manager = new WebSearchManager({
       web,
       resolveCredential: async () => 'fixture-private-key', save: async () => {},

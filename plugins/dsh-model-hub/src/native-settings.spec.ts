@@ -21,6 +21,12 @@ async function nativeSettings(schema: typeof Config, initial: Record<string, unk
   const entry = { id: ns, options: { id: ns, config: stored }, fiber: {
     uid: 1, state: 2, runtime: { Config: schema }, config: stored, ctx,
   } }
+  // Native SettingsForms >=0.2.2-rc.1 projects a descriptor's `value` from
+  // the fiber's activation config (`effectiveConfig`), not `fiber.config`.
+  // Mirror it so this hand-rolled configEditor behaves like the real Loader:
+  // without it descriptors carry no values, root `current` disappears and
+  // every concrete array item collapses to an empty `[]` template.
+  Object.defineProperty(entry.fiber, 'effectiveConfig', { enumerable: true, get: () => entry.fiber.config })
   ctx.provide('profileContext', { home: '.scratch/model-hub-no-profile', name: 'isolated-test' } as never)
   ctx.provide('loader', { await: async () => {} } as never)
   ctx.provide('configEditor', {
@@ -42,7 +48,15 @@ async function nativeSettings(schema: typeof Config, initial: Record<string, unk
   return { ctx, entry, descriptors, mutate, read: () => stored }
 }
 
-describe('native SettingsForms 0.2.0-rc.2 projection and mutation', () => {
+describe('native SettingsForms projection and mutation', () => {
+  it('projects the live activation config into each descriptor value', async () => {
+    // Canary for the host seam: describe() must carry resolved values. If a
+    // future native version reads another fiber property, fail here instead
+    // of silently losing `current`, array paths and the cast's allowedModels.
+    const schema = Schema.object({ provider: Schema.string().default('p'), model: Schema.string().default('m') }).volatile()
+    const host = await nativeSettings(schema, { provider: 'a', model: 'b' }, 'value-projection')
+    expect(host.descriptors()[0]).toMatchObject({ value: { provider: 'a', model: 'b' } })
+  })
   it('keeps the pinned native subagent current() usable through repair, enable and last-route removal', async () => {
     // Resolve this package's pinned test dependency directly;
     // Model Hub does not add a runtime copy of this host-provided service.

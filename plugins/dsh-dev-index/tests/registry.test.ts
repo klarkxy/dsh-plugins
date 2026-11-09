@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { PluginRegistry } from "../src/registry.js";
-import { registryTools } from "../src/registry-tools.js";
+import { pluginsTool } from "../src/registry-tools.js";
 
 const reply = (body: unknown) => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 const name = "@sample/dsh-example";
@@ -214,46 +214,52 @@ describe("plugin registry", () => {
 });
 
 describe("plugin registry tools", () => {
-  it("expose the renamed pair, forward cancellation, and stop serving after disposal", async () => {
+  it("exposes the merged tool, forwards cancellation, and stops serving after disposal", async () => {
     const client = new PluginRegistry({
       fetcher: ((_url: string, options?: RequestInit) => new Promise<Response>((_resolve, reject) => {
         options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true });
       })) as typeof fetch,
     });
-    const tools = registryTools(client);
-    expect(tools.map(tool => tool.name)).toEqual(["dsh_plugins_search", "dsh_plugins_fetch"]);
-    expect(tools[0].description).toContain("official plugin manager");
-    expect(tools[1].description).toContain("github:owner/repo#commit");
+    const tool = pluginsTool(client);
+    expect(tool.name).toBe("dsh_plugins");
+    expect(tool.description).toContain("official plugin manager");
+    expect(tool.description).toContain("github:owner/repo#commit");
     const signal = new AbortController().signal;
-    const searchPending = tools[0].execute({ query: "x" } as never, { signal } as never);
-    const fetchPending = tools[1].execute({ package: name } as never, { signal } as never);
+    const searchPending = tool.execute({ action: "search", query: "x" } as never, { signal } as never);
+    const fetchPending = tool.execute({ action: "fetch_npm", package: name } as never, { signal } as never);
     void searchPending.catch(() => undefined);
     void fetchPending.catch(() => undefined);
     client.dispose();
     await expect(searchPending).rejects.toThrow();
     await expect(fetchPending).rejects.toThrow();
+    await expect(tool.execute({ action: "search" } as never, { signal } as never)).rejects.toThrow(/requires query/);
+    await expect(tool.execute({ action: "fetch_npm" } as never, { signal } as never)).rejects.toThrow(/requires an exact package/);
   });
 
-  it("routes GitHub sources to the GitHub client and validates the source list", async () => {
+  it("routes GitHub sources and fetches to the GitHub client and validates the source list", async () => {
     const calls: string[] = [];
     const github = {
       searchRepos: async (args: { query: string }) => { calls.push(`repos:${args.query}`); return { transport: "gh" }; },
       searchCode: async (args: { query: string }) => { calls.push(`code:${args.query}`); return { transport: "gh" }; },
+      fetchPlugin: async (args: { repo: string }) => { calls.push(`fetch:${args.repo}`); return { transport: "gh" }; },
     };
     const client = new PluginRegistry({
       fetcher: (() => { throw new Error("unexpected network"); }) as typeof fetch,
     });
-    const tools = registryTools(client, github as never);
-    const search = tools[0];
+    const tool = pluginsTool(client, github as never);
     const signal = new AbortController().signal;
-    expect(await search.execute({ query: "x", source: "github" } as never, { signal } as never)).toEqual({ transport: "gh" });
-    expect(await search.execute({ query: "y", source: "github-code" } as never, { signal } as never)).toEqual({ transport: "gh" });
-    expect(calls).toEqual(["repos:x", "code:y"]);
+    expect(await tool.execute({ action: "search", query: "x", source: "github" } as never, { signal } as never)).toEqual({ transport: "gh" });
+    expect(await tool.execute({ action: "search", query: "y", source: "github-code" } as never, { signal } as never)).toEqual({ transport: "gh" });
+    expect(await tool.execute({ action: "fetch_github", repo: "sample/dsh-foo" } as never, { signal } as never)).toEqual({ transport: "gh" });
+    expect(calls).toEqual(["repos:x", "code:y", "fetch:sample/dsh-foo"]);
     // defineTool's enum schema rejects unknown sources before execute runs.
-    await expect(search.execute({ query: "x", source: "other" } as never, { signal } as never))
-      .rejects.toThrow(/one of \["catalog","npm","github","github-code"\]/);
-    const solo = registryTools(client);
-    await expect(solo[0].execute({ query: "x", source: "github" } as never, { signal } as never))
+    await expect(tool.execute({ action: "search", query: "x", source: "other" } as never, { signal } as never))
+      .rejects.toThrow(/catalog.*npm.*github.*github-code|one of/);
+    await expect(tool.execute({ action: "fetch_github" } as never, { signal } as never)).rejects.toThrow(/requires repo/);
+    const solo = pluginsTool(client);
+    await expect(solo.execute({ action: "search", query: "x", source: "github" } as never, { signal } as never))
+      .rejects.toThrow(/not available/);
+    await expect(solo.execute({ action: "fetch_github", repo: "a/b" } as never, { signal } as never))
       .rejects.toThrow(/not available/);
   });
 });

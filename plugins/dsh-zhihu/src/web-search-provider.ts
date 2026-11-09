@@ -1,6 +1,6 @@
 /**
  * Native ctx.web backend. Configuration and credentials belong to Zhihu.
- * Official model tool remains `web_search`. Dedicated `zhihu_global_search` is unchanged.
+ * Official model tool remains `web_search`. The `global_search` action of `zhihu_research` is unchanged.
  */
 import { WEB_PROVIDER_AVAILABILITY_EVENT, type DshWebManagementDescriptor } from '@klarkxy/dsh-plugin-kit/contracts'
 import { ZHIHU_CREDENTIAL_REF } from './contracts.ts'

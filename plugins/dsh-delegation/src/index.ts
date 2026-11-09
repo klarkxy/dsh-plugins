@@ -78,13 +78,15 @@ export async function apply(ctx: Context): Promise<void> {
   const service = new DelegationService({
     settings: domain.table('settings'),
     records: domain.table('sessions'),
+    recent: domain.table('recent'),
     sessionStore: ctx.sessions as unknown as DelegationServiceDeps['sessionStore'],
     agents: ctx.agents as unknown as DelegationServiceDeps['agents'],
     tools: ctx.tools as unknown as DelegationServiceDeps['tools'],
     sessionQuery: ctx.sessionQuery as unknown as DelegationServiceDeps['sessionQuery'],
     hasStarted: session => {
-      const boundary = ctx.sessionProjections.stateOf(session as Session, 'turnBoundary')
-      return boundary === undefined || boundary.openTurnStartSeq !== null || boundary.lastTurn > 0
+      const boundary = ctx.sessionProjections.stateOf(session as Session, 'turnBoundary') as
+        { openTurnStartSeq: number | null; lastTurn: number } | null | undefined
+      return boundary == null || boundary.openTurnStartSeq !== null || boundary.lastTurn > 0
     },
   })
   ctx.provide('delegation', service)

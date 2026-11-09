@@ -7,7 +7,7 @@ import { CliProcessError, runCli } from "@klarkxy/dsh-plugin-kit/cli-process";
 
 import { findGh, parseGhVersion, probeGh, belowFloor } from "../src/gh.js";
 import { GitHubClient, cleanPath, cleanRef, parseRepo } from "../src/github.js";
-import { githubFetchTool } from "../src/github-tools.js";
+import { pluginsTool } from "../src/registry-tools.js";
 
 const reply = (body: unknown, init?: { status?: number; headers?: Record<string, string> }) =>
   new Response(JSON.stringify(body), { status: init?.status ?? 200, headers: { "content-type": "application/json", ...init?.headers } });
@@ -610,14 +610,14 @@ describe("GitHub code search", () => {
         repository: "sample/mono", manifestPath: "plugins/dsh-foo/dsh.plugin.json",
         url: "https://github.com/sample/mono/blob/main/plugins/dsh-foo/dsh.plugin.json",
         installSpec: "github:sample/mono#path:/plugins/dsh-foo",
-        hint: "Resolve a pinned commit with dsh_github_fetch before installing.",
+        hint: "Resolve a pinned commit with dsh_plugins fetch_github before installing.",
         verification: "candidate-only",
       },
       {
         repository: "sample/solo", manifestPath: "dsh.plugin.json",
         url: "https://github.com/sample/solo/blob/main/dsh.plugin.json",
         installSpec: "github:sample/solo",
-        hint: "Resolve a pinned commit with dsh_github_fetch before installing.",
+        hint: "Resolve a pinned commit with dsh_plugins fetch_github before installing.",
         verification: "candidate-only",
       },
     ]);
@@ -810,7 +810,7 @@ describe("GitHub plugin fetch", () => {
   });
 });
 
-describe("dsh_github_fetch tool", () => {
+describe("dsh_plugins fetch_github action", () => {
   it("exposes the tool contract and stops serving after disposal", async () => {
     const client = new GitHubClient({
       discover: async () => ghProbe,
@@ -818,10 +818,10 @@ describe("dsh_github_fetch tool", () => {
         options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
       })) as never,
     });
-    const tool = githubFetchTool(client);
-    expect(tool.name).toBe("dsh_github_fetch");
+    const tool = pluginsTool(null as never, client);
+    expect(tool.name).toBe("dsh_plugins");
     expect(tool.description).toContain("official plugin manager");
-    const pending = tool.execute({ repo: "sample/dsh-foo" } as never, { signal: new AbortController().signal } as never);
+    const pending = tool.execute({ action: "fetch_github", repo: "sample/dsh-foo" } as never, { signal: new AbortController().signal } as never);
     void pending.catch(() => undefined);
     client.dispose();
     await expect(pending).rejects.toThrow();

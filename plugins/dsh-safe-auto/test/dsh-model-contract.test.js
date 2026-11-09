@@ -23,8 +23,13 @@ try {
     cordis: await load(requireHost, '@deepseek-ai/cordis'),
     prompt: await load(requireHost, '@deepseek-ai/dsh-system-prompt'),
     tools: await import(pathToFileURL(toolsPath).href),
+    // The native executor is this package's public pipeline entry, the same
+    // composition @deepseek-ai/dsh-tool-executor-native installs. No extra
+    // dependency: dsh-dev-index already pins dsh-tools.
+    pipeline: await import(pathToFileURL(requireTools.resolve('@deepseek-ai/dsh-tools/pipeline')).href),
     llm: await load(requireTools, '@deepseek-ai/dsh-llm'),
     approval: await load(requireTools, '@deepseek-ai/dsh-user-approval'),
+    projection: await load(requireTools, '@deepseek-ai/dsh-session-projection'),
     sandbox: await load(requireTools, '@deepseek-ai/dsh-sandbox'),
     storageDomain: await load(requireKit, '@deepseek-ai/dsh-storage-domain'),
     storageJson: await load(requireKit, '@deepseek-ai/dsh-storage-json'),
@@ -51,12 +56,24 @@ async function harness(t, { config = {} } = {}) {
   }
   mounted.push(await ctx.plugin(host.prompt.default, {}));
   mounted.push(await ctx.plugin(host.tools.default));
+  // 0.2.2 rejects ctx.tools.execute until an executor is mounted. This is the
+  // native batch scheduler; the assertions below still require the real
+  // approval outcome and that a denied body never runs.
+  const execution = new host.pipeline.ToolExecutionPipeline(ctx);
+  ctx.tools.setExecutor({
+    describe: definitions => ({ schemas: definitions.map(definition => host.tools.projectToolSchema(definition, false)) }),
+    execute: input => host.pipeline.executeToolBatch(input, execution, () => 10),
+  });
   mounted.push(await ctx.plugin(SandboxFixture));
   class WorkingDirectoryFixture extends Service {
     constructor(scope) { super(scope, 'workingDirectory'); }
     get() { return root; }
   }
   mounted.push(await ctx.plugin(WorkingDirectoryFixture));
+  // ApprovalService declares inject ['sessionProjections']: without the real
+  // registry composed first, the approval service never activates and every
+  // escalation fails closed as "no approval service is composed".
+  mounted.push(await ctx.plugin(host.projection.default));
   mounted.push(await ctx.plugin(host.approval.default, { policy: 'ask' }));
   // Real JSON-backed storageDomain facility — safeAuto's apply() opens the
   // audit domain at mount; without this service the runtime never activates.
@@ -132,7 +149,16 @@ async function harness(t, { config = {} } = {}) {
   const agent = { id: 'native-agent', session };
   mounted.push(await ctx.plugin(safeAuto, config));
   let calls = 0;
-  const execute = (name, args) => ctx.tools.execute({ callId: `call-${++calls}`, name, agent, signal: new AbortController().signal, arguments: args });
+  const execute = async (name, args) => {
+    const batch = await ctx.tools.execute({
+      calls: [{ type: 'tool-call', id: `call-${++calls}`, name, arguments: JSON.stringify(args) }],
+      signal: new AbortController().signal,
+      agent,
+    });
+    const outcome = batch.results?.[0];
+    if (outcome === undefined) throw new Error(`tool call "${name}" produced no result`);
+    return outcome.result;
+  };
   const escalatedWrite = () => execute('write', { file_path: target, content: 'after',
     sandbox_permissions: 'danger-full-access', justification: 'Write the note the user specified.' });
   const decided = () => events.filter(e => e.type === 'approval/decided').map(e => e.data.outcome);

@@ -16,7 +16,7 @@ it('closes the opened storage domain if registry compatibility fails during appl
 
 it('waits for real removed provider work before completing Cordis teardown', async () => {
   const ctx = new Context()
-  new WebRuntime(ctx)
+  new WebRuntime(ctx, { searchProvider: { get: () => undefined }, fetchProvider: { get: () => undefined } } as never)
   let release!: () => void
   let signal!: AbortSignal
   const search = vi.fn((_request, combined?: AbortSignal) => {
@@ -47,7 +47,7 @@ it('waits for real removed provider work before completing Cordis teardown', asy
 
 it('finishes a pending settings write before closing storage during actual Cordis teardown', async () => {
   const ctx = new Context()
-  new WebRuntime(ctx)
+  new WebRuntime(ctx, { searchProvider: { get: () => undefined }, fetchProvider: { get: () => undefined } } as never)
   const events: string[] = []
   let release = () => {}
   const gate = new Promise<void>(resolve => { release = resolve })

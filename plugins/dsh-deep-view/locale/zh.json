@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Deep View 回复卡片",
+    "description": "在回复中展示图表、指标、表格和安全联动的本地输入；show_view 可接收已校验的用户回答。"
+  }
+}

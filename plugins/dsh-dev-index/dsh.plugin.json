@@ -1,15 +1,15 @@
 {
   "id": "@klarkxy/dsh-dev-index",
-  "version": "0.2.9",
+  "version": "0.3.0",
   "main": "lib/index.js",
-  "description": "DSH Docs: browse official DSH developer documentation in the Plugins page; Creator mode gets read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs_search, dsh_docs_fetch, dsh_plugins_search, dsh_plugins_fetch, dsh_github_fetch).",
+  "description": "DSH Docs: browse official DSH developer documentation in the Plugins page; the agent gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs, dsh_plugins).",
   "engines": {
     "dsh": ">=0.2.0-rc.2"
   },
   "contributes": {
     "tools": [
-      "dsh_docs_search",
-      "dsh_docs_fetch"
+      "dsh_docs",
+      "dsh_plugins"
     ],
     "skills": []
   }

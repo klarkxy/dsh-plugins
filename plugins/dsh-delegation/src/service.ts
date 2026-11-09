@@ -2,7 +2,7 @@ import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import {
   DELEGATION_TOOLS, type DelegationSessionStatus, type DelegationSettings,
 } from './contracts.ts'
-import { parseSession, parseSettings, SETTINGS_KEY, type SessionDelegation } from './storage.ts'
+import { parseRecent, parseSession, parseSettings, RECENT_KEY, SETTINGS_KEY, type RecentChoice, type SessionDelegation } from './storage.ts'
 import type { DelegationSessionLike } from './policy.ts'
 
 export class DelegationError extends Error {
@@ -37,6 +37,12 @@ export interface DelegationServiceDeps {
   readonly settings: DelegationTableLike<DelegationSettings>
   /** Parsed per-session rows (key: session id). */
   readonly records: DelegationTableLike<SessionDelegation>
+  /**
+   * The last successful creation-page choice (one key: 'global'). Fresh
+   * top-level sessions seed from it instead of the stored default; human
+   * forks inherit their parent and never touch it.
+   */
+  readonly recent?: DelegationTableLike<RecentChoice>
   readonly sessionStore?: { get(id: string): DelegationSessionLike | undefined }
   readonly agents?: { get(id: string): DelegationAgentLike | undefined }
   readonly tools?: { get(name: string, scope?: unknown): unknown }
@@ -88,6 +94,11 @@ export class DelegationService {
   /** The parsed session row; undefined means no record (off, revision 0). */
   record(sessionId: string): SessionDelegation | undefined {
     return parseSession(this.deps.records.get(sessionId))
+  }
+
+  /** The remembered new-session choice; undefined when none was saved. */
+  recentChoice(): RecentChoice | undefined {
+    return parseRecent(this.deps.recent?.get(RECENT_KEY))
   }
 
   private locked(session: DelegationSessionLike | undefined, agent: DelegationAgentLike | undefined): boolean {
@@ -166,6 +177,20 @@ export class DelegationService {
             throw new DelegationError('stale', 'dsh-delegation: session state changed; refresh and retry')
           }
           await this.deps.records.put(sessionId, { enabled, revision: revision + 1 })
+          // Remember the choice only for genuinely fresh sessions: a human
+          // fork carries parentSession and keeps the remembered default
+          // untouched, whichever way its own switch flips. Best-effort: a
+          // failed memo write must not report a committed update as failed.
+          const forked = typeof (header as { parentSession?: unknown } | undefined)?.parentSession === 'string'
+          const recent = this.deps.recent
+          if (!forked && recent) {
+            try {
+              // Serialized on a shared chain so concurrent updates on
+              // different sessions cannot interleave their memo puts: the
+              // enqueue order here is the commit order in the recent table.
+              await this.enqueue('recent', () => recent.put(RECENT_KEY, { enabled }))
+            } catch { /* the session row is committed; a stale memo only costs one fresh default */ }
+          }
         })
       } catch (error) {
         if (!entered) throw new DelegationError('session-busy', 'dsh-delegation: session is busy; refresh and retry')
@@ -177,10 +202,12 @@ export class DelegationService {
 
   /**
    * `agent/created` seeding. Only a fresh ('startup') non-subagent session gets
-   * an initial row: a human fork inherits its parent's flag, every other new
-   * top-level session takes the stored `defaultEnabled`. Resumed, cleared and
-   * compacted sessions keep whatever they already have — and stay off when
-   * they predate the plugin.
+   * an initial row: a human fork inherits its parent's flag or the stored
+   * `defaultEnabled` when the parent has none, every other new top-level
+   * session takes the remembered new-session choice, falling back to
+   * `defaultEnabled` when none exists. Resumed, cleared and compacted
+   * sessions keep whatever they already have — and stay off when they
+   * predate the plugin.
    */
   async seedSession(agent: DelegationAgentLike, source: string): Promise<void> {
     if (source !== 'startup') return
@@ -191,7 +218,12 @@ export class DelegationService {
       if (this.record(id)) return
       const parentId = typeof session.header?.parentSession === 'string' ? session.header.parentSession : undefined
       const inherited = parentId ? this.record(parentId) : undefined
-      const enabled = inherited?.enabled ?? this.getSettings().defaultEnabled
+      // A fork falls back to the stored default when its parent row is
+      // missing — the remembered choice only applies to genuinely new
+      // sessions, so an old fork keeps its pre-existing semantics.
+      const enabled = parentId
+        ? inherited?.enabled ?? this.getSettings().defaultEnabled
+        : this.recentChoice()?.enabled ?? this.getSettings().defaultEnabled
       await this.deps.records.put(id, { enabled, revision: 1 })
     })
   }

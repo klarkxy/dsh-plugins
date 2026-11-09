@@ -7,6 +7,15 @@ import { FRAME_PREFIX, frameMessages, selectRecentMessages, utf8Bytes } from './
 import { formatTitle, normalizeSessionTitle, parseModelTitle, resolveTitleLocale, type TitleLocaleMode } from './output.ts'
 import { sourceVersionOf } from './messages.ts'
 
+// DSH 0.2.2 replaced free-form `purpose` strings with a declaration-merged map
+// (LlmRequestPurposeMap, empty by default). Declare the title purpose so the
+// typed call still forwards `purpose: 'session-title'` to the LLM runtime.
+declare module '@deepseek-ai/dsh-llm' {
+  interface LlmRequestPurposeMap {
+    'session-title': true
+  }
+}
+
 /**
  * Fixed bytes the auxiliary-context envelope adds around the selected
  * messages, so maxInputBytes keeps bounding the wire text. The stable block

@@ -5,11 +5,10 @@ import { CREATOR_PRESET_ID } from "@klarkxy/dsh-plugin-kit/contracts";
 
 import { CREATOR_GUIDANCE } from "./creator-guidance.js";
 import { DocsClient } from "./docs.js";
-import { docsTools } from "./docs-tools.js";
+import { docsTool } from "./docs-tools.js";
 import { GitHubClient } from "./github.js";
-import { githubFetchTool } from "./github-tools.js";
 import { PluginRegistry } from "./registry.js";
-import { registryTools } from "./registry-tools.js";
+import { pluginsTool } from "./registry-tools.js";
 
 export const name = "@klarkxy/dsh-dev-index";
 export const inject = ["systemPrompt", "agentPresets", "tools"];
@@ -46,13 +45,12 @@ export function apply(ctx: Context & CreatorPromptHost, config: Config): void {
   resolveConfig(config);
   const client = new DocsClient();
   ctx.effect(() => () => client.dispose(), "dsh-dev-index.docs-client");
-  for (const tool of docsTools(client)) ctx.tools.register(tool);
+  ctx.tools.register(docsTool(client));
   const registry = new PluginRegistry();
   ctx.effect(() => () => registry.dispose(), "dsh-dev-index.plugin-registry");
   const github = new GitHubClient();
   ctx.effect(() => () => github.dispose(), "dsh-dev-index.github-client");
-  for (const tool of registryTools(registry, github)) ctx.tools.register(tool);
-  ctx.tools.register(githubFetchTool(github));
+  ctx.tools.register(pluginsTool(registry, github));
   ctx.effect(() => ctx.systemPrompt.section({
     name: "dsh-dev-index.creator-docs",
     order: 100,

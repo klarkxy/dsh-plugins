@@ -75,6 +75,23 @@ export interface SessionAutoContinue {
   readonly revision: number
 }
 
+/** Key of the single remembered new-session auto-continue choice. */
+export const AUTO_CONTINUE_RECENT_KEY = 'global'
+
+const autoContinueRecentSchema = z.object({
+  mode: z.enum(['off', 'cautious', 'bold']),
+}).strict()
+
+/**
+ * The last successful creation-page mode, kept separate from the configured
+ * `autoContinueMode` default so the chip remembers the user's latest pick
+ * without rewriting the setting. `max` is never remembered: the configured
+ * limit is per-run policy, not part of the per-session choice.
+ */
+export interface AutoContinueRecent {
+  readonly mode: AutoContinueMode
+}
+
 export const presenceDomain = defineDomain({
   name: 'dsh_editor_session_manager',
   version: 1,
@@ -88,6 +105,7 @@ export const presenceDomain = defineDomain({
       suggestions?: Record<string, { seq: number; text: string | null; key?: string }>
     }>(presenceSettingsSchema),
     auto_continue: domainTable<string, SessionAutoContinue>(autoContinueSchema),
+    auto_continue_recent: domainTable<string, AutoContinueRecent>(autoContinueRecentSchema),
   },
 })
 
@@ -96,6 +114,12 @@ export function parseAutoContinue(value: unknown): SessionAutoContinue | undefin
   const parsed = autoContinueSchema.safeParse(value)
   if (!parsed.success) return undefined
   return { mode: parsed.data.mode, max: parsed.data.max, revision: parsed.data.revision }
+}
+
+/** A missing or unreadable recent row reads as "no remembered choice". */
+export function parseAutoContinueRecent(value: unknown): AutoContinueRecent | undefined {
+  const parsed = autoContinueRecentSchema.safeParse(value)
+  return parsed.success ? { mode: parsed.data.mode } : undefined
 }
 
 /** Malformed rows collapse to a fresh default instead of blocking the settings page. */

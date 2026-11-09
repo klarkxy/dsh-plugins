@@ -197,7 +197,12 @@ export function apply(ctx, raw = {}) {
     await Promise.allSettled([...pendingWrites]);
     try { await (await ready).close(); } catch { /* mount failure remains visible to history callers */ }
   });
-  // The query tool and the page share the same read-only store operations.
+  if (!base.enabled) return;
+
+  // The query tool and the page share the same read-only store operations. It
+  // registers only while automatic approval is enabled: a disabled profile
+  // keeps the runtime service (the UI page reads history through it) without
+  // exposing the model tool.
   ctx.inject?.(['tools'], scope => scope.effect(() => scope.tools.register({
     name: 'safe_auto_history',
     description: 'Query persisted Safe Auto reviews for the current session. List returns summaries and a pagination cursor; get returns the full redacted audit record, including review input and rationale. The Safe Auto group under Settings → Session Management provides profile-wide audit history.',
@@ -233,7 +238,6 @@ export function apply(ctx, raw = {}) {
       return page;
     },
   })));
-  if (!base.enabled) return;
 
   let llm;
   // Optional dependency: losing the model service fails reviews closed instead of unloading the plugin.

@@ -4,7 +4,7 @@
 
 [简体中文](README.zh-CN.md)
 
-Read the official DeepSeek Harness docs inside DSH, and give Creator mode tools to look up docs and check plugins before installing them.
+Read the official DeepSeek Harness docs inside DSH, and give the agent tools to look up docs and check plugins before installing them.
 
 ## Install
 
@@ -17,7 +17,7 @@ Replace `web` with your profile name and restart the profile.
 ## Use
 
 - **Plugins → DSH Docs** shows the [official documentation site](https://deepseek-harness.github.io/deepseek-harness/) inside DSH, with a Chinese / English switch.
-- In Creator mode the agent gets five read-only tools: `dsh_docs_search` and `dsh_docs_fetch` to find and read official docs; `dsh_plugins_search` and `dsh_plugins_fetch` to check a plugin's npm information before installing it (search sources: catalog, npm or GitHub repositories); and `dsh_github_fetch` to inspect a GitHub plugin repository and pin its branch to an exact commit. Creator mode is also reminded to verify runtime interfaces with `cordis_inspect_list` and `cordis_inspect_query`.
+- The agent gets two read-only tools: `dsh_docs` to search and read official docs, and `dsh_plugins` to check a plugin's npm information before installing it (search sources: catalog, npm or GitHub repositories) or inspect a GitHub plugin repository and pin its branch to an exact commit. In Creator mode the agent is also reminded to use these tools and verify runtime interfaces with `cordis_inspect_list` and `cordis_inspect_query`.
 
 ## Limits
 

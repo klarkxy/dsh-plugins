@@ -35,13 +35,8 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 
 | 工具 | 用途 |
 | --- | --- |
-| `zhihu_search`、`zhihu_global_search`、`zhihu_hot_list` | 知乎站内搜索、全网搜索、热榜 |
-| `zhihu_ask` | 基于知乎内容的直答 |
-| `zhihu_knowledge_search` | 检索知识库 |
-| `zhihu_question_recommendations`、`zhihu_question_answers` | 发现问题、读取回答摘要 |
-| `zhihu_user_content_detail`、`zhihu_user_content_comments` | 读取自己已发布的内容及评论 |
-| `zhihu_creator_account_stats`、`zhihu_creator_content_stats` | 自己的创作数据 |
-| `zhihu_quota` | 查询官方额度 |
+| `zhihu_research` | 调研检索：`search`（站内搜索）、`global_search`（全网搜索）、`hot_list`（热榜）、`ask`（直答）、`knowledge_search`（知识库） |
+| `zhihu_account` | 账号数据：`question_recommendations`（问题推荐）、`question_answers`（回答摘要）、`content_detail`/`content_comments`（本人创作与评论）、`creator_account_stats`/`creator_content_stats`（创作数据）、`quota`（官方额度） |
 | `zhihu_sync` | 保存、列出、读取并校验草稿，上传配图 |
 
 站内搜索和全网搜索无匹配内容时返回空列表；服务提供原因说明时会一并显示。

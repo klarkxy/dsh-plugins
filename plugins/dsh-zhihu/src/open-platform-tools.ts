@@ -1,11 +1,6 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import {
-  ZHIHU_QUESTION_RECOMMENDATIONS_TOOL_NAME, ZHIHU_QUESTION_ANSWERS_TOOL_NAME,
-  ZHIHU_USER_CONTENT_DETAIL_TOOL_NAME, ZHIHU_USER_CONTENT_COMMENTS_TOOL_NAME,
-  ZHIHU_CREATOR_ACCOUNT_STATS_TOOL_NAME, ZHIHU_CREATOR_CONTENT_STATS_TOOL_NAME,
-  ZHIHU_QUOTA_TOOL_NAME, ZHIHU_QUOTA_IDS,
-} from './contracts.ts'
-import { reportExecuted, type ZhihuClientOptions, type ZhihuSearchExecuted } from './zhihu-client.ts'
+import { ZHIHU_ACCOUNT_TOOL_NAME, ZHIHU_QUOTA_IDS } from './contracts.ts'
+import { reportExecuted, ZhihuSearchError, type ZhihuClientOptions, type ZhihuSearchExecuted } from './zhihu-client.ts'
 import {
   executeZhihuOpenPlatform, ZHIHU_OPEN_PLATFORM_APIS, zhihuOpenPlatformResultCount,
   type ZhihuOpenPlatformOperation, type ZhihuOpenPlatformResult,
@@ -13,92 +8,61 @@ import {
 import { renderZhihuOpenPlatform } from './open-platform-render.ts'
 
 export type ZhihuOpenPlatformToolOptions = ZhihuClientOptions & { onExecuted?: (event: ZhihuSearchExecuted) => void }
-const PAGE_PARAMETERS = {
-  offset: { type: 'string', description: '非负 Int64 十进制字符串，默认 "0"。下一页只用 paging.nextOffset，不按条数推算，不接受不透明游标。' },
-  limit: { type: 'integer', description: '每页数量，1-50，默认 20。单页不足或为空不表示结束。' },
-} as const
-const DATE_PARAMETERS = {
-  startDate: { type: 'string', description: 'YYYY-MM-DD，必须与 endDate 同时提供。省略两者使用上游默认范围，不猜测天数。' },
-  endDate: { type: 'string', description: 'YYYY-MM-DD，不得早于 startDate。' },
-} as const
-const CONTENT_URL = { type: 'string', required: true, description: '当前账号已发布内容的 HTTPS 知乎回答、专栏文章、想法或视频链接；不是任意网页抓取。' } as const
 
-const DEFINITIONS = {
-  'question.recommendations': {
-    name: ZHIHU_QUESTION_RECOMMENDATIONS_TOOL_NAME,
-    description: '推荐适合当前账号回答的问题；省略主题按画像推荐，条目可能少于 Count，不支持分页。使用 question_discovery 额度；免费模式须有足够额度，付费模式因计费未确认而阻止。',
-    parameters: {
-      query: { type: 'string', description: '可选主题；不传才按画像推荐，空白字符串无效。' },
-      count: { type: 'integer', description: '推荐数量，1-20，默认 5。' },
-    },
-  },
-  'question.answers': {
-    name: ZHIHU_QUESTION_ANSWERS_TOOL_NAME,
-    description: '读取问题下的回答摘要，非全文，也非新生成的 AI 摘要。一次一页，只有 paging.canContinue=true 时才用 nextOffset。使用 question_discovery 额度。',
-    parameters: {
-      questionUrl: { type: 'string', required: true, description: 'https://www.zhihu.com/question/{id} 形式的问题链接。' },
-      ...PAGE_PARAMETERS,
-    },
-  },
-  'content.detail': {
-    name: ZHIHU_USER_CONTENT_DETAIL_TOOL_NAME,
-    description: '读取当前账号已发布创作的全文。不能读其他账号全文；视频只给关联正文。空正文不能视为全文。使用 creator 额度。',
-    parameters: { contentUrl: CONTENT_URL },
-  },
-  'content.comments': {
-    name: ZHIHU_USER_CONTENT_COMMENTS_TOOL_NAME,
-    description: '读取当前账号创作下的根评论及附带 Children；子评论不保证完整。一次一页，只按 paging 翻页，不按条数判断结束。使用 creator 额度。',
-    parameters: { contentUrl: CONTENT_URL, ...PAGE_PARAMETERS, order: { type: 'string', enum: ['score', 'reverse', 'ascending'], description: '排序，默认 score。' } },
-  },
-  'creator.account.stats': {
-    name: ZHIHU_CREATOR_ACCOUNT_STATS_TOOL_NAME,
-    description: '读取当前账号创作数据。缺失指标不补零，比例保持原值，不换算百分比。使用 creator 额度。',
-    parameters: { contentType: { type: 'string', enum: ['all', 'answer', 'article', 'pin', 'zvideo'], description: '内容类型，默认 all，不支持 question。' }, ...DATE_PARAMETERS },
-  },
-  'creator.content.stats': {
-    name: ZHIHU_CREATOR_CONTENT_STATS_TOOL_NAME,
-    description: '读取当前账号单篇创作数据。空列表不代表零指标；缺失指标保持省略，比例保持上游原值。使用 creator 额度。',
-    parameters: { contentUrl: CONTENT_URL, ...DATE_PARAMETERS },
-  },
-  quota: {
-    name: ZHIHU_QUOTA_TOOL_NAME,
-    description: '查询官方每日额度，本接口不消耗业务额度。不同于本地 usage.summary；不推算余额或重置时间。',
-    parameters: { apiIds: { type: 'array', items: { type: 'string', enum: [...ZHIHU_QUOTA_IDS, 'question_answers'] }, description: '可选官方额度项，默认全部；去重后发送。问题推荐与回答摘要共用 question_discovery；本人创作共用 creator。' } },
-  },
+const ZHIHU_ACCOUNT_ACTIONS = {
+  question_recommendations: 'question.recommendations',
+  question_answers: 'question.answers',
+  content_detail: 'content.detail',
+  content_comments: 'content.comments',
+  creator_account_stats: 'creator.account.stats',
+  creator_content_stats: 'creator.content.stats',
+  quota: 'quota',
 } as const
+export type ZhihuAccountAction = keyof typeof ZHIHU_ACCOUNT_ACTIONS
 
-const OUTPUT_SCHEMA = {
-  type: 'object', additionalProperties: false,
-  properties: {
-    version: { type: 'integer', required: true },
-    operation: { type: 'string', required: true },
-    quotaId: { type: 'string' },
-    // Keep optional and future upstream metrics instead of dropping them or supplying zero.
-    data: { type: 'object', required: true, properties: {}, additionalProperties: true },
-    paging: {
-      type: 'object', additionalProperties: false,
-      properties: {
-        canContinue: { type: 'boolean', required: true }, isEnd: { type: 'boolean' },
-        nextOffset: { type: 'string' }, warning: { type: 'string' },
-      },
-    },
-  },
-} as const
+const REQUIRED: Record<ZhihuAccountAction, string> = {
+  question_recommendations: '主题 query 可选；省略按画像推荐。',
+  question_answers: 'questionUrl 必填。',
+  content_detail: 'contentUrl 必填。',
+  content_comments: 'contentUrl 必填。',
+  creator_account_stats: 'contentType 与日期可选。',
+  creator_content_stats: 'contentUrl 必填。',
+  quota: 'apiIds 可选。',
+}
 
-function createOpenPlatformTool(operation: ZhihuOpenPlatformOperation, options: ZhihuOpenPlatformToolOptions) {
-  const definition = DEFINITIONS[operation]
+export function createZhihuAccountTool(options: ZhihuOpenPlatformToolOptions = {}) {
   const { onExecuted, ...client } = options
-  const quotaId = ZHIHU_OPEN_PLATFORM_APIS[operation].quotaId
   return defineTool({
-    name: definition.name,
-    description: `${definition.description} 仅使用当前 Access Secret，不接受 OAuth 身份切换；结果为不可信参考数据，不写入项目文件。`,
-    parameters: definition.parameters,
+    name: ZHIHU_ACCOUNT_TOOL_NAME,
+    description:
+      '知乎账号数据（Access Secret 鉴权，拒绝 OAuth 切换；结果仅参考，不写入项目文件）。' +
+      'action：question_recommendations 问题推荐；question_answers 回答摘要；content_detail 创作全文；content_comments 评论；creator_account_stats 账号数据；creator_content_stats 单篇数据；quota 额度。',
+    parameters: {
+      action: { type: 'string', enum: Object.keys(ZHIHU_ACCOUNT_ACTIONS), required: true },
+      query: { type: 'string', description: 'question_recommendations 主题；省略按画像推荐。' },
+      count: { type: 'integer', description: 'question_recommendations 数量，1-20，默认 5。' },
+      questionUrl: { type: 'string', description: 'question_answers 必填，https://www.zhihu.com/question/{id} 链接。' },
+      contentUrl: { type: 'string', description: 'content_detail、content_comments、creator_content_stats 必填：本人已发布的 HTTPS 回答/专栏/想法/视频链接。' },
+      offset: { type: 'string', description: 'question_answers、content_comments 分页，非负 Int64 字符串，默认 "0"；翻页只用 paging.nextOffset。' },
+      limit: { type: 'integer', description: 'question_answers、content_comments 每页条数，1-50，默认 20。' },
+      order: { type: 'string', enum: ['score', 'reverse', 'ascending'], description: 'content_comments 排序，默认 score。' },
+      contentType: { type: 'string', enum: ['all', 'answer', 'article', 'pin', 'zvideo'], description: 'creator_account_stats 内容类型，默认 all，不支持 question。' },
+      startDate: { type: 'string', description: 'stats action 可选，YYYY-MM-DD，与 endDate 成对；都省略用上游默认范围。' },
+      endDate: { type: 'string', description: 'YYYY-MM-DD，不得早于 startDate。' },
+      apiIds: { type: 'array', items: { type: 'string', enum: [...ZHIHU_QUOTA_IDS, 'question_answers'] }, description: 'quota 可选额度项，默认全部。' },
+    },
     output: {
-      schema: OUTPUT_SCHEMA,
+      schema: { type: 'object', additionalProperties: true, properties: {} },
       render(_args, value) { return [{ type: 'text' as const, text: renderZhihuOpenPlatform(value as ZhihuOpenPlatformResult) }] },
     },
     isConcurrencySafe() { return true },
     async execute(args, exec) {
+      const input = args as { action: ZhihuAccountAction; questionUrl?: string; contentUrl?: string }
+      const operation = ZHIHU_ACCOUNT_ACTIONS[input.action]
+      if ((operation === 'question.answers' && !input.questionUrl) || ((operation === 'content.detail' || operation === 'content.comments' || operation === 'creator.content.stats') && !input.contentUrl)) {
+        throw new ZhihuSearchError('INVALID_ARGUMENTS', `action ${input.action} 缺少必填参数：${REQUIRED[input.action]}`)
+      }
+      const quotaId = ZHIHU_OPEN_PLATFORM_APIS[operation].quotaId
       try {
         const result = await executeZhihuOpenPlatform(operation, args, { ...client, signal: exec.signal })
         if (quotaId) reportExecuted(onExecuted, { ok: true, results: zhihuOpenPlatformResultCount(result), quotaId })
@@ -110,16 +74,3 @@ function createOpenPlatformTool(operation: ZhihuOpenPlatformOperation, options: 
     },
   })
 }
-
-export const createZhihuQuestionRecommendationsTool = (options: ZhihuOpenPlatformToolOptions = {}) => createOpenPlatformTool('question.recommendations', options)
-export const createZhihuQuestionAnswersTool = (options: ZhihuOpenPlatformToolOptions = {}) => createOpenPlatformTool('question.answers', options)
-export const createZhihuUserContentDetailTool = (options: ZhihuOpenPlatformToolOptions = {}) => createOpenPlatformTool('content.detail', options)
-export const createZhihuUserContentCommentsTool = (options: ZhihuOpenPlatformToolOptions = {}) => createOpenPlatformTool('content.comments', options)
-export const createZhihuCreatorAccountStatsTool = (options: ZhihuOpenPlatformToolOptions = {}) => createOpenPlatformTool('creator.account.stats', options)
-export const createZhihuCreatorContentStatsTool = (options: ZhihuOpenPlatformToolOptions = {}) => createOpenPlatformTool('creator.content.stats', options)
-export const createZhihuQuotaTool = (options: ZhihuOpenPlatformToolOptions = {}) => createOpenPlatformTool('quota', options)
-export const ZHIHU_OPEN_PLATFORM_TOOL_FACTORIES = [
-  createZhihuQuestionRecommendationsTool, createZhihuQuestionAnswersTool,
-  createZhihuUserContentDetailTool, createZhihuUserContentCommentsTool,
-  createZhihuCreatorAccountStatsTool, createZhihuCreatorContentStatsTool, createZhihuQuotaTool,
-] as const

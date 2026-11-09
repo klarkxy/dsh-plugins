@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Sessions",
-    "description": "Search and read sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, and get a welcome-back recap with context-compaction hints after time away."
+    "description": "Search and read DeepSeek Harness sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, recap on return with context-compaction hints, and optionally let the agent fork the current session or message other sessions."
   }
 }

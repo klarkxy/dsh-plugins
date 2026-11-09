@@ -17,6 +17,7 @@ export default defineConfig({
       // so specs that reach a plugin's client half are pointed at a double that
       // renders the same elements, props and accessible names. See the module.
       "@deepseek-ai/dsh-client-ui-primitives": root + "scripts/editor-plugins/ui-primitives-stub.tsx",
+      "@klarkxy/dsh-model-route/model-picker": root + "plugins/dsh-model-route/src/model-picker.ts",
       "@klarkxy/dsh-model-route/ui": root + "plugins/dsh-model-route/src/ui.tsx",
       "@klarkxy/dsh-model-route/zod": root + "plugins/dsh-model-route/src/zod.ts",
       "@klarkxy/dsh-model-route/schemastery": root + "plugins/dsh-model-route/src/schemastery.ts",
@@ -31,6 +32,7 @@ export default defineConfig({
       "@klarkxy/dsh-plugin-kit/model-settings-client": root + "plugins/dsh-plugin-kit/src/model-settings-client.ts",
       "@klarkxy/dsh-plugin-kit/client-utils": root + "plugins/dsh-plugin-kit/src/client-utils.ts",
       "@klarkxy/dsh-plugin-kit/model-menu": root + "plugins/dsh-plugin-kit/src/model-menu.ts",
+      "@klarkxy/dsh-plugin-kit/model-picker": root + "plugins/dsh-plugin-kit/src/model-picker.tsx",
       "@klarkxy/dsh-plugin-kit/llm-call": root + "plugins/dsh-plugin-kit/src/llm-call.ts",
       "@klarkxy/dsh-plugin-kit/auxiliary-model": root + "plugins/dsh-plugin-kit/src/auxiliary-model.ts",
       "@klarkxy/dsh-plugin-kit/auxiliary-context": root + "plugins/dsh-plugin-kit/src/auxiliary-context.ts",

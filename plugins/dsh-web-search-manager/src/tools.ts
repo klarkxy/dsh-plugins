@@ -1,6 +1,14 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { applyWebSearchTool, applyWebFetchTool } from '@deepseek-ai/dsh-tool-web'
 import type { WebSearchManager } from './manager.ts'
+
+/**
+ * Per-source summary cap for the official web_search tool. DSH 0.2.2 turned this
+ * from an internal default into a required `applyWebSearchTool` argument; 800 is
+ * the upstream default (WEB_SEARCH_SUMMARY_MAX_CHARS) and preserves prior output.
+ */
+const WEB_SEARCH_SUMMARY_MAX_CHARS = 800
+
 export const name = 'dsh-web-search-manager-tools'
 export const inject = ['webSearchManager', 'web', 'tools', 'systemPrompt'] as const
 /** Mount official tools in a disposable child scope, only while explicitly authorized. */
@@ -23,7 +31,7 @@ export function apply(ctx: Context): void {
         name: 'managed-web-tool-scope',
         apply(child: Context) {
           const { maxResults, maxQueries, timeoutMs, maxFetchChars } = status.settings
-          if (status.searchActive) applyWebSearchTool(child, maxResults, maxQueries, timeoutMs, status.fetchActive)
+          if (status.searchActive) applyWebSearchTool(child, maxResults, maxQueries, WEB_SEARCH_SUMMARY_MAX_CHARS, timeoutMs, status.fetchActive)
           if (status.fetchActive) applyWebFetchTool(child, timeoutMs, maxFetchChars)
         },
       })

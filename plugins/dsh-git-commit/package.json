@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-git-commit",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Git Commit: commit workspace changes from the conversation, with the model grouping commits and generating commit messages.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -99,18 +99,19 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.1",
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.1",
     "zod": "4.4.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "@types/react": "18.3.31",
     "@types/react-dom": "^18.3.0",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.1",
     "jsdom": "29.1.1",
     "@types/jsdom": "28.0.3",
-    "@deepseek-ai/dsh-working-directory": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.1"
+    "@deepseek-ai/dsh-working-directory": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.1"
   },
   "keywords": [
     "dsh",
@@ -138,6 +139,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "d2c192c610f5123ebebf26a2cd6294f92f15a8c83e0e2517e417be23a43de4c0"
+    "contentHash": "5edf3fa111b3cea42ab6bab3ae41c2bbf9347b5f47838e79dc5c81b9d44cf561"
   }
 }

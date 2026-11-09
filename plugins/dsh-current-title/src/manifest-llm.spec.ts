@@ -16,10 +16,14 @@ const llmRoot = dirname(require.resolve(`${llmPackage}/package.json`))
 const installed = JSON.parse(readFileSync(join(llmRoot, 'package.json'), 'utf8')).version as string
 
 describe('current title host compatibility', () => {
-  it('requires the installed LLM version that accepts configure', () => {
+  it('requires the oldest LLM version that accepts configure', () => {
+    // The floor is 0.2.1: `configure` shipped there. `LlmRequestPurposeMap`
+    // (0.2.2) is type-only — runtime carries `purpose` as model-hidden
+    // transport metadata and accepts unfamiliar values, so the floor stays.
     const target = manifest.devDependencies[llmPackage]
-    expect(manifest.engines.dsh).toBe(`>=${target}`)
-    expect(manifest.peerDependencies[llmPackage]).toBe(`>=${target}`)
+    expect(semver.gte(target, '0.2.1-rc.1', { includePrerelease: true })).toBe(true)
+    expect(manifest.engines.dsh).toBe('>=0.2.1-rc.1')
+    expect(manifest.peerDependencies[llmPackage]).toBe('>=0.2.1-rc.1')
     expect(manifest.peerDependenciesMeta[llmPackage].optional).toBe(true)
     expect(semver.satisfies(installed, manifest.peerDependencies[llmPackage], { includePrerelease: true })).toBe(true)
   })

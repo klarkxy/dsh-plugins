@@ -347,6 +347,9 @@ describe('AuxiliaryModelCard', () => {
     // Only var(--token) references count: class modifiers like .dsh-ui-card--flat
     // carry a double hyphen but are selectors, not custom properties.
     for (const [, token] of auxiliaryModelCss.matchAll(/var\((--[\w-]+)/g)) {
+      // `--_name` values are component-local private properties (the slider's
+      // animated `--_p` channel), not theme tokens.
+      if (token.startsWith('--_')) continue
       expect(allowed.has(token), `unexpected theme token ${token}`).toBe(true)
     }
     expect(auxiliaryModelCss).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)

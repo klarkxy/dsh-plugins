@@ -10,7 +10,7 @@ afterEach(async () => { for (const off of cleanup.splice(0).reverse()) await off
 
 function setup() {
   const ctx = new Context()
-  new WebRuntime(ctx)
+  new WebRuntime(ctx, { searchProvider: { get: () => undefined }, fetchProvider: { get: () => undefined } } as never)
   cleanup.push(() => ctx.fiber.dispose())
   const resolveCredential = vi.fn(async () => undefined)
   const manager = new WebSearchManager({ web: ctx.web, initial: { ...defaultSettings(), searchOrder: [], fetchOrder: [] }, resolveCredential, save: async () => {} })

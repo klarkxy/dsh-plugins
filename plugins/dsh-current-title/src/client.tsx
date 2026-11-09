@@ -10,6 +10,7 @@ import {
   MODEL_CATALOG_INJECT, readModelCatalog, modelMenuEffortLabel, modelMenuEffortOptions, parseModelMenuChoices,
 } from '@klarkxy/dsh-model-route'
 import { ModelCatalogStatus, ModelMenu, modelMenuCss, useModelCatalog } from '@klarkxy/dsh-model-route/ui'
+import { renderModelPicker, useModelMenuAnchor, type RenderFactorySlot } from '@klarkxy/dsh-plugin-kit/model-picker'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RPC_CHANNEL, TITLE_CLIENT_SERVICE, type RpcResult, type TitleCadence, type TitleModelRoute, type TitleStatus } from './contracts.ts'
 import {
@@ -33,6 +34,8 @@ export function TitleSettings(props: {
   client: Client
   marker: { active: boolean }
   subscribeSettings?: (change: () => void, error?: (message: string) => void) => () => void
+  /** Framework-composed factory renderer; absent under direct test renders. */
+  renderFactorySlot?: RenderFactorySlot
 }) {
   const seat = useNativeSeat(props.client)
   const sessionId = seat.sessionId
@@ -182,6 +185,7 @@ export function TitleSettings(props: {
   const currentLabel = follow ? text.modelDefault : selectedModel?.label ?? `${savedModel.provider} / ${savedModel.model}`
   const selectedEffort = efforts.find(item => item.id === (savedModel.reasoningEffort || ''))
   const effortName = selectedEffort ? modelMenuEffortLabel(selectedEffort, seat.locale) : undefined
+  const anchor = useModelMenuAnchor(`${text.model}: ${currentLabel}`, undefined, () => setMenuOpen(false))
   const title = status?.session?.title
   const pinned = status?.session?.pinned === true
   const weOwn = status?.support?.weOwn === true
@@ -288,30 +292,54 @@ export function TitleSettings(props: {
     <div className="dsh-ui-field">
       <span className="dsh-ui-label">{text.model}</span>
       <ModelCatalogStatus state={catalogState} locale={seat.locale} />
-      <ModelMenu
-        locale={seat.locale}
-        open={menuOpen && Boolean(status) && !busy && !loadingSettings}
-        onOpenChange={next => setMenuOpen(next && Boolean(status) && !busy && !loadingSettings)}
-        listClassName="ct-root"
-        anchor={<button type="button" className="dsh-model-menu-trigger" disabled={busy || loadingSettings || !status} aria-label={`${text.model}: ${currentLabel}`}>
-          <span className="dsh-model-menu-triggerLabel">{currentLabel}</span>
-          {!follow && efforts.length ? <span className="dsh-model-menu-triggerEffort">{effortName ?? text.modelDefault}</span> : null}
-          <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${menuOpen ? ' dsh-model-menu-chevronOpen' : ''}`} />
-        </button>}
-        choices={choices}
-        selected={follow ? undefined : { provider: savedModel.provider, model: savedModel.model }}
-        onPick={picked => saveSettings({ model: { provider: picked.provider, model: picked.model } })}
-        leading={[{ id: 'default', label: text.modelDefault, selected: follow }]}
-        onPickLeading={() => saveSettings({ model: { provider: '', model: '' } })}
-        efforts={efforts}
-        selectedEffort={savedModel.reasoningEffort || ''}
-        onPickEffort={effort => saveSettings({ model: follow
+      {renderModelPicker(props.renderFactorySlot, {
+        locale: seat.locale,
+        disabled: busy || loadingSettings || !status,
+        busy: busy || loadingSettings,
+        onOpenChange: next => setMenuOpen(next && Boolean(status) && !busy && !loadingSettings),
+        listClassName: 'ct-root',
+        choices,
+        selected: follow ? undefined : { provider: savedModel.provider, model: savedModel.model },
+        onPick: picked => saveSettings({ model: { provider: picked.provider, model: picked.model } }),
+        leading: [{ id: 'default', label: text.modelDefault, selected: follow }],
+        onPickLeading: () => saveSettings({ model: { provider: '', model: '' } }),
+        efforts,
+        selectedEffort: savedModel.reasoningEffort || '',
+        onPickEffort: effort => saveSettings({ model: follow
           ? { provider: '', model: '' }
-          : { provider: savedModel.provider, model: savedModel.model, ...(effort ? { reasoningEffort: effort } : {}) } })}
-        modelLabel={text.model}
-        modelValue={currentLabel}
-        defaultEffortLabel={text.modelDefault}
-      />
+          : { provider: savedModel.provider, model: savedModel.model, ...(effort ? { reasoningEffort: effort } : {}) } }),
+        triggerLabel: currentLabel,
+        triggerEffortLabel: !follow && efforts.length ? (effortName ?? text.modelDefault) : undefined,
+        modelLabel: text.model,
+        modelValue: currentLabel,
+        defaultEffortLabel: text.modelDefault,
+      }, {
+        anchor,
+        fallback: <ModelMenu
+          locale={seat.locale}
+          open={menuOpen && Boolean(status) && !busy && !loadingSettings}
+          onOpenChange={next => setMenuOpen(next && Boolean(status) && !busy && !loadingSettings)}
+          listClassName="ct-root"
+          anchor={<button type="button" className="dsh-model-menu-trigger" disabled={busy || loadingSettings || !status} aria-label={`${text.model}: ${currentLabel}`}>
+            <span className="dsh-model-menu-triggerLabel">{currentLabel}</span>
+            {!follow && efforts.length ? <span className="dsh-model-menu-triggerEffort">{effortName ?? text.modelDefault}</span> : null}
+            <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${menuOpen ? ' dsh-model-menu-chevronOpen' : ''}`} />
+          </button>}
+          choices={choices}
+          selected={follow ? undefined : { provider: savedModel.provider, model: savedModel.model }}
+          onPick={picked => saveSettings({ model: { provider: picked.provider, model: picked.model } })}
+          leading={[{ id: 'default', label: text.modelDefault, selected: follow }]}
+          onPickLeading={() => saveSettings({ model: { provider: '', model: '' } })}
+          efforts={efforts}
+          selectedEffort={savedModel.reasoningEffort || ''}
+          onPickEffort={effort => saveSettings({ model: follow
+            ? { provider: '', model: '' }
+            : { provider: savedModel.provider, model: savedModel.model, ...(effort ? { reasoningEffort: effort } : {}) } })}
+          modelLabel={text.model}
+          modelValue={currentLabel}
+          defaultEffortLabel={text.modelDefault}
+        />,
+      })}
       <p className="dsh-ui-meta">{text.modelHint}</p>
     </div>
     <label className="dsh-ui-field">
@@ -338,7 +366,13 @@ export function TitleSettings(props: {
  * model/status requests — and stays mounted afterwards so a collapsed group
  * never drops an unsaved prompt draft or an in-flight write.
  */
-export function TitleSettingsItem(props: { client: Client; marker: { active: boolean }; subscribeSettings?: (change: () => void, error?: (message: string) => void) => () => void }) {
+export function TitleSettingsItem(props: {
+  client: Client
+  marker: { active: boolean }
+  subscribeSettings?: (change: () => void, error?: (message: string) => void) => () => void
+  /** Framework-composed factory renderer; absent under direct test renders. */
+  renderFactorySlot?: RenderFactorySlot
+}) {
   const seat = useNativeSeat(props.client)
   const text = titleCopy[seat.locale]
   const [visited, setVisited] = useState(false)
@@ -358,7 +392,8 @@ export function TitleSettingsItem(props: { client: Client; marker: { active: boo
       </summary>
       {visited ? (
         <div className="ct-item-body">
-          <TitleSettings client={props.client} marker={props.marker} subscribeSettings={props.subscribeSettings} />
+          <TitleSettings client={props.client} marker={props.marker} subscribeSettings={props.subscribeSettings}
+            renderFactorySlot={props.renderFactorySlot} />
         </div>
       ) : null}
     </details>
@@ -415,7 +450,8 @@ export function apply(ctx: Context): void {
     // Cordis context throws on any undeclared property read (so feeding one back
     // through `useNativeSeat` crashed the entry and abdicated its keyed cell).
     // The client and marker stay in the apply closure instead.
-    () => <TitleSettingsItem client={client} marker={marker} subscribeSettings={subscribeSettings} />,
+    slotProps => <TitleSettingsItem client={client} marker={marker} subscribeSettings={subscribeSettings}
+      renderFactorySlot={(slotProps as { renderFactorySlot?: RenderFactorySlot } | undefined)?.renderFactorySlot} />,
   ), 'current-title.settings')
   // The shared "default auxiliary model" card is root-owned infrastructure:
   // this plugin retains one share while enabled and the card unloads with the

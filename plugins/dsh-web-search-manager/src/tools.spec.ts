@@ -20,6 +20,8 @@ it('does not expose tools before authorization and disposes the previous scope o
   expect(ctx.plugin).not.toHaveBeenCalled()
   status = { ...status, searchActive: true }; listener()
   await vi.waitFor(() => expect(applyWebSearchTool).toHaveBeenCalledOnce())
+  // 0.2.2 applyWebSearchTool gained a summaryMaxChars argument before timeoutMs.
+  expect(applyWebSearchTool).toHaveBeenCalledWith(expect.anything(), 5, 1, 800, 30000, false)
   expect(applyWebFetchTool).not.toHaveBeenCalled()
   status = { ...status, searchActive: false }; listener()
   await vi.waitFor(() => expect(dispose).toHaveBeenCalledOnce())

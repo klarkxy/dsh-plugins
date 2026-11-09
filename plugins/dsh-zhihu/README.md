@@ -35,13 +35,8 @@ These model tools are enabled by default in your agent presets:
 
 | Tool | Purpose |
 | --- | --- |
-| `zhihu_search`, `zhihu_global_search`, `zhihu_hot_list` | Zhihu search, web search, hot list |
-| `zhihu_ask` | Zhida AI answers from Zhihu content |
-| `zhihu_knowledge_search` | Search knowledge bases |
-| `zhihu_question_recommendations`, `zhihu_question_answers` | Find questions and read answer summaries |
-| `zhihu_user_content_detail`, `zhihu_user_content_comments` | Read your published content and its comments |
-| `zhihu_creator_account_stats`, `zhihu_creator_content_stats` | Your creator statistics |
-| `zhihu_quota` | Check official quota |
+| `zhihu_research` | Research actions: `search` (site search), `global_search` (web search), `hot_list`, `ask` (Zhida AI answers), `knowledge_search` |
+| `zhihu_account` | Account actions: `question_recommendations`, `question_answers`, `content_detail`/`content_comments` on your posts, `creator_account_stats`, `creator_content_stats`, `quota` |
 | `zhihu_sync` | Save, list, read, and validate drafts or upload images |
 
 Site search and web search return an empty list when nothing matches, along with the service's explanation when provided.

@@ -12,6 +12,15 @@ export const DELETE_DIALOG_ID = '@klarkxy/dsh-session-manager.delete-chat'
 export const LIST_TOOL = 'list_sessions'
 export const SEARCH_TOOL = 'search_sessions'
 export const READ_TOOL = 'read_session'
+export const FORK_TOOL = 'fork_session'
+export const SEND_TOOL = 'send_session_message'
+/**
+ * Durable message-source kind shared with the host's adjacent-agent delivery
+ * (dsh-subagent/continuation-messages): `form: 'relay'` plus the sender's
+ * session id. Agent tools must never stamp `kind: 'user'` — the session
+ * prompt endpoint's user-rpc source is the only path that may claim it.
+ */
+export const AGENT_MESSAGE_KIND = 'agent-message'
 
 /** Endpoints on the shared TEMP_WORKSPACE_CHANNEL beyond temporary-directory allocation. */
 export const WELCOME_BACK_PREPARE_ENDPOINT = 'welcomeback.prepare'
@@ -23,8 +32,14 @@ export const CONFIG_READ_ENDPOINT = 'config.read'
 export const CONFIG_WRITE_ENDPOINT = 'config.write'
 export const AUTO_CONTINUE_STATUS_ENDPOINT = 'autocontinue.status'
 export const AUTO_CONTINUE_UPDATE_ENDPOINT = 'autocontinue.update'
-/** This plugin's own row inside the shared Session Management settings list. */
-export const SESSION_SETTINGS_ITEM_ID = 'session-manager'
+/** This plugin's rows inside the shared Session Management settings list. */
+export const SESSION_SETTINGS_ITEMS = [
+  { id: 'session-manager.composer', order: 60 },
+  { id: 'session-manager.auto-continue', order: 62 },
+  { id: 'session-manager.return', order: 64 },
+  { id: 'session-manager.handoff', order: 66 },
+  { id: 'session-manager.agent-actions', order: 68 },
+] as const
 
 /**
  * Stable feature ids stamped on `callLlmText` requests: each generated call is
@@ -172,6 +187,10 @@ export interface ConfigView {
   readonly autoContinueMode: AutoContinueMode
   /** Automatic continuations allowed after each human message in an auto-continue session. */
   readonly autoContinueMax: number
+  /** Whether the agent may fork its own session without per-call approval. */
+  readonly allowSelfFork: boolean
+  /** Whether the agent may message other unarchived sessions without per-call approval. */
+  readonly allowSendMessage: boolean
 }
 
 /** Sparse settings patch from the bundle config page; every key optional. */
@@ -190,6 +209,8 @@ export interface ConfigPatch {
   readonly handoffModel?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
   readonly autoContinueMode?: AutoContinueMode
   readonly autoContinueMax?: number
+  readonly allowSelfFork?: boolean
+  readonly allowSendMessage?: boolean
 }
 
 export interface ConfigWriteRequest {
@@ -232,6 +253,10 @@ export interface Config {
   autoContinueMode?: AutoContinueMode
   /** Automatic continuations allowed after each human message in an auto-continue session. */
   autoContinueMax?: number
+  /** Register the fork_session tool: one-call forks of the calling session, approved once by the toggle. */
+  allowSelfFork?: boolean
+  /** Register the send_session_message tool: agent-attributed messages to other unarchived sessions, approved once by the toggle. */
+  allowSendMessage?: boolean
 }
 
 export interface ResolvedConfig {
@@ -244,6 +269,8 @@ export interface ResolvedConfig {
   readonly continueMode: ContinueMode
   readonly autoContinueMode: AutoContinueMode
   readonly autoContinueMax: number
+  readonly allowSelfFork: boolean
+  readonly allowSendMessage: boolean
 }
 
 export function resolveConfig(config: Config = {}): ResolvedConfig {
@@ -257,7 +284,17 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
     continueMode: boundMode(config.continueMode, 'continueMode'),
     autoContinueMode: boundAutoContinueMode(config.autoContinueMode, 'autoContinueMode'),
     autoContinueMax: boundInteger(config.autoContinueMax, DEFAULT_AUTO_CONTINUE_MAX, MIN_AUTO_CONTINUE_MAX, MAX_AUTO_CONTINUE_MAX, 'autoContinueMax'),
+    allowSelfFork: boundFlag(config.allowSelfFork, 'allowSelfFork'),
+    allowSendMessage: boundFlag(config.allowSendMessage, 'allowSendMessage'),
   }
+}
+
+function boundFlag(value: boolean | undefined, name: string): boolean {
+  const resolved = value ?? false
+  if (typeof resolved !== 'boolean') {
+    throw new TypeError(`${PLUGIN_NAME}: ${name} must be a boolean`)
+  }
+  return resolved
 }
 
 function boundInteger(value: number | undefined, fallback: number, min: number, max: number, name: string): number {

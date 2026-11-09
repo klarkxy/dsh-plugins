@@ -113,6 +113,9 @@ export const OFFICIAL_THEME_TOKENS = {
     '--dsh-content-font-size-secondary',
     '--dsh-content-font-delta',
     '--dsh-frame-top-clearance',
+    // Published by the conversation.input.model seat for narrow composer rows.
+    '--dsh-composer-model-icon-display',
+    '--dsh-composer-model-text-display',
   ],
 } as const
 

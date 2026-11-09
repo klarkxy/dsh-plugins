@@ -26,6 +26,7 @@ import {
 } from '@klarkxy/dsh-model-route'
 import { ModelCatalogStatus, ModelMenu, modelMenuCss, useModelCatalog } from '@klarkxy/dsh-model-route/ui'
 import { officialUiCss } from './official-ui.ts'
+import { renderModelPicker, useModelMenuAnchor, type RenderFactorySlot } from './model-picker.tsx'
 import {
   createModelSettingsSubscriber, modelSettingsChangesRemote, type ModelSettingsSubscriber,
 } from './model-settings-client.ts'
@@ -140,10 +141,12 @@ async function callAuxiliaryRpc<T>(
  * The shared card. All state comes from the shared host service over the
  * plugin-kit RPC channel; the card only renders the stored row.
  */
-export function AuxiliaryModelCard({ client, subscribe }: {
+export function AuxiliaryModelCard({ client, subscribe, renderFactorySlot }: {
   client: AuxiliaryModelClient
   /** Settings-change invalidation; injected for tests without a live stream. */
   subscribe?: (change: () => void, error?: (message: string) => void) => () => void
+  /** Framework-composed factory renderer; absent under direct test renders. */
+  renderFactorySlot?: RenderFactorySlot
 }): ReactNode {
   const language = useAuxiliaryLocale(client)
   const text: AuxiliaryCopy = auxiliaryCopy[language]
@@ -227,6 +230,16 @@ export function AuxiliaryModelCard({ client, subscribe }: {
   }, [client, settings, refreshCatalog])
 
   const locked = busy
+  const current = settings?.model ?? { provider: '', model: '' }
+  const follow = !current.provider || !current.model
+  const selected = follow ? undefined : choices.find(item => item.provider === current.provider && item.model === current.model)
+  const efforts = follow ? [] : modelMenuEffortOptions(selected, current.reasoningEffort)
+  const currentLabel = follow ? text.modelDefault : selected?.label ?? `${current.provider} / ${current.model}`
+  const selectedEffort = efforts.find(item => item.id === (current.reasoningEffort || ''))
+  const effortName = selectedEffort ? modelMenuEffortLabel(selectedEffort, language) : undefined
+  // The shared picker's anchor mirrors the trigger the fallback menu renders.
+  const anchor = useModelMenuAnchor(`${text.model}: ${settings ? currentLabel : ''}`, undefined,
+    () => setMenuOpen(false))
   if (!settings) {
     return <section className="ams-root dsh-ui-card" data-testid="auxiliary-model-settings">
       <span className="dsh-ui-heading">{text.title}</span>
@@ -241,13 +254,6 @@ export function AuxiliaryModelCard({ client, subscribe }: {
     </section>
   }
 
-  const current = settings.model ?? { provider: '', model: '' }
-  const follow = !current.provider || !current.model
-  const selected = follow ? undefined : choices.find(item => item.provider === current.provider && item.model === current.model)
-  const efforts = follow ? [] : modelMenuEffortOptions(selected, current.reasoningEffort)
-  const currentLabel = follow ? text.modelDefault : selected?.label ?? `${current.provider} / ${current.model}`
-  const selectedEffort = efforts.find(item => item.id === (current.reasoningEffort || ''))
-  const effortName = selectedEffort ? modelMenuEffortLabel(selectedEffort, language) : undefined
 
   return <section className="ams-root dsh-ui-card" data-testid="auxiliary-model-settings">
     <span className="dsh-ui-heading">{text.title}</span>
@@ -255,31 +261,55 @@ export function AuxiliaryModelCard({ client, subscribe }: {
     <div className="dsh-ui-field">
       <span className="dsh-ui-label">{text.model}</span>
       <ModelCatalogStatus state={catalogState} locale={language} />
-      <ModelMenu
-        locale={language}
-        open={menuOpen && !locked}
-        onOpenChange={next => setMenuOpen(next && !locked)}
-        listClassName="ams-root ams-menu-portal"
-        anchor={<button type="button" className="dsh-model-menu-trigger" disabled={locked}
-          aria-label={`${text.model}: ${currentLabel}`}>
-          <span className="dsh-model-menu-triggerLabel">{currentLabel}</span>
-          {!follow && efforts.length ? <span className="dsh-model-menu-triggerEffort">{effortName ?? text.effortDefault}</span> : null}
-          <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${menuOpen && !locked ? ' dsh-model-menu-chevronOpen' : ''}`} />
-        </button>}
-        choices={choices}
-        selected={follow ? undefined : { provider: current.provider, model: current.model }}
-        onPick={picked => save({ provider: picked.provider, model: picked.model })}
-        leading={[{ id: 'default', label: text.modelDefault, selected: follow }]}
-        onPickLeading={() => save(null)}
-        efforts={efforts}
-        selectedEffort={current.reasoningEffort || ''}
-        onPickEffort={effort => save(follow
+      {renderModelPicker(renderFactorySlot, {
+        locale: language,
+        disabled: locked,
+        busy: locked,
+        onOpenChange: next => setMenuOpen(next && !locked),
+        listClassName: 'ams-root ams-menu-portal',
+        choices,
+        selected: follow ? undefined : { provider: current.provider, model: current.model },
+        onPick: picked => save({ provider: picked.provider, model: picked.model }),
+        leading: [{ id: 'default', label: text.modelDefault, selected: follow }],
+        onPickLeading: () => save(null),
+        efforts,
+        selectedEffort: current.reasoningEffort || '',
+        onPickEffort: effort => save(follow
           ? null
-          : { provider: current.provider, model: current.model, ...(effort ? { reasoningEffort: effort } : {}) })}
-        modelLabel={text.model}
-        modelValue={currentLabel}
-        defaultEffortLabel={text.effortDefault}
-      />
+          : { provider: current.provider, model: current.model, ...(effort ? { reasoningEffort: effort } : {}) }),
+        triggerLabel: currentLabel,
+        triggerEffortLabel: !follow && efforts.length ? (effortName ?? text.effortDefault) : undefined,
+        modelLabel: text.model,
+        modelValue: currentLabel,
+        defaultEffortLabel: text.effortDefault,
+      }, {
+        anchor,
+        fallback: <ModelMenu
+          locale={language}
+          open={menuOpen && !locked}
+          onOpenChange={next => setMenuOpen(next && !locked)}
+          listClassName="ams-root ams-menu-portal"
+          anchor={<button type="button" className="dsh-model-menu-trigger" disabled={locked}
+            aria-label={`${text.model}: ${currentLabel}`}>
+            <span className="dsh-model-menu-triggerLabel">{currentLabel}</span>
+            {!follow && efforts.length ? <span className="dsh-model-menu-triggerEffort">{effortName ?? text.effortDefault}</span> : null}
+            <IconChevronDownOutlineRegular className={`dsh-model-menu-chevron${menuOpen && !locked ? ' dsh-model-menu-chevronOpen' : ''}`} />
+          </button>}
+          choices={choices}
+          selected={follow ? undefined : { provider: current.provider, model: current.model }}
+          onPick={picked => save({ provider: picked.provider, model: picked.model })}
+          leading={[{ id: 'default', label: text.modelDefault, selected: follow }]}
+          onPickLeading={() => save(null)}
+          efforts={efforts}
+          selectedEffort={current.reasoningEffort || ''}
+          onPickEffort={effort => save(follow
+            ? null
+            : { provider: current.provider, model: current.model, ...(effort ? { reasoningEffort: effort } : {}) })}
+          modelLabel={text.model}
+          modelValue={currentLabel}
+          defaultEffortLabel={text.effortDefault}
+        />,
+      })}
       <span className="dsh-ui-hint">{text.modelHint}</span>
     </div>
     <div className="ams-row">
@@ -417,8 +447,10 @@ function acquireAuxiliaryModelCard(root: AuxiliaryRoot, ctx: Context): Auxiliary
     AUXILIARY_MODEL_CHANGES_IDENTITY,
     ns => ns === AUXILIARY_MODEL_NS,
   )
-  const render = () => <AuxiliaryModelCard client={root as unknown as AuxiliaryModelClient}
-    subscribe={subscriber.subscribe} />
+  const render = (props: { renderFactorySlot?: RenderFactorySlot }) => <AuxiliaryModelCard
+    client={root as unknown as AuxiliaryModelClient}
+    subscribe={subscriber.subscribe}
+    renderFactorySlot={props.renderFactorySlot} />
   const service: AuxiliaryCardService = {
     retain() {
       // The reservation is counted before the throwing installs, so a failure

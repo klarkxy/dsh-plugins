@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { withZhihuCallPolicy, resolveZhihuCallPolicy, zhihuQuotaGroup } from './call-policy.ts'
 import { zhihuFetchJson, type ZhihuSearchFetcher } from './zhihu-client.ts'
 import { createZhihuService } from './index.ts'
-import { createZhihuSearchTool } from './tool-definitions.ts'
+import { createZhihuResearchTool } from './tool-definitions.ts'
 import { createZhihuWebSearchProvider, registerZhihuGlobalSearchProvider } from './web-search-provider.ts'
 import { executeZhihuOpenPlatform } from './open-platform.ts'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -103,8 +103,8 @@ describe('actual protection across public DSH entries', () => {
   it('RPC, optional tool, direct client and native web share the same daily cap', async () => {
     const { paths, client, service } = fixture()
     expect((await service.call('search', { query: '普通资料' }, signal())).ok).toBe(true)
-    const tool = createZhihuSearchTool(service.toolOptions)
-    await expect(tool.execute({ query: '普通资料', count: 1 }, { signal: signal() } as never)).rejects.toMatchObject({ code: 'CALL_BLOCKED' })
+    const tool = createZhihuResearchTool(service.toolOptions)
+    await expect(tool.execute({ action: 'search', query: '普通资料', count: 1 }, { signal: signal() } as never)).rejects.toMatchObject({ code: 'CALL_BLOCKED' })
     await expect(zhihuFetchJson('/api/v1/content/hot_list', {}, '热榜', client)).rejects.toMatchObject({ code: 'CALL_BLOCKED' })
     const provider = createZhihuWebSearchProvider({ ...client, apiKey: 'fixture-only-token' })
     await expect(provider.search({ query: '普通资料' }, signal())).rejects.toMatchObject({ code: 'CALL_BLOCKED' })

@@ -40,4 +40,15 @@ describe('model menu grouping', () => {
     expect(groupModelMenuChoices(choices, 'chat').flatMap(group => group.items.map(item => item.model))).toEqual(['deepseek-chat'])
     expect(groupModelMenuChoices(choices, 'nothing-matches')).toEqual([])
   })
+
+  it('matches a provider display name that differs from its id, case-insensitively', () => {
+    // The label intentionally omits the display name, isolating the providerLabel channel.
+    const labelled = [{ provider: 'p-id', model: 'm1', label: 'm1', providerLabel: 'Acme Cloud', efforts: [] }]
+    expect(groupModelMenuChoices(labelled, 'acme')).toHaveLength(1)
+    expect(groupModelMenuChoices(labelled, 'ACME CLOUD')).toHaveLength(1)
+    expect(groupModelMenuChoices(labelled, 'p-id')).toHaveLength(1)
+    expect(groupModelMenuChoices(labelled, 'unrelated')).toEqual([])
+    // The group heading prefers providerLabel over the id.
+    expect(groupModelMenuChoices(labelled, '')[0]!.name).toBe('Acme Cloud')
+  })
 })

@@ -1,0 +1,5 @@
+# Installs reply rendering, an optional show_view tool, and its local answer channel.
+- insert:
+    - id: deep-view
+      name: '@klarkxy/dsh-deep-view'
+      disabled: false

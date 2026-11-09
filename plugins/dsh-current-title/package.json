@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-current-title",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Auto Title: keep session titles following the latest task; names you set by hand stay put.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -98,15 +98,16 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.1",
-    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.1",
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.1",
     "react": "^18.2.0",
     "@types/react": "18.3.31",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.1",
     "jsdom": "29.1.1",
     "@types/jsdom": "28.0.3",
-    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.1"
+    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.1"
   },
   "keywords": [
     "dsh",
@@ -133,6 +134,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "8a1d4ee9bbd311e6e69449a104c5a496fe92e5e1b6ab46d65817d253e76ade5c"
+    "contentHash": "38e5cedbea71cfa31a628e2669328c4f7439716c8443f43755239c851b084bcf"
   }
 }

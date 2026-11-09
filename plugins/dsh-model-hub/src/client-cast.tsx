@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Button, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import { modelCatalogFailures, normalizeModelRoute, type ModelRoute } from '@klarkxy/dsh-model-route'
 import { ModelCatalogStatus } from '@klarkxy/dsh-model-route/ui'
+import type { RenderFactorySlot } from '@klarkxy/dsh-plugin-kit/model-picker'
 import { hubMessage } from './client-copy.ts'
 import { FieldMenu, checkedCatalog, messageOf } from './client-model-menu.tsx'
 import type { CastCommit } from './cast.ts'
@@ -185,7 +186,7 @@ function routeInput(route: ModelRoute): CastRouteInput {
 interface RequestScope { api: CastApi; active: boolean; busy: boolean; queued: boolean }
 
 /** One cast entry: model picker, tendency input saved on blur, remove button. */
-function CastRow({ t, catalog, route, tendencyRevision, draftReview, disabled, tendencyDisabled, menuDisabled, onSetRoute, onSetTendency, onRemove }: {
+function CastRow({ t, catalog, route, tendencyRevision, draftReview, disabled, tendencyDisabled, menuDisabled, renderFactorySlot, onSetRoute, onSetTendency, onRemove }: {
   t: ReturnType<typeof useText>
   catalog: unknown
   route: CastRoute
@@ -194,6 +195,8 @@ function CastRow({ t, catalog, route, tendencyRevision, draftReview, disabled, t
   disabled: boolean
   tendencyDisabled: boolean
   menuDisabled: boolean
+  /** Framework-composed factory renderer; absent under direct test renders. */
+  renderFactorySlot?: RenderFactorySlot
   onSetRoute: (route: ModelRoute) => void
   onSetTendency: (tendency: string, expectedRevision: number) => void
   onRemove: () => void
@@ -214,7 +217,7 @@ function CastRow({ t, catalog, route, tendencyRevision, draftReview, disabled, t
       {/* The native AllowedModelRoute schema is {provider, model} only, so the
        * effort lives in the plugin's own preference store; the picker still
        * offers it next to the model. */}
-      <FieldMenu t={t} catalog={catalog} current={route} label={label} allowFollow={false} reasoningEffort display="short" disabled={menuDisabled} onSet={onSetRoute} />
+      <FieldMenu t={t} catalog={catalog} current={route} label={label} allowFollow={false} reasoningEffort display="short" disabled={menuDisabled} renderFactorySlot={renderFactorySlot} onSet={onSetRoute} />
     </div>
     <div className="cast-row-tendency">
       <Input type="text" aria-label={t('tendencyLabel', label)} placeholder={t('tendencyPlaceholder')}
@@ -227,7 +230,12 @@ function CastRow({ t, catalog, route, tendencyRevision, draftReview, disabled, t
   </div>
 }
 
-export function CastPage({ api, locale }: { api: CastApi; locale: LocaleLike }) {
+export function CastPage({ api, locale, renderFactorySlot }: {
+  api: CastApi
+  locale: LocaleLike
+  /** Framework-composed factory renderer; absent under direct test renders. */
+  renderFactorySlot?: RenderFactorySlot
+}) {
   const t = useText(locale)
   const [cast, setCast] = useState<CastState | null>(null)
   const [catalog, setCatalog] = useState<unknown>(null)
@@ -387,7 +395,7 @@ export function CastPage({ api, locale }: { api: CastApi; locale: LocaleLike }) 
        * position only for contract-conforming hosts that omit it. */
       const handle = route.index ?? position
       return <CastRow key={JSON.stringify([route.provider, route.model])}
-        t={t} catalog={catalog} route={route}
+        t={t} catalog={catalog} route={route} renderFactorySlot={renderFactorySlot}
         tendencyRevision={cast.tendencyRevision} draftReview={draftReview}
         tendencyDisabled={disabled || !!cast.tendencyError || cast.tendencyRevision === undefined}
         disabled={disabled} menuDisabled={disabled || catalog === null}
@@ -398,7 +406,7 @@ export function CastPage({ api, locale }: { api: CastApi; locale: LocaleLike }) 
     })}
     <div className="cast-add">
       <FieldMenu t={t} catalog={catalog} current={activePending} label={t('addModel')} allowFollow={false} followLabel={t('addModel')}
-        reasoningEffort display="short" disabled={disabled || catalog === null}
+        reasoningEffort display="short" disabled={disabled || catalog === null} renderFactorySlot={renderFactorySlot}
         onSet={picked => {
           if (!picked.provider || !picked.model) { setPending(undefined); return }
           if (activePending && activePending.provider === picked.provider && activePending.model === picked.model) {

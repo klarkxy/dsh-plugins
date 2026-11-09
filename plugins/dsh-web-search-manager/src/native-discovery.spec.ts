@@ -19,9 +19,14 @@ const searchProvider = (id: string): WebSearchProvider => ({ id, available: () =
 const fetchProvider = (id: string): WebFetchProvider => ({ id, available: () => true,
   fetch: vi.fn(async request => ({ url: request.url, statusCode: 200, body: { kind: 'text', content: 'x'.repeat(2000) } })),
 })
-function host(config = {}) {
+function host(config: { searchProvider?: string; fetchProvider?: string } = {}) {
   const ctx = new Context()
-  new WebRuntime(ctx, config)
+  // DSH 0.2.2 reads the selection per call as config.<field>.get() ?? <field>Env,
+  // so build the volatile cells the real WebRuntime constructor expects.
+  new WebRuntime(ctx, {
+    searchProvider: { get: () => config.searchProvider },
+    fetchProvider: { get: () => config.fetchProvider },
+  } as never)
   cleanup.push(() => ctx.fiber.dispose())
   return { ctx, web: ctx.web }
 }

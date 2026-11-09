@@ -36,7 +36,7 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
 
 /** Every `var(--token` reference, plus every `--token:` custom-property set. */
 function customProperties(text: string): string[] {
-  return [...text.matchAll(/var\(\s*(--[a-z0-9-]+)/g), ...text.matchAll(/(--[a-z0-9-]+)\s*:/g)]
+  return [...text.matchAll(/var\(\s*(--[a-z0-9_-]+)/g), ...text.matchAll(/(--[a-z0-9_-]+)\s*:/g)]
     .map(match => match[1]!)
 }
 
@@ -70,6 +70,9 @@ describe('official UI contract', () => {
     for (const file of filesWithStyling()) {
       const relative = file.slice(repoRoot.length)
       for (const token of new Set(customProperties(readFileSync(file, 'utf8')))) {
+        // Private `--_name` custom properties (e.g. a component's animated
+        // position channel, `--_p`) are author-owned values, not theme tokens.
+        if (token.startsWith('--_')) continue
         if (!ALLOWED.has(token)) offenders.push(`${relative}: ${token}`)
       }
     }
@@ -165,6 +168,9 @@ describe('official UI contract', () => {
         if (!token.startsWith('--ds')) continue
         if (fallback!.trimStart().startsWith('var(')) continue
         if (token === '--ds-font-family-code') continue
+        // These owner-published layout switches contain display keywords, not colours.
+        if (token === '--dsh-composer-model-icon-display' && fallback.trim() === 'none') continue
+        if (token === '--dsh-composer-model-text-display' && fallback.trim() === 'inline') continue
         offenders.push(`${relative}: var(${token}, <literal>)`)
       }
     }
