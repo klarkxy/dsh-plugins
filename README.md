@@ -20,6 +20,9 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse them on the [plugin site](http
 | [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface, conversation, code and terminal fonts and font sizes of the Web GUI. |
 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | Unrestricted: a session preset that removes the limits on what the model answers and delivers complete results, only in sessions that pick it; may get your account banned. |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: browse official DSH developer documentation in the Plugins page; the agent gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (`dsh_docs`, `dsh_plugins`). |
+| [`@klarkxy/dsh-context-cleaner`](plugins/dsh-context-cleaner/README.md) | Context Cleaner: hides the plugin-info and promotion cards at the top of the dsh-context dashboard. |
+| [`@klarkxy/dsh-deep-view`](plugins/dsh-deep-view/README.md) | Deep View: charts, metrics, tables and safe local inputs in replies, with validated answers to `show_view` cards. |
+| [`@klarkxy/dsh-model-picker`](plugins/dsh-model-picker/README.md) | Model Picker: searchable model selection with a reasoning-effort slider in the composer; other plugins can reuse the same picker. |
 
 `@klarkxy/dsh-plugin-kit` and `@klarkxy/dsh-model-route` are shared libraries that other plugins install automatically.
 

@@ -588,6 +588,132 @@
           }
         }
       ]
+    },
+    {
+      "name": "@klarkxy/dsh-context-cleaner",
+      "title": {
+        "zh": "上下文面板清理",
+        "en": "Context Cleaner"
+      },
+      "description": {
+        "zh": "隐藏 dsh-context 仪表盘顶部的插件信息与推广卡片。",
+        "en": "Hides the plugin-info and promotion cards at the top of the dsh-context dashboard."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/context-cleaner/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-context-cleaner"
+      },
+      "metadata": {
+        "category": "sessions",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "deepseek-harness-plugin",
+          "dsh-context",
+          "context-panel",
+          "declutter"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1794225836,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.2-rc.1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-deep-view",
+      "title": {
+        "zh": "Deep View 回复卡片",
+        "en": "Deep View reply cards"
+      },
+      "description": {
+        "zh": "在回复中展示图表、指标、表格和安全联动的本地输入；show_view 可接收已校验的用户回答。",
+        "en": "Charts, metrics, tables and safe local inputs in replies, with validated answers to show_view cards."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/deep-view/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-deep-view"
+      },
+      "metadata": {
+        "category": "workflow",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "deepseek-harness-plugin",
+          "charts",
+          "widgets",
+          "markdown"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1794225914,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-model-picker",
+      "title": {
+        "zh": "模型选择器",
+        "en": "Model picker"
+      },
+      "description": {
+        "zh": "输入框里的模型搜索与推理档位滑杆；其他插件可复用同一选择器。",
+        "en": "Searchable model selection with a reasoning-effort slider in the composer; other plugins can reuse the same picker."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-picker/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-model-picker"
+      },
+      "metadata": {
+        "category": "models",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "deepseek-harness-plugin",
+          "model-picker",
+          "model-selection",
+          "reasoning-effort",
+          "reasoning-slider",
+          "llm"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1794225867,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.2-rc.1"
+          }
+        }
+      ]
     }
   ]
 }

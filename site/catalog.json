@@ -332,6 +332,48 @@
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-unrestricted"
+    },
+    {
+      "slug": "context-cleaner",
+      "package": "@klarkxy/dsh-context-cleaner",
+      "category": "sessions",
+      "kind": "plugin",
+      "title": { "zh": "上下文面板清理", "en": "Context Cleaner" },
+      "summary": {
+        "zh": "隐藏 dsh-context 仪表盘顶部的插件信息与推广卡片。",
+        "en": "Hides the plugin-info and promotion cards at the top of the dsh-context dashboard."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-context-cleaner"
+    },
+    {
+      "slug": "deep-view",
+      "package": "@klarkxy/dsh-deep-view",
+      "category": "workflow",
+      "kind": "plugin",
+      "title": { "zh": "Deep View 回复卡片", "en": "Deep View reply cards" },
+      "summary": {
+        "zh": "在回复中展示图表、指标、表格和安全联动的本地输入；show_view 可接收已校验的用户回答。",
+        "en": "Charts, metrics, tables and safe local inputs in replies, with validated answers to show_view cards."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-deep-view"
+    },
+    {
+      "slug": "model-picker",
+      "package": "@klarkxy/dsh-model-picker",
+      "category": "models",
+      "kind": "plugin",
+      "title": { "zh": "模型选择器", "en": "Model picker" },
+      "summary": {
+        "zh": "输入框里的模型搜索与推理档位滑杆；其他插件可复用同一选择器。",
+        "en": "Searchable model selection with a reasoning-effort slider in the composer; other plugins can reuse the same picker."
+      },
+      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-model-picker"
     }
   ]
 }
