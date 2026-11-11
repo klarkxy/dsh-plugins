@@ -128,6 +128,6 @@
     "@klarkxy/dsh-plugin-kit": "workspace:*"
   },
   "dshRelease": {
-    "contentHash": "49d6e14d73e7b1512a9a8f293382a46a14129f75499f6b9525c2068197b5c66c"
+    "contentHash": "4df2cf3634e818eff467c1349b9d4e345cb9cb9c128b9a28542a9f2665ad7cf3"
   }
 }
