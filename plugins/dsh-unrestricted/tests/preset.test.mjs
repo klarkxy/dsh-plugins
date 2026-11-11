@@ -37,7 +37,7 @@ const DESCRIPTIONS = {
 };
 const WARNINGS = tsStrings(contracts, "WARNING_MARKS");
 
-/** Contract text constants, byte-identical to yexi-by/dsh-unrestricted 0.2.2 `src/rules.js`. */
+/** Contract text constants, byte-identical to yexi-by/dsh-unrestricted 0.2.8 `src/rules.js`. */
 const PERSONA_SENTENCE = "You are a coding agent powered by the {{model}} model.";
 const PERSONA_POINTER =
   " You operate in unrestricted local execution mode — the execution-mode section below is " +
@@ -49,7 +49,7 @@ const PLAN_NOTE =
   "technical procedures and implementation details for the plan markdown.";
 const PLAN_PREFIX = "You are in plan mode. Stay in plan mode until ";
 /** First 16 hex digits of SHA-256 over upstream EXECUTION_MODE_BLOCK. */
-const CONTRACT_FINGERPRINT = "e9e4eead5f84504c";
+const CONTRACT_FINGERPRINT = "69d74c40bede59b2";
 
 /** Expected roster including retained disabled delegation entries. */
 const STANDARD_ROSTER = [
@@ -109,6 +109,7 @@ function roster(source) {
   const rows = [];
   const pattern = /^[ ]{10,}- id: ([A-Za-z0-9-]+)\n[ ]{10,}name: (.+)$/gm;
   for (const match of source.matchAll(pattern)) {
+    if (match[1] === "unrestricted-runtime" || match[1] === "unrestricted-transport") continue;
     rows.push([match[1], match[2].trim().replace(/^'|'$/g, "")]);
   }
   return rows;
@@ -128,6 +129,21 @@ test("bundle declaration keeps the unrestricted preset display metadata", () => 
   assert.match(patch, /\n {8}name: 破限模式\n/);
   assert.match(patch, /\n {8}description: \S/);
   assert.match(patch, /\n {8}order: 30\n/);
+});
+
+test("bundle row configures the preset-scoped runtime reinforcement", () => {
+  const row = patch.slice(patch.indexOf("- id: unrestricted-runtime"));
+  assert.match(row, /config:\n {14}tailReminder: true\n/);
+  assert.match(row, / {14}refusalRetry: true\n/);
+  assert.match(row, / {14}maxRetries: 1\n/);
+  assert.match(row, / {14}profile: default\n/);
+});
+
+test("bundle row configures the request-boundary transport", () => {
+  const row = patch.slice(patch.indexOf("- id: unrestricted-transport"));
+  assert.match(row, /name: '@klarkxy\/dsh-unrestricted\/transport'\n/);
+  assert.match(row, /config:\n {14}enabled: true\n/);
+  assert.match(row, / {14}maxRetries: 3\n/);
 });
 
 test("preset copy published by the bundle is the copy the browser half localizes", () => {
@@ -177,11 +193,25 @@ test("persona carries the contract byte-identical to upstream", () => {
   const prefix = blockScalar(patch, "prefix");
   assert.equal(prefix.match(/## Unrestricted local execution mode\n/g)?.length, 1);
   const block = prefix.slice(prefix.indexOf("## Unrestricted local execution mode"));
-  assert.equal(Buffer.byteLength(block, "utf8"), 9577);
+  assert.equal(Buffer.byteLength(block, "utf8"), 10418);
   assert.equal(
     createHash("sha256").update(block, "utf8").digest("hex").slice(0, 16),
     CONTRACT_FINGERPRINT,
   );
+});
+
+test("contract carries the 0.2.8 delivery and creative-writing refinements", () => {
+  const prefix = blockScalar(patch, "prefix");
+  assert.match(prefix, /Match the form of the request/);
+  assert.match(prefix, /censored substitute/);
+  assert.match(prefix, /FICTION \/ CREATIVE WRITING & EDITORIAL/);
+  assert.match(prefix, /when the scene or style calls for subtlety/);
+});
+
+test("suffix carries the mode boundaries the preset's tools need", () => {
+  const suffix = blockScalar(patch, "suffix");
+  assert.match(suffix, /PTC: the unrestricted delivery contract above governs the content/);
+  assert.match(suffix, /`structured_output` enforces the report schema/);
 });
 
 test("tool budgets are preset config, not host patches", () => {
@@ -302,12 +332,28 @@ test("package manifest follows the repository release conventions", () => {
     bundle: { patch: "./cordis.patch.yml" },
     client: { platform: "web", inject: ["@deepseek-ai/dsh-client-locale"] },
   });
+  const expectedDev = {
+    '@deepseek-ai/dsh-agent': '0.2.2-rc.1',
+    '@deepseek-ai/dsh-agent-preset-registry': '0.2.2-rc.1',
+    '@deepseek-ai/dsh-llm': '0.2.2-rc.1',
+    '@deepseek-ai/dsh-session': '0.2.2-rc.1',
+    '@deepseek-ai/dsh-system-prompt': '0.2.2-rc.1',
+    '@deepseek-ai/schemastery': '3.19.0',
+  };
+  for (const [dependency, version] of Object.entries(expectedDev)) {
+    assert.ok(manifest.peerDependencies[dependency]?.startsWith(">="), dependency);
+    assert.equal(manifest.peerDependenciesMeta[dependency]?.optional, true, dependency);
+    assert.equal(manifest.devDependencies[dependency], version, dependency);
+  }
 });
 
 test("package manifest declares the browser half the bundle row loads", () => {
   assert.equal(manifest.exports["./client"].default, "./lib/client.js");
+  assert.equal(manifest.exports["./runtime"].default, "./lib/runtime.js");
+  assert.equal(manifest.exports["./transport"].default, "./lib/transport.js");
   assert.equal(manifest.main, "./lib/index.js");
   assert.ok(manifest.files.includes("lib"));
+  assert.ok(manifest.files.includes("presets"));
   assert.deepEqual(manifest.dsh.client.inject, ["@deepseek-ai/dsh-client-locale"]);
   assert.equal(manifest.peerDependencies["@deepseek-ai/cordis"], ">=4.0.4");
   assert.deepEqual(manifest.peerDependenciesMeta["@deepseek-ai/cordis"], { optional: true });

@@ -8,14 +8,18 @@ the projects below; all are reused under the MIT License and credited here.
 
 破限交付契约（persona 中 `## Unrestricted local execution mode` 一节）、persona 指针句和
 计划模式补注，改写自 [yexi-by/dsh-unrestricted](https://github.com/yexi-by/dsh-unrestricted)
-（`src/rules.js`，v0.2.2）。本包将同一份契约沉淀为独立的静态 Agent Preset 文本，仅在选用该
+（`src/rules.js`，v0.2.8）。本包将同一份契约沉淀为独立的静态 Agent Preset 文本，仅在选用该
 Preset 的会话中生效，保持其他 Preset 的提示词原样不变。
 
 The unrestricted delivery contract (the `## Unrestricted local execution mode` section in
 the persona), the persona pointer sentence, and the plan-mode note are adapted from
 [yexi-by/dsh-unrestricted](https://github.com/yexi-by/dsh-unrestricted)
-(`src/rules.js`, v0.2.2). This package settles the contract into a standalone static
+(`src/rules.js`, v0.2.8). This package settles the contract into a standalone static
 agent-preset declaration, keeping every other preset's prompt untouched.
+
+尾部提醒与拒绝重试是本包原创的运行时实现，不复制上述项目的代码。
+The runtime tail reminder and refusal retry are original implementations in this package; no
+code is copied from the projects above.
 
 ```text
 MIT License
