@@ -44,6 +44,7 @@ function fakeHost() {
   let summaryFails = false
   let catalogFails = false
   let presetsFail = false
+  const reflectionHooks: { promptHook?: (sessionId: string, text: string) => void | Promise<void> } = {}
   const host: DotHost = {
     listWorkspaces: () => [...workspaces],
     async createWorkspace(path, title) {
@@ -91,6 +92,17 @@ function fakeHost() {
     },
     async resumeDot(sessionId) { calls.push(`resume-dot ${sessionId}`); return dots.has(sessionId) && !lost.has(sessionId) },
     async releaseDot(sessionId) { calls.push(`release-dot ${sessionId}`) },
+    async createInternal(_cwd, preset) {
+      const id = `ref${++sessions}`
+      calls.push(`create-internal ${id} ${preset}`)
+      return id
+    },
+    async promptInternal(sessionId, text) {
+      calls.push(`prompt-internal ${sessionId} ${text}`)
+      await reflectionHooks.promptHook?.(sessionId, text)
+    },
+    async waitIdle() { return true },
+    async releaseInternal(sessionId) { calls.push(`release-internal ${sessionId}`) },
     async readEvents(sessionId) {
       if (unreadable.has(sessionId)) throw new Error('no such session')
       return events.get(sessionId) ?? []
@@ -115,7 +127,7 @@ function fakeHost() {
     async dispose() {},
   }
   return {
-    host, calls, timeline, said, relayed, workspaces, lost, events, running, unreadable,
+    host, calls, timeline, said, relayed, workspaces, lost, events, running, unreadable, reflectionHooks,
     failPermission: () => { permissionWorks = false },
     setContext: (next: DotContextView) => { context = next },
     setModel: (next: string | undefined) => { model = next },
@@ -130,7 +142,9 @@ function setup(settings?: Partial<DotSettings>) {
   const fake = fakeHost()
   const clock = manualTimer()
   const store = new DotStore(undefined)
-  if (settings) void store.setSettings({ ...DEFAULT_SETTINGS, ...settings })
+  // Reflection is off unless a test asks for it, so the reminder clock's periodic
+  // check does not start background passes in unrelated tests.
+  void store.setSettings({ ...DEFAULT_SETTINGS, reflection: false, ...settings })
   let at = 1000
   // The legacy note files live in memory here; only the one-time migration reads them.
   const notes = { path: '/dot/memory.md', text: '', cognition: '', read: async () => notes.text, readCognition: async () => notes.cognition }
@@ -756,6 +770,61 @@ describe('DotService knowledge migration', () => {
   })
 })
 
+describe('DotService background reflection delivery', () => {
+  it('carries a pending agreement note once with the next human message and clears it', async () => {
+    const h = setup()
+    await h.service.ensureDot()
+    await h.store.setAgreementNotes('agreement A conflicts with B')
+    await h.service.say('hello')
+    expect(h.said[0]!.carriedNotices).toContain('[dot agreement notes]')
+    expect(h.said[0]!.carriedNotices).toContain('agreement A conflicts with B')
+    expect(h.store.agreementNotes).toBe('')
+    await h.service.say('again')
+    expect(h.said[1]!.carriedNotices).toBeUndefined()
+  })
+
+  it('moves to a new segment before the next message when reflection changed cognition', async () => {
+    const h = setup()
+    const first = await h.service.ensureDot()
+    h.events.set(first, [human('hi', 10), reply('hello', 20)])
+    await h.service.setCognition('a fresh understanding', 'reflection')
+    await h.service.say('next')
+    expect(h.store.dotSessionId).not.toBe(first)
+    expect(h.store.segment!.cognition).toContain('a fresh understanding')
+  })
+
+  it('never clears an agreement note a concurrent reflection submission wrote', async () => {
+    const h = setup()
+    await h.service.ensureDot()
+    await h.store.setAgreementNotes('old note')
+    // Hold host.say the way a slow delivery would, so a reflection submission
+    // arrives while the human message is still in flight.
+    let releaseSay!: () => void
+    let enteredSay!: () => void
+    const gate = new Promise<void>(resolve => { releaseSay = resolve })
+    const entered = new Promise<void>(resolve => { enteredSay = resolve })
+    const realSay = h.host.say.bind(h.host)
+    h.host.say = async (...args: Parameters<typeof realSay>) => { enteredSay(); await gate; return realSay(...args) }
+    // The runner itself is exercised in reflection.spec; here we only need its
+    // write to observe the message lane, so stub the submission write.
+    h.service.reflection.submit = async (_cognition: string, notes: string | undefined) => {
+      await h.store.setAgreementNotes(notes ?? '')
+      return 'saved'
+    }
+    const saying = h.service.say('hello')
+    await entered
+    const submitting = h.service.reflectionSubmit('new cognition', 'new note', 'ref-1')
+    // The submission waits behind the in-flight message; nothing is written yet.
+    expect(h.store.agreementNotes).toBe('old note')
+    releaseSay()
+    await saying
+    await submitting
+    // The message carried the old note and cleared it; the new note survives.
+    expect(h.said[0]!.carriedNotices).toContain('old note')
+    expect(h.store.agreementNotes).toBe('new note')
+  })
+})
+
 describe('DotService reminders', () => {
   it('sets, lists and removes reminders and explains a request it cannot take', async () => {
     const h = setup()
@@ -796,7 +865,8 @@ describe('DotService reminders', () => {
     expect(h.relayed[0]!.text.startsWith(REMINDER_HEAD)).toBe(true)
     expect(h.relayed[0]!.text).toContain('Read the release task and report.')
     await vi.waitFor(() => expect(h.store.schedules).toEqual([]))
-    expect(h.delays()).toEqual([])
+    // The periodic reflection check keeps the clock armed even with no reminders.
+    expect(h.delays()).toEqual([30 * 60_000])
   })
 
   it('moves to a new segment first when one is due as the reminder fires', async () => {

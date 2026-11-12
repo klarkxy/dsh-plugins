@@ -19,6 +19,12 @@ export interface ReminderClockOptions {
   readonly store: DotStore
   /** Hand one message to dot; a rejection keeps the reminders due. */
   readonly deliver: (text: string) => Promise<void>
+  /**
+   * Other periodic work mounted on the same clock (the background reflection
+   * check). Called once per tick, and the clock keeps a wake-up even when no
+   * reminder is set, so the check runs on an idle dot too.
+   */
+  readonly onPeriodic?: () => void
   readonly now: () => number
   readonly timer?: Timer
   readonly log?: (message: string) => void
@@ -66,6 +72,11 @@ export class ReminderClock {
     if (this.firing || this.disposed) return
     const store = this.options.store
     const now = this.options.now()
+    // Other periodic work (the reflection check) rides this clock whether or not
+    // a reminder is due; it must never throw back into the timer.
+    try { this.options.onPeriodic?.() } catch (error) {
+      this.options.log?.(`dsh-dot: periodic check failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
     const due = store.schedules.filter(record => record.nextAt <= now)
     if (due.length === 0) { this.arm(); return }
     this.firing = true
@@ -99,8 +110,10 @@ export class ReminderClock {
     if (!this.started || this.disposed) return
     if (this.handle !== undefined) { this.timer.clear(this.handle); this.handle = undefined }
     const next = this.options.store.schedules[0]?.nextAt
-    if (next === undefined) return
-    const ms = wait ?? Math.min(MAX_SLEEP_MS, Math.max(0, next - this.options.now()))
+    // With periodic work attached the clock keeps a wake-up even when no
+    // reminder exists, so the periodic check still runs on an otherwise idle dot.
+    if (next === undefined && this.options.onPeriodic === undefined) return
+    const ms = wait ?? (next === undefined ? MAX_SLEEP_MS : Math.min(MAX_SLEEP_MS, Math.max(0, next - this.options.now())))
     this.handle = this.timer.set(() => { this.handle = undefined; void this.tick() }, ms)
   }
 }

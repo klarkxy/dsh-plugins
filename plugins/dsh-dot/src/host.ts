@@ -29,6 +29,7 @@ import { assembledSurface, type AssembledPromptInput } from './context-surface.t
 import type { DotContextUsage, DotContextView, ModelChoice, TrajectoryView } from './contracts.ts'
 import type { CatalogModel, TaskModelCatalog } from './task-models.ts'
 import type { CatalogPreset, TaskPresetCatalog } from './task-presets.ts'
+import { REFLECTION_PRESET_ID } from './reflection.ts'
 import { foldTrajectory } from './trajectory.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
@@ -78,6 +79,21 @@ export interface DotHost {
   // ---- dot's own session --------------------------------------------------
   /** Create dot's session under the subagent origin, running the given preset. */
   createDot(cwd: string, preset: string): Promise<string>
+  /**
+   * Create an internal, sidebar-hidden subagent session for a single background
+   * pass (the reflection run). It keeps the host's default permissions: such a
+   * pass needs no file system access at all.
+   */
+  createInternal(cwd: string, preset: string): Promise<string>
+  /** Deliver one prompt to an internal session and wake it. */
+  promptInternal(sessionId: string, text: string): Promise<void>
+  /**
+   * Resolve once the internal session's turn has gone idle. @returns false when
+   * it did not finish before the timeout (the turn is then cancelled).
+   */
+  waitIdle(sessionId: string, timeoutMs: number): Promise<boolean>
+  /** Archive and let go of an internal session; its log stays readable. */
+  releaseInternal(sessionId: string): Promise<void>
   /** Make dot's session live again. @returns false when it cannot serve as dot any more. */
   resumeDot(sessionId: string, preset: string): Promise<boolean>
   /** Transfer any open interactive `show_view` card from an ending segment to the new segment. */
@@ -148,6 +164,8 @@ interface LiveAgent {
   followup?(message: unknown): void
   steer?(message: unknown): void
   cancel?(cause: { kind: 'user' }, options?: { keepInbox?: boolean }): void
+  /** Public runtime API: resolves when the whole agent's activity is quiescent. */
+  whenIdle?(): Promise<void>
 }
 
 interface AgentHandle { readonly agent: LiveAgent; dispose(): Promise<void> }
@@ -306,6 +324,8 @@ export function bindHost(get: Get, log?: (message: string) => void, modelOf?: ()
       const presets: CatalogPreset[] = []
       for (const entry of await registry.list()) {
         if (typeof entry.id !== 'string' || !entry.id) continue
+        // The reflection preset is internal; dot must not pick it as a task preset.
+        if (entry.id === REFLECTION_PRESET_ID) continue
         presets.push({
           id: entry.id,
           ...typeof entry.name === 'string' && entry.name ? { name: entry.name } : {},
@@ -372,6 +392,59 @@ export function bindHost(get: Get, log?: (message: string) => void, modelOf?: ()
       // dot has no file or shell tools; its own calls never need a human approval.
       permit(handle.agent.session, FULL_ACCESS)
       return sessionId
+    },
+    async createInternal(cwd, preset) {
+      await mkdir(cwd, { recursive: true })
+      const { id, setup } = await setupFor(preset)
+      const sessionId = `session-${randomUUID()}`
+      // A reflection pass needs no file system or shell access, so it keeps the
+      // host's default permissions instead of dot's full access.
+      const handle = await agents().create({ sessionId, agentOptions: agentOptions(), meta: { cwd, origin: 'subagent', agentPreset: id }, setup })
+      handles.set(sessionId, handle)
+      return sessionId
+    },
+    async promptInternal(sessionId, text) {
+      const agent = await liveAgent(sessionId)
+      const message = createUserMessage({ content: [{ type: 'text' as const, text }], source: { kind: 'user' } as MessageSource })
+      if (typeof agent.steer !== 'function' || agent.status === 'idle' || agent.status === undefined) agent.followup?.(message)
+      else agent.steer(message)
+    },
+    async waitIdle(sessionId, timeoutMs) {
+      const agent = await liveAgent(sessionId)
+      if (typeof agent.whenIdle !== 'function') return false
+      // Let the waking delivery enter `running` first, so whenIdle does not
+      // resolve on the idle state that precedes the turn it was just given.
+      const waitedFrom = Date.now()
+      while (agent.status !== 'running' && Date.now() - waitedFrom < 1_000) await new Promise(resolve => setTimeout(resolve, 20))
+      let timedOut = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+      // On timeout, cancel the turn too: the pass then settles through its own
+      // finally (which releases the session), never by abandoning the wait.
+      const timeout = new Promise<void>(resolve => {
+        timer = setTimeout(() => {
+          timedOut = true
+          try { agent.cancel?.({ kind: 'user' }, { keepInbox: false }) } catch { /* best effort */ }
+          resolve()
+        }, Math.max(1_000, timeoutMs))
+      })
+      try {
+        await Promise.race([agent.whenIdle().catch(() => undefined), timeout])
+        return !timedOut
+      } finally {
+        if (timer !== undefined) clearTimeout(timer)
+      }
+    },
+    async releaseInternal(sessionId) {
+      scans.delete(sessionId)
+      try {
+        await registry().archiveSession(sessionId, { stopActivity: true })
+      } catch (error) {
+        log?.(`dsh-dot: internal session ${sessionId} was not archived: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      const handle = handles.get(sessionId)
+      if (!handle) return
+      handles.delete(sessionId)
+      await handle.dispose()
     },
     async resumeDot(sessionId, preset) {
       const live = agents().get(sessionId)

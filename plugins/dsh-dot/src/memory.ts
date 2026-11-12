@@ -124,6 +124,23 @@ export function cognitionSection(text: string): string {
   ].join('\n')
 }
 
+/**
+ * The one-time note the reflection pass leaves about the agreements. It rides
+ * the carried prefix of the next human message and asks dot to mention it
+ * briefly, then the human decides — the reflection pass never edits the
+ * agreements itself.
+ */
+export function agreementNotesBlock(notes: string): string {
+  const body = notes.trim()
+  if (!body) return ''
+  return [
+    '[dot agreement notes]',
+    `Your background reflection pass noticed something about the [agreements] that may be out of date or in conflict with each other. Do not change the agreements yourself. Mention this briefly in your reply to the human and ask them to decide:`,
+    '',
+    body,
+  ].join('\n')
+}
+
 /** The legacy note files. A missing file reads as empty; only migration uses these. */
 export class MemoryNotes {
   constructor(private readonly dir: string) {}

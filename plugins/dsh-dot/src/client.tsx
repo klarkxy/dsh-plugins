@@ -13,7 +13,7 @@ import { CHAT_ROOT, ChatPanel, chatCss, type CardComponent, type ChatApi } from 
 import { contextCss } from './context-panel.tsx'
 import { personaCss } from './persona-panel.tsx'
 import { trajectoryCss } from './trajectory-panel.tsx'
-import { RPC_CHANNEL, type BoardView, type ChatSnapshot, type DotContextView, type DotSettings, type KnowledgeView, type SettingProposal, type TrajectoryView } from './contracts.ts'
+import { RPC_CHANNEL, type BoardView, type ChatSnapshot, type DotContextView, type DotSettings, type KnowledgeView, type ReflectionRun, type SettingProposal, type TrajectoryView } from './contracts.ts'
 import { copyLocale, t, type CopyLocale } from './ui-copy.ts'
 import { DotIcon } from './whale.tsx'
 
@@ -71,6 +71,8 @@ export function apply(ctx: Context): void {
     context: signal => call<DotContextView>('context', {}, signal),
     clearUsage: () => call<DotContextView>('context.clearUsage'),
     trajectory: signal => call<TrajectoryView>('trajectory', {}, signal),
+    reflectionRuns: signal => call<readonly ReflectionRun[]>('reflection.runs', {}, signal),
+    reflectionTrajectory: (sessionId, signal) => call<TrajectoryView>('reflection.trajectory', { sessionId }, signal),
     models: async () => {
       const catalog = client.remote?.session?.modelCatalog
       if (typeof catalog !== 'function') throw new Error('model catalog unavailable')

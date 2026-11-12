@@ -6,14 +6,18 @@
  */
 import { Button, Checkbox, IconSearchOutlineRegular, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { TrajectoryView, TrajRecord, TrajStep, TrajTurn } from './contracts.ts'
+import type { ReflectionRun, TrajectoryView, TrajRecord, TrajStep, TrajTurn } from './contracts.ts'
 import { turnTotals } from './trajectory.ts'
-import { formatDuration, formatTokens, t, toolLabel, type CopyLocale, type TextKey } from './ui-copy.ts'
+import { formatDuration, formatTokens, formatWhen, t, toolLabel, type CopyLocale, type TextKey } from './ui-copy.ts'
 
 const RUNNING_POLL_MS = 3_000
 
 export interface TrajectoryApi {
   trajectory(signal: AbortSignal): Promise<TrajectoryView>
+  /** Archived background reflection passes, oldest first (at most 30). */
+  reflectionRuns(signal: AbortSignal): Promise<readonly ReflectionRun[]>
+  /** Trajectory of one archived reflection session. */
+  reflectionTrajectory(sessionId: string, signal: AbortSignal): Promise<TrajectoryView>
 }
 
 function useTrajectory(api: TrajectoryApi, rev: number | undefined, running: boolean): { view?: TrajectoryView; error?: string } {
@@ -167,22 +171,75 @@ function TurnBlock({ locale, turn, open, onToggle, filter, openRecords, toggleRe
   )
 }
 
+/** Compact list of archived reflection passes; picking one shows its trajectory. */
+function ReflectionRuns({ locale, runs, error, selected, onPick }: {
+  locale: CopyLocale
+  runs?: readonly ReflectionRun[]
+  error?: string
+  selected?: string
+  onPick: (sessionId: string) => void
+}) {
+  return (
+    <div className="dsh-dot-tr-reflections" aria-label={t(locale, 'trReflection')}>
+      {error ? <div className="dsh-ui-error">{t(locale, 'trFailedLoad')}{error}</div> : null}
+      {runs === undefined && !error ? <div className="dsh-ui-empty">{t(locale, 'trLoading')}</div> : null}
+      {runs?.length === 0 ? <div className="dsh-ui-empty">{t(locale, 'trReflectionEmpty')}</div> : null}
+      {[...(runs ?? [])].reverse().map(run => (
+        <button key={run.sessionId} type="button" className="dsh-dot-tr-run" aria-pressed={selected === run.sessionId} onClick={() => onPick(run.sessionId)}>
+          <span className="dsh-dot-tr-time">{formatWhen(run.startedAt)}</span>
+          <span className={run.endedAt !== undefined && !run.ok ? 'dsh-dot-tr-meta dsh-dot-tr-bad' : 'dsh-dot-tr-meta'}>
+            {run.endedAt === undefined ? t(locale, 'trRunning') : run.ok ? t(locale, 'trReflectionUpdated') : t(locale, 'trFailed')}
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function TrajectoryPanel({ locale, api, rev, running }: { locale: CopyLocale; api: TrajectoryApi; rev?: number; running: boolean }): ReactNode {
   const { view, error } = useTrajectory(api, rev, running)
   const [query, setQuery] = useState('')
   const [openTurns, setOpenTurns] = useState<ReadonlySet<number> | undefined>()
   const [openRecords, setOpenRecords] = useState<ReadonlySet<string>>(new Set())
   const [showContext, setShowContext] = useState(false)
+  const [reflectionOpen, setReflectionOpen] = useState(false)
+  const [runs, setRuns] = useState<readonly ReflectionRun[]>()
+  const [runsError, setRunsError] = useState<string>()
+  const [selected, setSelected] = useState<string>()
+  const [archived, setArchived] = useState<TrajectoryView>()
+  const [archivedError, setArchivedError] = useState<string>()
+  useEffect(() => {
+    if (!reflectionOpen) return
+    const life = new AbortController()
+    api.reflectionRuns(life.signal).then(
+      next => { if (!life.signal.aborted) { setRuns(next); setRunsError(undefined) } },
+      failure => { if (!life.signal.aborted) setRunsError(failure instanceof Error ? failure.message : String(failure)) },
+    )
+    return () => life.abort()
+  }, [api, reflectionOpen])
+  useEffect(() => {
+    if (!selected) return
+    const life = new AbortController()
+    setArchived(undefined)
+    setArchivedError(undefined)
+    api.reflectionTrajectory(selected, life.signal).then(
+      next => { if (!life.signal.aborted) setArchived(next) },
+      failure => { if (!life.signal.aborted) setArchivedError(failure instanceof Error ? failure.message : String(failure)) },
+    )
+    return () => life.abort()
+  }, [api, selected])
+  // An archived reflection pass uses the same turn view as the live segment.
+  const source = selected ? archived : view
   const needle = query.trim().toLowerCase()
   const filter = useCallback((records: readonly TrajRecord[]) => records.filter(record =>
     (showContext || !(record.kind === 'input' && record.source === 'context')) && (!needle || haystack(locale, record).includes(needle))), [locale, needle, showContext])
   const turns = useMemo(() => {
-    const all = view?.turns ?? []
+    const all = source?.turns ?? []
     if (!needle) return all
     return all.filter(turn => filter(turn.records).length > 0 || turn.steps.some(step => filter(step.records).length > 0))
-  }, [view, needle, filter])
+  }, [source, needle, filter])
   // The newest turn starts open; a search opens every match.
-  const lastTurn = view?.turns.at(-1)?.turn
+  const lastTurn = source?.turns.at(-1)?.turn
   const isOpen = (turn: number) => needle ? true : openTurns ? openTurns.has(turn) : turn === lastTurn
   const toggleTurn = (turn: number) => setOpenTurns(prev => {
     const next = new Set(prev ?? (lastTurn !== undefined ? [lastTurn] : []))
@@ -194,8 +251,24 @@ export function TrajectoryPanel({ locale, api, rev, running }: { locale: CopyLoc
     if (next.has(key)) next.delete(key); else next.add(key)
     return next
   }), [])
+  const pick = (sessionId: string) => {
+    setSelected(sessionId)
+    setOpenTurns(undefined)
+    setOpenRecords(new Set())
+  }
+  const back = () => {
+    setSelected(undefined)
+    setArchived(undefined)
+    setArchivedError(undefined)
+    setOpenTurns(undefined)
+    setOpenRecords(new Set())
+  }
+  const toggleReflection = () => {
+    if (reflectionOpen) back()
+    setReflectionOpen(!reflectionOpen)
+  }
 
-  if (!view) {
+  if (!view && !selected) {
     return error
       ? <div className="dsh-dot-tr"><div className="dsh-ui-error" role="alert">{t(locale, 'trFailedLoad')}{error}</div></div>
       : <div className="dsh-dot-tr"><div className="dsh-ui-loading">{t(locale, 'trLoading')}</div></div>
@@ -219,13 +292,24 @@ export function TrajectoryPanel({ locale, api, rev, running }: { locale: CopyLoc
           onChange={setShowContext}
         />
         <span className="dsh-dot-spacer" />
-        <Button variant="ghost" size="sm" onClick={() => setOpenTurns(new Set(view.turns.map(turn => turn.turn)))}>{t(locale, 'trExpandAll')}</Button>
+        <Button variant="ghost" size="sm" className="dsh-dot-tr-reflection-toggle" aria-pressed={reflectionOpen} onClick={toggleReflection}>{t(locale, 'trReflection')}</Button>
+        <Button variant="ghost" size="sm" onClick={() => setOpenTurns(new Set((source?.turns ?? []).map(turn => turn.turn)))}>{t(locale, 'trExpandAll')}</Button>
         <Button variant="ghost" size="sm" onClick={() => { setOpenTurns(new Set()); setOpenRecords(new Set()) }}>{t(locale, 'trCollapseAll')}</Button>
       </div>
       <div className="dsh-dot-tr-list">
-        {view.earlier > 0 ? <div className="dsh-dot-tr-earlier">{t(locale, 'trEarlier').replace('{n}', String(view.earlier))}</div> : null}
-        {turns.length === 0 ? <div className="dsh-ui-empty">{needle ? t(locale, 'trNoMatch') : t(locale, 'trEmptyLog')}</div> : null}
-        {turns.map(turn => <TurnBlock key={turn.turn} locale={locale} turn={turn} open={isOpen(turn.turn)} onToggle={() => toggleTurn(turn.turn)} filter={filter} openRecords={openRecords} toggleRecord={toggleRecord} />)}
+        {reflectionOpen
+          ? <ReflectionRuns locale={locale} {...runs ? { runs } : {}} {...runsError ? { error: runsError } : {}} {...selected ? { selected } : {}} onPick={pick} />
+          : null}
+        {selected ? <div className="dsh-dot-tr-archived-head"><Button variant="ghost" size="sm" onClick={back}>{t(locale, 'trReflectionBack')}</Button></div> : null}
+        {selected && archivedError ? <div className="dsh-ui-error" role="alert">{t(locale, 'trFailedLoad')}{archivedError}</div> : null}
+        {selected && !archived && !archivedError ? <div className="dsh-ui-loading">{t(locale, 'trLoading')}</div> : null}
+        {!selected || archived
+          ? <>
+            {(source?.earlier ?? 0) > 0 ? <div className="dsh-dot-tr-earlier">{t(locale, 'trEarlier').replace('{n}', String(source?.earlier ?? 0))}</div> : null}
+            {turns.length === 0 ? <div className="dsh-ui-empty">{needle ? t(locale, 'trNoMatch') : t(locale, 'trEmptyLog')}</div> : null}
+            {turns.map(turn => <TurnBlock key={turn.turn} locale={locale} turn={turn} open={isOpen(turn.turn)} onToggle={() => toggleTurn(turn.turn)} filter={filter} openRecords={openRecords} toggleRecord={toggleRecord} />)}
+          </>
+          : null}
       </div>
     </div>
   )
@@ -295,4 +379,10 @@ export const trajectoryCss = `
   font: 12px/18px var(--ds-font-family-code); white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .dsh-dot-chat .dsh-dot-tr-error { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-error); overflow-wrap: anywhere; }
+.dsh-dot-chat .dsh-dot-tr-reflections { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 10px; margin-bottom: 8px; border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
+.dsh-dot-chat .dsh-dot-tr-reflections > .dsh-ui-empty { margin: 4px 0; }
+.dsh-dot-chat .dsh-dot-tr-run { display: flex; align-items: center; gap: 10px; width: 100%; padding: 4px 6px; border: 0; border-radius: var(--dsw-radius-sm); background: none; color: inherit; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.dsh-dot-chat .dsh-dot-tr-run:hover,
+.dsh-dot-chat .dsh-dot-tr-run[aria-pressed='true'] { background: var(--dsw-alias-interactive-bg-hover); }
+.dsh-dot-chat .dsh-dot-tr-archived-head { padding: 2px 0 8px; }
 `

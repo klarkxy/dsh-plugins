@@ -3,6 +3,7 @@
  * so the host can rebuild the whole list or fold in one new event the same way.
  */
 import type { ChatItem } from './contracts.ts'
+import { AGREEMENT_NOTES_HEAD } from './contracts.ts'
 import { cardText } from './cards.ts'
 
 export interface RawEvent {
@@ -53,7 +54,9 @@ export function splitCarriedNotice(source: unknown, content: unknown): { readonl
   if (rec(source)?.kind !== 'user') return { text: full }
   if (typeof count !== 'number' || !Number.isInteger(count) || count <= 0 || count >= full.length) return { text: full }
   const notice = full.slice(0, count)
-  if (!notice.startsWith('[dot notice]')) return { text: full }
+  // The carried prefix holds batched updates and/or a one-time agreement note;
+  // either marks the block as system context rather than the human's own words.
+  if (!notice.startsWith('[dot notice]') && !notice.startsWith(AGREEMENT_NOTES_HEAD)) return { text: full }
   return { notice, text: full.slice(count).trim() }
 }
 

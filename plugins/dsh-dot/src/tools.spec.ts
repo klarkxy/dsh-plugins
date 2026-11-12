@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { apply } from './tools.ts'
+import { apply as applyReflection, REFLECTION_SUBMIT_TOOL } from './reflection.ts'
 import { DEFAULT_SETTINGS, TOOL, type DotSettings } from './contracts.ts'
 import { DEFAULT_PERSONA } from './persona.ts'
 import { settingsSnapshotBlock, SelfSettings } from './self-settings.ts'
@@ -33,7 +34,12 @@ function load(settings: { current: DotSettings; segment?: Seg; notes?: string; c
   const realSelf = new SelfSettings(service as never)
   let cardNumber = 0
   const ctx = {
-    tools: { register(definition: Record<string, unknown>) { registered.push(definition); return () => {} } },
+    tools: {
+      schemas: () => [],
+      restrict: () => () => {},
+      register(definition: Record<string, unknown>) { registered.push(definition); return () => {} },
+    },
+    on: () => () => {},
     systemPrompt: { section(section: (typeof sections)[number]) { sections.push(section); return () => {} } },
     dot: {
       store: { get settings() { return settings.current }, get segment() { return settings.segment } },
@@ -56,7 +62,28 @@ function load(settings: { current: DotSettings; segment?: Seg; notes?: string; c
   return Object.assign(registered, { sections })
 }
 
+/** The private preset gets the same schema guard as the public dot tools. */
+function loadReflection() {
+  const registered: Array<Record<string, unknown>> = []
+  applyReflection({
+    tools: {
+      schemas: () => [],
+      restrict: () => () => {},
+      register(definition: Record<string, unknown>) { registered.push(definition); return () => {} },
+    },
+    dot: {},
+    on: () => () => {},
+    effect(fn: () => unknown) { fn() },
+  } as never)
+  return registered
+}
+
+const allSchemas = () => [...load(), ...loadReflection()]
+
 describe('dot tools', () => {
+  it('keeps the private reflection preset to history reads and one restricted submission', () => {
+    expect(loadReflection().map(tool => tool.name).sort()).toEqual([TOOL.searchHistory, TOOL.readHistory, REFLECTION_SUBMIT_TOOL].sort())
+  })
   it('compiles every dot tool definition through defineTool and keeps 17 dot_* plus show_view', () => {
     const names = load().map(tool => tool.name)
     expect([...names].sort()).toEqual([...Object.values(TOOL), 'show_view'].sort())
@@ -87,7 +114,7 @@ describe('dot tools', () => {
   })
 
   it('no tool parameter schema uses oneOf / anyOf / allOf / const or a union type', () => {
-    const tools = load()
+    const tools = allSchemas()
     const forbidden = ['oneOf', 'anyOf', 'allOf', 'const']
     for (const t of tools) {
       const json = JSON.stringify(t.parameters ?? {})
@@ -100,7 +127,7 @@ describe('dot tools', () => {
   })
 
   it('uses only scalar fields in every flat tool schema', () => {
-    for (const tool of load()) {
+    for (const tool of allSchemas()) {
       const parameters = tool.parameters as Record<string, unknown>
       const properties = (parameters.properties ?? parameters) as Record<string, Record<string, unknown>>
       for (const [name, field] of Object.entries(properties)) {

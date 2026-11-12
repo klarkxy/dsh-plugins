@@ -80,6 +80,11 @@ describe('Dorothy self-management controls', () => {
     await act(async () => fullAccessTab.click())
     expect(current.taskPermission).toBe('danger-full-access')
 
+    // The reflection switch is a direct on/off setting, not a model proposal.
+    const reflectionOff = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(node => node.textContent === '关闭')!
+    await act(async () => reflectionOff.click())
+    expect(current.reflection).toBe(false)
+
     const allowTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(node => node.textContent === '仅允许所选')!
     await act(async () => allowTab.click())
     expect(current.taskModels.mode).toBe('allow')
@@ -274,12 +279,68 @@ describe('Dorothy self-management controls', () => {
           }],
         }],
       }),
+      reflectionRuns: async () => [],
+      reflectionTrajectory: async () => ({ earlier: 0, turns: [] }),
     }
-    await act(async () => root.render(<TrajectoryPanel locale="zh" api={api} />))
+    await act(async () => root.render(<TrajectoryPanel locale="zh" api={api} running={false} />))
     await act(async () => { await Promise.resolve() })
 
     expect(document.body.textContent).toContain('查看全局 · dot_overview')
     expect(document.body.textContent).toContain('结束：已停止')
+    await act(async () => root.unmount())
+  })
+
+  it('lists reflection runs and opens an archived reflection trajectory', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const archived = {
+      earlier: 0,
+      turns: [{
+        turn: 1,
+        startedAt: 1_700_000_000_000,
+        endedAt: 1_700_000_001_500,
+        end: 'completed',
+        records: [],
+        steps: [{
+          step: 1,
+          model: 'deepseek-chat',
+          startedAt: 1_700_000_000_000,
+          durationMs: 1200,
+          records: [{
+            kind: 'call' as const,
+            id: 'call-1',
+            name: 'dot_read_history',
+            args: '{}',
+            result: '{"ok":true}',
+            status: 'done' as const,
+            at: 1_700_000_000_100,
+            endedAt: 1_700_000_000_400,
+          }],
+        }],
+      }],
+    }
+    const api = {
+      trajectory: async () => ({ earlier: 0, turns: [] }),
+      reflectionRuns: async () => [
+        { sessionId: 'sess-1', startedAt: 1_700_000_000_000, endedAt: 1_700_000_001_000, ok: true },
+        { sessionId: 'sess-2', startedAt: 1_700_000_100_000, endedAt: 1_700_000_101_000, ok: false },
+      ],
+      reflectionTrajectory: vi.fn(async () => archived),
+    }
+    await act(async () => root.render(<TrajectoryPanel locale="zh" api={api} running={false} />))
+    await act(async () => { await Promise.resolve() })
+    const toggle = document.querySelector<HTMLButtonElement>('.dsh-dot-tr-reflection-toggle')!
+    expect(toggle.textContent).toBe('反思')
+    await act(async () => toggle.click())
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(document.body.textContent).toContain('已更新')
+    expect(document.body.textContent).toContain('失败')
+    // Newest first: the failed pass leads the list.
+    const rows = [...document.querySelectorAll<HTMLButtonElement>('.dsh-dot-tr-run')]
+    expect(rows.length).toBe(2)
+    await act(async () => rows[0]!.click())
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(api.reflectionTrajectory).toHaveBeenCalledWith('sess-2', expect.anything())
+    expect(document.body.textContent).toContain('dot_read_history')
     await act(async () => root.unmount())
   })
 })

@@ -32,7 +32,11 @@
     "taskPermissionDesc": "Applies to new tasks, independently of approval routing. Windows tests failing with spawn EPERM may need approval for a wider retry.",
     "approvals_dot": "Dorothy",
     "approvals_human": "You",
-    "approvals_deny": "Deny all"
+    "approvals_deny": "Deny all",
+    "reflection": "Background reflection",
+    "reflectionDesc": "Reviews recent work when idle and updates her cognition; flags stale or conflicting agreements the next time you message her, for you to decide.",
+    "reflection_on": "On",
+    "reflection_off": "Off"
   },
   "context": {
     "promptSections": "Prompt sections",

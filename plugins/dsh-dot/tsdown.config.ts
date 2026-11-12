@@ -26,8 +26,9 @@ const hostExternal = [
 
 export default defineConfig([
   {
-    // Two host entries: the plugin itself and the preset row that carries dot's tools.
-    entry: { index: 'src/index.ts', tools: 'src/tools.ts' },
+    // Three host entries: the plugin itself, the preset row that carries dot's
+    // tools, and the internal reflection preset's tool row.
+    entry: { index: 'src/index.ts', tools: 'src/tools.ts', reflection: 'src/reflection.ts' },
     format: ['esm'],
     dts: true,
     clean: true,

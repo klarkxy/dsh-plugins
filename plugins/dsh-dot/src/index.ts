@@ -27,7 +27,8 @@ import { bindHost } from './host.ts'
 import { clip } from './ledger.ts'
 import { detachNative } from './native.ts'
 import { DOT_INSTRUCTIONS } from './prompt.ts'
-import { APPROVAL_GRACE_MS, DotService, messageOf } from './service.ts'
+import { REFLECTION_INSTRUCTIONS, REFLECTION_PRESET_ID } from './reflection.ts'
+import { APPROVAL_GRACE_MS, DotError, DotService, messageOf } from './service.ts'
 import { patchSettings } from './settings.ts'
 import { dotDomain } from './storage.ts'
 import { DotStore, type DotDomainHandle } from './store.ts'
@@ -101,10 +102,15 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   ctx.provide(SERVICE_NAME, service)
   ctx.effect(() => () => {
     unfollow()
-    service.dispose()
-    feed.dispose()
-    void host.dispose()
-    void store.flush().then(() => domain.close())
+    // Stop reflection (and wait for it to release its session) before the host
+    // disposes every handle: otherwise an in-flight pass would outlive the plugin.
+    void (async () => {
+      await service.dispose().catch(() => undefined)
+      feed.dispose()
+      await host.dispose().catch(() => undefined)
+      await store.flush()
+      await domain.close()
+    })()
   }, 'dot.lifecycle')
 
   // The dot preset: conversation, dot's tools, and in-place compaction for the
@@ -139,6 +145,29 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     }, (error: unknown) => ctx.logger?.warn?.('dsh-dot: preset registration failed: %s', messageOf(error)))
     return () => { disposed = true; void release?.() }
   }, 'dot.preset')
+
+  // The internal reflection preset: a hidden subagent session mounts only the
+  // read-only history tools and the cognition submission tool (never the
+  // agreements tool). It is filtered out of the task preset roster in host.ts.
+  ctx.effect(() => {
+    let release: (() => Promise<void>) | undefined
+    let disposed = false
+    void ctx.agentPresets.register({
+      id: REFLECTION_PRESET_ID,
+      name: 'Dot reflection',
+      description: 'Internal background reflection pass for Dorothy; not used for tasks.',
+      order: 91,
+      plugins: [
+        { id: 'persona', name: '@deepseek-ai/dsh-persona', config: { prefix: REFLECTION_INSTRUCTIONS } },
+        { id: 'time-context', name: '@deepseek-ai/dsh-time-context' },
+        { id: 'dot-reflection-tools', name: '@klarkxy/dsh-dot/reflection' },
+      ] as never,
+    }).then((dispose: () => Promise<void>) => {
+      if (disposed) { void dispose(); return }
+      release = dispose
+    }, (error: unknown) => ctx.logger?.warn?.('dsh-dot: reflection preset registration failed: %s', messageOf(error)))
+    return () => { disposed = true; void release?.() }
+  }, 'dot.reflection-preset')
 
   // Correlate the host audit id (not callId) with its in-memory dot request.
   const approvalWithdrawals = new Map<string, { sessionId: string; withdraw: () => void }>()
@@ -305,6 +334,15 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
         case 'trajectory': {
           const id = await ensureDot()
           return { ok: true, value: host.dotTrajectory(id) }
+        }
+        case 'reflection.runs': return { ok: true, value: service.reflectionRuns() }
+        case 'reflection.trajectory': {
+          const id = field(payload, 'sessionId')
+          try {
+            return { ok: true, value: await service.reflectionTrajectory(typeof id === 'string' ? id : '') }
+          } catch (error) {
+            return { ok: false, error: { code: error instanceof DotError ? error.code : 'dot/failed', message: messageOf(error) } }
+          }
         }
         case 'context': {
           await ensureDot()

@@ -2,7 +2,7 @@
  * In-memory ledger mirrored to the storage domain. Writes are serialized so
  * the durable copy follows the in-memory order; reads never wait on disk.
  */
-import type { BoardView, CognitionVersion, DotContextUsage, DotSettings, DotUsageOffset, PendingView, ScheduleRecord, SettingProposal, TaskRecord } from './contracts.ts'
+import type { BoardView, CognitionVersion, DotContextUsage, DotSettings, DotUsageOffset, PendingView, ReflectionRun, ScheduleRecord, SettingProposal, TaskRecord } from './contracts.ts'
 import { COGNITION_HISTORY_MAX } from './contracts.ts'
 import { ZERO_USAGE, addUsage } from './context.ts'
 import { applyEvent, createTask, ledgerSummary, markSeen, sortTasks, withPending, type LedgerEvent, type NewTask } from './ledger.ts'
@@ -26,6 +26,9 @@ export interface DotDomainHandle {
 
 /** Ledger cap: the oldest archived tasks are forgotten past this size. */
 export const MAX_TASKS = 300
+
+/** Reflection runs remembered for the trajectory list. */
+export const MAX_REFLECTION_RUNS = 30
 
 export class DotStore {
   private state: DotState
@@ -202,6 +205,83 @@ export class DotStore {
     const version = this.cognitionHistory.find(entry => entry.at === at)
     if (!version) return Promise.resolve(false)
     return this.setCognition(version.text, now).then(() => true)
+  }
+
+  // ---- background reflection -------------------------------------------
+
+  /** When the last successful reflection finished; undefined until the first one. */
+  get lastReflectedAt(): number | undefined { return this.state.lastReflectedAt }
+  /** When the last reflection attempt started; drives the failure cooldown. */
+  get lastReflectionAttemptAt(): number | undefined { return this.state.lastReflectionAttemptAt }
+  /** Whether the last reflection attempt failed (stays true until a submission succeeds). */
+  get reflectionAttemptFailed(): boolean { return this.state.reflectionAttemptFailed === true }
+  /** A one-time agreement note from the reflection pass, until the next human message carries it. */
+  get agreementNotes(): string { return this.state.agreementNotes ?? '' }
+
+  /**
+   * Record the start of a reflection attempt. Marked failed up front: if the run
+   * crashes or never submits, the failure cooldown holds even when the start
+   * shares its millisecond with the previous success (a timestamp comparison
+   * could not tell them apart).
+   */
+  beginReflectionAttempt(at: number): Promise<void> {
+    return this.setDot({ lastReflectionAttemptAt: at, reflectionAttemptFailed: true })
+  }
+
+  /** Mark a reflection pass done: the cognition it wrote is live and the cooldown resets. */
+  markReflected(at: number): Promise<void> {
+    return this.setDot({ lastReflectedAt: at, reflectionAttemptFailed: false })
+  }
+
+  /**
+   * Undo any success bookkeeping a failed submission write may have left and
+   * keep the attempt marked failed, so the 24h success gate cannot be satisfied
+   * by a pass that reported an error to its model. The original attempt start is
+   * preserved so the 2h retry cooldown is counted from the real start.
+   */
+  failReflectionSubmission(attemptAt: number, priorReflectedAt: number | undefined): Promise<void> {
+    const { lastReflectedAt: _current, ...rest } = this.state
+    this.state = {
+      ...rest,
+      lastReflectionAttemptAt: attemptAt,
+      reflectionAttemptFailed: true,
+      ...priorReflectedAt !== undefined ? { lastReflectedAt: priorReflectedAt } : {},
+    }
+    this.changed()
+    return this.write('state', STATE_KEY, this.state)
+  }
+
+  /** Replace the pending agreement note; empty text leaves any existing note untouched. */
+  setAgreementNotes(text: string): Promise<void> {
+    const next = text.trim()
+    if (!next) return Promise.resolve()
+    return this.setDot({ agreementNotes: next })
+  }
+
+  /** Drop the pending agreement note once a human message carried it. */
+  clearAgreementNotes(): Promise<void> {
+    if (this.state.agreementNotes === undefined) return Promise.resolve()
+    const { agreementNotes: _notes, ...rest } = this.state
+    this.state = rest
+    this.changed()
+    return this.write('state', STATE_KEY, this.state)
+  }
+
+  /** Reflection passes that ran, oldest first; capped so the trajectory list cannot grow forever. */
+  get reflections(): readonly ReflectionRun[] { return this.state.reflections ?? [] }
+
+  /** Remember a reflection session as soon as it exists, so its trajectory survives the archive. */
+  addReflectionRun(run: ReflectionRun): Promise<void> {
+    const next = [...this.reflections, run].slice(-MAX_REFLECTION_RUNS)
+    return this.setDot({ reflections: next })
+  }
+
+  /** Record a reflection run's end and whether it produced a result. */
+  finishReflectionRun(sessionId: string, endedAt: number, ok: boolean): Promise<void> {
+    const runs = this.reflections
+    if (!runs.some(run => run.sessionId === sessionId)) return Promise.resolve()
+    const next = runs.map(run => run.sessionId === sessionId ? { ...run, endedAt, ok } : run)
+    return this.setDot({ reflections: next })
   }
 
   /**

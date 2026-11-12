@@ -38,4 +38,9 @@ describe('dot approval instructions', () => {
     expect(DOT_INSTRUCTIONS).toContain('A background wake-up with nothing the human must see')
     expect(DOT_INSTRUCTIONS).toContain('end that turn silently with no message')
   })
+
+  it('allows small talk from memory only with an unverified caveat and checks exact answers in a task', () => {
+    expect(DOT_INSTRUCTIONS).toContain('from memory and unverified')
+    expect(DOT_INSTRUCTIONS).toContain('start a task to check rather than guess')
+  })
 })

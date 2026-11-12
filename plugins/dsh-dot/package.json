@@ -22,6 +22,11 @@
       "import": "./lib/tools.js",
       "default": "./lib/tools.js"
     },
+    "./reflection": {
+      "types": "./lib/reflection.d.ts",
+      "import": "./lib/reflection.js",
+      "default": "./lib/reflection.js"
+    },
     "./client": {
       "default": "./lib/client.js"
     },

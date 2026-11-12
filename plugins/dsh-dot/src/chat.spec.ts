@@ -34,6 +34,19 @@ describe('chatItems', () => {
     expect(items[1]).toMatchObject({ key: '1', text: 'please check it' })
   })
 
+  it('splits an agreement note carried by a human message into a separate chat row', () => {
+    const note = '[dot agreement notes]\nYour background reflection pass noticed something.'
+    const items = chatItems([
+      ev(1, 'user/message', {
+        content: [{ type: 'text', text: `${note}\n\nhello there` }],
+        source: { kind: 'user', dshDot: { carriedChars: note.length } },
+      }),
+    ])
+    expect(items.map(item => item.kind)).toEqual(['notice', 'user'])
+    expect(items[0]).toMatchObject({ text: note })
+    expect(items[1]).toMatchObject({ text: 'hello there' })
+  })
+
   it('keeps show_view cards with their presentation and the answers given to them', () => {
     const items = chatItems([
       ev(1, 'tool/call', { callId: 'v1', name: 'show_view', arguments: JSON.stringify({ title: 'Pick', view: { type: 'confirm', id: 'ok' } }) }),

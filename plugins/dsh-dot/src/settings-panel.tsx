@@ -305,6 +305,9 @@ export function SettingsPanel({ locale, api, settings, onSaved, onStatusChange, 
             ))}
           </select>
         </Field>
+        <Field label={t(locale, 'sReflection')} help={t(locale, 'sReflectionDesc')} {...lock('reflection')}>
+          <SegmentedChoice locale={locale} label={t(locale, 'sReflection')} value={settings.reflection ? 'on' : 'off'} options={['on', 'off']} labelKeyOf={opt => `sReflection_${opt}`} onChange={next => save({ reflection: next === 'on' })} />
+        </Field>
         </div>
       </div>
       <div className="dsh-dot-pane-section">

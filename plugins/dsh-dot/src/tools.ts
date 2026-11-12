@@ -17,6 +17,7 @@ import { SERVICE_NAME, TOOL } from './contracts.ts'
 import { personaSection } from './persona.ts'
 import { settingsSnapshotBlock, type SelfSettings } from './self-settings.ts'
 import { DotError, messageOf, type DotService } from './service.ts'
+import { restrictInheritedTools } from './tool-scope.ts'
 
 export const name = 'dsh-dot-tools'
 export const inject = ['tools', 'systemPrompt', SERVICE_NAME] as const
@@ -80,6 +81,7 @@ async function run(work: () => Promise<string> | string): Promise<string> {
 }
 
 export function apply(ctx: Context): void {
+  restrictInheritedTools(ctx, [...Object.values(TOOL), 'show_view'])
   const host = ctx as ToolHost
   const dot = () => host[SERVICE_NAME]
   // Both sections read what the segment froze when it started, so every request of a segment

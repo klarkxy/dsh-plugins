@@ -51,6 +51,8 @@ function makeApi(snapshot: ChatSnapshot): ChatApi {
     context: async () => ({ live: true, compactions: 0 }),
     clearUsage: async () => ({ live: true, compactions: 0 }),
     trajectory: async () => ({ turns: [], earlier: 0 }),
+    reflectionRuns: async () => [],
+    reflectionTrajectory: async () => ({ turns: [], earlier: 0 }),
     models: async () => ({ models: [] }),
   }
 }

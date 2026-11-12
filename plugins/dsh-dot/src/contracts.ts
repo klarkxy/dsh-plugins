@@ -64,6 +64,19 @@ export interface CognitionVersion {
   readonly at: number
 }
 
+/**
+ * One background reflection pass that was actually run as a session, kept so
+ * the trajectory page can show it after the session has been archived.
+ */
+export interface ReflectionRun {
+  readonly sessionId: string
+  readonly startedAt: number
+  /** When the pass finished; absent while it is still running. */
+  readonly endedAt?: number
+  /** Whether it actually wrote a new cognition (a pass that never submits is a failure). */
+  readonly ok: boolean
+}
+
 /** dot's agreements as the settings view shows them: the human's own standing requirements. */
 export interface AgreementView {
   readonly text: string
@@ -92,6 +105,13 @@ export const AGREEMENT_ENTRY_MAX_CHARS = 400
 export const COGNITION_MAX_CHARS = 4000
 /** How many earlier cognition texts are kept for rollback. */
 export const COGNITION_HISTORY_MAX = 10
+
+/**
+ * First words of the one-time note the reflection pass leaves for dot's next
+ * human message. The note rides the same carried prefix as batched notices, so
+ * the chat and the transcript split it out of the human's words the same way.
+ */
+export const AGREEMENT_NOTES_HEAD = '[dot agreement notes]'
 
 // ---- dot's reminders ---------------------------------------------------
 

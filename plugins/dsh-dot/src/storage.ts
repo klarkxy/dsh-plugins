@@ -7,7 +7,7 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
 import type { ViewNode } from '../../dsh-deep-view/src/contracts.ts'
-import { SETTING_FIELDS, type CognitionVersion, type DotContextUsage, type DotUsageOffset, type ScheduleRecord, type SettingProposal, type TaskRecord } from './contracts.ts'
+import { SETTING_FIELDS, type CognitionVersion, type DotContextUsage, type DotUsageOffset, type ReflectionRun, type ScheduleRecord, type SettingProposal, type TaskRecord } from './contracts.ts'
 import type { PastSegment, Segment } from './segments.ts'
 
 export const STATE_KEY = 'current'
@@ -96,6 +96,13 @@ const cognitionVersionSchema = z.object({
   at: z.number(),
 }).strict()
 
+const reflectionRunSchema = z.object({
+  sessionId: z.string().min(1),
+  startedAt: z.number(),
+  endedAt: z.number().optional(),
+  ok: z.boolean(),
+}).strict()
+
 const cardSchema = z.object({
   id: z.string(), number: z.number().int().positive(), sessionId: z.string(), callId: z.string(),
   title: z.string(), view: z.custom<ViewNode>(), expired: z.boolean(),
@@ -126,6 +133,16 @@ const stateSchema = z.object({
   cognitionHistory: z.array(cognitionVersionSchema).optional(),
   /** Marker once the legacy notes have been imported; cleared content is never re-imported after it. */
   knowledgeMigrated: z.string().optional(),
+  /** When dot's last successful background reflection finished. */
+  lastReflectedAt: z.number().optional(),
+  /** When the last background reflection attempt started; drives the failure cooldown. */
+  lastReflectionAttemptAt: z.number().optional(),
+  /** Whether the last background reflection attempt failed or produced no result. */
+  reflectionAttemptFailed: z.boolean().optional(),
+  /** A one-time note the reflection pass left about the agreements, delivered with the next human message. */
+  agreementNotes: z.string().optional(),
+  /** Reflection passes that ran, oldest first; the trajectory page reads them by session id. */
+  reflections: z.array(reflectionRunSchema).optional(),
   usageCarry: usageSchema.optional(),
   usageOffset: usageOffsetSchema.optional(),
 }).strict()
@@ -176,6 +193,16 @@ export interface DotState {
   readonly cognitionHistory?: readonly CognitionVersion[]
   /** Marker once the legacy notes have been imported; cleared content is never re-imported after it. */
   readonly knowledgeMigrated?: string
+  /** When dot's last successful background reflection finished. */
+  readonly lastReflectedAt?: number
+  /** When the last background reflection attempt started; drives the failure cooldown. */
+  readonly lastReflectionAttemptAt?: number
+  /** Whether the last background reflection attempt failed or produced no result. */
+  readonly reflectionAttemptFailed?: boolean
+  /** A one-time note the reflection pass left about the agreements, delivered with the next human message. */
+  readonly agreementNotes?: string
+  /** Reflection passes that ran, oldest first; the trajectory page reads them by session id. */
+  readonly reflections?: readonly ReflectionRun[]
   /** Cumulative token totals carried from ended segments and handoff notes. */
   readonly usageCarry?: DotContextUsage
   /** Segment usage subtracted after the human clears cumulative totals mid-segment. */

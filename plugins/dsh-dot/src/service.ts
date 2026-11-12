@@ -11,14 +11,15 @@ import { DotCards, cardAnswerText, type DotCardRecord } from './card-state.ts'
 import { cardText } from './cards.ts'
 import { NoticeBatcher, formatNotices, type Notice, type Timer } from './batcher.ts'
 import { ZERO_USAGE, addUsage, combineUsage, netSegmentUsage, usageFromEvents } from './context.ts'
-import { PRESET_ID, TOOL, type BoardView, type DotContextSections, type DotContextUsage, type DotContextView, type KnowledgeView, type ModelChoice, type PendingKind, type PendingQuestionItem, type RolloverReason, type RuleConfig } from './contracts.ts'
+import { PRESET_ID, TOOL, type BoardView, type DotContextSections, type DotContextUsage, type DotContextView, type KnowledgeView, type ModelChoice, type PendingKind, type PendingQuestionItem, type ReflectionRun, type RolloverReason, type RuleConfig, type TrajectoryView } from './contracts.ts'
 import { SUMMARY_INSTRUCTION, SUMMARY_MAX_TOKENS, buildHandoff, type Handoff } from './handoff.ts'
 import { READ_ROWS_DEFAULT, READ_ROWS_MAX, SEARCH_LIMIT_DEFAULT, SEARCH_LIMIT_MAX, SEARCH_SESSIONS_MAX, formatRead, formatSearch, historyRows, queryTerms, searchRows, windowRows, type SessionHits } from './history.ts'
 import { type DotHost, type WorkspaceRow } from './host.ts'
 import { clip } from './ledger.ts'
-import { AGREEMENTS_MAX_CHARS, COGNITION_MAX_CHARS, KnowledgeError, MemoryNotes, addEntry, agreementsSection, cognitionSection, normalizeAgreements, normalizeCognition, policyAsAgreements, removeEntry } from './memory.ts'
+import { AGREEMENTS_MAX_CHARS, COGNITION_MAX_CHARS, KnowledgeError, MemoryNotes, addEntry, agreementNotesBlock, agreementsSection, cognitionSection, normalizeAgreements, normalizeCognition, policyAsAgreements, removeEntry } from './memory.ts'
 import { PendingHub, type PendingAnswer } from './pending.ts'
 import { personaSection } from './persona.ts'
+import { ReflectionRunner } from './reflection.ts'
 import { ReminderClock } from './reminders.ts'
 import { routeRequest } from './rules.ts'
 import { ScheduleInputError, describeTiming, scheduleLines, type ScheduleInput } from './schedule.ts'
@@ -89,6 +90,8 @@ export class DotService {
   private migration?: Promise<void>
   private requestedSegment?: { focus?: string }
   readonly cards: DotCards
+  /** The single background reflection pass; the reminder clock ticks its gate. */
+  readonly reflection: ReflectionRunner
 
   constructor(private readonly options: DotServiceOptions) {
     this.cards = new DotCards(options.store, options.log)
@@ -96,6 +99,18 @@ export class DotService {
     this.notes = options.notes ?? new MemoryNotes(options.homeDir)
     this.pending = new PendingHub(this.now)
     this.selfSettings = new SelfSettings(this)
+    this.reflection = new ReflectionRunner({
+      host: options.host,
+      store: options.store,
+      homeDir: options.homeDir,
+      now: this.now,
+      applyCognition: text => this.setCognition(text, 'reflection'),
+      isDotIdle: () => {
+        const dot = this.store.dotSessionId
+        return dot !== undefined && !this.options.host.isRunning(dot)
+      },
+      ...options.log ? { log: options.log } : {},
+    })
     this.pending.onChange(() => {
       this.batcher.dropWhere(item => item.requestId !== undefined && this.pending.get(item.requestId) === undefined)
       void this.store.syncPending(this.pending.list())
@@ -110,6 +125,8 @@ export class DotService {
       store: options.store,
       now: this.now,
       deliver: text => this.remind(text),
+      // The reflection check rides the reminder clock's periodic wake-up.
+      onPeriodic: () => { void this.reflection.tick().catch(() => undefined) },
       ...options.timer ? { timer: options.timer } : {},
       ...options.log ? { log: options.log } : {},
     })
@@ -172,14 +189,22 @@ export class DotService {
       const notices = this.liveNotices(this.batcher.take())
       const card = cardReply && this.store.cards.find(row => row.id === cardReply.card.id)
       const message = cardReply ? cardAnswerText(card ?? cardReply.card, cardReply.answer, card?.expired === true) : body
+      // A pending agreement note from the reflection pass rides the same carried
+      // prefix as batched updates; it reaches dot once and is cleared after delivery.
+      const agreementNotes = this.store.agreementNotes.trim()
+      const carried = [
+        agreementNotes ? agreementNotesBlock(agreementNotes) : '',
+        notices.length > 0 ? formatNotices(notices) : '',
+      ].filter(Boolean).join('\n\n')
       try {
-        await this.host.say(dot, message, notices.length > 0 ? formatNotices(notices) : undefined, cardReply?.answer)
+        await this.host.say(dot, message, carried || undefined, cardReply?.answer)
       } catch (error) {
         this.batcher.restore(this.liveNotices(notices))
         throw error
       }
       // Delivery already succeeded: a bookkeeping failure must never requeue
       // carried notices or invite the human to send the same answer twice.
+      if (agreementNotes) await this.store.clearAgreementNotes().catch(error => this.options.log?.(`dsh-dot: agreement note was not cleared: ${messageOf(error)}`))
       await this.store.expireCards(cardReply?.card.id).catch(error => this.options.log?.(`dsh-dot: card expiry was not saved: ${messageOf(error)}`))
       await this.store.noteConversation(this.now()).catch(error => this.options.log?.(`dsh-dot: conversation time was not saved: ${messageOf(error)}`))
     })
@@ -740,6 +765,26 @@ export class DotService {
     })
   }
 
+  // ---- background reflection -------------------------------------------
+
+  /** The submission tool calls this; the pass must be the one currently running. */
+  reflectionSubmit(cognition: string, agreementNotes: string | undefined, sessionId: string): Promise<string> {
+    // Same lane as `say`: a submission can never interleave with a human message
+    // between reading agreementNotes and clearing them, so a fresh note is not
+    // wiped by a message that carried the previous one.
+    return this.serial(() => this.reflection.submit(cognition, agreementNotes, sessionId))
+  }
+
+  /** Reflection passes remembered for the trajectory view, oldest first. */
+  reflectionRuns(): readonly ReflectionRun[] { return this.store.reflections }
+
+  /** The stored trajectory of one reflection pass; only ids the store remembers are readable. */
+  async reflectionTrajectory(sessionId: string): Promise<TrajectoryView> {
+    const id = sessionId.trim()
+    if (!id || !this.store.reflections.some(run => run.sessionId === id)) throw new DotError('dot/unknown-reflection', `no reflection pass ${id}`)
+    return this.reflection.trajectory(id)
+  }
+
   /** dot's own change only updates the segment's seen snapshot when it was in step; a panel edit never does. */
   private async afterAgreementsChange(before: string, after: string, by: 'human' | 'dot'): Promise<void> {
     if (by !== 'dot') return
@@ -811,10 +856,12 @@ export class DotService {
 
   flushNotices(): Promise<void> { return this.batcher.drain() }
 
-  dispose(): void {
+  async dispose(): Promise<void> {
     this.batcher.dispose()
     this.reminders.dispose()
     this.pending.dispose()
+    // Cancel any reflection pass in flight and wait for it to let go of its session.
+    await this.reflection.dispose()
   }
 
   /** Due reminders reach the segment dot is in now, whichever one they were set in. */
