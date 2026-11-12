@@ -28,21 +28,42 @@ describe('dot tools', () => {
 
   it('marks only the reading tools read-only', () => {
     const readOnly = load().filter(tool => tool.hostEffect === 'read-only').map(tool => tool.name).sort()
-    expect(readOnly).toEqual([TOOL.listModels, TOOL.listWorkspaces, TOOL.overview, TOOL.read, TOOL.readHistory, TOOL.readSettings, TOOL.scheduleList, TOOL.searchHistory].sort())
+    expect(readOnly).toEqual([TOOL.listModels, TOOL.overview, TOOL.read, TOOL.readHistory, TOOL.readSettings, TOOL.schedule, TOOL.searchHistory].sort())
   })
 
-  it('brings its companion plugin as a dependency, under the id its own bundle uses', () => {
+  it('registers dot_workspace (not the two old split tools)', () => {
+    const names = load().map(tool => tool.name)
+    expect(names).toContain(TOOL.workspace)
+    expect(names).not.toContain('dot_list_workspaces')
+    expect(names).not.toContain('dot_create_workspace')
+  })
+
+  it('registers dot_schedule (not the three old split tools)', () => {
+    const names = load().map(tool => tool.name)
+    expect(names).toContain(TOOL.schedule)
+    expect(names).not.toContain('dot_schedule_add')
+    expect(names).not.toContain('dot_schedule_list')
+    expect(names).not.toContain('dot_schedule_remove')
+  })
+
+  it('no tool parameter schema uses oneOf / anyOf / allOf / union type', () => {
+    const tools = load()
+    const forbidden = ['oneOf', 'anyOf', 'allOf']
+    for (const t of tools) {
+      const json = JSON.stringify(t.parameters ?? {})
+      for (const kw of forbidden) {
+        expect(json, `${t.name as string} schema must not contain "${kw}"`).not.toContain(`"${kw}"`)
+      }
+      // union type like ["string","null"] is also forbidden
+      expect(json, `${t.name as string} schema must not use type arrays`).not.toMatch(/"type"\s*:\s*\[/)
+    }
+  })
+
+  it('brings only dsh-dot itself in cordis.patch.yml (dsh-dev-index removed)', () => {
     const root = join(dirname(fileURLToPath(import.meta.url)), '..')
     const rowsOf = (file: string) => [...readFileSync(file, 'utf8').matchAll(/- id: (\S+)\s+name: '([^']+)'/g)].map(match => ({ id: match[1]!, name: match[2]! }))
     const rows = rowsOf(join(root, 'cordis.patch.yml'))
-    const dependencies = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }).dependencies
-    // The host resolves a row's package through the bundle that declares it as a dependency.
-    expect(rows.map(row => row.name)).toEqual(['@klarkxy/dsh-dev-index', '@klarkxy/dsh-dot'])
-    for (const row of rows.slice(0, -1)) {
-      expect(dependencies).toHaveProperty([row.name])
-      // Same id as in the plugin's own patch, so installing it separately does not mount it twice.
-      expect(rowsOf(join(root, '..', row.name.split('/')[1]!, 'cordis.patch.yml'))).toContainEqual(row)
-    }
+    expect(rows.map(r => r.name)).toEqual(['@klarkxy/dsh-dot'])
   })
 
   it('renders the persona from the live settings until a segment freezes it', () => {
@@ -50,11 +71,11 @@ describe('dot tools', () => {
     const [section] = load(settings).sections
     expect(section).toMatchObject({ name: 'dsh-dot:persona', order: 1 })
     expect(section!.text()).toContain(DEFAULT_PERSONA)
-    expect(section!.text()).toContain('称呼用户为“你”')
+    expect(section!.text()).toContain('称呼用户为"你"')
     settings.current = { ...DEFAULT_SETTINGS, persona: 'A calm librarian.', address: '老板' }
     expect(section!.text()).toContain('A calm librarian.')
     expect(section!.text()).not.toContain('鲸鱼娘')
-    expect(section!.text()).toContain('自然地称呼用户为“老板”')
+    expect(section!.text()).toContain('自然地称呼用户为"老板"')
     settings!.segment = { sessionId: 'dot1', persona: 'FROZEN PERSONA' }
     expect(section!.text()).toBe('FROZEN PERSONA')
     expect(section!.text({ agent: { session: { id: 'dot1' } } })).toBe('FROZEN PERSONA')

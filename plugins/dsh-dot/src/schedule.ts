@@ -147,6 +147,6 @@ export function formatReminders(due: readonly ScheduleRecord[], now: number): st
 
 /** The reminders as dot reads them in the list tool. */
 export function scheduleLines(records: readonly ScheduleRecord[]): string {
-  if (records.length === 0) return `No reminders set. ${TOOL.scheduleAdd} sets one.`
+  if (records.length === 0) return `No reminders set. ${TOOL.schedule} (action=add) sets one.`
   return records.map(record => `- ${record.id} "${record.title}" (${describeTiming(record.timing)}; next ${stamp(record.nextAt)}): ${entryText(record.prompt)}`).join('\n')
 }

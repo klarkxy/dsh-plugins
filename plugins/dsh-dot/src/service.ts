@@ -289,7 +289,7 @@ export class DotService {
   async listWorkspaces(): Promise<string> {
     const home = await this.homeWorkspace().catch(error => { this.options.log?.(`dsh-dot: dot's own workspace is unavailable: ${messageOf(error)}`); return undefined })
     const rows = this.host.listWorkspaces()
-    if (rows.length === 0) return 'No workspaces yet. Create one with dot_create_workspace.'
+    if (rows.length === 0) return 'No workspaces yet. Create one with dot_workspace (action=create).'
     return rows.map(row => `- ${row.id} "${row.title}" ${row.path} (${row.sessionCount} session(s))${row.id === home?.id ? ' · your own workspace' : ''}`).join('\n')
   }
 
@@ -447,7 +447,7 @@ export class DotService {
 
   async scheduleRemove(id: string): Promise<string> {
     const key = id.trim()
-    if (!(await this.reminders.remove(key))) throw new DotError('dot/unknown-reminder', `no reminder ${key || '(empty id)'}; ${TOOL.scheduleList} shows the ones that are set`)
+    if (!(await this.reminders.remove(key))) throw new DotError('dot/unknown-reminder', `no reminder ${key || '(empty id)'}; ${TOOL.schedule} (action=list) shows the ones that are set`)
     return `Removed reminder ${key}.`
   }
 

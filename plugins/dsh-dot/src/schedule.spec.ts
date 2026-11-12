@@ -84,7 +84,7 @@ describe('reminder text', () => {
   })
 
   it('lists what is set and names the tool when nothing is', () => {
-    expect(scheduleLines([])).toContain(TOOL.scheduleAdd)
+    expect(scheduleLines([])).toContain(TOOL.schedule)
     expect(scheduleLines([every])).toBe(`- sch-2 "Pulse" (every 60 min; next ${stamp(NOW - 120 * MINUTE)}): Look at the board.`)
     expect(describeTiming({ kind: 'daily', time: '09:00', weekdays: [1, 5] })).toBe('Mon, Fri at 09:00')
     expect(describeTiming({ kind: 'daily', time: '09:00' })).toBe('daily at 09:00')

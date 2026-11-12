@@ -713,7 +713,13 @@ export function summarizeToolCall(item: ToolItem, locale: CopyLocale, tasks: Tas
       }
       return {}
     }
-    case TOOL.listWorkspaces: {
+    case TOOL.workspace: {
+      const action = strOf(args.action)
+      if (action === 'create') {
+        const label = strOf(args.title) ?? folderName(strOf(args.path))
+        return label ? { summary: clipInline(label, 40) } : {}
+      }
+      // list
       if (!detail) return {}
       const matches = [...detail.matchAll(WORKSPACE_ROW_RE)]
       if (matches.length > 0) {
@@ -738,36 +744,24 @@ export function summarizeToolCall(item: ToolItem, locale: CopyLocale, tasks: Tas
       const parts = [target, msg ? clipInline(msg, 32) : undefined].filter(Boolean)
       return { ...parts.length > 0 ? { summary: parts.join(' · ') } : {}, ...sid ? { sessionId: sid } : {} }
     }
-    case TOOL.createWorkspace: {
-      const label = strOf(args.title) ?? folderName(strOf(args.path))
-      return label ? { summary: clipInline(label, 40) } : {}
-    }
-    case TOOL.scheduleAdd: {
-      const title = strOf(args.title)
-      return title ? { summary: clipInline(title, 40) } : {}
-    }
-    case TOOL.scheduleRemove: {
-      const id = strOf(args.id)
-      return id ? { summary: id } : {}
+    case TOOL.schedule: {
+      const action = strOf(args.action)
+      if (action === 'add') {
+        const title = strOf(args.title)
+        return title ? { summary: clipInline(title, 40) } : {}
+      }
+      if (action === 'remove') {
+        const id = strOf(args.id)
+        return id ? { summary: id } : {}
+      }
+      return {}
     }
     case TOOL.searchHistory:
-    case 'web_search':
     case 'dsh_docs':
     case 'dsh_plugins':
     case 'zhihu_research': {
       const q = strOf(args.query) ?? strOf(args.q) ?? strOf(args.pattern)
       return q ? { summary: clipInline(q, 42) } : {}
-    }
-    case 'web_fetch': {
-      const url = strOf(args.url)
-      if (!url) return {}
-      try {
-        const parsed = new URL(url)
-        const path = parsed.pathname === '/' ? '' : parsed.pathname
-        return { summary: clipInline(parsed.host + path, 44) }
-      } catch {
-        return { summary: clipInline(url, 44) }
-      }
     }
     case TOOL.remember:
     case TOOL.forget: {
@@ -911,14 +905,17 @@ export function formatToolDetail(item: ToolItem, locale: CopyLocale, tasks: Task
       return { tone: 'muted', text: t(locale, 'noActiveSessions') }
     }
   }
-  if (item.name === TOOL.listWorkspaces) {
-    if (/^No workspaces yet\b/i.test(raw)) {
+  if (item.name === TOOL.workspace) {
+    if (strOf(item.args?.action) !== 'list') {
+      // create result handled by generic formatter above
+    } else if (/^No workspaces yet\b/i.test(raw)) {
       return { tone: 'muted', text: t(locale, 'noWorkspaces') }
-    }
-    const matches = [...raw.matchAll(WORKSPACE_ROW_RE)]
-    if (matches.length > 0) {
-      const lines = matches.map(m => `• ${m[2]!} · ${m[3]!}`)
-      return { tone: 'normal', text: lines.join('\n'), ...lines.length > 1 ? { multiline: true } : {} }
+    } else {
+      const matches = [...raw.matchAll(WORKSPACE_ROW_RE)]
+      if (matches.length > 0) {
+        const lines = matches.map(m => `• ${m[2]!} · ${m[3]!}`)
+        return { tone: 'normal', text: lines.join('\n'), ...lines.length > 1 ? { multiline: true } : {} }
+      }
     }
   }
   if (raw.startsWith('{')) {

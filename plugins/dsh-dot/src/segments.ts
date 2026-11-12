@@ -99,6 +99,6 @@ export function openingText(input: { readonly handoff?: Handoff; readonly reason
   // The log of every earlier segment stays readable, so what a note left out is not lost.
   parts.push(`The earlier conversation itself stays on record. When you need its exact words or a detail that is not above, find it with ${TOOL.searchHistory} and read around a hit with ${TOOL.readHistory}${input.previous ? `; the session just before this one is ${input.previous}` : ''}. Do that before you ask the human to repeat themselves.`)
   if (input.ledger?.trim()) parts.push(`Task ledger at the handoff (${stamp(input.at)}); it may have moved since, and ${TOOL.overview} shows the current state:\n${input.ledger.trim()}`)
-  if (input.reminders?.trim()) parts.push(`Reminders you had set at the handoff; they stay yours and still come due, and ${TOOL.scheduleList} shows the current ones:\n${input.reminders.trim()}`)
+  if (input.reminders?.trim()) parts.push(`Reminders you had set at the handoff; they stay yours and still come due, and ${TOOL.schedule} (action=list) shows the current ones:\n${input.reminders.trim()}`)
   return parts.join('\n\n')
 }

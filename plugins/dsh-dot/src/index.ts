@@ -41,8 +41,6 @@ declare module '@deepseek-ai/cordis' {
 
 /** A long-poll answers after this long without changes; the client asks again. */
 const WAIT_MS = 15_000
-/** Characters of one fetched web page dot reads; the host default is 200,000. */
-const WEB_FETCH_MAX_CHARS = 24_000
 /** A finished turn is read this long after it stops, once its boundary has committed. */
 const TURN_SETTLE_MS = 300
 /** Events scanned back for the tool call an approval is about. */
@@ -105,7 +103,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     void store.flush().then(() => domain.close())
   }, 'dot.lifecycle')
 
-  // The dot preset: conversation, dot's tools, web search and fetch for quick lookups, and in-place compaction for the
+  // The dot preset: conversation, dot's tools, and in-place compaction for the
   // one turn that outgrows the window before a segment change. Choices go through
   // deep-view's show_view cards, which every session gets when it is installed.
   ctx.effect(() => {
@@ -127,8 +125,6 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
             { id: 'command-compact', name: '@deepseek-ai/dsh-command-compact' },
           ],
         },
-        // Quick lookups dot does itself. A fetched page stays in dot's long-lived context, so it is cut far below the host default.
-        { id: 'tool-web', name: '@deepseek-ai/dsh-tool-web', config: { fetchMaxOutputChars: WEB_FETCH_MAX_CHARS } },
         { id: 'dot-tools', name: '@klarkxy/dsh-dot/tools' },
       ] as never,
     }).then((dispose: () => Promise<void>) => {
