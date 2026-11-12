@@ -186,19 +186,24 @@ export class DotStore {
    * (including the migration marker) is updated only after the write is durable,
    * so a failed import is retried instead of being silently marked done.
    */
-  commitKnowledgeMigration(patch: Partial<Pick<DotState, 'agreements' | 'agreementsUndo' | 'cognition' | 'knowledgeMigrated'>>): Promise<void> {
+  commitKnowledgeMigration(patch: Partial<Pick<DotState, 'agreements' | 'agreementsUndo' | 'cognition' | 'cognitionHistory' | 'knowledgeMigrated'>>): Promise<void> {
+    // The one-time import may seed an initial cognition rollback version, but it must
+    // never replace history the store already holds; drop the key so the state spread
+    // keeps the existing history instead of overwriting it.
+    const effective = { ...patch }
+    if (effective.cognitionHistory !== undefined && (this.state.cognitionHistory?.length ?? 0) > 0) delete effective.cognitionHistory
     const domain = this.domain
     if (domain === undefined) {
-      this.state = { ...this.state, ...patch }
+      this.state = { ...this.state, ...effective }
       this.changed()
       return Promise.resolve()
     }
     const op = this.tail.then(async () => {
-      const next = { ...this.state, ...patch }
+      const next = { ...this.state, ...effective }
       await domain.table('state').put(STATE_KEY, next)
       // Merge onto the latest memory state so concurrent settings/segment fields survive;
       // the state write that landed meanwhile is re-issued with the latest snapshot below.
-      this.state = { ...this.state, ...patch }
+      this.state = { ...this.state, ...effective }
       this.changed()
     })
     this.tail = op.catch(() => undefined)

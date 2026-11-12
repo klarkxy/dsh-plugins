@@ -562,36 +562,34 @@ export class DotService {
     // an unrelated old file failing to read.
     const legacyAgreements: string[] = []
     if (agreementsEmpty) {
-      // The human's explicit requirements: the old custom rules plus the whole old notes file.
-      // A missing file reads as empty (MemoryNotes maps ENOENT); any other read error is
-      // propagated so the import is not marked done and will be retried.
+      // The human's explicit requirements: only the old custom rules. The old notes
+      // file is dot's own understanding, so it migrates into cognition below.
+      // A read error is propagated so the import is not marked done and is retried.
       const policy = this.store.settings.policy ?? ''
       if (policy.trim()) legacyAgreements.push(policyAsAgreements(policy))
-      const memoryFile = (await this.notes.read()).trim()
-      if (memoryFile) legacyAgreements.push(memoryFile)
     }
 
-    // dot's own understanding: any old state memory field plus the old cognition file.
+    // dot's own understanding: the old state memory field, old cognition file and whole notes file.
     const legacyCognition: string[] = []
+    let legacyUndo: string | undefined
     if (cognitionEmpty) {
       const stateMemory = this.store.legacyMemory?.trim()
       if (stateMemory) legacyCognition.push(stateMemory)
       const cognitionFile = ((await this.notes.readCognition?.()) ?? '').trim()
       if (cognitionFile) legacyCognition.push(cognitionFile)
+      // The old notes file used to be the only note store; it belongs to cognition now.
+      const memoryFile = (await this.notes.read()).trim()
+      if (memoryFile) legacyCognition.push(memoryFile)
+      // The old single-step note undo was the note text before the last change; keep it
+      // as the previous cognition version (an empty undo is a real version too).
+      legacyUndo = this.store.legacyMemoryUndo
     }
 
     // Fill a layer only while it is still empty, then mark done even when there was nothing to import.
-    const patch: { agreements?: string; agreementsUndo?: string; cognition?: string; knowledgeMigrated: string } = { knowledgeMigrated: '1' }
-    if (agreementsEmpty && legacyAgreements.length > 0) {
-      patch.agreements = normalizeAgreements(legacyAgreements.join('\n\n'))
-      const undo = this.store.legacyMemoryUndo
-      // The old undo only concerned notes; the independent policy still applied
-      // at that time and must survive restoring that snapshot, including an empty one.
-      if (undo !== undefined) patch.agreementsUndo = normalizeAgreements([policyAsAgreements(this.store.settings.policy ?? ''), undo].filter(Boolean).join('\n\n'))
-    }
-    if (cognitionEmpty && legacyCognition.length > 0) {
-      patch.cognition = normalizeCognition(legacyCognition.join('\n\n'))
-    }
+    const patch: { agreements?: string; cognition?: string; cognitionHistory?: readonly { readonly text: string; readonly at: number }[]; knowledgeMigrated: string } = { knowledgeMigrated: '1' }
+    if (agreementsEmpty && legacyAgreements.length > 0) patch.agreements = normalizeAgreements(legacyAgreements.join('\n\n'))
+    if (cognitionEmpty && legacyCognition.length > 0) patch.cognition = normalizeCognition(legacyCognition.join('\n\n'))
+    if (cognitionEmpty && legacyUndo !== undefined) patch.cognitionHistory = [{ text: normalizeCognition(legacyUndo), at: this.now() }]
     // Persist before flipping the marker in memory; a failed write leaves the import retryable.
     await this.store.commitKnowledgeMigration(patch)
   }

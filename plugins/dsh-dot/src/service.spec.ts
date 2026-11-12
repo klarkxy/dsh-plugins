@@ -587,16 +587,18 @@ describe('DotService knowledge', () => {
 })
 
 describe('DotService knowledge migration', () => {
-  it('imports the old policy and the whole notes file into agreements, and the old cognition file into cognition', async () => {
+  it('imports the old policy into agreements, and the old state memory, notes file and cognition file into cognition', async () => {
     const h = setup({ policy: 'pushing to my own repos is fine' })
     h.notes.text = '- 普通开发任务用标准预设，不用破限\n- call me Captain\n'
     h.notes.cognition = 'I have learned that you like short answers.'
     await h.service.ensureDot()
     const view = await h.service.knowledgeView()
     expect(view.agreements.text).toContain('pushing to my own repos is fine')
-    expect(view.agreements.text).toContain('普通开发任务用标准预设，不用破限')
-    expect(view.agreements.text).toContain('call me Captain')
-    expect(view.cognition.text).toBe('I have learned that you like short answers.')
+    expect(view.agreements.text).not.toContain('普通开发任务用标准预设')
+    expect(view.agreements.text).not.toContain('call me Captain')
+    expect(agreementsSection(view.agreements.text)).toContain('pushing to my own repos is fine')
+    expect(view.cognition.text).toContain('call me Captain')
+    expect(view.cognition.text).toContain('I have learned that you like short answers.')
     // The import runs once: clearing it afterwards never pulls the old sources back in.
     await h.service.setAgreements('')
     await h.service.setCognition('')
@@ -614,30 +616,32 @@ describe('DotService knowledge migration', () => {
     expect((await h.service.knowledgeView()).agreements.text).not.toContain('推送前问我')
   })
 
-  it('imports the legacy state memory field into cognition and preserves the independent policy in notes undo', async () => {
+  it('imports the legacy state memory and notes file into cognition, keeping the old undo as a cognition history version', async () => {
     const h = setup({ policy: '推送前问我' })
     await h.store.setDot({ memory: 'state-held understanding', memoryUndo: '- an older rule\n' })
     h.notes.text = '- a rule from the notes file\n'
     await h.service.ensureDot()
     const view = await h.service.knowledgeView()
-    expect(view.cognition.text).toBe('state-held understanding')
-    expect(view.agreements.text).toContain('a rule from the notes file')
-    // The old memory undo migrates as the agreements' undo snapshot, not as cognition input.
-    expect(view.cognition.text).not.toContain('older rule')
-    expect(view.agreements.canUndo).toBe(true)
-    const restored = await h.service.undoAgreements()
-    expect(restored.agreements.text).toContain('推送前问我')
-    expect(restored.agreements.text).toContain('an older rule')
-    expect(restored.agreements.text).not.toContain('a rule from the notes file')
+    expect(view.cognition.text).toContain('state-held understanding')
+    expect(view.cognition.text).toContain('a rule from the notes file')
+    expect(view.agreements.text).toContain('推送前问我')
+    expect(view.agreements.text).not.toContain('a rule from the notes file')
+    // The old single-step note undo becomes the previous cognition version, not an agreement undo.
+    expect(view.cognition.history).toHaveLength(1)
+    expect(view.cognition.history[0]!.text).toContain('an older rule')
+    expect(typeof view.cognition.history[0]!.at).toBe('number')
   })
 
-  it('preserves an empty legacy notes undo snapshot without removing the independent policy', async () => {
+  it('preserves an empty legacy notes undo as an empty cognition history version', async () => {
     const h = setup({ policy: '推送前问我' })
     await h.store.setDot({ memoryUndo: '' })
     h.notes.text = '- 普通开发任务用标准预设，不用破限\n'
     await h.service.ensureDot()
-    const restored = await h.service.undoAgreements()
-    expect(restored.agreements.text).toBe('- 推送前问我\n')
+    const view = await h.service.knowledgeView()
+    expect(view.agreements.text).toBe('- 推送前问我\n')
+    expect(view.cognition.text).toContain('普通开发任务用标准预设')
+    expect(view.cognition.history).toHaveLength(1)
+    expect(view.cognition.history[0]!.text).toBe('')
   })
 
   it('does not treat a failed import as done, and retries it next time', async () => {
@@ -655,7 +659,7 @@ describe('DotService knowledge migration', () => {
     failing = false
     const view = await h.service.knowledgeView()
     expect(h.store.knowledgeMigrated).toBe(true)
-    expect(view.agreements.text).toContain('important rule')
+    expect(view.cognition.text).toContain('important rule')
   })
 
   it('does not mark the import done when a legacy read fails, and retries without losing the note', async () => {
@@ -675,30 +679,35 @@ describe('DotService knowledge migration', () => {
     failRead = false
     const view = await h.service.knowledgeView()
     expect(h.store.knowledgeMigrated).toBe(true)
-    expect(view.agreements.text).toContain('must not be lost')
+    expect(view.cognition.text).toContain('must not be lost')
   })
 
-  it('carries an imported agreement set whole past the write limit, keeping the tail rule in the prompt', async () => {
-    const h = setup({ policy: `P${'p'.repeat(1998)}` })
-    h.notes.text = `- ${'x'.repeat(3000)}\n- the last rule that must stay in force\n`
+  it('carries an imported cognition set whole past the write limit, keeping the tail note', async () => {
+    const h = setup()
+    h.notes.text = `- ${'x'.repeat(3000)}\n- the last note that must stay in force\n`
+    h.notes.cognition = 'y'.repeat(1500)
     await h.service.ensureDot()
     const view = await h.service.knowledgeView()
-    // The stored text exceeds the 4000-char new-write limit; the import is not clipped.
-    expect(view.agreements.text.length).toBeGreaterThan(4000)
-    expect(view.agreements.text).toContain('the last rule that must stay in force')
-    // And the rendered prompt block carries the tail too.
-    expect(agreementsSection(view.agreements.text)).toContain('the last rule that must stay in force')
+    // The stored cognition exceeds the 4000-char new-write limit; the import is not clipped.
+    expect(view.cognition.text.length).toBeGreaterThan(4000)
+    expect(view.cognition.text).toContain('the last note that must stay in force')
   })
 
   it('does not read a legacy file whose target layer already has content', async () => {
     const h = setup()
     await h.store.setAgreements('- keep me\n')
     await h.store.setCognition('my own understanding')
-    // A failing legacy file must not block the import when its layer is already filled.
-    h.notes.read = async () => { throw Object.assign(new Error('permission denied'), { code: 'EACCES' }) }
-    h.notes.readCognition = async () => { throw Object.assign(new Error('permission denied'), { code: 'EACCES' }) }
+    // Both target layers are already filled, so neither legacy file should be consulted.
+    let noteReads = 0
+    let cognitionReads = 0
+    const realRead = h.notes.read
+    const realCognition = h.notes.readCognition!
+    h.notes.read = async () => { noteReads += 1; return realRead() }
+    h.notes.readCognition = async () => { cognitionReads += 1; return realCognition() }
     await h.service.ensureDot()
     expect(h.store.knowledgeMigrated).toBe(true)
+    expect(noteReads).toBe(0)
+    expect(cognitionReads).toBe(0)
     const view = await h.service.knowledgeView()
     expect(view.agreements.text).toBe('- keep me\n')
     expect(view.cognition.text).toBe('my own understanding')

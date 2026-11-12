@@ -107,6 +107,16 @@ describe('DotStore settings proposals', () => {
 })
 
 describe('DotStore agreements and cognition', () => {
+  it('preserves existing cognition history when a legacy import supplies an undo version', async () => {
+    const { domain } = fakeDomain()
+    const store = new DotStore(domain)
+    const existing = [{ text: 'an existing version', at: 10 }]
+    await store.setDot({ cognitionHistory: existing })
+    await store.commitKnowledgeMigration({ cognition: 'imported notes', cognitionHistory: [{ text: 'old undo', at: 20 }], knowledgeMigrated: '1' })
+    expect(store.cognitionHistory).toEqual(existing)
+    expect(new DotStore(domain).cognitionHistory).toEqual(existing)
+  })
+
   it('keeps agreements and one undo step across a reload', async () => {
     const { domain } = fakeDomain()
     const store = new DotStore(domain)

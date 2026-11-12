@@ -103,7 +103,7 @@ const stateSchema = z.object({
   pastSegments: z.array(pastSegmentSchema).optional(),
   /** Legacy notes captured in old state rows; read only by the one-time migration. */
   memory: z.string().optional(),
-  /** Legacy note undo snapshot; the migration carries it to agreementsUndo. */
+  /** Legacy note undo snapshot; the migration preserves it as cognition history. */
   memoryUndo: z.string().optional(),
   /** The human's own standing requirements, verbatim. */
   agreements: z.string().optional(),
@@ -141,7 +141,7 @@ export interface DotState {
   readonly pastSegments?: readonly PastSegment[]
   /** Legacy notes captured in old state rows; read only by the one-time migration. */
   readonly memory?: string
-  /** Legacy note undo snapshot; the migration carries it to agreementsUndo. */
+  /** Legacy note undo snapshot; the migration preserves it as cognition history. */
   readonly memoryUndo?: string
   /** The human's own standing requirements, verbatim. */
   readonly agreements?: string

@@ -95,8 +95,8 @@ export function normalizeCognition(text: string): string {
 /**
  * The [agreements] block of dot's system prompt; empty when there are none.
  * The text is carried whole, even past AGREEMENTS_MAX_CHARS: the limit guards new
- * writes, while a legacy import (policy + notes) may legitimately exceed it and no
- * user rule at the tail may be cut out of the prompt.
+ * writes, while a legacy policy import may legitimately exceed it and no user rule
+ * at the tail may be cut out of the prompt.
  */
 export function agreementsSection(text: string): string {
   const body = text.trim()
