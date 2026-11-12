@@ -1,5 +1,5 @@
 import { DotError, messageOf, type DotService } from './service.ts'
-import { SETTING_FIELDS, type DotSettings, type SettingField, type SettingProposal } from './contracts.ts'
+import { SETTING_FIELDS, TOOL, type DotSettings, type SettingField, type SettingProposal } from './contracts.ts'
 import { lockedField, patchSettings } from './settings.ts'
 import { DEFAULT_ADDRESS, DEFAULT_PERSONA } from './persona.ts'
 import { MEMORY_MAX_CHARS, memorySection } from './memory.ts'
@@ -27,6 +27,24 @@ export function proposalText(proposal: SettingProposal): string {
   return `${proposal.field}\nBefore: ${textOf(proposal.before)}\nAfter: ${textOf(proposal.after)}\nWhy: ${proposal.reason}`
 }
 
+/**
+ * Compact read-only snapshot of the core hard-switch settings injected into
+ * dot's system prompt. Rendered on every request so a settings change reaches
+ * dot in the same segment without requiring a new segment rollover.
+ */
+export function settingsSnapshotBlock(settings: DotSettings): string {
+  const lines = [
+    '[settings snapshot — read-only; use dot_settings to propose a change]',
+    `scope: ${settings.scope}`,
+    `approvals: ${settings.approvals}`,
+    `questions: ${settings.questions}`,
+    `taskPermission: ${(settings as unknown as Record<string, unknown>).taskPermission ?? 'default'}`,
+  ]
+  const reflection = (settings as unknown as Record<string, unknown>).reflection
+  if (reflection !== undefined) lines.push(`reflection: ${reflection}`)
+  return lines.join('\n')
+}
+
 export class SelfSettings {
   constructor(private readonly dot: DotService) {}
 
@@ -35,7 +53,7 @@ export class SelfSettings {
     const locks = this.dot.store.settings.locks ?? {}
     const fields = SETTING_FIELDS.map(field => `${field}${locks[field] ? ' [locked by the human]' : ''}: ${textOf(valueOf(this.dot.store.settings, field, memory.text))}`)
     const pending = this.dot.store.settingProposals.map(proposal => `${proposal.id} · ${proposal.field}: ${proposal.reason}`).join('\n')
-    return `${fields.join('\n')}\n\nOnly propose an unlocked field with dot_propose_settings; the human must approve it. Locks and homeDir are human-only.${pending ? `\n\nWaiting proposals:\n${pending}` : ''}`
+    return `${fields.join('\n')}\n\nOnly propose an unlocked field with ${TOOL.settings} (action=propose); the human must approve it. Locks and homeDir are human-only.${pending ? `\n\nWaiting proposals:\n${pending}` : ''}`
   }
 
   async propose(input: { field: string; value: unknown; reason: string }): Promise<string> {

@@ -772,7 +772,9 @@ export function summarizeToolCall(item: ToolItem, locale: CopyLocale, tasks: Tas
       const focus = strOf(args.focus)
       return focus ? { summary: clipInline(focus, 42) } : {}
     }
-    case TOOL.proposeSettings: {
+    case TOOL.settings: {
+      const action = strOf(args.action)
+      if (action !== 'propose') return {}
       const field = strOf(args.field)
       if (!field) return {}
       const key = `field_${field}` as TextKey

@@ -27,8 +27,7 @@ export const TOOL = {
   remember: 'dot_remember',
   forget: 'dot_forget',
   newSegment: 'dot_new_segment',
-  readSettings: 'dot_read_settings',
-  proposeSettings: 'dot_propose_settings',
+  settings: 'dot_settings',
 } as const
 
 /** Settings Dorothy may propose changing; locks themselves are human-only. */

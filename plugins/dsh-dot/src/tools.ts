@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { SERVICE_NAME, TOOL } from './contracts.ts'
 import { personaSection } from './persona.ts'
+import { settingsSnapshotBlock, type SelfSettings } from './self-settings.ts'
 import { DotError, messageOf, type DotService } from './service.ts'
 
 export const name = 'dsh-dot-tools'
@@ -23,6 +24,12 @@ const PERSONA_ORDER = 1
 const MEMORY_ORDER = 2
 /** What the segment was handed from the conversation before it. */
 const HANDOFF_ORDER = 3
+/**
+ * Core hard-switch state injected on every request so dot always knows its
+ * current settings without calling dot_settings. Not frozen with the segment:
+ * a settings change takes effect immediately in the same segment.
+ */
+const SETTINGS_SNAPSHOT_ORDER = 4
 
 /** The part of an assembly context these sections read: the agent the prompt is built for. */
 interface AssemblyContext { readonly agent?: { readonly session?: { readonly id?: string } } }
@@ -34,6 +41,7 @@ type ToolHost = Context
   & { tools: { register(definition: unknown): () => void } }
   & { systemPrompt: { section(section: { name: string; order: number; text: (context?: AssemblyContext) => string; interpolate?: boolean }): () => void } }
   & Record<typeof SERVICE_NAME, DotService>
+  & { _selfSettings?: SelfSettings }
 
 const TEXT_OUTPUT = {
   schema: { type: 'string' as const },
@@ -78,6 +86,8 @@ export function apply(ctx: Context): void {
   ctx.effect(() => host.systemPrompt.section({ name: 'dsh-dot:memory', order: MEMORY_ORDER, interpolate: false, text: context => { const segment = segmentOf(context); return segment ? segment.memory ?? '' : dot().currentNotesBlock() } }))
   // Empty in dot's very first segment; the host drops empty sections.
   ctx.effect(() => host.systemPrompt.section({ name: 'dsh-dot:handoff', order: HANDOFF_ORDER, interpolate: false, text: context => segmentOf(context)?.opening ?? '' }))
+  // Core hard-switch state: always reads live settings so a change takes effect immediately.
+  ctx.effect(() => host.systemPrompt.section({ name: 'dsh-dot:settings-snapshot', order: SETTINGS_SNAPSHOT_ORDER, interpolate: false, text: () => settingsSnapshotBlock(dot().store.settings) }))
 
   // Attach hostEffect after defineTool: the standard host drops unknown options.
   const tool = (definition: ToolInput, readOnly = false) => {
@@ -364,28 +374,26 @@ export function apply(ctx: Context): void {
     title: 'New segment',
   }))
 
-  // ── dot_read_settings ─────────────────────────────────────────────────────
+  // ── dot_settings (merged from dot_read_settings + dot_propose_settings) ──
+  // Core hard-switch state is always visible in the [settings snapshot] system-prompt
+  // block; call dot_settings only to read full detail or propose a change.
   const self = () => dot().selfSettings
   tool(defineToolInput({
-    name: TOOL.readSettings,
-    description: 'Read your own current settings, notes, which fields the human has locked, and changes waiting for approval. Everything is unlocked by default.',
-    parameters: {},
-    execute: () => run(() => self().read()),
-    title: 'Read own settings',
-  }), true)
-
-  // ── dot_propose_settings ──────────────────────────────────────────────────
-  tool(defineToolInput({
-    name: TOOL.proposeSettings,
-    description: 'Propose changing one unlocked setting or replacing your notes. Nothing changes until the human approves it in Settings. Fields: model, approvals, questions, scope, taskModels, policy, persona, address, memory. value uses the same shape as dot_read_settings, with null restoring a default or clearing notes. Locks and homeDir cannot be changed.',
+    name: TOOL.settings,
+    description: `Manage your own settings. action=read: read the full current settings, which fields the human has locked, and any change proposals waiting for approval. The core switches (scope, approvals, questions, taskPermission, reflection) are always visible in your [settings snapshot] block, so call read only when you need detail beyond those. action=propose: propose changing one unlocked setting or replacing your notes — nothing changes until the human approves it in Settings. Fields: model, approvals, questions, scope, taskModels, policy, persona, address, memory. value uses the same shape as the read output, with null to restore a default or clear notes. Locks and homeDir cannot be changed. Routine one-line notes still use ${TOOL.remember} and ${TOOL.forget}; use propose only to rewrite all notes or when notes are locked.`,
     parameters: {
-      field: { type: 'string', required: true, description: 'One setting field.' },
-      value: { type: 'json', description: 'New value, in the shape shown by dot_read_settings.' },
-      reason: { type: 'string', required: true, description: 'Why this change helps; shown to the human.' },
+      action: { type: 'string', enum: ['read', 'propose'], required: true, description: 'read or propose.' },
+      field: { type: 'string', description: 'propose: one setting field.' },
+      value: { type: 'json', description: 'propose: new value in the shape shown by read.' },
+      reason: { type: 'string', description: 'propose: why this change helps; shown to the human.' },
     },
-    execute: args => run(() => self().propose({ field: str(args, 'field') ?? '', value: (args as Record<string, unknown> | null)?.value, reason: str(args, 'reason') ?? '' })),
-    title: 'Propose settings change',
-  }))
+    execute: args => run(() => {
+      const action = str(args, 'action')
+      if (action === 'propose') return self().propose({ field: str(args, 'field') ?? '', value: (args as Record<string, unknown> | null)?.value, reason: str(args, 'reason') ?? '' })
+      return self().read()
+    }),
+    title: 'Settings',
+  }), /* read is not exclusively read-only since propose mutates */ false)
 }
 
 /** Shared defaults: text output, serial execution, a generic call card. */

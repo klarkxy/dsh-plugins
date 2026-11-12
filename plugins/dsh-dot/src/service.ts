@@ -542,14 +542,14 @@ export class DotService {
   }
 
   async remember(text: string): Promise<string> {
-    if (this.store.settings.locks?.memory) throw new DotError('dot/setting-locked', 'notes are locked by the human; use dot_propose_settings for the change you want')
+    if (this.store.settings.locks?.memory) throw new DotError('dot/setting-locked', 'notes are locked by the human; use dot_settings (action=propose) for the change you want')
     const { before, after } = await this.changeNotes(current => addEntry(current, text), 'dot')
     if (after === before) return 'That is already in your notes.'
     return `Noted. Your notes now hold ${entriesOf(after).length} entr${entriesOf(after).length === 1 ? 'y' : 'ies'}, ${after.trim().length} of ${MEMORY_MAX_CHARS} characters. The [your notes] block of this session still shows them as they were when it started; your next session shows the new one.`
   }
 
   async forget(text: string): Promise<string> {
-    if (this.store.settings.locks?.memory) throw new DotError('dot/setting-locked', 'notes are locked by the human; use dot_propose_settings for the change you want')
+    if (this.store.settings.locks?.memory) throw new DotError('dot/setting-locked', 'notes are locked by the human; use dot_settings (action=propose) for the change you want')
     let removed = ''
     await this.changeNotes(current => { const result = removeEntry(current, text); removed = result.removed; return result.text }, 'dot')
     return `Removed from your notes: "${removed}".`

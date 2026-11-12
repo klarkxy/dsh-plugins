@@ -35,7 +35,6 @@ const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
   TOOL.listModels,
   TOOL.searchHistory,
   TOOL.readHistory,
-  TOOL.readSettings,
   TOOL.schedule,
   'list_sessions',
   'search_sessions',
