@@ -11,6 +11,20 @@ const APPROVAL_NOTICE = (id: string, cmd = 'gh run view --log') => [
 ].join('\n')
 
 describe('filterVisibleChat', () => {
+  it('uses turn boundaries for card suppression and keeps human no-card fallback', () => {
+    const items: ChatItem[] = [
+      { kind: 'user', key: 'u1', text: 'hello', at: 1, turn: 1, trigger: 'human' },
+      { kind: 'bot', key: 'b1', text: 'preface', at: 2, turn: 1, trigger: 'human' },
+      { kind: 'view', key: 'v1', presentation: { viewId: 'card' }, at: 3, turn: 1, trigger: 'human' },
+      { kind: 'bot', key: 'b2', text: 'duplicate', at: 4, turn: 1, trigger: 'human' },
+      { kind: 'notice', key: 'n2', text: '[dot reminder] check', at: 5, turn: 2, trigger: 'background' },
+      { kind: 'bot', key: 'b3', text: 'background chatter', at: 6, turn: 2, trigger: 'background' },
+      { kind: 'user', key: 'u3', text: 'again', at: 7, turn: 3, trigger: 'human' },
+      { kind: 'view', key: 'bad', failed: true, at: 8, turn: 3, trigger: 'human' },
+      { kind: 'bot', key: 'fallback', text: 'plain reply', at: 9, turn: 3, trigger: 'human' },
+    ]
+    expect(filterVisibleChat(items).items.map(item => item.key)).toEqual(['u1', 'v1', 'n2', 'u3', 'fallback'])
+  })
   it('hides requests already answered in their own session and routine silent settlements', () => {
     const items: ChatItem[] = [
       {
@@ -50,14 +64,14 @@ describe('filterVisibleChat', () => {
     ]
     expect(filterVisibleChat(inFlight, { streaming: false })).toMatchObject({ items: [], silentTail: true })
     expect(filterVisibleChat(inFlight, { streaming: true }).items.map(item => item.key)).toEqual(['n1', 't1'])
-    expect(filterVisibleChat(inFlight, { streaming: true }).silentTail).toBe(false)
+    expect(filterVisibleChat(inFlight, { streaming: true }).silentTail).toBe(true)
 
     const withCard: ChatItem[] = [
       ...inFlight,
       { kind: 'bot', key: 'b1', text: '这条命令会推送代码到远端，请确认是否放行：', at: 3 },
       { kind: 'view', key: 'v1', title: '确认推送', view: { type: 'confirm', id: 'ok' }, presentation: { viewId: 'view-1' }, at: 4 },
     ]
-    expect(filterVisibleChat(withCard).items.map(item => item.key)).toEqual(['n1', 't1', 'b1', 'v1'])
+    expect(filterVisibleChat(withCard).items.map(item => item.key)).toEqual(['n1', 't1', 'v1'])
   })
 
   it('preserves rejections explained to the human and strips silent requests from mixed task-update notices', () => {
@@ -66,7 +80,7 @@ describe('filterVisibleChat', () => {
       { kind: 'tool', key: 't1', name: 'dot_answer', status: 'done', args: { id: 'ap-26', allow: false }, detail: 'Answered ap-26 for session-f922364c-9f84-4ca4-af18-38f650070997.', at: 2 },
       { kind: 'bot', key: 'b1', text: '已拦截该会话删除目录外的命令。', at: 3 },
     ]
-    expect(filterVisibleChat(rejected).items.map(item => item.key)).toEqual(['n1', 't1', 'b1'])
+    expect(filterVisibleChat(rejected).items.map(item => item.key)).toEqual(['n1', 't1'])
 
     const mixedNotice = [
       '[dot notice] Updates from other sessions:',
@@ -80,7 +94,7 @@ describe('filterVisibleChat', () => {
       { kind: 'bot', key: 'bm', text: '「修复链接」跑完了，共修好 3 处失效链接。', at: 12 },
     ]
     const res = filterVisibleChat(mixed)
-    expect(res.items.map(item => item.key)).toEqual(['nm', 'bm'])
+    expect(res.items.map(item => item.key)).toEqual(['nm'])
     expect(res.hiddenRequestIds.has('ap-27')).toBe(true)
   })
 
@@ -100,7 +114,7 @@ describe('filterVisibleChat', () => {
     ] as const) {
       const res = filterVisibleChat(writeTurn(name, args))
       expect(res.items.map(item => item.key)).toEqual(['n1', 'w1'])
-      expect(res.silentTail).toBe(false)
+      expect(res.silentTail).toBe(true)
     }
   })
 })

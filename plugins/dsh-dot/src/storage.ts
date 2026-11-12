@@ -6,6 +6,7 @@
  */
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
+import type { ViewNode } from '../../dsh-deep-view/src/contracts.ts'
 import { SETTING_FIELDS, type CognitionVersion, type DotContextUsage, type DotUsageOffset, type ScheduleRecord, type SettingProposal, type TaskRecord } from './contracts.ts'
 import type { PastSegment, Segment } from './segments.ts'
 
@@ -95,7 +96,17 @@ const cognitionVersionSchema = z.object({
   at: z.number(),
 }).strict()
 
+const cardSchema = z.object({
+  id: z.string(), number: z.number().int().positive(), sessionId: z.string(), callId: z.string(),
+  title: z.string(), view: z.custom<ViewNode>(), expired: z.boolean(),
+  answer: z.object({ id: z.string(), action: z.string(), values: z.record(z.string(), z.unknown()) }).optional(),
+}).strict()
+
 const stateSchema = z.object({
+  cardSequence: z.number().int().nonnegative().optional(),
+  cards: z.array(cardSchema).optional(),
+  lastReplyAt: z.number().optional(),
+  lastConversationAt: z.number().optional(),
   dotSessionId: z.string().optional(),
   dotWorkspaceId: z.string().optional(),
   settings: z.record(z.string(), z.unknown()).optional(),
@@ -139,6 +150,10 @@ const proposalSchema = z.object({
 }).strict()
 
 export interface DotState {
+  readonly cardSequence?: number
+  readonly cards?: readonly import('./card-state.ts').DotCardRecord[]
+  readonly lastReplyAt?: number
+  readonly lastConversationAt?: number
   readonly dotSessionId?: string
   readonly dotWorkspaceId?: string
   /** The human's settings; read through parseSettings. */
@@ -174,11 +189,10 @@ export function parseSettingProposal(value: unknown): SettingProposal | undefine
 
 export const dotDomain = defineDomain({
   name: 'klarkxy_dsh_dot',
-  // v2 adds agreements/cognition and their seen snapshots. Rows written by v1
-  // stay readable (the new fields are optional), so v2 lists v1 as compatible;
-  // older readers then never reject a v2 row under the same version stamp.
-  version: 2,
-  compatibleVersions: [1],
+  // v3 adds durable asynchronous cards. All new fields are optional, so v1/v2
+  // rows stay readable without replacing any existing settings or knowledge.
+  version: 3,
+  compatibleVersions: [1, 2],
   tables: {
     state: domainTable<string, DotState>(stateSchema),
     tasks: domainTable<string, TaskRecord>(taskSchema),

@@ -39,7 +39,7 @@ export interface Segment {
   readonly cognitionSeen?: string
   /** Handoff block of the system prompt; absent in the very first segment. */
   readonly opening?: string
-  /** Title of an unanswered interactive `show_view` card carried into this segment. */
+  /** Legacy field, read for storage compatibility only. Cards no longer hold a segment open. */
   readonly openCard?: string
   readonly handoff?: Handoff
   /** Why the previous segment ended. */
@@ -106,9 +106,7 @@ export function openingText(input: { readonly handoff?: Handoff; readonly reason
     `You are continuing an ongoing conversation with the same human in a fresh session, because ${WHY[input.reason]}. They see one unbroken chat: carry on naturally and do not bring up the handoff unless they ask. What follows is all you carry over from before; the earlier messages themselves are no longer in front of you.`,
   ]
   parts.push(body || 'Nothing was carried over from the earlier conversation.')
-  if (input.openCard) {
-    parts.push(`An interactive show_view card ("${input.openCard}") from the earlier segment is still open in the chat and remains connected to this session. If the human submits it, their answer arrives here as a user message starting with "${input.openCard}"; inspect ${input.previous ?? 'the earlier session'} with ${TOOL.searchHistory} and ${TOOL.readHistory} if you need the card's exact fields or surrounding context.`)
-  }
+  parts.push('Earlier unanswered cards may be answered late. Their numbered reply arrives in the active segment with an expired-card prefix; use the history tools when you need the original card or its context.')
   // The log of every earlier segment stays readable, so what a note left out is not lost.
   parts.push(`The earlier conversation itself stays on record. When you need its exact words or a detail that is not above, find it with ${TOOL.searchHistory} and read around a hit with ${TOOL.readHistory}${input.previous ? `; the session just before this one is ${input.previous}` : ''}. Do that before you ask the human to repeat themselves.`)
   if (input.ledger?.trim()) parts.push(`Task ledger at the handoff (${stamp(input.at)}); it may have moved since, and ${TOOL.overview} shows the current state:\n${input.ledger.trim()}`)

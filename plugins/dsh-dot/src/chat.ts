@@ -3,6 +3,7 @@
  * so the host can rebuild the whole list or fold in one new event the same way.
  */
 import type { ChatItem } from './contracts.ts'
+import { cardText } from './cards.ts'
 
 export interface RawEvent {
   readonly type: string
@@ -96,7 +97,15 @@ export class ChatFold {
   private readonly byCall = new Map<string, number>()
   readonly answers: Record<string, { action: string; values: Record<string, unknown> }> = {}
 
+  private turn?: number
+  private trigger: 'human' | 'background' = 'background'
+  private inTurn = false
+
   get items(): readonly ChatItem[] { return this.list }
+
+  private push(item: ChatItem): void {
+    this.list.push(this.turn === undefined ? item : { ...item, turn: this.turn, trigger: this.trigger })
+  }
 
   /** @returns whether the visible list changed. */
   add(event: RawEvent): boolean {
@@ -104,21 +113,32 @@ export class ChatFold {
     const at = typeof event.time === 'number' ? event.time : 0
     const key = String(event.seq ?? this.list.length)
     switch (event.type) {
+      case 'turn/start': {
+        this.turn = event.seq ?? (this.turn ?? 0) + 1
+        this.inTurn = true
+        return false
+      }
       case 'user/message': {
         const source = rec(data.source)
+        if (source?.kind === 'user') {
+          this.trigger = 'human'
+          if (this.inTurn && this.turn !== undefined) {
+            for (let index = this.list.length - 1; index >= 0 && this.list[index]?.turn === this.turn; index--) this.list[index] = { ...this.list[index]!, trigger: 'human' }
+          }
+        } else if (!this.inTurn) this.trigger = 'background'
         const parts = splitCarriedNotice(source, data.content)
         const text = parts.text.trim()
-        if (parts.notice) this.list.push({ kind: 'notice', key: `${key}:notice`, text: parts.notice, at })
+        if (parts.notice) this.push({ kind: 'notice', key: `${key}:notice`, text: parts.notice, at })
         if (!text) return parts.notice !== undefined
         if (source?.kind === 'user') {
           const answer = viewAnswerOf(source)
           if (answer) {
             this.answers[answer.id] = { action: answer.action, values: answer.values }
-            this.list.push({ kind: 'answer', key, text, at })
-          } else this.list.push({ kind: 'user', key, text, at })
+            this.push({ kind: 'answer', key, text, at })
+          } else this.push({ kind: 'user', key, text, at })
           return true
         }
-        if (source?.kind === 'agent-message') { this.list.push({ kind: 'notice', key, text, at }); return true }
+        if (source?.kind === 'agent-message') { this.push({ kind: 'notice', key, text, at }); return true }
         return false
       }
       case 'assistant/message': {
@@ -128,7 +148,7 @@ export class ChatFold {
           content.forEach((block, index) => {
             const row = rec(block)
             if (row?.type === 'text' && typeof row.text === 'string' && row.text.trim()) {
-              this.list.push({ kind: 'bot', key: `${key}:${index}`, text: row.text, at })
+              this.push({ kind: 'bot', key: `${key}:${index}`, text: row.text, at })
               changed = true
             }
           })
@@ -141,10 +161,10 @@ export class ChatFold {
         this.byCall.set(callId, this.list.length)
         if (name === SHOW_VIEW) {
           const args = parseArgs(data.arguments)
-          this.list.push({ kind: 'view', key: callId, title: args?.title, view: args?.view, at })
+          this.push({ kind: 'view', key: callId, title: args?.title, view: args?.view, at })
         } else {
           const args = compactArgs(data.arguments)
-          this.list.push({ kind: 'tool', key: callId, name, status: 'running', ...args ? { args } : {}, at })
+          this.push({ kind: 'tool', key: callId, name, status: 'running', ...args ? { args } : {}, at })
         }
         return true
       }
@@ -156,7 +176,7 @@ export class ChatFold {
         const item = this.list[index]!
         if (item.kind === 'view') {
           const meta = rec(data.meta)
-          this.list[index] = meta ? { ...item, presentation: meta } : { ...item, failed: true }
+          this.list[index] = meta && message?.isError !== true && cardText(meta) !== undefined ? { ...item, presentation: meta } : { ...item, failed: true }
         } else if (item.kind === 'tool') {
           const detail = textOf(message?.content).trim()
           const errMatch = ERROR_PREFIX.exec(detail)
@@ -169,11 +189,14 @@ export class ChatFold {
         return true
       }
       case 'turn/end': {
+        this.inTurn = false
+        this.turn = undefined
+        this.trigger = 'background'
         const reason = rec(data.reason)
         if (reason?.kind !== 'error') return false
         const error = rec(reason.error)
         const text = typeof error?.message === 'string' ? error.message : 'The turn failed.'
-        this.list.push({ kind: 'error', key, text, at })
+        this.push({ kind: 'error', key, text, at })
         return true
       }
       default:

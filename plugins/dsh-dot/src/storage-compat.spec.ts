@@ -24,14 +24,31 @@ describe('knowledge storage compatibility', () => {
   }
 
   it('declares the previous domain version as readable', () => {
-    expect(dotDomain.version).toBe(2)
-    expect(dotDomain.compatibleVersions).toContain(1)
+    expect(dotDomain.version).toBe(3)
+    expect(dotDomain.compatibleVersions).toEqual([1, 2])
   })
 
   it('admits untouched v1 records at the real domain validation boundary', () => {
     const decoded = dotDomain.tables.state.valueSchema.parse(legacy)
     expect(decoded).toMatchObject(legacy)
     expect(parseState(decoded)).toMatchObject(legacy)
+  })
+
+  it('round trips card state without overwriting existing settings or knowledge', () => {
+    const value = { ...legacy, agreements: '- ask me', cognition: 'keep answers brief', cardSequence: 8, cards: [{
+      id: 'dot-card-8', number: 8, sessionId: 'dot-v1', callId: 'c8', title: 'Choice',
+      view: { type: 'confirm', id: 'confirm' }, expired: true,
+    }], lastReplyAt: 250, lastConversationAt: 300 }
+    const decoded = dotDomain.tables.state.valueSchema.parse(value)
+    expect(parseState(decoded)).toMatchObject(value)
+    expect(parseState(decoded).settings?.taskPermission).toBe('default')
+  })
+
+  it('does not reject the settings row when a historical view is no longer supported', () => {
+    const value = { ...legacy, cards: [{ id: 'old', number: 1, sessionId: 'dot-v1', callId: 'c', title: 'Old card', view: { type: 'retired-component' }, expired: true }] }
+    const decoded = dotDomain.tables.state.valueSchema.parse(value)
+    expect(parseState(decoded).settings?.taskPermission).toBe('default')
+    expect(parseState(decoded).cards).toHaveLength(1)
   })
 
   it('keeps old rows readable under the new unit version without knowledge fields', () => {

@@ -4,6 +4,7 @@
  * compaction checkpoints stay out, so a handoff carries the conversation and
  * not the machinery around it.
  */
+import { cardText } from './cards.ts'
 import { splitCarriedNotice, textOf, type RawEvent } from './chat.ts'
 
 export type TranscriptRole = 'human' | 'notice' | 'dot'
@@ -51,6 +52,10 @@ export function transcriptRows(events: Iterable<RawEvent>): TranscriptRow[] {
       }
     } else if (event.type === 'assistant/message') {
       const text = textOf(rec(data.message)?.content).trim()
+      if (text) rows.push({ role: 'dot', text, at })
+    } else if (event.type === 'tool/result') {
+      // A valid show_view card is dot speaking; a failed one contributes nothing.
+      const text = cardText(data.meta)
       if (text) rows.push({ role: 'dot', text, at })
     }
   }

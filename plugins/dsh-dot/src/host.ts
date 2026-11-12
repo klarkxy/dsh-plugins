@@ -95,7 +95,7 @@ export interface DotHost {
   /** The model dot's next segment would run on, as `provider/model@effort`; undefined when none is known. */
   modelKey(): string | undefined
   /** The human's message to dot, optionally carrying notices into the same turn; steers a running turn, starts one when idle. */
-  say(sessionId: string, text: string, carriedNotices?: string): Promise<void>
+  say(sessionId: string, text: string, carriedNotices?: string, answer?: import('../../dsh-deep-view/src/contracts.ts').ViewAnswer): Promise<void>
   /** Stop dot's current turn; queued messages stay. */
   stop(sessionId: string): Promise<void>
   /**
@@ -390,15 +390,21 @@ export function bindHost(get: Get, log?: (message: string) => void, modelOf?: ()
         return false
       }
     },
-    async say(sessionId, text, carriedNotices) {
+    async say(sessionId, text, carriedNotices, answer) {
       const agent = await liveAgent(sessionId)
       const content = carriedNotices ? `${carriedNotices}\n\n${text}` : text
       // The character count lets the panel and history split the carried notices
       // back out without storing a second copy of their text in the source.
-      const source = { kind: 'user', ...carriedNotices ? { dshDot: { carriedChars: carriedNotices.length } } : {} } as MessageSource
+      const source = { kind: 'user', ...answer ? { deepView: { owner: 'dsh-deep-view', version: 1, answer } } : {}, ...carriedNotices ? { dshDot: { carriedChars: carriedNotices.length } } : {} } as MessageSource
       const message = createUserMessage({ content: [{ type: 'text' as const, text: content }], source })
       if (agent.status === 'idle' || typeof agent.steer !== 'function') agent.followup?.(message)
       else agent.steer(message)
+      if (answer && agent.session) {
+        // The answer facts and readable reply share one session message. Once
+        // appended it must not be sent twice, even if its checkpoint fails.
+        const sessions = get('sessions') as { flush(session: LiveSession): Promise<boolean> } | undefined
+        try { await sessions?.flush(agent.session) } catch (error) { log?.(`dsh-dot: answer message checkpoint failed: ${String(error)}`) }
+      }
     },
     async stop(sessionId) {
       (await liveAgent(sessionId)).cancel?.({ kind: 'user' }, { keepInbox: true })

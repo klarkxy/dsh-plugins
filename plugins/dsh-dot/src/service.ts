@@ -6,6 +6,9 @@
  * operations as model tools.
  */
 import { mkdir } from 'node:fs/promises'
+import type { ShownView, ViewAnswer } from '../../dsh-deep-view/src/contracts.ts'
+import { DotCards, cardAnswerText, type DotCardRecord } from './card-state.ts'
+import { cardText } from './cards.ts'
 import { NoticeBatcher, formatNotices, type Notice, type Timer } from './batcher.ts'
 import { ZERO_USAGE, addUsage, combineUsage, netSegmentUsage, usageFromEvents } from './context.ts'
 import { PRESET_ID, TOOL, type BoardView, type DotContextSections, type DotContextUsage, type DotContextView, type KnowledgeView, type ModelChoice, type PendingKind, type PendingQuestionItem, type RolloverReason, type RuleConfig } from './contracts.ts'
@@ -24,7 +27,7 @@ import type { DotStore } from './store.ts'
 import { eventTier } from './tiers.ts'
 import { TaskModelError, formatTaskModels, modelKey, pickTaskModel, type TaskModelCatalog } from './task-models.ts'
 import { TaskPresetError, pickTaskPreset, type TaskPresetCatalog, type TaskPresetChoice } from './task-presets.ts'
-import { openCardState, stamp, transcriptRows, type TranscriptRow } from './transcript.ts'
+import { stamp, transcriptRows, type TranscriptRow } from './transcript.ts'
 import { SelfSettings } from './self-settings.ts'
 
 export interface DotServiceOptions {
@@ -85,8 +88,10 @@ export class DotService {
   /** The one-time legacy import; kept only while it runs so a failure is retried next time. */
   private migration?: Promise<void>
   private requestedSegment?: { focus?: string }
+  readonly cards: DotCards
 
   constructor(private readonly options: DotServiceOptions) {
+    this.cards = new DotCards(options.store, options.log)
     this.now = options.now ?? Date.now
     this.notes = options.notes ?? new MemoryNotes(options.homeDir)
     this.pending = new PendingHub(this.now)
@@ -157,7 +162,7 @@ export class DotService {
   }
 
   /** The human's message from dot's chat panel. */
-  async say(text: string): Promise<void> {
+  async say(text: string, cardReply?: { card: DotCardRecord; answer: ViewAnswer }): Promise<void> {
     const body = text.trim()
     if (!body) throw new DotError('dot/invalid', 'message must be non-empty')
     await this.serial(async () => {
@@ -165,11 +170,31 @@ export class DotService {
       // The human already wakes dot, so carried updates join the same message
       // instead of becoming a separate model turn of their own.
       const notices = this.liveNotices(this.batcher.take())
-      try { await this.host.say(dot, body, notices.length > 0 ? formatNotices(notices) : undefined) } catch (error) {
+      const card = cardReply && this.store.cards.find(row => row.id === cardReply.card.id)
+      const message = cardReply ? cardAnswerText(card ?? cardReply.card, cardReply.answer, card?.expired === true) : body
+      try {
+        await this.host.say(dot, message, notices.length > 0 ? formatNotices(notices) : undefined, cardReply?.answer)
+      } catch (error) {
         this.batcher.restore(this.liveNotices(notices))
         throw error
       }
+      // Delivery already succeeded: a bookkeeping failure must never requeue
+      // carried notices or invite the human to send the same answer twice.
+      await this.store.expireCards(cardReply?.card.id).catch(error => this.options.log?.(`dsh-dot: card expiry was not saved: ${messageOf(error)}`))
+      await this.store.noteConversation(this.now()).catch(error => this.options.log?.(`dsh-dot: conversation time was not saved: ${messageOf(error)}`))
     })
+  }
+
+  presentCard(shown: ShownView, callId: string) {
+    return this.serial(async () => {
+      const presentation = await this.cards.present(shown, callId)
+      await this.store.noteConversation(this.now(), true)
+      return presentation
+    })
+  }
+
+  answerCard(id: string, action: string, values: unknown): Promise<void> {
+    return this.cards.answer(id, action, values, (card, answer) => this.say('card reply', { card, answer }))
   }
 
   /**
@@ -194,6 +219,9 @@ export class DotService {
     if (!this.isDot(sessionId)) return Promise.resolve()
     return this.serial(async () => {
       if (!this.isDot(sessionId) || !this.store.segment || this.host.isRunning(sessionId)) return
+      const replies = transcriptRows(await this.host.readEvents(sessionId)).filter(row => row.role === 'dot')
+      const latest = replies.at(-1)
+      if (latest) await this.store.noteConversation(latest.at, true)
       const requested = this.requestedSegment
       const reason: RolloverReason | undefined = requested ? 'dot-requested' : reasonAfterTurn(await this.host.dotContext(sessionId))
       if (!reason) return
@@ -864,8 +892,8 @@ export class DotService {
   currentCognitionBlock(): string { return cognitionSection(this.store.cognition) }
 
   /**
-   * Whether dot's segment has to end before the next message reaches it. A
-   * running turn and a card that waits for the human both keep the segment.
+   * Whether dot's segment has to end before the next message reaches it.
+   * Only a running turn keeps the segment; unanswered cards remain asynchronous.
    */
   private async dueBeforeDelivery(dot: string): Promise<RolloverReason | undefined> {
     const segment = this.store.segment
@@ -874,7 +902,9 @@ export class DotService {
     let replied = false
     let lastReplyAt: number | undefined
     for (const event of events) {
-      if (event.type !== 'assistant/message') continue
+      const result = event.data as { meta?: unknown; message?: { isError?: boolean } } | undefined
+      const validCard = event.type === 'tool/result' && result?.message?.isError !== true && cardText(result?.meta) !== undefined
+      if (event.type !== 'assistant/message' && !validCard) continue
       replied = true
       if (typeof event.time === 'number') lastReplyAt = event.time
     }
@@ -934,15 +964,12 @@ export class DotService {
     }
     const at = this.now()
     const reminders = this.store.schedules
-    const cardState = openCardState(events)
-    const openCard = cardState.openCard ?? (!cardState.hadUserMessage ? this.store.segment?.openCard : undefined)
     const handoffOpening = openingText({
       ...handoff ? { handoff } : {},
       reason,
       ledger: this.store.summary(this.pending.list(), at),
       ...reminders.length > 0 ? { reminders: scheduleLines(reminders) } : {},
       previous: from,
-      ...openCard ? { openCard } : {},
       at,
     })
     const opening = requestedFocus ? `${handoffOpening}\n\nWhat you chose to focus on next: ${requestedFocus}` : handoffOpening
@@ -954,7 +981,6 @@ export class DotService {
       startedAt: at,
       ...await this.frozen(),
       opening,
-      ...openCard ? { openCard } : {},
       ...handoff ? { handoff } : {},
       reason,
     }, { reason }, endedUsage)

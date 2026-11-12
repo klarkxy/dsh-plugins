@@ -4,6 +4,7 @@
  * record, and these functions search and read them. The same two operations
  * let a new segment read back what its handoff only summarized.
  */
+import { cardText } from './cards.ts'
 import { splitCarriedNotice, textOf, type RawEvent } from './chat.ts'
 import { stamp } from './transcript.ts'
 
@@ -67,16 +68,25 @@ export function historyRows(events: Iterable<RawEvent>, tools = false, skip: Rea
       push('dot', textOf(rec(data.message)?.content))
     } else if (tools && event.type === 'tool/call') {
       const name = typeof data.name === 'string' ? data.name : 'tool'
-      if (skip.has(name)) {
+      // A show_view card is read from its result as dot's words; its raw JSON
+      // call would only quote the card back at every search.
+      if (name === 'show_view' || skip.has(name)) {
         if (typeof data.callId === 'string') skipped.add(data.callId)
         continue
       }
       const args = typeof data.arguments === 'string' ? data.arguments : JSON.stringify(data.arguments ?? {})
       push('tool-call', `${name} ${args}`)
-    } else if (tools && event.type === 'tool/result') {
-      const message = rec(data.message)
-      if (typeof message?.toolCallId === 'string' && skipped.has(message.toolCallId)) continue
-      push('tool-result', textOf(message?.content))
+    } else if (event.type === 'tool/result') {
+      // Valid card results are dot's words even when tool traffic is left out;
+      // a failed show_view leaves no card and is skipped like a lookup.
+      const card = cardText(data.meta)
+      if (card) {
+        push('dot', card)
+      } else if (tools) {
+        const message = rec(data.message)
+        if (typeof message?.toolCallId === 'string' && skipped.has(message.toolCallId)) continue
+        push('tool-result', textOf(message?.content))
+      }
     }
   }
   return rows

@@ -12,10 +12,9 @@ Her chat is warm, relaxed and a little goofy, with an occasional orange catchphr
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-dot
-dsh plugin --profile web add @klarkxy/dsh-deep-view
 ```
 
-Replace `web` with your profile name and restart it if DSH asks. Deep View draws the choice, confirmation and chart cards in Dorothy's chat; without it she asks in plain text.
+Replace `web` with your profile name and restart it if DSH asks. Deep View, which draws Dorothy's choice, confirmation and chart cards, is installed with her: adding Dorothy brings it in, and when both plugins are already present it loads only once. In ordinary sessions Deep View keeps its usual two-step behaviour; the single-step cards described below apply only to Dorothy's own chat.
 
 ## Use
 
@@ -37,11 +36,15 @@ Dorothy then:
 - reports approvals, questions, failures and finished turns of tasks she started promptly, merging updates that arrive close together into one message. Finished turns of sessions she only watches wait for her next wake-up or your next message; running and idle changes stay on the board;
 - handles the approval prompts and model questions of every session, including the ones you opened yourself. Routine ones and requests already answered in their own session are settled silently without cluttering her chat; when a request deletes data outside the project, publishes or pushes, spends money, touches credentials, or changes direction or scope, she asks you in her chat with a card and passes your answer back. The rules she judges by are the ones you wrote as agreements, plus the standing principle that a request that deletes data outside the project, publishes or pushes, spends money or touches credentials needs your approval first.
 
+Everything Dorothy says to you arrives as a card, and the card ends the turn: a display card with text, numbers, a table or a chart for a report, or an interactive card with options, a confirmation or a form when she needs an answer. While a card is being prepared the chat shows a light “preparing card” hint. A turn you started that ends without a usable card falls back to a plain text bubble; a background turn with nothing worth showing stays silent and adds no message.
+
+Interactive cards carry a persistent number, #1, #2 and so on; the number appears in the card's readable summary too, so her history search can find it. A card is marked expired once you send a new message, she shows a newer interactive card, or the conversation moves to a new segment — but its buttons stay usable. Answering a late card still works: the answer is delivered to the segment she is in now, with a prefix marking it as a late answer to that numbered card.
+
 In the panel, **Tasks** in the header opens the board: requests waiting on you, every tracked task with its status and latest note, and the reminders Dorothy has set. Click a task row to open that session. Type at the bottom; Enter sends and Shift+Enter starts a new line. While Dorothy works, a new message reaches her at her next step, and **Stop** ends her current turn.
 
 You can ask Dorothy to do something later or regularly, for example "check in half an hour whether that task has finished" or "sum up progress at nine every weekday morning". She sets herself a reminder: once (some minutes from now, or at a date and time), every so many minutes, every day at a fixed time, or on chosen days of the week. When it is due the reminder wakes her, she does what she wrote down for it, and tells you what is worth knowing. Reminders belong to Dorothy and not to one segment of the conversation: they still come due after the conversation moves to a new segment, they survive a DSH restart, and one that was missed while DSH was not running is delivered once at the next start. Times follow the local time of the computer DSH runs on, and she can hold up to 50. **Reminders** in the board shows each one with how it repeats and when it is next due; click **Remove** to delete it, or ask her to change or remove it.
 
-The conversation with Dorothy can go on indefinitely. When a turn ends with more than 70% of the usable window in use, she moves the conversation to a new segment: a short conversation is carried over word for word, and a longer one becomes a handoff note she writes for herself, plus the last few exchanges word for word and the task ledger at that moment. The panel still shows one continuous chat, with a divider where the segment changed and the latest six segments above it. Changing her model or persona, or coming back after more than two hours to a conversation that is already long, also starts a new segment before your next message is delivered. She stays in the segment while she is working; if a card is still open when the conversation moves to a new segment, the card stays active and your reply reaches her in the new segment.
+The conversation with Dorothy can go on indefinitely. When a turn ends with more than 70% of the usable window in use, she moves the conversation to a new segment: a short conversation is carried over word for word, and a longer one becomes a handoff note she writes for herself, plus the last few exchanges word for word and the task ledger at that moment. The panel still shows one continuous chat, with a divider where the segment changed and the latest six segments above it. Changing her model or persona, or coming back after more than two hours to a conversation that is already long, also starts a new segment before your next message is delivered. She stays in the segment while she is working; if a card is still open when the conversation moves to a new segment, the card is marked expired but its buttons still work, and your reply is delivered to the new segment with a prefix marking it as a late answer.
 
 You can also click **Start new segment** directly from **Context** in the gear drawer when she is idle. The button does not send Dorothy a message; it uses the same handoff and keeps her tasks, reminders, agreements, cognition, open cards and searchable history. Dorothy can choose a new segment herself with her own tool, which takes effect when her turn ends.
 
@@ -80,7 +83,7 @@ The plugin list keeps two settings, `homeDir`: the folder of Dorothy's own works
 
 ## Limits
 
-- Dorothy works through other sessions: her preset carries conversation, context compaction, her own tools (reminders included) and a few lookup tools, and file and shell work happens in task sessions.
+- Dorothy works through other sessions: her preset carries 17 `dot_*` tools plus `show_view` (reminders included), and file and shell work happens in task sessions.
 - She does no research herself: looking things up, reading pages and running commands happen in task sessions, where they are recorded and can be checked.
 - She can archive only the sessions she started herself.
 - She can look up only her own conversation and the sessions on her task board; other sessions are out of her reach. The search is literal and knows no synonyms; it covers the conversation text by default, and tool calls and results only when she asks for them. One search covers the latest 120 sessions at most.

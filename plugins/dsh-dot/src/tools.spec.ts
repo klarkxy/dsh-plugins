@@ -31,6 +31,7 @@ function load(settings: { current: DotSettings; segment?: Seg; notes?: string; c
     serialSettings: async <T>(work: () => Promise<T>) => work(),
   }
   const realSelf = new SelfSettings(service as never)
+  let cardNumber = 0
   const ctx = {
     tools: { register(definition: Record<string, unknown>) { registered.push(definition); return () => {} } },
     systemPrompt: { section(section: (typeof sections)[number]) { sections.push(section); return () => {} } },
@@ -40,6 +41,14 @@ function load(settings: { current: DotSettings; segment?: Seg; notes?: string; c
       currentCognitionBlock: () => settings.cognition ?? '',
       selfSettings: realSelf,
       answer: (id: string, answer: unknown) => JSON.stringify({ id, answer }),
+      presentCard: async (shown: { title: string; view: Record<string, unknown>; interactive: boolean }, callId?: string) => {
+        cardNumber += 1
+        return {
+          owner: 'dsh-deep-view', title: shown.title, view: shown.view, interactive: shown.interactive,
+          awaitReply: shown.interactive, ...(callId ? { viewId: callId } : {}),
+          ...(shown.interactive ? { dotCard: { number: cardNumber } } : {}),
+        }
+      },
     },
     effect(fn: () => unknown) { fn() },
   }
@@ -48,11 +57,11 @@ function load(settings: { current: DotSettings; segment?: Seg; notes?: string; c
 }
 
 describe('dot tools', () => {
-  it('compiles every tool definition through defineTool and keeps the total at 17', () => {
+  it('compiles every dot tool definition through defineTool and keeps 17 dot_* plus show_view', () => {
     const names = load().map(tool => tool.name)
-    expect([...names].sort()).toEqual([...Object.values(TOOL)].sort())
-    expect(names).toHaveLength(17)
-    expect(new Set(names).size).toBe(17)
+    expect([...names].sort()).toEqual([...Object.values(TOOL), 'show_view'].sort())
+    expect(names).toHaveLength(18)
+    expect(new Set(names).size).toBe(18)
   })
 
   it('marks only the reading tools read-only', () => {
@@ -61,7 +70,8 @@ describe('dot tools', () => {
     // dot_settings is NOT read-only: propose mutates state.
     // dot_workspace is NOT read-only: create mutates state.
     // dot_agreement / dot_cognition are NOT read-only: they mutate knowledge.
-    expect(readOnly).toEqual([TOOL.listModels, TOOL.overview, TOOL.read, TOOL.readHistory, TOOL.searchHistory].sort())
+    // show_view is read-only so the no-approval dot policy runs it directly.
+    expect(readOnly).toEqual([TOOL.listModels, TOOL.overview, TOOL.read, TOOL.readHistory, TOOL.searchHistory, 'show_view'].sort())
   })
 
   it('registers the merged tools, not the old split ones', () => {
@@ -117,6 +127,41 @@ describe('dot tools', () => {
     expect(await tool.execute({ id: 'q-1', allow: true, answers: '[]' })).toContain('Error [dot/invalid]')
   })
 
+  it('registers one same-name show_view with a flat schema and single-step conclusion', async () => {
+    const tool = load().find(row => row.name === 'show_view') as unknown as {
+      parameters: { properties: Record<string, { type: string }>; required?: string[] }
+      output: { render: (args: unknown, value: unknown) => unknown; presentationMeta: (args: unknown, value: unknown) => unknown }
+      execute: (args: unknown, exec: { callId?: string; concludeTurn(): void }) => Promise<Record<string, unknown>>
+    }
+    expect(Object.keys(tool.parameters.properties).sort()).toEqual(['await_reply', 'title', 'view'])
+    expect(tool.parameters.properties.title!.type).toBe('string')
+    expect(tool.parameters.properties.view!.type).toBe('string')
+    expect(tool.parameters.properties.await_reply!.type).toBe('boolean')
+    expect(tool.parameters.required).toEqual(['view'])
+
+    let concluded = 0
+    const exec = { callId: 'call-1', concludeTurn: () => { concluded += 1 } }
+    const result = await tool.execute({ title: 'Pick target', view: JSON.stringify({ type: 'options', id: 'o', options: [{ label: 'A' }, { label: 'B' }] }), await_reply: true }, exec)
+    expect(result.status).toBe('shown')
+    expect(concluded).toBe(1)
+    expect(tool.output.render(undefined, result)).toEqual([{ type: 'text', text: 'shown' }])
+    expect(tool.output.presentationMeta(undefined, result)).toMatchObject({ owner: 'dsh-deep-view', title: 'Pick target', interactive: true, awaitReply: true, dotCard: { number: 1 } })
+  })
+
+  it('keeps an invalid show_view in the same turn without concluding it', async () => {
+    const tool = load().find(row => row.name === 'show_view') as unknown as { execute: (args: unknown, exec: { callId?: string; concludeTurn(): void }) => Promise<Record<string, unknown>> }
+    let concluded = 0
+    const exec = { callId: 'c', concludeTurn: () => { concluded += 1 } }
+    const badJson = await tool.execute({ view: '{not json' }, exec)
+    expect(badJson.status).toBe('invalid')
+    expect(String(badJson.summary)).toContain('JSON')
+    const missingType = await tool.execute({ view: JSON.stringify({ text: 'hi' }) }, exec)
+    expect(missingType.status).toBe('invalid')
+    const mismatch = await tool.execute({ view: JSON.stringify({ type: 'text', text: 'hi' }), await_reply: true }, exec)
+    expect(mismatch.status).toBe('invalid')
+    expect(concluded).toBe(0)
+  })
+
   it('gives the knowledge tools flat, primitive schemas', () => {
     const byName = new Map(load().map(tool => [tool.name, tool]))
     const propsOf = (tool: Record<string, unknown>): Record<string, { type: string; enum?: string[] }> => {
@@ -133,15 +178,18 @@ describe('dot tools', () => {
     expect(cognition.text).toMatchObject({ type: 'string' })
   })
 
-  it('brings only dsh-dot itself in cordis.patch.yml (dsh-dev-index removed)', () => {
+  it('brings Deep View once under its own mount id without restoring dsh-dev-index', () => {
     const root = join(dirname(fileURLToPath(import.meta.url)), '..')
     const rowsOf = (file: string) => [...readFileSync(file, 'utf8').matchAll(/- id: (\S+)\s+name: '([^']+)'/g)].map(match => ({ id: match[1]!, name: match[2]! }))
     const rows = rowsOf(join(root, 'cordis.patch.yml'))
-    expect(rows.map(r => r.name)).toEqual(['@klarkxy/dsh-dot'])
+    expect(rows).toEqual([{ id: 'deep-view', name: '@klarkxy/dsh-deep-view' }, { id: 'dot', name: '@klarkxy/dsh-dot' }])
+    expect(rows[0]).toEqual(rowsOf(join(root, '..', 'dsh-deep-view', 'cordis.patch.yml'))[0])
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+    expect(pkg.dependencies['@klarkxy/dsh-deep-view']).toBe('workspace:*')
   })
 
   it('injects a settings-snapshot section after the frozen blocks', () => {
-    const settings = { current: { ...DEFAULT_SETTINGS, approvals: 'human' as const, scope: 'tracked' as const } }
+    const settings: { current: DotSettings } = { current: { ...DEFAULT_SETTINGS, approvals: 'human' as const, scope: 'tracked' as const } }
     const snap = load(settings).sections.find(s => s.name === 'dsh-dot:settings-snapshot')
     expect(snap).toBeDefined()
     expect(snap!.order).toBe(5)

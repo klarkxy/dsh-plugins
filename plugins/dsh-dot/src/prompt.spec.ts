@@ -29,4 +29,13 @@ describe('dot approval instructions', () => {
     expect(DOT_INSTRUCTIONS).toContain('taskPermission is independent')
     expect(DOT_INSTRUCTIONS).toContain('approval routing is not a sandbox or a guarantee')
   })
+
+  it('closes every user-facing reply with one show_view card and keeps the background silent', () => {
+    expect(DOT_INSTRUCTIONS).toContain('Every reply to the human ends with one show_view card')
+    expect(DOT_INSTRUCTIONS).toContain('Calling it ends the turn at once')
+    expect(DOT_INSTRUCTIONS).toContain('every ViewNode needs a "type" field')
+    expect(DOT_INSTRUCTIONS).toContain('correct it and call it again in the same turn')
+    expect(DOT_INSTRUCTIONS).toContain('A background wake-up with nothing the human must see')
+    expect(DOT_INSTRUCTIONS).toContain('end that turn silently with no message')
+  })
 })

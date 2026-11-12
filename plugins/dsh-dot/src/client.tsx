@@ -5,6 +5,8 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
+import { createDotCards } from './card-client.tsx'
+export { createDotCards } from './card-client.tsx'
 import { useMemo, useSyncExternalStore } from 'react'
 import { BOARD_ROOT, boardCss } from './board.tsx'
 import { CHAT_ROOT, ChatPanel, chatCss, type CardComponent, type ChatApi } from './chat-panel.tsx'
@@ -19,8 +21,6 @@ export const name = 'dsh-dot-client'
 export const inject = ['slots', 'locale', 'uiWorkspace', 'connection', 'remote', 'remote.session'] as const
 
 const PANEL_ID = 'dsh-dot'
-/** deep-view's client service; optional. */
-const CARDS_SERVICE = 'dshDeepView'
 
 interface LocaleService {
   getSnapshot(): { active: string }
@@ -78,12 +78,10 @@ export function apply(ctx: Context): void {
     },
   }
   const openSession = (sessionId: string) => { void client.uiWorkspace?.openSession?.(sessionId) }
-  const cards = (): CardComponent | undefined => {
-    try {
-      const service = (client as unknown as { get(name: string): unknown }).get(CARDS_SERVICE) as { Card?: CardComponent } | undefined
-      return service?.Card
-    } catch { return undefined }
-  }
+  // Reuse the renderer, but keep every pending/reply request on dot's durable
+  // asynchronous channel. The adapter runs once, so feed updates do not remount inputs.
+  const ownCards = createDotCards(call, client.locale)
+  const cards = (): CardComponent => ownCards.Card
   const localeOf = (): CopyLocale => copyLocale(client.locale?.getSnapshot().active)
 
   client.effect(() => {

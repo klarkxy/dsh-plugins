@@ -4,6 +4,9 @@
     "description": "An always-on coordinator: talk to Dorothy in her own panel, and she opens workspaces, starts sessions, follows their progress, settles approvals and questions for you, and reports back."
   },
   "panel": {
+    "cardPreparing": "Preparing card…",
+    "cardExpired": "Expired",
+    "cardsHint": "You can still answer expired cards; replies reach the current conversation.",
     "personaTitle": "Persona & agreements",
     "agreements": "Agreements",
     "agreementsHint": "The rules you set, kept in your own words. They win over her cognition.",

@@ -85,6 +85,19 @@ describe('ChatFeed', () => {
     expect(items[0]!.key).not.toBe(items[2]!.key)
   })
 
+  it('exposes show_view preparation before tool arguments commit and clears on result', () => {
+    const { feed } = feedWith([])
+    feed.attach('dot')
+    feed.snapshot()
+    feed.onStream('dot', { type: 'chunk', chunk: { type: 'tool-call-start', id: 'card', name: 'show_view' } })
+    expect(feed.snapshot()?.preparingCard).toBe(true)
+    feed.onStream('dot', { type: 'chunk', chunk: { type: 'tool-call-delta', id: 'card', text: '{' } })
+    expect(feed.snapshot()?.preparingCard).toBe(true)
+    feed.onEvent('dot', { seq: 1, type: 'tool/result', data: { message: { toolCallId: 'card' } } })
+    expect(feed.snapshot()?.preparingCard).toBe(false)
+    feed.dispose()
+  })
+
   it('a wait with a stale revision returns at once', async () => {
     const { feed } = feedWith([])
     feed.attach('dot')

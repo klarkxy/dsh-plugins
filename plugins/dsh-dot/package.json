@@ -72,6 +72,7 @@
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-dot/src"
   },
   "dependencies": {
+    "@klarkxy/dsh-deep-view": "workspace:*",
     "@klarkxy/dsh-plugin-kit": "workspace:*",
     "zod": "^4.1.5"
   },

@@ -47,6 +47,20 @@ describe('historyRows', () => {
     ])
   })
 
+  it('reads a valid show_view card as dot speech and leaves a failed card out', () => {
+    const meta = { owner: 'dsh-deep-view', title: 'Pick target', view: { type: 'options', id: 'o', options: [{ label: 'A' }, { label: 'B' }] }, interactive: true, awaitReply: true, dotCard: { number: 4 } }
+    const log: RawEvent[] = [
+      human('pick one', 1),
+      { type: 'tool/call', seq: 2, time: 2000, data: { callId: 'c1', name: 'show_view', arguments: '{"title":"Pick target"}' } },
+      { type: 'tool/result', seq: 3, time: 3000, data: { message: { toolCallId: 'c1', content: [{ type: 'text', text: 'shown' }] }, meta } },
+      { type: 'tool/call', seq: 4, time: 4000, data: { callId: 'c2', name: 'show_view', arguments: '{}' } },
+      { type: 'tool/result', seq: 5, time: 5000, data: { message: { toolCallId: 'c2', content: [{ type: 'text', text: 'invalid' }] }, meta: null } },
+    ]
+    expect(historyRows(log).map(row => [row.seq, row.role])).toEqual([[1, 'human'], [3, 'dot']])
+    expect(historyRows(log)[1]!.text).toBe('[#4] Pick target — options: A/B')
+    expect(historyRows(log, true).map(row => [row.seq, row.role])).toEqual([[1, 'human'], [3, 'dot']])
+  })
+
   it('numbers events by their place in the log when the log carries no seq', () => {
     const rows = historyRows([{ type: 'session/meta' }, { type: 'user/message', data: { content: 'hello', source: { kind: 'user' } } }])
     expect(rows).toEqual([{ seq: 1, at: 0, role: 'human', text: 'hello' }])

@@ -3,6 +3,7 @@ import { JSDOM } from 'jsdom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, type ChatItem, type ChatSnapshot } from './contracts.ts'
 import { ChatPanel, type ChatApi } from './chat-panel.tsx'
+import { createDotCards } from './client.tsx'
 
 const dom = new JSDOM('<div id="root"></div>', { url: 'https://local.test' })
 vi.stubGlobal('window', dom.window)
@@ -55,6 +56,37 @@ function makeApi(snapshot: ChatSnapshot): ChatApi {
 }
 
 describe('ChatPanel activity and notice cards', () => {
+  it('keeps an expired numbered card answerable through dot RPC and hides duplicate prose', async () => {
+    const view = { type: 'confirm', id: 'ok' }
+    const presentation = { owner: 'dsh-deep-view', title: 'Deploy', view, viewId: 'dot-card-4', interactive: true, awaitReply: true, dotCard: { number: 4, expired: true } }
+    const call = vi.fn(async (endpoint: string) => endpoint === 'card.pending'
+      ? { id: 'dot-card-4', sessionId: 'old', callId: 'call4', title: 'Deploy', view } : true)
+    const { Card } = createDotCards(call)
+    const snapshot: ChatSnapshot = { sessionId: 'current', running: false, streaming: '', rev: 1, itemsRev: 1, items: [
+      { kind: 'user', key: 'u', text: 'deploy', at: 1 },
+      { kind: 'bot', key: 'b', text: 'duplicate prose', at: 2 },
+      { kind: 'view', key: 'call4', presentation, at: 3 },
+    ] }
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => { root.render(<ChatPanel locale="en" api={makeApi(snapshot)} Card={Card} onOpenSession={() => {}} />) })
+    expect(document.body.textContent).toContain('#4 · Expired')
+    expect(document.body.textContent).not.toContain('duplicate prose')
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('.dvui-root button')].find(button => button.textContent === 'Confirm')!
+    expect(confirm).toBeDefined()
+    expect(confirm.disabled).toBe(false)
+    await act(async () => { confirm.click() })
+    expect(call).toHaveBeenCalledWith('card.answer', expect.objectContaining({ viewId: 'dot-card-4', action: 'ok', values: { confirmed: true } }))
+    await act(async () => { root.unmount() })
+  })
+
+  it('shows card preparation instead of streamed ordinary prose', async () => {
+    const snapshot: ChatSnapshot = { sessionId: 'dot', running: true, streaming: 'hidden streamed prose', preparingCard: true, rev: 1, itemsRev: 1, items: [{ kind: 'user', key: 'u', text: 'hi', at: 1 }] }
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => { root.render(<ChatPanel locale="zh" api={makeApi(snapshot)} onOpenSession={() => {}} />) })
+    expect(document.body.textContent).toContain('正在准备卡片…')
+    expect(document.body.textContent).not.toContain('hidden streamed prose')
+    await act(async () => { root.unmount() })
+  })
   it('silences background/already-handled requests while showing structured cards for requests needing the human', async () => {
     const opened: string[] = []
     const snapshot: ChatSnapshot = {
@@ -101,7 +133,7 @@ describe('ChatPanel activity and notice cards', () => {
     // Escalated request (ap-25) that asks the human renders cleanly.
     expect(document.body.textContent).toContain('收到会话动态')
     expect(document.body.textContent).toContain('审批 · pwsh · dsh-plugins')
-    expect(document.body.textContent).toContain('这个操作会直接发布包到 npm，需要你确认是否放行？')
+    expect(document.body.textContent).not.toContain('这个操作会直接发布包到 npm，需要你确认是否放行？')
 
     // Expand notice row: shows structured approval card, hides English routing prompt & raw JSON keys.
     const rowButtons = [...document.querySelectorAll<HTMLButtonElement>('.dsh-stub-disclosure__row')]

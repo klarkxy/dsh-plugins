@@ -33,7 +33,7 @@ import { dotDomain } from './storage.ts'
 import { DotStore, type DotDomainHandle } from './store.ts'
 
 export const name = PLUGIN_NAME
-export const inject = ['storageDomain', 'sessionController', 'workspaceRegistry', 'sessionQuery', 'agentPresets', 'agents', 'agentDefaultModel', 'webServer', 'connection'] as const
+export const inject = ['storageDomain', 'sessions', 'sessionController', 'workspaceRegistry', 'sessionQuery', 'agentPresets', 'agents', 'agentDefaultModel', 'webServer', 'connection'] as const
 export { DotService } from './service.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -88,9 +88,9 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     log,
     approvalGraceMs: Number.isFinite(config.approvalGraceMs) ? Math.max(0, Math.min(60_000, config.approvalGraceMs!)) : APPROVAL_GRACE_MS,
   })
-  const feed = new ChatFeed(host)
+  const feed = new ChatFeed(host, store)
   // The chat follows dot into every new segment and keeps the earlier ones above it.
-  const follow = () => { if (store.dotSessionId) feed.attach(store.dotSessionId, store.pastSegments) }
+  const follow = () => { if (store.dotSessionId) feed.attach(store.dotSessionId, store.pastSegments); feed.cardsChanged() }
   follow()
   const unfollow = store.onChange(follow)
   const ensureDot = async () => {
@@ -282,6 +282,16 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
         case 'say': {
           const text = field(payload, 'text')
           await service.say(typeof text === 'string' ? text.slice(0, 20_000) : '')
+          return { ok: true, value: true }
+        }
+        case 'card.pending': {
+          const callId = field(payload, 'callId')
+          return { ok: true, value: typeof callId === 'string' ? service.cards.pending(callId) : null }
+        }
+        case 'card.answer': {
+          const id = field(payload, 'viewId')
+          const action = field(payload, 'action')
+          await service.answerCard(typeof id === 'string' ? id : '', typeof action === 'string' ? action : '', field(payload, 'values'))
           return { ok: true, value: true }
         }
         case 'stop': { await service.stop(); return { ok: true, value: true } }

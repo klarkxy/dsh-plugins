@@ -37,7 +37,7 @@ describe('chatItems', () => {
   it('keeps show_view cards with their presentation and the answers given to them', () => {
     const items = chatItems([
       ev(1, 'tool/call', { callId: 'v1', name: 'show_view', arguments: JSON.stringify({ title: 'Pick', view: { type: 'confirm', id: 'ok' } }) }),
-      ev(2, 'tool/result', { message: { toolCallId: 'v1', content: [] }, meta: { owner: 'dsh-deep-view', viewId: 'view-1', awaitReply: true } }),
+      ev(2, 'tool/result', { message: { toolCallId: 'v1', content: [] }, meta: { owner: 'dsh-deep-view', viewId: 'view-1', title: 'Pick', view: { type: 'confirm', id: 'ok' }, interactive: true, awaitReply: true } }),
       ev(3, 'user/message', { content: [{ type: 'text', text: 'Confirmed' }], source: { kind: 'user', deepView: { owner: 'dsh-deep-view', version: 1, answer: { id: 'view-1', action: 'confirm', values: {} } } } }),
     ])
     expect(items[0]).toMatchObject({ kind: 'view', key: 'v1', title: 'Pick', presentation: { viewId: 'view-1' } })

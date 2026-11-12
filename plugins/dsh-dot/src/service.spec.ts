@@ -138,6 +138,49 @@ function setup(settings?: Partial<DotSettings>) {
   return { ...fake, ...clock, store, service, notes, advance: (ms: number) => { at += ms } }
 }
 
+describe('DotService asynchronous card replies', () => {
+  const shown = { title: 'Choose target', interactive: true, view: { type: 'options' as const, id: 'target', options: [{ label: 'staging' }] } }
+  it('merges held updates into a late answer in the active segment', async () => {
+    const h = setup()
+    const first = await h.service.ensureDot()
+    const card = await h.service.presentCard(shown, 'card1')
+    await h.service.newSegment()
+    const active = h.store.dotSessionId!
+    expect(active).not.toBe(first)
+    await h.service.watch('watched', 'keep an eye')
+    await h.service.onTurnEnd('watched')
+    await h.service.answerCard(card.viewId!, 'target', { selected: ['staging'] })
+    expect(h.said.at(-1)?.text).toContain('[补答已过期卡片 #1「Choose target」]')
+    expect(h.said.at(-1)?.carriedNotices).toContain('[dot notice]')
+    expect(h.calls.at(-1)).toContain(`say ${active}`)
+    expect(h.store.cards[0]?.answer?.values).toEqual({ selected: ['staging'] })
+    expect(h.store.lastReplyAt).toBe(1000)
+    expect(h.store.lastConversationAt).toBe(1000)
+  })
+  it('never requeues delivered notices when later bookkeeping fails', async () => {
+    const h = setup()
+    await h.service.ensureDot()
+    await h.service.watch('watched', 'keep an eye')
+    await h.service.onTurnEnd('watched')
+    h.store.noteConversation = async () => { throw new Error('disk offline') }
+    await expect(h.service.say('first')).resolves.toBeUndefined()
+    expect(h.said[0]?.carriedNotices).toContain('[dot notice]')
+    await expect(h.service.say('second')).resolves.toBeUndefined()
+    expect(h.said[1]?.carriedNotices).toBeUndefined()
+  })
+  it('counts a card-only reply when deciding whether persona changes need a segment', async () => {
+    const h = setup()
+    const first = await h.service.ensureDot()
+    const card = await h.service.presentCard(shown, 'card1')
+    h.events.set(first, [{ type: 'tool/result', time: 1100, data: { message: { toolCallId: 'card1' }, meta: card } }])
+    await h.store.setSettings({ ...h.store.settings, persona: 'Changed persona' })
+    await h.service.say('next')
+    expect(h.store.dotSessionId).not.toBe(first)
+    expect(h.store.cards[0]?.expired).toBe(true)
+    expect(h.store.segment?.handoff?.rows.some(row => row.role === 'dot' && row.text.includes('Choose target'))).toBe(true)
+  })
+})
+
 describe('DotService.ensureDot', () => {
   it('creates dot once under its own preset and resumes it afterwards', async () => {
     const h = setup()
@@ -271,16 +314,15 @@ describe('DotService segments', () => {
     const second = h.store.dotSessionId!
     expect(second).not.toBe(dot)
     expect(h.calls).toContain(`handoff-view ${dot} ${second}`)
-    expect(h.store.segment?.openCard).toBe('Choose target')
-    expect(h.store.segment?.opening).toContain('An interactive show_view card ("Choose target") from the earlier segment is still open')
-    expect(h.store.segment?.opening).toContain(`inspect ${dot} with dot_search_history and dot_read_history`)
+    expect(h.store.segment?.openCard).toBeUndefined()
+    expect(h.store.segment?.opening).not.toContain('is still open')
 
     // A manual rollover before the user replies keeps forwarding the same open card.
     h.setContext({ live: true, compactions: 0 })
     const third = await h.service.newSegment()
     expect(third).not.toBe(second)
     expect(h.calls).toContain(`handoff-view ${second} ${third}`)
-    expect(h.store.segment?.openCard).toBe('Choose target')
+    expect(h.store.segment?.openCard).toBeUndefined()
   })
 
   it('accumulates token usage across segment rollovers and supports clearing mid-segment', async () => {

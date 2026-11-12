@@ -380,7 +380,9 @@ export interface TrajectoryView {
 
 // ---- dot's own chat, drawn by the plugin -------------------------------
 
-export type ChatItem =
+export type ChatItem = ChatItemRow & { readonly turn?: number; readonly trigger?: 'human' | 'background' }
+
+type ChatItemRow =
   | { readonly kind: 'user'; readonly key: string; readonly text: string; readonly at: number }
   /** The human's answer to one of dot's cards. */
   | { readonly kind: 'answer'; readonly key: string; readonly text: string; readonly at: number }
@@ -399,6 +401,8 @@ export interface ChatSnapshot {
   readonly running: boolean
   /** Reply text streaming right now, before its message commits. */
   readonly streaming: string
+  /** A show_view call is streaming or awaiting its committed result. */
+  readonly preparingCard?: boolean
   /** Changes on every update; the client long-polls with the last one it saw. */
   readonly rev: number
   /** Changes when the item list changes; items are sent only when it moved past the client's. */

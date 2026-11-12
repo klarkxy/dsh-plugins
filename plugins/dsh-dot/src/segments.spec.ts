@@ -66,14 +66,15 @@ describe('openingText', () => {
     expect(text).not.toContain('Task ledger')
   })
 
-  it('records an open card carried from the previous segment with history lookup guidance', () => {
+  it('treats legacy open cards as asynchronous rather than holding the old segment open', () => {
     const text = openingText({
       reason: 'context-full',
       previous: 'dot-prev',
       openCard: 'Deploy target',
       at: 0,
     })
-    expect(text).toContain('An interactive show_view card ("Deploy target") from the earlier segment is still open')
-    expect(text).toContain('inspect dot-prev with dot_search_history and dot_read_history')
+    expect(text).not.toContain('is still open')
+    expect(text).toContain('Earlier unanswered cards may be answered late')
+    expect(text).toContain('dot_search_history')
   })
 })

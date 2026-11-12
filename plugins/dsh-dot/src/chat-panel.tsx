@@ -258,7 +258,8 @@ export function ChatPanel({ locale, api, Card, onOpenSession }: ChatPanelProps) 
   }, [api])
 
   const hasStreaming = Boolean(streaming.trim())
-  const filtered = useMemo(() => filterVisibleChat(state.items, { streaming: hasStreaming }), [state.items, hasStreaming])
+  const preparingCard = snapshot?.preparingCard === true
+  const filtered = useMemo(() => filterVisibleChat(state.items, { streaming: hasStreaming, running }), [state.items, hasStreaming, running])
   const rows = useMemo(() => rowsOf(filtered.items), [filtered.items])
   const scroller = useRef<HTMLDivElement>(null)
   const stuck = useRef(true)
@@ -279,7 +280,7 @@ export function ChatPanel({ locale, api, Card, onOpenSession }: ChatPanelProps) 
     return map
   }, [board?.tasks])
   const lastTool = rows.at(-1)?.kind === 'tools'
-  const showThinking = running && !streaming && !lastTool && !filtered.silentTail
+  const showThinking = running && !preparingCard && !lastTool && !filtered.silentTail
 
   return (
     <div className={CHAT_ROOT}>
@@ -311,7 +312,7 @@ export function ChatPanel({ locale, api, Card, onOpenSession }: ChatPanelProps) 
           ) : null}
           {rows.map(row => <Fragment key={row.kind === 'tools' ? 'tools:' + row.key : row.item.key}>{renderRow(row, { locale, labels, Card, sessionId: snapshot?.sessionId ?? '', answers: state.answers, hiddenRequestIds: filtered.hiddenRequestIds, tasks: tasksBySession, onOpenSession })}</Fragment>)}
           {pendingEchoes.map(echo => <div key={'echo:' + echo.at} className="dsh-dot-user dsh-dot-echo"><UserMessageBubble>{echo.text}</UserMessageBubble></div>)}
-          {streaming ? <BotLine lead={!rows.length || rows.at(-1)?.kind === 'item' && (rows.at(-1) as { item: ChatItem }).item.kind !== 'bot'}><MarkdownText text={streaming} streaming labels={labels} variant="body" /></BotLine> : null}
+          {preparingCard ? <BotLine lead={!lastTool}><span role="status"><TextShimmer active>{t(locale, 'cardPreparing')}</TextShimmer></span></BotLine> : null}
           {showThinking ? <BotLine lead={!lastTool}><TextShimmer active>{t(locale, 'thinking')}</TextShimmer></BotLine> : null}
         </div>
       </div>
@@ -367,11 +368,15 @@ function renderRow(row: Row, context: RenderContext): ReactNode {
       const Card = context.Card
       const viewId = typeof item.presentation?.viewId === 'string' ? item.presentation.viewId : undefined
       const answer = viewId ? context.answers[viewId] : undefined
+      const badge = item.presentation?.dotCard as { number?: number; expired?: boolean } | undefined
       return (
         <BotLine lead={row.lead}>
+          <div className="dsh-dot-view" data-expired={badge?.expired && !answer ? '' : undefined}>
+          {badge?.number ? <div className="dsh-dot-view-number" title={badge.expired && !answer ? t(context.locale, 'cardsHint') : undefined}><Tag tone="quiet">#{badge.number}{badge.expired && !answer ? ` · ${t(context.locale, 'cardExpired')}` : ''}</Tag></div> : null}
           {Card
             ? <Card sessionId={context.sessionId} callId={item.key} {...item.presentation ? { presentation: item.presentation } : {}} title={item.title} view={item.view} {...item.failed ? { failed: true } : {}} {...answer && viewId ? { answer: { id: viewId, ...answer } } : {}} />
             : <span className="dsh-dot-muted">{t(context.locale, 'cardsMissing')}</span>}
+          </div>
         </BotLine>
       )
     }
@@ -830,6 +835,8 @@ export const chatCss = settingsCss + `
 .dsh-dot-chat .dsh-dot-bot { display: flex; gap: 10px; align-items: flex-start; }
 .dsh-dot-chat .dsh-dot-gutter { flex: 0 0 28px; width: 28px; min-height: 1px; }
 .dsh-dot-chat .dsh-dot-body { flex: 1; min-width: 0; padding-top: 3px; }
+.dsh-dot-chat .dsh-dot-view-number { margin-bottom: 4px; }
+.dsh-dot-chat .dsh-dot-view[data-expired] { opacity: 0.7; }
 .dsh-dot-chat .dsh-dot-activity { color: var(--dsw-alias-label-tertiary); }
 .dsh-dot-chat .dsh-dot-row-content { flex: 1 1 auto; min-width: 0; }
 .dsh-dot-chat .dsh-dot-row-layout { min-width: 0; }

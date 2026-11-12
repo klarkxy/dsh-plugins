@@ -69,11 +69,23 @@ function routineSettledIdOf(item: ToolItem): string | undefined {
 function groupBlocks(items: readonly ChatItem[]): ExchangeBlock[] {
   const blocks: ExchangeBlock[] = []
   let current: ExchangeBlock | undefined
+  let currentTurn: number | undefined
 
   for (const item of items) {
     if (item.kind === 'segment') {
       blocks.push({ segment: item, inputs: [], replies: [] })
       current = undefined
+      currentTurn = undefined
+      continue
+    }
+    if (item.turn !== undefined) {
+      if (!current || currentTurn !== item.turn) {
+        current = { inputs: [], replies: [] }
+        currentTurn = item.turn
+        blocks.push(current)
+      }
+      if (item.kind === 'user' || item.kind === 'answer' || item.kind === 'notice') current.inputs.push(item)
+      else current.replies.push(item)
       continue
     }
     if (item.kind === 'user' || item.kind === 'answer' || item.kind === 'notice') {
@@ -102,7 +114,7 @@ function groupBlocks(items: readonly ChatItem[]): ExchangeBlock[] {
 
 export function filterVisibleChat(
   items: readonly ChatItem[],
-  options?: { readonly streaming?: boolean },
+  options?: { readonly streaming?: boolean; readonly running?: boolean },
 ): FilteredChat {
   const blocks = groupBlocks(items)
   const out: ChatItem[] = []
@@ -118,15 +130,17 @@ export function filterVisibleChat(
     const streamingHere = isLast && options?.streaming === true
     const tools = block.replies.filter((reply): reply is ToolItem => reply.kind === 'tool')
     const bots = block.replies.filter((reply): reply is Extract<ChatItem, { kind: 'bot' }> => reply.kind === 'bot')
-    const hasVisibleView = block.replies.some(reply => reply.kind === 'view' && !reply.failed)
+    const hasVisibleView = block.replies.some(reply => reply.kind === 'view' && !reply.failed && reply.presentation !== undefined)
     const hasTurnError = block.replies.some(reply => reply.kind === 'error')
     const hasSideEffectTool = tools.some(tool => tool.name !== TOOL.answerPending && !READ_ONLY_TOOLS.has(tool.name))
-    const hasHumanInput = block.inputs.some(input => input.kind === 'user' || input.kind === 'answer')
+    const hasHumanInput = block.inputs.some(input => input.kind === 'user' || input.kind === 'answer') || block.replies.some(reply => reply.trigger === 'human')
+    if (isLast && !hasHumanInput && !hasVisibleView) silentTail = true
     const notices = block.inputs.filter((input): input is Extract<ChatItem, { kind: 'notice' }> => input.kind === 'notice')
 
     // Leading window tail from a race-lost request turn whose notice scrolled past the window.
     if (
       block.inputs.length === 0
+      && !hasHumanInput
       && !hasVisibleView
       && !hasTurnError
       && !hasSideEffectTool
@@ -202,6 +216,8 @@ export function filterVisibleChat(
       out.push(input)
     }
     for (const reply of block.replies) {
+      if (reply.kind === 'bot' && (hasVisibleView || !hasHumanInput || isLast && options?.running === true)) continue
+      if (reply.kind === 'view' && (reply.failed || !reply.presentation)) continue
       if (reply.kind === 'tool' && droppedTools.has(reply)) continue
       out.push(reply)
     }

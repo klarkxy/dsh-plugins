@@ -10,6 +10,9 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { checkShownView } from '../../dsh-deep-view/src/core/index.js'
+import type { ShownView } from '../../dsh-deep-view/src/contracts.ts'
+import { cardPresentation, type DotCardMeta } from './cards.ts'
 import { SERVICE_NAME, TOOL } from './contracts.ts'
 import { personaSection } from './persona.ts'
 import { settingsSnapshotBlock, type SelfSettings } from './self-settings.ts'
@@ -34,6 +37,14 @@ interface AssemblyContext { readonly agent?: { readonly session?: { readonly id?
 
 /** defineTool's input, kept opaque: its generic inference is too deep for these JSON schemas. */
 type ToolInput = Record<string, unknown>
+
+/**
+ * The card-writing part of the root dot service (implemented in service.ts).
+ * It registers a valid card and returns the presentation meta to persist.
+ */
+interface CardService {
+  presentCard(shown: ShownView, callId: string): Promise<DotCardMeta>
+}
 
 type ToolHost = Context
   & { tools: { register(definition: unknown): () => void } }
@@ -94,6 +105,72 @@ export function apply(ctx: Context): void {
     const made = (defineTool as unknown as (input: ToolInput) => Record<string, unknown>)(definition)
     ctx.effect(() => host.tools.register(readOnly ? { ...made, hostEffect: 'read-only' as const } : made))
   }
+
+  // ── show_view (dot scope, single-step) ────────────────────────────────────
+  // Same name as dsh-deep-view's global tool. A preset row registers into the
+  // agent scope, and a scoped registration shadows the global one, so only dot
+  // gets this variant: a valid card concludes the turn in the same request.
+  // Ordinary sessions keep deep-view's two-step show_view untouched.
+  tool({
+    name: 'show_view',
+    description: [
+      'Show the human one card and end this turn. This is how every reply to the human goes out: put your reply text inside the card (a text node is enough), then call show_view once as the very last step.',
+      'Calling it ends the turn at once — finish every other tool call first and have its result in hand. If it reports an invalid view, fix the view and call show_view again in the same turn.',
+      'Write the view as JSON text in view. Every ViewNode must carry a "type" field; nodes nest under stack|row (children, optional let).',
+      'Display nodes: text, metric{label,value}, table{columns,rows}, chart{kind,categories,series}, progress{percent|value+max}, callout{text}, sources{items}. Inputs: slider, number, choice, toggle.',
+      'To ask the human to choose, confirm or fill something in, use an options, confirm or form node and set await_reply true; a display-only card must not set it. A background wake-up with nothing for the human must not call this tool: end silently with no message.',
+    ].join(' '),
+    parameters: {
+      title: { type: 'string', description: 'Short heading above the card.' },
+      view: { type: 'string', required: true, description: 'One ViewNode as JSON text. Every node needs a "type"; nodes nest under stack|row children.' },
+      await_reply: { type: 'boolean', description: 'true only for a card with answer controls (options/confirm/form); omit or false for a display card.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: {
+          status: { type: 'string' },
+          summary: { type: 'string' },
+          presentation: { type: 'object', additionalProperties: true },
+        },
+        additionalProperties: true,
+      },
+      // The model sees only "shown" for a card; an invalid view returns its error
+      // so the model can correct it in the same turn (the turn is not concluded).
+      render: (_args: unknown, value: unknown) => {
+        const status = (value as { status?: unknown } | null)?.status
+        return [{ type: 'text' as const, text: status === 'shown' || status === 'pending' ? 'shown' : String((value as { summary?: unknown } | null)?.summary ?? 'invalid view') }]
+      },
+      presentationMeta: (_args: unknown, value: unknown) => cardPresentation(value) ?? null,
+    },
+    isConcurrencySafe: () => false,
+    execute: async (args: unknown, exec: { callId?: string; concludeTurn(): void }) => {
+      const input = (args !== null && typeof args === 'object' ? args : {}) as Record<string, unknown>
+      const invalid = (summary: string) => ({ status: 'invalid' as const, summary })
+      let view = input.view
+      if (typeof view === 'string') {
+        try { view = JSON.parse(view) } catch { return invalid('view: expected JSON text describing one ViewNode') }
+      }
+      if (view === undefined || view === null) return invalid('view: expected one ViewNode')
+      const checked = checkShownView(input.title, view)
+      if ('error' in checked) return invalid(checked.error)
+      if (input.await_reply !== undefined && typeof input.await_reply !== 'boolean') return invalid('await_reply: expected true or false')
+      const awaitReply = input.await_reply ?? checked.interactive
+      if (awaitReply !== checked.interactive) {
+        return invalid(checked.interactive
+          ? 'This card has answer controls; set await_reply true or omit it.'
+          : 'A display-only card cannot wait for an answer; omit await_reply or set it false.')
+      }
+      try {
+        const presentation = await (dot() as unknown as CardService).presentCard(checked, exec.callId ?? '')
+        exec.concludeTurn()
+        return { status: 'shown' as const, summary: 'shown', presentation }
+      } catch (error) {
+        return invalid(`the card could not be shown: ${messageOf(error)}`)
+      }
+    },
+    presentCall: () => ({ card: 'generic', title: 'Show view', kind: 'other' }),
+  }, true)
 
   // ── dot_overview ──────────────────────────────────────────────────────────
   tool(defineToolInput({

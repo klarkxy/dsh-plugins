@@ -4,6 +4,9 @@
     "description": "常驻的调度管家桃乐丝：在她自己的面板里和她对话，她替你开工作区、派任务、跟进度，替你处理审批和提问，再向你汇报。"
   },
   "panel": {
+    "cardPreparing": "正在准备卡片…",
+    "cardExpired": "已过期",
+    "cardsHint": "过期卡片仍可补答，答复会送达当前对话。",
     "personaTitle": "人设与约定",
     "agreements": "约定",
     "agreementsHint": "你说过的规矩，原话记下。与认知冲突时，一律以约定为准。",

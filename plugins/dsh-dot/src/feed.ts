@@ -41,7 +41,11 @@ export class ChatFeed {
   private historyItems: readonly ChatItem[] = []
   private historyAnswers: Answers = {}
 
-  constructor(private readonly host: DotHost) {}
+  private preparingCard = false
+  private readonly cardCalls = new Set<string>()
+  constructor(private readonly host: DotHost, private readonly cardStore?: import('./store.ts').DotStore) {}
+
+  cardsChanged(): void { this.bump(true) }
 
   /**
    * Point the feed at dot's current session. A new session starts a fresh
@@ -55,6 +59,8 @@ export class ChatFeed {
     this.fold = undefined
     this.lastSeq = -1
     this.streaming = ''
+    this.preparingCard = false
+    this.cardCalls.clear()
     this.past = past.slice(-HISTORY_SEGMENTS)
     this.rebuildHistory()
     this.bump(true)
@@ -71,17 +77,40 @@ export class ChatFeed {
       this.lastSeq = event.seq
     }
     if (event.type === 'assistant/message') this.streaming = ''
+    const data = event.data as { name?: string; callId?: string; message?: { toolCallId?: string } } | undefined
+    if (event.type === 'tool/call' && data?.name === 'show_view') {
+      this.cardCalls.add(data.callId ?? 'show_view')
+      this.preparingCard = true
+    }
+    if (event.type === 'tool/result' && data?.message?.toolCallId && this.cardCalls.delete(data.message.toolCallId)) {
+      this.preparingCard = this.cardCalls.size > 0
+    }
+    if (event.type === 'turn/end') { this.preparingCard = false; this.cardCalls.clear() }
     if (this.fold.add(event)) this.bump(true)
   }
 
   onStatus(sessionId: string): void {
-    if (this.isDot(sessionId)) this.bump(false)
+    if (!this.isDot(sessionId)) return
+    if (!this.host.isRunning(sessionId)) { this.preparingCard = false; this.cardCalls.clear() }
+    this.bump(false)
   }
 
-  onStream(sessionId: string, frame: { type?: string; chunk?: { type?: string; text?: string } }): void {
+  onStream(sessionId: string, frame: { type?: string; chunk?: { type?: string; text?: string; name?: string; id?: string; callId?: string } }): void {
     if (!this.isDot(sessionId)) return
+    const chunk = frame.chunk
+    // 0.2.2-rc.1 sends a name-bearing delta; accept start frames from older adapters too.
+    if (frame.type === 'chunk' && (chunk?.type === 'tool-call-start' || chunk?.type === 'tool-call-delta') && chunk.name === 'show_view') {
+      this.cardCalls.add(chunk.id ?? chunk.callId ?? 'show_view')
+      this.preparingCard = true
+      this.bump(false)
+    }
+    if (frame.type === 'chunk' && chunk?.type === 'tool-call-delta' && this.cardCalls.has(chunk.id ?? chunk.callId ?? 'show_view')) {
+      this.preparingCard = true
+      this.streamTimer ??= setTimeout(() => { this.streamTimer = undefined; this.bump(false) }, STREAM_PUSH_MS)
+    }
     if (frame.type === 'start' || frame.type === 'end') {
       this.streaming = ''
+      if (frame.type === 'start') { this.cardCalls.clear(); this.preparingCard = false }
       this.bump(false)
       return
     }
@@ -103,9 +132,17 @@ export class ChatFeed {
       }
       this.fold = fold
     }
-    const base = { sessionId, running: this.host.isRunning(sessionId), streaming: this.streaming, rev: this.rev, itemsRev: this.itemsRev }
+    const base = { sessionId, running: this.host.isRunning(sessionId), streaming: this.streaming, preparingCard: this.preparingCard, rev: this.rev, itemsRev: this.itemsRev }
     if (knownItemsRev === this.itemsRev) return base
-    return { ...base, items: [...this.historyItems, ...scoped(sessionId, this.fold.items)], answers: { ...this.historyAnswers, ...this.fold.answers } }
+    const cards = new Map(this.cardStore?.cards.map(card => [card.id, card]))
+    const answers = { ...this.historyAnswers, ...this.fold.answers }
+    for (const card of cards.values()) if (card.answer) answers[card.id] = card.answer
+    const items = [...this.historyItems, ...scoped(sessionId, this.fold.items)].map(item => {
+      if (item.kind !== 'view' || typeof item.presentation?.viewId !== 'string') return item
+      const card = cards.get(item.presentation.viewId)
+      return card ? { ...item, presentation: { ...item.presentation, dotCard: { number: card.number, expired: card.expired } } } : item
+    })
+    return { ...base, items, answers }
   }
 
   /** Resolve once the revision moves past `rev`, the signal aborts, or `ms` passes. */

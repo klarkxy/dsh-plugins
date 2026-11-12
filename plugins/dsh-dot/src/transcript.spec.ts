@@ -34,6 +34,14 @@ describe('transcriptRows', () => {
     ])
   })
 
+  it('turns a valid show_view card into dot\'s own words and ignores a failed card', () => {
+    const meta = { owner: 'dsh-deep-view', title: 'Pick target', view: { type: 'options', id: 'o', options: [{ label: 'A' }, { label: 'B' }] }, interactive: true, awaitReply: true, dotCard: { number: 3 } }
+    expect(transcriptRows([
+      { seq: 1, type: 'tool/result', time: 1, data: { message: { toolCallId: 'c1' }, meta } },
+      { seq: 2, type: 'tool/result', time: 2, data: { message: { toolCallId: 'c2' }, meta: { owner: 'dsh-deep-view', status: 'invalid', title: 'Broken' } } },
+    ])).toEqual([{ role: 'dot', text: '[#3] Pick target — options: A/B', at: 1 }])
+  })
+
   it('groups rows into exchanges that start with what came in', () => {
     const rows = transcriptRows([human(1, 'a'), reply(2, 'b'), reply(3, 'c'), notice(4, 'd'), human(5, 'e'), reply(6, 'f')])
     expect(exchanges(rows).map(group => group.map(row => row.text).join(''))).toEqual(['abc', 'def'])

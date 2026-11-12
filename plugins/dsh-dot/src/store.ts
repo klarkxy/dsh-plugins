@@ -55,6 +55,28 @@ export class DotStore {
     }
   }
 
+  get cards(): readonly import('./card-state.ts').DotCardRecord[] { return this.state.cards ?? [] }
+  get cardSequence(): number { return this.cards.reduce((max, card) => Math.max(max, card.number), this.state.cardSequence ?? 0) }
+  get lastReplyAt(): number | undefined { return this.state.lastReplyAt }
+  get lastConversationAt(): number | undefined { return this.state.lastConversationAt }
+
+  addCard(card: import('./card-state.ts').DotCardRecord): Promise<void> {
+    return this.setDot({ cardSequence: card.number, cards: [...this.cards.map(row => row.answer ? row : { ...row, expired: true }), card] })
+  }
+
+  expireCards(keepId?: string): Promise<void> {
+    if (!this.cards.some(card => !card.expired && !card.answer && card.id !== keepId)) return Promise.resolve()
+    return this.setDot({ cards: this.cards.map(card => card.answer || card.id === keepId ? card : { ...card, expired: true }) })
+  }
+
+  setCardAnswer(id: string, answer: NonNullable<import('./card-state.ts').DotCardRecord['answer']>): Promise<void> {
+    return this.setDot({ cards: this.cards.map(card => card.id === id ? { ...card, answer } : card) })
+  }
+
+  noteConversation(at: number, replied = false): Promise<void> {
+    return this.setDot({ lastConversationAt: Math.max(this.lastConversationAt ?? 0, at), ...replied ? { lastReplyAt: Math.max(this.lastReplyAt ?? 0, at) } : {} })
+  }
+
   get dotSessionId(): string | undefined { return this.state.dotSessionId }
   get dotWorkspaceId(): string | undefined { return this.state.dotWorkspaceId }
 
@@ -89,6 +111,7 @@ export class DotStore {
       dotSessionId: next.sessionId,
       segment: next,
       pastSegments: past,
+      ...(moved ? { cards: this.cards.map(card => card.answer ? card : { ...card, expired: true }) } : {}),
     }
     this.changed()
     return this.write('state', STATE_KEY, this.state)
