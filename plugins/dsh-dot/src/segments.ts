@@ -1,0 +1,104 @@
+/**
+ * dot's conversation runs as a chain of session segments instead of one
+ * session that compacts in place. This file holds the records and the pure
+ * decisions: when a segment ends and what the next one opens with.
+ */
+import { TOOL, type RolloverReason } from './contracts.ts'
+import { handoffText, type Handoff } from './handoff.ts'
+import { stamp } from './transcript.ts'
+
+/** A segment left idle this long ends before the next delivery, when it is large enough to be worth it. */
+export const IDLE_ROLLOVER_MS = 2 * 60 * 60_000
+export const IDLE_MIN_TOKENS = 32_768
+/** Ended segments remembered for the chat history. */
+export const MAX_PAST_SEGMENTS = 200
+
+/** The segment dot is talking in. Its prompt inputs are frozen so every request shares one cacheable prefix. */
+export interface Segment {
+  readonly sessionId: string
+  readonly startedAt: number
+  /** Persona section as it read when the segment started. */
+  readonly persona: string
+  /** Model the segment runs on, as `provider/model@effort`. */
+  readonly model?: string
+  /** Notes block of the system prompt as it read when the segment started; absent while dot has no notes. */
+  readonly memory?: string
+  /**
+   * Notes block as this segment's conversation last accounted for it: set when dot itself changes its
+   * notes here, since it then knows the change. Notes that differ from it were edited by the human.
+   */
+  readonly memorySeen?: string
+  /** Handoff block of the system prompt; absent in the very first segment. */
+  readonly opening?: string
+  /** Title of an unanswered interactive `show_view` card carried into this segment. */
+  readonly openCard?: string
+  readonly handoff?: Handoff
+  /** Why the previous segment ended. */
+  readonly reason?: RolloverReason
+}
+
+export interface PastSegment {
+  readonly sessionId: string
+  readonly startedAt: number
+  readonly endedAt: number
+  readonly reason?: RolloverReason
+}
+
+export interface DeliveryCheck {
+  /** Whether dot has replied in this segment; an untouched segment is updated in place instead. */
+  readonly replied: boolean
+  readonly now: number
+  readonly lastReplyAt?: number
+  readonly usedTokens?: number
+  readonly persona: string
+  readonly frozenPersona: string
+  readonly model?: string
+  readonly frozenModel?: string
+  /** Notes block as it reads now, and as the segment last accounted for it. */
+  readonly notes?: string
+  readonly seenNotes?: string
+}
+
+/** Checked before every message that reaches dot. */
+export function reasonBeforeDelivery(check: DeliveryCheck): RolloverReason | undefined {
+  if (!check.replied) return undefined
+  if (check.model !== undefined && check.frozenModel !== undefined && check.model !== check.frozenModel) return 'model-switch'
+  if (check.persona !== check.frozenPersona) return 'prompt-changed'
+  // The human edited dot's notes; dot's own changes are already part of the conversation.
+  if ((check.notes ?? '') !== (check.seenNotes ?? '')) return 'prompt-changed'
+  if (check.lastReplyAt !== undefined && check.now - check.lastReplyAt >= IDLE_ROLLOVER_MS && (check.usedTokens ?? 0) >= IDLE_MIN_TOKENS) return 'idle-expired'
+  return undefined
+}
+
+/** Checked when dot's turn has ended. */
+export function reasonAfterTurn(check: { readonly usedTokens?: number; readonly rolloverAt?: number }): RolloverReason | undefined {
+  return check.usedTokens !== undefined && check.rolloverAt !== undefined && check.usedTokens >= check.rolloverAt ? 'context-full' : undefined
+}
+
+const WHY: Record<RolloverReason, string> = {
+  'context-full': 'the previous session had grown long',
+  'idle-expired': 'the previous session had been idle for a long time',
+  'model-switch': 'your model was changed',
+  'prompt-changed': 'the human changed your persona settings or your notes, and what is above is current',
+  'lost': 'the previous session could not be reopened',
+  'manual': 'the human started a new segment from the context page',
+  'dot-requested': 'you chose to start a new segment',
+}
+
+/** The handoff block a new segment keeps in its system prompt for its whole life. */
+export function openingText(input: { readonly handoff?: Handoff; readonly reason: RolloverReason; readonly ledger?: string; readonly reminders?: string; /** Session the conversation ran in until now. */ readonly previous?: string; /** Unanswered interactive card carried over from an earlier segment. */ readonly openCard?: string; readonly at: number }): string {
+  const body = input.handoff ? handoffText(input.handoff) : ''
+  const parts = [
+    '[conversation handoff]',
+    `You are continuing an ongoing conversation with the same human in a fresh session, because ${WHY[input.reason]}. They see one unbroken chat: carry on naturally and do not bring up the handoff unless they ask. What follows is all you carry over from before; the earlier messages themselves are no longer in front of you.`,
+  ]
+  parts.push(body || 'Nothing was carried over from the earlier conversation.')
+  if (input.openCard) {
+    parts.push(`An interactive show_view card ("${input.openCard}") from the earlier segment is still open in the chat and remains connected to this session. If the human submits it, their answer arrives here as a user message starting with "${input.openCard}"; inspect ${input.previous ?? 'the earlier session'} with ${TOOL.searchHistory} and ${TOOL.readHistory} if you need the card's exact fields or surrounding context.`)
+  }
+  // The log of every earlier segment stays readable, so what a note left out is not lost.
+  parts.push(`The earlier conversation itself stays on record. When you need its exact words or a detail that is not above, find it with ${TOOL.searchHistory} and read around a hit with ${TOOL.readHistory}${input.previous ? `; the session just before this one is ${input.previous}` : ''}. Do that before you ask the human to repeat themselves.`)
+  if (input.ledger?.trim()) parts.push(`Task ledger at the handoff (${stamp(input.at)}); it may have moved since, and ${TOOL.overview} shows the current state:\n${input.ledger.trim()}`)
+  if (input.reminders?.trim()) parts.push(`Reminders you had set at the handoff; they stay yours and still come due, and ${TOOL.scheduleList} shows the current ones:\n${input.reminders.trim()}`)
+  return parts.join('\n\n')
+}

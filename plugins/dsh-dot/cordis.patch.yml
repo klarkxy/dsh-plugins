@@ -1,0 +1,9 @@
+# Dorothy brings dsh-dev-index with her: dsh_docs and dsh_plugins, and the docs page in Plugins.
+# It is a dependency of this package, so the host resolves it from this bundle; the row carries
+# the id that plugin's own bundle uses, so a profile that also has it installed ends up with one
+# entry, not two. Web search and page reading are the host's own tools (a row of dot's preset).
+- insert:
+    - id: dsh-dev-index
+      name: '@klarkxy/dsh-dev-index'
+    - id: dot
+      name: '@klarkxy/dsh-dot'
