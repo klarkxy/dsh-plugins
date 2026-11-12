@@ -43,13 +43,24 @@ describe('Dorothy self settings', () => {
 
   it('keeps a stale proposal instead of overwriting a newer human edit', async () => {
     const h = setup()
-    await h.self.propose({ field: 'policy', value: 'ask before push', reason: 'safer' })
-    await h.store.setSettings({ ...DEFAULT_SETTINGS, policy: 'never push' })
+    await h.self.propose({ field: 'taskPermission', value: 'danger-full-access', reason: 'faster' })
+    await h.store.setSettings({ ...DEFAULT_SETTINGS, taskPermission: 'default' })
     const id = h.store.settingProposals[0]!.id
     await expect(h.self.decide(id, true)).rejects.toMatchObject({ code: 'dot/proposal-stale' })
-    expect(h.store.settings.policy).toBe('never push')
+    expect(h.store.settings.taskPermission).toBe('default')
     expect(h.store.settingProposals).toHaveLength(1)
     expect(await h.self.decide(id, false)).toContain('no settings changed')
+  })
+
+  it('refuses to propose the removed policy field and drops an old proposal for it', async () => {
+    const h = setup()
+    await expect(h.self.propose({ field: 'policy', value: 'ask before push', reason: 'safer' })).rejects.toThrow(/unknown setting/)
+    // A proposal stored before the field was removed stays decidable: it can be
+    // declined, which clears it, but it can never be applied.
+    await h.store.putSettingProposal({ id: 'legacy-1', field: 'policy', before: 'x', after: 'y', reason: 'old', createdAt: 1 })
+    await expect(h.self.decide('legacy-1', true)).rejects.toMatchObject({ code: 'dot/proposal-obsolete' })
+    expect(await h.self.decide('legacy-1', false)).toContain('no longer exists')
+    expect(h.store.settingProposals).toHaveLength(0)
   })
 
   it('rewrites the agreements (the old memory field) only after approval', async () => {

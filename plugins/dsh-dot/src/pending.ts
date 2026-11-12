@@ -3,6 +3,9 @@
  * human settles them. The host listener races this against the original
  * session's own answerer, so whichever answers first wins and the loser's
  * late answer is dropped.
+ *
+ * A bounded record of recent settlements lets a late `dot_answer` tell
+ * "already settled" apart from "never known", and say why it settled.
  */
 import type { PendingKind, PendingQuestionItem, PendingView } from './contracts.ts'
 
@@ -19,17 +22,33 @@ export interface PendingInput {
   readonly signal?: AbortSignal
 }
 
+/** How a recent request ended. */
+export interface Settlement {
+  readonly sessionId: string
+  readonly kind: PendingKind
+  readonly reason: 'answered' | 'withdrawn'
+}
+
+/** Recent settlements kept for late callers; older ones fall out in insertion order. */
+export const SETTLEMENT_LIMIT = 500
+
 interface Entry {
   readonly view: PendingView
   readonly resolve: (answer: PendingAnswer | undefined) => void
+  /** Detaches the abort listener once the request ends, whichever way it ends. */
+  cleanup?: () => void
 }
 
 export class PendingHub {
   private readonly entries = new Map<string, Entry>()
+  private readonly settled = new Map<string, Settlement>()
   private counter = 0
   private readonly listeners = new Set<() => void>()
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly now: () => number = Date.now,
+    private readonly settlementLimit: number = SETTLEMENT_LIMIT,
+  ) {}
 
   /** Open a request. The promise resolves with dot's answer, or undefined when withdrawn. */
   open(input: PendingInput): { readonly id: string; readonly settled: Promise<PendingAnswer | undefined>; readonly withdraw: () => void } {
@@ -45,11 +64,19 @@ export class PendingHub {
       ...input.detail === undefined ? {} : { detail: input.detail },
       ...input.questions === undefined ? {} : { questions: input.questions },
     }
-    const withdraw = () => this.settle(id, undefined)
-    this.entries.set(id, { view, resolve: finish })
-    if (input.signal?.aborted) withdraw()
-    else input.signal?.addEventListener('abort', withdraw, { once: true })
-    this.changed()
+    const withdraw = () => { this.settle(id, undefined) }
+    const entry: Entry = { view, resolve: finish }
+    this.entries.set(id, entry)
+    if (input.signal?.aborted) {
+      withdraw()
+    } else if (input.signal) {
+      const signal = input.signal
+      const onAbort = () => { withdraw() }
+      signal.addEventListener('abort', onAbort, { once: true })
+      entry.cleanup = () => { signal.removeEventListener('abort', onAbort) }
+    }
+    // An already-aborted signal settled above and already notified listeners.
+    if (this.entries.has(id)) this.changed()
     return { id, settled, withdraw }
   }
 
@@ -62,6 +89,9 @@ export class PendingHub {
   }
 
   get(id: string): PendingView | undefined { return this.entries.get(id)?.view }
+
+  /** Why a recent request ended; undefined for an open or never-known id. */
+  settlement(id: string): Settlement | undefined { return this.settled.get(id) }
 
   list(): PendingView[] { return [...this.entries.values()].map(entry => entry.view) }
 
@@ -81,9 +111,20 @@ export class PendingHub {
     const entry = this.entries.get(id)
     if (entry === undefined) return false
     this.entries.delete(id)
+    entry.cleanup?.()
     entry.resolve(answer)
+    this.remember(entry.view, answer === undefined ? 'withdrawn' : 'answered')
     this.changed()
     return true
+  }
+
+  private remember(view: PendingView, reason: Settlement['reason']): void {
+    this.settled.set(view.id, { sessionId: view.sessionId, kind: view.kind, reason })
+    while (this.settled.size > this.settlementLimit) {
+      const oldest = this.settled.keys().next().value
+      if (oldest === undefined) break
+      this.settled.delete(oldest)
+    }
   }
 
   private changed(): void {

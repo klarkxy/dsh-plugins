@@ -21,6 +21,16 @@
     "restoreCognition": "回到这一版",
     "charCount": "{n} / {max} 字符"
   },
+  "settings": {
+    "taskPermission": "任务权限",
+    "taskPermission_workspace-write": "工作区写入",
+    "taskPermission_danger-full-access": "完全访问",
+    "taskPermission_default": "跟随宿主",
+    "taskPermissionDesc": "仅影响新任务，与审批方式独立。Windows 测试报 spawn EPERM 时，可能需要申请越界重试。",
+    "approvals_dot": "桃乐丝管",
+    "approvals_human": "用户管",
+    "approvals_deny": "一律不许"
+  },
   "context": {
     "promptSections": "提示词分区",
     "promptSectionsHint": "这一段对话实际带在提示词里的内容。",

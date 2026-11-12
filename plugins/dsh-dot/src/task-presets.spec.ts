@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CONFIG_PRESET_ID, pickTaskPreset, usablePresets, type TaskPresetCatalog } from './task-presets.ts'
+import { pickTaskPreset, usablePresets, type TaskPresetCatalog } from './task-presets.ts'
 
 const CATALOG: TaskPresetCatalog = {
   fallback: 'standard',
@@ -9,7 +9,6 @@ const CATALOG: TaskPresetCatalog = {
 describe('task presets', () => {
   it("leaves out dot's own preset and the broken ones", () => {
     expect(usablePresets(CATALOG).map(preset => preset.id)).toEqual(['standard', 'ptc', 'cordis'])
-    expect(CONFIG_PRESET_ID).toBe('cordis')
   })
 
   it('takes the host default when none is asked for, by word or by name', () => {

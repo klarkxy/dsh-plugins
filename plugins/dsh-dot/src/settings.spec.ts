@@ -10,21 +10,46 @@ describe('parseSettings', () => {
     const parsed = parseSettings({ approvals: 'deny', questions: 'nonsense', taskPermission: 'inherit', approvalAllowlist: ['read'], notifyQuietSeconds: 30, awayMinutes: 20, model: { provider: 'p', model: 'm' } })
     expect(parsed.approvals).toBe('deny')
     expect(parsed.questions).toBe('dot')
-    expect(parsed).not.toHaveProperty('taskPermission')
+    expect(parsed.taskPermission).toBe('workspace-write')
     expect(parsed).not.toHaveProperty('approvalAllowlist')
     expect(parsed).not.toHaveProperty('notifyQuietSeconds')
     expect(parsed).not.toHaveProperty('awayMinutes')
     expect(parsed.model).toEqual({ provider: 'p', model: 'm' })
     expect(parseSettings({ approvals: 'off' }).approvals).toBe('dot')
-    expect(parseSettings({ approvals: 'allow' }).approvals).toBe('allow')
+  })
+
+  it('defaults a fresh install to workspace write and keeps a saved permission', () => {
+    expect(DEFAULT_SETTINGS.taskPermission).toBe('workspace-write')
+    expect(parseSettings({}).taskPermission).toBe('workspace-write')
+    expect(parseSettings({ taskPermission: 'danger-full-access' }).taskPermission).toBe('danger-full-access')
+    expect(parseSettings({ taskPermission: 'default' }).taskPermission).toBe('default')
+    // An unknown value never replaces a known one.
+    expect(parseSettings({ taskPermission: 'inherit' }).taskPermission).toBe('workspace-write')
+  })
+
+  it('reads the plural legacy permission name once, without guessing a shape', () => {
+    expect(parseSettings({ taskPermissions: 'danger-full-access' }).taskPermission).toBe('danger-full-access')
+    expect(parseSettings({ taskPermissions: 'workspace-write' }).taskPermission).toBe('workspace-write')
+    expect(parseSettings({ taskPermissions: { mode: 'danger-full-access' } }).taskPermission).toBe('workspace-write')
+    // The singular field wins over the legacy one.
+    expect(parseSettings({ taskPermission: 'default', taskPermissions: 'danger-full-access' }).taskPermission).toBe('default')
+  })
+
+  it('falls back to the human for the removed blanket allow mode', () => {
+    expect(parseSettings({ approvals: 'allow' }).approvals).toBe('human')
+    expect(parseSettings({ approvals: 'dot' }).approvals).toBe('dot')
+  })
+
+  it('reads the deprecated policy text but never lets it be edited', () => {
+    expect(parseSettings({ policy: 'ask before push' }).policy).toBe('ask before push')
+    expect(() => patchSettings(DEFAULT_SETTINGS, { policy: 'new rules' })).toThrow(/unknown setting/)
   })
 })
 
 describe('patchSettings', () => {
   it('applies a valid patch and clears the model with null', () => {
-    const withModel = patchSettings(DEFAULT_SETTINGS, { model: { provider: 'p', model: 'm', reasoningEffort: 'high' }, policy: 'push is fine' })
+    const withModel = patchSettings(DEFAULT_SETTINGS, { model: { provider: 'p', model: 'm', reasoningEffort: 'high' } })
     expect(withModel.model).toEqual({ provider: 'p', model: 'm', reasoningEffort: 'high' })
-    expect(withModel.policy).toBe('push is fine')
     expect(patchSettings(withModel, { model: null }).model).toBeUndefined()
   })
 
@@ -49,7 +74,7 @@ describe('patchSettings', () => {
   })
 
   it('stores the task model list and keeps the default for settings saved before it existed', () => {
-    expect(parseSettings({ approvals: 'allow' }).taskModels).toEqual({ mode: 'all', list: [] })
+    expect(parseSettings({ approvals: 'human' }).taskModels).toEqual({ mode: 'all', list: [] })
     const next = patchSettings(DEFAULT_SETTINGS, { taskModels: { mode: 'deny', list: [' magpie/team/pro '] } })
     expect(next.taskModels).toEqual({ mode: 'deny', list: ['magpie/team/pro'] })
     expect(parseSettings(next).taskModels).toEqual(next.taskModels)
@@ -61,10 +86,21 @@ describe('patchSettings', () => {
   it('refuses unknown keys and bad values as a whole', () => {
     expect(() => patchSettings(DEFAULT_SETTINGS, { colour: 'pink' })).toThrow(/unknown setting/)
     expect(() => patchSettings(DEFAULT_SETTINGS, { approvals: 'allowlist' })).toThrow(/approvals/)
+    // The removed blanket allow mode cannot be set again.
+    expect(() => patchSettings(DEFAULT_SETTINGS, { approvals: 'allow' })).toThrow(/approvals/)
     expect(() => patchSettings(DEFAULT_SETTINGS, { approvalAllowlist: ['read'] })).toThrow(/unknown setting/)
     expect(() => patchSettings(DEFAULT_SETTINGS, { notifyQuietSeconds: 30 })).toThrow(/unknown setting/)
     expect(() => patchSettings(DEFAULT_SETTINGS, { awayMinutes: 10 })).toThrow(/unknown setting/)
+    expect(() => patchSettings(DEFAULT_SETTINGS, { taskPermission: 'inherit' })).toThrow(/taskPermission/)
     expect(() => patchSettings(DEFAULT_SETTINGS, 'off')).toThrow(/object/)
+  })
+
+  it('stores the task permission and the reflection switch', () => {
+    const next = patchSettings(DEFAULT_SETTINGS, { taskPermission: 'danger-full-access', reflection: false })
+    expect(next.taskPermission).toBe('danger-full-access')
+    expect(next.reflection).toBe(false)
+    expect(parseSettings(next).taskPermission).toBe('danger-full-access')
+    expect(parseSettings(next).reflection).toBe(false)
   })
 
   it('keeps every setting unlocked by default and saves individual locks', () => {
@@ -72,7 +108,7 @@ describe('patchSettings', () => {
     const next = patchSettings(DEFAULT_SETTINGS, { locks: { model: true, memory: false } })
     expect(next.locks).toEqual({ model: true, memory: false })
     expect(parseSettings(next).locks).toEqual(next.locks)
-    expect(parseSettings({ locks: { model: true, taskPermission: true } }).locks).toEqual({ model: true })
+    expect(parseSettings({ locks: { model: true, taskPermission: true } }).locks).toEqual({ model: true, taskPermission: true })
     expect(() => patchSettings(DEFAULT_SETTINGS, { locks: { locks: true } })).toThrow()
   })
 })

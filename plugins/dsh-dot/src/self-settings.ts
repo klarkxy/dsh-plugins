@@ -29,16 +29,14 @@ export function proposalText(proposal: SettingProposal): string {
  * dot in the same segment without requiring a new segment rollover.
  */
 export function settingsSnapshotBlock(settings: DotSettings): string {
-  const lines = [
+  return [
     '[settings snapshot — read-only; use dot_settings to propose a change]',
     `scope: ${settings.scope}`,
     `approvals: ${settings.approvals}`,
     `questions: ${settings.questions}`,
-    `taskPermission: ${(settings as unknown as Record<string, unknown>).taskPermission ?? 'default'}`,
-  ]
-  const reflection = (settings as unknown as Record<string, unknown>).reflection
-  if (reflection !== undefined) lines.push(`reflection: ${reflection}`)
-  return lines.join('\n')
+    `taskPermission: ${settings.taskPermission}`,
+    `reflection: ${settings.reflection}`,
+  ].join('\n')
 }
 
 export class SelfSettings {
@@ -88,6 +86,15 @@ export class SelfSettings {
   private async decideNow(id: string, allow: boolean): Promise<string> {
     const proposal = this.dot.store.settingProposal(id)
     if (!proposal) throw new DotError('dot/unknown-proposal', `no waiting settings proposal ${id}`)
+    // A proposal for a field that no longer exists (the old free-form rules)
+    // can only be dropped, never applied; declining it clears it.
+    if (!(SETTING_FIELDS as readonly string[]).includes(proposal.field)) {
+      if (!allow) {
+        await this.dot.store.deleteSettingProposal(id)
+        return `Declined ${id}; the setting it named no longer exists, so no settings changed.`
+      }
+      throw new DotError('dot/proposal-obsolete', `${proposal.field} is no longer a setting; decline this proposal instead`)
+    }
     const field = lockedField(this.dot.store.settings, proposal.field)!
     if (!allow) {
       await this.dot.store.deleteSettingProposal(id)

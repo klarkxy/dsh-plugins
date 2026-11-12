@@ -39,6 +39,7 @@ function load(settings: { current: DotSettings; segment?: Seg; notes?: string; c
       currentAgreementsBlock: () => settings.notes ?? '',
       currentCognitionBlock: () => settings.cognition ?? '',
       selfSettings: realSelf,
+      answer: (id: string, answer: unknown) => JSON.stringify({ id, answer }),
     },
     effect(fn: () => unknown) { fn() },
   }
@@ -86,6 +87,34 @@ describe('dot tools', () => {
       // union type like ["string","null"] is also forbidden
       expect(json, `${t.name as string} schema must not use type arrays`).not.toMatch(/"type"\s*:\s*\[/)
     }
+  })
+
+  it('uses only scalar fields in every flat tool schema', () => {
+    for (const tool of load()) {
+      const parameters = tool.parameters as Record<string, unknown>
+      const properties = (parameters.properties ?? parameters) as Record<string, Record<string, unknown>>
+      for (const [name, field] of Object.entries(properties)) {
+        expect(['string', 'number', 'integer', 'boolean'], `${tool.name}.${name}`).toContain(field.type)
+        expect(field).not.toHaveProperty('properties')
+        expect(field).not.toHaveProperty('items')
+      }
+    }
+  })
+
+  it('accepts JSON-encoded settings values and reports malformed JSON', async () => {
+    const tool = load().find(row => row.name === TOOL.settings) as { execute(args: unknown): Promise<string> }
+    expect(await tool.execute({ action: 'propose', field: 'approvals', value: '"human"', reason: 'Ask me every time' })).toContain('waits for the human')
+    expect(await tool.execute({ action: 'propose', field: 'reflection', value: 'false', reason: 'pause it' })).toContain('waits for the human')
+    expect(await tool.execute({ action: 'propose', field: 'scope', value: 'broken JSON', reason: 'invalid' })).toContain('Error [dot/invalid]')
+  })
+
+  it('decodes question answers from JSON text and rejects malformed payloads', async () => {
+    const tool = load().find(row => row.name === TOOL.answerPending) as { execute(args: unknown): Promise<string> }
+    const answer = await tool.execute({ id: 'q-1', answers: '[{"id":"choice","selected":["Yes"],"custom":"why"}]' })
+    expect(JSON.parse(answer)).toEqual({ id: 'q-1', answer: { kind: 'question', answers: [{ id: 'choice', selected: ['Yes'], custom: 'why' }] } })
+    expect(await tool.execute({ id: 'q-1', answers: 'broken' })).toContain('Error [dot/invalid]')
+    expect(await tool.execute({ id: 'q-1', answers: '[null]' })).toContain('Error [dot/invalid]')
+    expect(await tool.execute({ id: 'q-1', allow: true, answers: '[]' })).toContain('Error [dot/invalid]')
   })
 
   it('gives the knowledge tools flat, primitive schemas', () => {
@@ -173,7 +202,7 @@ describe('dot tools', () => {
   it('does not expose locks or the workspace directory as a self-service setting', async () => {
     const tool = load().find(row => row.name === TOOL.settings) as { execute(args: unknown): Promise<string> }
     // propose with locked field should fail (SelfSettings.propose throws)
-    await expect(tool.execute({ action: 'propose', field: 'locks', value: {}, reason: 'unlock' })).resolves.toContain('Error [dot/failed]')
+    await expect(tool.execute({ action: 'propose', field: 'locks', value: '{}', reason: 'unlock' })).resolves.toContain('Error [dot/failed]')
   })
 })
 
@@ -191,7 +220,11 @@ describe('settingsSnapshotBlock', () => {
     expect(settingsSnapshotBlock(settings)).toContain('taskPermission: workspace-write')
   })
 
-  it('defaults taskPermission to "default" when absent', () => {
-    expect(settingsSnapshotBlock(DEFAULT_SETTINGS)).toContain('taskPermission: default')
+  it('shows the fresh workspace-write default and reflection switch', () => {
+    const snapshot = settingsSnapshotBlock(DEFAULT_SETTINGS)
+    expect(snapshot).toContain('taskPermission: workspace-write')
+    expect(snapshot).toContain('reflection: true')
+    expect(settingsSnapshotBlock({ ...DEFAULT_SETTINGS, taskPermission: 'default', reflection: false })).toContain('taskPermission: default')
+    expect(settingsSnapshotBlock({ ...DEFAULT_SETTINGS, reflection: false })).toContain('reflection: false')
   })
 })

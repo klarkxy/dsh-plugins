@@ -5,11 +5,11 @@
 import { groupModelMenuChoices, modelMenuShortName, parseModelMenuChoices, type ModelMenuChoice } from '@klarkxy/dsh-plugin-kit/model-menu'
 import { Button, Checkbox, IconSearchOutlineRegular, Input, SegmentedTabs, type SegmentedTab } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState, type ReactNode } from 'react'
-import { type ApprovalMode, type DotSettings, type ModelChoice, type SettingField, type SettingProposal, type TakeoverMode, type TaskModelRule } from './contracts.ts'
+import { type ApprovalMode, type DotSettings, type ModelChoice, type SettingField, type SettingProposal, type TakeoverMode, type TaskModelRule, type TaskPermission } from './contracts.ts'
 import { t, type CopyLocale, type TextKey } from './ui-copy.ts'
 
-/** null on model, persona or address goes back to the default. */
-export type SettingsPatch = { readonly [K in keyof DotSettings]?: K extends 'model' ? ModelChoice | null : K extends 'persona' | 'address' ? string | null : DotSettings[K] }
+/** null on model, persona or address goes back to the default. `policy` is legacy and cannot be patched. */
+export type SettingsPatch = { readonly [K in Exclude<keyof DotSettings, 'policy'>]?: K extends 'model' ? ModelChoice | null : K extends 'persona' | 'address' ? string | null : DotSettings[K] }
 export type SaveNotice = { readonly kind: 'saved' } | { readonly kind: 'error'; readonly message: string }
 
 export interface SettingsApi {
@@ -87,7 +87,7 @@ function Field({ label, help, helpTone, trailing, children, locked, onLock }: { 
   )
 }
 
-function formatProposalValue(locale: CopyLocale, field: SettingField, value: unknown, choices: readonly ModelMenuChoice[]): { text: string; block: boolean } {
+function formatProposalValue(locale: CopyLocale, field: SettingProposal['field'], value: unknown, choices: readonly ModelMenuChoice[]): { text: string; block: boolean } {
   if (value === null || value === undefined || value === '') {
     return { text: field === 'model' ? t(locale, 'sModelFollow') : t(locale, 'sProposalDefault'), block: false }
   }
@@ -104,10 +104,13 @@ function formatProposalValue(locale: CopyLocale, field: SettingField, value: unk
       if (value === 'all' || value === 'tracked') return { text: t(locale, `sScope_${value}`), block: false }
       break
     case 'approvals':
-      if (value === 'dot' || value === 'human' || value === 'deny' || value === 'allow') return { text: t(locale, `sApprovals_${value}`), block: false }
+      if (value === 'dot' || value === 'human' || value === 'deny') return { text: t(locale, `sApprovals_${value}`), block: false }
       break
     case 'questions':
       if (value === 'dot' || value === 'human' || value === 'off') return { text: t(locale, `sQuestions_${value}`), block: false }
+      break
+    case 'taskPermission':
+      if (value === 'workspace-write' || value === 'danger-full-access' || value === 'default') return { text: t(locale, `sTaskPermission_${value}`), block: false }
       break
     case 'taskModels': {
       const rule = value as Partial<TaskModelRule>
@@ -217,14 +220,6 @@ function SegmentedChoice<T extends string>({ locale, label, value, options, labe
   )
 }
 
-/** A text field that saves when it loses focus, and only when it changed. */
-function useDraft(saved: string, save: (text: string) => void): { value: string; dirty: boolean; onChange: (text: string) => void; onBlur: () => void } {
-  const [value, setValue] = useState(saved)
-  useEffect(() => { setValue(saved) }, [saved])
-  const commit = () => { if (value !== saved) save(value) }
-  return { value, dirty: value !== saved, onChange: setValue, onBlur: commit }
-}
-
 export function SettingsPanel({ locale, api, settings, onSaved, onStatusChange, onProposalCount }: {
   locale: CopyLocale
   api: SettingsApi
@@ -247,7 +242,6 @@ export function SettingsPanel({ locale, api, settings, onSaved, onStatusChange, 
       failure => reportStatus({ kind: 'error', message: failure instanceof Error ? failure.message : String(failure) }),
     )
   }, [api, onSaved, reportStatus])
-  const policy = useDraft(settings?.policy ?? '', text => save({ policy: text }))
   const [proposalRefresh, setProposalRefresh] = useState(0)
   const decided = useCallback(() => {
     setProposalRefresh(value => value + 1)
@@ -267,8 +261,9 @@ export function SettingsPanel({ locale, api, settings, onSaved, onStatusChange, 
     const choice = choices.find(item => keyOf(item) === key)
     if (choice) save({ model: { provider: choice.provider, model: choice.model } })
   }
-  const approvalModes: readonly [ApprovalMode, ApprovalMode, ApprovalMode, ApprovalMode] = ['dot', 'human', 'deny', 'allow']
+  const approvalModes: readonly [ApprovalMode, ApprovalMode, ApprovalMode] = ['dot', 'human', 'deny']
   const questionModes: readonly [TakeoverMode, TakeoverMode, TakeoverMode] = ['dot', 'human', 'off']
+  const permissionModes: readonly [TaskPermission, TaskPermission, TaskPermission] = ['workspace-write', 'danger-full-access', 'default']
   const lock = (field: SettingField) => ({ locked: settings?.locks?.[field] === true, onLock: (locked: boolean) => save({ locks: { ...settings?.locks, [field]: locked } }) })
 
   // Models dot may start tasks on: provider-grouped catalog choices, followed by listed entries the catalog no longer has.
@@ -290,9 +285,8 @@ export function SettingsPanel({ locale, api, settings, onSaved, onStatusChange, 
     : emptyAllowList ? t(locale, 'sTaskModelsEmpty')
     : undefined
   const approvalHelp = settings.approvals === 'dot' ? t(locale, 'sApprovalsDesc_dot')
-    : settings.approvals === 'allow' ? t(locale, 'sApprovalsDesc_allow')
-    : undefined
-  const policyActive = settings.approvals === 'dot' || settings.questions === 'dot'
+    : settings.approvals === 'human' ? t(locale, 'sApprovalsDesc_human')
+    : t(locale, 'sApprovalsDesc_deny')
 
   return (
     <LocaleContext.Provider value={locale}><div className="dsh-dot-pane dsh-dot-settings-pane">
@@ -325,13 +319,8 @@ export function SettingsPanel({ locale, api, settings, onSaved, onStatusChange, 
         <Field label={t(locale, 'sQuestions')} help={settings.questions === 'dot' ? t(locale, 'sQuestionsDesc_dot') : undefined} {...lock('questions')}>
           <SegmentedChoice locale={locale} label={t(locale, 'sQuestions')} value={settings.questions} options={questionModes} labelKeyOf={opt => `sQuestions_${opt}`} onChange={next => save({ questions: next })} />
         </Field>
-        <Field
-          label={t(locale, 'sPolicy')}
-          help={policyActive ? undefined : t(locale, 'sPolicyInactiveHelp')}
-          trailing={policy.dirty ? <span className="dsh-ui-hint">{t(locale, 'sDraftUnsaved')}</span> : null}
-          {...lock('policy')}
-        >
-          <textarea className="dsh-ui-textarea" aria-label={t(locale, 'sPolicy')} rows={3} maxLength={2000} placeholder={t(locale, 'sPolicyPlaceholder')} value={policy.value} onChange={event => policy.onChange(event.target.value)} onBlur={policy.onBlur} />
+        <Field label={t(locale, 'sTaskPermission')} help={t(locale, 'sTaskPermissionDesc')} {...lock('taskPermission')}>
+          <SegmentedChoice locale={locale} label={t(locale, 'sTaskPermission')} value={settings.taskPermission} options={permissionModes} labelKeyOf={opt => `sTaskPermission_${opt}`} onChange={next => save({ taskPermission: next })} />
         </Field>
         </div>
       </div>

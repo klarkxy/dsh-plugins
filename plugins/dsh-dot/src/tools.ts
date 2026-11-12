@@ -213,36 +213,28 @@ export function apply(ctx: Context): void {
   }))
 
   // ── dot_answer ────────────────────────────────────────────────────────────
-  // answers.items is kept as array-of-object; the outer container is now a
-  // plain optional field (no oneOf), and the allow field is a plain optional
-  // boolean (no oneOf). Callers pass either allow or answers, never both.
+  // Structured question answers are JSON text, keeping the model-facing schema scalar.
+  // Callers pass either allow or answers, never both.
   tool(defineToolInput({
     name: TOOL.answerPending,
-    description: 'Settle a waiting approval or question from another session by its id (ap-N / q-N). Approval: set allow to true or false. Question: give answers as an array, one item per question id, with selected option labels and/or custom text. Follow the instruction attached to the request; stay silent after settling routine requests or ones already answered in their own session.',
+    description: 'Settle a waiting approval or question from another session by its id (ap-N / q-N). Approval: set allow to true or false. Question: give answers as a string containing a JSON array, one item per question id, with selected option labels and/or custom text. Follow the settings snapshot, agreements and approval principles in your system prompt. Already settled means no answer was applied: do not retry it, and stay silent unless another update needs the human.',
     parameters: {
       id: { type: 'string', required: true, description: 'Request id from the notice.' },
       allow: { type: 'boolean', description: 'Approval decision (omit for a question).' },
-      answers: {
-        type: 'array',
-        description: 'Question answers (omit for an approval). One item per question id.',
-        items: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', required: true },
-            selected: { type: 'array', items: { type: 'string' } },
-            custom: { type: 'string' },
-          },
-          additionalProperties: false,
-        },
-      },
+      answers: { type: 'string', description: 'Question answers as JSON text (omit for an approval), e.g. [{"id":"q1","selected":["Option"],"custom":"details"}]. Include every question id exactly once; selected may be empty.' },
     },
     execute: args => run(() => {
       const id = str(args, 'id') ?? ''
       const allow = (args as { allow?: unknown }).allow
-      const answers = (args as { answers?: unknown }).answers
+      let answers = (args as { answers?: unknown }).answers
+      if (typeof allow === 'boolean' && answers !== undefined) throw new DotError('dot/invalid', 'give allow or answers, not both')
       if (typeof allow === 'boolean') return dot().answer(id, { kind: 'approval', allow })
+      if (typeof answers === 'string') {
+        try { answers = JSON.parse(answers) } catch { throw new DotError('dot/invalid', 'answers must contain a JSON array') }
+      }
       if (Array.isArray(answers)) {
         return dot().answer(id, { kind: 'question', answers: answers.map(item => {
+          if (item === null || typeof item !== 'object' || Array.isArray(item)) throw new DotError('dot/invalid', 'each answer must be an object with a question id')
           const row = item as { id?: unknown; selected?: unknown; custom?: unknown }
           return {
             id: String(row.id ?? ''),
@@ -385,16 +377,22 @@ export function apply(ctx: Context): void {
   const self = () => dot().selfSettings
   tool(defineToolInput({
     name: TOOL.settings,
-    description: `Manage your own settings. action=read: read the full current settings, which fields the human has locked, and any change proposals waiting for approval. The core switches (scope, approvals, questions, taskPermission, reflection) are always visible in your [settings snapshot] block, so call read only when you need detail beyond those. action=propose: propose changing one unlocked setting — nothing changes until the human approves it in Settings. Fields: model, approvals, questions, scope, taskModels, policy, persona, address, memory (the agreements text). value uses the same shape as the read output, with null to restore a default or clear. Locks and homeDir cannot be changed. Routine agreements use ${TOOL.agreement} and cognition uses ${TOOL.cognition}; do not propose these for an ordinary edit.`,
+    description: `Manage your own settings. action=read: read the full current settings, which fields the human has locked, and any change proposals waiting for approval. The core switches (scope, approvals, questions, taskPermission, reflection) are always visible in your [settings snapshot] block, so call read only when you need detail beyond those. action=propose: propose changing one unlocked setting — nothing changes until the human approves it in Settings. Fields: model, approvals, questions, scope, taskModels, taskPermission, reflection, persona, address, memory (the agreements text). value is a string containing JSON in the same shape as read: encode text as a JSON string, booleans as true/false, objects as JSON, and null to restore a clearable default. For example value=\"\\\"human\\\"\" proposes approvals=human. Locks and homeDir cannot be changed. Routine agreements use ${TOOL.agreement} and cognition uses ${TOOL.cognition}; do not propose these for an ordinary edit.`,
     parameters: {
       action: { type: 'string', enum: ['read', 'propose'], required: true, description: 'read or propose.' },
       field: { type: 'string', description: 'propose: one setting field.' },
-      value: { type: 'json', description: 'propose: new value in the shape shown by read.' },
+      value: { type: 'string', description: 'propose: JSON-encoded value, e.g. "human", true, {"provider":"p","model":"m"}, or null. The outer tool argument is always a string.' },
       reason: { type: 'string', description: 'propose: why this change helps; shown to the human.' },
     },
     execute: args => run(() => {
       const action = str(args, 'action')
-      if (action === 'propose') return self().propose({ field: str(args, 'field') ?? '', value: (args as Record<string, unknown> | null)?.value, reason: str(args, 'reason') ?? '' })
+      if (action === 'propose') {
+        let value = (args as Record<string, unknown> | null)?.value
+        if (typeof value === 'string') {
+          try { value = JSON.parse(value) } catch { throw new DotError('dot/invalid', 'value must be a string containing valid JSON; encode text as a JSON string') }
+        }
+        return self().propose({ field: str(args, 'field') ?? '', value, reason: str(args, 'reason') ?? '' })
+      }
       return self().read()
     }),
     title: 'Settings',

@@ -71,11 +71,14 @@ describe('Dorothy self-management controls', () => {
 
     expect(document.body.textContent).not.toContain('默认任务权限')
     const tabLabels = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].map(node => node.textContent)
-    expect(tabLabels).toEqual(expect.arrayContaining(['桃乐丝管', '用户管', '一律不许', '一律允许']))
-    const allowAllTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(node => node.textContent === '一律允许')!
-    await act(async () => allowAllTab.click())
-    expect(current.approvals).toBe('allow')
-    expect(document.body.textContent).toContain('新任务以完全访问运行')
+    expect(tabLabels).toEqual(expect.arrayContaining(['桃乐丝管', '用户管', '一律不许']))
+    // The blanket allow mode is gone; the task permission is its own field.
+    expect(tabLabels).not.toContain('一律允许')
+    expect(tabLabels).toEqual(expect.arrayContaining(['工作区写入', '完全访问', '跟随宿主']))
+
+    const fullAccessTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(node => node.textContent === '完全访问')!
+    await act(async () => fullAccessTab.click())
+    expect(current.taskPermission).toBe('danger-full-access')
 
     const allowTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(node => node.textContent === '仅允许所选')!
     await act(async () => allowTab.click())

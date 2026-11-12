@@ -29,13 +29,13 @@ Create a workspace at D:\work\site and start a task there: fix the broken links 
 
 Dorothy then:
 
-- creates or reuses workspaces and opens one session per task, with a self-contained first instruction. By default task sessions keep the host's permissions while Dorothy settles routine approvals silently; setting **Permission approvals** to **Allow all** runs new tasks with full access;
-- picks the agent preset by the task: DSH's default preset for ordinary work, `ptc` for mechanical work that is mostly running steps by script, and `cordis` for writing or changing DSH plugins, presets and settings. A `cordis` task can change DSH itself, so it keeps its approval prompts and every one of them is yours to decide;
+- creates or reuses workspaces and opens one session per task, with a self-contained first instruction. By default task sessions start with the workspace-write permission and Dorothy settles routine approvals silently;
+- picks the agent preset by the task: DSH's default preset for ordinary work, `ptc` for mechanical work that is mostly running steps by script, and `cordis` for writing or changing DSH plugins, presets and settings. A `cordis` task can change DSH itself, so it starts under the same task permission as any other task and its approvals follow the same routing;
 - runs work that belongs to none of your projects, such as research or looking after DSH itself, in a workspace of her own. It is called **Dorothy** in the sidebar and lives in the `dot` folder of the DSH home; you can open sessions there too;
 - steers or stops sessions when you ask, including sessions you opened yourself, and starts tracking an existing session on request;
 - archives the sessions she started herself once their work is done. She cannot archive a session you opened, even when she follows it; archive those yourself in the session list;
 - reports approvals, questions, failures and finished turns of tasks she started promptly, merging updates that arrive close together into one message. Finished turns of sessions she only watches wait for her next wake-up or your next message; running and idle changes stay on the board;
-- handles the approval prompts and model questions of every session, including the ones you opened yourself. Routine ones and requests already answered in their own session are settled silently without cluttering her chat; when a request deletes data outside the project, publishes or pushes, spends money, touches credentials, or changes direction or scope, she asks you in her chat with a card and passes your answer back.
+- handles the approval prompts and model questions of every session, including the ones you opened yourself. Routine ones and requests already answered in their own session are settled silently without cluttering her chat; when a request deletes data outside the project, publishes or pushes, spends money, touches credentials, or changes direction or scope, she asks you in her chat with a card and passes your answer back. The rules she judges by are the ones you wrote as agreements, plus the standing principle that a request that deletes data outside the project, publishes or pushes, spends money or touches credentials needs your approval first.
 
 In the panel, **Tasks** in the header opens the board: requests waiting on you, every tracked task with its status and latest note, and the reminders Dorothy has set. Click a task row to open that session. Type at the bottom; Enter sends and Shift+Enter starts a new line. While Dorothy works, a new message reaches her at her next step, and **Stop** ends her current turn.
 
@@ -53,16 +53,18 @@ Dorothy also keeps two things of her own for what she should know in every conve
 
 ### Settings
 
-The gear in the panel's header opens a drawer with Settings, Persona, Context and Trajectory; click its close button or press Esc to close it. Option switches save at once; custom rules save automatically when you leave the field.
+The gear in the panel's header opens a drawer with Settings, Persona, Context and Trajectory; click its close button or press Esc to close it. Option switches save at once; free-text fields save automatically when you leave them.
 
 | Setting | Effect |
 | --- | --- |
 | Dorothy's model | The model shared across chatting, dispatching tasks and screening approvals. **Follow the default model** (default) tracks the host's default model. |
 | Scope | **All sessions** (default), or **Tracked tasks only** (only the tasks she started or watches). |
-| Permission approvals | **Dorothy** (default: approves routine work and asks about risky ones); **You** (relays every approval to you); **Deny all** (rejects every approval prompt); or **Allow all** (runs new tasks with full access and allows approval prompts automatically). |
+| Permission approvals | **Dorothy** (default: approves routine work and asks about risky ones); **You** (relays every approval to you); or **Deny all** (rejects every approval prompt). |
 | Model questions | **Answer when clear** (default: answers what the goal settles and asks when direction or scope changes); **Always ask me**; or **Leave to session** (leaves them to the native question card). |
-| Custom rules | Preferences in plain language, such as which pushes are fine or which deletions always need you. Applied first whenever Dorothy handles approvals or questions. |
+| Task permissions | The permission preset a new task session starts with: **Workspace write** (default: it may write inside its workspace and ask for more), **Full access** (it may act anywhere), or **Follow the host** (the host's own default). It is independent of **Permission approvals**: the sandbox limits what a task can touch, the approval mode decides who answers the prompts that still appear. |
 | Allowed task models | **Unrestricted** (default), **Allow selected**, or **Exclude selected**, with provider-grouped filtering. Applies only to the tasks she starts, not to her own model. A task runs on the host's default model unless she names one; when the default is not allowed she picks a model that is, and a model outside the list is refused. |
+
+Upgrading preserves your saved task permission, including **Full access** and **Follow the host**; **Workspace write** is the default only when none was saved. The removed **Allow all** approval mode falls back to **You**. Old custom rules migrate into agreements, while old notes migrate into cognition; the import runs once.
 
 The **Persona** page (**Persona & agreements**) holds how Dorothy addresses you, her everyday tone, and the two blocks her prompt carries. **How she addresses you** defaults to 你 (you); type a name, nickname or title and press Enter or leave the field to save it. **Voice & personality** shows her default character text; edit it in any language and click **Save changes**, or **Discard** unsaved edits. Both fields have **Restore default**. Changes apply from your next message, when the conversation continues in a new segment, and her reports, task results and approval decisions stay objective whatever the persona says.
 
@@ -74,7 +76,7 @@ The **Context** page in the same drawer shows the context usage of Dorothy's cur
 
 Dorothy can read her settings and propose changes to them. Every setting is unlocked by default; click the lock icon beside any field label to lock it, which only restricts Dorothy and never your own edits. For an unlocked field she submits a proposed value and reason, which waits under **Proposed changes** in Settings until you **Approve and apply** or **Decline** it. Approval applies it only if you have not changed that field since; otherwise the proposal stays for review instead of overwriting your newer choice. Locks and `homeDir` are yours alone. Pending proposals survive a restart. She can also propose replacing her agreements; locking them makes her ordinary agreement additions and removals require the same approval.
 
-The plugin list keeps one setting, `homeDir`: the folder of Dorothy's own workspace, which also holds her own session. Empty uses a `dot` folder in the DSH home.
+The plugin list keeps two settings, `homeDir`: the folder of Dorothy's own workspace, which also holds her own session (empty uses a `dot` folder in the DSH home), and `approvalGraceMs`: how long she waits, in milliseconds, before an approval request reaches her, so an answer given in the original session can settle it first (default 10000).
 
 ## Limits
 
@@ -86,12 +88,15 @@ The plugin list keeps one setting, `homeDir`: the folder of Dorothy's own worksp
 - The agreements are yours: she writes one down only when you explicitly ask her to remember something or state a rule, keeps your wording, and drops one only when you say to drop it. The cognition is hers: she rewrites it when her understanding changes. You can edit both on her Persona page.
 - Her reminders are managed in the board only; they do not appear among DSH's **Automations**.
 - Her panel shows text, tool activity and Deep View cards. Attachments and slash commands belong to ordinary sessions. Her model is chosen in her settings.
-- Setting **Permission approvals** to **Allow all** runs new task sessions with full access so their commands can change anything they reach.
-- A task on the `cordis` preset never runs with full access: unless **Permission approvals** is set to **Deny all**, its approvals always come to you. Its questions still follow **Model questions**.
+- Permission approvals and task permissions are separate: a task with full access raises no sandbox prompt, so there is nothing for Dorothy to take over. Approval routing is not a guarantee that every risky operation is intercepted.
+- An approval she grants lasts for that one request only; the host offers no standing approval.
+- A task on the `cordis` preset runs with the same task permission as any other task, and its approvals follow the same routing.
 - Dorothy chooses a task's preset from what the task is, and you can name one yourself. The preset has to be in this DSH's preset list; `ptc` and `cordis` come with DSH.
 - An answer given on the session's own card counts as well; the first answer wins.
 - Waiting requests and notices waiting or held for delivery live in memory, like the host's own pending approvals: restarting DSH clears them.
 - Approvals, questions, errors and finished turns of tasks she started wake Dorothy for one model turn. Held updates join the next wake-up or your next message, and a full held queue is sent as one message. Every due reminder wakes her; reminders due at the same moment arrive as one message.
+- On Windows, tests and builds can fail with `spawn EPERM` inside the workspace sandbox because a child process cannot start. The task can request a wider retry with a reason; Dorothy judges that exact retry under your agreements and authorization.
+- Safe Auto can settle an approval before Dorothy. If it settles during the grace period, she is not woken; if it settles after delivery, her late answer returns “Already settled” and changes nothing. A review lasting beyond the grace period can still overlap Dorothy's judgement. In the web UI, Safe Auto requires a separate choice for each session, so a fresh task starts without it. Without that UI, its global reviewer may also cover Dorothy's tasks; Dorothy cannot currently exempt those tasks individually. Choosing Dorothy for approvals does not override other active answerers.
 
 ## License
 

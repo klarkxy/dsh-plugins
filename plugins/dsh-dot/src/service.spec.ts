@@ -134,7 +134,7 @@ function setup(settings?: Partial<DotSettings>) {
   let at = 1000
   // The legacy note files live in memory here; only the one-time migration reads them.
   const notes = { path: '/dot/memory.md', text: '', cognition: '', read: async () => notes.text, readCognition: async () => notes.cognition }
-  const service = new DotService({ host: fake.host, store, homeDir: join(tmpdir(), 'dsh-dot-spec'), notes, quietMs: 10_000, maxWaitMs: 60_000, timer: clock.timer, now: () => at })
+  const service = new DotService({ host: fake.host, store, homeDir: join(tmpdir(), 'dsh-dot-spec'), notes, quietMs: 10_000, maxWaitMs: 60_000, approvalGraceMs: 0, timer: clock.timer, now: () => at })
   return { ...fake, ...clock, store, service, notes, advance: (ms: number) => { at += ms } }
 }
 
@@ -809,7 +809,7 @@ describe('DotService tasks', () => {
     expect(reply).toContain(task.sessionId)
     expect(reply).not.toContain('full access')
     expect(task).toMatchObject({ origin: 'started', cwd: '/proj', goal: 'write hello.txt' })
-    expect(h.calls.some(call => call.startsWith('permit '))).toBe(false)
+    expect(h.calls).toContain(`permit ${task.sessionId} workspace-write`)
 
     await h.service.onTurnEnd(task.sessionId)
     expect(h.store.task(task.sessionId)).toMatchObject({ status: 'idle', unseenTurns: 1 })
@@ -819,13 +819,13 @@ describe('DotService tasks', () => {
     expect(h.relayed[0]!.text).toContain('finished a turn')
   })
 
-  it('grants full access before sending the instruction when approvals are set to allow', async () => {
-    const h = setup({ approvals: 'allow' })
+  it('applies the saved full access choice before the first instruction independently of approval mode', async () => {
+    const h = setup({ taskPermission: 'danger-full-access' })
     await h.service.ensureDot()
     const workspace = await h.host.createWorkspace('/proj', 'proj')
     const reply = await h.service.startTask({ workspaceId: workspace.id, title: 'hello', instruction: 'write hello.txt' }, new AbortController().signal)
     const task = h.store.list()[0]!
-    expect(reply).toContain('full access')
+    expect(reply).toContain('danger-full-access permissions')
     const permitAt = h.calls.indexOf(`permit ${task.sessionId} ${FULL_ACCESS}`)
     expect(permitAt).toBeGreaterThan(-1)
     expect(permitAt).toBeLessThan(h.calls.indexOf(`prompt ${task.sessionId} write hello.txt`))
@@ -870,13 +870,20 @@ describe('DotService tasks', () => {
     expect(h.calls).toContain(`say ${h.store.dotSessionId} please check it`)
   })
 
-  it('says so when full access could not be applied', async () => {
-    const h = setup({ approvals: 'allow' })
+  it('does not send an instruction if the saved permission cannot be applied', async () => {
+    const h = setup({ taskPermission: 'danger-full-access' })
     h.failPermission()
     await h.service.ensureDot()
+    await expect(h.service.startTask({ cwd: '/proj', title: 't', instruction: 'go' }, new AbortController().signal)).rejects.toMatchObject({ code: 'dot/permission-failed' })
+    expect(h.calls.some(call => call.startsWith('prompt '))).toBe(false)
+  })
+
+  it('preserves the explicit host-default permission choice', async () => {
+    const h = setup({ taskPermission: 'default' })
+    await h.service.ensureDot()
     const reply = await h.service.startTask({ cwd: '/proj', title: 't', instruction: 'go' }, new AbortController().signal)
-    expect(reply).toContain('could not be applied')
-    expect(reply).toContain('allowed automatically')
+    expect(reply).toContain('host default permissions')
+    expect(h.calls.some(call => call.startsWith('permit '))).toBe(false)
   })
 
   it("registers dot's own workspace and runs a task there when no place is given", async () => {
@@ -948,16 +955,14 @@ describe('DotService tasks', () => {
     expect(h.store.list()).toHaveLength(1)
   })
 
-  it('keeps the approvals of a task on the DSH preset and gives every one to the human', async () => {
-    const h = setup({ approvals: 'allow' })
+  it('routes cordis tasks through the same dot approval rules as other presets', async () => {
+    const h = setup()
     await h.service.ensureDot()
     const reply = await h.service.startTask({ cwd: '/proj', title: 'new plugin', instruction: 'scaffold it', preset: 'cordis' }, new AbortController().signal)
     const id = h.store.list()[0]!.sessionId
     expect(h.calls).toContain(`create ${id} /proj preset=cordis`)
-    // Full access is the setting, and this task still does not get it.
-    expect(h.calls.some(call => call.startsWith('permit '))).toBe(false)
-    expect(reply).toContain('every approval it asks for goes to the human')
-    expect(reply).not.toContain('full access')
+    expect(h.calls).toContain(`permit ${id} workspace-write`)
+    expect(reply).toContain('workspace-write permissions')
 
     const approval = h.service.relayRequest({ kind: 'approval', sessionId: id, subject: 'bash', detail: 'dsh plugin add x' })
     if (approval.decided !== 'pending') throw new Error('expected a pending relay')
@@ -966,9 +971,9 @@ describe('DotService tasks', () => {
     await h.service.flushNotices()
     const text = h.relayed.map(item => item.text).join('\n')
     const [approvalPart, questionPart] = [text.slice(text.indexOf(approval.id), text.indexOf(question.id)), text.slice(text.indexOf(question.id))]
-    expect(approvalPart).toContain('Never decide it yourself')
-    // Questions keep the human's setting: dot answers what it can.
-    expect(questionPart).toContain('Answer it yourself')
+    expect(approvalPart).toContain('dsh plugin add x')
+    expect(approvalPart).not.toContain('Never decide it yourself')
+    expect(questionPart).toContain('which name?')
 
     // Under deny all, even cordis approvals are rejected immediately.
     await h.store.setSettings({ ...DEFAULT_SETTINGS, approvals: 'deny' })
@@ -1026,6 +1031,65 @@ describe('DotService tasks', () => {
   })
 })
 
+describe('DotService approval grace', () => {
+  async function withGrace(run: (h: ReturnType<typeof setup>, service: DotService) => Promise<void>) {
+    vi.useFakeTimers()
+    const h = setup()
+    const service = new DotService({ host: h.host, store: h.store, homeDir: join(tmpdir(), 'dsh-dot-spec'), notes: h.notes })
+    try {
+      await service.ensureDot()
+      await run(h, service)
+    } finally {
+      service.dispose()
+      h.service.dispose()
+      vi.useRealTimers()
+    }
+  }
+
+  it('drops approvals settled within the default ten seconds without a wake', async () => {
+    await withGrace(async (h, service) => {
+      const routed = service.relayRequest({ kind: 'approval', sessionId: 'task', subject: 'pwsh' })
+      if (routed.decided !== 'pending') throw new Error('expected pending')
+      await vi.advanceTimersByTimeAsync(2000)
+      routed.withdraw()
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(h.relayed).toEqual([])
+      expect(service.board().pending).toEqual([])
+    })
+  })
+
+  it('reports already settled after a request was delivered, without applying a late answer', async () => {
+    await withGrace(async (h, service) => {
+      const routed = service.relayRequest({ kind: 'approval', sessionId: 'task', subject: 'pwsh' })
+      if (routed.decided !== 'pending') throw new Error('expected pending')
+      await vi.advanceTimersByTimeAsync(9999)
+      expect(h.relayed).toEqual([])
+      await vi.advanceTimersByTimeAsync(1)
+      expect(h.relayed).toHaveLength(1)
+      routed.withdraw()
+      expect(service.answer(routed.id, { kind: 'approval', allow: true })).toContain('Already settled:')
+      await expect(routed.settled).resolves.toBeUndefined()
+      expect(() => service.answer('ap-missing', { kind: 'approval', allow: true })).toThrow(/no known request/)
+    })
+  })
+
+  it('does not carry an approval early in a human message or an unrelated urgent question', async () => {
+    await withGrace(async (h, service) => {
+      const routed = service.relayRequest({ kind: 'approval', sessionId: 'task', subject: 'pwsh' })
+      if (routed.decided !== 'pending') throw new Error('expected pending')
+      await service.say('hello')
+      expect(h.said[0]?.carriedNotices).toBeUndefined()
+      service.relayRequest({ kind: 'question', sessionId: 'other', subject: 'which?' })
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(h.relayed).toHaveLength(1)
+      expect(h.relayed[0]?.text).not.toContain(routed.id)
+      routed.withdraw()
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(h.relayed).toHaveLength(1)
+    })
+  })
+})
+
 describe('DotService.relayRequest', () => {
   it('takes over requests from untracked sessions and lets dot judge approvals by default', async () => {
     const h = setup()
@@ -1039,7 +1103,7 @@ describe('DotService.relayRequest', () => {
     expect(text).toContain(routed.id)
     expect(text).toContain('untracked session in /elsewhere')
     expect(text).toContain('rm -rf build')
-    expect(text).toContain('Decide it yourself')
+    expect(text).not.toContain('Decide it yourself')
     h.service.answer(routed.id, { kind: 'approval', allow: true })
     await expect(routed.settled).resolves.toEqual({ kind: 'approval', allow: true })
     expect(h.service.board().pending).toHaveLength(0)
@@ -1057,6 +1121,17 @@ describe('DotService.relayRequest', () => {
     expect(h.service.board().pending).toHaveLength(0)
   })
 
+  it('also removes questions settled in the original session and explains late answers', async () => {
+    const h = setup()
+    await h.service.ensureDot()
+    const routed = h.service.relayRequest({ kind: 'question', sessionId: 'task', subject: 'which?', questions: [{ id: 'choice', question: 'which?' }] })
+    if (routed.decided !== 'pending') throw new Error('expected pending')
+    routed.withdraw()
+    await h.service.flushNotices()
+    expect(h.relayed).toEqual([])
+    expect(h.service.answer(routed.id, { kind: 'question', answers: [{ id: 'choice', selected: [] }] })).toContain('Already settled:')
+  })
+
   it('skips untracked sessions when the scope is tracked, and dot itself always', async () => {
     const h = setup({ scope: 'tracked' })
     const dot = await h.service.ensureDot()
@@ -1071,15 +1146,25 @@ describe('DotService.relayRequest', () => {
     const routed = h.service.relayRequest({ kind: 'approval', sessionId: 's9', subject: 'bash' })
     if (routed.decided !== 'pending') throw new Error('expected a pending relay')
     await h.service.flushNotices()
-    expect(h.relayed[0]!.text).toContain('Never decide it yourself')
+    expect(h.relayed[0]!.text).not.toContain('Never decide it yourself')
     expect(h.relayed[0]!.text).toContain('task "s9"')
   })
 
-  it('settles allow/deny approvals and off questions immediately, reading settings live', async () => {
+  it('does not grant an in-flight approval after the human switches to deny', async () => {
     const h = setup()
     await h.service.ensureDot()
-    await h.store.setSettings({ ...DEFAULT_SETTINGS, approvals: 'allow' })
-    expect(h.service.relayRequest({ kind: 'approval', sessionId: 's9', subject: 'bash' })).toEqual({ decided: 'allow' })
+    const routed = h.service.relayRequest({ kind: 'approval', sessionId: 'task', subject: 'pwsh' })
+    if (routed.decided !== 'pending') throw new Error('expected pending')
+    await h.store.setSettings({ ...h.store.settings, approvals: 'deny' })
+    expect(h.service.answer(routed.id, { kind: 'approval', allow: true })).toContain('approvals=deny; no grant')
+    await expect(routed.settled).resolves.toEqual({ kind: 'approval', allow: false })
+  })
+
+  it('enforces deny approvals and off questions immediately, reading settings live', async () => {
+    const h = setup()
+    await h.service.ensureDot()
+    await h.store.setSettings({ ...DEFAULT_SETTINGS, approvals: 'dot' })
+    expect(h.service.relayRequest({ kind: 'approval', sessionId: 's9', subject: 'bash' }).decided).toBe('pending')
     expect(h.service.relayRequest({ kind: 'question', sessionId: 's9', subject: 'Which?', questions: [{ id: 'q', question: 'Which?' }] }).decided).toBe('pending')
 
     await h.store.setSettings({ ...DEFAULT_SETTINGS, approvals: 'deny', questions: 'off' })
@@ -1087,12 +1172,13 @@ describe('DotService.relayRequest', () => {
     expect(h.service.relayRequest({ kind: 'question', sessionId: 's9', subject: 'Which?', questions: [{ id: 'q', question: 'Which?' }] })).toEqual({ decided: 'skip' })
   })
 
-  it("carries the human's own rules into the notice dot reads", async () => {
+  it("keeps the human's rules in the agreements rather than repeating them in notices", async () => {
     const h = setup({ policy: 'pushing to my own repos is fine' })
     await h.service.ensureDot()
     h.service.relayRequest({ kind: 'approval', sessionId: 's9', subject: 'bash' })
     await h.service.flushNotices()
-    expect(h.relayed[0]!.text).toContain('> pushing to my own repos is fine')
+    expect(h.relayed[0]!.text).not.toContain('pushing to my own repos is fine')
+    expect(h.store.agreements).toContain('pushing to my own repos is fine')
   })
 
   it('archiving a task dot started declines its waiting requests', async () => {

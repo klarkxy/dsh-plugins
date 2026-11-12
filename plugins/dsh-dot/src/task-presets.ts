@@ -20,12 +20,6 @@ export interface TaskPresetCatalog {
   readonly presets: readonly CatalogPreset[]
 }
 
-/**
- * The preset whose sessions may change the DSH installation itself: plugins,
- * presets and settings. Every approval from such a task goes to the human.
- */
-export const CONFIG_PRESET_ID = 'cordis'
-
 export class TaskPresetError extends Error {
   constructor(readonly code: 'dot/unknown-preset' | 'dot/preset-broken', message: string) { super(message); this.name = 'TaskPresetError' }
 }

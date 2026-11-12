@@ -121,9 +121,17 @@ const stateSchema = z.object({
 
 const proposalValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null(), z.record(z.string(), z.unknown()), z.array(z.unknown())])
 
+/**
+ * Fields a stored proposal may name. `policy` was a setting before the
+ * agreements took its place; old rows still have to open, so the name stays
+ * readable, but it is no longer in SETTING_FIELDS and can never be proposed
+ * again. Deciding such a row is refused as an unknown setting.
+ */
+const PROPOSAL_FIELDS = [...SETTING_FIELDS, 'policy'] as const
+
 const proposalSchema = z.object({
   id: z.string().min(1),
-  field: z.enum(SETTING_FIELDS),
+  field: z.enum(PROPOSAL_FIELDS),
   before: proposalValueSchema,
   after: proposalValueSchema,
   reason: z.string().min(1).max(2000),

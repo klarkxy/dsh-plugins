@@ -19,6 +19,7 @@ import Schema from '@deepseek-ai/schemastery'
 import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import { openCompatibleDomain } from '@klarkxy/dsh-plugin-kit/domain'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import { approvalAuditId, raceApproval } from './approval-relay.ts'
 import type { RawEvent } from './chat.ts'
 import { COMPACTION_POLICY, PLUGIN_NAME, PRESET_ID, RPC_CHANNEL, SERVICE_NAME, type PendingQuestionItem } from './contracts.ts'
 import { ChatFeed } from './feed.ts'
@@ -26,7 +27,7 @@ import { bindHost } from './host.ts'
 import { clip } from './ledger.ts'
 import { detachNative } from './native.ts'
 import { DOT_INSTRUCTIONS } from './prompt.ts'
-import { DotService, messageOf } from './service.ts'
+import { APPROVAL_GRACE_MS, DotService, messageOf } from './service.ts'
 import { patchSettings } from './settings.ts'
 import { dotDomain } from './storage.ts'
 import { DotStore, type DotDomainHandle } from './store.ts'
@@ -46,16 +47,18 @@ const TURN_SETTLE_MS = 300
 /** Events scanned back for the tool call an approval is about. */
 const CALL_SCAN = 400
 
-/** Everything the human tunes lives in the settings view of Dorothy's panel; only the working directory stays here. */
+/** Conversation settings stay in Dorothy's panel; delivery timing is profile configuration. */
 export interface Config {
   homeDir?: string
+  approvalGraceMs?: number
 }
 
 export const Config: Schema<Config> = Schema.object({
   homeDir: Schema.string().default(''),
+  approvalGraceMs: Schema.number().min(0).max(60_000).default(APPROVAL_GRACE_MS),
 }).i18n({
-  zh: { homeDir: '桃乐丝自己的工作区所在的目录，她自己的会话也在这里；留空使用 DSH 主目录下的 dot 文件夹。其余设置在桃乐丝面板右上角的齿轮里' },
-  en: { homeDir: "Folder of Dorothy's own workspace, which also holds her own session; empty uses a dot folder in the DSH home. Other settings live behind the gear in Dorothy's panel" },
+  zh: { homeDir: '桃乐丝自己的工作区所在的目录，她自己的会话也在这里；留空使用 DSH 主目录下的 dot 文件夹。其余设置在桃乐丝面板右上角的齿轮里', approvalGraceMs: '审批通知宽限期（毫秒），默认 10000；期间在原会话结算的审批不会唤醒桃乐丝' },
+  en: { homeDir: "Folder of Dorothy's own workspace, which also holds her own session; empty uses a dot folder in the DSH home. Other settings live behind the gear in Dorothy's panel", approvalGraceMs: 'Approval notice grace period in milliseconds (default 10000); approvals settled in the original session during this time do not wake Dorothy' },
 })
 
 interface SessionLike {
@@ -83,6 +86,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     store,
     homeDir: config.homeDir?.trim() || join(process.env.DSH_HOME?.trim() || join(homedir(), '.dsh'), 'dot'),
     log,
+    approvalGraceMs: Number.isFinite(config.approvalGraceMs) ? Math.max(0, Math.min(60_000, config.approvalGraceMs!)) : APPROVAL_GRACE_MS,
   })
   const feed = new ChatFeed(host)
   // The chat follows dot into every new segment and keeps the earlier ones above it.
@@ -136,6 +140,10 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     return () => { disposed = true; void release?.() }
   }, 'dot.preset')
 
+  // Correlate the host audit id (not callId) with its in-memory dot request.
+  const approvalWithdrawals = new Map<string, { sessionId: string; withdraw: () => void }>()
+  ctx.effect(() => () => approvalWithdrawals.clear(), 'dot.approval-links')
+
   // Ledger and chat feed. Handlers never throw back into the agent loop.
   const guard = (work: () => unknown) => { try { void Promise.resolve(work()).catch(() => {}) } catch { /* observer only */ } }
   ctx.effect(() => ctx.on('agent/status', ({ agent, status }: { agent: AgentLike; status: string }) => guard(() => {
@@ -158,6 +166,14 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   })), 'dot.error')
   ctx.effect(() => (ctx as unknown as { on(name: string, listener: (...args: never[]) => void): () => void }).on('session/event', ((session: { id?: string }, event: RawEvent) => {
     if (session?.id && feed.isDot(session.id)) guard(() => feed.onEvent(session.id!, event))
+    if (event.type === 'approval/decided') {
+      const id = (event.data as { id?: unknown } | undefined)?.id
+      const linked = typeof id === 'string' ? approvalWithdrawals.get(id) : undefined
+      if (linked && linked.sessionId === session?.id) {
+        approvalWithdrawals.delete(id as string)
+        linked.withdraw()
+      }
+    }
   }) as never), 'dot.chat-events')
   ctx.effect(() => (ctx as unknown as { on(name: string, listener: (...args: never[]) => void): () => void }).on('agent/assistant-stream', ((payload: { agent?: AgentLike; frame?: { type?: string; chunk?: { type?: string; text?: string } } }) => {
     const id = payload?.agent?.session?.id
@@ -204,21 +220,19 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     ].filter(Boolean).join('\n  ')
     const routed = service.relayRequest({ kind: 'approval', sessionId: origin.id, subject: req.toolName, ...detail ? { detail } : {}, ...origin.cwd ? { cwd: origin.cwd } : {}, ...req.signal ? { signal: req.signal } : {} })
     if (routed.decided === 'skip') return next()
-    if (routed.decided === 'allow') return 'allowed-once'
     if (routed.decided === 'deny') return 'rejected'
+    const callerSignal = req.signal
     const lease = detachNative(req as { signal?: AbortSignal })
-    const native = next()
-    const winner = await Promise.race([
-      native.then(outcome => ({ from: 'native' as const, outcome }), () => ({ from: 'native' as const, outcome: 'unavailable' as const })),
-      routed.settled.then(answer => ({ from: 'dot' as const, answer })),
-    ])
-    if (winner.from === 'native' && winner.outcome !== 'unavailable') { lease?.release(); routed.withdraw(); return winner.outcome }
-    // dot answered first: close the original session's card.
-    if (winner.from === 'dot') lease?.close()
-    // No live card (no browser attached): dot's channel is the only answerer left.
-    const answer = winner.from === 'dot' ? winner.answer : await routed.settled
-    if (answer?.kind === 'approval') return answer.allow ? 'allowed-once' : 'rejected'
-    return req.signal?.aborted ? 'cancelled' : native
+    // The host appends approval/asked before dispatch and does not expose its id on req.
+    // Only link an unambiguous, still-open audit pair. Calls without unique ids
+    // still withdraw through their own native-result promise, never another request's event.
+    const session = (req.agent as AgentLike).session
+    const found = approvalAuditId(session, req.toolName, req.callId)
+    const auditId = found && !approvalWithdrawals.has(found) ? found : undefined
+    if (auditId && session?.id) approvalWithdrawals.set(auditId, { sessionId: session.id, withdraw: routed.withdraw })
+    try { return await raceApproval(routed, next, lease, callerSignal) } finally {
+      if (auditId) approvalWithdrawals.delete(auditId)
+    }
   }, { prepend: true }), 'dot.approval')
 
   ctx.effect(() => ctx.on('user-questions/request', async (req, next): Promise<AskUserQuestionAnswer> => {

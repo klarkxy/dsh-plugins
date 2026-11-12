@@ -21,6 +21,16 @@
     "restoreCognition": "Restore this version",
     "charCount": "{n} / {max} characters"
   },
+  "settings": {
+    "taskPermission": "Task permissions",
+    "taskPermission_workspace-write": "Workspace write",
+    "taskPermission_danger-full-access": "Full access",
+    "taskPermission_default": "Follow the host",
+    "taskPermissionDesc": "Applies to new tasks, independently of approval routing. Windows tests failing with spawn EPERM may need approval for a wider retry.",
+    "approvals_dot": "Dorothy",
+    "approvals_human": "You",
+    "approvals_deny": "Deny all"
+  },
   "context": {
     "promptSections": "Prompt sections",
     "promptSectionsHint": "What this segment actually carries in its prompt.",

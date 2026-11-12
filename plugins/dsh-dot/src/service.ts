@@ -11,19 +11,19 @@ import { ZERO_USAGE, addUsage, combineUsage, netSegmentUsage, usageFromEvents } 
 import { PRESET_ID, TOOL, type BoardView, type DotContextSections, type DotContextUsage, type DotContextView, type KnowledgeView, type ModelChoice, type PendingKind, type PendingQuestionItem, type RolloverReason, type RuleConfig } from './contracts.ts'
 import { SUMMARY_INSTRUCTION, SUMMARY_MAX_TOKENS, buildHandoff, type Handoff } from './handoff.ts'
 import { READ_ROWS_DEFAULT, READ_ROWS_MAX, SEARCH_LIMIT_DEFAULT, SEARCH_LIMIT_MAX, SEARCH_SESSIONS_MAX, formatRead, formatSearch, historyRows, queryTerms, searchRows, windowRows, type SessionHits } from './history.ts'
-import { FULL_ACCESS, type DotHost, type WorkspaceRow } from './host.ts'
+import { type DotHost, type WorkspaceRow } from './host.ts'
 import { clip } from './ledger.ts'
 import { AGREEMENTS_MAX_CHARS, COGNITION_MAX_CHARS, KnowledgeError, MemoryNotes, addEntry, agreementsSection, cognitionSection, normalizeAgreements, normalizeCognition, policyAsAgreements, removeEntry } from './memory.ts'
 import { PendingHub, type PendingAnswer } from './pending.ts'
 import { personaSection } from './persona.ts'
 import { ReminderClock } from './reminders.ts'
-import { routeInstruction, routeRequest, type Route } from './rules.ts'
+import { routeRequest } from './rules.ts'
 import { ScheduleInputError, describeTiming, scheduleLines, type ScheduleInput } from './schedule.ts'
 import { openingText, reasonAfterTurn, reasonBeforeDelivery, type Segment } from './segments.ts'
 import type { DotStore } from './store.ts'
 import { eventTier } from './tiers.ts'
 import { TaskModelError, formatTaskModels, modelKey, pickTaskModel, type TaskModelCatalog } from './task-models.ts'
-import { CONFIG_PRESET_ID, TaskPresetError, pickTaskPreset, type TaskPresetCatalog, type TaskPresetChoice } from './task-presets.ts'
+import { TaskPresetError, pickTaskPreset, type TaskPresetCatalog, type TaskPresetChoice } from './task-presets.ts'
 import { openCardState, stamp, transcriptRows, type TranscriptRow } from './transcript.ts'
 import { SelfSettings } from './self-settings.ts'
 
@@ -38,6 +38,8 @@ export interface DotServiceOptions {
   /** Fixed quiet window for tests; otherwise the settings decide. */
   readonly quietMs?: number
   readonly maxWaitMs?: number
+  /** Let original-session answerers settle approvals before waking dot. */
+  readonly approvalGraceMs?: number
   readonly timer?: Timer
   readonly now?: () => number
   readonly log?: (message: string) => void
@@ -56,6 +58,8 @@ const LOOKUP_TOOLS: ReadonlySet<string> = new Set([TOOL.searchHistory, TOOL.read
 
 /** Sidebar title of dot's own workspace; the host keeps one title per workspace, so it is not translated. */
 export const HOME_TITLE = 'Dorothy'
+/** The middle of the recommended 8–12 second window; profile config may override it. */
+export const APPROVAL_GRACE_MS = 10_000
 
 export class DotError extends Error {
   constructor(readonly code: string, message: string) { super(message); this.name = 'DotError' }
@@ -63,7 +67,6 @@ export class DotError extends Error {
 
 export type RelayOutcome =
   | { readonly decided: 'pending'; readonly id: string; readonly settled: Promise<PendingAnswer | undefined>; readonly withdraw: () => void }
-  | { readonly decided: 'allow' }
   | { readonly decided: 'deny' }
   | { readonly decided: 'skip' }
 
@@ -374,11 +377,14 @@ export class DotService {
         throw new DotError('dot/model-failed', `session ${sessionId} was created but could not be put on ${modelKey(model)}, so nothing was sent to it: ${messageOf(error)}`)
       }
     }
-    // Under `allow`, task sessions run with full access; under other modes they keep host approvals.
-    // A session that can change the DSH installation never gets full access and asks the human unless denied.
-    const guarded = preset.id === CONFIG_PRESET_ID
-    const fullAccess = !guarded && this.store.settings.approvals === 'allow'
-    const permitted = fullAccess ? await this.host.setPermission(sessionId, FULL_ACCESS) : false
+    // Safe Auto is opt-in per live session (its control keeps selections in a WeakMap),
+    // so a newly created task has no inherited reviewer. Use the public native
+    // permission preset before its first prompt; no global Safe Auto settings are changed.
+    // A failed permission change leaves this empty session without a first instruction.
+    const permission = this.store.settings.taskPermission
+    if (permission !== 'default' && !(await this.host.setPermission(sessionId, permission))) {
+      throw new DotError('dot/permission-failed', `session ${sessionId} was created but ${permission} could not be applied, so nothing was sent to it`)
+    }
     await this.store.track({ sessionId, origin: 'started', title: input.title, goal: input.goal ?? instruction, cwd, ...workspaceId ? { workspaceId } : {}, ...preset.id ? { preset: preset.id } : {}, at: this.now() })
     try {
       await this.host.prompt(sessionId, instruction, 'queue', signal)
@@ -386,11 +392,7 @@ export class DotService {
       await this.store.apply({ type: 'error', sessionId, at: this.now(), message: `first instruction not delivered: ${messageOf(error)}` }, this.pending.list())
       throw new DotError('dot/prompt-failed', `session ${sessionId} was created but the instruction was not delivered: ${messageOf(error)}`)
     }
-    const access = guarded
-      ? this.store.settings.approvals === 'deny'
-        ? ' It can change the DSH installation, and approvals are set to deny all.'
-        : ' It can change the DSH installation, so it runs under the default permissions and every approval it asks for goes to the human.'
-      : !fullAccess ? '' : permitted ? ' It runs with full access.' : ' Full access could not be applied; it runs under the default permissions and its approvals are allowed automatically.'
+    const access = permission === 'default' ? ' It keeps the host default permissions.' : ` It runs with ${permission} permissions.`
     return `Started task ${sessionId} "${input.title}" in ${cwd}${preset.named && preset.id ? ` with the ${preset.id} preset` : ''}${model ? ` on ${modelKey(model)}` : ''}.${access}`
   }
 
@@ -440,9 +442,15 @@ export class DotService {
 
   answer(id: string, answer: PendingAnswer): string {
     const view = this.pending.get(id)
-    if (!view) throw new DotError('dot/unknown-request', `no waiting request ${id}; it may have been answered in its own session — stay silent unless another update needs the human`)
-    if (!this.pending.answer(id, answer)) throw new DotError('dot/invalid-answer', answer.kind === 'question' ? 'answer every question id exactly once' : `request ${id} is a ${view.kind}`)
-    return `Answered ${id} for ${view.sessionId}.`
+    if (!view) {
+      const settled = this.pending.settlement(id)
+      if (settled) return `Already settled: ${id} for ${settled.sessionId} (${settled.reason}); no answer was applied. Stay silent unless another update needs the human.`
+      throw new DotError('dot/unknown-request', `no known request ${id}; check the request id`)
+    }
+    // The human may switch to deny while dot is still judging a delivered request.
+    const denied = view.kind === 'approval' && answer.kind === 'approval' && this.rules.approvals === 'deny'
+    if (!this.pending.answer(id, denied ? { kind: 'approval', allow: false } : answer)) throw new DotError('dot/invalid-answer', answer.kind === 'question' ? 'answer every question id exactly once' : `request ${id} is a ${view.kind}`)
+    return denied ? `Rejected ${id} for ${view.sessionId}: approvals=deny; no grant was applied.` : `Answered ${id} for ${view.sessionId}.`
   }
 
   async scheduleAdd(input: ScheduleInput): Promise<string> {
@@ -751,12 +759,8 @@ export class DotService {
     const tracked = this.store.tracks(input.sessionId)
     if (!tracked && this.rules.scope === 'tracked') return { decided: 'skip' }
     const task = this.store.task(input.sessionId)
-    // A task that can change the DSH installation never has its approvals auto-allowed or settled by dot:
-    // unless approvals are denied across the board, they go to the human.
-    const guarded = input.kind === 'approval' && task?.preset === CONFIG_PRESET_ID
-    const routed = routeRequest(this.rules, input.kind)
-    const route: Route = guarded && (routed.action === 'dot' || routed.action === 'allow') ? { action: 'human' } : routed
-    if (route.action === 'skip' || route.action === 'allow' || route.action === 'deny') return { decided: route.action }
+    const route = routeRequest(this.rules, input.kind)
+    if (route.action === 'skip' || route.action === 'deny') return { decided: route.action }
     const { cwd, ...request } = input
     const opened = this.pending.open(request)
     const where = task ? `task "${task.title}"` : `untracked session${cwd ? ` in ${cwd}` : ''}`
@@ -765,15 +769,16 @@ export class DotService {
     for (const q of input.questions ?? []) {
       lines.push(`  [${q.id}] ${q.question}${q.options?.length ? ' options: ' + q.options.map(o => o.label).join(' | ') : ''}${q.multiSelect ? ' (multi)' : ''}`)
     }
-    lines.push(`  ${routeInstruction(route, this.rules.policy)}`)
-    this.notify({ sessionId: input.sessionId, kind: input.kind, requestId: opened.id, text: lines.join('\n'), at: this.now() }, true)
+    // Decisions live in the system prompt and agreements, never repeated in each notice.
+    // An already-aborted request is not queued at all.
+    if (this.pending.get(opened.id)) this.notify({ sessionId: input.sessionId, kind: input.kind, requestId: opened.id, text: lines.join('\n'), at: this.now() }, true)
     return { decided: 'pending', ...opened }
   }
 
   notify(notice: Notice, urgent = false): void {
     const tier = eventTier(notice.kind, this.store.task(notice.sessionId)?.origin)
     if (tier === 'hold') this.batcher.hold(notice)
-    else if (tier === 'wake') this.batcher.push(notice, urgent)
+    else if (tier === 'wake') this.batcher.push(notice, urgent, notice.kind === 'approval' ? this.options.approvalGraceMs ?? APPROVAL_GRACE_MS : 0)
   }
 
   flushNotices(): Promise<void> { return this.batcher.drain() }

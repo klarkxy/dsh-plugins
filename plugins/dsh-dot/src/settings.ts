@@ -2,9 +2,14 @@
  * Host-side reading and patching of dot's settings. Stored rows read field by
  * field, so one bad value falls back to its default instead of losing the rest;
  * patches from the panel are checked strictly and refused as a whole.
+ *
+ * Two legacy shapes are still read and never written back: the old 'allow'
+ * approval mode (a blanket auto-allow the host cannot express; it reads as
+ * the safe 'human' fallback) and the old 'policy' free-text rules (their
+ * content is migrated into the agreements once).
  */
 import { z } from 'zod'
-import { DEFAULT_SETTINGS, POLICY_MAX_CHARS, SETTING_FIELDS, TASK_MODEL_LIST_MAX, type DotSettings, type SettingField } from './contracts.ts'
+import { DEFAULT_SETTINGS, SETTING_FIELDS, TASK_MODEL_LIST_MAX, type DotSettings, type SettingField, type TaskPermission } from './contracts.ts'
 import { ADDRESS_MAX_CHARS, DEFAULT_ADDRESS, DEFAULT_PERSONA, PERSONA_MAX_CHARS } from './persona.ts'
 
 const FIELDS = {
@@ -20,7 +25,8 @@ const FIELDS = {
     mode: z.enum(['all', 'allow', 'deny']),
     list: z.array(z.string().trim().min(1).max(400)).max(TASK_MODEL_LIST_MAX),
   }).strict(),
-  policy: z.string().max(POLICY_MAX_CHARS),
+  taskPermission: z.enum(['workspace-write', 'danger-full-access', 'default']),
+  reflection: z.boolean(),
   persona: z.string().max(PERSONA_MAX_CHARS),
   address: z.string().trim().min(1).max(ADDRESS_MAX_CHARS),
   locks: z.object(Object.fromEntries(SETTING_FIELDS.map(field => [field, z.boolean().optional()]))).strict(),
@@ -39,6 +45,28 @@ export class SettingsError extends Error {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 
+const TASK_PERMISSIONS = new Set<string>(['workspace-write', 'danger-full-access', 'default'])
+
+/**
+ * The task permission of a stored row. The singular field wins; a legacy row
+ * that carries the plural name as a plain string is read once for
+ * compatibility. A value that is not one of the known presets leaves the
+ * default in place, so a saved 'default' or 'danger-full-access' is never
+ * quietly replaced.
+ */
+function readTaskPermission(row: Record<string, unknown>): TaskPermission | undefined {
+  const singular = row.taskPermission
+  if (typeof singular === 'string' && TASK_PERMISSIONS.has(singular)) return singular as TaskPermission
+  const plural = row.taskPermissions
+  if (typeof plural === 'string' && TASK_PERMISSIONS.has(plural)) return plural as TaskPermission
+  return undefined
+}
+
+/**
+ * The stored settings. The deprecated 'policy' text is carried through
+ * untouched: the one-time migration reads it into the agreements, and no
+ * patch can change it.
+ */
 export function parseSettings(value: unknown): DotSettings {
   const row = isRecord(value) ? value : {}
   const out: Record<string, unknown> = { ...DEFAULT_SETTINGS }
@@ -53,8 +81,15 @@ export function parseSettings(value: unknown): DotSettings {
       continue
     }
     const parsed = FIELDS[key].safeParse(row[key])
-    if (parsed.success) out[key] = parsed.data
+    if (!parsed.success) continue
+    // The old blanket auto-allow mode was removed by product decision; a stored
+    // legacy value falls back to 'human', the safe mode that asks the human.
+    if (key === 'approvals' && parsed.data === 'allow') { out.approvals = 'human'; continue }
+    out[key] = parsed.data
   }
+  const permission = readTaskPermission(row)
+  if (permission !== undefined) out.taskPermission = permission
+  if (typeof row.policy === 'string') out.policy = row.policy
   return out as unknown as DotSettings
 }
 
@@ -67,6 +102,7 @@ export function patchSettings(current: DotSettings, patch: unknown): DotSettings
     if (CLEARABLE.has(key) && value === null) { delete next[key]; continue }
     const parsed = FIELDS[key as Field].safeParse(value)
     if (!parsed.success) throw new SettingsError(`invalid value for ${key}`)
+    if (key === 'approvals' && parsed.data === 'allow') throw new SettingsError('invalid value for approvals')
     if (key in DEFAULTS && (parsed.data as string).trim() === DEFAULTS[key]!.trim()) { delete next[key]; continue }
     next[key] = parsed.data
   }

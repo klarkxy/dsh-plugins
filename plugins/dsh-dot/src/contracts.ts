@@ -30,15 +30,25 @@ export const TOOL = {
   settings: 'dot_settings',
 } as const
 
-/** Settings Dorothy may propose changing; locks themselves are human-only. */
-export const SETTING_FIELDS = ['model', 'approvals', 'questions', 'scope', 'taskModels', 'policy', 'persona', 'address', 'memory'] as const
+/**
+ * Settings Dorothy may propose changing; locks themselves are human-only.
+ * `policy` (the old free-form custom rules) is gone: its content lives in the
+ * agreements now. A stored value is still read once for that migration, but it
+ * can no longer be edited or proposed.
+ */
+export const SETTING_FIELDS = ['model', 'approvals', 'questions', 'scope', 'taskModels', 'taskPermission', 'reflection', 'persona', 'address', 'memory'] as const
 export type SettingField = typeof SETTING_FIELDS[number]
 export type SettingLocks = Readonly<Partial<Record<SettingField, boolean>>>
 
 /** A durable human decision; approving writes the value captured in the proposal only if it is still current. */
 export interface SettingProposal {
   readonly id: string
-  readonly field: SettingField
+  /**
+   * The setting the proposal names. `policy` is the legacy free-form rules
+   * field: such a row stays readable so the human can decline it, but it can
+   * no longer be applied.
+   */
+  readonly field: SettingField | 'policy'
   readonly before: unknown
   readonly after: unknown
   readonly reason: string
@@ -165,11 +175,13 @@ export interface BoardView {
 }
 
 /**
- * Unified permission policy across sessions in scope and tasks dot starts.
- * dot: host default sandbox + dot screens prompts; human: host default + relay to human;
- * deny: host default + reject prompts automatically; allow: full access on new tasks + auto-allow prompts (cordis tasks still ask the human).
+ * Who answers the approval prompts of the sessions in scope.
+ * dot: dot settles what it can and asks the human the rest; human: every
+ * request goes to the human; deny: every request is rejected.
+ * The old blanket "allow all" mode is gone by product decision; a stored
+ * legacy value reads as 'human', the safe fallback.
  */
-export type ApprovalMode = 'dot' | 'human' | 'deny' | 'allow'
+export type ApprovalMode = 'dot' | 'human' | 'deny'
 
 /** dot: dot settles what it can and asks the human the rest; human: dot relays every one; off: the host's own card handles it. */
 export type TakeoverMode = 'dot' | 'human' | 'off'
@@ -184,6 +196,16 @@ export interface ModelChoice { readonly provider: string; readonly model: string
 export interface TaskModelRule { readonly mode: 'all' | 'allow' | 'deny'; readonly list: readonly string[] }
 export const TASK_MODEL_LIST_MAX = 500
 
+/**
+ * The permission preset a task session starts with. It is independent of the
+ * approval mode: a sandbox limits what a task can touch, the approval mode
+ * decides who answers the prompts that still appear.
+ * - workspace-write: the task may write inside its workspace and ask for more.
+ * - danger-full-access: the task may act anywhere; no sandbox prompt appears.
+ * - default: the host's own default permissions, whatever the host has set.
+ */
+export type TaskPermission = 'workspace-write' | 'danger-full-access' | 'default'
+
 /** Everything the human tunes in dot's settings view; stored with dot's state. */
 export interface DotSettings {
   /** dot's own model; absent follows the host default model. */
@@ -194,8 +216,16 @@ export interface DotSettings {
   readonly scope: 'all' | 'tracked'
   /** Models dot may start tasks on. */
   readonly taskModels: TaskModelRule
-  /** The human's own rules for settling requests, in their words; they take precedence over dot's defaults. */
-  readonly policy: string
+  /** The permission preset a new task session starts with. */
+  readonly taskPermission: TaskPermission
+  /** Whether dot may run her own background reflection pass. */
+  readonly reflection: boolean
+  /**
+   * @deprecated The old free-form custom rules. They are no longer editable;
+   * a stored value is read once for the migration into the agreements and is
+   * never changed again.
+   */
+  readonly policy?: string
   /** The human's own persona text for dot; absent uses the default persona. */
   readonly persona?: string
   /** How dot addresses the human; absent uses the default. */
@@ -204,18 +234,17 @@ export interface DotSettings {
   readonly locks?: SettingLocks
 }
 
-export const POLICY_MAX_CHARS = 2000
-
 export const DEFAULT_SETTINGS: DotSettings = {
   approvals: 'dot',
   questions: 'dot',
   scope: 'all',
   taskModels: { mode: 'all', list: [] },
-  policy: '',
+  taskPermission: 'workspace-write',
+  reflection: true,
 }
 
 /** The part of the settings that routes an incoming request. */
-export type RuleConfig = Pick<DotSettings, 'approvals' | 'questions' | 'scope' | 'policy'>
+export type RuleConfig = Pick<DotSettings, 'approvals' | 'questions' | 'scope'>
 
 export const DEFAULT_RULES: RuleConfig = DEFAULT_SETTINGS
 
