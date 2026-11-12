@@ -11,7 +11,7 @@ import { CHAT_ROOT, ChatPanel, chatCss, type CardComponent, type ChatApi } from 
 import { contextCss } from './context-panel.tsx'
 import { personaCss } from './persona-panel.tsx'
 import { trajectoryCss } from './trajectory-panel.tsx'
-import { RPC_CHANNEL, type BoardView, type ChatSnapshot, type DotContextView, type DotSettings, type MemoryView, type SettingProposal, type TrajectoryView } from './contracts.ts'
+import { RPC_CHANNEL, type BoardView, type ChatSnapshot, type DotContextView, type DotSettings, type KnowledgeView, type SettingProposal, type TrajectoryView } from './contracts.ts'
 import { copyLocale, t, type CopyLocale } from './ui-copy.ts'
 import { DotIcon } from './whale.tsx'
 
@@ -63,9 +63,11 @@ export function apply(ctx: Context): void {
     settingProposals: signal => call<SettingProposal[]>('settings.proposals', {}, signal),
     decideSetting: (id, allow) => call<string>('settings.decide', { id, allow }),
     newSegment: () => call<string>('segment.new'),
-    memory: signal => call<MemoryView>('memory', {}, signal),
-    setMemory: text => call<MemoryView>('memory.set', { text }),
-    undoMemory: () => call<MemoryView>('memory.undo'),
+    knowledge: signal => call<KnowledgeView>('knowledge', {}, signal),
+    setAgreements: text => call<KnowledgeView>('agreements.set', { text }),
+    undoAgreements: () => call<KnowledgeView>('agreements.undo'),
+    setCognition: text => call<KnowledgeView>('cognition.set', { text }),
+    restoreCognition: at => call<KnowledgeView>('cognition.restore', { at }),
     context: signal => call<DotContextView>('context', {}, signal),
     clearUsage: () => call<DotContextView>('context.clearUsage'),
     trajectory: signal => call<TrajectoryView>('trajectory', {}, signal),

@@ -6,6 +6,7 @@ import type { RawEvent } from './chat.ts'
 import { DEFAULT_SETTINGS, PRESET_ID, REMINDER_HEAD, type DotContextView, type DotSettings } from './contracts.ts'
 import { FULL_ACCESS, type DotHost, type SessionRow, type WorkspaceRow } from './host.ts'
 import { DotService, HOME_TITLE } from './service.ts'
+import { agreementsSection } from './memory.ts'
 import { DotStore } from './store.ts'
 
 /** Manual timer: tests fire scheduled callbacks explicitly. */
@@ -131,8 +132,8 @@ function setup(settings?: Partial<DotSettings>) {
   const store = new DotStore(undefined)
   if (settings) void store.setSettings({ ...DEFAULT_SETTINGS, ...settings })
   let at = 1000
-  // The notes live in memory here; no test touches a file.
-  const notes = { path: '/dot/memory.md', text: '', read: async () => notes.text, write: async (text: string) => { notes.text = text } }
+  // The legacy note files live in memory here; only the one-time migration reads them.
+  const notes = { path: '/dot/memory.md', text: '', cognition: '', read: async () => notes.text, readCognition: async () => notes.cognition }
   const service = new DotService({ host: fake.host, store, homeDir: join(tmpdir(), 'dsh-dot-spec'), notes, quietMs: 10_000, maxWaitMs: 60_000, timer: clock.timer, now: () => at })
   return { ...fake, ...clock, store, service, notes, advance: (ms: number) => { at += ms } }
 }
@@ -475,89 +476,232 @@ describe('DotService history', () => {
   })
 })
 
-describe('DotService notes', () => {
-  it('freezes the notes into the segment and keeps the segment when dot changes them itself', async () => {
+describe('DotService knowledge', () => {
+  it('freezes agreements and cognition into the segment and keeps it when dot changes them itself', async () => {
     const h = setup()
-    h.notes.text = '- likes tea\n'
+    await h.service.setAgreements('- use the standard preset\n')
+    await h.service.setCognition('I notice you prefer short answers.')
     const dot = await h.service.ensureDot()
-    expect(h.store.segment!.memory).toContain('[your notes]')
-    expect(h.store.segment!.memory).toContain('- likes tea')
+    expect(h.store.segment!.agreements).toContain('[agreements]')
+    expect(h.store.segment!.agreements).toContain('standard preset')
+    expect(h.store.segment!.cognition).toContain('[cognition]')
+    expect(h.store.segment!.cognition).toContain('short answers')
     h.events.set(dot, [human('hi', 10), reply('hello', 20)])
 
-    expect(await h.service.remember('works in Shanghai time')).toContain('2 entries')
-    expect(h.notes.text).toBe('- likes tea\n- works in Shanghai time\n')
-    expect(await h.service.remember('LIKES TEA')).toBe('That is already in your notes.')
-    expect(await h.service.forget('tea')).toBe('Removed from your notes: "likes tea".')
-    await expect(h.service.forget('coffee')).rejects.toMatchObject({ code: 'dot/unknown-note' })
-    // The prompt of the running segment stays as it was built, and dot is not moved for its own change.
-    expect(h.store.segment!.memory).toContain('- likes tea')
-    expect(h.store.segment!.memory).not.toContain('Shanghai')
+    expect(await h.service.agreementAdd('never push to main')).toContain('Recorded as an agreement')
+    expect(h.store.agreements).toContain('never push to main')
+    expect(await h.service.cognitionRewrite('I notice you like detail.')).toContain('updated')
+    expect(h.store.cognition).toBe('I notice you like detail.')
+    // The frozen prompt of the running segment stays as it was built; dot's own change only moves the seen snapshot.
+    expect(h.store.segment!.agreements).not.toContain('never push to main')
+    expect(h.store.segment!.agreementsSeen).toContain('never push to main')
+    expect(h.store.segment!.cognition).toContain('short answers')
+    expect(h.store.segment!.cognitionSeen).toContain('like detail')
     await h.service.say('go on')
     expect(h.store.dotSessionId).toBe(dot)
 
-    // The next segment starts with the notes as they are by then.
+    // The next segment starts with the blocks as they are by then.
     h.setContext(OVER_THE_LINE)
     await h.service.onDotIdle(dot)
     expect(h.store.dotSessionId).not.toBe(dot)
-    expect(h.store.segment!.memory).toContain('- works in Shanghai time')
-    expect(h.store.segment!.memory).not.toContain('likes tea')
-    expect(h.store.segment!.memorySeen).toBeUndefined()
+    expect(h.store.segment!.agreements).toContain('never push to main')
+    expect(h.store.segment!.agreementsSeen).toBeUndefined()
+    expect(h.store.segment!.cognition).toContain('like detail')
+    expect(h.store.segment!.cognitionSeen).toBeUndefined()
   })
 
   it("takes the human's edit in place before dot has replied and in a new segment after", async () => {
     const h = setup()
     const dot = await h.service.ensureDot()
-    expect(h.store.segment!.memory).toBeUndefined()
-    expect((await h.service.setMemory('- call me Captain\r\n\r\n')).text).toBe('- call me Captain\n')
-    await h.service.settingsChanged()
+    expect(h.store.segment!.agreements).toBe('')
+    expect((await h.service.setAgreements('- call me Captain\r\n\r\n')).agreements.text).toBe('- call me Captain\n')
+    // A panel edit does not switch right away.
     expect(h.store.dotSessionId).toBe(dot)
-    expect(h.store.segment!.memory).toContain('- call me Captain')
+    expect(h.store.segment!.agreements).toBe('')
+    await h.service.say('hi')
+    // Not replied yet: the untouched segment takes the current text in place.
+    expect(h.store.dotSessionId).toBe(dot)
+    expect(h.store.segment!.agreements).toContain('- call me Captain')
 
     h.events.set(dot, [human('hi', 10), reply('hello', 20)])
-    await h.service.setMemory('- call me Admiral')
-    await h.service.settingsChanged()
-    expect(h.store.dotSessionId).toBe(dot)
-    expect(h.store.segment!.memory).toContain('- call me Captain')
+    await h.service.setAgreements('- call me Admiral')
     await h.service.say('ahoy')
     const next = h.store.dotSessionId!
     expect(next).not.toBe(dot)
     expect(h.store.segment).toMatchObject({ reason: 'prompt-changed' })
-    expect(h.store.segment!.memory).toContain('- call me Admiral')
+    expect(h.store.segment!.agreements).toContain('- call me Admiral')
     expect(h.calls).toContain(`say ${next} ahoy`)
   })
 
-  it("still moves for the human's edit when dot adds a note of its own after it", async () => {
+  it('does not swallow a human edit to one layer when dot changes the other in-session', async () => {
     const h = setup()
     const dot = await h.service.ensureDot()
     h.events.set(dot, [human('hi', 10), reply('hello', 20)])
-    await h.service.setMemory('- call me Admiral')
-    await h.service.remember('likes tea')
-    await h.service.say('ahoy')
+    // The human edits the agreements in the panel; dot rewrites its cognition in the same segment.
+    await h.service.setAgreements('- be terse')
+    await h.service.cognitionRewrite('I feel you like detail.')
+    // The agreements seen snapshot is still the pre-edit block, so the next message still moves.
+    await h.service.say('continue')
     expect(h.store.dotSessionId).not.toBe(dot)
     expect(h.store.segment).toMatchObject({ reason: 'prompt-changed' })
-    expect(h.store.segment!.memory).toContain('- call me Admiral\n- likes tea')
+    expect(h.store.segment!.agreements).toContain('be terse')
+    expect(h.store.segment!.cognition).toContain('like detail')
   })
 
-  it('takes the latest change back once, whoever made it', async () => {
+  it('takes the latest agreements change back once, whoever made it', async () => {
     const h = setup()
     await h.service.ensureDot()
-    expect(await h.service.memoryView()).toEqual({ text: '', path: '/dot/memory.md', maxChars: 4000, canUndo: false })
-    await expect(h.service.undoMemory()).rejects.toMatchObject({ code: 'dot/nothing-to-undo' })
-    await h.service.setMemory('- call me Captain')
-    await h.service.remember('likes tea')
-    expect(await h.service.memoryView()).toMatchObject({ text: '- call me Captain\n- likes tea\n', canUndo: true })
-    expect(await h.service.undoMemory()).toMatchObject({ text: '- call me Captain\n', canUndo: true })
+    expect((await h.service.knowledgeView()).agreements).toEqual({ text: '', maxChars: 4000, canUndo: false })
+    await expect(h.service.undoAgreements()).rejects.toMatchObject({ code: 'dot/nothing-to-undo' })
+    await h.service.setAgreements('- call me Captain')
+    await h.service.agreementAdd('likes tea')
+    expect((await h.service.knowledgeView()).agreements).toMatchObject({ text: '- call me Captain\n- likes tea\n', canUndo: true })
+    expect((await h.service.undoAgreements()).agreements).toMatchObject({ text: '- call me Captain\n', canUndo: true })
     // One step is kept: taking back again restores what was just taken back.
-    expect((await h.service.undoMemory()).text).toBe('- call me Captain\n- likes tea\n')
-    await expect(h.service.setMemory('x'.repeat(4001))).rejects.toMatchObject({ code: 'dot/invalid' })
-    expect(h.notes.text).toBe('- call me Captain\n- likes tea\n')
+    expect((await h.service.undoAgreements()).agreements.text).toBe('- call me Captain\n- likes tea\n')
+    await expect(h.service.setAgreements('x'.repeat(4001))).rejects.toMatchObject({ code: 'dot/invalid' })
   })
 
-  it('runs changes one after another, so none is lost', async () => {
+  it('rewrites cognition whole, keeps versions, rolls back, and lets the empty version return', async () => {
     const h = setup()
     await h.service.ensureDot()
-    await Promise.all([h.service.remember('one'), h.service.remember('two'), h.service.remember('three')])
-    expect(h.notes.text).toBe('- one\n- two\n- three\n')
+    await h.service.cognitionRewrite('first')
+    await h.service.cognitionRewrite('second')
+    let view = await h.service.knowledgeView()
+    expect(view.cognition.text).toBe('second')
+    expect(view.cognition.history.map(version => version.text)).toEqual(['first', ''])
+    const empty = view.cognition.history.find(version => version.text === '')!
+    view = await h.service.restoreCognition(empty.at)
+    expect(view.cognition.text).toBe('')
+    // Restoring pushes the replaced text back onto the history too.
+    expect(view.cognition.history[0]!.text).toBe('second')
+    await expect(h.service.restoreCognition(-1)).rejects.toMatchObject({ code: 'dot/unknown-version' })
+  })
+
+  it('runs agreements changes one after another, so none is lost', async () => {
+    const h = setup()
+    await h.service.ensureDot()
+    await Promise.all([h.service.agreementAdd('one'), h.service.agreementAdd('two'), h.service.agreementAdd('three')])
+    expect(h.store.agreements).toBe('- one\n- two\n- three\n')
+  })
+})
+
+describe('DotService knowledge migration', () => {
+  it('imports the old policy and the whole notes file into agreements, and the old cognition file into cognition', async () => {
+    const h = setup({ policy: 'pushing to my own repos is fine' })
+    h.notes.text = '- 普通开发任务用标准预设，不用破限\n- call me Captain\n'
+    h.notes.cognition = 'I have learned that you like short answers.'
+    await h.service.ensureDot()
+    const view = await h.service.knowledgeView()
+    expect(view.agreements.text).toContain('pushing to my own repos is fine')
+    expect(view.agreements.text).toContain('普通开发任务用标准预设，不用破限')
+    expect(view.agreements.text).toContain('call me Captain')
+    expect(view.cognition.text).toBe('I have learned that you like short answers.')
+    // The import runs once: clearing it afterwards never pulls the old sources back in.
+    await h.service.setAgreements('')
+    await h.service.setCognition('')
+    h.notes.text = '- a later edit of the file\n'
+    const after = await h.service.knowledgeView()
+    expect(after.agreements.text).toBe('')
+    expect(after.cognition.text).toBe('')
+  })
+
+  it('turns the old policy into removable agreement items', async () => {
+    const h = setup({ policy: '推送前问我' })
+    await h.service.ensureDot()
+    expect((await h.service.knowledgeView()).agreements.text).toContain('- 推送前问我')
+    expect(await h.service.agreementRemove('推送前问我')).toContain('Removed this agreement')
+    expect((await h.service.knowledgeView()).agreements.text).not.toContain('推送前问我')
+  })
+
+  it('imports the legacy state memory field into cognition and preserves the independent policy in notes undo', async () => {
+    const h = setup({ policy: '推送前问我' })
+    await h.store.setDot({ memory: 'state-held understanding', memoryUndo: '- an older rule\n' })
+    h.notes.text = '- a rule from the notes file\n'
+    await h.service.ensureDot()
+    const view = await h.service.knowledgeView()
+    expect(view.cognition.text).toBe('state-held understanding')
+    expect(view.agreements.text).toContain('a rule from the notes file')
+    // The old memory undo migrates as the agreements' undo snapshot, not as cognition input.
+    expect(view.cognition.text).not.toContain('older rule')
+    expect(view.agreements.canUndo).toBe(true)
+    const restored = await h.service.undoAgreements()
+    expect(restored.agreements.text).toContain('推送前问我')
+    expect(restored.agreements.text).toContain('an older rule')
+    expect(restored.agreements.text).not.toContain('a rule from the notes file')
+  })
+
+  it('preserves an empty legacy notes undo snapshot without removing the independent policy', async () => {
+    const h = setup({ policy: '推送前问我' })
+    await h.store.setDot({ memoryUndo: '' })
+    h.notes.text = '- 普通开发任务用标准预设，不用破限\n'
+    await h.service.ensureDot()
+    const restored = await h.service.undoAgreements()
+    expect(restored.agreements.text).toBe('- 推送前问我\n')
+  })
+
+  it('does not treat a failed import as done, and retries it next time', async () => {
+    const h = setup()
+    h.notes.text = '- important rule\n'
+    const realCommit = h.store.commitKnowledgeMigration.bind(h.store)
+    let failing = true
+    h.store.commitKnowledgeMigration = async patch => {
+      if (failing) throw new Error('disk writes are down')
+      return realCommit(patch)
+    }
+    // The failure surfaces to the caller instead of being swallowed.
+    await expect(h.service.ensureDot()).rejects.toThrow(/disk writes are down/)
+    expect(h.store.knowledgeMigrated).toBe(false)
+    failing = false
+    const view = await h.service.knowledgeView()
+    expect(h.store.knowledgeMigrated).toBe(true)
+    expect(view.agreements.text).toContain('important rule')
+  })
+
+  it('does not mark the import done when a legacy read fails, and retries without losing the note', async () => {
+    const h = setup()
+    h.notes.text = '- must not be lost\n'
+    const realRead = h.notes.read
+    let failRead = true
+    h.notes.read = async () => {
+      if (failRead) throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+      return realRead()
+    }
+    await expect(h.service.ensureDot()).rejects.toThrow(/permission denied/)
+    expect(h.store.knowledgeMigrated).toBe(false)
+    // While the import keeps failing, a write is refused too, so it can never hide the old note.
+    await expect(h.service.agreementAdd('added while the import is broken')).rejects.toThrow(/permission denied/)
+    expect(h.store.agreements).toBe('')
+    failRead = false
+    const view = await h.service.knowledgeView()
+    expect(h.store.knowledgeMigrated).toBe(true)
+    expect(view.agreements.text).toContain('must not be lost')
+  })
+
+  it('carries an imported agreement set whole past the write limit, keeping the tail rule in the prompt', async () => {
+    const h = setup({ policy: `P${'p'.repeat(1998)}` })
+    h.notes.text = `- ${'x'.repeat(3000)}\n- the last rule that must stay in force\n`
+    await h.service.ensureDot()
+    const view = await h.service.knowledgeView()
+    // The stored text exceeds the 4000-char new-write limit; the import is not clipped.
+    expect(view.agreements.text.length).toBeGreaterThan(4000)
+    expect(view.agreements.text).toContain('the last rule that must stay in force')
+    // And the rendered prompt block carries the tail too.
+    expect(agreementsSection(view.agreements.text)).toContain('the last rule that must stay in force')
+  })
+
+  it('does not read a legacy file whose target layer already has content', async () => {
+    const h = setup()
+    await h.store.setAgreements('- keep me\n')
+    await h.store.setCognition('my own understanding')
+    // A failing legacy file must not block the import when its layer is already filled.
+    h.notes.read = async () => { throw Object.assign(new Error('permission denied'), { code: 'EACCES' }) }
+    h.notes.readCognition = async () => { throw Object.assign(new Error('permission denied'), { code: 'EACCES' }) }
+    await h.service.ensureDot()
+    expect(h.store.knowledgeMigrated).toBe(true)
+    const view = await h.service.knowledgeView()
+    expect(view.agreements.text).toBe('- keep me\n')
+    expect(view.cognition.text).toBe('my own understanding')
   })
 })
 

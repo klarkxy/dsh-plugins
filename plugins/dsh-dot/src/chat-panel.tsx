@@ -15,7 +15,7 @@ import { Board } from './board.tsx'
 import { filterVisibleChat } from './chat-filter.ts'
 import { formatToolDetail, parseNotice, permissionLabel, resolveSessionBadge, summarizeNotice, summarizeToolCall, summarizeToolGroup, type KnownTaskMeta, type NoticeEntry, type SessionBadge, type TaskLookup } from './chat-format.ts'
 import { ContextPanel, type ContextApi } from './context-panel.tsx'
-import { PersonaPanel, type MemoryApi } from './persona-panel.tsx'
+import { PersonaPanel, type KnowledgeApi } from './persona-panel.tsx'
 import { TrajectoryPanel, type TrajectoryApi } from './trajectory-panel.tsx'
 import type { BoardView, ChatItem, ChatSnapshot, DotSettings } from './contracts.ts'
 import { SettingsPanel, settingsCss, type SaveNotice, type SettingsApi } from './settings-panel.tsx'
@@ -30,7 +30,7 @@ const RETRY_MS = 2_000
 const ECHO_MS = 60_000
 const STICK_PX = 96
 
-export interface ChatApi extends SettingsApi, ContextApi, TrajectoryApi, MemoryApi {
+export interface ChatApi extends SettingsApi, ContextApi, TrajectoryApi, KnowledgeApi {
   chat(itemsRev: number, signal: AbortSignal): Promise<ChatSnapshot | undefined>
   wait(rev: number, itemsRev: number, signal: AbortSignal): Promise<ChatSnapshot | undefined>
   say(text: string): Promise<void>

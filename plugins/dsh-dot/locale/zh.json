@@ -2,5 +2,38 @@
   "meta": {
     "title": "桃乐丝（dot）",
     "description": "常驻的调度管家桃乐丝：在她自己的面板里和她对话，她替你开工作区、派任务、跟进度，替你处理审批和提问，再向你汇报。"
+  },
+  "panel": {
+    "personaTitle": "人设与约定",
+    "agreements": "约定",
+    "agreementsHint": "你说过的规矩，原话记下。与认知冲突时，一律以约定为准。",
+    "agreementsPlaceholder": "- 例如：推送到个人仓库可直接放行",
+    "agreementsEmpty": "还没有约定。",
+    "saveAgreements": "保存约定",
+    "undoAgreements": "回退上次保存",
+    "cognition": "认知",
+    "cognitionHint": "桃乐丝自己对你们协作方式的体会，由她写下，也可由你改。",
+    "cognitionPlaceholder": "她对你的偏好与工作节奏的判断…",
+    "cognitionEmpty": "还没有认知。",
+    "saveCognition": "保存认知",
+    "cognitionHistory": "历史版本",
+    "cognitionHistoryEmpty": "还没有历史版本。",
+    "restoreCognition": "回到这一版",
+    "charCount": "{n} / {max} 字符"
+  },
+  "context": {
+    "promptSections": "提示词分区",
+    "promptSectionsHint": "这一段对话实际带在提示词里的内容。",
+    "sectionPersona": "人设",
+    "sectionAgreements": "约定",
+    "sectionCognition": "认知",
+    "sectionHandoff": "交接",
+    "sectionEmpty": "（空）"
+  },
+  "tools": {
+    "dot_agreement": "约定",
+    "dot_cognition": "认知",
+    "agreementAdded": "记下约定",
+    "agreementRemoved": "删掉约定"
   }
 }

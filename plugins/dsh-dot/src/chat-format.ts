@@ -763,8 +763,19 @@ export function summarizeToolCall(item: ToolItem, locale: CopyLocale, tasks: Tas
       const q = strOf(args.query) ?? strOf(args.q) ?? strOf(args.pattern)
       return q ? { summary: clipInline(q, 42) } : {}
     }
-    case TOOL.remember:
-    case TOOL.forget: {
+    case TOOL.agreement: {
+      const text = strOf(args.text)
+      if (!text) return {}
+      const label = strOf(args.action) === 'remove' ? t(locale, 'toolAgreementRemoved') : t(locale, 'toolAgreementAdded')
+      return { summary: [label, clipInline(text, 40)].filter(Boolean).join(' · ') }
+    }
+    case TOOL.cognition: {
+      const text = strOf(args.text)
+      return text ? { summary: clipInline(text, 42) } : {}
+    }
+    // The old note tools, kept so earlier conversations stay readable.
+    case 'dot_remember':
+    case 'dot_forget': {
       const text = strOf(args.text)
       return text ? { summary: clipInline(text, 42) } : {}
     }

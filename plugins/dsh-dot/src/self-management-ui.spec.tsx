@@ -92,9 +92,13 @@ describe('Dorothy self-management controls', () => {
     await act(async () => root.unmount())
   })
 
-  it('edits, discards, saves, and restores persona and memory', async () => {
+  it('edits, discards and saves the persona, and keeps agreements and cognition apart', async () => {
     let current: DotSettings = { ...DEFAULT_SETTINGS }
-    let memoryState = { text: '- 先给结论', path: '/tmp/memory.md', maxChars: 4000, canUndo: true }
+    let knowledge = {
+      agreements: { text: '- 先给结论', maxChars: 4000, canUndo: true },
+      cognition: { text: '他偏好先看结论。', maxChars: 4000, history: [{ text: '旧的一版。', at: 1_700_000_000_000 }] },
+    }
+    const restores: number[] = []
     function Harness() {
       const [settings, setSettings] = useState<DotSettings>(current)
       const api = {
@@ -103,13 +107,30 @@ describe('Dorothy self-management controls', () => {
             ...current,
             ...(patch.persona === null ? { persona: undefined } : patch.persona !== undefined ? { persona: String(patch.persona) } : {}),
             ...(patch.address === null ? { address: undefined } : patch.address !== undefined ? { address: String(patch.address) } : {}),
+            ...(patch.locks !== undefined ? { locks: patch.locks as DotSettings['locks'] } : {}),
           }
           setSettings(current)
           return current
         },
-        memory: async () => memoryState,
-        setMemory: async (text: string) => { memoryState = { ...memoryState, text, canUndo: true }; return memoryState },
-        undoMemory: async () => { memoryState = { ...memoryState, text: '', canUndo: false }; return memoryState },
+        knowledge: async () => knowledge,
+        setAgreements: async (text: string) => {
+          knowledge = { ...knowledge, agreements: { ...knowledge.agreements, text, canUndo: true } }
+          return knowledge
+        },
+        undoAgreements: async () => {
+          knowledge = { ...knowledge, agreements: { ...knowledge.agreements, text: '', canUndo: false } }
+          return knowledge
+        },
+        setCognition: async (text: string) => {
+          knowledge = { ...knowledge, cognition: { ...knowledge.cognition, text } }
+          return knowledge
+        },
+        restoreCognition: async (at: number) => {
+          restores.push(at)
+          const hit = knowledge.cognition.history.find(item => item.at === at)
+          knowledge = { ...knowledge, cognition: { ...knowledge.cognition, text: hit?.text ?? '' } }
+          return knowledge
+        },
       }
       return <PersonaPanel locale="zh" api={api} settings={settings} onSaved={setSettings} />
     }
@@ -131,8 +152,35 @@ describe('Dorothy self-management controls', () => {
     await act(async () => buttons().filter(btn => btn.textContent === '恢复默认')[1]!.click())
     expect(current.persona).toBeUndefined()
 
+    // The two knowledge blocks are separate and carry their own copy.
+    const agreementsBox = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="约定"]')!
+    const cognitionBox = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="认知"]')!
+    expect(agreementsBox.value).toBe('- 先给结论')
+    expect(cognitionBox.value).toBe('他偏好先看结论。')
+    expect(document.body.textContent).toContain('与认知冲突时，一律以约定为准')
+
+    // The agreements keep a lock toggle, so an existing lock can be lifted here.
+    const lock = document.querySelector<HTMLButtonElement>('button[aria-label="禁止桃乐丝修改：约定"]')!
+    await act(async () => lock.click())
+    expect(current.locks).toEqual({ memory: true })
+    const unlock = document.querySelector<HTMLButtonElement>('button[aria-label="允许桃乐丝申请修改：约定"]')!
+    expect(unlock.hasAttribute('data-locked')).toBe(true)
+
+    // Saving the agreements calls the agreements endpoint only.
+    await act(async () => { changeValue(agreementsBox, '- 先给结论\n- 少说废话') })
+    await act(async () => buttons().find(btn => btn.textContent === '保存修改' && btn.closest('.dsh-ui-field')?.textContent?.includes('约定'))!.click())
+    expect(knowledge.agreements.text).toContain('- 少说废话')
+    expect(knowledge.cognition.text).toBe('他偏好先看结论。')
+
+    // One step of undo on the agreements.
     await act(async () => buttons().find(btn => btn.textContent === '回退上次保存')!.click())
-    expect(memoryState.text).toBe('')
+    expect(knowledge.agreements.text).toBe('')
+
+    // The cognition history lists an earlier version and restores it by its timestamp.
+    expect(document.body.textContent).toContain('历史版本')
+    await act(async () => buttons().find(btn => btn.textContent === '回到这一版')!.click())
+    expect(restores).toEqual([1_700_000_000_000])
+    expect(knowledge.cognition.text).toBe('旧的一版。')
 
     await act(async () => root.unmount())
   })
@@ -151,6 +199,12 @@ describe('Dorothy self-management controls', () => {
         parts: { system: 1_200, tools: 1_800, user: 0, inject: 400, skill: 0, assistant: 0, tool: 0 },
       },
       usage: { input: 2_000, cacheRead: 6_000, cacheWrite: 500, output: 1_500 },
+      sections: {
+        persona: '[persona] 你是桃乐丝',
+        agreements: '[agreements]\n- 推送到个人仓库可直接放行',
+        cognition: '[cognition]\n他偏好先看结论。',
+        handoff: '[handoff] 上文已交接',
+      },
     }
     const api = {
       context: vi.fn(async () => view),
@@ -165,6 +219,15 @@ describe('Dorothy self-management controls', () => {
     expect(document.body.textContent).toContain('3.4K')
     expect(document.body.textContent).toContain('提示词明细')
     expect(document.body.textContent).toContain('10K')
+
+    // The frozen prompt blocks of this segment are shown as their own zones.
+    expect(document.body.textContent).toContain('提示词分区')
+    expect(document.body.textContent).toContain('约定')
+    expect(document.body.textContent).toContain('认知')
+    expect(document.body.textContent).toContain('- 推送到个人仓库可直接放行')
+    expect(document.body.textContent).toContain('他偏好先看结论。')
+    const zones = [...document.querySelectorAll('.dsh-dot-ctx-section-row > dt')].map(node => node.textContent)
+    expect(zones).toEqual(['人设', '约定', '认知', '交接'])
 
     const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent === '开启新分段')!
     await act(async () => button.click())

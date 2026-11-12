@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_SETTINGS } from './contracts.ts'
 import { DotStore, type DotDomainHandle } from './store.ts'
 
 function fakeDomain(seed: Record<string, Record<string, unknown>> = {}) {
@@ -102,5 +103,132 @@ describe('DotStore settings proposals', () => {
     expect(new DotStore(domain).settingProposals).toEqual([proposal])
     await store.deleteSettingProposal(proposal.id)
     expect(tables.proposals!.size).toBe(0)
+  })
+})
+
+describe('DotStore agreements and cognition', () => {
+  it('keeps agreements and one undo step across a reload', async () => {
+    const { domain } = fakeDomain()
+    const store = new DotStore(domain)
+    expect(store.agreements).toBe('')
+    expect(store.agreementsUndo).toBeUndefined()
+    await store.setAgreements('- use the standard preset\n')
+    await store.setAgreements('- never push to main\n')
+    expect(new DotStore(domain).agreements).toBe('- never push to main\n')
+    expect(store.agreementsUndo).toBe('- use the standard preset\n')
+    expect(await store.undoAgreements()).toBe(true)
+    expect(store.agreements).toBe('- use the standard preset\n')
+    // One step is kept: taking back again swaps the same two texts.
+    expect(store.agreementsUndo).toBe('- never push to main\n')
+    expect(await store.undoAgreements()).toBe(true)
+    expect(store.agreements).toBe('- never push to main\n')
+    expect(new DotStore(domain).agreements).toBe('- never push to main\n')
+  })
+
+  it('records each cognition replacement in a capped, strictly increasing history', async () => {
+    const store = new DotStore(undefined)
+    expect(store.cognitionHistory).toEqual([])
+    // Same millisecond writes still get distinct, increasing timestamps.
+    for (let index = 0; index < 12; index++) await store.setCognition(`v${index}`, 1000)
+    expect(store.cognition).toBe('v11')
+    expect(store.cognitionHistory).toHaveLength(10)
+    // Newest first; the oldest two fell off.
+    expect(store.cognitionHistory[0]!.text).toBe('v10')
+    expect(store.cognitionHistory[9]!.text).toBe('v1')
+    const ats = store.cognitionHistory.map(entry => entry.at)
+    expect(new Set(ats).size).toBe(ats.length)
+    for (let index = 1; index < ats.length; index++) expect(ats[index]!).toBeLessThan(ats[index - 1]!)
+  })
+
+  it('restores an older cognition text and pushes the replaced one back onto the history', async () => {
+    const store = new DotStore(undefined)
+    await store.setCognition('first', 10)
+    await store.setCognition('second', 20)
+    await store.setCognition('third', 30)
+    const target = store.cognitionHistory.find(entry => entry.text === 'first')!
+    expect(await store.restoreCognition(target.at, 40)).toBe(true)
+    expect(store.cognition).toBe('first')
+    // The text it replaced is now the newest history entry.
+    expect(store.cognitionHistory[0]!.text).toBe('third')
+    expect(await store.restoreCognition(999, 50)).toBe(false)
+  })
+
+  it('lets the empty text be a restorable version', async () => {
+    const store = new DotStore(undefined)
+    await store.setCognition('something', 10)
+    const empty = store.cognitionHistory.find(entry => entry.text === '')!
+    expect(empty).toBeDefined()
+    expect(await store.restoreCognition(empty.at, 20)).toBe(true)
+    expect(store.cognition).toBe('')
+  })
+
+  it('exposes the legacy fields only to migration and marks the import done', async () => {
+    const { domain } = fakeDomain({ state: { current: { memory: 'old notes', memoryUndo: 'older notes' } } })
+    const store = new DotStore(domain)
+    expect(store.legacyMemory).toBe('old notes')
+    expect(store.legacyMemoryUndo).toBe('older notes')
+    expect(store.knowledgeMigrated).toBe(false)
+    await store.commitKnowledgeMigration({ knowledgeMigrated: '1' })
+    expect(new DotStore(domain).knowledgeMigrated).toBe(true)
+  })
+})
+
+describe('DotStore knowledge migration commit', () => {
+  it('sets the marker only after the write succeeds, so a failed import retries without losing the note', async () => {
+    const tables: Record<string, Map<string, unknown>> = { state: new Map(), tasks: new Map(), schedules: new Map(), proposals: new Map() }
+    let failStatePut = true
+    const domain: DotDomainHandle = {
+      table: name => ({
+        entries: () => tables[name]!.entries(),
+        get: key => tables[name]!.get(key),
+        put: async (key, value) => {
+          if (name === 'state' && failStatePut) { failStatePut = false; throw new Error('put down') }
+          tables[name]!.set(key, value)
+        },
+        delete: async key => tables[name]!.delete(key),
+      }),
+      close: async () => {},
+    }
+    const store = new DotStore(domain)
+    await expect(store.commitKnowledgeMigration({ agreements: '- old note\n', knowledgeMigrated: '1' })).rejects.toThrow('put down')
+    // Nothing reached memory, so the next attempt retries from the old note.
+    expect(store.agreements).toBe('')
+    expect(store.knowledgeMigrated).toBe(false)
+    await store.commitKnowledgeMigration({ agreements: '- old note\n', knowledgeMigrated: '1' })
+    expect(store.knowledgeMigrated).toBe(true)
+    expect(new DotStore(domain).agreements).toBe('- old note\n')
+  })
+
+  it('keeps concurrent settings and the migration marker when the state write is slow', async () => {
+    const tables: Record<string, Map<string, unknown>> = { state: new Map(), tasks: new Map(), schedules: new Map(), proposals: new Map() }
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    let firstStatePut = true
+    const domain: DotDomainHandle = {
+      table: name => ({
+        entries: () => tables[name]!.entries(),
+        get: key => tables[name]!.get(key),
+        put: async (key, value) => {
+          if (name === 'state' && firstStatePut) { firstStatePut = false; await gate }
+          tables[name]!.set(key, value)
+        },
+        delete: async key => tables[name]!.delete(key),
+      }),
+      close: async () => {},
+    }
+    const store = new DotStore(domain)
+    const committing = store.commitKnowledgeMigration({ agreements: '- old note\n', knowledgeMigrated: '1' })
+    // A settings write lands while the migration's state put is still in flight (queued, not awaited yet).
+    const setting = store.setSettings({ ...DEFAULT_SETTINGS, scope: 'tracked' })
+    release()
+    await Promise.all([committing, setting])
+    await store.flush()
+    const reloaded = new DotStore(domain)
+    // Neither the concurrent setting nor the import was lost on disk or in memory.
+    expect(reloaded.knowledgeMigrated).toBe(true)
+    expect(reloaded.agreements).toBe('- old note\n')
+    expect(reloaded.settings.scope).toBe('tracked')
+    expect(store.settings.scope).toBe('tracked')
+    expect(store.knowledgeMigrated).toBe(true)
   })
 })

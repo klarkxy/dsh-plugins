@@ -6,7 +6,7 @@
  */
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
-import { SETTING_FIELDS, type DotContextUsage, type DotUsageOffset, type ScheduleRecord, type SettingProposal, type TaskRecord } from './contracts.ts'
+import { SETTING_FIELDS, type CognitionVersion, type DotContextUsage, type DotUsageOffset, type ScheduleRecord, type SettingProposal, type TaskRecord } from './contracts.ts'
 import type { PastSegment, Segment } from './segments.ts'
 
 export const STATE_KEY = 'current'
@@ -39,8 +39,17 @@ const segmentSchema = z.object({
   startedAt: z.number(),
   persona: z.string(),
   model: z.string().optional(),
+  /** Legacy notes block frozen before the split into agreements and cognition. */
   memory: z.string().optional(),
   memorySeen: z.string().optional(),
+  /** Agreements block of the system prompt as it read when the segment started; absent while there are none. */
+  agreements: z.string().optional(),
+  /** Agreements block as this segment's conversation last accounted for it (dot's own change). */
+  agreementsSeen: z.string().optional(),
+  /** Cognition block as it read when the segment started; absent while dot has written none. */
+  cognition: z.string().optional(),
+  /** Cognition block as this segment's conversation last accounted for it. */
+  cognitionSeen: z.string().optional(),
   opening: z.string().optional(),
   openCard: z.string().optional(),
   handoff: handoffSchema.optional(),
@@ -81,13 +90,31 @@ const usageOffsetSchema = usageSchema.extend({
   sessionId: z.string().min(1),
 }).strict()
 
+const cognitionVersionSchema = z.object({
+  text: z.string(),
+  at: z.number(),
+}).strict()
+
 const stateSchema = z.object({
   dotSessionId: z.string().optional(),
   dotWorkspaceId: z.string().optional(),
   settings: z.record(z.string(), z.unknown()).optional(),
   segment: segmentSchema.optional(),
   pastSegments: z.array(pastSegmentSchema).optional(),
+  /** Legacy notes captured in old state rows; read only by the one-time migration. */
+  memory: z.string().optional(),
+  /** Legacy note undo snapshot; the migration carries it to agreementsUndo. */
   memoryUndo: z.string().optional(),
+  /** The human's own standing requirements, verbatim. */
+  agreements: z.string().optional(),
+  /** What one undo of the agreements restores. */
+  agreementsUndo: z.string().optional(),
+  /** dot's own understanding, rewritten whole. */
+  cognition: z.string().optional(),
+  /** Earlier cognition texts, newest first; used for rollback. */
+  cognitionHistory: z.array(cognitionVersionSchema).optional(),
+  /** Marker once the legacy notes have been imported; cleared content is never re-imported after it. */
+  knowledgeMigrated: z.string().optional(),
   usageCarry: usageSchema.optional(),
   usageOffset: usageOffsetSchema.optional(),
 }).strict()
@@ -112,8 +139,20 @@ export interface DotState {
   readonly segment?: Segment
   /** Ended segments, oldest first. */
   readonly pastSegments?: readonly PastSegment[]
-  /** dot's notes as they read before their latest change; what one undo restores. */
+  /** Legacy notes captured in old state rows; read only by the one-time migration. */
+  readonly memory?: string
+  /** Legacy note undo snapshot; the migration carries it to agreementsUndo. */
   readonly memoryUndo?: string
+  /** The human's own standing requirements, verbatim. */
+  readonly agreements?: string
+  /** What one undo of the agreements restores. */
+  readonly agreementsUndo?: string
+  /** dot's own understanding, rewritten whole. */
+  readonly cognition?: string
+  /** Earlier cognition texts, newest first. */
+  readonly cognitionHistory?: readonly CognitionVersion[]
+  /** Marker once the legacy notes have been imported; cleared content is never re-imported after it. */
+  readonly knowledgeMigrated?: string
   /** Cumulative token totals carried from ended segments and handoff notes. */
   readonly usageCarry?: DotContextUsage
   /** Segment usage subtracted after the human clears cumulative totals mid-segment. */
@@ -127,7 +166,11 @@ export function parseSettingProposal(value: unknown): SettingProposal | undefine
 
 export const dotDomain = defineDomain({
   name: 'klarkxy_dsh_dot',
-  version: 1,
+  // v2 adds agreements/cognition and their seen snapshots. Rows written by v1
+  // stay readable (the new fields are optional), so v2 lists v1 as compatible;
+  // older readers then never reject a v2 row under the same version stamp.
+  version: 2,
+  compatibleVersions: [1],
   tables: {
     state: domainTable<string, DotState>(stateSchema),
     tasks: domainTable<string, TaskRecord>(taskSchema),

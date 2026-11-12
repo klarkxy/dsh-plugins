@@ -2,5 +2,38 @@
   "meta": {
     "title": "Dorothy (dot)",
     "description": "An always-on coordinator: talk to Dorothy in her own panel, and she opens workspaces, starts sessions, follows their progress, settles approvals and questions for you, and reports back."
+  },
+  "panel": {
+    "personaTitle": "Persona & agreements",
+    "agreements": "Agreements",
+    "agreementsHint": "The rules you set, kept in your own words. They win over her cognition.",
+    "agreementsPlaceholder": "- e.g. Pushing to my personal repos is fine",
+    "agreementsEmpty": "No agreements yet.",
+    "saveAgreements": "Save agreements",
+    "undoAgreements": "Revert last save",
+    "cognition": "Cognition",
+    "cognitionHint": "Dorothy's own reading of how you like to work. She writes it; you can edit it.",
+    "cognitionPlaceholder": "What she has noticed about your preferences and rhythm…",
+    "cognitionEmpty": "No cognition yet.",
+    "saveCognition": "Save cognition",
+    "cognitionHistory": "Versions",
+    "cognitionHistoryEmpty": "No earlier versions yet.",
+    "restoreCognition": "Restore this version",
+    "charCount": "{n} / {max} characters"
+  },
+  "context": {
+    "promptSections": "Prompt sections",
+    "promptSectionsHint": "What this segment actually carries in its prompt.",
+    "sectionPersona": "Persona",
+    "sectionAgreements": "Agreements",
+    "sectionCognition": "Cognition",
+    "sectionHandoff": "Handoff",
+    "sectionEmpty": "(empty)"
+  },
+  "tools": {
+    "dot_agreement": "Agreement",
+    "dot_cognition": "Cognition",
+    "agreementAdded": "Added an agreement",
+    "agreementRemoved": "Removed an agreement"
   }
 }

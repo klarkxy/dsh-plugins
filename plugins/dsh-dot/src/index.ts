@@ -294,18 +294,21 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
           const id = field(payload, 'id')
           return { ok: true, value: typeof id === 'string' ? await service.removeSchedule(id) : false }
         }
-        case 'memory': return { ok: true, value: await service.memoryView() }
-        case 'memory.set': {
+        case 'knowledge': return { ok: true, value: await service.knowledgeView() }
+        // Panel edits of the agreements/cognition do not switch segments at once: the change is
+        // picked up before the next message (prompt-changed), or folded in while the segment is untouched.
+        case 'agreements.set': {
           const text = field(payload, 'text')
-          const view = await service.setMemory(typeof text === 'string' ? text : '')
-          // A segment dot has not answered in takes the edited notes at once, like a persona edit.
-          await service.settingsChanged()
-          return { ok: true, value: view }
+          return { ok: true, value: await service.setAgreements(typeof text === 'string' ? text : '') }
         }
-        case 'memory.undo': {
-          const view = await service.undoMemory()
-          await service.settingsChanged()
-          return { ok: true, value: view }
+        case 'agreements.undo': return { ok: true, value: await service.undoAgreements() }
+        case 'cognition.set': {
+          const text = field(payload, 'text')
+          return { ok: true, value: await service.setCognition(typeof text === 'string' ? text : '') }
+        }
+        case 'cognition.restore': {
+          const at = field(payload, 'at')
+          return { ok: true, value: await service.restoreCognition(typeof at === 'number' ? at : Number.NaN) }
         }
         case 'settings.set': {
           const next = patchSettings(store.settings, field(payload, 'patch'))

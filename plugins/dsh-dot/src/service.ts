@@ -8,12 +8,12 @@
 import { mkdir } from 'node:fs/promises'
 import { NoticeBatcher, formatNotices, type Notice, type Timer } from './batcher.ts'
 import { ZERO_USAGE, addUsage, combineUsage, netSegmentUsage, usageFromEvents } from './context.ts'
-import { PRESET_ID, TOOL, type BoardView, type DotContextUsage, type DotContextView, type MemoryView, type ModelChoice, type PendingKind, type PendingQuestionItem, type RolloverReason, type RuleConfig } from './contracts.ts'
+import { PRESET_ID, TOOL, type BoardView, type DotContextSections, type DotContextUsage, type DotContextView, type KnowledgeView, type ModelChoice, type PendingKind, type PendingQuestionItem, type RolloverReason, type RuleConfig } from './contracts.ts'
 import { SUMMARY_INSTRUCTION, SUMMARY_MAX_TOKENS, buildHandoff, type Handoff } from './handoff.ts'
 import { READ_ROWS_DEFAULT, READ_ROWS_MAX, SEARCH_LIMIT_DEFAULT, SEARCH_LIMIT_MAX, SEARCH_SESSIONS_MAX, formatRead, formatSearch, historyRows, queryTerms, searchRows, windowRows, type SessionHits } from './history.ts'
 import { FULL_ACCESS, type DotHost, type WorkspaceRow } from './host.ts'
 import { clip } from './ledger.ts'
-import { MEMORY_MAX_CHARS, MemoryError, MemoryNotes, addEntry, entriesOf, memorySection, removeEntry } from './memory.ts'
+import { AGREEMENTS_MAX_CHARS, COGNITION_MAX_CHARS, KnowledgeError, MemoryNotes, addEntry, agreementsSection, cognitionSection, normalizeAgreements, normalizeCognition, policyAsAgreements, removeEntry } from './memory.ts'
 import { PendingHub, type PendingAnswer } from './pending.ts'
 import { personaSection } from './persona.ts'
 import { ReminderClock } from './reminders.ts'
@@ -33,7 +33,7 @@ export interface DotServiceOptions {
   readonly store: DotStore
   /** Working directory of dot's own session. */
   readonly homeDir: string
-  /** dot's note file; defaults to memory.md in homeDir. */
+  /** The legacy note file; only the one-time migration reads it. Defaults to memory.md in homeDir. */
   readonly notes?: NoteFile
   /** Fixed quiet window for tests; otherwise the settings decide. */
   readonly quietMs?: number
@@ -43,11 +43,12 @@ export interface DotServiceOptions {
   readonly log?: (message: string) => void
 }
 
-/** Where dot's notes are kept; a missing file reads as empty. */
+/** The legacy note files; only migration reads them, and a missing file reads as empty. */
 export interface NoteFile {
   readonly path: string
   read(): Promise<string>
-  write(text: string): Promise<void>
+  /** The old cognition.md file, when the file reader also knows it. */
+  readCognition?(): Promise<string>
 }
 
 /** The history tools themselves: their calls and results are not part of the record they read. */
@@ -76,10 +77,10 @@ export class DotService {
   private lane: Promise<unknown> = Promise.resolve()
   private readonly now: () => number
   private readonly notes: NoteFile
-  /** Changes to the notes run one at a time, so two of them never start from the same text. */
-  private notesLane: Promise<unknown> = Promise.resolve()
-  /** Notes block as last read from the file; what a session without a segment record shows. */
-  private notesBlock = ''
+  /** Changes to the agreements and cognition run one at a time, so two never start from the same text. */
+  private knowledgeLane: Promise<unknown> = Promise.resolve()
+  /** The one-time legacy import; kept only while it runs so a failure is retried next time. */
+  private migration?: Promise<void>
   private requestedSegment?: { focus?: string }
 
   constructor(private readonly options: DotServiceOptions) {
@@ -125,6 +126,8 @@ export class DotService {
   ensureDot(): Promise<string> {
     this.ensuring ??= (async () => {
       try {
+        // A first run on an old install imports the legacy notes before any prompt is frozen.
+        await this.ensureMigration()
         // Registered once per run, so the workspace is in the sidebar from dot's first use on.
         if (!this.homeRegistered) {
           await this.homeWorkspace().then(() => { this.homeRegistered = true }, error => { this.options.log?.(`dsh-dot: dot's own workspace was not registered: ${messageOf(error)}`) })
@@ -205,12 +208,21 @@ export class DotService {
   async contextView(): Promise<DotContextView> {
     const id = await this.ensureDot()
     const raw = await this.host.dotContext(id)
-    if (!raw.live) return raw
+    const sections = this.contextSections()
+    if (!raw.live) return { ...raw, sections }
     const segmentRaw = raw.usage ?? usageFromEvents(await this.host.readEvents(id).catch(() => []))
     return {
       ...raw,
+      sections,
       usage: combineUsage(segmentRaw, id, this.store.usageCarry, this.store.usageOffset),
     }
+  }
+
+  /** The frozen prompt blocks of the current segment, or the live text before a segment exists. */
+  private contextSections(): DotContextSections {
+    const segment = this.store.segment
+    if (segment) return { persona: segment.persona, agreements: segment.agreements ?? '', cognition: segment.cognition ?? '', handoff: segment.opening ?? '' }
+    return { persona: personaSection(this.store.settings), agreements: this.currentAgreementsBlock(), cognition: this.currentCognitionBlock(), handoff: '' }
   }
 
   /** Zero cumulative token usage while keeping the current segment intact. */
@@ -517,64 +529,196 @@ export class DotService {
     return formatRead({ ...this.describeSession(sessionId), ...window })
   }
 
-  // ---- notes: what dot knows in every conversation ---------------------
+  // ---- agreements and cognition: what dot knows in every conversation ----
 
-  /** Change the notes in one step and keep what they were, so the change can be taken back once. */
-  private changeNotes(change: (text: string) => string, by: 'dot' | 'human'): Promise<{ before: string; after: string }> {
-    const run = this.notesLane.then(async () => {
-      const before = await this.notes.read()
-      let after: string
-      try { after = change(before) } catch (error) {
-        if (error instanceof MemoryError) throw new DotError(error.code, error.message)
-        throw error
-      }
-      if (after === before) return { before, after }
-      await this.notes.write(after)
-      await this.store.setMemoryUndo(before)
-      this.notesBlock = memorySection(after)
-      // dot knows its own change from the tool call. An edit of the human that it has not seen yet stays outstanding.
-      const segment = this.store.segment
-    if (by !== 'human' && segment && (segment.memorySeen ?? segment.memory ?? '') === memorySection(before)) await this.store.noteMemorySeen(this.notesBlock)
-      return { before, after }
-    })
-    this.notesLane = run.catch(() => undefined)
+  /** Run queued agreements/cognition changes one at a time, so none is lost. */
+  private withKnowledge<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.knowledgeLane.then(work)
+    this.knowledgeLane = run.catch(() => undefined)
     return run
   }
 
-  async remember(text: string): Promise<string> {
-    if (this.store.settings.locks?.memory) throw new DotError('dot/setting-locked', 'notes are locked by the human; use dot_settings (action=propose) for the change you want')
-    const { before, after } = await this.changeNotes(current => addEntry(current, text), 'dot')
-    if (after === before) return 'That is already in your notes.'
-    return `Noted. Your notes now hold ${entriesOf(after).length} entr${entriesOf(after).length === 1 ? 'y' : 'ies'}, ${after.trim().length} of ${MEMORY_MAX_CHARS} characters. The [your notes] block of this session still shows them as they were when it started; your next session shows the new one.`
+  /**
+   * Import the old note sources once. A persistent marker makes the import
+   * idempotent: content cleared later is never pulled back in. The old files
+   * and state fields are read here once only; they are never live afterwards.
+   */
+  private ensureMigration(): Promise<void> {
+    if (this.store.knowledgeMigrated) return Promise.resolve()
+    this.migration ??= this.runMigration().catch(error => {
+      // A failed import must not look done: clear it so the next call retries, and
+      // let the caller see the failure instead of silently continuing without the notes.
+      this.migration = undefined
+      throw error
+    })
+    return this.migration
   }
 
-  async forget(text: string): Promise<string> {
-    if (this.store.settings.locks?.memory) throw new DotError('dot/setting-locked', 'notes are locked by the human; use dot_settings (action=propose) for the change you want')
-    let removed = ''
-    await this.changeNotes(current => { const result = removeEntry(current, text); removed = result.removed; return result.text }, 'dot')
-    return `Removed from your notes: "${removed}".`
+  private async runMigration(): Promise<void> {
+    const agreementsEmpty = !this.store.agreements.trim()
+    const cognitionEmpty = !this.store.cognition.trim()
+    // Only read a legacy source while its target layer is still empty, as the
+    // requirement says; a layer that already has content must not be blocked by
+    // an unrelated old file failing to read.
+    const legacyAgreements: string[] = []
+    if (agreementsEmpty) {
+      // The human's explicit requirements: the old custom rules plus the whole old notes file.
+      // A missing file reads as empty (MemoryNotes maps ENOENT); any other read error is
+      // propagated so the import is not marked done and will be retried.
+      const policy = this.store.settings.policy ?? ''
+      if (policy.trim()) legacyAgreements.push(policyAsAgreements(policy))
+      const memoryFile = (await this.notes.read()).trim()
+      if (memoryFile) legacyAgreements.push(memoryFile)
+    }
+
+    // dot's own understanding: any old state memory field plus the old cognition file.
+    const legacyCognition: string[] = []
+    if (cognitionEmpty) {
+      const stateMemory = this.store.legacyMemory?.trim()
+      if (stateMemory) legacyCognition.push(stateMemory)
+      const cognitionFile = ((await this.notes.readCognition?.()) ?? '').trim()
+      if (cognitionFile) legacyCognition.push(cognitionFile)
+    }
+
+    // Fill a layer only while it is still empty, then mark done even when there was nothing to import.
+    const patch: { agreements?: string; agreementsUndo?: string; cognition?: string; knowledgeMigrated: string } = { knowledgeMigrated: '1' }
+    if (agreementsEmpty && legacyAgreements.length > 0) {
+      patch.agreements = normalizeAgreements(legacyAgreements.join('\n\n'))
+      const undo = this.store.legacyMemoryUndo
+      // The old undo only concerned notes; the independent policy still applied
+      // at that time and must survive restoring that snapshot, including an empty one.
+      if (undo !== undefined) patch.agreementsUndo = normalizeAgreements([policyAsAgreements(this.store.settings.policy ?? ''), undo].filter(Boolean).join('\n\n'))
+    }
+    if (cognitionEmpty && legacyCognition.length > 0) {
+      patch.cognition = normalizeCognition(legacyCognition.join('\n\n'))
+    }
+    // Persist before flipping the marker in memory; a failed write leaves the import retryable.
+    await this.store.commitKnowledgeMigration(patch)
   }
 
-  async memoryView(): Promise<MemoryView> {
-    const text = await this.notes.read()
-    const undo = this.store.memoryUndo
-    return { text, path: this.notes.path, maxChars: MEMORY_MAX_CHARS, canUndo: undo !== undefined && undo !== text }
+  async knowledgeView(): Promise<KnowledgeView> {
+    await this.ensureMigration()
+    const undo = this.store.agreementsUndo
+    return {
+      agreements: { text: this.store.agreements, maxChars: AGREEMENTS_MAX_CHARS, canUndo: undo !== undefined && undo !== this.store.agreements },
+      cognition: { text: this.store.cognition, maxChars: COGNITION_MAX_CHARS, history: this.store.cognitionHistory },
+    }
   }
 
-  /** The human rewrote the notes in the settings view. */
-  async setMemory(text: string, by: 'human' | 'dot-approved' = 'human'): Promise<MemoryView> {
-    const next = text.replace(/\r\n/g, '\n')
-    if (next.trim().length > MEMORY_MAX_CHARS) throw new DotError('dot/invalid', `the notes are at most ${MEMORY_MAX_CHARS} characters; these have ${next.trim().length}`)
-    await this.changeNotes(() => next.trim() ? `${next.replace(/\s+$/, '')}\n` : '', by === 'human' ? 'human' : 'dot')
-    return this.memoryView()
+  /** dot adds one of the human's own requirements, in their words. */
+  async agreementAdd(text: string): Promise<string> {
+    return this.withKnowledge(async () => {
+      await this.ensureMigration()
+      if (this.store.settings.locks?.memory) throw new DotError('dot/setting-locked', 'agreements are locked by the human; use dot_settings (action=propose) for the change you want')
+      const before = this.store.agreements
+      let after: string
+      try { after = addEntry(before, text) } catch (error) {
+        if (error instanceof KnowledgeError) throw new DotError(error.code, error.message)
+        throw error
+      }
+      if (after === before) return 'That is already one of your agreements.'
+      await this.store.setAgreements(after)
+      await this.afterAgreementsChange(before, after, 'dot')
+      return 'Recorded as an agreement. The [agreements] block of this session still shows them as they were when it started; your next session shows the new one.'
+    })
   }
 
-  /** Put the notes back to what they were before their latest change, whoever made it. */
-  async undoMemory(): Promise<MemoryView> {
-    const undo = this.store.memoryUndo
-    if (undo === undefined) throw new DotError('dot/nothing-to-undo', 'there is no earlier version of the notes')
-    await this.changeNotes(() => undo, 'human')
-    return this.memoryView()
+  /** dot drops one agreement the human asked it to drop. */
+  async agreementRemove(text: string): Promise<string> {
+    return this.withKnowledge(async () => {
+      await this.ensureMigration()
+      if (this.store.settings.locks?.memory) throw new DotError('dot/setting-locked', 'agreements are locked by the human; use dot_settings (action=propose) for the change you want')
+      const before = this.store.agreements
+      let removed = ''
+      let after = before
+      try { const result = removeEntry(before, text); removed = result.removed; after = normalizeAgreements(result.text) } catch (error) {
+        if (error instanceof KnowledgeError) throw new DotError(error.code, error.message)
+        throw error
+      }
+      await this.store.setAgreements(after)
+      await this.afterAgreementsChange(before, after, 'dot')
+      return `Removed this agreement: "${removed}".`
+    })
+  }
+
+  /** dot rewrites its whole cognition. */
+  async cognitionRewrite(text: string): Promise<string> {
+    return this.withKnowledge(async () => {
+      await this.ensureMigration()
+      const next = normalizeCognition(text)
+      if (next.trim().length > COGNITION_MAX_CHARS) throw new DotError('dot/invalid', `cognition is at most ${COGNITION_MAX_CHARS} characters; these have ${next.trim().length}`)
+      const before = this.store.cognition
+      await this.store.setCognition(next, this.now())
+      if (next !== before) await this.afterCognitionChange(before, next, 'dot')
+      return 'Your cognition is updated. The [cognition] block of this session still shows the old text; your next session shows the new one.'
+    })
+  }
+
+  /** The human rewrote the agreements in the settings view (or approved a proposal). */
+  async setAgreements(text: string, by: 'human' | 'dot' = 'human'): Promise<KnowledgeView> {
+    return this.withKnowledge(async () => {
+      await this.ensureMigration()
+      const next = normalizeAgreements(text)
+      if (next.trim().length > AGREEMENTS_MAX_CHARS) throw new DotError('dot/invalid', `the agreements are at most ${AGREEMENTS_MAX_CHARS} characters; these have ${next.trim().length}`)
+      const before = this.store.agreements
+      if (next !== before) {
+        await this.store.setAgreements(next)
+        await this.afterAgreementsChange(before, next, by)
+      }
+      return this.knowledgeView()
+    })
+  }
+
+  /** Put the agreements back to what they were before their latest change, whoever made it. */
+  async undoAgreements(): Promise<KnowledgeView> {
+    return this.withKnowledge(async () => {
+      await this.ensureMigration()
+      const before = this.store.agreements
+      if (!(await this.store.undoAgreements())) throw new DotError('dot/nothing-to-undo', 'there is no earlier version of the agreements')
+      await this.afterAgreementsChange(before, this.store.agreements, 'human')
+      return this.knowledgeView()
+    })
+  }
+
+  /** The human rewrote cognition, or the reflection pass did; neither is dot's own in-session change. */
+  async setCognition(text: string, by: 'human' | 'dot' | 'reflection' = 'human'): Promise<KnowledgeView> {
+    return this.withKnowledge(async () => {
+      await this.ensureMigration()
+      const next = normalizeCognition(text)
+      if (next.trim().length > COGNITION_MAX_CHARS) throw new DotError('dot/invalid', `cognition is at most ${COGNITION_MAX_CHARS} characters; these have ${next.trim().length}`)
+      const before = this.store.cognition
+      if (next !== before) {
+        await this.store.setCognition(next, this.now())
+        await this.afterCognitionChange(before, next, by)
+      }
+      return this.knowledgeView()
+    })
+  }
+
+  /** Put an earlier cognition text back; the replaced text joins the history too. */
+  async restoreCognition(at: number): Promise<KnowledgeView> {
+    return this.withKnowledge(async () => {
+      await this.ensureMigration()
+      const before = this.store.cognition
+      if (!(await this.store.restoreCognition(at, this.now()))) throw new DotError('dot/unknown-version', 'no earlier cognition version has that timestamp')
+      if (this.store.cognition !== before) await this.afterCognitionChange(before, this.store.cognition, 'human')
+      return this.knowledgeView()
+    })
+  }
+
+  /** dot's own change only updates the segment's seen snapshot when it was in step; a panel edit never does. */
+  private async afterAgreementsChange(before: string, after: string, by: 'human' | 'dot'): Promise<void> {
+    if (by !== 'dot') return
+    const segment = this.store.segment
+    if (!segment) return
+    if ((segment.agreementsSeen ?? segment.agreements ?? '') === agreementsSection(before)) await this.store.noteAgreementsSeen(agreementsSection(after))
+  }
+
+  private async afterCognitionChange(before: string, after: string, by: 'human' | 'dot' | 'reflection'): Promise<void> {
+    if (by !== 'dot') return
+    const segment = this.store.segment
+    if (!segment) return
+    if ((segment.cognitionSeen ?? segment.cognition ?? '') === cognitionSection(before)) await this.store.noteCognitionSeen(cognitionSection(after))
   }
 
   // ---- host events -----------------------------------------------------
@@ -698,23 +842,23 @@ export class DotService {
     if (frozen === undefined || frozen === this.host.modelKey()) this.host.syncModel(dot)
   }
 
-  /** Persona, model and notes as a segment starting now would freeze them. */
-  private async frozen(): Promise<Pick<Segment, 'persona' | 'model' | 'memory'>> {
+  /** Persona, model, agreements and cognition as a segment starting now would freeze them. */
+  private async frozen(): Promise<Pick<Segment, 'persona' | 'model' | 'agreements' | 'cognition'>> {
     const model = this.host.modelKey()
-    const memory = await this.readNotesBlock()
-    return { persona: personaSection(this.store.settings), ...model ? { model } : {}, ...memory ? { memory } : {} }
-  }
-
-  /** The notes block of the prompt as the file gives it now. An unreadable file keeps the block last read. */
-  private async readNotesBlock(): Promise<string> {
-    try { this.notesBlock = memorySection(await this.notes.read()) } catch (error) {
-      this.options.log?.(`dsh-dot: dot's notes could not be read: ${messageOf(error)}`)
+    await this.ensureMigration()
+    return {
+      persona: personaSection(this.store.settings),
+      ...model ? { model } : {},
+      agreements: agreementsSection(this.store.agreements),
+      cognition: cognitionSection(this.store.cognition),
     }
-    return this.notesBlock
   }
 
-  /** Notes block for a prompt that no segment record covers yet. */
-  currentNotesBlock(): string { return this.notesBlock }
+  /** Agreements block for a prompt that no segment record covers yet. */
+  currentAgreementsBlock(): string { return agreementsSection(this.store.agreements) }
+
+  /** Cognition block for a prompt that no segment record covers yet. */
+  currentCognitionBlock(): string { return cognitionSection(this.store.cognition) }
 
   /**
    * Whether dot's segment has to end before the next message reaches it. A
@@ -733,10 +877,13 @@ export class DotService {
     }
     if (this.requestedSegment) return 'dot-requested'
     const wanted = await this.frozen()
-    const seenNotes = segment.memorySeen ?? segment.memory ?? ''
+    const seenAgreements = segment.agreementsSeen ?? segment.agreements ?? ''
+    const seenCognition = segment.cognitionSeen ?? segment.cognition ?? ''
     if (!replied) {
-      // No request of this segment is cached yet, so it simply takes the current settings and notes.
-      if (segment.persona !== wanted.persona || segment.model !== wanted.model || (wanted.memory ?? '') !== seenNotes) await this.store.refreezeSegment(wanted)
+      // No request of this segment is cached yet, so it simply takes the current settings and blocks.
+      if (segment.persona !== wanted.persona || segment.model !== wanted.model
+        || (wanted.agreements ?? '') !== (segment.agreements ?? '')
+        || (wanted.cognition ?? '') !== (segment.cognition ?? '')) await this.store.refreezeSegment(wanted)
       return undefined
     }
     const view = await this.host.dotContext(dot)
@@ -749,8 +896,10 @@ export class DotService {
       frozenPersona: segment.persona,
       ...wanted.model ? { model: wanted.model } : {},
       ...segment.model ? { frozenModel: segment.model } : {},
-      notes: wanted.memory ?? '',
-      seenNotes,
+      agreements: wanted.agreements ?? '',
+      seenAgreements,
+      cognition: wanted.cognition ?? '',
+      seenCognition,
     }) ?? reasonAfterTurn(view)
   }
 

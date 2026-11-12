@@ -20,16 +20,14 @@ export const inject = ['tools', 'systemPrompt', SERVICE_NAME] as const
 
 /** Right after the fixed instructions in the persona prefix (order 0). */
 const PERSONA_ORDER = 1
-/** What dot knows in every conversation, between who it is and what this conversation was. */
-const MEMORY_ORDER = 2
+/** The human's own standing requirements, between who dot is and what it has come to understand. */
+const AGREEMENTS_ORDER = 2
+/** dot's own understanding of the human and of working with them. */
+const COGNITION_ORDER = 3
 /** What the segment was handed from the conversation before it. */
-const HANDOFF_ORDER = 3
-/**
- * Core hard-switch state injected on every request so dot always knows its
- * current settings without calling dot_settings. Not frozen with the segment:
- * a settings change takes effect immediately in the same segment.
- */
-const SETTINGS_SNAPSHOT_ORDER = 4
+const HANDOFF_ORDER = 4
+/** Last of the frozen blocks: the settings snapshot reads live so a change takes effect at once. */
+const SETTINGS_SNAPSHOT_ORDER = 5
 
 /** The part of an assembly context these sections read: the agent the prompt is built for. */
 interface AssemblyContext { readonly agent?: { readonly session?: { readonly id?: string } } }
@@ -82,8 +80,10 @@ export function apply(ctx: Context): void {
     return segment && (id === undefined || id === segment.sessionId) ? segment : undefined
   }
   ctx.effect(() => host.systemPrompt.section({ name: 'dsh-dot:persona', order: PERSONA_ORDER, interpolate: false, text: context => segmentOf(context)?.persona ?? personaSection(dot().store.settings) }))
-  // dot's notes, as they read when the segment started; empty while there are none.
-  ctx.effect(() => host.systemPrompt.section({ name: 'dsh-dot:memory', order: MEMORY_ORDER, interpolate: false, text: context => { const segment = segmentOf(context); return segment ? segment.memory ?? '' : dot().currentNotesBlock() } }))
+  // The human's own requirements, as they read when the segment started; empty while there are none.
+  ctx.effect(() => host.systemPrompt.section({ name: 'dsh-dot:agreements', order: AGREEMENTS_ORDER, interpolate: false, text: context => { const segment = segmentOf(context); return segment ? segment.agreements ?? '' : dot().currentAgreementsBlock() } }))
+  // dot's own understanding, as it read when the segment started; empty while dot has written none.
+  ctx.effect(() => host.systemPrompt.section({ name: 'dsh-dot:cognition', order: COGNITION_ORDER, interpolate: false, text: context => { const segment = segmentOf(context); return segment ? segment.cognition ?? '' : dot().currentCognitionBlock() } }))
   // Empty in dot's very first segment; the host drops empty sections.
   ctx.effect(() => host.systemPrompt.section({ name: 'dsh-dot:handoff', order: HANDOFF_ORDER, interpolate: false, text: context => segmentOf(context)?.opening ?? '' }))
   // Core hard-switch state: always reads live settings so a change takes effect immediately.
@@ -345,22 +345,27 @@ export function apply(ctx: Context): void {
     title: 'Read history',
   }), true)
 
-  // ── dot_remember ──────────────────────────────────────────────────────────
+  // ── dot_agreement ─────────────────────────────────────────────────────────
   tool(defineToolInput({
-    name: TOOL.remember,
-    description: 'Add one line to your notes: something you should know in every future conversation, such as who the human is, how they want you to work or speak, or a standing preference or correction. Write it so it makes sense on its own. Not for what merely happened or for task details; those stay findable in the history.',
-    parameters: { text: { type: 'string', required: true, description: 'The note, one short line (at most 400 characters).' } },
-    execute: args => run(() => dot().remember(str(args, 'text') ?? '')),
-    title: 'Remember',
+    name: TOOL.agreement,
+    description: `The human's own standing requirements, kept in their words. action=add: call only when the human explicitly asks you to remember something or states a rule; write one short line verbatim, do not reword it. action=remove: drop the one requirement the human says to drop, giving enough of its words to single it out. The [agreements] block of the running session keeps its old text until your next session.`,
+    parameters: {
+      action: { type: 'string', enum: ['add', 'remove'], required: true, description: 'add or remove.' },
+      text: { type: 'string', required: true, description: 'add: the requirement, in the human\'s own words (one short line, at most 400 characters). remove: the requirement, or enough of its words to single it out.' },
+    },
+    execute: args => run(() => str(args, 'action') === 'remove' ? dot().agreementRemove(str(args, 'text') ?? '') : dot().agreementAdd(str(args, 'text') ?? '')),
+    title: 'Agreement',
   }))
 
-  // ── dot_forget ────────────────────────────────────────────────────────────
+  // ── dot_cognition ─────────────────────────────────────────────────────────
   tool(defineToolInput({
-    name: TOOL.forget,
-    description: `Remove one line from your notes, when it is outdated or wrong. To change a note, remove it and add the new wording with ${TOOL.remember}.`,
-    parameters: { text: { type: 'string', required: true, description: 'The note, or enough of its words to single it out.' } },
-    execute: args => run(() => dot().forget(str(args, 'text') ?? '')),
-    title: 'Forget',
+    name: TOOL.cognition,
+    description: 'Rewrite your own cognition: your understanding of the human and of how best to work with them — what you have noticed, felt and come to expect. Pass the complete new text every time (this replaces the whole block, it does not append); pass an empty string to clear it. Keep it short. It never overrides the [agreements]. The running session keeps its old text until your next session.',
+    parameters: {
+      text: { type: 'string', required: true, description: 'The complete new cognition text (at most 4000 characters); empty clears it.' },
+    },
+    execute: args => run(() => dot().cognitionRewrite(str(args, 'text') ?? '')),
+    title: 'Cognition',
   }))
 
   // ── dot_new_segment ───────────────────────────────────────────────────────
@@ -380,7 +385,7 @@ export function apply(ctx: Context): void {
   const self = () => dot().selfSettings
   tool(defineToolInput({
     name: TOOL.settings,
-    description: `Manage your own settings. action=read: read the full current settings, which fields the human has locked, and any change proposals waiting for approval. The core switches (scope, approvals, questions, taskPermission, reflection) are always visible in your [settings snapshot] block, so call read only when you need detail beyond those. action=propose: propose changing one unlocked setting or replacing your notes — nothing changes until the human approves it in Settings. Fields: model, approvals, questions, scope, taskModels, policy, persona, address, memory. value uses the same shape as the read output, with null to restore a default or clear notes. Locks and homeDir cannot be changed. Routine one-line notes still use ${TOOL.remember} and ${TOOL.forget}; use propose only to rewrite all notes or when notes are locked.`,
+    description: `Manage your own settings. action=read: read the full current settings, which fields the human has locked, and any change proposals waiting for approval. The core switches (scope, approvals, questions, taskPermission, reflection) are always visible in your [settings snapshot] block, so call read only when you need detail beyond those. action=propose: propose changing one unlocked setting — nothing changes until the human approves it in Settings. Fields: model, approvals, questions, scope, taskModels, policy, persona, address, memory (the agreements text). value uses the same shape as the read output, with null to restore a default or clear. Locks and homeDir cannot be changed. Routine agreements use ${TOOL.agreement} and cognition uses ${TOOL.cognition}; do not propose these for an ordinary edit.`,
     parameters: {
       action: { type: 'string', enum: ['read', 'propose'], required: true, description: 'read or propose.' },
       field: { type: 'string', description: 'propose: one setting field.' },

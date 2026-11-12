@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { extractJsonFields, formatToolDetail, parseNotice, summarizeNotice, summarizeToolCall, type TaskLookup } from './chat-format.ts'
+import { toolLabel } from './ui-copy.ts'
 
 const SCREENSHOT_NOTICE = [
   '[dot notice] Updates from other sessions:',
@@ -102,6 +103,48 @@ describe('chat-format', () => {
       text: '已处理 ap-23（插件发布检查）',
       session: { sessionId: 'session-f922364c-9f84-4ca4-af18-38f650070997', label: '插件发布检查' },
     })
+  })
+
+  it('summarizes agreement and cognition calls, and still reads the old note tools', () => {
+    const added = {
+      kind: 'tool' as const,
+      key: 'a1',
+      name: 'dot_agreement',
+      status: 'done' as const,
+      args: { action: 'add', text: '推送到个人仓库可直接放行' },
+      detail: 'Recorded as an agreement.',
+      at: 1,
+    }
+    expect(summarizeToolCall(added, 'zh', EMPTY_TASKS)).toEqual({ summary: '记下约定 · 推送到个人仓库可直接放行' })
+
+    const removed = { ...added, key: 'a2', args: { action: 'remove', text: '推送到个人仓库可直接放行' } }
+    expect(summarizeToolCall(removed, 'zh', EMPTY_TASKS)).toEqual({ summary: '删掉约定 · 推送到个人仓库可直接放行' })
+
+    const cognition = {
+      kind: 'tool' as const,
+      key: 'c1',
+      name: 'dot_cognition',
+      status: 'done' as const,
+      args: { text: '他偏好先看结论，再给步骤。' },
+      detail: 'Your cognition is updated.',
+      at: 2,
+    }
+    expect(summarizeToolCall(cognition, 'zh', EMPTY_TASKS)).toEqual({ summary: '他偏好先看结论，再给步骤。' })
+
+    // Conversations from before the split keep their old note calls readable.
+    const legacy = {
+      kind: 'tool' as const,
+      key: 'l1',
+      name: 'dot_remember',
+      status: 'done' as const,
+      args: { text: '- 先给结论' },
+      detail: 'Noted.',
+      at: 3,
+    }
+    expect(summarizeToolCall(legacy, 'zh', EMPTY_TASKS)).toEqual({ summary: '- 先给结论' })
+    expect(toolLabel('zh', 'dot_agreement')).toBe('约定')
+    expect(toolLabel('zh', 'dot_cognition')).toBe('认知')
+    expect(toolLabel('en', 'dot_agreement')).toBe('Agreement')
   })
 
   it('turns list_sessions and dot_read machine outputs into human summaries and clean details', () => {

@@ -42,9 +42,11 @@ function makeApi(snapshot: ChatSnapshot): ChatApi {
     settingProposals: async () => [],
     decideSetting: async () => 'ok',
     newSegment: async () => 'dot-2',
-    memory: async () => ({ text: '', path: '/tmp/memory.md', maxChars: 4000, canUndo: false }),
-    setMemory: async () => ({ text: '', path: '/tmp/memory.md', maxChars: 4000, canUndo: false }),
-    undoMemory: async () => ({ text: '', path: '/tmp/memory.md', maxChars: 4000, canUndo: false }),
+    knowledge: async () => ({ agreements: { text: '', maxChars: 4000, canUndo: false }, cognition: { text: '', maxChars: 4000, history: [] } }),
+    setAgreements: async () => ({ agreements: { text: '', maxChars: 4000, canUndo: false }, cognition: { text: '', maxChars: 4000, history: [] } }),
+    undoAgreements: async () => ({ agreements: { text: '', maxChars: 4000, canUndo: false }, cognition: { text: '', maxChars: 4000, history: [] } }),
+    setCognition: async () => ({ agreements: { text: '', maxChars: 4000, canUndo: false }, cognition: { text: '', maxChars: 4000, history: [] } }),
+    restoreCognition: async () => ({ agreements: { text: '', maxChars: 4000, canUndo: false }, cognition: { text: '', maxChars: 4000, history: [] } }),
     context: async () => ({ live: true, compactions: 0 }),
     clearUsage: async () => ({ live: true, compactions: 0 }),
     trajectory: async () => ({ turns: [], earlier: 0 }),
@@ -256,7 +258,7 @@ describe('ChatPanel activity and notice cards', () => {
     // Switch across the other 3 pages and check header titles.
     const navButtons = [...drawer.querySelectorAll<HTMLButtonElement>('.dsh-dot-settings-nav button')]
     await act(async () => { navButtons[1]!.click() })
-    expect(drawer.querySelector('.dsh-dot-settings-title')?.textContent).toBe('人设与记忆')
+    expect(drawer.querySelector('.dsh-dot-settings-title')?.textContent).toBe('人设与约定')
     expect(drawer.querySelector('.dsh-dot-settings-status')).toBeNull()
 
     await act(async () => { navButtons[2]!.click() })

@@ -83,4 +83,24 @@ describe('filterVisibleChat', () => {
     expect(res.items.map(item => item.key)).toEqual(['nm', 'bm'])
     expect(res.hiddenRequestIds.has('ap-27')).toBe(true)
   })
+
+  it('keeps a turn that writes the agreements or the cognition visible', () => {
+    // A background notice alone is routine and gets silenced; a turn that also
+    // writes the agreements or the cognition is a side effect the human sees.
+    const writeTurn = (name: string, args: Record<string, unknown>): ChatItem[] => [
+      { kind: 'notice', key: 'n1', text: APPROVAL_NOTICE('ap-30'), at: 1 },
+      { kind: 'tool', key: 'w1', name, status: 'done', args, detail: 'Recorded as an agreement.', at: 2 },
+    ]
+    for (const [name, args] of [
+      ['dot_agreement', { action: 'add', text: '推送到个人仓库可直接放行' }],
+      ['dot_cognition', { text: '他偏好先看结论。' }],
+      // Conversations from before the split keep their old note calls.
+      ['dot_remember', { text: '- 先给结论' }],
+      ['dot_forget', { text: '- 先给结论' }],
+    ] as const) {
+      const res = filterVisibleChat(writeTurn(name, args))
+      expect(res.items.map(item => item.key)).toEqual(['n1', 'w1'])
+      expect(res.silentTail).toBe(false)
+    }
+  })
 })

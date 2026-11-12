@@ -6,7 +6,7 @@
  */
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { COMPACTION_POLICY, type DotContextView } from './contracts.ts'
+import { COMPACTION_POLICY, type DotContextSections, type DotContextView } from './contracts.ts'
 import { makeCurrentComposition } from './context-current-composition.tsx'
 import { Donut } from './context-donut.tsx'
 import { IconDatabase } from './context-icons.ts'
@@ -99,6 +99,36 @@ function anchoredParts(parts: PartsPart[], target: number | null): PartsPart[] {
 
 function Fact({ label, value }: { label: string; value: string }) {
   return <div className="dsh-dot-ctx-fact"><dt>{label}</dt><dd>{value}</dd></div>
+}
+
+/** The prompt blocks this segment actually carries: persona, agreements, cognition and the handoff. */
+function PromptSections({ locale, sections }: { locale: CopyLocale; sections: DotContextSections }) {
+  const rows: readonly { key: TextKey; text: string }[] = [
+    { key: 'ctxSectionPersona', text: sections.persona },
+    { key: 'ctxSectionAgreements', text: sections.agreements },
+    { key: 'ctxSectionCognition', text: sections.cognition },
+    { key: 'ctxSectionHandoff', text: sections.handoff },
+  ]
+  return (
+    <section className="dsh-dot-ctx-section" aria-label={t(locale, 'ctxPromptSections')}>
+      <div className="lc-card-title">
+        <span className="lc-card-title-text">{t(locale, 'ctxPromptSections')}</span>
+        <span className="lc-card-rate">{t(locale, 'ctxPromptSectionsHint')}</span>
+      </div>
+      <dl className="dsh-dot-ctx-sections">
+        {rows.map(row => (
+          <div className="dsh-dot-ctx-section-row" key={row.key}>
+            <dt>{t(locale, row.key)}</dt>
+            <dd>
+              {row.text.trim()
+                ? <pre className="dsh-dot-ctx-section-text">{row.text}</pre>
+                : <span className="dsh-ui-hint">{t(locale, 'ctxSectionEmpty')}</span>}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
 }
 
 export function ContextPanel({ locale, api, running = false }: { locale: CopyLocale; api: ContextApi; running?: boolean }) {
@@ -206,6 +236,8 @@ export function ContextPanel({ locale, api, running = false }: { locale: CopyLoc
       </section>
 
       {view.surface ? <SurfaceBrowser locale={locale} surface={view.surface} /> : null}
+
+      {view.sections ? <PromptSections locale={locale} sections={view.sections} /> : null}
 
       {usage ? (
         <section className="dsh-dot-ctx-section lc-col-donut" aria-label={t(locale, 'ctxTotals')}>
@@ -364,6 +396,16 @@ export const contextCss = `
 .dsh-dot-chat .dsh-dot-ctx-fact dt { color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 16px; }
 .dsh-dot-chat .dsh-dot-ctx-fact dd { margin: 0; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 20px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .dsh-dot-chat .dsh-dot-ctx-section .dsh-ui-help { margin: 12px 0 0; }
+.dsh-dot-chat .dsh-dot-ctx-sections { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.dsh-dot-chat .dsh-dot-ctx-section-row { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dsh-dot-chat .dsh-dot-ctx-section-row > dt { color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 16px; }
+.dsh-dot-chat .dsh-dot-ctx-section-row > dd { margin: 0; min-width: 0; }
+.dsh-dot-chat .dsh-dot-ctx-section-text {
+  margin: 0; max-height: 160px; overflow: auto; padding: 8px 10px;
+  border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary); font: 12px/18px var(--ds-font-family-code);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
 @keyframes lc-donut-in { from { stroke-dasharray: 0 100; } }
 @keyframes lc-stacked-in { from { transform: scaleX(0); } }
 .dsh-dot-chat .animate-lc-donut-in { animation: lc-donut-in 0.45s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--lc-i, 0) * 50ms) backwards; }

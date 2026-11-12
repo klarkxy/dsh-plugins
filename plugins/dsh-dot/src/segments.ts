@@ -21,13 +21,22 @@ export interface Segment {
   readonly persona: string
   /** Model the segment runs on, as `provider/model@effort`. */
   readonly model?: string
-  /** Notes block of the system prompt as it read when the segment started; absent while dot has no notes. */
+  /** Legacy notes block frozen before the split into agreements and cognition. */
   readonly memory?: string
-  /**
-   * Notes block as this segment's conversation last accounted for it: set when dot itself changes its
-   * notes here, since it then knows the change. Notes that differ from it were edited by the human.
-   */
+  /** Legacy notes block as this segment's conversation last accounted for it. */
   readonly memorySeen?: string
+  /** Agreements block of the system prompt as it read when the segment started; absent while there are none. */
+  readonly agreements?: string
+  /**
+   * Agreements block as this segment's conversation last accounted for it: set when dot itself changes
+   * the agreements here, since it then knows the change. A block that differs from this were edited
+   * by the human (or the reflection pass), which starts a new segment before the next message.
+   */
+  readonly agreementsSeen?: string
+  /** Cognition block of the system prompt as it read when the segment started; absent while dot has written none. */
+  readonly cognition?: string
+  /** Cognition block as this segment's conversation last accounted for it (dot's own rewrite). */
+  readonly cognitionSeen?: string
   /** Handoff block of the system prompt; absent in the very first segment. */
   readonly opening?: string
   /** Title of an unanswered interactive `show_view` card carried into this segment. */
@@ -54,9 +63,12 @@ export interface DeliveryCheck {
   readonly frozenPersona: string
   readonly model?: string
   readonly frozenModel?: string
-  /** Notes block as it reads now, and as the segment last accounted for it. */
-  readonly notes?: string
-  readonly seenNotes?: string
+  /** Agreements block as it reads now, and as the segment last accounted for it. */
+  readonly agreements?: string
+  readonly seenAgreements?: string
+  /** Cognition block as it reads now, and as the segment last accounted for it. */
+  readonly cognition?: string
+  readonly seenCognition?: string
 }
 
 /** Checked before every message that reaches dot. */
@@ -64,8 +76,9 @@ export function reasonBeforeDelivery(check: DeliveryCheck): RolloverReason | und
   if (!check.replied) return undefined
   if (check.model !== undefined && check.frozenModel !== undefined && check.model !== check.frozenModel) return 'model-switch'
   if (check.persona !== check.frozenPersona) return 'prompt-changed'
-  // The human edited dot's notes; dot's own changes are already part of the conversation.
-  if ((check.notes ?? '') !== (check.seenNotes ?? '')) return 'prompt-changed'
+  // The human (or a reflection pass) changed a block; dot's own changes are already part of the conversation.
+  if ((check.agreements ?? '') !== (check.seenAgreements ?? '')) return 'prompt-changed'
+  if ((check.cognition ?? '') !== (check.seenCognition ?? '')) return 'prompt-changed'
   if (check.lastReplyAt !== undefined && check.now - check.lastReplyAt >= IDLE_ROLLOVER_MS && (check.usedTokens ?? 0) >= IDLE_MIN_TOKENS) return 'idle-expired'
   return undefined
 }
@@ -79,7 +92,7 @@ const WHY: Record<RolloverReason, string> = {
   'context-full': 'the previous session had grown long',
   'idle-expired': 'the previous session had been idle for a long time',
   'model-switch': 'your model was changed',
-  'prompt-changed': 'the human changed your persona settings or your notes, and what is above is current',
+  'prompt-changed': 'the human changed your persona settings, your agreements or your cognition, and what is above is current',
   'lost': 'the previous session could not be reopened',
   'manual': 'the human started a new segment from the context page',
   'dot-requested': 'you chose to start a new segment',

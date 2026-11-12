@@ -24,8 +24,8 @@ export const TOOL = {
   schedule: 'dot_schedule',
   searchHistory: 'dot_search_history',
   readHistory: 'dot_read_history',
-  remember: 'dot_remember',
-  forget: 'dot_forget',
+  agreement: 'dot_agreement',
+  cognition: 'dot_cognition',
   newSegment: 'dot_new_segment',
   settings: 'dot_settings',
 } as const
@@ -45,17 +45,43 @@ export interface SettingProposal {
   readonly createdAt: number
 }
 
-// ---- dot's notes -------------------------------------------------------
+// ---- dot's knowledge: agreements and cognition -------------------------
 
-/** dot's notes as the settings view shows them. */
-export interface MemoryView {
+/** One earlier full text of dot's cognition, with the moment it was replaced. */
+export interface CognitionVersion {
   readonly text: string
-  /** The note file on the host's disk. */
-  readonly path: string
+  /** Unique, monotonically increasing; used to ask for that version back. */
+  readonly at: number
+}
+
+/** dot's agreements as the settings view shows them: the human's own standing requirements. */
+export interface AgreementView {
+  readonly text: string
   readonly maxChars: number
   /** Whether the change before the current text can be taken back. */
   readonly canUndo: boolean
 }
+
+/** dot's cognition as the settings view shows it: its own understanding, with the versions it can return to. */
+export interface CognitionView {
+  readonly text: string
+  readonly maxChars: number
+  /** Newest first; at most COGNITION_HISTORY_MAX. The empty text is a version too. */
+  readonly history: readonly CognitionVersion[]
+}
+
+/** Both prompt blocks that are not the fixed persona or the handoff. */
+export interface KnowledgeView {
+  readonly agreements: AgreementView
+  readonly cognition: CognitionView
+}
+
+/** Sizes of the two prompt blocks; the tools and the panel refuse to grow them past this. */
+export const AGREEMENTS_MAX_CHARS = 4000
+export const AGREEMENT_ENTRY_MAX_CHARS = 400
+export const COGNITION_MAX_CHARS = 4000
+/** How many earlier cognition texts are kept for rollback. */
+export const COGNITION_HISTORY_MAX = 10
 
 // ---- dot's reminders ---------------------------------------------------
 
@@ -245,6 +271,14 @@ export interface DotUsageOffset extends DotContextUsage {
   readonly sessionId: string
 }
 
+/** The frozen prompt blocks of the current segment; live values before a segment exists. */
+export interface DotContextSections {
+  readonly persona: string
+  readonly agreements: string
+  readonly cognition: string
+  readonly handoff: string
+}
+
 export interface DotContextView {
   /** Whether dot's session is live in this process. */
   readonly live: boolean
@@ -263,6 +297,8 @@ export interface DotContextView {
   readonly breakdown?: { readonly system: number; readonly tools: number; readonly messages: number }
   /** Detailed live categories and their actual content, folded from dot's session log. */
   readonly surface?: DotContextSurface
+  /** Actual frozen prompt blocks of the current segment (live text before one exists). */
+  readonly sections?: DotContextSections
   /** Provider-reported cumulative totals across segments since the latest clear. */
   readonly usage?: DotContextUsage
   readonly compactions: number

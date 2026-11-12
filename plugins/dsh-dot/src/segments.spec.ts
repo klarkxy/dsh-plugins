@@ -15,6 +15,14 @@ describe('reasonBeforeDelivery', () => {
     expect(reasonBeforeDelivery({ ...base, model: 'a/c@', persona: 'q' })).toBe('model-switch')
   })
 
+  it('ends it when the agreements or the cognition changed under it', () => {
+    expect(reasonBeforeDelivery({ ...base, agreements: 'new', seenAgreements: 'old' })).toBe('prompt-changed')
+    expect(reasonBeforeDelivery({ ...base, cognition: 'new', seenCognition: 'old' })).toBe('prompt-changed')
+    // Each layer is compared on its own: a change in one does not hide a change in the other.
+    expect(reasonBeforeDelivery({ ...base, agreements: 'A', seenAgreements: 'A', cognition: 'C', seenCognition: 'old' })).toBe('prompt-changed')
+    expect(reasonBeforeDelivery({ ...base, agreements: 'A', seenAgreements: 'A', cognition: 'C', seenCognition: 'C' })).toBeUndefined()
+  })
+
   it('never ends a segment dot has not replied in', () => {
     expect(reasonBeforeDelivery({ ...base, replied: false, model: 'a/c@', persona: 'q' })).toBeUndefined()
   })

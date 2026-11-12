@@ -2,7 +2,8 @@
  * In-memory ledger mirrored to the storage domain. Writes are serialized so
  * the durable copy follows the in-memory order; reads never wait on disk.
  */
-import type { BoardView, DotContextUsage, DotSettings, DotUsageOffset, PendingView, ScheduleRecord, SettingProposal, TaskRecord } from './contracts.ts'
+import type { BoardView, CognitionVersion, DotContextUsage, DotSettings, DotUsageOffset, PendingView, ScheduleRecord, SettingProposal, TaskRecord } from './contracts.ts'
+import { COGNITION_HISTORY_MAX } from './contracts.ts'
 import { ZERO_USAGE, addUsage } from './context.ts'
 import { applyEvent, createTask, ledgerSummary, markSeen, sortTasks, withPending, type LedgerEvent, type NewTask } from './ledger.ts'
 import { MAX_PAST_SEGMENTS, type PastSegment, type Segment } from './segments.ts'
@@ -107,29 +108,101 @@ export class DotStore {
   }
 
   /** Refresh the frozen inputs of a segment dot has not replied in yet. */
-  refreezeSegment(patch: Pick<Segment, 'persona' | 'model' | 'memory'>): Promise<void> {
+  refreezeSegment(patch: Pick<Segment, 'persona' | 'model' | 'agreements' | 'cognition'>): Promise<void> {
     const segment = this.segment
     if (!segment) return Promise.resolve()
-    const { model: _model, memory: _memory, memorySeen: _seen, ...rest } = segment
-    return this.setDot({ segment: { ...rest, persona: patch.persona, ...patch.model ? { model: patch.model } : {}, ...patch.memory ? { memory: patch.memory } : {} } })
+    const { model: _model, agreements: _agreements, agreementsSeen: _aseen, cognition: _cognition, cognitionSeen: _cseen, ...rest } = segment
+    return this.setDot({ segment: {
+      ...rest,
+      persona: patch.persona,
+      ...patch.model !== undefined ? { model: patch.model } : {},
+      ...patch.agreements !== undefined ? { agreements: patch.agreements } : {},
+      ...patch.cognition !== undefined ? { cognition: patch.cognition } : {},
+    } })
   }
 
-  /** dot changed its own notes in the current segment: the conversation accounts for them as they read now. */
-  noteMemorySeen(section: string): Promise<void> {
+  /** dot changed its own agreements in the current segment: the conversation accounts for them as they read now. */
+  noteAgreementsSeen(section: string): Promise<void> {
     const segment = this.segment
     if (!segment) return Promise.resolve()
-    return this.setDot({ segment: { ...segment, memorySeen: section } })
+    return this.setDot({ segment: { ...segment, agreementsSeen: section } })
   }
 
-  /** dot's notes before their latest change; undefined when there is nothing to take back. */
-  get memoryUndo(): string | undefined { return this.state.memoryUndo }
+  /** dot rewrote its own cognition in the current segment: the conversation accounts for it as it reads now. */
+  noteCognitionSeen(section: string): Promise<void> {
+    const segment = this.segment
+    if (!segment) return Promise.resolve()
+    return this.setDot({ segment: { ...segment, cognitionSeen: section } })
+  }
 
-  setMemoryUndo(text: string | undefined): Promise<void> {
-    if (text !== undefined) return this.setDot({ memoryUndo: text })
-    const { memoryUndo: _undo, ...rest } = this.state
-    this.state = rest
-    this.changed()
-    return this.write('state', STATE_KEY, this.state)
+  // ---- agreements and cognition (DotStore is the authority) --------------
+
+  get agreements(): string { return this.state.agreements ?? '' }
+  get agreementsUndo(): string | undefined { return this.state.agreementsUndo }
+  get cognition(): string { return this.state.cognition ?? '' }
+  get cognitionHistory(): readonly CognitionVersion[] { return this.state.cognitionHistory ?? [] }
+  /** Whether the one-time legacy import already ran; cleared content is never re-imported after it. */
+  get knowledgeMigrated(): boolean { return this.state.knowledgeMigrated !== undefined }
+  /** Legacy note text from old state rows; only migration reads it. */
+  get legacyMemory(): string | undefined { return this.state.memory }
+  get legacyMemoryUndo(): string | undefined { return this.state.memoryUndo }
+
+  /** Replace the agreements; the text before them is what one undo restores. */
+  setAgreements(text: string): Promise<void> {
+    const before = this.agreements
+    if (text === before) return Promise.resolve()
+    return this.setDot({ agreements: text, agreementsUndo: before })
+  }
+
+  /** Swap the agreements with the text the latest change replaced. @returns false when there is nothing to take back. */
+  undoAgreements(): Promise<boolean> {
+    const undo = this.state.agreementsUndo
+    if (undo === undefined) return Promise.resolve(false)
+    const current = this.agreements
+    return this.setDot({ agreements: undo, agreementsUndo: current }).then(() => true)
+  }
+
+  /** Replace cognition, pushing the text it replaces onto the rollback history (newest first, capped). */
+  setCognition(text: string, now = Date.now()): Promise<void> {
+    const before = this.cognition
+    if (text === before) return Promise.resolve()
+    const history = this.cognitionHistory
+    const latest = history[0]?.at ?? 0
+    // Strictly increasing timestamps keep every version addressable for restore.
+    const at = Math.max(Math.trunc(now), latest + 1)
+    const next = [{ text: before, at }, ...history].slice(0, COGNITION_HISTORY_MAX)
+    return this.setDot({ cognition: text, cognitionHistory: next })
+  }
+
+  /** Put an earlier cognition text back; the text it replaces joins the history too. @returns false for an unknown version. */
+  restoreCognition(at: number, now = Date.now()): Promise<boolean> {
+    const version = this.cognitionHistory.find(entry => entry.at === at)
+    if (!version) return Promise.resolve(false)
+    return this.setCognition(version.text, now).then(() => true)
+  }
+
+  /**
+   * Commit the one-time legacy import. Unlike {@link setDot}, the in-memory state
+   * (including the migration marker) is updated only after the write is durable,
+   * so a failed import is retried instead of being silently marked done.
+   */
+  commitKnowledgeMigration(patch: Partial<Pick<DotState, 'agreements' | 'agreementsUndo' | 'cognition' | 'knowledgeMigrated'>>): Promise<void> {
+    const domain = this.domain
+    if (domain === undefined) {
+      this.state = { ...this.state, ...patch }
+      this.changed()
+      return Promise.resolve()
+    }
+    const op = this.tail.then(async () => {
+      const next = { ...this.state, ...patch }
+      await domain.table('state').put(STATE_KEY, next)
+      // Merge onto the latest memory state so concurrent settings/segment fields survive;
+      // the state write that landed meanwhile is re-issued with the latest snapshot below.
+      this.state = { ...this.state, ...patch }
+      this.changed()
+    })
+    this.tail = op.catch(() => undefined)
+    return op
   }
 
   get settings(): DotSettings { return this.current }
@@ -279,7 +352,10 @@ export class DotStore {
   private write(table: TableName, key: string, value: unknown): Promise<void> {
     const domain = this.domain
     if (domain === undefined) return Promise.resolve()
-    const op = this.tail.then(() => domain.table(table).put(key, value))
+    // State is a single document: read the latest in-memory state when the queued
+    // slot actually runs, so an older queued snapshot cannot overwrite a change that
+    // landed in the meantime (e.g. the migration marker merged into it).
+    const op = this.tail.then(() => domain.table(table).put(key, table === 'state' ? this.state : value))
     this.tail = op.catch(() => undefined)
     return op
   }
