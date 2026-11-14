@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-session-manager",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Search and read DeepSeek Harness sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, recap on return with context-compaction hints, and optionally let the agent fork the current session or message other sessions.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -155,6 +155,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/session-manager/",
   "dshRelease": {
-    "contentHash": "626584dd92ab2cf0e912646ab043a46a78cd82630ac20c871f09e17e1b14c881"
+    "contentHash": "5771b33ff5ad86cd13ddc1a657e36699e3369441e01ee0c3f3d37429b63dab71"
   }
 }
