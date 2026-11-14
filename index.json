@@ -175,8 +175,8 @@
         "en": "Web Search"
       },
       "description": {
-        "zh": "在一个设置页管理和排序联网搜索与网页读取（抓取）服务，内置 DuckDuckGo、Exa、Tavily 等，并整合其他插件的搜索源，为模型提供 web_search 与 web_fetch。",
-        "en": "Manage and rank web search and page-reading providers (DuckDuckGo, Exa, Tavily, Brave, Bocha, Serper, Firecrawl, Perplexity, Jina, and plugin sources) in one settings page for web_search and web_fetch."
+        "zh": "在一个设置页管理和排序联网搜索与网页读取（抓取）服务，内置 DuckDuckGo、Exa、Tavily、Linkup、智谱等，并整合其他插件的搜索源，为模型提供 web_search 与 web_fetch。",
+        "en": "Manage and rank web search and page-reading providers (DuckDuckGo, Exa, Tavily, Brave, Bocha, Serper, Firecrawl, Perplexity, You.com, Linkup, Zhipu, Jina, and plugin sources) in one settings page for web_search and web_fetch."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/web-search-manager/",

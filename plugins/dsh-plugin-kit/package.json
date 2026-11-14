@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-plugin-kit",
-  "version": "0.7.0",
-  "description": "Shared support library for klarkxy DSH plugins, providing the default auxiliary model, shared session settings, independent feature contexts, RPC, UI helpers and optional shared model picker integration; installed automatically by dependent plugins.",
+  "version": "0.8.0",
+  "description": "Shared support library for klarkxy DSH plugins, providing the default auxiliary model, shared session settings, diagnostic logging, independent feature contexts, RPC, UI helpers and optional shared model picker integration; installed automatically by dependent plugins.",
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/plugin-kit/",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -96,6 +96,21 @@
       "types": "./lib/cli-media.d.ts",
       "import": "./lib/cli-media.js",
       "default": "./lib/cli-media.js"
+    },
+    "./log-shared": {
+      "types": "./lib/log-shared.d.ts",
+      "import": "./lib/log-shared.js",
+      "default": "./lib/log-shared.js"
+    },
+    "./logger": {
+      "types": "./lib/logger.d.ts",
+      "import": "./lib/logger.js",
+      "default": "./lib/logger.js"
+    },
+    "./client-logger": {
+      "types": "./lib/client-logger.d.ts",
+      "import": "./lib/client-logger.js",
+      "default": "./lib/client-logger.js"
     }
   },
   "files": [

@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-web-search-manager",
   "version": "0.3.4",
-  "description": "Manage and rank web search and page-reading providers in one settings page—with built-in DuckDuckGo, Exa, Tavily, and others—for the model's web_search and web_fetch tools.",
+  "description": "Manage and rank web search and page-reading providers in one settings page—with built-in DuckDuckGo, Exa, Tavily, Linkup, Zhipu, and others—for the model's web_search and web_fetch tools.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -147,7 +147,10 @@
     "serper",
     "perplexity",
     "firecrawl",
-    "jina"
+    "jina",
+    "you.com",
+    "linkup",
+    "zhipu"
   ],
   "repository": {
     "type": "git",

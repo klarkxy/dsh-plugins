@@ -1,5 +1,6 @@
 import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import { buildAuxiliaryUserText } from '@klarkxy/dsh-plugin-kit/auxiliary-context'
+import type { PluginLogger } from '@klarkxy/dsh-plugin-kit/log-shared'
 import type { ModelRoute } from '@klarkxy/dsh-model-route'
 import type { GenerateConfig, TitleMessage, TitleModelRoute } from './contracts.ts'
 import { DEFAULT_TIMEOUT_MS, PLUGIN_NAME, TITLE_CALL_FEATURE } from './contracts.ts'
@@ -73,6 +74,7 @@ export async function generateCurrentTitle(options: {
   signal: AbortSignal
   isCurrent: () => boolean
   now?: Date
+  logger?: PluginLogger
 }): Promise<GeneratedTitle> {
   options.signal.throwIfAborted()
   if (!options.isCurrent()) {
@@ -124,6 +126,7 @@ export async function generateCurrentTitle(options: {
       signal,
       sessionId: options.sessionId,
       isCurrent: options.isCurrent,
+      ...(options.logger ? { logger: options.logger } : {}),
     })
     signal.throwIfAborted()
   } catch (error) {

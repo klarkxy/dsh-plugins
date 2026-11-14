@@ -2,6 +2,23 @@
   "schemaVersion": 2,
   "packages": [
     {
+      "name": "@klarkxy/dsh-workspace-folders",
+      "state": "draft",
+      "reason": {
+        "zh": "新增工作区多文件夹管理，首次发布前完成宿主验收。",
+        "en": "New workspace folder management; host acceptance precedes the first release."
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-dot",
+      "state": "draft",
+      "reason": {
+        "zh": "已迁移至独立项目 ds-dot，不再参与本仓库构建与发布。",
+        "en": "Moved to the standalone ds-dot project; excluded from this repository's builds and releases."
+      },
+      "retired": true
+    },
+    {
       "name": "@klarkxy/dsh-chatgpt",
       "state": "published",
       "reason": {
@@ -211,6 +228,14 @@
         "version": "0.1.0-rc.3",
         "publishedAt": "2026-09-27T07:05:52.72Z",
         "integrity": "sha512-/y9ZnWZ8YPzdy2PtaL0VGTwVrE/ceajED4zpY8c6tAdqnyoxGsuwd4P3ZKXjtw3qZ9CVRA5obIhL3ZfXhkuV2Q=="
+      }
+    },
+    {
+      "name": "@klarkxy/dsh-secret-manager",
+      "state": "draft",
+      "reason": {
+        "zh": "新增密钥管理器，首次发布前完成宿主验收。",
+        "en": "New secret manager; host acceptance precedes the first release."
       }
     },
     {

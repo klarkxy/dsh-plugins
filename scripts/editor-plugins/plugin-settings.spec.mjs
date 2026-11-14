@@ -7,6 +7,7 @@ import { apply as font } from '../../plugins/dsh-font/src/client.tsx'
 import { apply as gitCommit } from '../../plugins/dsh-git-commit/src/client.tsx'
 import { apply as modelHub } from '../../plugins/dsh-model-hub/src/client.tsx'
 import { apply as safeAuto } from '../../plugins/dsh-safe-auto/src/client.jsx'
+import { apply as secretManager } from '../../plugins/dsh-secret-manager/src/client.tsx'
 import { apply as sessionManager } from '../../plugins/dsh-session-manager/src/client.tsx'
 import { apply as webSearch } from '../../plugins/dsh-web-search-manager/src/client.tsx'
 import { apply as zhihu } from '../../plugins/dsh-zhihu/src/client.tsx'
@@ -384,6 +385,7 @@ const plugins = [
   { pkg: '@klarkxy/dsh-font', apply: font, seat: SECTION, id: 'font', order: 5 },
   { pkg: '@klarkxy/dsh-web-search-manager', apply: webSearch, seat: SECTION, id: 'web-search-manager', order: 150 },
   { pkg: '@klarkxy/dsh-zhihu', apply: zhihu, seat: SECTION, id: 'zhihu', order: 160 },
+  { pkg: '@klarkxy/dsh-secret-manager', apply: secretManager, seat: SECTION, id: 'secret-manager', order: 170 },
   { pkg: '@klarkxy/dsh-model-hub', apply: modelHub, seat: SECTION, id: 'model-hub', order: 180 },
 ]
 const ownerProps = { [SECTION]: { close: () => {} } }

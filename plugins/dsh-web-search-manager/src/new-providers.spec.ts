@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { PerplexitySearchProvider, YouSearchProvider } from './rest-search.ts'
+import { LinkupSearchProvider, PerplexitySearchProvider, YouSearchProvider, ZhipuSearchProvider } from './rest-search.ts'
 import { FirecrawlFetchProvider } from './firecrawl-fetch.ts'
 import { MAX_RESPONSE_BYTES } from './http-json.ts'
-import { searchProviderInfo, usesBundledPricing } from './provider-info.ts'
+import { searchProviderInfo, usesBundledPricing, providerDisplayLabel } from './provider-info.ts'
 import type { ProviderView } from './contracts.ts'
 
 const source = (n: number) => ({ url: `https://example.com/${n}`, title: `Page ${n}`, snippet: 'excerpt' })
 afterEach(() => vi.unstubAllGlobals())
 
 it('keeps new bilingual billing notes separate from dated numeric prices and Firecrawl search', () => {
-  for (const [id, kind] of [['perplexity', 'search'], ['you', 'search'], ['firecrawl', 'fetch']] as const) {
+  for (const [id, kind] of [['perplexity', 'search'], ['you', 'search'], ['linkup', 'search'], ['zhipu', 'search'], ['firecrawl', 'fetch']] as const) {
     const provider: ProviderView = { id, kind, label: id, description: '', billing: 'request', configured: false, calls: 0, failures: 0, configurationOwned: true }
     expect(searchProviderInfo(provider, 'zh').pricing).not.toBe(searchProviderInfo(provider, 'en').pricing)
     expect(searchProviderInfo(provider, 'en').pricing).toContain('account')
@@ -45,6 +45,48 @@ describe('official search API adapters', () => {
     expect(options.headers).toMatchObject({ 'x-api-key': 'fixture-key' })
     expect(JSON.parse(String(options.body))).toEqual({ query: 'query', count: 2 })
   })
+  it('Linkup uses fast source search, skips images, and keeps a parseable publication date', async () => {
+    const transport = vi.fn(async () => Response.json({ results: [
+      { type: 'text', name: 'Page 1', url: 'https://example.com/1', content: 'excerpt', publishedAt: '2024-07-30' },
+      { type: 'image', name: 'Picture', url: 'https://example.com/image' },
+      { type: 'text', name: 'Page 1 again', url: 'https://example.com/1', content: 'duplicate' },
+      { type: 'text', name: 'Page 2', url: 'https://example.com/2', content: 'second' },
+      { type: 'text', name: 'Page 3', url: 'https://example.com/3', content: 'third' },
+      { type: 'text', url: 'javascript:bad', content: 'dropped' },
+    ] }))
+    const provider = new LinkupSearchProvider({ apiKey: 'fixture-key', fetch: transport })
+    const result = await provider.search({ query: 'query', maxResults: 2 })
+    expect(result).toEqual({
+      sources: [
+        { ...source(1), publishedAt: '2024-07-30T00:00:00.000Z' },
+        { url: 'https://example.com/2', title: 'Page 2', snippet: 'second' },
+      ],
+      truncated: true,
+    })
+    const [url, options] = transport.mock.calls[0] as unknown as [URL, RequestInit]
+    expect(String(url)).toBe('https://api.linkup.so/v1/search')
+    expect(options.headers).toMatchObject({ authorization: 'Bearer fixture-key' })
+    expect(JSON.parse(String(options.body))).toEqual({
+      q: 'query', depth: 'fast', outputType: 'searchResults', maxResults: 2, includeImages: false,
+    })
+  })
+  it('Zhipu stays on search_std and rejects queries longer than 70 characters before sending', async () => {
+    const transport = vi.fn(async () => Response.json({ search_result: [{ title: 'Page 1', link: 'https://example.com/1', content: 'excerpt', publish_date: '2024-07-30' }] }))
+    const provider = new ZhipuSearchProvider({ apiKey: 'fixture-key', baseURL: 'https://proxy.example/prefix', fetch: transport })
+    expect(provider.available()).toBe(true)
+    await expect(provider.search({ query: 'x'.repeat(71) })).rejects.toMatchObject({ code: 'WEB_INVALID_REQUEST' })
+    expect(transport).not.toHaveBeenCalled()
+    const result = await provider.search({ query: '  ok  ', maxResults: 3 })
+    expect(result.sources).toEqual([{ ...source(1), publishedAt: '2024-07-30T00:00:00.000Z' }])
+    const [url, options] = transport.mock.calls[0] as unknown as [URL, RequestInit]
+    expect(String(url)).toBe('https://proxy.example/prefix/api/paas/v4/web_search')
+    expect(JSON.parse(String(options.body))).toEqual({
+      search_query: 'ok', search_engine: 'search_std', search_intent: false, count: 3, content_size: 'medium',
+    })
+    const labeled = { id: 'zhipu', kind: 'search' as const, label: '智谱', description: '', billing: 'request' as const, configured: false, calls: 0, failures: 0, configurationOwned: true }
+    expect(providerDisplayLabel(labeled, 'en')).toBe('Zhipu')
+    expect(providerDisplayLabel(labeled, 'zh')).toBe('智谱')
+  })
   it.each([PerplexitySearchProvider, YouSearchProvider])('validates locally, accepts empty results, and rejects malformed responses', async Provider => {
     const transport = vi.fn(async () => Response.json({ results: Provider === PerplexitySearchProvider ? [] : { web: [] } }))
     expect(new Provider({ apiKey: '', fetch: transport }).available()).toBe(false)
@@ -59,7 +101,22 @@ describe('official search API adapters', () => {
     transport.mockImplementation(async () => Response.json({ error: 'bad envelope' }))
     await expect(provider.search({ query: 'ok' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
   })
-  it.each([PerplexitySearchProvider, YouSearchProvider])('honours cancellation, bounds responses and redacts transport errors', async Provider => {
+  it.each([
+    [LinkupSearchProvider, { results: [] }],
+    [ZhipuSearchProvider, { search_result: [] }],
+  ] as const)('accepts an empty result list and rejects a missing one', async (Provider, empty) => {
+    const transport = vi.fn(async () => Response.json(empty))
+    expect(new Provider({ apiKey: '', fetch: transport }).available()).toBe(false)
+    expect(new Provider({ apiKey: 'key', baseURL: 'http://bad.example', fetch: transport }).available()).toBe(false)
+    const provider = new Provider({ apiKey: 'key', fetch: transport })
+    await expect(provider.search({ query: ' ', maxResults: 1 })).rejects.toMatchObject({ code: 'WEB_INVALID_REQUEST' })
+    await expect(provider.search({ query: 'ok', maxResults: 21 })).rejects.toMatchObject({ code: 'WEB_INVALID_REQUEST' })
+    expect(transport).not.toHaveBeenCalled()
+    await expect(provider.search({ query: 'ok' })).resolves.toEqual({ sources: [], truncated: false })
+    transport.mockImplementation(async () => Response.json({ error: 'bad envelope' }))
+    await expect(provider.search({ query: 'ok' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
+  })
+  it.each([PerplexitySearchProvider, YouSearchProvider, LinkupSearchProvider, ZhipuSearchProvider])('honours cancellation, bounds responses and redacts transport errors', async Provider => {
     const transport = vi.fn(async () => { throw new Error('echo fixture-secret') })
     const provider = new Provider({ apiKey: 'fixture-secret', fetch: transport })
     const controller = new AbortController(); controller.abort()

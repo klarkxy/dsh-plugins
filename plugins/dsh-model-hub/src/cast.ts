@@ -16,6 +16,7 @@
  */
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import type { PluginLogger } from '@klarkxy/dsh-plugin-kit/log-shared'
 import type { ProbeDescriptorLike } from './probe.ts'
 
 /** Native namespace owning the subagent model-selection preference. */
@@ -67,6 +68,7 @@ export interface CastDeps {
   mutate(ns: string, ops: readonly SettingsOp[], expectedRevision: number): Promise<void>
   profileDir?: string
   logger?: { warn(message: string, ...args: unknown[]): void }
+  pluginLogger?: PluginLogger
   notifyTendenciesChanged?(revision: number): void
 }
 
@@ -191,6 +193,7 @@ export function createCast(deps: CastDeps) {
     }
     let parsed: unknown
     try { parsed = JSON.parse(raw) } catch (error) {
+      deps.pluginLogger?.fault('cast.preferences-corrupt', 'Cast preference store JSON is damaged.', error)
       throw new Error('Cast preference store is damaged; repair cast.json and refresh', { cause: error })
     }
     const version = isRecord(parsed) ? parsed.schemaVersion : undefined
@@ -296,38 +299,46 @@ export function createCast(deps: CastDeps) {
    * synchronously, so RPC callers and specs see one failure channel. */
   const setEnabled = async (enabled: unknown, expectedRevision: unknown): Promise<CastCommit> => {
     if (typeof enabled !== 'boolean') throw new Error('Invalid enabled state')
-    return write(expectedRevision, raw => {
+    const committed = await write(expectedRevision, raw => {
       if (enabled && raw.routes.length === 0) throw new Error('Add a model before enabling subagent cast')
       return [{ op: 'set', path: ['enabled'], value: enabled }]
     })
+    deps.pluginLogger?.info('cast.enabled-updated', 'Updated subagent cast enabled state.', { enabled })
+    return committed
   }
 
   const addRoute = async (input: unknown, expectedRevision: unknown): Promise<CastCommit> => {
     const route = normalizeRouteInput(input)
-    return write(expectedRevision, raw => {
+    const committed = await write(expectedRevision, raw => {
       assertUnique(route, raw)
       return [{ op: 'set', path: ['allowedModels', String(raw.length)], value: route }]
     })
+    deps.pluginLogger?.info('cast.route-added', 'Added subagent cast route.', { provider: route.provider, model: route.model })
+    return committed
   }
 
   const setRoute = async (index: unknown, input: unknown, expectedRevision: unknown): Promise<CastCommit> => {
     const route = normalizeRouteInput(input)
     const at = validateIndex(index)
-    return write(expectedRevision, raw => {
+    const committed = await write(expectedRevision, raw => {
       if (at >= raw.length) throw new Error('Invalid route index')
       assertUnique(route, raw, at)
       return [{ op: 'set', path: ['allowedModels', String(at)], value: route }]
     })
+    deps.pluginLogger?.info('cast.route-updated', 'Updated subagent cast route.', { index: at, provider: route.provider, model: route.model })
+    return committed
   }
 
   const removeRoute = async (index: unknown, expectedRevision: unknown): Promise<CastCommit> => {
     const at = validateIndex(index)
-    return write(expectedRevision, raw => {
+    const committed = await write(expectedRevision, raw => {
       if (at >= raw.length) throw new Error('Invalid route index')
       const ops: SettingsOp[] = [{ op: 'unset', path: ['allowedModels', String(at)] }]
       if (raw.enabled && !raw.routes.some(route => route.index !== at)) ops.push({ op: 'set', path: ['enabled'], value: false })
       return ops
     })
+    deps.pluginLogger?.info('cast.route-removed', 'Removed subagent cast route.', { index: at })
+    return committed
   }
 
   /**
@@ -366,6 +377,11 @@ export function createCast(deps: CastDeps) {
     const raw = readRaw()
     signal?.throwIfAborted()
     writePreferences(next, revision + 1)
+    deps.pluginLogger?.info('cast.preferences-updated', 'Saved subagent route preferences.', {
+      provider: provider.trim(),
+      model: model.trim(),
+      revision: revision + 1,
+    })
     try { deps.notifyTendenciesChanged?.(revision + 1) } catch { /* Already committed. */ }
     return { enabled: raw.enabled, revision: raw.revision, tendencyRevision: revision + 1, routes: mergePreferences(raw.routes, next) }
   }
@@ -401,6 +417,7 @@ export function createCast(deps: CastDeps) {
     try {
       return buildCastPrompt(snapshot.enabled, mergePreferences(snapshot.routes, readPreferences()))
     } catch (error) {
+      deps.pluginLogger?.warn('cast.preferences-unavailable', 'Cast preferences unavailable while building prompt.', error)
       deps.logger?.warn('model-hub: cast preferences unavailable: %s', (error as Error).message)
       // Optional user notes must not suppress the generic selection guidance.
       return buildCastPrompt(snapshot.enabled, snapshot.routes)

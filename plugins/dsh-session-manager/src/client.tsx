@@ -22,6 +22,7 @@ import { bindHost, createFreeChatModel, createRetryModel, type FreeChatModel, ty
 import { bindPresenceHost, createContinueModel, createPresenceConfigModel, createWelcomeBackModel } from './presence-model.ts'
 import { AutoContinueOption } from './auto-continue-option.tsx'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
+import { installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { registerSessionSettingsItem } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { registerAuxiliaryModelSettings } from '@klarkxy/dsh-plugin-kit/auxiliary-model-client'
 import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client'
@@ -77,6 +78,7 @@ type Client = Context & {
 
 export function apply(ctx: Context): void {
   const client = ctx as Client
+  const logger = installClientPluginLogger(ctx, PLUGIN_NAME)
   mountModelSettingsChanges(client, PLUGIN_NAME)
   const host = bindHost(client)
   const chats = createFreeChatModel(host)
@@ -339,6 +341,7 @@ export function apply(ctx: Context): void {
     })
     if (typeof watchList === 'function') stops.push(watchList)
     const reset = client.on?.('connection/reset', () => {
+      logger.debug('connection.reset', 'Reloading Session Manager client state after connection reset.')
       void chats.reloadCapabilities()
       void retries.load()
       refreshConfig()

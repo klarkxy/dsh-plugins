@@ -1,4 +1,4 @@
-import type { Formula, Scalar, ShownView, ViewFailure, ViewNode } from './contracts.ts'
+import type { Formula, Scalar, ShownView, ViewFailure, ViewNode } from '../contracts.ts'
 
 export declare const CHART_KINDS: readonly string[]
 export declare const VIEW_BYTE_LIMIT: number

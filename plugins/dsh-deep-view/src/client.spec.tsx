@@ -35,8 +35,10 @@ describe('tool.call.toolview contract', () => {
   it('registers compact tool status and a separate final-reply surface', () => {
     const registrations: Record<string, unknown>[] = []
     const slots: string[] = []
+    const provided: string[] = []
     const ctx = {
       effect(run: () => unknown) { run() },
+      provide(name: string) { provided.push(name) },
       slots: { inject(key: string, fn: () => unknown) { slots.push(key); fn(); return () => {} }, register(spec: Record<string, unknown>) { registrations.push(spec); return () => {} } },
       locale: { register: () => () => {} }, connection: { rpc: { call: async () => ({ ok: true, value: null }) } },
     }
@@ -45,5 +47,7 @@ describe('tool.call.toolview contract', () => {
     expect(slots).toEqual(['tool.call.toolview', 'conversation.chat.turnTail'])
     expect(registrations[1]).toMatchObject({ name: 'conversation.chat.turnTail', id: 'deep-view', locale: 'deep-view' })
     expect(registrations[0]).toMatchObject({ name: 'tool.call.toolview', key: 'show_view', locale: 'deep-view' })
+    // Plugin-drawn chats read the same card through this client service.
+    expect(provided).toEqual(['dshDeepView'])
   })
 })

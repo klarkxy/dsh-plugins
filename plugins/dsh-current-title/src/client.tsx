@@ -3,6 +3,7 @@ import type { NativeSurfaceClient } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { createPluginReadGate, registerSessionSettingsItem, useFeatureRefresh, useNativeSeat } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { Button, IconChevronDownOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
+import { installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
 import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import { registerAuxiliaryModelSettings } from '@klarkxy/dsh-plugin-kit/auxiliary-model-client'
@@ -427,9 +428,13 @@ declare module '@deepseek-ai/cordis' {
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
   const packageName = '@klarkxy/dsh-current-title'
+  const logger = installClientPluginLogger(ctx, packageName)
   mountModelSettingsChanges(ctx, packageName)
   const settingsSubscriber = createModelSettingsSubscriber(ctx, packageName, modelSettingsChangesIdentity(packageName))
-  const subscribeSettings = (change: () => void, error?: (message: string) => void) => settingsSubscriber.subscribe(change, error)
+  const subscribeSettings = (change: () => void, error?: (message: string) => void) => settingsSubscriber.subscribe(change, message => {
+    logger.warn('settings.subscription-error', 'Title settings subscription reported an error.', undefined, { detail: message })
+    error?.(message)
+  })
   const marker = createTitleClientMarker()
   ctx.provide(TITLE_CLIENT_SERVICE, marker)
   ctx.effect(() => {
@@ -463,7 +468,12 @@ export function apply(ctx: Context): void {
       const row = result as RpcResult<TitleStatus>
       if (!live) return
       applyMarkerFromStatus(marker, row?.ok ? row.value : undefined, live)
-    }).catch(() => { if (live) applyMarkerFromStatus(marker, undefined, live) })
+    }).catch(error => {
+      logger.debug('marker.status-failed', 'Initial title status RPC failed.', {
+        reason: error instanceof Error ? error.message : String(error),
+      })
+      if (live) applyMarkerFromStatus(marker, undefined, live)
+    })
     return () => { live = false; disposeTitleClientMarker(marker) }
   }, 'current-title.marker')
 }

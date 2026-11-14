@@ -12,8 +12,10 @@ vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
 // import runs before these globals exist, canUseDOM stays false, and a range
 // `input` event takes the IE polyfill path that never calls onChange.
 let createRoot: typeof import('react-dom/client').createRoot
+let createCards: typeof import('./client.tsx').createCards
 beforeAll(async () => {
   createRoot = (await import('react-dom/client')).createRoot
+  createCards = (await import('./client.tsx')).createCards
 })
 const t = (key: string) => key
 const labels = { code: { copyLabel: 'Copy', copiedLabel: 'Copied' }, footnotes: 'Footnotes' }
@@ -21,6 +23,23 @@ const chartNode = { type: 'chart' as const, kind: 'line' as const, categories: [
 afterEach(() => { document.body.innerHTML = '<div id="root"></div>' })
 
 describe('widget interactions without a browser', () => {
+  it('keeps local formulas editable in a display card exposed to plugin chats', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const Card = createCards(vi.fn(), undefined).Card
+    const view = { type: 'stack' as const, children: [
+      { type: 'number' as const, id: 'price', label: 'Price', value: 2 },
+      { type: 'number' as const, id: 'count', label: 'Count', value: 5 },
+      { type: 'metric' as const, label: 'Total', value: { '=': 'price * count' } },
+    ] }
+    await act(async () => root.render(<Card sessionId="s" callId="c" presentation={{ owner: 'dsh-deep-view', title: 'Budget', view, interactive: false, awaitReply: false }} />))
+    const input = document.querySelector('input[type=number]')!
+    expect(input.disabled).toBe(false)
+    expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('10')
+    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!
+    await act(async () => { setter.call(input, '3'); input.dispatchEvent(new dom.window.Event('input', { bubbles: true })) })
+    expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('15')
+    await act(async () => root.unmount())
+  })
   it('updates formula-backed metrics from local inputs', async () => {
     const root = createRoot(document.getElementById('root')!)
     const view = { type: 'stack' as const, children: [

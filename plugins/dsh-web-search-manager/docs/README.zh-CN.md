@@ -16,7 +16,7 @@ dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 
 ## 配置搜索
 
-DuckDuckGo 开箱即用。要用 DeepSeek 搜索、Exa、Brave、博查、Serper、Firecrawl、Tavily、Perplexity 或 You.com，填写对应 API Key。拖拽列表调整顺序：每次搜索使用第一个就绪的服务。其他插件提供的搜索服务（例如知乎）也在同一列表中，手动开启后即可参与排序。
+DuckDuckGo 开箱即用。要用 DeepSeek 搜索、Exa、Brave、博查、Serper、Firecrawl、Tavily、Perplexity、You.com、Linkup 或智谱，填写对应 API Key。拖拽列表调整顺序：每次搜索使用第一个就绪的服务。其他插件提供的搜索服务（例如知乎）也在同一列表中，手动开启后即可参与排序。
 
 「设置」页签设置结果条数、每次调用的查询数、总超时和网页正文长度上限。
 
@@ -26,7 +26,7 @@ DuckDuckGo 开箱即用。要用 DeepSeek 搜索、Exa、Brave、博查、Serper
 
 原先选中的读取服务保留在首位。内置「网页读取」走免费的 Jina Reader，失败时改为直接请求一次；宿主或其他插件的服务按各自方式读取。
 
-也可开启 **Firecrawl** 读取 Markdown 网页，与 Firecrawl 搜索共用 API Key；搜索与网页读取分别计费。Perplexity 使用 Search API 直接返回搜索结果；You.com 直接返回网页与新闻摘要。
+也可开启 **Firecrawl** 读取 Markdown 网页，与 Firecrawl 搜索共用 API Key；搜索与网页读取分别计费。Perplexity 使用 Search API 直接返回搜索结果；You.com 直接返回网页与新闻摘要。Linkup 使用 fast 检索，只返回来源，不生成回答，也不启用 deep。智谱固定使用基础搜索（`search_std`）；查询超过 70 个字符会在本地拒绝，不会被截短后发出。
 
 ## 让模型使用
 

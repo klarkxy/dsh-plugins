@@ -31,6 +31,12 @@ function fingerprint(files) {
 test('discovers all independent scoped plugins', t => {
   assert.equal(discoverPackages(fixture(t)).length, 2);
 });
+test('ignores residual directories after a plugin moves out', t => {
+  const root = fixture(t);
+  mkdirSync(join(root, 'plugins/dsh-retired/lib'), { recursive: true });
+  writeFileSync(join(root, 'plugins/dsh-retired/lib/index.js'), 'export {}');
+  assert.deepEqual(discoverPackages(root).map(pkg => pkg.name), ['@klarkxy/dsh-one', '@klarkxy/dsh-two']);
+});
 test('excludes private development packages from automatic publication', t => {
   const root = fixture(t);
   writeFileSync(join(root, 'plugins/dsh-two/package.json'), JSON.stringify({

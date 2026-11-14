@@ -9,6 +9,7 @@ export default defineConfig([
   {
     entry: { 'client.inner': 'src/client.ts' }, format: ['cjs'], dts: false, clean: false, outDir: 'lib',
     platform: 'browser', target: 'es2022', sourcemap: true, hash: false,
+    deps: { alwaysBundle: ['@klarkxy/dsh-plugin-kit/client-logger', '@klarkxy/dsh-plugin-kit/log-shared'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },
 ])

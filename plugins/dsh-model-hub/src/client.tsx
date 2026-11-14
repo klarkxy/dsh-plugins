@@ -1,6 +1,7 @@
 /** Subagent model preferences and read-only route labels in the native catalog. */
 import type { Context } from '@deepseek-ai/cordis'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
+import { installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
 import { IconModelNetworkSettings, registerSettingsSectionIcon } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { createModelSettingsSubscriber, mountModelSettingsChanges, type ModelSettingsSubscriberContext } from '@klarkxy/dsh-plugin-kit/model-settings-client'
@@ -55,6 +56,7 @@ function subagentChatAddress(address: SubagentAddress): string {
 
 export function apply(ctx: unknown): void {
   const client = ctx as HubClientContext
+  const logger = installClientPluginLogger(ctx, BUNDLE)
   mountModelSettingsChanges(ctx as ModelSettingsSubscriberContext, BUNDLE)
   const changes = createModelSettingsSubscriber(ctx as ModelSettingsSubscriberContext, BUNDLE, modelSettingsChangesIdentity(BUNDLE), namespace => CAST_WATCH_NAMESPACES.some(own => own === namespace))
   const call = async (endpoint: string, payload: unknown): Promise<never> => {
@@ -92,7 +94,12 @@ export function apply(ctx: unknown): void {
       client.sidebarRight.openResource(subagentChatAddress(address), { kind: 'subagentchat', preferNewPane: true })
     },
     refreshProjection: (sessionId: string) => {
-      void Promise.resolve(client.sessions.refreshProjections(sessionId)).catch(() => {})
+      void Promise.resolve(client.sessions.refreshProjections(sessionId)).catch(error => {
+        logger.debug('subagent.refresh-failed', 'Subagent projection refresh failed.', {
+          sessionId,
+          reason: error instanceof Error ? error.message : String(error),
+        })
+      })
     },
     hostT: locale.bind('subagent'),
     locale,

@@ -20,6 +20,7 @@ const client = await import(`data:text/javascript;base64,${Buffer.from(source
   .replace("from '@klarkxy/dsh-model-route/ui'", `from '${new URL('./model-menu-stub.mjs', import.meta.url).href}'`)
   .replace("from '@klarkxy/dsh-model-route'", `from '${resolve('@klarkxy/dsh-model-route')}'`)
   .replace("from '@klarkxy/dsh-plugin-kit/official-ui'", `from '${resolve('@klarkxy/dsh-plugin-kit/official-ui')}'`)
+  .replace("from '@klarkxy/dsh-plugin-kit/client-logger'", `from '${resolve('@klarkxy/dsh-plugin-kit/client-logger')}'`)
   .replace("from '@klarkxy/dsh-plugin-kit/client-utils'", `from '${resolve('@klarkxy/dsh-plugin-kit/client-utils')}'`)
   .replace("from '@klarkxy/dsh-plugin-kit/auxiliary-model-client'", `from '${new URL('./auxiliary-model-client-stub.mjs', import.meta.url).href}'`)
   .replace("from '@klarkxy/dsh-plugin-kit/model-settings-client'", `from '${resolve('@klarkxy/dsh-plugin-kit/model-settings-client')}'`)).toString('base64')}`);

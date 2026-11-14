@@ -37,6 +37,8 @@ export default defineConfig([
         '@klarkxy/dsh-plugin-kit/contracts',
         '@klarkxy/dsh-plugin-kit/domain',
         '@klarkxy/dsh-plugin-kit/model-settings',
+        '@klarkxy/dsh-plugin-kit/logger',
+        '@klarkxy/dsh-plugin-kit/log-shared',
         '@klarkxy/dsh-model-route',
       ],
       neverBundle: [
@@ -69,6 +71,8 @@ export default defineConfig([
       alwaysBundle: [
         '@klarkxy/dsh-plugin-kit/official-ui',
         '@klarkxy/dsh-plugin-kit/client-utils',
+        '@klarkxy/dsh-plugin-kit/client-logger',
+        '@klarkxy/dsh-plugin-kit/log-shared',
         '@klarkxy/dsh-plugin-kit/auxiliary-model-client',
         '@klarkxy/dsh-plugin-kit/model-settings-client',
         '@klarkxy/dsh-plugin-kit/contracts',

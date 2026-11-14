@@ -21,6 +21,16 @@ const providerInfo: Record<string, ProviderInfo> = {
     pricing: '按 Web Search API 请求计费；实际价格与额度以官方账户为准。',
     pricingUrl: 'https://you.com/docs/administration/billing',
   },
+  linkup: {
+    description: '通过 Linkup fast 检索获取网页来源，不生成回答，也不启用 deep 检索。',
+    pricing: '按 Search API 的 fast 来源请求计费；实际价格与额度以官方账户为准。',
+    pricingUrl: 'https://docs.linkup.so/pages/documentation/platform/pricing',
+  },
+  zhipu: {
+    description: '通过智谱基础搜索获取标题、链接和摘要，不改用高阶或第三方引擎。',
+    pricing: '基础搜索按次计费；实际价格与额度以官方账户为准。查询超过 70 个字符会在本地拒绝。',
+    pricingUrl: 'https://docs.bigmodel.cn/cn/guide/start/pricing',
+  },
   'firecrawl-fetch': {
     description: '读取网页 Markdown；与 Firecrawl 搜索共用 Key。',
     pricing: '网页读取使用 Firecrawl 积分，与搜索分别计费；实际消耗以官方账户为准。',
@@ -72,6 +82,8 @@ const providerInfo: Record<string, ProviderInfo> = {
 const englishInfo: Record<string, Pick<ProviderInfo, 'description' | 'pricing'>> = {
   perplexity: { description: 'Get web sources through the Perplexity Search API without generating an answer.', pricing: 'Charged per Search API request; current prices and credits depend on your official account.' },
   you: { description: 'Get web and news results through You.com without requesting extra full-page extraction.', pricing: 'Charged per Web Search API request; current prices and credits depend on your official account.' },
+  linkup: { description: 'Get web sources through Linkup fast search without generating an answer or enabling deep search.', pricing: 'Charged per fast Search API source request; current prices and credits depend on your official account.' },
+  zhipu: { description: 'Get titles, links and summaries through Zhipu basic search without switching to a higher or third-party engine.', pricing: 'Basic search is charged per request; current prices and credits depend on your official account. Queries longer than 70 characters are rejected locally.' },
   'firecrawl-fetch': { description: 'Read page Markdown using the same key as Firecrawl search.', pricing: 'Page reads use Firecrawl credits and are charged separately from search; your official account determines usage.' },
   ddg: { description: 'Search public DuckDuckGo pages without registration or an API key.', pricing: 'Free to use; no search API fees.' },
   bocha: { description: 'Search Chinese web content, returning titles, links and summaries.', pricing: 'Charged per request: listed price ¥0.036/request; trial credits depend on official offers.' },
@@ -86,6 +98,8 @@ const englishInfo: Record<string, Pick<ProviderInfo, 'description' | 'pricing'>>
 const bundledDescriptions: Record<string, readonly [string, string]> = {
   perplexity: ['Search API；返回网页来源，不生成回答。', 'Search API returning web sources without generating an answer.'],
   you: ['网页与新闻搜索；不额外提取全文。', 'Web and news search without extra full-page extraction.'],
+  linkup: ['Search API；fast 检索，只返回来源，不生成回答。', 'Search API using fast retrieval and returning sources without generating an answer.'],
+  zhipu: ['基础搜索 API；固定 search_std，查询不超过 70 个字符。', 'Basic search API fixed to search_std; queries are limited to 70 characters.'],
   'firecrawl-fetch': ['读取网页 Markdown；与 Firecrawl 搜索共用 Key。', 'Read page Markdown using the same key as Firecrawl search.'],
   ddg: ['无需注册。默认后端。', 'No registration required. Default backend.'],
   'deepseek-official': ['使用已配置的 DeepSeek API Key，可能产生额外搜索费用。', 'Uses the configured DeepSeek API key; additional search fees may apply.'],
@@ -102,6 +116,7 @@ export function providerDisplayLabel(provider: ProviderView, locale: 'zh' | 'en'
   if (!bundledCatalogId(provider)) return provider.label
   if (provider.label === 'DeepSeek 搜索') return locale === 'zh' ? provider.label : 'DeepSeek search'
   if (provider.label === '博查') return locale === 'zh' ? provider.label : 'Bocha'
+  if (provider.label === '智谱') return locale === 'zh' ? provider.label : 'Zhipu'
   if (provider.label === '网页读取') return locale === 'zh' ? provider.label : 'Read web pages'
   return provider.label
 }
@@ -122,7 +137,7 @@ function missingPricing(locale: 'zh' | 'en'): string {
 export function usesBundledPricing(provider: ProviderView): boolean {
   if (provider.pricing?.trim()) return false
   const catalogId = bundledCatalogId(provider)
-  return Boolean(catalogId && !['perplexity', 'you', 'firecrawl-fetch'].includes(catalogId) && Object.hasOwn(providerInfo, catalogId))
+  return Boolean(catalogId && !['perplexity', 'you', 'linkup', 'zhipu', 'firecrawl-fetch'].includes(catalogId) && Object.hasOwn(providerInfo, catalogId))
 }
 
 export function searchProviderInfo(provider: ProviderView, locale: 'zh' | 'en' = 'zh'): ProviderInfo {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -135,9 +135,7 @@ test('this repository excludes review holds and private development packages', (
   const holds = JSON.parse(readFileSync(join(root, 'scripts/npm-release-holds.json'), 'utf8'));
   const candidates = new Set(releaseWorkspace(root, discoverPackages(root)).candidates.map(pkg => pkg.name));
   for (const entry of holds.packages) assert.equal(candidates.has(entry.name), false, entry.name);
-  for (const entry of readdirSync(join(root, 'plugins'), { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const manifest = JSON.parse(readFileSync(join(root, 'plugins', entry.name, 'package.json'), 'utf8'));
-    if (manifest.private === true) assert.equal(candidates.has(manifest.name), false, manifest.name);
+  for (const pkg of discoverPackages(root, { includePrivate: true })) {
+    if (pkg.private === true) assert.equal(candidates.has(pkg.name), false, pkg.name);
   }
 });

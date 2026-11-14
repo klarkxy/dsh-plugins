@@ -85,6 +85,15 @@
       ],
       "@klarkxy/dsh-plugin-kit/cli-media": [
         "plugins/dsh-plugin-kit/src/cli-media.ts"
+      ],
+      "@klarkxy/dsh-plugin-kit/log-shared": [
+        "plugins/dsh-plugin-kit/src/log-shared.ts"
+      ],
+      "@klarkxy/dsh-plugin-kit/logger": [
+        "plugins/dsh-plugin-kit/src/logger.ts"
+      ],
+      "@klarkxy/dsh-plugin-kit/client-logger": [
+        "plugins/dsh-plugin-kit/src/client-logger.ts"
       ]
     }
   }

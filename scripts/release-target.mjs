@@ -1,11 +1,13 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import semver from 'semver';
 
 export function discoverPackages(root, { includePrivate = false } = {}) {
   const packages = readdirSync(join(root, 'plugins'), { withFileTypes: true })
-    .filter(entry => entry.isDirectory())
+    // Removing a plugin can leave ignored build output or a locked empty
+    // directory on Windows. Like pnpm, only directories with manifests are packages.
+    .filter(entry => entry.isDirectory() && existsSync(join(root, 'plugins', entry.name, 'package.json')))
     .map(entry => {
       const directory = `plugins/${entry.name}`;
       const manifest = JSON.parse(readFileSync(join(root, directory, 'package.json'), 'utf8'));

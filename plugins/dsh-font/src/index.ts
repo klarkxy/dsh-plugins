@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { installPluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { PLUGIN_NAME } from './contracts.ts'
 
 export const name = PLUGIN_NAME
@@ -10,6 +11,7 @@ export const name = PLUGIN_NAME
  * font persists browser-local, and every host-backed write goes through the
  * official `ctx.theme` entries. Nothing here needs a Host service.
  */
-export function apply(_ctx: Context): void {
+export function apply(ctx: Context): void {
   /* no host services, no RPC, no model calls */
+  installPluginLogger(ctx, PLUGIN_NAME, { forwardHostWarnError: false })
 }

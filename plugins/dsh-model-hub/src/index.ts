@@ -4,6 +4,7 @@ import Schema from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import { installPluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { notifyModelSettingsChanged } from '@klarkxy/dsh-plugin-kit/model-settings'
 import { CAST_TENDENCIES_NAMESPACE, createCast } from './cast.ts'
 import { registerHubModelSettingsChanges } from './changes.ts'
@@ -14,13 +15,14 @@ export const CHANNEL = '/dsh-model-hub'
 export const Config = Schema.object({})
 
 export function apply(ctx: Context): void {
+  const logger = installPluginLogger(ctx, name, { forwardHostWarnError: false })
   registerHubModelSettingsChanges(ctx)
   const profile = ctx.get('profileContext') as { dir: string } | undefined
   const settings = ctx.settings as { describe(options?: { redactSecrets?: boolean }): unknown[]; mutate(ns: string, ops: Array<{ op: 'set'; path: string[]; value: unknown } | { op: 'unset'; path: string[] }>, expectedRevision?: number): Promise<void> }
   const cast = createCast({
     describe: () => settings.describe({ redactSecrets: true }) as never,
     mutate: (ns, ops, revision) => settings.mutate(ns, [...ops], revision),
-    profileDir: profile?.dir, logger: ctx.logger,
+    profileDir: profile?.dir, logger: ctx.logger, pluginLogger: logger,
     notifyTendenciesChanged: revision => notifyModelSettingsChanged(ctx, CAST_TENDENCIES_NAMESPACE, revision),
   })
   ctx.systemPrompt.section({
@@ -43,7 +45,8 @@ export function apply(ctx: Context): void {
       }
       throw new Error(`Unknown endpoint: ${endpoint}`)
     } catch (error) {
+      logger.warn('rpc.rejected', 'Model Hub RPC request failed.', error, { endpoint })
       return { ok: false, error: { code: 'model-hub/rejected', message: error instanceof Error ? error.message : String(error) } }
     }
-  }, { isEndpoint: endpoint => /^[a-z][a-zA-Z.]*$/.test(endpoint) }))
+  }, { isEndpoint: endpoint => /^[a-z][a-zA-Z.]*$/.test(endpoint), logger }))
 }

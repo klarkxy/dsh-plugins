@@ -1,6 +1,7 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconKeyboardSettings, registerSettingsSectionIcon } from '@klarkxy/dsh-plugin-kit/client-utils'
+import { installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { useRef, useState } from 'react'
 import type { Shortcuts, ShortcutContext } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/protocol'
@@ -106,14 +107,18 @@ function Overlay(props: ScreenProps) {
 }
 
 export function apply(ctx: Context): void {
+  const logger = installClientPluginLogger(ctx, PACKAGE)
   const client = ctx as unknown as Client
   const shortcuts = client.shortcuts
   // This contract intentionally has no Inspect provider; fail visibly on incompatible hosts.
   if (!shortcuts.catalog || !shortcuts.fixedCatalog || !shortcuts.config || typeof shortcuts.edit !== 'function') {
+    logger.fault('contract.missing', 'Host does not provide the shortcut catalog and key-binding editor contract.')
     throw new Error('This host does not provide the shortcut catalog and key-binding editor contract.')
   }
   let storage: Storage | undefined
-  try { storage = window.localStorage } catch { /* The trigger editor reports unavailable storage. */ }
+  try { storage = window.localStorage } catch (error) {
+    logger.warn('storage.unavailable', 'Browser localStorage is unavailable for shortcut preferences.', error)
+  }
   const trigger = createWebTrigger(storage)
   // Include the Web-only palette binding in local conflict checks; it is absent
   // from the host's application catalog because Web allows a separately saved key.
@@ -131,7 +136,11 @@ export function apply(ctx: Context): void {
   const recording: Shortcuts['recording'] = async active => {
     if (active) recordingActive = true
     try { await shortcuts.recording(active) }
-    catch (error) { if (active) recordingActive = false; throw error }
+    catch (error) {
+      if (active) recordingActive = false
+      logger.warn('recording.failed', 'Shortcut recording toggle failed.', error, { active })
+      throw error
+    }
     finally { if (!active) recordingActive = false }
   }
   const dispatchErrors = new Set<(error: string) => void>()
@@ -149,7 +158,11 @@ export function apply(ctx: Context): void {
   }
   ctx.effect(() => installFixedDispatcher({ window, getMappings: () => fixed.state.getSnapshot().rows,
     isRecording: () => recordingActive,
-    onError: error => { dispatchError = error.message; for (const listener of dispatchErrors) listener(error.message) },
+    onError: error => {
+      logger.warn('dispatch.failed', 'Fixed shortcut dispatch failed.', error)
+      dispatchError = error.message
+      for (const listener of dispatchErrors) listener(error.message)
+    },
   }))
   const model = new CommandPaletteModel({ shortcuts,
     // The next animation frame follows the React commit and modal focus-trap cleanup.

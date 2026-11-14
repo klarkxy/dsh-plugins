@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import { retainAuxiliaryModel } from '@klarkxy/dsh-plugin-kit/auxiliary-model'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import { installPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
 import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
 import { registerModelSettings, notifyModelSettingsChanged, type ModelSettingsEvents } from '@klarkxy/dsh-plugin-kit/model-settings'
@@ -47,8 +48,14 @@ function stringField(payload: unknown, key: string): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined
 }
 
-function fail(error: unknown): RpcResult<never> {
+function fail(error: unknown, endpoint?: string, logger?: PluginLogger): RpcResult<never> {
   if (error instanceof CommitRunError) {
+    const meta = { endpoint: endpoint ?? null, code: error.code, hasPartial: Boolean(error.partial) }
+    if (error.code === 'cancelled' || error.code === 'no-changes' || error.code === 'busy' || error.code === 'stale') {
+      logger?.debug('rpc.domain-error', error.message, meta)
+    } else {
+      logger?.warn('rpc.domain-error', error.message, undefined, meta)
+    }
     return {
       ok: false,
       error: {
@@ -58,6 +65,7 @@ function fail(error: unknown): RpcResult<never> {
       },
     }
   }
+  logger?.error('rpc.internal-error', 'Unexpected Git Commit RPC error.', error, { endpoint: endpoint ?? null })
   const message = error instanceof Error ? error.message : String(error)
   return { ok: false, error: { code: 'internal', message } }
 }
@@ -67,6 +75,7 @@ export async function handleRpc(
   endpoint: string,
   payload: unknown,
   signal: AbortSignal,
+  logger?: PluginLogger,
 ): Promise<RpcResult> {
   try {
     switch (endpoint) {
@@ -102,11 +111,12 @@ export async function handleRpc(
         return { ok: false, error: { code: 'not-found', message: `unknown endpoint: ${endpoint}` } }
     }
   } catch (error) {
-    return fail(error)
+    return fail(error, endpoint, logger)
   }
 }
 
 export async function apply(ctx: Context): Promise<void> {
+  const logger = installPluginLogger(ctx, PLUGIN_NAME, { forwardHostWarnError: false })
   createModelSettingsChanges(ctx, modelSettingsChangesIdentity(PLUGIN_NAME), PLUGIN_NAME)
   // Keep the shared auxiliary default alive while this plugin is mounted: it
   // is the global default commit planning follows when no planning model is
@@ -120,6 +130,7 @@ export async function apply(ctx: Context): Promise<void> {
   const tablePromise = domainPromise.then(domain => domain.table('settings'))
   const service = new GitCommitService({
     plugin: PLUGIN_NAME,
+    logger,
     onSettingsChanged: revision => notifyModelSettingsChanged(ctx, PLUGIN_NAME, revision),
     llm: host.llm,
     host,
@@ -137,7 +148,12 @@ export async function apply(ctx: Context): Promise<void> {
     await service.dispose()
     await (await domainPromise).close()
   }, 'git-commit.lifecycle')
-  ctx.effect(() => registerHostRpc(host, RPC_CHANNEL, (endpoint, payload, signal) => handleRpc(service, endpoint, payload, signal)), 'git-commit.rpc')
+  ctx.effect(() => registerHostRpc(
+    host,
+    RPC_CHANNEL,
+    (endpoint, payload, signal) => handleRpc(service, endpoint, payload, signal, logger),
+    { logger },
+  ), 'git-commit.rpc')
   ctx.effect(() => registerModelSettings(ctx as unknown as ModelSettingsEvents, {
     ns: PLUGIN_NAME, title: { zh: 'Git 提交', en: 'Git Commit' },
     async read(signal) {

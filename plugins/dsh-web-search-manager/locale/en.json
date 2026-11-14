@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Web Search",
-    "description": "Manage and rank web search and page-reading providers in one settings page, including capabilities from installed plugins, for the model's web_search and web_fetch tools."
+    "description": "Manage and rank web search and page-reading providers in one settings page, including Linkup, Zhipu and capabilities from installed plugins, for the model's web_search and web_fetch tools."
   }
 }

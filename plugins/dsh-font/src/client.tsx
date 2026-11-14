@@ -3,6 +3,7 @@ import { migrateFontPreferences, type FontRole, type FontTheme, type FontThemeSn
 import { Button, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { IconFontSettings, registerSettingsSectionIcon } from '@klarkxy/dsh-plugin-kit/client-utils'
+import { createClientPluginLogger, installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { useId, useState, useSyncExternalStore } from 'react'
 import {
   CODE_FONT_PRESETS, CONVERSATION_FONT_SELECTOR, FONT_SIZE_SPECS,
@@ -342,12 +343,19 @@ export function FontSettingsGroup(props: {
     // prompt; anything else (Firefox, Safari, denied permission, Electron
     // policy) falls through to the preset + manual-input flow unchanged.
     const query = (globalThis as { queryLocalFonts?: () => Promise<readonly unknown[]> }).queryLocalFonts
-    if (typeof query !== 'function') { setFontList({ state: 'denied', families: [] }); return }
+    if (typeof query !== 'function') {
+      createClientPluginLogger(PLUGIN_NAME).debug('system-fonts.unsupported', 'Local Font Access API is not available in this browser.')
+      setFontList({ state: 'denied', families: [] })
+      return
+    }
     setFontList(current => ({ state: 'loading', families: current.families }))
     try {
       const fonts = await query()
-      setFontList({ state: 'ready', families: uniqueSystemFonts(fonts) })
-    } catch {
+      const families = uniqueSystemFonts(fonts)
+      createClientPluginLogger(PLUGIN_NAME).info('system-fonts.loaded', 'Loaded system font families.', { count: families.length })
+      setFontList({ state: 'ready', families })
+    } catch (error) {
+      createClientPluginLogger(PLUGIN_NAME).warn('system-fonts.denied', 'System font enumeration was denied or failed.', error)
       setFontList(current => ({ state: 'denied', families: current.families }))
     }
   }
@@ -461,6 +469,7 @@ export function FontSettingsGroup(props: {
 }
 
 export function apply(ctx: Context): void {
+  const logger = installClientPluginLogger(ctx, PLUGIN_NAME)
   const client = ctx as unknown as Client & { effect: Context['effect'] }
   const store = createFontSettingsStore(readStorage())
   const conversation = createConversationFontStore(readStorage())
@@ -488,9 +497,13 @@ export function apply(ctx: Context): void {
         fontTokenDeclarations(document.styleSheets ?? []),
       )
       if (declarations.length === 0) return
-      sheet.insertRule(`${CONVERSATION_FONT_SELECTOR}{}`)
-      const rule = sheet.cssRules[0] as CSSStyleRule
-      for (const [name, value] of declarations) rule.style.setProperty(name, value)
+      try {
+        sheet.insertRule(`${CONVERSATION_FONT_SELECTOR}{}`)
+        const rule = sheet.cssRules[0] as CSSStyleRule
+        for (const [name, value] of declarations) rule.style.setProperty(name, value)
+      } catch (error) {
+        logger.warn('conversation-font.rule-failed', 'Failed to apply conversation font CSS rule.', error)
+      }
     }
     write()
     const unsubscribe = conversation.subscribe(write)

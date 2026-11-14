@@ -1,5 +1,6 @@
 import { createControl, CHANNEL, REVIEW_FIELDS } from './control.js';
 import { registerHostRpc } from '@klarkxy/dsh-plugin-kit/host-rpc';
+import { createPluginLogger } from '@klarkxy/dsh-plugin-kit/logger';
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts';
 import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes';
 import { registerModelSettings, notifyModelSettingsChanged } from '@klarkxy/dsh-plugin-kit/model-settings';
@@ -12,17 +13,20 @@ const ENDPOINT = /^[A-Za-z0-9_$.-]+$/;
 const MAX_REQUEST_BYTES = 64 * 1024;
 
 /** Connection-compatible POST /dsh-safe-auto/<endpoint>. Missing auth policy fails closed. */
-export function registerControlRoute(ctx, call) {
+export function registerControlRoute(ctx, call, logger) {
   return registerHostRpc(ctx, CHANNEL, (endpoint, payload, signal) => call(endpoint, payload, signal), {
     maxBodyBytes: MAX_REQUEST_BYTES,
     isEndpoint: endpoint => ENDPOINT.test(endpoint),
     caseInsensitiveContentType: true,
     requirePayload: true,
     errorBody: status => status === 401 ? 'unauthorized' : status === 403 ? 'forbidden' : undefined,
+    ...(logger ? { logger } : {}),
   });
 }
 
 export async function apply(ctx) {
+  const logger = createPluginLogger(ctx, '@klarkxy/dsh-safe-auto', { forwardHostWarnError: false });
+  logger.info('ui-host.loaded', 'Safe Auto UI host initialized.');
   createModelSettingsChanges(ctx, modelSettingsChangesIdentity('@klarkxy/dsh-safe-auto'), '@klarkxy/dsh-safe-auto');
   // Loaded only by the separate UI row; the review plugin keeps its minimal dependencies.
   const [{ defineDomain, domainTable }, { z }] = await Promise.all([import('@deepseek-ai/dsh-storage-domain'), import('zod')]);
@@ -68,6 +72,9 @@ export async function apply(ctx) {
       }
       return { ok: true, value: await control.call(endpoint, payload, signal) };
     }
-    catch (error) { return { ok: false, error: { code: 'safe-auto/rejected', message: error instanceof Error ? error.message : 'Request rejected', details: {} } }; }
-  }));
+    catch (error) {
+      logger.warn('ui-host.rpc-rejected', 'Safe Auto UI host request rejected.', error, { endpoint });
+      return { ok: false, error: { code: 'safe-auto/rejected', message: error instanceof Error ? error.message : 'Request rejected', details: {} } };
+    }
+  }, logger));
 }

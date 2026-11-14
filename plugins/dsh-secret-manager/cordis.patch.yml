@@ -1,0 +1,5 @@
+# Installs the secret manager: Host tool + RPC channel and the client prompt UI.
+- insert:
+    - id: secret-manager
+      name: '@klarkxy/dsh-secret-manager'
+      disabled: false

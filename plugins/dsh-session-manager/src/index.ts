@@ -19,6 +19,7 @@ import { registerSessionManagerRpc } from './rpc.ts'
 import type { PresenceModelHost } from './welcome-back.ts'
 import type { HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
 import { openCompatibleDomain } from '@klarkxy/dsh-plugin-kit/domain'
+import { installPluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
 import { retainAuxiliaryModel } from '@klarkxy/dsh-plugin-kit/auxiliary-model'
 import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
@@ -90,6 +91,7 @@ export const Config: Schema<Config> = Schema.object({
 })
 
 export function apply(ctx: Context, config: PluginConfig = {}): void {
+  const logger = installPluginLogger(ctx, PLUGIN_NAME, { forwardHostWarnError: false })
   createModelSettingsChanges(ctx, modelSettingsChangesIdentity(PLUGIN_NAME), PLUGIN_NAME)
   const resolved = resolveConfig(config)
   const cursors = createCursorKey()
@@ -104,9 +106,11 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
     let mounted = true
     void retainAuxiliaryModel(inner as Context).then(release => {
       if (!mounted) { void release(); return }
+      logger.debug('auxiliary.retained', 'Shared auxiliary model store retained.')
       inner.effect(() => release)
     }).catch(error => {
       auxBroken = true
+      logger.warn('auxiliary.unavailable', 'Shared auxiliary model store unavailable.', error)
       ctx.logger?.warn?.('dsh-session-manager: auxiliary model store unavailable; feature models without an explicit override are disabled: %s',
         error instanceof Error ? error.message : String(error))
     })
@@ -128,7 +132,11 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
     let store: PresenceSettingsStore | undefined
     let unregister: (() => void) | undefined
     const opening = (async () => {
-      const domain = await openCompatibleDomain(spec => host.storageDomain.open(spec), presenceDomain)
+      const domain = await openCompatibleDomain(
+        spec => host.storageDomain.open(spec),
+        presenceDomain,
+        { logger, domainName: 'dsh_session_manager' },
+      )
       if (disposed || storageGeneration !== generation) {
         await domain.close()
         return
@@ -172,6 +180,9 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
             }
             const model = modelRouteOverride(route as ModelRoute) ?? null
             const revision = await opened.writeFeature(key, model, { expectedRevision, signal })
+            logger.info('settings.model-updated', 'Updated Session Manager feature model.', {
+              feature: key, revision, provider: model?.provider ?? null, model: model?.model ?? null,
+            })
             notifyModelSettingsChanged(ctx, PLUGIN_NAME, revision)
             return revision
           },
@@ -179,13 +190,16 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
         settings = opened
         autoContinueTable = domain.table('auto_continue') as AutoContinueTableLike
         autoContinueRecentTable = domain.table('auto_continue_recent') as AutoContinueRecentTableLike
+        logger.info('storage.mounted', 'Session Manager storage domain mounted.')
       } catch (error) {
         unregister?.()
         if (store !== undefined) await store.close()
         else await domain.close()
         throw error
       }
-    })().catch(() => { /* storageDomain unavailable or incompatible: degrade silently */ })
+    })().catch(error => {
+      logger.warn('storage.unavailable', 'Session Manager storage domain unavailable; degrading to stateless mode.', error)
+    })
     storageReady = opening
     injected.effect(() => async () => {
       disposed = true
@@ -263,9 +277,16 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
       agents: scoped.agents as never,
       sessions: scoped.sessions as never,
       sessionQuery: ctx.sessionQuery as never,
+      logger,
       log: {
-        debug: message => (ctx as { logger?: { debug?(m: string): void } }).logger?.debug?.(message),
-        warn: message => (ctx as { logger?: { warn?(m: string): void } }).logger?.warn?.(message),
+        debug: message => {
+          logger.debug('auto-continue.trace', message)
+          ;(ctx as { logger?: { debug?(m: string): void } }).logger?.debug?.(message)
+        },
+        warn: message => {
+          logger.warn('auto-continue.warn', message)
+          ;(ctx as { logger?: { warn?(m: string): void } }).logger?.warn?.(message)
+        },
       },
     })
     // Seeding listens on agent/created: serial and awaited before the agent's
@@ -277,7 +298,13 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
         // Do not seed it with an empty table before its remembered mode loads.
         await storageReady
         await service.seed(agent as never, source)
+        logger.debug('auto-continue.seeded', 'Seeded session auto-continue state.', {
+          sessionId: agent.session?.id ?? agent.id, source,
+        })
       } catch (error) {
+        logger.warn('auto-continue.seed-failed', 'Could not seed session auto-continue state.', error, {
+          sessionId: agent.session?.id ?? agent.id, source,
+        })
         ctx.logger.warn('dsh-session-manager: could not seed auto-continue state: %s', error instanceof Error ? error.message : String(error))
       }
     }), 'session-manager.autocontinue.seed')
@@ -301,7 +328,7 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
       sessionProjections: host.sessionProjections,
       permissionPresets: host.permissionPresets,
       agentPresets: host.agentPresets,
-      log: { warn: message => ctx.logger.warn(message) },
+      log: { warn: message => { logger.warn('creation-defaults.warn', message); ctx.logger.warn(message) } },
     })
     inner.effect(() => {
       const off = ctx.on('session/event', mirror.onSessionEvent)
@@ -317,6 +344,7 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
       captureModels,
       () => settings,
       () => autoContinueService,
+      logger,
     ))
   })
 }

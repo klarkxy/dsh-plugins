@@ -19,10 +19,12 @@ const roots = {
   'dsh-model-picker': ['.dsh-model-picker', '.dsh-model-picker-'],
   'dsh-model-route': ['.dsh-model-menu-'],
   'dsh-safe-auto': ['.dsh-safe-auto'],
+  'dsh-secret-manager': ['.sm-root'],
   'dsh-session-manager': ['.dsh-free-chat'],
   'dsh-shortcuts': ['.shortcuts-root', '.shortcuts-fixed-root'],
   'dsh-unrestricted': ['[data-dsh-unrestricted-warning]'],
   'dsh-web-search-manager': ['.ws-root'],
+  'dsh-workspace-folders': ['.workspace-folders'],
   'dsh-zhihu': ['.zhihu-panel'],
 }
 const skip = new Set(['node_modules', 'lib', 'dist', 'coverage', 'test', 'tests'])

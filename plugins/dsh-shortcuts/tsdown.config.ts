@@ -37,6 +37,8 @@ export default defineConfig([
       ],
       alwaysBundle: [
         '@klarkxy/dsh-plugin-kit/client-utils',
+        '@klarkxy/dsh-plugin-kit/client-logger',
+        '@klarkxy/dsh-plugin-kit/log-shared',
         '@klarkxy/dsh-plugin-kit/official-ui',
         '@klarkxy/dsh-plugin-kit/contracts',
       ],

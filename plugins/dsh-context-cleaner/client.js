@@ -15,6 +15,22 @@
 window.__ModuleLoader__.load({
   id: '@klarkxy/dsh-context-cleaner',
   factory() {
+    function recordClientLog(level, event, message) {
+      try {
+        const g = typeof globalThis !== 'undefined' ? globalThis : window;
+        const list = Array.isArray(g.__KLARKXY_PLUGIN_LOGS__) ? g.__KLARKXY_PLUGIN_LOGS__ : (g.__KLARKXY_PLUGIN_LOGS__ = []);
+        list.push({
+          version: 1,
+          at: new Date().toISOString(),
+          level,
+          source: 'dsh-context-cleaner',
+          surface: 'client',
+          event,
+          message,
+        });
+        if (list.length > 300) list.splice(0, list.length - 300);
+      } catch {}
+    }
     return {
       apply(ctx) {
         ctx.effect(() => {
@@ -31,7 +47,11 @@ window.__ModuleLoader__.load({
           tag.textContent =
             '.lc-root > .lc-cols.lc-head > .lc-col:has(.lc-pi-grid, .lc-recom) { display: none; }';
           document.head.appendChild(tag);
-          return () => tag.remove();
+          recordClientLog('info', 'client.loaded', 'Installed dsh-context-cleaner stylesheet.');
+          return () => {
+            tag.remove();
+            recordClientLog('debug', 'client.disposed', 'Removed dsh-context-cleaner stylesheet.');
+          };
         }, 'dsh-context-cleaner: hide cards');
       },
     };

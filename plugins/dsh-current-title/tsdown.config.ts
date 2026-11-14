@@ -17,6 +17,8 @@ export default defineConfig([
         '@klarkxy/dsh-plugin-kit/model-settings-changes',
         '@klarkxy/dsh-plugin-kit/contracts',
         '@klarkxy/dsh-plugin-kit/model-settings',
+        '@klarkxy/dsh-plugin-kit/logger',
+        '@klarkxy/dsh-plugin-kit/log-shared',
         '@klarkxy/dsh-model-route',
       ],
       neverBundle: ['@deepseek-ai/cordis', '@deepseek-ai/dsh-typert-protocol', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-storage-domain', 'zod'],
@@ -26,7 +28,7 @@ export default defineConfig([
   {
     entry: { 'client.inner': 'src/client.tsx' }, format: ['cjs'], dts: false, clean: false, outDir: 'lib',
     platform: 'browser', target: 'es2022', sourcemap: true, hash: false,
-    deps: { neverBundle: ['react', 'react/jsx-runtime', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'], alwaysBundle: ['@klarkxy/dsh-plugin-kit/model-settings-client', '@klarkxy/dsh-plugin-kit/contracts', '@klarkxy/dsh-model-route', '@klarkxy/dsh-model-route/ui', '@klarkxy/dsh-model-route/model-picker', '@klarkxy/dsh-plugin-kit/client-utils', '@klarkxy/dsh-plugin-kit/official-ui', '@klarkxy/dsh-plugin-kit/auxiliary-model-client', '@klarkxy/dsh-plugin-kit/model-picker'] },
+    deps: { neverBundle: ['react', 'react/jsx-runtime', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'], alwaysBundle: ['@klarkxy/dsh-plugin-kit/model-settings-client', '@klarkxy/dsh-plugin-kit/contracts', '@klarkxy/dsh-model-route', '@klarkxy/dsh-model-route/ui', '@klarkxy/dsh-model-route/model-picker', '@klarkxy/dsh-plugin-kit/client-utils', '@klarkxy/dsh-plugin-kit/client-logger', '@klarkxy/dsh-plugin-kit/log-shared', '@klarkxy/dsh-plugin-kit/official-ui', '@klarkxy/dsh-plugin-kit/auxiliary-model-client', '@klarkxy/dsh-plugin-kit/model-picker'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },
 ])

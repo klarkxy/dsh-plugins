@@ -18,7 +18,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import { isAgentLoopRequest, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import z from '@deepseek-ai/schemastery'
-import { PRESET_ID } from '../contracts.ts'
+import { createPluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
+import { PLUGIN_NAME, PRESET_ID } from '../contracts.ts'
 import { readTuning } from '../tuning.ts'
 import { guardStream, type GuardResult } from './monitor.ts'
 import { buildNestedRequest } from './request.ts'
@@ -56,7 +57,12 @@ export function apply(ctx: Context, config: Config = {}): void {
   const tuning = readTuning()
   const enabled = tuning.transportEnabled ?? config.enabled ?? false
   const maxRetries = Math.min(3, Math.max(1, tuning.transportMaxRetries ?? config.maxRetries ?? 3))
-  if (!enabled) return
+  const logger = createPluginLogger(ctx, PLUGIN_NAME, { forwardHostWarnError: false }).child({ entry: 'transport' })
+  if (!enabled) {
+    logger.debug('transport.disabled', 'Unrestricted stream transport is disabled.')
+    return
+  }
+  logger.info('transport.enabled', 'Unrestricted stream transport enabled.', { maxRetries })
 
   ctx.effect(() => ctx.on('llm/stream', async function* (options, next) {
     // A preset's Cordis scope does NOT isolate the llm waterfall. Its listener
@@ -74,6 +80,11 @@ export function apply(ctx: Context, config: Config = {}): void {
     // The last attempt is intentionally unguarded: the user sees the honest
     // result rather than an endless rewrite loop.
     if (attempt >= maxRetries) {
+      logger.debug('transport.max-retries', 'Reached unrestricted transport retry limit; passing stream through.', {
+        sessionId: options.sessionId ?? null,
+        attempt,
+        maxRetries,
+      })
       yield* next()
       return
     }
@@ -92,6 +103,12 @@ export function apply(ctx: Context, config: Config = {}): void {
 
     if (result.refused) {
       const nextAttempt = attempt + 1
+      logger.info('transport.refusal-retry', 'Transport stream refusal detected; retrying nested stream.', {
+        sessionId: options.sessionId ?? null,
+        attempt,
+        nextAttempt,
+        maxRetries,
+      })
       ctx.logger?.info?.(
         'dsh-unrestricted: transport refusal on attempt %d; retrying %d/%d',
         attempt, nextAttempt, maxRetries,

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Secret Manager",
+    "description": "Collect secrets outside chat and use named references with per-session HTTP and shell permissions."
+  }
+}

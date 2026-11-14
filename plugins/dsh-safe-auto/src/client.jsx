@@ -4,6 +4,7 @@ import { Button, Input, IconChevronDownOutlineRegular, IconChevronUpOutlineRegul
 import { MODEL_CATALOG_INJECT, readModelCatalog, modelMenuEffortLabel, modelMenuEffortOptions, parseModelMenuChoices } from '@klarkxy/dsh-model-route';
 import { ModelCatalogStatus, ModelMenu, modelMenuCss, useModelCatalog } from '@klarkxy/dsh-model-route/ui';
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui';
+import { createClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger';
 import { createPluginReadGate, registerSessionSettingsItem } from '@klarkxy/dsh-plugin-kit/client-utils';
 import { registerAuxiliaryModelSettings } from '@klarkxy/dsh-plugin-kit/auxiliary-model-client';
 import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client';
@@ -652,19 +653,35 @@ export function SafeAutoSettingsItem({ api, locale }) {
 }
 
 export function apply(ctx) {
+  const logger = createClientPluginLogger(BUNDLE, ctx);
+  logger.info('client.loaded', 'Client plugin initialized.');
   // Each plugin lifetime owns its stylesheet; individual seats do not inject
   // copies. A second lifetime must survive disposal of the first one.
   ctx.effect(() => {
-    if (typeof document === 'undefined') return undefined;
+    if (typeof document === 'undefined') {
+      return () => { logger.debug('client.disposed', 'Client plugin disposed.'); };
+    }
     const style = document.createElement('style');
     style.setAttribute('data-plugin', BUNDLE);
     style.textContent = css;
     document.head.appendChild(style);
-    return () => style.remove();
+    return () => {
+      style.remove();
+      logger.debug('client.disposed', 'Client plugin disposed.');
+    };
   });
   mountModelSettingsChanges(ctx, BUNDLE);
   const settingsSubscriber = createModelSettingsSubscriber(ctx, BUNDLE);
-  const call = (endpoint, payload) => unwrapRpc((...args) => ctx.connection.rpc.call(...args), endpoint, payload);
+  const call = async (endpoint, payload) => {
+    try {
+      return await unwrapRpc((...args) => ctx.connection.rpc.call(...args), endpoint, payload);
+    } catch (error) {
+      if (errorMessage(error) !== INACTIVE_SESSION) {
+        logger.warn('client.rpc-failed', 'Safe Auto client RPC failed.', error, { endpoint });
+      }
+      throw error;
+    }
+  };
   const api = Object.freeze({
     subscribeSettings: (change, error) => settingsSubscriber.subscribe(change, error),
     subscribeGeneration: listener => ctx.connection.generation?.subscribe(listener) ?? (() => {}),

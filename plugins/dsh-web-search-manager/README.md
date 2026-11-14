@@ -16,7 +16,7 @@ Replace `web` with your profile name. Restart DSH Web, then open **Settings → 
 
 ## Set up search
 
-DuckDuckGo works out of the box with zero configuration. To use DeepSeek Search, Exa, Brave, Bocha, Serper, Firecrawl, Tavily, Perplexity, or You.com, enter its API key. Drag the list to reorder: each search uses the first ready service. Search services from other plugins, such as Zhihu, appear in the same list and join the priority order once you enable them.
+DuckDuckGo works out of the box with zero configuration. To use DeepSeek Search, Exa, Brave, Bocha, Serper, Firecrawl, Tavily, Perplexity, You.com, Linkup, or Zhipu, enter its API key. Drag the list to reorder: each search uses the first ready service. Search services from other plugins, such as Zhihu, appear in the same list and join the priority order once you enable them.
 
 The **Settings** tab sets the number of results, queries per call, total timeout, and maximum page length.
 
@@ -26,7 +26,7 @@ Turn on **Read web pages**, enable the services you want, then drag them or use 
 
 Your previously selected fetch service stays first. The bundled **Read web pages** service uses the free Jina Reader and falls back to one direct request if that fails; services from the host or other plugins use their own fetching method.
 
-**Firecrawl** can also read Markdown pages with the same API key as Firecrawl search; search and page reads are billed separately. Perplexity uses its Search API to return search results directly; You.com returns web and news snippets directly.
+**Firecrawl** can also read Markdown pages with the same API key as Firecrawl search; search and page reads are billed separately. Perplexity uses its Search API to return search results directly; You.com returns web and news snippets directly. Linkup uses fast search and returns sources only, without an answer or deep search. Zhipu stays on basic search (`search_std`); a query longer than 70 characters is rejected locally and is not shortened.
 
 ## Give the tools to the model
 

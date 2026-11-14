@@ -1,4 +1,5 @@
 import { registerHostRpcTransport, sendHostRpcResponse, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import type { PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 
 const CHANNEL_PATTERN = /^\/[A-Za-z0-9._~-]+$/
 const ENDPOINT_SEGMENT = /^[A-Za-z0-9_$.-]+$/
@@ -12,7 +13,7 @@ function isEndpoint(endpoint: string): boolean {
 }
 
 /** Zhihu keeps its gateway-compatible bad-request envelope and upload allowance. */
-export function registerHostRpc(ctx: HostRpcContext, channel: string, handler: HostRpcHandler): () => void {
+export function registerHostRpc(ctx: HostRpcContext, channel: string, handler: HostRpcHandler, logger?: PluginLogger): () => void {
   if (!CHANNEL_PATTERN.test(channel) || channel === '/api') {
     throw new Error(`invalid RPC channel ${JSON.stringify(channel)}`)
   }
@@ -20,6 +21,7 @@ export function registerHostRpc(ctx: HostRpcContext, channel: string, handler: H
     const record = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {}
     const rpcId = typeof record.rpcId === 'string' ? record.rpcId : 'invalid-request'
     if (record.type !== 'client-request' || record.method !== endpoint) {
+      logger?.debug('rpc.envelope-rejected', 'Rejected invalid Zhihu client-request envelope.', { endpoint })
       sendHostRpcResponse(res, rpcId, {
         ok: false,
         error: {
@@ -38,6 +40,7 @@ export function registerHostRpc(ctx: HostRpcContext, channel: string, handler: H
     isEndpoint,
     caseInsensitiveContentType: true,
     emptyBodyAsNull: true,
+    ...(logger ? { logger } : {}),
     errorBody: (status, error) => {
       if (status === 503) return 'host authorization policy is unavailable'
       if (status === 401) return 'unauthorized'

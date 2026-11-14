@@ -37,6 +37,7 @@ import {
   type ModelPickerAnchorProps, type ModelPickerProps,
 } from '@klarkxy/dsh-model-route/model-picker'
 import { EffortPreference } from './effort-preference.ts'
+import { installClientPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 
 export const name = 'dsh-model-picker-client'
 export const inject = ['slots', 'locale', 'sessions'] as const
@@ -591,6 +592,7 @@ function ModelMenuFallback(props: {
 export function createPreferredSelect(
   directory: { store: ModelSelectInjected['directory']; select: ModelSelectInjected['select'] },
   preference: EffortPreference,
+  logger?: PluginLogger,
 ): ModelSelectInjected['select'] {
   return async selection => {
     const state = directory.store.getSnapshot()
@@ -605,12 +607,25 @@ export function createPreferredSelect(
       if (effort !== undefined) final = { ...selection, reasoningEffort: effort }
     }
     const result = await directory.select(final)
-    if (result?.ok === true) preference.remember(final, final.reasoningEffort)
+    if (result?.ok === true) {
+      preference.remember(final, final.reasoningEffort)
+      logger?.debug('model.selected', 'Applied model selection.', {
+        provider: final.provider,
+        model: final.model,
+        effort: final.reasoningEffort ?? null,
+      })
+    } else if (result && result.ok === false) {
+      logger?.warn('model.select-rejected', 'Model selection failed.', undefined, {
+        provider: final.provider,
+        model: final.model,
+      })
+    }
     return result
   }
 }
 
 export function apply(ctx: Context): void {
+  const logger = installClientPluginLogger(ctx, '@klarkxy/dsh-model-picker')
   /* Page-lifetime memory of the last successful explicit effort per route.
    * Scoped to this apply: multiple client contexts (HMR, parallel roots)
    * each own their own. */
@@ -660,11 +675,16 @@ export function apply(ctx: Context): void {
           return {
             available: true,
             directory: directory.store,
-            load: () => { void directory.load().catch(() => {}) },
+            load: () => {
+              void directory.load().catch(error => {
+                logger.warn('directory.load-failed', 'Model directory load failed.', error, { sessionId })
+              })
+            },
             resolveText: text => ctx.locale?.resolveText(text) ?? String(text),
-            select: createPreferredSelect(directory, preference),
+            select: createPreferredSelect(directory, preference, logger),
           }
-        } catch {
+        } catch (error) {
+          logger.warn('directory.unavailable', 'Could not resolve model directory for session.', error, { sessionId })
           return unavailable
         }
       },

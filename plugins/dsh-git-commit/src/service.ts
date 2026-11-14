@@ -1,6 +1,7 @@
 import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import { buildAuxiliaryUserText } from '@klarkxy/dsh-plugin-kit/auxiliary-context'
 import { getAuxiliaryModel } from '@klarkxy/dsh-plugin-kit/contracts'
+import type { PluginLogger } from '@klarkxy/dsh-plugin-kit/log-shared'
 import { modelRouteOverride } from '@klarkxy/dsh-model-route'
 import {
   COMMIT_PLAN_FEATURE, MAX_MANIFEST_CHARS, RECENT_LOG_COUNT,
@@ -28,6 +29,7 @@ export interface AgentStoreLike {
 
 export interface GitCommitServiceDeps {
   readonly plugin: string
+  readonly logger?: PluginLogger
   readonly onSettingsChanged?: (revision: number) => void
   readonly llm: LlmTextCaller
   readonly host?: unknown
@@ -93,10 +95,13 @@ export class GitCommitService {
     // A missing row is resolved by storage; an unreadable row must not select a different model.
     this.settingsReady = deps.settings?.load().then(
       loaded => { if (loaded && !this.settingsAdopted) this.settings = structuredClone(loaded) },
-      () => {
-        if (!this.settingsAdopted) this.settingsFailure = new CommitRunError(
-          'settings-unavailable', 'dsh-git-commit: saved settings could not be read; reload the plugin before retrying',
-        )
+      error => {
+        if (!this.settingsAdopted) {
+          this.settingsFailure = new CommitRunError(
+            'settings-unavailable', 'dsh-git-commit: saved settings could not be read; reload the plugin before retrying',
+          )
+          deps.logger?.fault('settings.load-failed', 'Saved Git commit settings could not be read; blocking commits until reload.', error)
+        }
       },
     ) ?? Promise.resolve()
   }
@@ -178,6 +183,11 @@ export class GitCommitService {
       }
       await this.deps.settings?.save(next)
       this.settings = next
+      this.deps.logger?.info('settings.updated', 'Updated Git commit settings.', {
+        revision: next.revision,
+        allowFallback: next.allowFallback,
+        hasCustomModel: Boolean(next.model?.provider && next.model?.model),
+      })
       try { this.deps.onSettingsChanged?.(next.revision) } catch {}
       return structuredClone(next)
     })
@@ -277,6 +287,11 @@ export class GitCommitService {
     if (selected.length === 0) {
       throw new CommitRunError('no-changes', 'dsh-git-commit: working tree is clean')
     }
+    this.deps.logger?.debug('commit.started', 'Starting grouped Git commit run.', {
+      sessionId,
+      branch: resolved.branch,
+      fileCount: selected.length,
+    })
     const paths = selected.flatMap(file => file.status === 'renamed' && file.origin ? [file.path, file.origin] : [file.path])
     const originalVersions = await pathVersions(this.run, resolved.root, paths, signal)
     const [{ stat, diff }, subjects] = await Promise.all([
@@ -311,6 +326,7 @@ export class GitCommitService {
           system: planSystemPrompt(),
           signal,
           sessionId,
+          ...(this.deps.logger ? { logger: this.deps.logger } : {}),
         })
         model = modelInfo(result, planned.source)
         groups = parsePlan(result.text, selected)
@@ -326,7 +342,19 @@ export class GitCommitService {
     // here — before the index or the worktree is touched. A single fallback
     // commit stays available, but only when the settings row asked for it.
     if (!groups && !this.settings.allowFallback) {
+      this.deps.logger?.warn('plan.unavailable', 'Model commit plan unavailable; aborting commit run.', undefined, {
+        sessionId,
+        branch: resolved.branch,
+        reason: planFailure,
+      })
       throw new CommitRunError('plan-unavailable', `dsh-git-commit: no commit plan (${planFailure})`)
+    }
+    if (!groups) {
+      this.deps.logger?.warn('plan.fallback', 'Model commit plan unavailable; falling back to single commit.', undefined, {
+        sessionId,
+        branch: resolved.branch,
+        reason: planFailure,
+      })
     }
 
     assertReady()
@@ -375,6 +403,17 @@ export class GitCommitService {
         || (cause instanceof Error && cause.name === 'AbortError')
       const code = cause instanceof CommitRunError ? cause.code : cancelled ? 'cancelled' : 'commit-failed'
       const message = cause instanceof Error ? cause.message : String(cause)
+      const partialMeta = {
+        sessionId,
+        branch: resolved.branch,
+        committedCount: commits.length,
+        code,
+      }
+      if (error.uncertain) {
+        this.deps.logger?.fault('commit.partial-uncertain', 'Commit run stopped with uncertain repository state.', cause, partialMeta)
+      } else {
+        this.deps.logger?.error('commit.partial', 'Commit run stopped after creating partial commits.', cause, partialMeta)
+      }
       throw new CommitRunError(code, message, {
         branch: resolved.branch,
         commits,
@@ -387,6 +426,12 @@ export class GitCommitService {
     }
     const commits = describe(executed)
     if (commits.length === 0) throw new CommitRunError('no-changes', 'dsh-git-commit: nothing was committed')
+    this.deps.logger?.info('commit.completed', 'Completed grouped Git commit run.', {
+      sessionId,
+      branch: resolved.branch,
+      commitCount: commits.length,
+      fallback: groups === undefined,
+    })
     return {
       branch: resolved.branch,
       commits,

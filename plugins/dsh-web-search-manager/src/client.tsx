@@ -2,6 +2,7 @@ import { localErrorText } from './client-error.ts'
 import { webSearchClientStyles } from './client-styles.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { Button, IconGlobeOutlineRegular, Input, SegmentedTabs, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
+import { installClientPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { createPluginReadGate } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { PROVIDER_PRICING_CHECKED, providerDisplayLabel, searchProviderInfo, usesBundledPricing } from './provider-info.ts'
@@ -366,9 +367,14 @@ function limitTexts(settings: WebSettings): Record<LimitKey, string> {
   }
 }
 
+function readLocale(client: Client): Client['locale'] {
+  try { return client.locale } catch { return undefined }
+}
+
 function useHostLocale(client: Client): 'zh' | 'en' {
-  const subscribe = useCallback((listener: () => void) => client.locale?.subscribe(listener) ?? (() => {}), [client])
-  const snapshot = useCallback(() => client.locale?.getSnapshot().active ?? 'zh', [client])
+  const locale = readLocale(client)
+  const subscribe = useCallback((listener: () => void) => locale?.subscribe(listener) ?? (() => {}), [locale])
+  const snapshot = useCallback(() => locale?.getSnapshot().active ?? 'zh', [locale])
   return String(useSyncExternalStore(subscribe, snapshot, snapshot)).startsWith('zh') ? 'zh' : 'en'
 }
 
@@ -376,7 +382,15 @@ function useHostLocale(client: Client): 'zh' | 'en' {
 const REORDER_DEBOUNCE_MS = 500
 type PendingOrder = { kind: ProviderKind; order: string[] }
 
-export function NetworkSearchSettings({ client, hidden }: { client: Client; hidden?: boolean }) {
+export function NetworkSearchSettings({
+  client,
+  hidden,
+  logger,
+}: {
+  client: Client
+  hidden?: boolean
+  logger?: PluginLogger
+}) {
   const locale = useHostLocale(client)
   const text: Copy = copy[locale]
   const tabsId = useId()
@@ -413,8 +427,16 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
   if (!readGateRef.current) readGateRef.current = createPluginReadGate()
   const readGate = readGateRef.current
 
+  async function callRpc(endpoint: string, payload: unknown = {}): Promise<unknown> {
+    try {
+      return await client.connection.rpc.call(WEB_SEARCH_RPC_CHANNEL, endpoint, payload)
+    } catch (error) {
+      logger?.warn('rpc.call-failed', 'Web search settings RPC call failed.', error, { endpoint })
+      throw error
+    }
+  }
   async function call<T>(endpoint: string, payload: unknown = {}): Promise<T> {
-    return unwrap(await client.connection.rpc.call(WEB_SEARCH_RPC_CHANNEL, endpoint, payload) as RpcResult<T>)
+    return unwrap(await callRpc(endpoint, payload) as RpcResult<T>)
   }
   function adopt(next: WebStatus, resetDraft = false) {
     const previous = statusRef.current
@@ -462,7 +484,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
     let release = () => {}
     statusRead.current = new Promise<void>(resolve => { release = resolve })
     try {
-      const next = unwrap(await readGate.run(() => client.connection.rpc.call(WEB_SEARCH_RPC_CHANNEL, 'status', {})) as RpcResult<WebStatus>)
+      const next = unwrap(await readGate.run(() => callRpc('status', {})) as RpcResult<WebStatus>)
       if (!mountedRef.current || mine !== requestSeq.current) return next
       if (source === 'poll' && !shouldApplyPolledStatus({
         requestId: mine, latestRequestId: requestSeq.current,
@@ -873,6 +895,7 @@ export function NetworkSearchSettings({ client, hidden }: { client: Client; hidd
 }
 
 export function apply(ctx: Context): void {
+  const logger = installClientPluginLogger(ctx, '@klarkxy/dsh-web-search-manager')
   const client = ctx as unknown as Client
   ctx.effect(() => {
     if (typeof document === 'undefined') return () => {}
@@ -886,8 +909,8 @@ export function apply(ctx: Context): void {
   ctx.effect(() => client.slots.inject('settings.section', () => [
     client.slots.register({
       name: 'settings.section', id: 'web-search-manager', order: 150,
-      label: () => (client.locale?.getSnapshot().active ?? 'zh').startsWith('zh') ? '网页搜索' : 'Web Search',
-    }, (props?: { hidden?: boolean }) => <NetworkSearchSettings client={client} hidden={props?.hidden} />),
+      label: () => (readLocale(client)?.getSnapshot().active ?? 'zh').startsWith('zh') ? '网页搜索' : 'Web Search',
+    }, (props?: { hidden?: boolean }) => <NetworkSearchSettings client={client} hidden={props?.hidden} logger={logger} />),
     // The nav icon uses the official globe glyph; its wait rides the section's.
     client.slots.inject('settings.section.icon', () => client.slots.register(
       { name: 'settings.section.icon', id: 'web-search-manager', order: 150 }, IconGlobeOutlineRegular)),

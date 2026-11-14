@@ -10,6 +10,7 @@ import {
   Button, IconChevronDownOutlineRegular, IconRefreshOutlineRegular, Switch, Tooltip, useAnchoredPosition, useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
+import { installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client'
 import { registerAuxiliaryModelSettings } from '@klarkxy/dsh-plugin-kit/auxiliary-model-client'
 import {
@@ -802,9 +803,13 @@ export function GitCommitSettingsPanel(props: {
 
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
+  const logger = installClientPluginLogger(ctx, PLUGIN_NAME)
   mountModelSettingsChanges(ctx, PLUGIN_NAME)
   const settingsSubscriber = createModelSettingsSubscriber(ctx, PLUGIN_NAME)
-  const subscribeSettings = (change: () => void, error?: (message: string) => void) => settingsSubscriber.subscribe(change, error)
+  const subscribeSettings = (change: () => void, error?: (message: string) => void) => settingsSubscriber.subscribe(change, message => {
+    logger.warn('settings.subscription-error', 'Model settings subscription reported an error.', undefined, { detail: message })
+    error?.(message)
+  })
   ctx.provide(GIT_COMMIT_CLIENT_SERVICE, { active: true })
   // The shared "default auxiliary model" card is root-owned infrastructure:
   // this plugin retains one share while enabled and the card unloads with

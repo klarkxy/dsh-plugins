@@ -21,6 +21,7 @@ import {
   TextShimmer,
   type SegmentedTab,
 } from '@deepseek-ai/dsh-client-ui-primitives';
+import { installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { clientText, translator, useHostLocale, useT, ZhihuLocaleContext, type HostLocaleService, type Translate, type ClientText } from './client-locale.ts'
 import { ZHIHU_CREDENTIAL_REF, ZHIHU_RPC_CHANNEL, type ZhihuRpcResult } from './contracts.ts'
 import { createZhihuClientState, type ZhihuClientState } from './client-state.ts'
@@ -1509,17 +1510,28 @@ function ZhihuSettingsRoot(props: Parameters<typeof ZhihuSettings>[0] & { locale
 }
 
 export function apply(ctx: Context): void {
+  const logger = installClientPluginLogger(ctx, '@klarkxy/dsh-zhihu')
   ctx.effect(() => {
     const style = injectStyles()
     return () => style?.remove()
   }, 'zhihu.styles')
   const client = ctx as ZhihuClientContext
+  const rpc: RpcCaller = {
+    async call(channel, endpoint, payload, signal) {
+      try {
+        return await client.connection.rpc.call(channel, endpoint, payload, signal)
+      } catch (error) {
+        if (!signal?.aborted) logger.warn('rpc.call-failed', 'Zhihu client RPC call failed.', error, { endpoint })
+        throw error
+      }
+    },
+  }
   // `locale` is an optional service: reading it through a Cordis proxy that
   // lacks it throws, so the lookup is guarded and a missing one stays Chinese.
   let locale: HostLocaleService | undefined
   try { locale = client.locale } catch { locale = undefined }
   const settingsRender = () => <ZhihuSettingsRoot
-    rpc={client.connection.rpc}
+    rpc={rpc}
     credentials={wrapCredentials(client.remote.credentials)}
     locale={locale} />
   // The settings page mounts this section through the shared contract; the

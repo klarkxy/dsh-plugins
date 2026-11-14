@@ -139,6 +139,7 @@ export function SegmentedTabs<Value extends string>({ items, value, onChange, la
   onChange: (value: Value) => void
   label: string
   className?: string
+  size?: 'sm' | 'md'
 }) {
   /* Mirrors the real roving tablist: arrows, Home and End move focus and select. */
   const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -172,7 +173,7 @@ export function SegmentedTabs<Value extends string>({ items, value, onChange, la
 
 /** Controlled 24px disclosure row. */
 export const DisclosureRow = React.memo(function DisclosureRow({
-  icon, title, open, expandable, onToggle, running, expandOnRowClick, collapsedContent, children, className,
+  icon, title, open, expandable, onToggle, running, expandOnRowClick, keepContentWhenOpen, collapsedContent, children, className,
 }: {
   icon: React.ReactNode
   title: string
@@ -181,7 +182,10 @@ export const DisclosureRow = React.memo(function DisclosureRow({
   onToggle: () => void
   running?: boolean
   expandOnRowClick?: boolean
+  keepContentWhenOpen?: boolean
   collapsedContent?: React.ReactNode
+  contentClassName?: string
+  contentLayoutClassName?: string
   children?: React.ReactNode
   className?: string
 }) {
@@ -191,12 +195,22 @@ export const DisclosureRow = React.memo(function DisclosureRow({
       'aria-expanded': expandable ? open : undefined,
       onClick: expandOnRowClick ? onToggle : undefined,
       className: 'dsh-stub-disclosure__row',
-    }, icon, title),
+    }, icon, title, (keepContentWhenOpen || !open) ? collapsedContent : null),
     expandable
       ? h('button', { type: 'button', 'aria-expanded': open, onClick: onToggle, className: 'dsh-stub-disclosure__toggle' })
       : null,
-    (open || collapsedContent) && h('div', { className: 'dsh-stub-disclosure__body' }, open ? children : collapsedContent))
+    open ? h('div', { className: 'dsh-stub-disclosure__body' }, children) : null)
 })
+
+export function UserMessageBubble({ children, className }: { children?: React.ReactNode; className?: string }) {
+  return h('div', { className: cx('dsh-stub-user-bubble', className) }, children)
+}
+
+export function MarkdownText({ text, className }: { text: string; streaming?: boolean; labels?: unknown; variant?: string; className?: string }) {
+  return h('div', { className: cx('dsh-stub-markdown', className) }, text)
+}
+
+export const FISH_LOGO_PATH = 'M0 0h23v17zM2 10h8v4zM12 8h1v1zM11 7h2v2z'
 
 /** Text activity animation: the double renders the text and records activity. */
 export const TextShimmer = React.memo(function TextShimmer({
@@ -434,7 +448,9 @@ export const IconChevronRightOutlineMedium = icon('chevron-right-medium')
 export const IconChevronDownOutlineRegular = icon('chevron-down')
 export const IconChevronUpOutlineRegular = icon('chevron-up')
 export const IconChevronRightOutlineRegular = icon('chevron-right')
+export const IconCloseOutlineRegular = icon('close')
 export const IconCloseFillRegular = icon('close-fill')
+export const IconSearchOutlineRegular = icon('search')
 export const IconEditOutlineRegular = icon('edit')
 export const IconCopyOutlineRegular = icon('copy')
 export function FileTypeIcon({ path, className }: { path: string; className?: string }) {
@@ -507,11 +523,11 @@ export function isBehindModal(_anchor: HTMLElement | null): boolean { return fal
 // The barrel is expected to export everything above; a plugin importing a name
 // that is not here would otherwise get `undefined` and fail far from the cause.
 const known = new Set([
-  'Button', 'Tag', 'Checkbox', 'Switch', 'Input', 'Pill', 'SegmentedTabs', 'DisclosureRow', 'TextShimmer', 'JsonTree',
+  'Button', 'Tag', 'Checkbox', 'Switch', 'Input', 'Pill', 'SegmentedTabs', 'DisclosureRow', 'UserMessageBubble', 'MarkdownText', 'FISH_LOGO_PATH', 'TextShimmer', 'JsonTree',
   'Modal', 'Menu', 'MenuItemButton', 'MenuSurface', 'MenuGroup', 'PathLabel', 'Tooltip', 'StateDot', 'IconChecklistOutlineRegular', 'IconThinkOutlineRegular',
   'IconCheckOutlineRegular', 'IconChevronDownOutlineMedium', 'IconChevronRightOutlineMedium', 'IconChevronDownOutlineRegular',
   'IconChevronUpOutlineRegular',
-  'IconChevronRightOutlineRegular', 'IconCloseFillRegular', 'IconEditOutlineRegular', 'IconCopyOutlineRegular', 'IconRefreshOutlineRegular', 'IconSettingsOutlineRegular', 'IconShieldOutlineRegular',
+  'IconChevronRightOutlineRegular', 'IconCloseOutlineRegular', 'IconCloseFillRegular', 'IconSearchOutlineRegular', 'IconEditOutlineRegular', 'IconCopyOutlineRegular', 'IconRefreshOutlineRegular', 'IconSettingsOutlineRegular', 'IconShieldOutlineRegular',
   'IconUserOutlineRegular', 'IconUsersOutlineRegular',
   'PermissionIconFullAccessRegular', 'PermissionIconReadOnlyRegular', 'PermissionIconWorkspaceWriteRegular',
   'IconGlobeOutlineRegular', 'IconQuestionOutlineRegular',

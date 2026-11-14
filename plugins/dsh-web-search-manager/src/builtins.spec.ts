@@ -29,7 +29,7 @@ describe('builtin web providers', () => {
     expect(providers.map(row => `${row.kind}:${row.id}`).sort()).toEqual([
       'fetch:firecrawl', 'fetch:http-managed',
       'search:bocha', 'search:brave', 'search:ddg', 'search:deepseek-managed',
-      'search:exa', 'search:firecrawl', 'search:perplexity', 'search:serper', 'search:tavily', 'search:you',
+      'search:exa', 'search:firecrawl', 'search:linkup', 'search:perplexity', 'search:serper', 'search:tavily', 'search:you', 'search:zhipu',
     ])
     expect(providers.find(row => row.id === 'ddg')).toMatchObject({
       kind: 'search', billing: 'none', configured: true, label: 'DuckDuckGo',
@@ -42,7 +42,7 @@ describe('builtin web providers', () => {
       kind: 'fetch', configured: true, billing: 'none',
     })
     expect(manager.status().settings).toMatchObject({ searchOrder: ['ddg'], fetchOrder: ['http-managed'] })
-    for (const id of ['perplexity', 'you', 'firecrawl']) {
+    for (const id of ['perplexity', 'you', 'linkup', 'zhipu', 'firecrawl']) {
       expect(providers.filter(row => row.id === id).every(row => !row.configured && row.billing === 'request')).toBe(true)
     }
     expect(providers.filter(row => row.id === 'firecrawl')).toHaveLength(2)

@@ -123,8 +123,8 @@
         "en": "Web Search"
       },
       "summary": {
-        "zh": "在一个设置页管理和排序联网搜索与网页读取（抓取）服务，内置 DuckDuckGo、Exa、Tavily 等，并整合其他插件的搜索源，为模型提供 web_search 与 web_fetch。",
-        "en": "Manage and rank web search and page-reading providers (DuckDuckGo, Exa, Tavily, Brave, Bocha, Serper, Firecrawl, Perplexity, Jina, and plugin sources) in one settings page for web_search and web_fetch."
+        "zh": "在一个设置页管理和排序联网搜索与网页读取（抓取）服务，内置 DuckDuckGo、Exa、Tavily、Linkup、智谱等，并整合其他插件的搜索源，为模型提供 web_search 与 web_fetch。",
+        "en": "Manage and rank web search and page-reading providers (DuckDuckGo, Exa, Tavily, Brave, Bocha, Serper, Firecrawl, Perplexity, You.com, Linkup, Zhipu, Jina, and plugin sources) in one settings page for web_search and web_fetch."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",
@@ -223,8 +223,8 @@
         "en": "Plugin Kit"
       },
       "summary": {
-        "zh": "DSH 插件共用的运行时与界面支撑库（默认辅助模型、共享设置页、存储与通信、官方 UI 样式、可选共享模型选择器及子代理会话识别），由依赖它的插件自动安装。",
-        "en": "Shared runtime and UI support library for DSH plugins (default auxiliary model, shared settings, storage, RPC, official UI styling, optional shared model picker integration, and subagent session helpers), installed automatically by dependent plugins."
+        "zh": "DSH 插件共用的运行时与界面支撑库（默认辅助模型、共享设置页、诊断日志、存储与通信、官方 UI 样式、可选共享模型选择器及子代理会话识别），由依赖它的插件自动安装。",
+        "en": "Shared runtime and UI support library for DSH plugins (default auxiliary model, shared settings, diagnostic logging, storage, RPC, official UI styling, optional shared model picker integration, and subagent session helpers), installed automatically by dependent plugins."
       },
       "readme": {
         "zh": "docs/README.zh-CN.md",

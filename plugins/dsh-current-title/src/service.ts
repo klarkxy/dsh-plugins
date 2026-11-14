@@ -1,6 +1,7 @@
 import type { RpcResult } from '@klarkxy/dsh-plugin-kit/contracts'
 import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
+import type { PluginLogger } from '@klarkxy/dsh-plugin-kit/log-shared'
 import type { GenerateConfig, TitleSettings, TitleSnapshot, TitleStatus, TitleSupport } from './contracts.ts'
 import { PROVIDER_ID, defaultGenerateConfig } from './contracts.ts'
 import { generateCurrentTitle } from './generate.ts'
@@ -35,6 +36,7 @@ export class CurrentTitleService {
 
   constructor(private readonly options: {
     plugin: string
+    logger?: PluginLogger
     llm?: LlmTextCaller
     host?: unknown
     sessionTitle?: SessionTitleServiceLike
@@ -57,6 +59,7 @@ export class CurrentTitleService {
     if (!llm || !sessionTitle?.register || !sessions || !loader) {
       this.support.weOwn = false
       this.support.limitation = 'required host services are missing'
+      this.options.logger?.warn('slot.missing-services', 'Required host services for session title generation are missing.')
       return
     }
     this.nativeSlot = createNativeTitleSlot({
@@ -70,10 +73,16 @@ export class CurrentTitleService {
       this.support.weOwn = true
       this.support.nativeOwner = PROVIDER_ID
       delete this.support.limitation
+      this.options.logger?.info('slot.claimed', 'Claimed native session title provider slot.', {
+        cadence: this.settings.cadence,
+      })
     } catch (error) {
       this.support.weOwn = false
       this.support.nativeOwner = this.nativeSlot.owner() ?? null
       this.support.limitation = error instanceof Error ? error.message : 'native title provider slot is occupied'
+      this.options.logger?.warn('slot.occupied', 'Could not claim native session title provider slot.', error, {
+        owner: this.support.nativeOwner,
+      })
     }
   }
 
@@ -92,6 +101,9 @@ export class CurrentTitleService {
     this.support.nativeOwner = this.nativeSlot?.owner() ?? null
     if (outcome === 'left-other-owner') {
       this.support.limitation = 'another title provider owns the slot; previous owner was not restored'
+      this.options.logger?.debug('slot.left-other-owner', 'Another title provider owned the slot during dispose.', {
+        owner: this.support.nativeOwner,
+      })
     }
   }
 
@@ -136,6 +148,12 @@ export class CurrentTitleService {
       try { this.options.onSettingsChanged?.(next.revision) } catch {}
       this.config = { ...this.config, locale: 'auto' }
       if (!this.disposed && next.cadence !== previous.cadence) await this.reclaimWithCadence()
+      this.options.logger?.info('settings.updated', 'Updated session title settings.', {
+        revision: next.revision,
+        cadence: next.cadence,
+        hasCustomPrompt: Boolean(next.prompt.trim()),
+        hasCustomModel: Boolean(next.model.provider && next.model.model),
+      })
       return {
         revision: next.revision,
         locale: next.locale,
@@ -163,6 +181,10 @@ export class CurrentTitleService {
       this.support.weOwn = false
       this.support.nativeOwner = this.nativeSlot.owner() ?? null
       this.support.limitation = error instanceof Error ? error.message : 'native title provider slot is occupied'
+      this.options.logger?.warn('slot.reclaim-failed', 'Failed to reclaim session title slot after cadence update.', error, {
+        cadence: this.settings.cadence,
+        owner: this.support.nativeOwner,
+      })
     }
   }
 
@@ -223,8 +245,15 @@ export class CurrentTitleService {
       // dispatch prompt arrives as the child's own user message, so `source.kind`
       // cannot exclude them. The host logs the rejection and keeps the fallback.
       if (isSubagentSession(session)) {
+        this.options.logger?.debug('title.skipped-subagent', 'Skipped title generation for delegated child session.', {
+          sessionId: request.session.id,
+        })
         throw Object.assign(new Error('dsh-current-title: delegated child thread keeps the host fallback title'), { code: 'subagent-session' })
       }
+      this.options.logger?.debug('title.started', 'Generating session title.', {
+        sessionId: request.session.id,
+        messageCount: request.messages.length,
+      })
       const messages = collectHumanMessages(
         request.messages.map(message => ({
           type: 'user/message',
@@ -245,8 +274,28 @@ export class CurrentTitleService {
         isCurrent: () => this.generation === generation && this.support.weOwn
           && (!session || this.options.sessions?.get(request.session.id) === session),
         now: this.options.now?.(),
+        ...(this.options.logger ? { logger: this.options.logger } : {}),
+      })
+      this.options.logger?.info('title.generated', 'Generated session title.', {
+        sessionId: request.session.id,
+        provider: generated.model?.provider ?? null,
+        model: generated.model?.model ?? null,
       })
       return { title: generated.title, messageSeqs: generated.messageSeqs, model: generated.model }
+    } catch (error) {
+      const code = error instanceof Error && 'code' in error ? String((error as { code?: string }).code) : undefined
+      const cancelled = request.signal.aborted || controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')
+      if (cancelled || code === 'superseded' || code === 'subagent-session') {
+        this.options.logger?.debug('title.cancelled', 'Session title generation stopped before completion.', {
+          sessionId: request.session.id,
+          reason: code ?? 'aborted',
+        })
+      } else {
+        this.options.logger?.warn('title.failed', 'Session title generation failed.', error, {
+          sessionId: request.session.id,
+        })
+      }
+      throw error
     } finally {
       if (this.inFlight.get(request.session.id) === controller) this.inFlight.delete(request.session.id)
     }
@@ -265,7 +314,13 @@ export function hostLocalePreference(host: CurrentTitleHost): string | undefined
   }
 }
 
-export async function handleRpc(service: CurrentTitleService, endpoint: string, payload: unknown, signal: AbortSignal): Promise<RpcResult> {
+export async function handleRpc(
+  service: CurrentTitleService,
+  endpoint: string,
+  payload: unknown,
+  signal: AbortSignal,
+  logger?: PluginLogger,
+): Promise<RpcResult> {
   signal.throwIfAborted()
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
   if (endpoint === 'status') {
@@ -288,6 +343,7 @@ export async function handleRpc(service: CurrentTitleService, endpoint: string, 
     } catch (error) {
       const code = error instanceof Error && 'code' in error ? String((error as { code?: string }).code) : 'failed'
       if (code === 'revision') return { ok: false, error: { code, message: '设置已更新，请刷新后重试。' } }
+      logger?.error('rpc.settings-failed', 'Failed to persist session title settings.', error)
       return { ok: false, error: { code: 'failed', message: '无法保存标题设置。' } }
     }
   }
@@ -303,6 +359,7 @@ export async function handleRpc(service: CurrentTitleService, endpoint: string, 
       if (code === 'not-found') return { ok: false, error: { code, message: '找不到该会话。' } }
       if (code === 'unavailable') return { ok: false, error: { code, message: '标题服务未就绪。' } }
       if (signal.aborted) return { ok: false, error: { code: 'cancelled', message: '已取消。' } }
+      logger?.warn('rpc.regenerate-failed', 'Manual session title regeneration failed.', error, { sessionId: body.sessionId })
       return { ok: false, error: { code: 'failed', message: '标题生成失败。' } }
     }
   }

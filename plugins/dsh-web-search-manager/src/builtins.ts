@@ -10,7 +10,7 @@ import { ExaSearchProvider } from '@deepseek-ai/dsh-web-search-exa'
 import { HttpFetchProvider } from '@deepseek-ai/dsh-web-fetch-http'
 import { JinaFirstFetchProvider } from './jina-fetch.ts'
 import { SEARCH_ENGINE_ID, SearchEngineProvider } from './search-engine.ts'
-import { BochaSearchProvider, BraveSearchProvider, FirecrawlSearchProvider, PerplexitySearchProvider, YouSearchProvider, SerperSearchProvider } from './rest-search.ts'
+import { BochaSearchProvider, BraveSearchProvider, FirecrawlSearchProvider, LinkupSearchProvider, PerplexitySearchProvider, YouSearchProvider, SerperSearchProvider, ZhipuSearchProvider } from './rest-search.ts'
 import { FirecrawlFetchProvider } from './firecrawl-fetch.ts'
 import { TavilySearchProvider } from './tavily.ts'
 import { registerNativeSearch, registerNativeFetch, type ProviderConfiguration } from './native-providers.ts'
@@ -93,6 +93,16 @@ export function registerBuiltins(web: WebRegistry, configuration: ProviderConfig
       defaultBaseURL: 'https://ydc-index.io', credentialRef: 'DSH_EDITOR_WEB_YOU_API_KEY', billing: 'request',
       signupUrl: 'https://you.com/platform',
     }, options => new YouSearchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL }))
+    registerSearch({
+      id: 'linkup', label: 'Linkup', description: 'Search API；fast 检索，只返回来源，不生成回答。',
+      defaultBaseURL: 'https://api.linkup.so', credentialRef: 'DSH_EDITOR_WEB_LINKUP_API_KEY', billing: 'request',
+      signupUrl: 'https://app.linkup.so/sign-up',
+    }, options => new LinkupSearchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL }))
+    registerSearch({
+      id: 'zhipu', label: '智谱', description: '基础搜索 API；固定 search_std，查询不超过 70 个字符。',
+      defaultBaseURL: 'https://open.bigmodel.cn', credentialRef: 'DSH_EDITOR_WEB_ZHIPU_API_KEY', billing: 'request',
+      signupUrl: 'https://bigmodel.cn/usercenter/proj-mgmt/apikeys',
+    }, options => new ZhipuSearchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL }))
     registerFetch({
       id: 'http-managed', legacyId: 'http', label: '网页读取', billing: 'none',
       description: '优先匿名 Jina Reader 读取，失败后本机 HTTP 直连；无需 Key。',

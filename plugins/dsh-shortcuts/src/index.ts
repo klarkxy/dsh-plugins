@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { installPluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 
 export const name = '@klarkxy/dsh-shortcuts'
 
@@ -8,6 +9,7 @@ export const name = '@klarkxy/dsh-shortcuts'
  * shortcuts service, and the command palette and its additional Web opening key
  * live in the client.
  */
-export function apply(_ctx: Context): void {
+export function apply(ctx: Context): void {
   /* no host services, no RPC, no model calls */
+  installPluginLogger(ctx, name, { forwardHostWarnError: false })
 }

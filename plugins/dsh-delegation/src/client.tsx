@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconUsersOutlineRegular, Pill, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
+import { installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import {
   DELEGATION_CLIENT_SERVICE, PLUGIN_NAME, RPC_CHANNEL,
   type DelegationSessionStatus, type RpcResult,
@@ -210,6 +211,7 @@ type Client = Context & {
 
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
+  installClientPluginLogger(ctx, PLUGIN_NAME)
   ctx.provide(DELEGATION_CLIENT_SERVICE, { active: true })
   ctx.effect(() => client.locale.register(NS, { zh: { ...zh }, en: { ...en } }), 'delegation.locale')
   // Style the new-session Delegate chip.

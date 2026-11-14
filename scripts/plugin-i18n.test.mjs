@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 
 const root = fileURLToPath(new URL('../plugins/', import.meta.url))
-const packages = readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => {
+const packages = readdirSync(root, { withFileTypes: true })
+  .filter(entry => entry.isDirectory() && existsSync(join(root, entry.name, 'package.json'))).map(entry => {
   const directory = join(root, entry.name)
   return { directory, manifest: JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) }
 })

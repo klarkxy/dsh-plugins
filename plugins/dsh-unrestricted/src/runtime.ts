@@ -7,6 +7,7 @@ import { deriveEventMessage } from '@deepseek-ai/dsh-session/surface'
 import type { PromptPresentation } from '@deepseek-ai/dsh-system-prompt'
 import z from '@deepseek-ai/schemastery'
 import { producerMessageSource } from '@klarkxy/dsh-plugin-kit'
+import { installPluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { PLUGIN_NAME, PRESET_ID } from './contracts.ts'
 import { modelNote } from './model-profiles.ts'
 import { fuseSections } from './prompt/fuse.ts'
@@ -79,6 +80,16 @@ export function apply(ctx: Context, config: Config = {}): void {
     modelProfiles: tuning.modelProfiles ?? {},
     profile: tuning.profile ?? config.profile ?? 'default',
   }
+  const logger = installPluginLogger(ctx, PLUGIN_NAME, {
+    forwardHostWarnError: false,
+    loadedContext: {
+      entry: 'runtime',
+      profile: settings.profile,
+      tailReminder: settings.tailReminder,
+      refusalRetry: settings.refusalRetry,
+      maxRetries: settings.maxRetries,
+    },
+  })
   const retryState = new WeakMap<Agent, RetryState>()
 
   ctx.effect(() => ctx.on('system-prompt/assemble', async (assembly: PromptPresentation, context, next) => {
@@ -88,6 +99,10 @@ export function apply(ctx: Context, config: Config = {}): void {
         || ctx.agentPresets.composedPreset(context.agent.ctx) !== PRESET_ID) return original
       const fused = fuseSections(original.sections, { profileBody: composeProfile(settings.profile) ?? '' })
       if (fused.issues !== undefined) {
+        logger.warn('prompt.fusion-skipped', 'Prompt fusion skipped due to section issues.', undefined, {
+          profile: settings.profile,
+          issues: fused.issues.join(', '),
+        })
         ctx.logger?.warn?.('dsh-unrestricted: prompt fusion skipped: %s', fused.issues.join(', '))
         return original
       }
@@ -95,6 +110,9 @@ export function apply(ctx: Context, config: Config = {}): void {
     } catch (error) {
       // A fusion failure must not take the session's prompt down; the static
       // preset declaration is still a complete fallback.
+      logger.error('prompt.fusion-failed', 'Prompt fusion failed; falling back to static preset prompt.', error, {
+        profile: settings.profile,
+      })
       ctx.logger?.warn?.(
         'dsh-unrestricted: prompt fusion failed: %s',
         error instanceof Error ? error.message : String(error),
@@ -138,6 +156,12 @@ export function apply(ctx: Context, config: Config = {}): void {
         const text = lastAssistantText(agent.session, turn)
         if (text === undefined || !isRefusalText(text)) return
         retryState.set(agent, { turn, count: used + 1 })
+        logger.info('turn.refusal-retry', 'Refusal detected on turn; scheduling corrective retry.', {
+          sessionId: agent.id,
+          turn,
+          retry: used + 1,
+          maxRetries: settings.maxRetries,
+        })
         ctx.logger?.info?.(
           'dsh-unrestricted: refusal detected on turn %d; corrective retry %d/%d',
           turn, used + 1, settings.maxRetries,
@@ -147,6 +171,7 @@ export function apply(ctx: Context, config: Config = {}): void {
           source: producerMessageSource(PLUGIN_NAME),
         }))
       } catch (error) {
+        logger.warn('turn.refusal-retry-failed', 'Refusal retry observer failed.', error, { turn })
         ctx.logger?.warn?.(
           'dsh-unrestricted: refusal retry skipped: %s',
           error instanceof Error ? error.message : String(error),

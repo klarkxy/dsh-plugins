@@ -6,6 +6,7 @@ import type {} from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import { installPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import {
   PLUGIN_NAME, RPC_CHANNEL,
   type DelegationSessionStatus, type DelegationSettings, type RpcResult,
@@ -25,10 +26,12 @@ declare module '@deepseek-ai/cordis' {
   interface Context { delegation: DelegationService }
 }
 
-function fail(error: unknown): RpcResult<never> {
+function fail(error: unknown, endpoint?: string, logger?: PluginLogger): RpcResult<never> {
   if (error instanceof DelegationError) {
+    logger?.debug('rpc.domain-error', error.message, { endpoint: endpoint ?? null, code: error.code })
     return { ok: false, error: { code: error.code, message: error.message } }
   }
+  logger?.error('rpc.internal-error', 'Unexpected delegation RPC error.', error, { endpoint: endpoint ?? null })
   const message = error instanceof Error ? error.message : String(error)
   return { ok: false, error: { code: 'internal', message } }
 }
@@ -38,6 +41,7 @@ export async function handleRpc(
   endpoint: string,
   payload: unknown,
   signal: AbortSignal,
+  logger?: PluginLogger,
 ): Promise<RpcResult> {
   try {
     switch (endpoint) {
@@ -49,6 +53,9 @@ export async function handleRpc(
         const parsed = settingsUpdateSchema.safeParse(payload)
         if (!parsed.success) return { ok: false, error: { code: 'bad-request', message: 'settings update is invalid' } }
         const value: DelegationSettings = await service.updateSettings(parsed.data.defaultEnabled, parsed.data.expectedRevision)
+        logger?.info('settings.updated', 'Updated delegation default setting.', {
+          defaultEnabled: value.defaultEnabled, revision: value.revision,
+        })
         return { ok: true, value }
       }
       case 'session.status': {
@@ -62,17 +69,21 @@ export async function handleRpc(
         if (!parsed.success) return { ok: false, error: { code: 'bad-request', message: 'session update is invalid' } }
         const value: DelegationSessionStatus = await service.updateSession(
           parsed.data.sessionId, parsed.data.enabled, parsed.data.expectedRevision, signal)
+        logger?.info('session.updated', 'Updated session delegation toggle.', {
+          sessionId: parsed.data.sessionId, enabled: value.enabled, revision: value.revision,
+        })
         return { ok: true, value }
       }
       default:
         return { ok: false, error: { code: 'not-found', message: `unknown endpoint: ${endpoint}` } }
     }
   } catch (error) {
-    return fail(error)
+    return fail(error, endpoint, logger)
   }
 }
 
 export async function apply(ctx: Context): Promise<void> {
+  const logger = installPluginLogger(ctx, PLUGIN_NAME, { forwardHostWarnError: false })
   const host = ctx as Context & HostRpcContext
   const domain = await ctx.storageDomain.open(delegationDomain)
   const service = new DelegationService({
@@ -97,7 +108,13 @@ export async function apply(ctx: Context): Promise<void> {
   ctx.effect(() => ctx.on('agent/created', async ({ agent, source }: { agent: DelegationAgentLike; source: string }) => {
     try {
       await service.seedSession(agent, source)
+      logger.debug('session.seeded', 'Seeded session delegation state.', {
+        sessionId: agent.session?.id ?? agent.id, source,
+      })
     } catch (error) {
+      logger.warn('session.seed-failed', 'Could not seed session delegation state.', error, {
+        sessionId: agent.session?.id ?? agent.id, source,
+      })
       ctx.logger.warn('dsh-delegation: could not seed session state: %s', error instanceof Error ? error.message : String(error))
     }
   }), 'delegation.seed')
@@ -129,5 +146,6 @@ export async function apply(ctx: Context): Promise<void> {
     text: context => delegationReminderText(context, lookups),
   }), 'delegation.context')
   ctx.effect(() => registerHostRpc(host, RPC_CHANNEL,
-    (endpoint, payload, signal) => handleRpc(service, endpoint, payload, signal)), 'delegation.rpc')
+    (endpoint, payload, signal) => handleRpc(service, endpoint, payload, signal, logger),
+    { logger }), 'delegation.rpc')
 }

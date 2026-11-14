@@ -3,6 +3,11 @@ export type RpcResult<T = unknown> = SharedRpcResult<T>
 export const PLUGIN_NAME = '@klarkxy/dsh-deep-view'
 export const RPC_CHANNEL = '/dsh-deep-view'
 export const VIEW_OWNER = 'dsh-deep-view'
+export const HOST_SERVICE = 'dshDeepView'
+export type DeepViewHost = {
+  /** Move an open card and route stale session lookups to a replacement root session. */
+  handoffSession(fromSessionId: string, toSessionId: string): boolean
+}
 
 export type Scalar = string | number | boolean
 export type Formula = { '=': string }

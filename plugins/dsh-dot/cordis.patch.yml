@@ -1,6 +1,0 @@
-- insert:
-    - id: deep-view
-      name: '@klarkxy/dsh-deep-view'
-      disabled: false
-    - id: dot
-      name: '@klarkxy/dsh-dot'

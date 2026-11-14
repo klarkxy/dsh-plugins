@@ -9,6 +9,7 @@ import { SessionId as brandSessionId, type SessionEvent } from '@deepseek-ai/dsh
 import { createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import { callLlmText, resolveFeatureModel, type LlmTextCaller } from '@klarkxy/dsh-plugin-kit/llm-call'
+import type { PluginLogger } from '@klarkxy/dsh-plugin-kit/log-shared'
 import type { AutoContinueService } from './auto-continue.ts'
 import {
   AUTO_CONTINUE_KIND,
@@ -51,6 +52,7 @@ export interface AutoContinueRunnerDeps {
     observeSession(id: string, options: { signal?: AbortSignal; projectionMode?: string }): Promise<RunnerObservationLike>
   }
   readonly isSubagent?: (session: unknown) => boolean
+  readonly logger?: PluginLogger
   readonly log?: {
     debug?(message: string): void
     warn?(message: string): void
@@ -145,6 +147,9 @@ export class AutoContinueRunner {
       source: { kind: AUTO_CONTINUE_KIND, form: 'notice', summary: composed.summary },
     }))
     await this.deps.sessions.flush(live.session)
+    this.deps.logger?.info('auto-continue.dispatched', 'Sent automatic continuation message.', {
+      sessionId, mode: record.mode, verdict: verdict.verdict, count: decision.count + 1, max: record.max,
+    })
   }
 
   /** One observation of the active branch; the lease is always disposed. */
@@ -185,6 +190,7 @@ export class AutoContinueRunner {
       const result = await callLlmText(llm, {
         plugin: PLUGIN_NAME,
         feature: FEATURE_JUDGE,
+        ...(this.deps.logger ? { logger: this.deps.logger } : {}),
         // Judge context is the human request alone — never the ghost context.
         context: [JSON.stringify({ request: material.request })],
         route,

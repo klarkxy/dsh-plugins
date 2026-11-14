@@ -56,7 +56,7 @@ describe('network search live locale', () => {
     expect(providerDisplayLabel(external, 'en')).toBe('外部名称')
   })
 
-  it.each(['ddg', 'bocha', 'brave', 'deepseek-managed', 'exa', 'firecrawl', 'serper', 'tavily'])('has balanced bundled provider copy for %s', id => {
+  it.each(['ddg', 'bocha', 'brave', 'deepseek-managed', 'exa', 'firecrawl', 'serper', 'tavily', 'linkup', 'zhipu'])('has balanced bundled provider copy for %s', id => {
     const provider = { id, kind: 'search' as const, label: id, description: '', billing: 'request' as const, configured: true, configurationOwned: true, calls: 0, failures: 0 }
     const zh = searchProviderInfo(provider, 'zh'), en = searchProviderInfo(provider, 'en')
     expect(zh.description).toMatch(/[\u4e00-\u9fff]/)

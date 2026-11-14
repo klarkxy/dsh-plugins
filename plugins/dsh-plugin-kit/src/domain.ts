@@ -1,4 +1,7 @@
+import type { PluginLogger } from './log-shared.ts'
+
 type PluginDomainSpec = {
+  name?: string
   version: number
   compatibleVersions?: readonly number[]
   layout?: 'single' | 'per-record'
@@ -24,7 +27,10 @@ type PluginDomainHandle = {
  */
 export async function openCompatibleDomain<S extends PluginDomainSpec, D extends PluginDomainHandle>(
   open: (spec: S) => Promise<D>, spec: S,
+  options?: { logger?: PluginLogger; domainName?: string },
 ): Promise<D> {
+  const log = options?.logger
+  const domainName = options?.domainName ?? (typeof spec.name === 'string' ? spec.name : 'plugin-domain')
   const perRecord = { ...spec, layout: 'per-record' } as S
   const domain = await open(perRecord)
   let populated = false
@@ -33,18 +39,32 @@ export async function openCompatibleDomain<S extends PluginDomainSpec, D extends
   } finally {
     if (!populated) await domain.close()
   }
-  if (populated) return domain
+  if (populated) {
+    log?.debug('domain.opened', 'Opened populated per-record storage domain.', { domain: domainName, version: spec.version })
+    return domain
+  }
 
   let mismatch: unknown
   for (const version of new Set([spec.version, ...spec.compatibleVersions ?? []])) {
     try {
       const legacy = await open({ ...spec, layout: 'single', version, compatibleVersions: [] } as S)
       await legacy.close()
+      log?.info('domain.probed', 'Opened storage domain after legacy probe.', {
+        domain: domainName, probedVersion: version, targetVersion: spec.version,
+      })
       return open(perRecord)
     } catch (error) {
-      if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'version-mismatch') throw error
+      if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'version-mismatch') {
+        log?.error('domain.open-failed', 'Storage domain open failed during legacy probe.', error, {
+          domain: domainName, probedVersion: version,
+        })
+        throw error
+      }
       mismatch = error
     }
   }
+  log?.error('domain.version-mismatch', 'Storage domain version is incompatible.', mismatch, {
+    domain: domainName, targetVersion: spec.version,
+  })
   throw mismatch
 }

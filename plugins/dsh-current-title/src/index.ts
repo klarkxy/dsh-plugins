@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { LlmTextCaller } from '@klarkxy/dsh-plugin-kit'
 import { retainAuxiliaryModel } from '@klarkxy/dsh-plugin-kit/auxiliary-model'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import { installPluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { modelSettingsChangesIdentity } from '@klarkxy/dsh-plugin-kit/contracts'
 import { createModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-changes'
 import { registerModelSettings, notifyModelSettingsChanged, type ModelSettingsEvents } from '@klarkxy/dsh-plugin-kit/model-settings'
@@ -38,6 +39,7 @@ type Host = Context & HostRpcContext & {
 }
 
 export async function apply(ctx: Context, config: { locale?: TitleLocaleMode } = {}): Promise<void> {
+  const logger = installPluginLogger(ctx, PLUGIN_NAME, { forwardHostWarnError: false })
   createModelSettingsChanges(ctx, modelSettingsChangesIdentity(PLUGIN_NAME), PLUGIN_NAME)
   // Keep the shared auxiliary default alive while this plugin is mounted: it
   // is the global default title generation follows when no title model is
@@ -52,6 +54,7 @@ export async function apply(ctx: Context, config: { locale?: TitleLocaleMode } =
   const locale = isTitleLocaleMode(config.locale) ? config.locale : 'auto'
   const service = new CurrentTitleService({
     plugin: PLUGIN_NAME,
+    logger,
     onSettingsChanged: revision => notifyModelSettingsChanged(ctx, PLUGIN_NAME, revision),
     llm: host.llm,
     host,
@@ -68,7 +71,12 @@ export async function apply(ctx: Context, config: { locale?: TitleLocaleMode } =
   await service.start()
   ctx.provide('currentTitle', service)
   ctx.effect(() => async () => { await service.dispose(); await domain.close() }, 'current-title.lifecycle')
-  ctx.effect(() => registerHostRpc(host, RPC_CHANNEL, (endpoint, payload, signal) => handleRpc(service, endpoint, payload, signal)), 'current-title.rpc')
+  ctx.effect(() => registerHostRpc(
+    host,
+    RPC_CHANNEL,
+    (endpoint, payload, signal) => handleRpc(service, endpoint, payload, signal, logger),
+    { logger },
+  ), 'current-title.rpc')
   ctx.effect(() => registerModelSettings(ctx as unknown as ModelSettingsEvents, {
     ns: PLUGIN_NAME, title: { zh: '自动标题', en: 'Auto Title' },
     read(signal) {

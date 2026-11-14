@@ -1,4 +1,5 @@
 import { WebError, type WebFetchProvider, type WebSearchProvider } from '@deepseek-ai/dsh-web'
+import type { PluginLogger } from '@klarkxy/dsh-plugin-kit/log-shared'
 import { providerError } from './provider-error.ts'
 import { observeWebRegistry, type WebRegistry, type NativeProvider } from './web-registry.ts'
 import { registerNativeSearch, registerNativeFetch, type ProviderConfiguration } from './native-providers.ts'
@@ -14,6 +15,7 @@ export interface ManagerOptions {
   initial?: Omit<WebSettings, 'searchOrder' | 'fetchOrder'> & { searchOrder?: string[]; fetchOrder?: string[] }
   resolveCredential(ref: string): Promise<string | undefined>
   save(settings: WebSettings): Promise<void>
+  logger?: PluginLogger
 }
 type Entry = {
   descriptor: ProviderDescriptor; kind: ProviderKind; configured: boolean
@@ -49,7 +51,12 @@ export class WebSearchManager {
       remove: (kind, id) => {
         const key = providerKey(kind, id)
         const entry = this.entries.get(key)
-        if (entry) { this.abort(entry); this.entries.delete(key); this.notify() }
+        if (entry) {
+          this.abort(entry)
+          this.entries.delete(key)
+          this.options.logger?.debug('provider.removed', 'Removed web provider.', { kind, providerId: id })
+          this.notify()
+        }
       },
     })
   }
@@ -165,6 +172,7 @@ export class WebSearchManager {
       configured: descriptor.configurationOwner !== WEB_MANAGER_OWNER || !descriptor.credentialRef,
       calls: 0, failures: 0, active: new Set() }
     this.entries.set(key, entry)
+    this.options.logger?.debug('provider.discovered', 'Discovered web provider.', { kind, providerId: provider.id })
     // The bundle's old adapters used official ids. Migrate only their fixed aliases;
     // leave values in storage untouched until an explicit user save.
     const legacy = metadata?.legacyId
@@ -227,6 +235,7 @@ export class WebSearchManager {
   private async execute<T>(entry: Entry, signal: AbortSignal | undefined,
     run: (options: ProviderOptions, signal: AbortSignal) => Promise<T>): Promise<T> {
     if (!this.selected(entry)) fail('WEB_DISABLED', '请在设置 → 网络搜索中配置凭据并启用。')
+    const startedAt = Date.now()
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), this.settings.timeoutMs)
     const combined = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
@@ -248,17 +257,31 @@ export class WebSearchManager {
       this.work.set(work, controller)
       const result = await work
       if (combined.aborted || epoch !== this.epoch || !this.selected(entry)) fail('WEB_ABORTED', '网络请求已取消。')
+      this.options.logger?.info('provider.executed', 'Completed web provider execution.', {
+        kind: entry.kind, providerId: entry.descriptor.id, durationMs: Date.now() - startedAt,
+      })
       return result
     } catch (error) {
       if (started) entry.failures += 1
       if (error instanceof WebError && error.code === 'WEB_CREDENTIAL_MISSING') {
         entry.configured = false; this.abort(entry); this.notify()
+        this.options.logger?.warn('provider.credential-missing', 'Web provider credential is missing.', error, {
+          kind: entry.kind, providerId: entry.descriptor.id, durationMs: Date.now() - startedAt,
+        })
       }
       if (combined.aborted && !(error instanceof WebError && error.code === 'WEB_CREDENTIAL_MISSING')) {
+        this.options.logger?.debug('provider.aborted', 'Web provider execution cancelled or timed out.', {
+          kind: entry.kind, providerId: entry.descriptor.id, durationMs: Date.now() - startedAt,
+        })
         throw new WebError('网络请求已取消或超时。', 'WEB_ABORTED')
       }
       // Preserve upstream diagnostics, stripping only known credentials and authentication fields.
       const safe = providerError(error)
+      if (!(error instanceof WebError && error.code === 'WEB_CREDENTIAL_MISSING')) {
+        this.options.logger?.warn('provider.failed', 'Web provider execution failed.', safe, {
+          kind: entry.kind, providerId: entry.descriptor.id, code: safe.code, durationMs: Date.now() - startedAt,
+        })
+      }
       throw new WebError(`[${entry.kind}:${entry.descriptor.id}] ${safe.message}`, safe.code)
     } finally {
       clearTimeout(timeout)
@@ -307,14 +330,24 @@ export class WebSearchManager {
       this.abort()
       this.notify()
       try { await this.options.save(proposed) }
-      catch {
+      catch (saveError) {
         this.storageFailed = true
         this.notify()
+        this.options.logger?.fault('settings.save-failed', 'Failed to persist web search settings; network access suspended.', saveError, {
+          revision: proposed.revision,
+        })
         fail('WEB_CONFIG_SAVE_FAILED', '保存失败，本次运行已暂停网络访问以防意外联网。')
       }
       this.settings = proposed
       this.storageFailed = false
       this.suspended = false
+      this.options.logger?.info('settings.updated', 'Updated web search settings.', {
+        revision: proposed.revision,
+        searchEnabled: proposed.searchEnabled,
+        searchProvider: proposed.searchProvider,
+        fetchEnabled: proposed.fetchEnabled,
+        fetchProvider: proposed.fetchProvider,
+      })
       this.notify()
       return this.status()
     })

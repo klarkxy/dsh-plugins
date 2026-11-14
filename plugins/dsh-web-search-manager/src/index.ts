@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { WebError } from '@deepseek-ai/dsh-web'
 import { WEB_PROVIDER_AVAILABILITY_EVENT } from '@klarkxy/dsh-plugin-kit/contracts'
+import { installPluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { WEB_SEARCH_RPC_CHANNEL, type RpcResult } from './contracts.ts'
 import { registerBuiltins } from './builtins.ts'
 import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
@@ -17,8 +18,12 @@ type Host = Context & HostRpcContext & {
   credentials: { resolve(ref: ReturnType<typeof credentialRef>): Promise<{ value: string } | undefined> }
 }
 export async function apply(ctx: Context): Promise<void> {
+  const logger = installPluginLogger(ctx, name)
   const host = ctx as Host
-  const domain = await ctx.storageDomain.open(webSettingsDomain)
+  const domain = await ctx.storageDomain.open(webSettingsDomain).catch(error => {
+    logger.fault('storage.open-failed', 'Failed to open web search settings domain.', error)
+    throw error
+  })
   // Own storage before a compatibility check can throw during startup.
   let managed: WebSearchManager | undefined
   let unregisterBuiltins: (() => void) | undefined
@@ -33,6 +38,7 @@ export async function apply(ctx: Context): Promise<void> {
     web: ctx.web, initial: table.get('global'),
     resolveCredential: async ref => (await host.credentials.resolve(credentialRef(ref)))?.value,
     save: settings => table.put('global', settings),
+    logger,
   })
   ctx.provide('webSearchManager', manager)
   ctx.on('credentials/reference-updated', () => { void manager.refresh() })
@@ -53,16 +59,22 @@ export async function apply(ctx: Context): Promise<void> {
       if (endpoint === 'test') {
         // Testing is explicit, uses the same authorized registry, and sends no manuscript text.
         const result = await ctx.web.search({ query: 'IANA example domains', maxResults: 1 }, signal)
+        logger.info('search.tested', 'Completed explicit web search connectivity test.', { sources: result.sources.length })
         return { ok: true, value: { sources: result.sources.length } }
       }
       return { ok: false, error: { code: 'WEB_INVALID_REQUEST', message: '未知操作。', details: {} } }
     } catch (error) {
+      if (error instanceof WebError) {
+        logger.debug('rpc.domain-error', error.message, { endpoint, code: error.code })
+      } else {
+        logger.error('rpc.internal-error', 'Unexpected web search manager RPC failure.', error, { endpoint })
+      }
       return { ok: false, error: {
         code: error instanceof WebError ? error.code : 'WEB_REQUEST_FAILED',
         message: error instanceof WebError ? error.message : '网络设置操作失败，请刷新后重试。', details: {},
       } }
     }
-  }), 'web-search-manager.rpc')
+  }, logger), 'web-search-manager.rpc')
 }
 declare module '@deepseek-ai/cordis' {
   interface Events {

@@ -3,6 +3,7 @@
  * Official model tool remains `web_search`. The `global_search` action of `zhihu_research` is unchanged.
  */
 import { WEB_PROVIDER_AVAILABILITY_EVENT, type DshWebManagementDescriptor } from '@klarkxy/dsh-plugin-kit/contracts'
+import type { PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { ZHIHU_CREDENTIAL_REF } from './contracts.ts'
 import { reportExecuted, type ZhihuClientOptions, type ZhihuSearchExecuted } from './zhihu-client.ts'
 import {
@@ -128,6 +129,7 @@ type BindingContext = {
 export function bindZhihuWebSearch(
   ctx: { inject(deps: readonly string[], apply: (inner: BindingContext) => (() => void) | void): unknown },
   service: ZhihuWebSearchHost,
+  logger?: PluginLogger,
 ): void {
   ctx.inject(['web'], (inner) => {
     let web: unknown
@@ -142,10 +144,12 @@ export function bindZhihuWebSearch(
       if (!alive || current !== revision) return
       if (configured !== ready) {
         configured = ready
+        logger?.debug('web-search.availability', 'Zhihu web search provider availability changed.', { ready })
         inner.emit?.(WEB_PROVIDER_AVAILABILITY_EVENT, 'search', ZHIHU_WEB_SEARCH_ID)
       }
     }
     const off = registerZhihuGlobalSearchProvider(web, service, () => configured)
+    logger?.debug('web-search.registered', 'Registered Zhihu provider with host web registry.')
     const unlisten = inner.on?.('credentials/reference-updated', ref => {
       if (ref === ZHIHU_CREDENTIAL_REF) { void refresh() }
     })

@@ -1,4 +1,5 @@
 import { registerHostRpc as registerSharedHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import type { PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import type { RpcResult } from './contracts.ts'
 
 export type { HostRpcContext }
@@ -8,8 +9,10 @@ export function registerHostRpc(
   ctx: HostRpcContext,
   channel: string,
   call: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult>,
+  logger?: PluginLogger,
 ): () => void {
   return registerSharedHostRpc(ctx, channel, call, {
     errorBody: status => status === 500 ? 'network settings request failed' : undefined,
+    ...(logger ? { logger } : {}),
   })
 }

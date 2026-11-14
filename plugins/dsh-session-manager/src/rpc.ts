@@ -55,6 +55,7 @@ import {
 } from './welcome-back.ts'
 import { createSharedCalls } from './shared-call.ts'
 import type { SessionQueryEngine } from '@deepseek-ai/dsh-session-query'
+import type { PluginLogger } from '@klarkxy/dsh-plugin-kit/log-shared'
 
 const PROFILE_ERROR = 'Session Manager requires the active profile directory'
 
@@ -62,12 +63,18 @@ function isAbort(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
 }
 
-function failure(error: unknown): RpcResult {
+function failure(error: unknown, endpoint?: string, logger?: PluginLogger): RpcResult {
   if (error instanceof PresenceError || error instanceof RetryError || error instanceof RetryJournalError
     || error instanceof AutoContinueError) {
+    if (error.code === 'session/retry-uncertain') {
+      logger?.fault('retry.commit-uncertain', error.message, error, { endpoint: endpoint ?? null })
+    } else {
+      logger?.debug('rpc.domain-error', error.message, { endpoint: endpoint ?? null, code: error.code })
+    }
     return { ok: false, error: { code: error.code, message: error.message } }
   }
   if (isAbort(error)) return { ok: false, error: { code: 'session-manager/failed', message: 'request cancelled' } }
+  logger?.error('rpc.unexpected-error', 'Unexpected Session Manager RPC error.', error, { endpoint: endpoint ?? null })
   // Unknown failures answer with fixed copy instead of leaking host internals.
   return { ok: false, error: { code: 'session-manager/failed', message: 'session manager request failed' } }
 }
@@ -89,6 +96,7 @@ export function registerSessionManagerRpc(
   models: () => PresenceModelHost | undefined,
   modelStore?: () => PresenceModelStore | undefined,
   autoContinue?: () => AutoContinueService | undefined,
+  logger?: PluginLogger,
 ): () => Promise<void> {
   const profile = transport.get('profileContext') as { dir?: string } | undefined
   if (!profile?.dir) throw new Error(PROFILE_ERROR)
@@ -107,8 +115,15 @@ export function registerSessionManagerRpc(
     if (!storage) return undefined
     return journal ??= (async () => {
       const domain = await storage.open(retryDomain)
-      try { return new RetryJournal(domain) }
-      catch (error) { await domain.close(); throw error }
+      try {
+        const opened = new RetryJournal(domain)
+        logger?.debug('retry.journal-opened', 'Opened durable retry journal.')
+        return opened
+      } catch (error) {
+        logger?.fault('retry.journal-failed', 'Failed to initialize durable retry journal.', error)
+        await domain.close()
+        throw error
+      }
     })()
   }
   const unregister = registerHostRpc(transport, TEMP_WORKSPACE_CHANNEL, async (endpoint, payload, signal) => {
@@ -124,6 +139,9 @@ export function registerSessionManagerRpc(
       if (endpoint === WELCOME_BACK_COMPACT_ENDPOINT) {
         if (!payloadKeys(payload, ['sessionId', 'requestId'])) throw new PresenceError('session-manager/invalid-request', 'invalid compaction request')
         const value = await compactSession(services, payload as unknown as WelcomeBackCompactRequest, merged)
+        logger?.info('welcome-back.compacted', 'Triggered welcome-back session compaction.', {
+          sessionId: String((payload as Record<string, unknown>).sessionId ?? ''),
+        })
         return { ok: true, value }
       }
       if (endpoint === CONTINUE_SUGGEST_ENDPOINT) {
@@ -159,6 +177,9 @@ export function registerSessionManagerRpc(
           throw new PresenceError('session-manager/invalid-request', 'invalid retry commit request')
         }
         const value = await commitRetry({ ...services, retryJournal: await retryJournal() }, payload as unknown as RetryCommitRequest, merged)
+        logger?.info('retry.committed', 'Committed message retry branch.', {
+          sourceSessionId: String((payload as Record<string, unknown>).sessionId ?? ''),
+        })
         return { ok: true, value }
       }
       if (endpoint === CONFIG_READ_ENDPOINT) {
@@ -186,13 +207,17 @@ export function registerSessionManagerRpc(
         if (typeof request.sessionId !== 'string' || request.sessionId.trim() === '') throw new PresenceError('session-manager/invalid-request', 'sessionId must be a non-empty string')
         if (typeof request.mode !== 'string' || !AUTO_CONTINUE_MODES.includes(request.mode as AutoContinueMode)) throw new PresenceError('session-manager/invalid-request', 'mode must be one of off, cautious, bold')
         if (typeof request.expectedRevision !== 'number' || !Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 0) throw new PresenceError('session-manager/invalid-request', 'expectedRevision must be a non-negative integer')
-        return { ok: true, value: await service.update(request.sessionId, request.mode as AutoContinueMode, request.expectedRevision, merged) }
+        const updated = await service.update(request.sessionId, request.mode as AutoContinueMode, request.expectedRevision, merged)
+        logger?.info('auto-continue.updated', 'Updated session auto-continue mode.', {
+          sessionId: request.sessionId, mode: request.mode, revision: updated.revision,
+        })
+        return { ok: true, value: updated }
       }
       throw new PresenceError('session-manager/invalid-request', 'unknown Session Manager operation')
     } catch (error) {
-      return failure(error)
+      return failure(error, endpoint, logger)
     }
-  }, { requirePayload: true })
+  }, { requirePayload: true, ...(logger ? { logger } : {}) })
   return async () => {
     lifetime.abort()
     suggestions.clear()

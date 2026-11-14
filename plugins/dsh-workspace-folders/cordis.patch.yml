@@ -1,0 +1,4 @@
+- insert:
+    - id: workspace-folders
+      name: '@klarkxy/dsh-workspace-folders'
+      disabled: false

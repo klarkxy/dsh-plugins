@@ -14,6 +14,7 @@
  * change rebuilds the copy instead of stacking copies on top of it.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import { installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import {
   PLUGIN_NAME, PRESET_COPY, PRESET_ID, WARNING_ATTRIBUTE, WARNING_MARKS,
 } from './contracts.ts'
@@ -240,6 +241,7 @@ function watchTargets(copyOf: () => Copy): { stop: () => void; rescan: () => voi
 
 /** @param ctx - the client context, which owns the stylesheet, the observer and the locale subscription. */
 export function apply(ctx: Context): void {
+  installClientPluginLogger(ctx, PLUGIN_NAME)
   const client = ctx as unknown as Context & { locale: LocaleService }
   ctx.effect(() => {
     const style = document.createElement('style')

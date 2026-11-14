@@ -1,6 +1,7 @@
 import { resolveZhihuCallPolicy, type ZhihuCallPolicyOptions } from './call-policy.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import { installPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { executeZhihuSearch, ZHIHU_SEARCH_DEFAULT_COUNT } from './search-api.ts'
 import {
   executeZhihuGlobalSearch, executeZhihuHotList, executeZhihuAsk, executeZhihuKnowledgeSearch,
@@ -32,7 +33,12 @@ type Host = Context & HostRpcContext & {
 const fail = (code: string, message: string, details: Record<string, unknown> = {}): ZhihuRpcResult => ({ ok: false, error: { code, message, details } })
 
 /** One shared service for direct UI RPC and optional Tool wrappers. */
-export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsageRecorder, notify: (event: ZhihuSearchExecuted) => void = () => {}): ZhihuService {
+export function createZhihuService(
+  options: ZhihuClientOptions,
+  usage: ZhihuUsageRecorder,
+  notify: (event: ZhihuSearchExecuted) => void = () => {},
+  logger?: PluginLogger,
+): ZhihuService {
   // Serialize read-modify-write counters; concurrent tools must not lose increments.
   let pendingUsage = Promise.resolve()
   const lifetime = new AbortController()
@@ -44,7 +50,9 @@ export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsag
     return request.finally(() => active.delete(request))
   }
   const record = (event: ZhihuSearchExecuted) => {
-    pendingUsage = pendingUsage.then(() => usage.record(event)).catch(() => {})
+    pendingUsage = pendingUsage.then(() => usage.record(event)).catch(error => {
+      logger?.warn('usage.record-failed', 'Failed to persist Zhihu usage record.', error)
+    })
     try { notify(event) } catch { /* observer failure does not change a request */ }
   }
   const service = {
@@ -52,6 +60,7 @@ export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsag
     async usageSummary(days: unknown) { await pendingUsage; return { days: await usage.read(resolveDays(days)) } },
     async call(endpoint: string, payload: unknown, signal: AbortSignal): Promise<ZhihuRpcResult> {
       if (signal.aborted) return fail('cancelled', '请求已取消')
+      const startedAt = Date.now()
       const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
       const client = { ...options, signal }
       let counted = false
@@ -61,6 +70,7 @@ export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsag
       try {
         if (endpoint === 'policy.status') return { ok: true, value: resolveZhihuCallPolicy(options.env, options.callPolicy) }
         if (endpoint === 'usage.summary') { await pendingUsage; return { ok: true, value: { days: await usage.read(resolveDays(body.days)) } } }
+        logger?.debug('call.started', 'Executing Zhihu operation.', { endpoint, operation: operation ?? null })
         const query = typeof body.query === 'string' ? body.query : ''
         if (['search', 'global.search', 'ask', 'knowledge.search'].includes(endpoint) && (!query.trim() || query.length > 4000)) {
           return fail('bad-request', '查询不超过 4000 字符')
@@ -107,11 +117,26 @@ export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsag
           return fail('bad-request', `unknown endpoint ${endpoint}`)
         }
         if (counted) record({ ok: true, results, ...metering })
+        logger?.info('call.completed', 'Completed Zhihu operation.', {
+          endpoint, operation: operation ?? null, results, durationMs: Date.now() - startedAt,
+        })
         return { ok: true, value }
       } catch (error) {
         if (counted) record({ ok: false, results: 0, ...metering })
-        if (signal.aborted) return fail('cancelled', '请求已取消')
+        if (signal.aborted) {
+          logger?.debug('call.cancelled', 'Zhihu operation cancelled.', { endpoint, durationMs: Date.now() - startedAt })
+          return fail('cancelled', '请求已取消')
+        }
         const code = error instanceof ZhihuSearchError ? error.code.toLowerCase().replaceAll('_', '-') : 'internal'
+        if (error instanceof ZhihuSearchError) {
+          logger?.warn('call.upstream-failed', 'Zhihu upstream request failed.', error, {
+            endpoint, code, status: error.status ?? null, retryable: error.retryable, durationMs: Date.now() - startedAt,
+          })
+        } else {
+          logger?.error('call.internal-error', 'Unexpected Zhihu operation failure.', error, {
+            endpoint, durationMs: Date.now() - startedAt,
+          })
+        }
         const details: Record<string, unknown> = {}
         if (error instanceof ZhihuSearchError) {
           for (const key of ['status', 'upstreamCode', 'retryAfter', 'retryable'] as const) {
@@ -142,17 +167,24 @@ export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsag
 }
 
 export async function apply(ctx: Context, config: ZhihuCallPolicyOptions = {}): Promise<void> {
+  const logger = installPluginLogger(ctx, name)
   const host = ctx as Host
-  const domain = await ctx.storageDomain.open(zhihuUsageDomainSpec)
+  const domain = await ctx.storageDomain.open(zhihuUsageDomainSpec).catch(error => {
+    logger.fault('storage.usage-open-failed', 'Failed to open Zhihu usage storage domain.', error)
+    throw error
+  })
   const service = createZhihuService({
     callPolicy: config,
     resolveCredential: async () => (await host.credentials.resolve(credentialRef(ZHIHU_CREDENTIAL_REF)))?.value,
   }, createZhihuUsageRecorder(domain.table('daily')), event => {
     const emit = ctx.emit as unknown as (name: string, event: ZhihuSearchExecuted) => void
     emit.call(ctx, ZHIHU_SEARCH_EVENT, event)
-  })
+  }, logger)
   ctx.effect(() => async () => { await service.dispose(); await domain.close() }, 'zhihu.usageDomainClose')
-  const syncDomain = await ctx.storageDomain.open(zhihuSyncDomainSpec)
+  const syncDomain = await ctx.storageDomain.open(zhihuSyncDomainSpec).catch(error => {
+    logger.fault('storage.sync-open-failed', 'Failed to open Zhihu sync storage domain.', error)
+    throw error
+  })
   const sync = createZhihuSyncService(syncDomain.table('drafts'), {
     resolveCredentials: async () => {
       const [key, secret] = await Promise.all(ZHIHU_SYNC_CREDENTIAL_REFS.map(ref => host.credentials.resolve(credentialRef(ref))))
@@ -165,11 +197,20 @@ export async function apply(ctx: Context, config: ZhihuCallPolicyOptions = {}): 
   ctx.provide('zhihu', service)
   ctx.effect(() => registerHostRpc(host, ZHIHU_RPC_CHANNEL, async (endpoint, payload, signal) => {
     if (!endpoint.startsWith('sync.')) return service.call(endpoint, payload, signal)
-    try { return { ok: true, value: await service.syncCall!(endpoint, payload, signal, 'ui') } }
+    try {
+      const value = await service.syncCall!(endpoint, payload, signal, 'ui')
+      logger.debug('sync.completed', 'Completed Zhihu sync RPC call.', { endpoint })
+      return { ok: true, value }
+    }
     catch (error) {
       if (signal.aborted) return fail('cancelled', '请求已取消')
+      if (error instanceof ZhihuSyncServiceError) {
+        logger.warn('sync.rejected', 'Zhihu sync operation rejected.', error, { endpoint, code: error.code })
+      } else {
+        logger.error('sync.failed', 'Unexpected Zhihu sync failure.', error, { endpoint })
+      }
       return fail(error instanceof ZhihuSyncServiceError ? error.code : 'sync-failed', error instanceof Error ? error.message : '知乎同步失败。')
     }
-  }))
-  bindZhihuWebSearch(ctx, service)
+  }, logger))
+  bindZhihuWebSearch(ctx, service, logger)
 }

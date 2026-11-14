@@ -160,6 +160,21 @@ const css = `
     return {
       inject: ['slots', 'locale'],
       apply(ctx) {
+        try {
+          const list = Array.isArray(globalThis.__KLARKXY_PLUGIN_LOGS__)
+            ? globalThis.__KLARKXY_PLUGIN_LOGS__
+            : (globalThis.__KLARKXY_PLUGIN_LOGS__ = []);
+          list.push({
+            version: 1,
+            at: new Date().toISOString(),
+            level: 'info',
+            source: 'dsh-dev-index',
+            surface: 'client',
+            event: 'client.loaded',
+            message: 'Client plugin initialized.',
+          });
+          if (list.length > 300) list.splice(0, list.length - 300);
+        } catch {}
         ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
           name: 'plugins.bundle.config',
           key: '@klarkxy/dsh-dev-index',

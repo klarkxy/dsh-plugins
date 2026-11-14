@@ -11,7 +11,8 @@ const manifest = read('package.json')
 const official = name => /^@deepseek-ai\/dsh(?:-|$)/.test(name)
 const target = manifest.devDependencies['@deepseek-ai/dsh-client-ui-primitives']
 const plugins = readdirSync(join(root, 'plugins'), { withFileTypes: true })
-  .filter(entry => entry.isDirectory()).map(entry => read(`plugins/${entry.name}/package.json`))
+  .filter(entry => entry.isDirectory() && existsSync(join(root, 'plugins', entry.name, 'package.json')))
+  .map(entry => read(`plugins/${entry.name}/package.json`))
 
 test('DSH development dependencies and workspace overrides share one baseline', () => {
   assert.equal(semver.valid(target), target)

@@ -9,6 +9,8 @@ type RestSpec = {
   fallback: string
   path: string
   method: 'GET' | 'POST'
+  /** Extra cap on the trimmed query. The shared 4000-character request limit still applies. */
+  maxQueryLength?: number
   headers(apiKey: string): Record<string, string>
   query?: (request: { query: string; count: number }) => Record<string, string>
   body?: (request: { query: string; count: number }) => unknown
@@ -29,6 +31,7 @@ function createRestSearch(spec: RestSpec): new (options: RestSearchOptions) => W
       const count = request.maxResults ?? 5
       if (!Number.isInteger(count) || count < 1 || count > 20) throw new WebError('结果数须为 1 至 20。', 'WEB_INVALID_REQUEST')
       const query = request.query.trim()
+      if (spec.maxQueryLength !== undefined && query.length > spec.maxQueryLength) throw new WebError('查询无效。', 'WEB_INVALID_REQUEST')
       try {
         signal?.throwIfAborted()
         const url = new URL(httpsEndpoint(this.options.baseURL ?? spec.fallback, spec.path))
@@ -113,6 +116,53 @@ export const YouSearchProvider = createRestSearch({
       if (!source || seen.has(source.url)) return []
       seen.add(source.url)
       return [source]
+    })
+  },
+})
+
+function publishedAt(value: unknown): string | undefined {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : undefined
+}
+
+// https://docs.linkup.so/pages/documentation/endpoints/search/reference
+// fast + searchResults only: no sourced answer, structured extraction, or deep search.
+export const LinkupSearchProvider = createRestSearch({
+  id: 'linkup', fallback: 'https://api.linkup.so', path: '/v1/search', method: 'POST',
+  headers: apiKey => ({ authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }),
+  body: ({ query, count }) => ({ q: query, depth: 'fast', outputType: 'searchResults', maxResults: count, includeImages: false }),
+  parse(payload) {
+    const results = record(payload)?.results
+    if (!Array.isArray(results)) throw new Error('Linkup returned no results array.')
+    const seen = new Set<string>()
+    return results.flatMap(raw => {
+      const row = record(raw)
+      if (!row || row.type === 'image') return []
+      const source = sourceFrom({ url: row.url, title: row.name, snippet: row.content }, 'url', 'title', 'snippet')
+      if (!source || seen.has(source.url)) return []
+      seen.add(source.url)
+      const published = publishedAt(row.publishedAt)
+      return [{ ...source, ...(published ? { publishedAt: published } : {}) }]
+    })
+  },
+})
+
+// https://docs.bigmodel.cn/api-reference/工具-api/网络搜索
+// search_std only. search_query is capped at 70 characters and is not truncated.
+export const ZhipuSearchProvider = createRestSearch({
+  id: 'zhipu', fallback: 'https://open.bigmodel.cn', path: '/api/paas/v4/web_search', method: 'POST', maxQueryLength: 70,
+  headers: apiKey => ({ authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }),
+  body: ({ query, count }) => ({
+    search_query: query, search_engine: 'search_std', search_intent: false, count, content_size: 'medium',
+  }),
+  parse(payload) {
+    const results = record(payload)?.search_result
+    if (!Array.isArray(results)) throw new Error('Zhipu returned no search_result array.')
+    return results.flatMap(raw => {
+      const row = record(raw)
+      const source = sourceFrom(row, 'link', 'title', 'content')
+      if (!source || !row) return []
+      const published = publishedAt(row.publish_date)
+      return [{ ...source, ...(published ? { publishedAt: published } : {}) }]
     })
   },
 })

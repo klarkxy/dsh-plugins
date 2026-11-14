@@ -1,5 +1,6 @@
 import { isSubagentSession, AUXILIARY_MODEL_SERVICE } from '@klarkxy/dsh-plugin-kit/contracts';
 import { retainAuxiliaryModel } from '@klarkxy/dsh-plugin-kit/auxiliary-model';
+import { createPluginLogger } from '@klarkxy/dsh-plugin-kit/logger';
 import { parseConfig } from './config.js';
 import { isPermissionEvent } from './control.js';
 import { dangerousCommand } from './dangerous.js';
@@ -111,6 +112,8 @@ export function createBreaker() {
 }
 
 export function apply(ctx, raw = {}) {
+  const logger = createPluginLogger(ctx, name, { forwardHostWarnError: false });
+  logger.info('plugin.loaded', 'Host plugin initialized.');
   const base = parseConfig(raw);
   let control;
   let controlEpoch = 0;
@@ -122,7 +125,10 @@ export function apply(ctx, raw = {}) {
   const lifetime = new AbortController();
   const ready = openAudit(ctx.storageDomain);
   // Keep an unavailable store observable without an unhandled rejection at mount.
-  void ready.catch(() => { try { ctx.logger?.warn?.('safe-auto audit store could not be opened; automatic approvals will be rejected'); } catch {} });
+  void ready.catch(err => {
+    logger.fault('audit.open-failed', 'Safe Auto audit store could not be opened; automatic approvals will be rejected.', err);
+    try { ctx.logger?.warn?.('safe-auto audit store could not be opened; automatic approvals will be rejected'); } catch {}
+  });
   const history = {
     async list(payload) { return (await ready).list(payload); },
     async get(payload) { return (await ready).get(payload); },
@@ -145,9 +151,11 @@ export function apply(ctx, raw = {}) {
   ctx.inject?.(['storageDomain', 'webServer', 'connection'], scope => {
     void retainAuxiliaryModel(scope).then(release => {
       scope.effect(() => release);
+      logger.debug('auxiliary.retained', 'Shared auxiliary model store retained.');
       settleAuxiliary('ready');
     }, error => {
       auxiliary.failure = error;
+      logger.error('auxiliary.failed', 'Shared auxiliary model store failed to open.', error);
       settleAuxiliary('failed');
     });
   });
@@ -196,6 +204,7 @@ export function apply(ctx, raw = {}) {
     lifetime.abort();
     await Promise.allSettled([...pendingWrites]);
     try { await (await ready).close(); } catch { /* mount failure remains visible to history callers */ }
+    logger.debug('plugin.disposed', 'Host plugin disposed.');
   });
   if (!base.enabled) return;
 
@@ -281,6 +290,9 @@ export function apply(ctx, raw = {}) {
     if (WIDER_MODES[mode]?.includes(exec.arguments?.sandbox_permissions)) return decision;
     const rule = dangerousCommand(exec.arguments?.command, exec.name);
     if (!rule) return decision;
+    logger.info('command.intercepted', 'Intercepted dangerous command for Safe Auto review.', {
+      tool: exec.name, rule,
+    });
     return { kind: 'ask', reason: `safe-auto: dangerous command (${rule}) requires review`,
       displayReason: { en: `Safe Auto review: dangerous command (${rule})`, zh: `安全自动审核：危险命令（${rule}）` } };
   }, { prepend: true });
@@ -307,7 +319,10 @@ export function apply(ctx, raw = {}) {
       track(Promise.all(records.map(({ store, id }) => store.execution(id, {
         state: result.isError ? 'failed' : 'succeeded', completedAt: new Date().toISOString(),
         ...(result.isError ? { error: result.error?.message || 'Tool execution failed' } : {}),
-      }))).catch(() => { try { ctx.logger?.warn?.('safe-auto execution audit write failed'); } catch {} }));
+      }))).catch(err => {
+        logger.error('audit.execution-write-failed', 'Failed to persist execution audit outcome.', err);
+        try { ctx.logger?.warn?.('safe-auto execution audit write failed'); } catch {}
+      }));
     }
     feedback.delete(exec.token);
     const calls = exec.agent && executions.get(exec.agent);
@@ -329,7 +344,10 @@ export function apply(ctx, raw = {}) {
   const writeApproval = (store, auditId, outcome) => {
     if (!['allowed-once', 'rejected', 'cancelled', 'unavailable'].includes(outcome)) return;
     void track(store.approval(auditId, { outcome })).catch(
-      () => { try { ctx.logger?.warn?.('safe-auto native approval record failed'); } catch {} });
+      err => {
+        logger.error('audit.approval-write-failed', 'Failed to persist native approval outcome.', err, { outcome });
+        try { ctx.logger?.warn?.('safe-auto native approval record failed'); } catch {}
+      });
   };
   // Live feed: session/event fires synchronously after the decided append's
   // commit, so a decided can arrive while the verdict's durable write is still
@@ -374,6 +392,9 @@ export function apply(ctx, raw = {}) {
       }
       feedback.set(exec.token, MESSAGES.failed('the audit record could not be saved'));
       audit({ tool: exec.name, callId: String(exec.callId), outcome: 'rejected', code: 'AUDIT_WRITE_FAILED', durationMs: Date.now() - started });
+      logger.fault('audit.write-failed', 'Rejected approval because the audit record could not be saved.', undefined, {
+        tool: exec.name, durationMs: Date.now() - started,
+      });
       return 'rejected';
     };
     // The native asked/decided pair is captured before the first durable
@@ -437,6 +458,23 @@ export function apply(ctx, raw = {}) {
       }
       if (text !== undefined && outcome !== 'allowed-once') feedback.set(exec.token, text);
       audit({ id: auditId, tool: exec.name, callId: String(exec.callId), outcome, durationMs: Date.now() - started, ...row, rationale: undefined });
+      const finishContext = {
+        auditId: auditId ?? null,
+        tool: exec.name,
+        outcome,
+        code: row?.code ?? null,
+        risk: row?.risk ?? null,
+        durationMs: Date.now() - started,
+      };
+      if (outcome === 'cancelled') {
+        logger.debug('review.cancelled', 'Safe Auto review cancelled.', finishContext);
+      } else if (row?.code === 'CIRCUIT_OPEN') {
+        logger.warn('review.breaker-open', 'Safe Auto circuit breaker paused automatic review.', undefined, finishContext);
+      } else if (row?.code && row.code !== 'ALLOWED' && row.code !== 'DENIED') {
+        logger.warn('review.failed', 'Safe Auto review rejected due to reviewer or input error.', undefined, finishContext);
+      } else {
+        logger.info('review.decided', 'Safe Auto review decided.', finishContext);
+      }
       return outcome;
     };
     // A grant is durable-but-provisional until the native approval/decided
