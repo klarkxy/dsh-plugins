@@ -1,6 +1,6 @@
 {
   "id": "@klarkxy/dsh-dev-index",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "main": "lib/index.js",
   "description": "DSH Docs: browse official DSH developer documentation in the Plugins page; the agent gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs, dsh_plugins).",
   "engines": {

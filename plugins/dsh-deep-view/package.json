@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-deep-view",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Declarative reply cards with charts, safe formulas, local inputs and validated show_view answers.",
   "icon": "./icon.svg",
   "license": "Apache-2.0",
@@ -149,6 +149,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "9d8a49647bf01ffd956e64939ed159b56812d7c372a78bf5e44affc1b27eee62"
+    "contentHash": "ca32521a6ca09c8d93378dc92151647aca18bb76eee6873382a4fd38466a4839"
   }
 }
