@@ -29,6 +29,9 @@ export default defineConfig({
     'official-ui': 'src/official-ui.ts',
     'cli-process': 'src/cli-process.ts',
     'cli-media': 'src/cli-media.ts',
+    'log-shared': 'src/log-shared.ts',
+    logger: 'src/logger.ts',
+    'client-logger': 'src/client-logger.ts',
   },
   format: ['esm'], dts: true, clean: true, outDir: 'lib', platform: 'neutral', target: 'es2022', sourcemap: true, hash: false,
   plugins: [{ name: 'native-remote-decorators', transform: {

@@ -29,6 +29,7 @@ import {
   AUXILIARY_MODEL_SERVICE, type AuxiliaryModelDefaults, type AuxiliaryModelShared, type RpcResult,
 } from './contracts.ts'
 import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
+import { createPluginLogger } from './logger.ts'
 import { createModelSettingsChanges } from './model-settings-changes.ts'
 import { registerModelSettings, notifyModelSettingsChanged, type ModelSettingsEvents } from './model-settings.ts'
 
@@ -151,10 +152,23 @@ function setSharedModel(state: SharedState, ctx: Context, input: unknown, expect
   }
   const commit = state.tail.then(async (): Promise<AuxiliaryModelDefaults> => {
     if (state.closed || !state.domain) throw new Error('Auxiliary model settings are unloading; retry in a moment')
-    if (expectedRevision !== state.data.revision) throw conflictError('Auxiliary model settings changed; reload and retry')
+    if (expectedRevision !== state.data.revision) {
+      createPluginLogger(ctx, 'dsh-plugin-kit', { forwardHostWarnError: false }).warn(
+        'auxiliary-model.conflict',
+        'Auxiliary model update rejected due to revision conflict.',
+        undefined,
+        { expectedRevision: Number(expectedRevision), currentRevision: state.data.revision },
+      )
+      throw conflictError('Auxiliary model settings changed; reload and retry')
+    }
     const next: AuxiliaryModelDefaults = { revision: state.data.revision + 1, model: modelRouteOverride(normalized) ?? null }
     await state.domain.table(TABLE).put(KEY, { revision: next.revision, model: next.model })
     state.data = next
+    createPluginLogger(ctx, 'dsh-plugin-kit', { forwardHostWarnError: false }).info(
+      'auxiliary-model.updated',
+      'Updated global auxiliary model default.',
+      { revision: next.revision, provider: next.model?.provider ?? null, model: next.model?.model ?? null },
+    )
     notifyModelSettingsChanged(ctx.root, AUXILIARY_MODEL_NS, next.revision)
     return next
   })
@@ -164,6 +178,7 @@ function setSharedModel(state: SharedState, ctx: Context, input: unknown, expect
 }
 
 function initScope(state: SharedState, ctx: Context, scope: Scope): Promise<void> {
+  const log = createPluginLogger(ctx, 'dsh-plugin-kit', { forwardHostWarnError: false })
   // A dependency loss unloads this fiber (running its disposers) and a
   // remount re-runs the callback (bumping state.generation), so an init that
   // was still opening always detects its own supersession through these two
@@ -195,6 +210,9 @@ function initScope(state: SharedState, ctx: Context, scope: Scope): Promise<void
     state.data = { revision: stored?.revision ?? 0, model: stored?.model ?? null }
     state.error = undefined
     state.available = true
+    log.info('auxiliary-model.opened', 'Shared auxiliary model store opened.', {
+      generation, revision: state.data.revision, hasModel: Boolean(state.data.model),
+    })
     scope.effect(() => registerModelSettings(scope, {
       ns: AUXILIARY_MODEL_NS,
       title: { zh: '辅助模型', en: 'Auxiliary model' },
@@ -242,7 +260,7 @@ function initScope(state: SharedState, ctx: Context, scope: Scope): Promise<void
         }
       }
       return { ok: false, error: { code: 'auxiliary-model/unknown-endpoint', message: `Unknown endpoint: ${endpoint}` } } satisfies RpcResult
-    }, { isEndpoint: endpoint => /^[a-z.]+$/.test(endpoint) }))
+    }, { isEndpoint: endpoint => /^[a-z.]+$/.test(endpoint), logger: log }))
     // The change stream lives and dies with this shared fiber.
     createModelSettingsChanges(scope as unknown as Context, AUXILIARY_MODEL_CHANGES_IDENTITY, AUXILIARY_MODEL_NS)
     // Disposers run LIFO on unload: registered last, this runs FIRST when a
@@ -252,6 +270,11 @@ function initScope(state: SharedState, ctx: Context, scope: Scope): Promise<void
     // impl just changed; only a superseded scope's teardown stays out.
     scope.effect(() => () => { if (state.generation === generation) { state.available = false; state.domain = undefined } })
   })().catch(error => {
+    if (error && typeof error === 'object' && (error as Record<symbol, unknown>)[RECOVERABLE]) {
+      log.debug('auxiliary-model.superseded', 'Shared auxiliary model init superseded during open.', { generation })
+    } else {
+      log.error('auxiliary-model.init-failed', 'Shared auxiliary model store failed to open.', error, { generation })
+    }
     // Tag the failure with its generation so ready.catch can distinguish a
     // superseded init's rejection from the live scope's.
     if (error && typeof error === 'object') (error as Record<string, unknown>).auxGeneration = generation
@@ -283,6 +306,11 @@ function teardown(state: SharedState, ctx: Context): Promise<void> {
       await state.scopeInit?.catch(() => {})
       await state.tail.catch(() => {})
       try { await state.fiber?.dispose() } catch (error) {
+        createPluginLogger(ctx, 'dsh-plugin-kit', { forwardHostWarnError: false }).fault(
+          'auxiliary-model.dispose-failed',
+          'Shared auxiliary model owner fiber failed to dispose.',
+          error,
+        )
         // A failed dispose may leave the domain open; log loudly so the next
         // open's 'already open' error is attributable instead of mysterious.
         try { (ctx as unknown as { logger?: { warn(...args: unknown[]): void } }).logger?.warn('auxiliary-model: fiber dispose failed', error) }

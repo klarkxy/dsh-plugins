@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { StringDecoder } from 'node:string_decoder'
+import type { PluginLogger } from './log-shared.ts'
 
 /** Only OS/runtime discovery facts cross the default CLI boundary. CLI-specific login configuration must opt in. */
 export function cliEnvironment(parent: NodeJS.ProcessEnv = process.env, extra: readonly string[] = []): NodeJS.ProcessEnv {
@@ -29,22 +30,32 @@ export type CliOptions = {
   maxOutputBytes?: number; maxLineBytes?: number;
   onLine?: (line: string) => void | Promise<void>;
   spawnChild?: typeof spawn;
+  logger?: PluginLogger;
 }
 
 /** Own one process tree until it exits, including caller cancellation and protocol failure. */
 export async function runCli(executable: CliExecutable, args: string[], options: CliOptions): Promise<CliOutput> {
   options.signal.throwIfAborted()
+  const started = Date.now()
+  const log = options.logger
   const timed = AbortSignal.timeout(options.timeoutMs ?? 900_000)
   const signal = AbortSignal.any([options.signal, timed])
   const maxBytes = options.maxOutputBytes ?? 16 * 1024 * 1024
   const maxLine = options.maxLineBytes ?? 8 * 1024 * 1024
+  log?.debug('cli.started', 'CLI process starting.', {
+    argCount: args.length,
+    timeoutMs: options.timeoutMs ?? 900_000,
+  })
   let child: ChildProcessWithoutNullStreams
   try {
     child = (options.spawnChild ?? spawn)(executable.command, [...(executable.args ?? []), ...args], {
       cwd: options.cwd, env: executable.env ?? cliEnvironment(), shell: false,
       windowsHide: true, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'],
     }) as ChildProcessWithoutNullStreams
-  } catch { throw new CliProcessError('unavailable', 'Unable to start the official CLI.') }
+  } catch (spawnErr) {
+    log?.error('cli.unavailable', 'Unable to start CLI process.', spawnErr, { argCount: args.length })
+    throw new CliProcessError('unavailable', 'Unable to start the official CLI.')
+  }
   let failure: unknown, total = 0, stderr = '', stdout = '', pending = Buffer.alloc(0)
   const stdoutDecoder = new StringDecoder('utf8'), stderrDecoder = new StringDecoder('utf8')
   let exited = false, exitCode = -1, stopping: Promise<void> | undefined
@@ -113,8 +124,28 @@ export async function runCli(executable: CliExecutable, args: string[], options:
     stdout += stdoutDecoder.end(); stderr += stderrDecoder.end()
     if (pending.length && !failure) acceptLine(pending.toString('utf8'))
     await lineWork
-    if (failure) throw failure
+    if (failure) {
+      const durationMs = Date.now() - started
+      if (failure instanceof CliProcessError && failure.code === 'cancelled') {
+        log?.debug('cli.cancelled', 'CLI process cancelled.', { durationMs, outputBytes: total })
+      } else if (failure instanceof CliProcessError && failure.code === 'timeout') {
+        log?.warn('cli.timeout', 'CLI process timed out.', failure, { durationMs, outputBytes: total })
+      } else {
+        log?.error('cli.failed', 'CLI process failed.', failure, {
+          code: failure instanceof CliProcessError ? failure.code : null,
+          durationMs,
+          outputBytes: total,
+        })
+      }
+      throw failure
+    }
     signal.throwIfAborted()
+    const durationMs = Date.now() - started
+    if (exitCode === 0) {
+      log?.debug('cli.completed', 'CLI process exited cleanly.', { exitCode, durationMs, outputBytes: total })
+    } else {
+      log?.warn('cli.nonzero-exit', 'CLI process exited with a non-zero code.', undefined, { exitCode, durationMs, outputBytes: total })
+    }
     return { stdout, stderr, exitCode }
   } finally {
     signal.removeEventListener('abort', abort)

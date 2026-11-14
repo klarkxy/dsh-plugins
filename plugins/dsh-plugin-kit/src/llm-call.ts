@@ -4,6 +4,7 @@ import {
 } from '@deepseek-ai/dsh-llm'
 import { getAuxiliaryModel, producerMessageSource, type ModelRoute } from './contracts.ts'
 import { buildAuxiliaryUserText } from './auxiliary-context.ts'
+import type { PluginLogger } from './log-shared.ts'
 
 /** A feature's own saved model. Empty means the host default chat model. */
 export interface FeatureModelRoute {
@@ -39,6 +40,8 @@ export interface LlmTextRequest {
   configure?: Parameters<LlmRuntime['prepareCall']>[2]
   /** Rechecked before the call returns text. A false result discards the output. */
   isCurrent?: () => boolean
+  /** Optional diagnostic logger for timing, token usage, and failure telemetry. */
+  logger?: PluginLogger
 }
 
 export interface LlmTextResult {
@@ -133,6 +136,17 @@ export async function callLlmText(llm: LlmTextCaller, request: LlmTextRequest): 
   request.signal.throwIfAborted()
   const live = () => request.isCurrent?.() !== false && !request.signal.aborted
   if (!live()) throw Object.assign(new Error('调用已取消。'), { name: 'AbortError' })
+  const started = Date.now()
+  const logBase = {
+    plugin: request.plugin,
+    feature: request.feature ?? null,
+    provider: request.route.provider,
+    model: request.route.model,
+    purpose: request.purpose ?? null,
+    sessionId: request.sessionId ?? null,
+  }
+  request.logger?.debug('llm.call.started', 'Auxiliary model call started.', logBase)
+  try {
   const effort = request.route.reasoningEffort?.trim()
   const prepared = await llm.prepareCall({
     provider: request.route.provider,
@@ -176,6 +190,15 @@ export async function callLlmText(llm: LlmTextCaller, request: LlmTextRequest): 
   // Every usable host usage field passes through; absent fields stay absent
   // (the caller's accounting must not see invented zeros).
   const usage = assembler.usage
+  request.logger?.debug('llm.call.completed', 'Auxiliary model call completed.', {
+    ...logBase,
+    provider: prepared.config.provider,
+    model: prepared.config.model,
+    durationMs: Date.now() - started,
+    ...(usage?.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
+    ...(usage?.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
+    ...(usage?.totalTokens !== undefined ? { totalTokens: usage.totalTokens } : {}),
+  })
   return {
     text: joinText(assembler),
     provider: prepared.config.provider,
@@ -188,5 +211,15 @@ export async function callLlmText(llm: LlmTextCaller, request: LlmTextRequest): 
       ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
       ...(usage.reasoningTokens !== undefined ? { reasoningTokens: usage.reasoningTokens } : {}),
     } : {}),
+  }
+  } catch (error) {
+    const durationMs = Date.now() - started
+    const aborted = request.signal.aborted || (error instanceof Error && error.name === 'AbortError')
+    if (aborted) {
+      request.logger?.debug('llm.call.cancelled', 'Auxiliary model call cancelled.', { ...logBase, durationMs })
+    } else {
+      request.logger?.warn('llm.call.failed', 'Auxiliary model call failed.', error, { ...logBase, durationMs })
+    }
+    throw error
   }
 }

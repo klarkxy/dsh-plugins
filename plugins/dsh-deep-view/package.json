@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-deep-view",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Declarative reply cards with charts, safe formulas, local inputs and validated show_view answers.",
   "icon": "./icon.svg",
   "license": "Apache-2.0",
@@ -24,6 +24,31 @@
       "types": "./lib/contracts.d.ts",
       "import": "./lib/contracts.js",
       "default": "./lib/contracts.js"
+    },
+    "./core": {
+      "types": "./lib/core.d.ts",
+      "import": "./lib/core.js",
+      "default": "./lib/core.js"
+    },
+    "./answer-text": {
+      "types": "./lib/answer-text.d.ts",
+      "import": "./lib/answer-text.js",
+      "default": "./lib/answer-text.js"
+    },
+    "./answers": {
+      "types": "./lib/answers.d.ts",
+      "import": "./lib/answers.js",
+      "default": "./lib/answers.js"
+    },
+    "./widget": {
+      "types": "./lib/widget.d.ts",
+      "import": "./lib/widget.js",
+      "default": "./lib/widget.js"
+    },
+    "./copy": {
+      "types": "./lib/copy.d.ts",
+      "import": "./lib/copy.js",
+      "default": "./lib/copy.js"
     },
     "./icon": "./icon.svg",
     "./package.json": "./package.json",

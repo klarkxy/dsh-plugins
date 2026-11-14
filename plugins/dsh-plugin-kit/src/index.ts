@@ -6,3 +6,10 @@ export { callLlmText, resolveFeatureModel, type FeatureModelRoute, type LlmTextC
 export {
   buildAuxiliaryUserText, packAuxiliaryContext, AuxiliaryContextTooLargeError,
 } from './auxiliary-context.ts'
+export {
+  RotatingPluginLogger, createPluginLogger, installPluginLogger,
+  nextPluginOperationId, currentPluginLogContext, withPluginLogContext,
+  pluginLogStep, pluginLogSyncStep, readPluginLogTail, pluginLogDirectory,
+  type PluginLogger, type PluginLogLevel, type PluginLogInput,
+  type PluginLogEntry, type PluginLogContext, type RotatingPluginLoggerOptions,
+} from './logger.ts'

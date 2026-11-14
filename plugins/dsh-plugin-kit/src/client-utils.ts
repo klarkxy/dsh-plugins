@@ -1,9 +1,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createElement, useCallback, useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { SESSION_SETTINGS_ITEM_SLOT, SESSION_SETTINGS_SECTION_ID, SETTINGS_SECTION_ICON_SLOT } from './contracts.ts'
+import type { PluginLogger } from './log-shared.ts'
 
 /** Fixed pause for failing background reads; manual work is never replayed. */
-export function createPluginReadGate(now: () => number = Date.now) {
+export function createPluginReadGate(now: () => number = Date.now, logger?: PluginLogger) {
   let pausedUntil = 0
   let epoch = 0
   return {
@@ -13,7 +14,10 @@ export function createPluginReadGate(now: () => number = Date.now) {
       const current = epoch
       try {
         const value = await read()
-        if (current === epoch) pausedUntil = 0
+        if (current === epoch) {
+          if (pausedUntil > 0) logger?.debug('read-gate.resumed', 'Background read gate recovered.')
+          pausedUntil = 0
+        }
         return value
       } catch (error) {
         // The native Connection error is an Error with this exact HTTP text.
@@ -22,6 +26,7 @@ export function createPluginReadGate(now: () => number = Date.now) {
         if (current === epoch && (/(?:^|\s)transport failure for .+: HTTP (?:404|405|503)\b/.test(message)
           || (error instanceof TypeError && /^(?:Failed to fetch|fetch failed|NetworkError when attempting to fetch resource\.?)$/i.test(message)))) {
           pausedUntil = now() + 30_000
+          logger?.warn('read-gate.paused', 'Background reads paused for 30s after transport failure.', error)
         }
         throw error
       }

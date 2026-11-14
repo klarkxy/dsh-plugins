@@ -1,33 +1,20 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement } from 'react'
 import { MarkdownText, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import { checkShownView } from './core/index.js'
+import { createClientPluginLogger, installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type PendingView, type RpcResult, type ShownView, type ViewPresentation } from './contracts.ts'
 import type { ToolViewProps, ToolArgsView, ReplyViewProps, ReplySnapshot } from './runtime.ts'
 import { WidgetCard, type Answer } from './widget.tsx'
 import { viewStyles } from './styles.ts'
 import { checkedAnswer, replyAnswers, sameAnswers } from './answers.ts'
+import { uiEn, uiZh } from './copy.ts'
 
 export const name = 'dsh-deep-view-client'
 export const inject = ['slots', 'connection', 'locale'] as const
 export const LOCALE = 'deep-view'
 
-export const uiZh = {
-  copy: '复制', copied: '已复制', footnotes: '脚注', code: '代码', wrap: '自动换行', unwrap: '不换行',
-  prepared: '卡片将在最终回复中显示', preparing: '正在准备视图…', error: '视图未能显示', invalid: '视图数据无效',
-  local: '仅本地预览；此卡片不会发送回答。', answerFailed: '回答未能发送，请重试。',
-  chart: '图表', chartOptions: '图表选项', viewAsChart: '查看图表', viewAsTable: '查看表格', copyData: '复制数据',
-  chartNumber: '图表 {n}', value: '值', series: '系列', view: '视图', sources: '来源', progress: '进度', yourAnswer: '你的回答',
-  options: '选项', submit: '提交', cancel: '取消', confirm: '确认', send: '发送', selected: '已选择',
-}
-export const uiEn: Record<keyof typeof uiZh, string> = {
-  copy: 'Copy', copied: 'Copied', footnotes: 'Footnotes', code: 'Code', wrap: 'Wrap lines', unwrap: 'Do not wrap lines',
-  prepared: 'The card will appear in the final reply', preparing: 'Preparing view…', error: 'The view could not be shown', invalid: 'Invalid view data',
-  local: 'Local preview only; this card does not send an answer.', answerFailed: 'The answer could not be sent; try again.',
-  chart: 'Chart', chartOptions: 'Chart options', viewAsChart: 'View as chart', viewAsTable: 'View as table', copyData: 'Copy data',
-  chartNumber: 'Chart {n}', value: 'Value', series: 'Series', view: 'View', sources: 'Sources', progress: 'Progress', yourAnswer: 'Your answer',
-  options: 'Options', submit: 'Submit', cancel: 'Cancel', confirm: 'Confirm', send: 'Send', selected: 'Selected',
-}
+export { uiEn, uiZh } from './copy.ts'
 type UiKey = keyof typeof uiZh
 export type UiT = (key: UiKey, params?: Record<string, unknown>) => string
 const viewT = (t: UiT): ((key: string, params?: Record<string, unknown>) => string) => (key, params) => {
@@ -118,8 +105,21 @@ export function ToolCallView(props: ToolViewProps & { restoredAnswer?: Answer; c
     void props.call('reply', { sessionId: props.sessionId, viewId: pending.id, action, values }).then(result => {
       const envelope = result as RpcResult | undefined
       if (envelope?.ok) { setAnswer({ id: pending.id, action, values }); setPending(null) }
-      else setFailed(true)
-    }).catch(() => setFailed(true)).finally(() => setBusy(false))
+      else {
+        createClientPluginLogger(PLUGIN_NAME).warn('reply.rejected', 'Deep View reply was rejected by host.', undefined, {
+          sessionId: props.sessionId,
+          viewId: pending.id,
+          code: envelope && !envelope.ok ? envelope.error.code : null,
+        })
+        setFailed(true)
+      }
+    }).catch(error => {
+      createClientPluginLogger(PLUGIN_NAME).error('reply.transport-error', 'Deep View reply RPC failed.', error, {
+        sessionId: props.sessionId,
+        viewId: pending.id,
+      })
+      setFailed(true)
+    }).finally(() => setBusy(false))
   }, [props.call, props.sessionId, pending, busy])
   if (read.phase === 'preparing') return <div className="dvui-root dvui-tool-loading" role="status">{t('preparing')}</div>
   if (read.isError || !shown) {
@@ -129,7 +129,8 @@ export function ToolCallView(props: ToolViewProps & { restoredAnswer?: Answer; c
     return <div className="dvui-root dvui-tool-error" role="status">{t(read.isError ? 'error' : 'invalid')}</div>
   }
   const canAnswer = shown.awaitReply && pending !== null && answer === null
-  return <div className="dvui-root"><WidgetCard title={shown.title} view={shown.view} onSubmit={canAnswer ? submit : undefined} busy={busy} settled={answer !== null || !canAnswer} answer={answer} t={viewT(t)} labels={labels} Markdown={ViewMarkdown} localOnly={answer === null && !canAnswer && shown.interactive} />{failed ? <p className="dvui-tool-error" role="alert">{t('answerFailed')}</p> : null}</div>
+  // Display cards never settle their local inputs; only answer cards lock after their reply window closes.
+  return <div className="dvui-root"><WidgetCard title={shown.title} view={shown.view} onSubmit={canAnswer ? submit : undefined} busy={busy} settled={answer !== null || (shown.awaitReply && !canAnswer)} answer={answer} t={viewT(t)} labels={labels} Markdown={ViewMarkdown} localOnly={answer === null && !canAnswer && shown.interactive} />{failed ? <p className="dvui-tool-error" role="alert">{t('answerFailed')}</p> : null}</div>
 }
 
 /** Collect only this turn's successfully persisted cards, including PTC children.
@@ -176,16 +177,67 @@ export function ToolCallStatus(props: ToolViewProps) {
     : read.phase === 'result' ? 'prepared' : 'preparing')}</div>
 }
 
+/** Client service name other plugins read to draw show_view cards in their own surfaces. */
+export const CARDS_SERVICE = 'dshDeepView'
+
+export type CardProps = {
+  sessionId: string
+  callId: string
+  /** The committed result's presentation metadata, when the call has finished. */
+  presentation?: unknown
+  /** Raw call arguments while the result is pending. */
+  title?: unknown
+  view?: unknown
+  failed?: boolean
+  /** The human's committed answer, restored from history. */
+  answer?: Answer
+}
+export type DeepViewCards = { Card(props: CardProps): ReactElement }
+
+function staticArgs(values: Record<string, unknown>): ToolArgsView {
+  return {
+    has: key => values[key] !== undefined,
+    complete: key => values[key] !== undefined,
+    text: key => typeof values[key] === 'string' ? values[key] as string : undefined,
+    value: key => values[key],
+  }
+}
+
+/** One show_view card for a plugin-drawn chat: same card, same answer channel as the host chat. */
+export function createCards(call: (endpoint: string, payload: unknown) => Promise<unknown>, locale: { getSnapshot?(): { active?: string }; subscribe?(listener: () => void): () => void } | undefined): DeepViewCards {
+  const subscribe = (listener: () => void) => locale?.subscribe?.(listener) ?? (() => {})
+  const active = () => locale?.getSnapshot?.().active ?? 'en'
+  function Card(props: CardProps) {
+    const language = useSyncExternalStore(subscribe, active)
+    const t = useMemo<UiT>(() => {
+      const table: Record<string, string> = language.toLowerCase().startsWith('zh') ? uiZh : uiEn
+      return (key, params) => (table[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => String(params?.[name] ?? `{${name}}`))
+    }, [language])
+    const block = useMemo(() => props.presentation !== undefined
+      ? { callId: props.callId, kind: 'tool-result' as const, meta: props.presentation, isError: false }
+      : props.failed
+        ? { callId: props.callId, kind: 'tool-result' as const, isError: true }
+        : { callId: props.callId, args: staticArgs({ title: props.title, view: props.view }) },
+    [props.callId, props.presentation, props.failed, props.title, props.view])
+    const phase = props.presentation !== undefined || props.failed ? 'result' : 'start'
+    return <ToolCallView sessionId={props.sessionId} callId={props.callId} phase={phase} block={block} t={t as ToolViewProps['t']} call={call} {...props.answer ? { restoredAnswer: props.answer } : {}} />
+  }
+  return { Card }
+}
+
 type Client = Context & {
   connection: { rpc: { call(channel: string, endpoint: string, payload: unknown): Promise<unknown> } }
   slots: {
     inject(key: string, callback: () => unknown): () => void
     register(spec: Record<string, unknown>, render: unknown): () => void
   }
-  locale: { register(namespace: string, dictionaries: { zh: Record<string, string>; en: Record<string, string> }): () => void }
+  locale: { register(namespace: string, dictionaries: { zh: Record<string, string>; en: Record<string, string> }): () => void; getSnapshot?(): { active?: string }; subscribe?(listener: () => void): () => void }
+  provide(name: string, value: unknown): void
 }
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
+  installClientPluginLogger(ctx, PLUGIN_NAME)
+  client.provide(CARDS_SERVICE, createCards((endpoint, payload) => client.connection.rpc.call(RPC_CHANNEL, endpoint, payload), client.locale))
   ctx.effect(() => client.locale.register(LOCALE, { zh: { ...uiZh }, en: { ...uiEn } }), 'deep-view.locale')
   ctx.effect(() => {
     if (typeof document === 'undefined') return () => {}
