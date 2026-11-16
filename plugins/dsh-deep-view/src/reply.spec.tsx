@@ -2,7 +2,8 @@ import { act } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { JSDOM } from 'jsdom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { ReplyView, ToolCallStatus, replyCards } from './client.tsx'
+import { ReplyView, ToolCallStatus, ToolCallView, ActivityDock, replyCards } from './client.tsx'
+import { createViewStateStore } from './client-state.ts'
 import type { ReplySnapshot, ReplyViewProps, ToolViewBlock } from './runtime.ts'
 
 const dom = new JSDOM('<div id="root"></div>', { url: 'https://local.test' })
@@ -26,10 +27,14 @@ function snapshot(blocks: ToolViewBlock[]): ReplySnapshot {
     nodes: { get: key => ({ kind: 'tool-call', data: { root: blocks[Number(key)] } }) },
   }
 }
-function props(blocks: ToolViewBlock[], call: ReplyViewProps['call']): ReplyViewProps {
+function props(blocks: ToolViewBlock[], call: ReplyViewProps['call']) {
   return {
-    sessionId: 'session', turn: { turn: 2, status: 'closed' }, t: key => key,
-    useChat: selector => selector(snapshot(blocks)), call,
+    sessionId: 'session', turn: { turn: 2, status: 'closed' as const }, t: key => key,
+    useChat: <T,>(selector: (snapshot: ReplySnapshot) => T) => selector(snapshot(blocks)), call,
+    store: createViewStateStore(),
+    useInput: <T,>(selector: (snapshot: { draft: string; phase: 'plain' }) => T) => selector({ draft: '', phase: 'plain' }),
+    useSession: <T,>(selector: (snapshot: { running: boolean }) => T) => selector({ running: true }),
+    inputActions: { setDraft: () => {}, persistDraft: () => {}, captureInsertion: () => ({}), insertText: () => true },
   }
 }
 describe('cards in the final reply', () => {
@@ -44,39 +49,109 @@ describe('cards in the final reply', () => {
     expect(replyCards(data, 2)).toEqual([one, two])
     expect(replyCards(data, 1)).toEqual([])
   })
-  it('never renders a card or JSON in the tool activity', () => {
-    const markup = renderToStaticMarkup(<ToolCallStatus sessionId="session" callId="one" phase="result" block={card('one')} t={key => key} />)
-    expect(markup).toContain('prepared')
-    expect(markup).not.toContain('Choose')
-    expect(markup).not.toContain('button')
+  it('shows a real card while running and only status when settled', () => {
+    const store = createViewStateStore()
+    const markup = renderToStaticMarkup(<ToolCallStatus sessionId="session" callId="one" phase="start" block={card('one')} t={key => key}
+      store={store} call={async () => ({ ok: true, value: null })} useSession={selector => selector({ running: true })} />)
+    expect(markup).toContain('Choose')
     expect(markup).not.toContain('show_view')
+    const settled = renderToStaticMarkup(<ToolCallStatus sessionId="session" callId="one" phase="result" block={card('one')} t={key => key}
+      store={store} call={async () => ({ ok: true, value: null })} useSession={selector => selector({ running: false })} />)
+    expect(settled).toContain('prepared')
+    expect(settled).not.toContain('Choose')
   })
-  it('waits for the final reply, remains visible with tools collapsed, and submits once', async () => {
+  it('moves the only editable answer card into the dock and submits once', async () => {
     const one = card('one')
     const call = vi.fn(async (endpoint: string) => endpoint === 'pending'
       ? { ok: true, value: { id: 'one', sessionId: 'session', callId: 'one', title: 'Choose', view } }
       : { ok: true, value: { answered: true } })
     const p = props([one], call)
     const root = createRoot(document.getElementById('root')!)
-    const render = (status: 'open' | 'closed') => <main>
-      <details><summary>Tools</summary><ToolCallStatus sessionId="session" callId="one" phase="result" block={one} t={p.t} /></details>
-      <p>Final answer</p>
-      <ReplyView {...p} turn={{ turn: 2, status }} />
-    </main>
-    await act(async () => root.render(render('open')))
-    expect(document.querySelector('[data-deep-view-reply]')).toBeNull()
-    expect(call).not.toHaveBeenCalled()
-    await act(async () => root.render(render('closed')))
-    const reply = document.querySelector('[data-deep-view-reply]')!
-    expect(reply).not.toBeNull()
-    expect(reply.closest('details')).toBeNull()
-    expect(document.querySelector('details')?.open).toBe(false)
-    const button = reply.querySelector('.dvui-option') as HTMLButtonElement
+    await act(async () => root.render(<main>
+      <ToolCallStatus sessionId="session" callId="one" phase="result" block={one} t={p.t} store={p.store} call={call} useSession={p.useSession} />
+      <ActivityDock sessionId="session" callId="one" phase="result" block={one} t={p.t} store={p.store} call={call} useSession={p.useSession} useInput={p.useInput} inputActions={p.inputActions} />
+    </main>))
+    const dock = document.querySelector('.dvui-dock')!
+    const button = dock.querySelector('button.dvui-option') as HTMLButtonElement
     expect(button.disabled).toBe(false)
+    expect(document.querySelectorAll('.dvui-view:not(.dvui-settled)')).toHaveLength(1)
     await act(async () => button.click())
+    await act(async () => (dock.querySelector('button.dvui-submit') as HTMLButtonElement).click())
     expect(call.mock.calls.filter(([endpoint]) => endpoint === 'reply')).toHaveLength(1)
     expect(call).toHaveBeenCalledWith('reply', { sessionId: 'session', viewId: 'one', action: 'pick', values: { selected: ['One'] } })
-    expect(reply.textContent).not.toContain('answer_to_pending_view')
+    expect(document.querySelector('.dvui-dock')).toBeNull()
+    await act(async () => root.unmount())
+  })
+  it('retires a stale answer instead of offering endless retries', async () => {
+    const one = card('one')
+    const call = vi.fn(async (endpoint: string) => endpoint === 'pending'
+      ? { ok: true, value: { id: 'one', sessionId: 'session', callId: 'one', title: 'Choose', view } }
+      : { ok: false, error: { code: 'stale', message: 'stale' } })
+    const p = props([one], call)
+    p.store.setPending({ id: 'one', sessionId: 'session', callId: 'one', title: 'Choose', view })
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<ActivityDock sessionId="session" callId="one" phase="result" block={one} t={p.t} store={p.store} call={call} useSession={p.useSession} useInput={p.useInput} inputActions={p.inputActions} />))
+    await act(async () => (document.querySelector('.dvui-dock button.dvui-option') as HTMLButtonElement).click())
+    await act(async () => (document.querySelector('.dvui-dock button.dvui-submit') as HTMLButtonElement).click())
+    expect(document.querySelector('.dvui-dock')).toBeNull()
+    await act(async () => root.unmount())
+  })
+  it('fills the native composer without sending or losing the draft', async () => {
+    const one = card('one')
+    const call = vi.fn(async (endpoint: string) => endpoint === 'pending'
+      ? { ok: true, value: { id: 'one', sessionId: 'session', callId: 'one', title: 'Choose', view } }
+      : { ok: true, value: { answered: true } })
+    const p = props([one], call)
+    const setDraft = vi.fn(), persistDraft = vi.fn()
+    p.inputActions = { ...p.inputActions, setDraft, persistDraft }
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<main>
+      <ToolCallStatus sessionId="session" callId="one" phase="result" block={one} t={p.t} store={p.store} call={call} useSession={p.useSession} />
+      <ActivityDock sessionId="session" callId="one" phase="result" block={one} t={p.t} store={p.store} call={call} useSession={p.useSession} useInput={p.useInput} inputActions={p.inputActions} />
+    </main>))
+    await act(async () => (document.querySelector('.dvui-dock button.dvui-option') as HTMLButtonElement).click())
+    await act(async () => [...document.querySelectorAll('.dvui-dock button')].find(button => button.textContent === 'fillDraft')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })))
+    expect(setDraft).toHaveBeenCalledWith('Choose\nOne')
+    expect(persistDraft).toHaveBeenCalledOnce()
+    expect(call.mock.calls.filter(([endpoint]) => endpoint === 'reply')).toHaveLength(0)
+    expect(document.querySelector('.dvui-dock')).toBeNull()
+    await act(async () => root.unmount())
+  })
+  it('translates retained status with the current language', async () => {
+    const p = props([], vi.fn(async () => ({ ok: true, value: null })))
+    const listeners = new Set<() => void>()
+    let locale = { active: 'en' }
+    const store = createViewStateStore({ getSnapshot: () => locale, subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener) } } })
+    store.setPending({ id: 'one', sessionId: 'session', callId: 'one', title: 'Choose', view })
+    store.setStatus('one', { state: 'filled', text: 'Added to the composer. Review and send when ready.', copyKey: 'filled' })
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<ToolCallView sessionId="session" callId="one" phase="result" block={card('one')} t={key => key} store={store} call={p.call} surface="inline" />))
+    expect(document.body.textContent).toContain('Added to the composer')
+    await act(async () => { locale = { active: 'zh' }; for (const listener of listeners) listener() })
+    expect(document.body.textContent).toContain('已填入输入框，请检查后发送')
+    expect(document.body.textContent).not.toContain('Added to the composer')
+    await act(async () => root.unmount())
+  })
+  it('replaces activity progress instead of accumulating cards', async () => {
+    const steps = { type: 'steps', items: [{ label: 'Working', status: 'active' }] }
+    const block = { callId: 'progress', kind: 'tool-result' as const, meta: { owner: 'dsh-deep-view', title: 'Progress', view: steps, interactive: false, awaitReply: false } }
+    const p = props([], vi.fn(async () => ({ ok: true, value: null })))
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<main>
+      <ToolCallStatus sessionId="session" callId="progress" phase="result" block={block} t={p.t} store={p.store} call={p.call} useSession={p.useSession} />
+      <ActivityDock sessionId="session" callId="progress" phase="result" block={block} t={p.t} store={p.store} call={p.call} useSession={p.useSession} useInput={p.useInput} inputActions={p.inputActions} />
+    </main>))
+    expect(document.querySelectorAll('.dvui-dock .dvui-steps')).toHaveLength(1)
+    expect(document.body.textContent).toContain('Working')
+    const next = { callId: 'form', kind: 'tool-result' as const, meta: { owner: 'dsh-deep-view', title: 'Next', view, interactive: true, awaitReply: true } }
+    await act(async () => root.render(<main>
+      <ToolCallStatus sessionId="session" callId="form" phase="result" block={next} t={p.t} store={p.store} call={p.call} useSession={p.useSession} />
+      <ActivityDock sessionId="session" callId="form" phase="result" block={next} t={p.t} store={p.store} call={p.call} useSession={p.useSession} useInput={p.useInput} inputActions={p.inputActions} />
+    </main>))
+    expect(document.querySelector('.dvui-dock')).toBeNull()
+    await act(async () => root.render(<ActivityDock sessionId="session" callId="progress" phase="result" block={block} t={p.t} store={p.store} call={p.call}
+      useSession={selector => selector({ running: false })} useInput={p.useInput} inputActions={p.inputActions} />))
+    expect(document.querySelector('.dvui-dock')).toBeNull()
     await act(async () => root.unmount())
   })
   it('replays persisted cards without arguments, with expired answers disabled', async () => {

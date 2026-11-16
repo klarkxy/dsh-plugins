@@ -7,7 +7,7 @@ export declare function isName(value: unknown): value is string
 export declare function show(value: unknown): string
 export declare function asText(value: unknown): string
 export declare function checkShownView(title: unknown, sent: unknown): ShownView | ViewFailure
-export declare function normalizeView(value: unknown): unknown
+export declare function normalizeView(value: unknown, inFormFields?: boolean): unknown
 export declare function validateView(view: unknown): { ok: true; interactive: boolean } | { ok: false; error: string }
 export declare function viewBytes(title: unknown, view: unknown): number
 export declare function viewInputs(view: ViewNode): ViewNode[]

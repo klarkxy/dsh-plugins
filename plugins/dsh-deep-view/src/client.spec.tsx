@@ -32,7 +32,7 @@ describe('tool.call.toolview contract', () => {
     expect(readToolCall({ phase: 'preparing', block: { callId: 'c', args: { ...open, complete: () => false } } }).viewReady).toBe(false)
     expect(readToolCall({ phase: 'start', block: { callId: 'c', args: argsView({ title: 'Pick', view: interactiveView }) } }).view).toEqual(interactiveView)
   })
-  it('registers compact tool status and a separate final-reply surface', () => {
+  it('registers live tool cards, an activity dock and the settled-reply surface', () => {
     const registrations: Record<string, unknown>[] = []
     const slots: string[] = []
     const provided: string[] = []
@@ -44,8 +44,9 @@ describe('tool.call.toolview contract', () => {
     }
     apply(ctx as never)
     expect([...inject]).toEqual(['slots', 'connection', 'locale'])
-    expect(slots).toEqual(['tool.call.toolview', 'conversation.chat.turnTail'])
-    expect(registrations[1]).toMatchObject({ name: 'conversation.chat.turnTail', id: 'deep-view', locale: 'deep-view' })
+    expect(slots).toEqual(['tool.call.toolview', 'conversation.input.dock', 'conversation.chat.turnTail'])
+    expect(registrations[2]).toMatchObject({ name: 'conversation.chat.turnTail', id: 'deep-view', locale: 'deep-view' })
+    expect(registrations[1]).toMatchObject({ name: 'conversation.input.dock', id: 'deep-view', locale: 'deep-view' })
     expect(registrations[0]).toMatchObject({ name: 'tool.call.toolview', key: 'show_view', locale: 'deep-view' })
     // Plugin-drawn chats read the same card through this client service.
     expect(provided).toEqual(['dshDeepView'])

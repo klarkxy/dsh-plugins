@@ -5,6 +5,9 @@ export const uiZh = {
   chart: '图表', chartOptions: '图表选项', viewAsChart: '查看图表', viewAsTable: '查看表格', copyData: '复制数据',
   chartNumber: '图表 {n}', value: '值', series: '系列', view: '视图', sources: '来源', progress: '进度', yourAnswer: '你的回答',
   options: '选项', submit: '提交', cancel: '取消', confirm: '确认', send: '发送', selected: '已选择',
+  sending: '正在发送…', filling: '正在填入输入框…', filled: '已填入输入框，请检查后发送', fillFailed: '未能填入输入框，请检查当前草稿状态',
+  fillDraft: '填入输入框', waitingDock: '请在输入框上方的卡片中回答。', expired: '这张卡片已过期，请让模型重新生成。', dismissFailed: '关闭失败，请重试。', dismissView: '关闭视图', draftConflict: '输入框已有草稿，请选择填入方式', replaceDraft: '替换草稿', appendDraft: '保留并追加',
+  steps: '步骤',
 }
 
 export const uiEn: Record<keyof typeof uiZh, string> = {
@@ -14,4 +17,7 @@ export const uiEn: Record<keyof typeof uiZh, string> = {
   chart: 'Chart', chartOptions: 'Chart options', viewAsChart: 'View as chart', viewAsTable: 'View as table', copyData: 'Copy data',
   chartNumber: 'Chart {n}', value: 'Value', series: 'Series', view: 'View', sources: 'Sources', progress: 'Progress', yourAnswer: 'Your answer',
   options: 'Options', submit: 'Submit', cancel: 'Cancel', confirm: 'Confirm', send: 'Send', selected: 'Selected',
+  sending: 'Sending…', filling: 'Filling the composer…', filled: 'Added to the composer. Review and send when ready.', fillFailed: 'Could not fill the composer. Check its current draft state.',
+  fillDraft: 'Fill composer', waitingDock: 'Answer in the card above the composer.', expired: 'This card has expired. Ask the model for a new one.', dismissFailed: 'Could not dismiss the view; try again.', dismissView: 'Dismiss view', draftConflict: 'The composer already has a draft. Choose how to add this answer', replaceDraft: 'Replace draft', appendDraft: 'Keep and append',
+  steps: 'Steps',
 }

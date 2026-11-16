@@ -7,7 +7,7 @@
 import { compileFormula, createScope, evaluate, isName, show } from './formula.js'
 
 const LAYOUT = ['stack', 'row']
-const DISPLAY = ['text', 'metric', 'table', 'chart', 'progress', 'callout', 'sources']
+const DISPLAY = ['text', 'metric', 'table', 'chart', 'progress', 'callout', 'sources', 'steps']
 const INPUT_TYPES = ['slider', 'choice', 'toggle', 'number']
 const ANSWERS = ['options', 'confirm', 'form', 'submit']
 const COMPONENTS = [...LAYOUT, ...DISPLAY, ...INPUT_TYPES, ...ANSWERS]
@@ -27,15 +27,18 @@ const PROPS = {
   progress: ['label', 'percent', 'value', 'max', 'valueLabel', 'tone'],
   callout: ['text', 'tone'],
   sources: ['items'],
+  steps: ['items'],
   slider: ['id', 'label', 'min', 'max', 'step', 'value', 'unit'],
   choice: ['id', 'label', 'options', 'value'],
   toggle: ['id', 'label', 'value'],
   number: ['id', 'label', 'min', 'max', 'step', 'value', 'unit'],
   options: ['id', 'options', 'multi'],
   confirm: ['id', 'confirmLabel', 'cancelLabel'],
-  form: ['id', 'fields', 'submitLabel'],
+  form: ['id', 'fields', 'submitLabel', 'cancelLabel'],
   submit: ['id', 'label'],
 }
+const FIELD_PROPS = ['id', 'label', 'placeholder', 'value', 'multiline', 'readOnly']
+const STEP_STATUSES = ['done', 'active', 'pending', 'blocked']
 const MAX_DEPTH = 8
 const MAX_NODES = 64
 const MAX_CHILDREN = 16
@@ -45,6 +48,7 @@ const MAX_COLUMNS = 8
 const MAX_ROWS = 50
 const MAX_OPTIONS = 8
 const MAX_FIELDS = 6
+const MAX_STEPS = 8
 const SUMMARY_PART = 40
 const SUMMARY_COUNT = 8
 const RESERVED = new Set(['true', 'false'])
@@ -73,21 +77,23 @@ const numeric = value => (typeof value === 'string' && value.trim() !== '' && !N
 // numbers as strings. Normalize the blueprint before validation so a model is
 // not asked to retry a call whose only fault is the provider's encoding.
 // Arrays are unwrapped; numeric fields and chart values accept a numeric string.
+// A form field's `value` is the text the user starts with, so `value` inside a
+// `fields` array keeps its type: "42" must stay text, not become a number.
 // Returns a new object; the input is not mutated.
-export function normalizeView(value) {
-  if (Array.isArray(value)) return value.map(normalizeView)
+export function normalizeView(value, inFormFields = false) {
+  if (Array.isArray(value)) return value.map(item => normalizeView(item, inFormFields))
   if (!isRecord(value)) return value
   const keys = Object.keys(value)
   // Unwrap recursively: a provider may nest the wrapper, as { item: { item: [...] } }.
   if (keys.length === 1 && keys[0] === 'item') {
-    const inner = normalizeView(value.item)
+    const inner = normalizeView(value.item, inFormFields)
     if (Array.isArray(inner)) return inner
   }
   // Define own properties: an incoming "__proto__" key must become data the
   // validator can reject, not hit the prototype setter and vanish from the JSON.
   const out = {}
-  for (const key of keys) Object.defineProperty(out, key, { value: normalizeView(value[key]), writable: true, enumerable: true, configurable: true })
-  for (const field of NUMERIC) if (Object.hasOwn(out, field)) out[field] = numeric(out[field])
+  for (const key of keys) Object.defineProperty(out, key, { value: normalizeView(value[key], inFormFields || key === 'fields'), writable: true, enumerable: true, configurable: true })
+  for (const field of NUMERIC) if ((field !== 'value' || !inFormFields) && Object.hasOwn(out, field)) out[field] = numeric(out[field])
   if (Array.isArray(out.values)) out.values = out.values.map(numeric)
   return out
 }
@@ -136,6 +142,7 @@ function checkNode(node, path, depth, ctx) {
     case 'progress': return checkProgress(node, path, ctx)
     case 'callout': return checkCallout(node, path, ctx)
     case 'sources': return checkSources(node, path)
+    case 'steps': return checkSteps(node, path, ctx)
     case 'slider': case 'number': return checkNumberInput(node, path, ctx)
     case 'choice': return checkChoice(node, path, ctx)
     case 'toggle': return checkToggle(node, path, ctx)
@@ -293,6 +300,26 @@ function checkSources(node, path) {
   return undefined
 }
 
+// One step in a flow: a label, an optional detail line and a status. `detail`
+// and `status` may be formulas so a view can derive its stage from inputs.
+function checkSteps(node, path, ctx) {
+  if (!Array.isArray(node.items) || node.items.length === 0) return `${path}.items: expected an array of 1 to ${MAX_STEPS} steps`
+  if (node.items.length > MAX_STEPS) return `${path}.items: ${node.items.length} steps exceeds the limit of ${MAX_STEPS}`
+  for (let index = 0; index < node.items.length; index += 1) {
+    const item = node.items[index]
+    const at = `${path}.items[${index}]`
+    if (!isRecord(item)) return `${at}: expected a { label, detail?, status? } object`
+    for (const key of Object.keys(item)) {
+      if (key !== 'label' && key !== 'detail' && key !== 'status') return `${at}.${key}: unknown property ${quoted(key)}; allowed: label, detail, status`
+    }
+    if (typeof item.label !== 'string' || item.label.trim() === '') return `${at}.label: expected a non-empty string`
+    const error = checkValue(item, 'detail', at, ctx, 'scalar')
+      ?? checkValue(item, 'status', at, ctx, STEP_STATUSES)
+    if (error !== undefined) return error
+  }
+  return undefined
+}
+
 function checkInputId(node, path, ctx) {
   if (!isName(node.id) || RESERVED.has(node.id)) return `${path}.id: an input id is letters, digits and _, and starts with a letter or _, so formulas can use it`
   if (ctx.ids.has(node.id)) return `${path}.id: duplicate id ${quoted(node.id)}`
@@ -386,6 +413,7 @@ function checkForm(node, path, ctx) {
   const idError = checkId(node, path, ctx)
   if (idError !== undefined) return idError
   if (node.submitLabel !== undefined && typeof node.submitLabel !== 'string') return `${path}.submitLabel: expected a string`
+  if (node.cancelLabel !== undefined && typeof node.cancelLabel !== 'string') return `${path}.cancelLabel: expected a string`
   if (!Array.isArray(node.fields)) return `${path}.fields: expected an array of at most ${MAX_FIELDS} fields`
   if (node.fields.length > MAX_FIELDS) return `${path}.fields: ${node.fields.length} fields exceeds the limit of ${MAX_FIELDS}`
   const seen = new Set()
@@ -394,7 +422,7 @@ function checkForm(node, path, ctx) {
     const at = `${path}.fields[${index}]`
     if (!isRecord(field)) return `${at}: expected a field object`
     for (const key of Object.keys(field)) {
-      if (key !== 'id' && key !== 'label' && key !== 'placeholder') return `${at}.${key}: unknown property ${quoted(key)}; allowed: id, label, placeholder`
+      if (!FIELD_PROPS.includes(key)) return `${at}.${key}: unknown property ${quoted(key)}; allowed: ${allowed(FIELD_PROPS)}`
     }
     if (typeof field.id !== 'string' || field.id === '') return `${at}.id: expected a non-empty string`
     if (field.id === '__proto__') return `${at}.id: "__proto__" cannot be an id`
@@ -402,6 +430,14 @@ function checkForm(node, path, ctx) {
     seen.add(field.id)
     if (typeof field.label !== 'string') return `${at}.label: expected a string`
     if (field.placeholder !== undefined && typeof field.placeholder !== 'string') return `${at}.placeholder: expected a string`
+    if (field.value !== undefined) {
+      // The value is the text the field starts with; it stays a string end to
+      // end (normalizeView keeps a fields[].value literal unsourced as text).
+      if (typeof field.value !== 'string') return `${at}.value: expected a string`
+      if (field.value.length > MAX_TEXT) return `${at}.value: ${field.value.length} characters exceeds the limit of ${MAX_TEXT}`
+    }
+    if (field.multiline !== undefined && typeof field.multiline !== 'boolean') return `${at}.multiline: expected a boolean`
+    if (field.readOnly !== undefined && typeof field.readOnly !== 'boolean') return `${at}.readOnly: expected a boolean`
   }
   return undefined
 }
@@ -563,6 +599,7 @@ function componentSummary(node, lookup) {
     case 'progress': return `progress: ${node.label ? `${node.label} ` : ''}${Math.round(progressPercent(node, lookup))}%`
     case 'callout': return `callout: ${value(node.text)}`
     case 'sources': return `sources: ${(Array.isArray(node.items) ? node.items : []).map(item => item?.label).filter(Boolean).join('/')}`
+    case 'steps': return `steps: ${(Array.isArray(node.items) ? node.items : []).map(item => item?.label).filter(Boolean).join('/')}`
     case 'slider': case 'number': case 'choice': case 'toggle': return `${node.type}: ${node.label}=${inputText(node, inputDefault(node))}`
     case 'options': return `options: ${(Array.isArray(node.options) ? node.options : []).map(option => option?.label).filter(Boolean).join('/')}`
     case 'confirm': return 'confirm'
@@ -662,15 +699,21 @@ function validateConfirm(values) {
 }
 
 function validateForm(node, values) {
+  // A cancel is its own answer: no field values are read or stored.
+  if (values.canceled === true) return { canceled: true }
   if (!isRecord(values.fields)) return { error: 'values.fields: expected an object of field ids to strings' }
-  const declared = (node.fields ?? []).map(field => field?.id).filter(id => typeof id === 'string')
+  const declaredFields = (node.fields ?? []).filter(field => typeof field?.id === 'string')
+  const declared = declaredFields.map(field => field.id)
+  const byId = new Map(declaredFields.map(field => [field.id, field]))
   const allowedIds = new Set(declared)
   const fields = {}
   for (const [key, value] of Object.entries(values.fields)) {
     if (!allowedIds.has(key)) return { error: `values.fields.${key}: unknown field; allowed: ${allowed(declared)}` }
     if (typeof value !== 'string') return { error: `values.fields.${key}: expected a string` }
     if (value.length > MAX_TEXT) return { error: `values.fields.${key}: ${value.length} characters exceeds the limit of ${MAX_TEXT}` }
-    fields[key] = value
+    const spec = byId.get(key)
+    // A read-only field answers what the card declared, not what was sent.
+    fields[key] = spec?.readOnly === true ? (spec.value ?? '') : value
   }
   return { fields }
 }

@@ -13,6 +13,7 @@ export function answerText(card: Pick<Card, 'title' | 'view'>, action: string, v
   if (Array.isArray(values.selected)) lines.push(values.selected.map(String).join(', '))
   if (typeof values.confirmed === 'boolean') lines.push(values.confirmed
     ? node?.confirmLabel ?? 'Confirm' : node?.cancelLabel ?? 'Cancel')
+  if (values.canceled === true) lines.push(node?.cancelLabel ?? 'Cancel')
   if (isRecord(values.fields)) {
     for (const field of node?.fields ?? []) lines.push(`${field.label}: ${String(values.fields[field.id] ?? '')}`)
   }
@@ -53,15 +54,20 @@ export function legacyAnswer(card: Card, text: string): ViewAnswer | null {
       if (yes === no || line !== yes && line !== no) continue
       values.confirmed = line === yes
     } else if (node.type === 'form') {
-      const fields: Record<string, string> = {}
-      let valid = true
-      for (const field of node.fields ?? []) {
-        const line = rest.shift(), prefix = `${field.label}: `
-        if (line === undefined || !line.startsWith(prefix)) { valid = false; break }
-        fields[field.id] = line.slice(prefix.length)
+      if (rest[0] !== undefined && rest[0] === (node.cancelLabel ?? 'Cancel')) {
+        rest.shift()
+        values.canceled = true
+      } else {
+        const fields: Record<string, string> = {}
+        let valid = true
+        for (const field of node.fields ?? []) {
+          const line = rest.shift(), prefix = `${field.label}: `
+          if (line === undefined || !line.startsWith(prefix)) { valid = false; break }
+          fields[field.id] = line.slice(prefix.length)
+        }
+        if (!valid) continue
+        values.fields = fields
       }
-      if (!valid) continue
-      values.fields = fields
     }
     const inputs = viewInputs(card.view) as ViewNode[]
     if (inputs.length) {

@@ -4,7 +4,7 @@
 import { Fragment, useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { ComponentType } from 'react'
 import { asText, choiceValue, inputDefault, resolve, viewInputs, viewScope } from './core/index.js'
-import type { ViewNode } from './contracts.ts'
+import { isSourceItem, isStepItem, type ViewNode } from './contracts.ts'
 import { WidgetChart, type ChartHandle } from './chart.tsx'
 import { CheckIcon, CopyIcon, DotsIcon, InfoIcon, LinkIcon, Segmented, TableIcon, english, keyLetter, type ViewT } from './ui.tsx'
 
@@ -21,6 +21,8 @@ export type WidgetCardProps = {
   title?: string
   view: ViewNode
   onSubmit?: (action: string, values: Record<string, unknown>) => void
+  /** Write the answer as composer draft instead of answering directly. Never sends. */
+  onFillDraft?: (action: string, values: Record<string, unknown>) => void
   onDismiss?: () => void
   busy?: boolean
   settled?: boolean
@@ -29,6 +31,10 @@ export type WidgetCardProps = {
   labels?: ViewLabels
   Markdown?: ComponentType<MarkdownProps>
   localOnly?: boolean
+  /** Optional explanation for an interactive preview answered in another surface. */
+  localNote?: string
+  /** Browser hosts inject their native button without coupling the shared widget to DSH. */
+  ButtonComponent?: ButtonHost
 }
 type Ctx = {
   values: Record<string, unknown>
@@ -36,10 +42,14 @@ type Ctx = {
   lookup(name: string): unknown
   locked: boolean
   answerLocked: boolean
+  fillLocked: boolean
+  editable: boolean
   busy: boolean
   settled: boolean
   answer?: Answer | null
   onSubmit?: (action: string, values: Record<string, unknown>) => void
+  onFillDraft?: (action: string, values: Record<string, unknown>) => void
+  ButtonComponent?: ButtonHost
   registerChart(key: string, handle: ChartHandle): (() => void) | void
   refreshCharts(): void
 }
@@ -47,6 +57,8 @@ const TONES = ['good', 'warn', 'bad']
 const CALLOUT_TONES = ['info', 'good', 'warn', 'bad']
 const optionsOf = (node: ViewNode) => (Array.isArray(node.options) ? node.options : []) as { label: string; value?: string | number | boolean; description?: string }[]
 const fieldsOf = (node: ViewNode) => (Array.isArray(node.fields) ? node.fields : [])
+const sourcesOf = (node: ViewNode) => (Array.isArray(node.items) ? node.items : []).filter(isSourceItem)
+const stepsOf = (node: ViewNode) => (Array.isArray(node.items) ? node.items : []).filter(isStepItem)
 const cellText = (value: unknown) => value === null || value === undefined ? '' : typeof value === 'object' ? JSON.stringify(value) : asText(value)
 const NUMERIC_CELL = /^[-+]?[\d.,]+\s?(%|[a-zA-Z]{1,4})?$/
 function hasType(node: ViewNode, types: Set<string>): boolean {
@@ -55,31 +67,46 @@ function hasType(node: ViewNode, types: Set<string>): boolean {
 const answerValues = (answer: Answer | null | undefined, node: ViewNode) => answer != null && answer.action === node.id ? answer.values : undefined
 const withUnit = (value: unknown, unit?: string) => `${asText(value)}${unit ? ` ${unit}` : ''}`
 const grouped = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('en-US', { maximumFractionDigits: 6 }) : asText(value)
+export type ButtonHost = ComponentType<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'outline' | 'toolbar'; size?: 'sm' | 'md' }>
+function ActionButton({ primary = false, className = '', children, host: Host, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { primary?: boolean; host?: ButtonHost }) {
+  const classes = `${primary ? 'dvui-submit' : 'dvui-button'} ${className}`
+  return Host ? <Host variant={primary ? 'primary' : 'ghost'} size="sm" className={classes} {...props}>{children}</Host>
+    : <button type={props.type ?? 'button'} className={classes} {...props}>{children}</button>
+}
 function FallbackMarkdown({ text }: MarkdownProps) { return <span>{text}</span> }
 
 function OptionsInput({ node, ctx, t }: { node: ViewNode; ctx: Ctx; t: ViewT }) {
   const [picked, setPicked] = useState<string[]>([])
   const options = optionsOf(node)
   const multi = node.multi === true
+  // A card that can fill a draft needs a pick first, so one-tap submit becomes
+  // select-then-act only while filling is available; plain cards keep the
+  // instant single-tap answer.
+  const staged = multi || ctx.onFillDraft !== undefined
   const choose = (label: string) => {
-    if (ctx.answerLocked) return
+    if (!ctx.editable) return
     if (multi) setPicked(current => current.includes(label) ? current.filter(item => item !== label) : [...current, label])
+    else if (staged) setPicked([label])
     else ctx.onSubmit?.(node.id!, { selected: [label] })
   }
+  const values = () => ({ selected: picked })
   const onKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const index = event.key.toUpperCase().charCodeAt(0) - 65
     if (index >= 0 && index < options.length && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); choose(options[index].label) }
   }
   return <Fragment>
     <div className="dvui-options" role="group" aria-label={t('Options')} onKeyDown={onKey}>{options.map((option, index) => {
-      const selected = multi && picked.includes(option.label)
-      return <button key={option.label} type="button" className="dvui-option" disabled={ctx.answerLocked} aria-pressed={multi ? selected : undefined} aria-keyshortcuts={keyLetter(index).toLowerCase()} onClick={() => choose(option.label)}>
+      const selected = staged && picked.includes(option.label)
+      return <button key={option.label} type="button" className="dvui-option" disabled={!ctx.editable} aria-pressed={staged ? selected : undefined} aria-keyshortcuts={keyLetter(index).toLowerCase()} onClick={() => choose(option.label)}>
         <span className="dvui-key" aria-hidden="true">{keyLetter(index)}</span>
         <span className="dvui-option-body"><span className="dvui-option-label">{option.label}</span>{option.description ? <span className="dvui-option-desc">{option.description}</span> : null}</span>
         {selected ? <span className="dvui-check"><CheckIcon /></span> : null}
       </button>
     })}</div>
-    {multi ? <div className="dvui-actions"><button type="button" className="dvui-submit" disabled={ctx.answerLocked || picked.length === 0} onClick={() => ctx.onSubmit?.(node.id!, { selected: picked })}>{t('Submit')}</button></div> : null}
+    {staged ? <div className="dvui-actions">
+      {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.fillLocked || picked.length === 0} onClick={() => ctx.onFillDraft?.(node.id!, values())}>{t('Fill composer')}</ActionButton> : null}
+      <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked || picked.length === 0} onClick={() => ctx.onSubmit?.(node.id!, values())}>{t('Submit')}</ActionButton>
+    </div> : null}
   </Fragment>
 }
 function SettledOptions({ node, answer, t }: { node: ViewNode; answer?: Answer | null; t: ViewT }) {
@@ -88,7 +115,11 @@ function SettledOptions({ node, answer, t }: { node: ViewNode; answer?: Answer |
   return <div className="dvui-options" role="group" aria-label={t('Your answer')}>{optionsOf(node).map(option => <div key={option.label} className="dvui-option"><span className="dvui-option-body"><span className="dvui-option-label">{option.label}</span>{option.description ? <span className="dvui-option-desc">{option.description}</span> : null}</span>{chosen.includes(option.label) ? <span className="dvui-check" role="img" aria-label={t('Selected')}><CheckIcon /></span> : null}</div>)}</div>
 }
 function ConfirmInput({ node, ctx, t }: { node: ViewNode; ctx: Ctx; t: ViewT }) {
-  return <div className="dvui-actions"><button type="button" className="dvui-button" disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, { confirmed: false })}>{node.cancelLabel ?? t('Cancel')}</button><button type="button" className="dvui-submit" disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, { confirmed: true })}>{node.confirmLabel ?? t('Confirm')}</button></div>
+  return <div className="dvui-actions">
+    {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.fillLocked} onClick={() => ctx.onFillDraft?.(node.id!, { confirmed: true })}>{t('Fill composer')}</ActionButton> : null}
+    <ActionButton host={ctx.ButtonComponent} disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, { confirmed: false })}>{node.cancelLabel ?? t('Cancel')}</ActionButton>
+    <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, { confirmed: true })}>{node.confirmLabel ?? t('Confirm')}</ActionButton>
+  </div>
 }
 function SettledConfirm({ node, answer, t }: { node: ViewNode; answer?: Answer | null; t: ViewT }) {
   const confirmed = answerValues(answer, node)?.confirmed
@@ -97,14 +128,50 @@ function SettledConfirm({ node, answer, t }: { node: ViewNode; answer?: Answer |
 }
 function FormInput({ node, ctx, t }: { node: ViewNode; ctx: Ctx; t: ViewT }) {
   const fields = fieldsOf(node)
-  const [draft, setDraft] = useState<Record<string, string>>({})
-  const submit = () => { if (!ctx.answerLocked) ctx.onSubmit?.(node.id!, { fields: Object.fromEntries(fields.map(field => [field.id, draft[field.id] ?? ''])) }) }
-  return <form className="dvui-form" onSubmit={event => { event.preventDefault(); submit() }}>{fields.map(field => <label key={field.id} className="dvui-field"><span className="dvui-field-label">{field.label}</span><input className="dvui-input" type="text" value={draft[field.id] ?? ''} autoComplete="off" spellCheck={false} readOnly={ctx.answerLocked} aria-label={field.label} placeholder={field.placeholder} onChange={event => setDraft(current => ({ ...current, [field.id]: event.target.value }))} /></label>)}<div className="dvui-actions"><button type="submit" className="dvui-submit" disabled={ctx.answerLocked}>{node.submitLabel ?? t('Submit')}</button></div></form>
+  const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(fields.map(field => [field.id, field.value ?? ''])))
+  const values = () => ({ fields: Object.fromEntries(fields.map(field => [field.id, field.readOnly === true ? (field.value ?? '') : (draft[field.id] ?? '')])) })
+  // The primary action prefers a direct answer; a fill-only card (no onSubmit)
+  // falls back to writing the draft.
+  const act = ctx.onSubmit !== undefined ? ctx.onSubmit : ctx.onFillDraft
+  const submit = () => { if (ctx.editable) act?.(node.id!, values()) }
+  const cancel = () => { if (ctx.editable) ctx.onSubmit?.(node.id!, { canceled: true }) }
+  return <form className="dvui-form" onSubmit={event => { event.preventDefault(); submit() }}>
+    {fields.map(field => {
+      const readOnly = field.readOnly === true
+      const val = readOnly ? (field.value ?? '') : (draft[field.id] ?? '')
+      const shared = {
+        className: 'dvui-input', value: val, autoComplete: 'off', spellCheck: false,
+        readOnly: !ctx.editable || readOnly, 'aria-label': field.label, placeholder: field.placeholder,
+        onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { if (!readOnly) setDraft(current => ({ ...current, [field.id]: event.target.value })) },
+      }
+      return <label key={field.id} className="dvui-field"><span className="dvui-field-label">{field.label}</span>
+        {field.multiline === true
+          ? <textarea {...shared} rows={Math.min(10, Math.max(3, (val.match(/\n/g)?.length ?? 0) + 1))} onKeyDown={event => {
+            if (event.key !== 'Enter' || (!event.metaKey && !event.ctrlKey) || event.nativeEvent.isComposing) return
+            event.preventDefault(); submit()
+          }} />
+          : <input {...shared} type="text" onKeyDown={event => {
+            if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+            event.preventDefault(); submit()
+          }} />}
+      </label>
+    })}
+    <div className="dvui-actions">
+      {node.cancelLabel ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.answerLocked} onClick={cancel}>{node.cancelLabel}</ActionButton> : null}
+      {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.fillLocked} onClick={() => ctx.onFillDraft?.(node.id!, values())}>{t('Fill composer')}</ActionButton> : null}
+      <ActionButton host={ctx.ButtonComponent} primary type="submit" disabled={ctx.answerLocked}>{node.submitLabel ?? t('Submit')}</ActionButton>
+    </div>
+  </form>
 }
-function SettledForm({ node, answer }: { node: ViewNode; answer?: Answer | null }) {
-  const fields = answerValues(answer, node)?.fields
-  const values = fields !== null && typeof fields === 'object' ? fields as Record<string, unknown> : {}
-  return <div className="dvui-form">{fieldsOf(node).map(field => <label key={field.id} className="dvui-field"><span className="dvui-field-label">{field.label}</span><input className="dvui-input" value={String(values[field.id] ?? '')} disabled readOnly aria-label={field.label} /></label>)}</div>
+// A settled form keeps a receipt line, not a second frozen copy of the fields.
+// The full values already live in the user message's answer text.
+function SettledForm({ node, answer, t }: { node: ViewNode; answer?: Answer | null; t: ViewT }) {
+  const sent = answerValues(answer, node)
+  if (sent === undefined) return <div className="dvui-form">{fieldsOf(node).map(field => <div className="dvui-field" key={field.id}>
+    <span className="dvui-field-label">{field.label}</span><span className="dvui-option-desc">{field.value || field.placeholder || ''}</span>
+  </div>)}</div>
+  const label = sent.canceled === true ? (node.cancelLabel ?? t('Cancel')) : (node.submitLabel ?? t('Submit'))
+  return <div className="dvui-actions"><span className="dvui-badge">{label}</span></div>
 }
 function WidgetTable({ node, lookup }: { node: ViewNode; lookup: (name: string) => unknown }) {
   const columns = Array.isArray(node.columns) ? node.columns : []
@@ -137,7 +204,41 @@ function WidgetCallout({ node, lookup, Markdown, labels }: { node: ViewNode; loo
   return <div className="dvui-callout" data-tone={CALLOUT_TONES.includes(String(tone)) ? String(tone) : 'info'}><span className="dvui-callout-icon" aria-hidden="true"><InfoIcon /></span><div><Markdown text={asText(resolve(node.text, lookup, ''))} labels={labels} variant="compact" /></div></div>
 }
 function WidgetSources({ node, t }: { node: ViewNode; t: ViewT }) {
-  return <div className="dvui-sources" role="list" aria-label={t('Sources')}>{(node.items ?? []).map((item, index) => <a key={`${item.url}-${index}`} role="listitem" className="dvui-source" href={item.url} target="_blank" rel="noopener noreferrer" title={item.url}><LinkIcon />{item.label}</a>)}</div>
+  return <div className="dvui-sources" role="list" aria-label={t('Sources')}>{sourcesOf(node).map((item, index) => <a key={`${item.url}-${index}`} role="listitem" className="dvui-source" href={item.url} target="_blank" rel="noopener noreferrer" title={item.url}><LinkIcon />{item.label}</a>)}</div>
+}
+// A vertical rail of stage dots. Styles live inline because the view stylesheet
+// is a separate contract; only status colours come from host tokens.
+const STEP_DOT: Record<string, React.CSSProperties> = {
+  done: { background: 'var(--dsw-alias-state-success-primary)' },
+  active: { background: 'var(--dsw-alias-state-business-primary)', boxShadow: '0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-business-primary) 20%, transparent)' },
+  blocked: { background: 'var(--dsw-alias-state-error-primary)' },
+  pending: { boxShadow: 'inset 0 0 0 1.5px var(--dsw-alias-border-l3)' },
+}
+const STEP_LABEL: Record<string, React.CSSProperties> = {
+  active: { color: 'var(--dsw-alias-label-primary)', fontWeight: 600 },
+  blocked: { color: 'var(--dsw-alias-state-error-primary)' },
+  pending: { color: 'var(--dsw-alias-label-secondary)' },
+  done: { color: 'var(--dsw-alias-label-secondary)' },
+}
+function WidgetSteps({ node, lookup, t }: { node: ViewNode; lookup: (name: string) => unknown; t: ViewT }) {
+  const items = stepsOf(node)
+  return <ol className="dvui-steps" role="list" aria-label={t('Steps')} aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: 2, margin: 0, padding: 0, listStyle: 'none' }}>{items.map((item, index) => {
+    const status = resolve(item.status, lookup, 'pending')
+    const state = typeof status === 'string' && status in STEP_DOT ? status : 'pending'
+    const detail = item.detail === undefined ? '' : asText(resolve(item.detail, lookup, ''))
+    const last = index === items.length - 1
+    return <li key={`${item.label}-${index}`} className="dvui-step" data-status={state} aria-current={state === 'active' ? 'step' : undefined}
+      style={{ display: 'flex', gap: 10, minWidth: 0 }}>
+      <span aria-hidden="true" style={{ flex: 'none', width: 12, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <span style={{ flex: 'none', width: 9, height: 9, marginTop: 6, borderRadius: '50%', ...STEP_DOT[state] }} />
+        {last ? null : <span style={{ flex: '1 1 auto', width: 1.5, minHeight: 8, margin: '2px 0 -2px', background: 'var(--dsw-alias-border-l2)' }} />}
+      </span>
+      <span style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1, paddingBottom: last ? 0 : 10 }}>
+        <span style={{ fontSize: 13, lineHeight: '20px', fontWeight: 500, overflowWrap: 'anywhere', ...STEP_LABEL[state] }}>{item.label}</span>
+        {detail !== '' ? <span className="dvui-option-desc">{detail}</span> : null}
+      </span>
+    </li>
+  })}</ol>
 }
 function InputHead({ id, label, value }: { id: string; label?: string; value?: string }) {
   return <div className="dvui-input-head"><label htmlFor={id} className="dvui-input-label">{label}</label>{value !== undefined ? <output htmlFor={id} className="dvui-input-value">{value}</output> : null}</div>
@@ -193,25 +294,33 @@ function WidgetNode({ node, ctx, Markdown, labels, t }: { node: ViewNode; ctx: C
     case 'progress': return <WidgetProgress node={node} lookup={lookup} t={t} />
     case 'callout': return <WidgetCallout node={node} lookup={lookup} Markdown={Markdown} labels={labels} />
     case 'sources': return <WidgetSources node={node} t={t} />
+    case 'steps': return <WidgetSteps node={node} lookup={lookup} t={t} />
     case 'slider': return <SliderInput node={node} ctx={ctx} />
     case 'number': return <NumberInput node={node} ctx={ctx} />
     case 'choice': return <ChoiceInput node={node} ctx={ctx} />
     case 'toggle': return <ToggleInput node={node} ctx={ctx} />
-    case 'submit': return ctx.settled ? null : <div className="dvui-actions"><button type="button" className="dvui-submit" disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, {})}>{node.label || t('Send')}</button></div>
+    case 'submit': return ctx.settled ? null : <div className="dvui-actions">
+      {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.fillLocked} onClick={() => ctx.onFillDraft?.(node.id!, {})}>{t('Fill composer')}</ActionButton> : null}
+      <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, {})}>{node.label || t('Send')}</ActionButton>
+    </div>
     case 'options': return ctx.settled ? <SettledOptions node={node} answer={ctx.answer} t={t} /> : <OptionsInput node={node} ctx={ctx} t={t} />
     case 'confirm': return ctx.settled ? <SettledConfirm node={node} answer={ctx.answer} t={t} /> : <ConfirmInput node={node} ctx={ctx} t={t} />
-    case 'form': return ctx.settled ? <SettledForm node={node} answer={ctx.answer} /> : <FormInput node={node} ctx={ctx} t={t} />
+    case 'form': return ctx.settled ? <SettledForm node={node} answer={ctx.answer} t={t} /> : <FormInput node={node} ctx={ctx} t={t} />
     default: return null
   }
 }
-export function WidgetView({ view, onSubmit, settled = false, answer = null, busy = false, registerChart, refreshCharts, t = english, labels = { code: { copyLabel: 'Copy', copiedLabel: 'Copied' }, footnotes: 'Footnotes' }, Markdown = FallbackMarkdown }: Omit<WidgetCardProps, 'title'> & { registerChart: Ctx['registerChart']; refreshCharts: () => void }) {
+export function WidgetView({ view, onSubmit, onFillDraft, settled = false, answer = null, busy = false, ButtonComponent, registerChart, refreshCharts, t = english, labels = { code: { copyLabel: 'Copy', copiedLabel: 'Copied' }, footnotes: 'Footnotes' }, Markdown = FallbackMarkdown }: Omit<WidgetCardProps, 'title'> & { registerChart: Ctx['registerChart']; refreshCharts: () => void }) {
   const inputs = viewInputs(view) as ViewNode[]
   const [values, setValues] = useState<Record<string, unknown>>(() => Object.fromEntries(inputs.map(node => [node.id, inputDefault(node)])))
   const sent = answer?.values?.inputs
   const current = settled && sent !== null && typeof sent === 'object' ? { ...values, ...sent } : values
-  const submit = (action: string, extra: Record<string, unknown>) => onSubmit?.(action, inputs.length > 0 ? { ...extra, inputs: current } : extra)
+  const withInputs = (extra: Record<string, unknown>) => inputs.length > 0 ? { ...extra, inputs: current } : extra
+  const submit = (action: string, extra: Record<string, unknown>) => onSubmit?.(action, withInputs(extra))
+  const fill = onFillDraft === undefined ? undefined : (action: string, extra: Record<string, unknown>) => onFillDraft(action, withInputs(extra))
+  const editable = !settled && !busy && (onSubmit !== undefined || fill !== undefined)
   const ctx: Ctx = {
-    onSubmit: submit, settled, answer, busy, lookup: viewScope(view, current), values: current, locked: settled || busy, answerLocked: settled || busy || onSubmit === undefined,
+    onSubmit: submit, onFillDraft: fill, settled, answer, busy, editable, lookup: viewScope(view, current), values: current, ButtonComponent,
+    locked: settled || busy, answerLocked: settled || busy || onSubmit === undefined, fillLocked: settled || busy || fill === undefined,
     setInput: (id, value) => setValues(before => ({ ...before, [id]: value })), registerChart, refreshCharts,
   }
   return <WidgetNode node={view} ctx={ctx} Markdown={Markdown} labels={labels} t={t} />
@@ -240,13 +349,13 @@ function ViewMenu({ charts, t }: { charts: ChartHandle[]; t: ViewT }) {
   }, [open])
   return <div ref={root} className="dvui-tools" data-open={open ? '' : undefined}><button type="button" className="dvui-more" aria-label={t('Chart options')} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)}><DotsIcon /></button>{open ? <div className="dvui-menu" role="menu">{charts.map((chart, index) => <Fragment key={`${chart.label}-${index}`}>{charts.length > 1 ? <div className="dvui-menu-label">{chart.label ?? t('Chart {n}', { n: index + 1 })}</div> : null}<button type="button" role="menuitem" onClick={() => { setOpen(false); chart.toggleTable() }}><TableIcon />{chart.asTable ? t('View as chart') : t('View as table')}</button><button type="button" role="menuitem" onClick={() => { setOpen(false); chart.copy() }}><CopyIcon />{t('Copy data')}</button></Fragment>)}</div> : null}</div>
 }
-export function WidgetCard({ title = '', view, onSubmit, onDismiss, busy = false, settled = false, answer = null, t = english, labels, Markdown, localOnly = false }: WidgetCardProps) {
+export function WidgetCard({ title = '', view, onSubmit, onFillDraft, onDismiss, busy = false, settled = false, answer = null, t = english, labels, Markdown, localOnly = false, localNote, ButtonComponent }: WidgetCardProps) {
   const titleId = useId()
   const { charts, registerChart, refreshCharts } = useChartHandles()
   const framed = hasType(view, new Set(['slider', 'number', 'choice', 'toggle', 'options', 'confirm', 'form', 'submit']))
   return <div className={`dvui-view ${framed ? 'dvui-framed' : 'dvui-bare'}${settled ? ' dvui-settled' : ''}`} role="group" aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : t('View')} aria-busy={busy || undefined}>
     {title || onDismiss || charts.length > 0 ? <div className="dvui-head"><p className="dvui-title" id={titleId}>{title}</p>{charts.length > 0 ? <ViewMenu charts={charts} t={t} /> : null}{onDismiss ? <button type="button" className="dvui-dismiss" aria-label={t('Dismiss view')} onClick={onDismiss} disabled={busy}>×</button> : null}</div> : null}
-    <div className="dvui-body"><WidgetView view={view} onSubmit={onSubmit} settled={settled} answer={answer} busy={busy} registerChart={registerChart} refreshCharts={refreshCharts} t={t} labels={labels} Markdown={Markdown} /></div>
-    {localOnly && hasType(view, new Set(['options', 'confirm', 'form', 'submit'])) ? <p className="dvui-local-note" role="note">{t('Local preview only; this card does not send an answer.')}</p> : null}
+    <div className="dvui-body"><WidgetView view={view} onSubmit={onSubmit} onFillDraft={onFillDraft} settled={settled} answer={answer} busy={busy} ButtonComponent={ButtonComponent} registerChart={registerChart} refreshCharts={refreshCharts} t={t} labels={labels} Markdown={Markdown} /></div>
+    {localOnly && hasType(view, new Set(['options', 'confirm', 'form', 'submit'])) ? <p className="dvui-local-note" role="note">{localNote ?? t('Local preview only; this card does not send an answer.')}</p> : null}
   </div>
 }

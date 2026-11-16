@@ -13,7 +13,7 @@ export default defineConfig([
     format: ['esm'], dts: true, clean: true, outDir: 'lib', platform: 'node', target: 'node22', sourcemap: true, hash: false,
     // The shared RPC helper is embedded so a linked package reload has one atomic Host generation.
     deps: {
-      neverBundle: ['@deepseek-ai/cordis', '@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tools', 'react', 'react/jsx-runtime', 'react-dom'],
+      neverBundle: ['@deepseek-ai/cordis', '@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-client-ui-primitives', 'react', 'react/jsx-runtime', 'react-dom'],
       alwaysBundle: ['@klarkxy/dsh-plugin-kit/host-rpc', '@klarkxy/dsh-plugin-kit/logger', '@klarkxy/dsh-plugin-kit/log-shared'],
     },
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),

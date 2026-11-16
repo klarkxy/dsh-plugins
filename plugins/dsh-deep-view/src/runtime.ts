@@ -18,7 +18,9 @@ export type ToolViewBlock = {
   content?: readonly unknown[]
   subCalls?: readonly ToolViewBlock[]
 }
-export type ToolViewProps = {
+import type { ComposerActions, InputSnapshot } from './draft.ts'
+
+export type ToolViewProps = SessionInputProps & {
   sessionId: string
   callId: string
   toolName?: string
@@ -34,7 +36,14 @@ export type ReplySnapshot = {
   locations: { getTurn(turn: number): readonly string[] }
   nodes: { get(key: string): { kind: string; data?: { root?: ToolViewBlock; source?: unknown; content?: readonly unknown[] } } | undefined }
 }
-export type ReplyViewProps = {
+export type SessionInputProps = {
+  inputActions?: ComposerActions
+  useInput?<T>(selector: (snapshot: InputSnapshot) => T, equal?: (left: T, right: T) => boolean): T
+  useSession?<T>(selector: (snapshot: { running: boolean }) => T, equal?: (left: T, right: T) => boolean): T
+  useChat?<T>(selector: (snapshot: ReplySnapshot) => T, equal?: (left: T, right: T) => boolean): T
+}
+
+export type ReplyViewProps = SessionInputProps & {
   sessionId: string
   turn: { turn: number; status: 'open' | 'closed' | 'unknown' }
   useChat<T>(selector: (snapshot: ReplySnapshot) => T, equal?: (left: T, right: T) => boolean): T

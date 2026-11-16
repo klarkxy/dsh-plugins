@@ -13,8 +13,21 @@ export type Scalar = string | number | boolean
 export type Formula = { '=': string }
 export type Value = Scalar | Formula
 export type ChoiceOption = { label: string; value?: Scalar }
+export type StepStatus = 'done' | 'active' | 'pending' | 'blocked'
+export type SourceItem = { label: string; url: string }
+export type StepItem = { label: string; detail?: Value; status?: Value }
+export type FormField = { id: string; label: string; placeholder?: string; value?: string; multiline?: boolean; readOnly?: boolean }
+// The wire shares `items` between sources ({label,url}) and steps
+// ({label,detail?,status?}); the validator enforces the shape per node type.
+// Narrow with `isSourceItem`/`isStepItem` before reading `url` or `status`.
+export function isSourceItem(item: SourceItem | StepItem): item is SourceItem {
+  return item !== null && typeof item === 'object' && 'url' in item
+}
+export function isStepItem(item: SourceItem | StepItem): item is StepItem {
+  return item !== null && typeof item === 'object' && !('url' in item)
+}
 export type ViewNode = {
-  type: 'stack' | 'row' | 'text' | 'metric' | 'table' | 'chart' | 'progress' | 'callout' | 'sources'
+  type: 'stack' | 'row' | 'text' | 'metric' | 'table' | 'chart' | 'progress' | 'callout' | 'sources' | 'steps'
     | 'slider' | 'number' | 'choice' | 'toggle' | 'options' | 'confirm' | 'form' | 'submit'
   id?: string
   children?: ViewNode[]
@@ -33,14 +46,14 @@ export type ViewNode = {
   percent?: Value
   max?: Value
   valueLabel?: Value
-  items?: { label: string; url: string }[]
+  items?: SourceItem[] | StepItem[]
   min?: number
   step?: number
   options?: ChoiceOption[] | { label: string; description?: string }[]
   multi?: boolean
   confirmLabel?: string
   cancelLabel?: string
-  fields?: { id: string; label: string; placeholder?: string }[]
+  fields?: FormField[]
   submitLabel?: string
 }
 export type ShownView = { title: string; view: ViewNode; interactive: boolean }
