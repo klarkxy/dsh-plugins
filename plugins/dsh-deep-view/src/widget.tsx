@@ -1,12 +1,13 @@
 // Widget composition adapted from deep-view/src/react/card.js (Apache-2.0).
 // DSH migration: html/PNG export/Bot persistence are excluded. Local controls
 // remain live; only a supplied onSubmit callback may deliver an answer.
-import { Fragment, useCallback, useEffect, useId, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ComponentType } from 'react'
-import { asText, choiceValue, inputDefault, resolve, viewInputs, viewScope } from './core/index.js'
+import { asText, choiceValue, hasInputs, inputDefault, mathDefaults, resolve, viewInputs, viewScope } from './core/index.js'
 import { isSourceItem, isStepItem, type ViewNode } from './contracts.ts'
 import { WidgetChart, type ChartHandle } from './chart.tsx'
 import { CheckIcon, CopyIcon, DotsIcon, InfoIcon, LinkIcon, Segmented, TableIcon, english, keyLetter, type ViewT } from './ui.tsx'
+import { RichNode } from './rich-lazy.tsx'
 
 // Structural twin of the official MarkdownLabels: the widget layer stays
 // runtime-neutral, and any component accepting this shape (the official
@@ -16,7 +17,7 @@ export type ViewLabels = {
   code: { copyLabel: string; copiedLabel: string; toolbarLabels?: { codeLabel: string; wrapLabel: string; unwrapLabel: string } }
   footnotes: string
 }
-export type Answer = { id: string; action: string; values: Record<string, unknown> }
+export type Answer = { id: string; action: string; values: Record<string, unknown>; revision?: number }
 export type WidgetCardProps = {
   title?: string
   view: ViewNode
@@ -31,6 +32,9 @@ export type WidgetCardProps = {
   labels?: ViewLabels
   Markdown?: ComponentType<MarkdownProps>
   localOnly?: boolean
+  /** Ephemeral local state shared across the dock and settled reply surfaces. */
+  values?: Record<string, unknown>
+  onValuesChange?: (values: Record<string, unknown>) => void
   /** Optional explanation for an interactive preview answered in another surface. */
   localNote?: string
   /** Browser hosts inject their native button without coupling the shared widget to DSH. */
@@ -53,6 +57,10 @@ type Ctx = {
   registerChart(key: string, handle: ChartHandle): (() => void) | void
   refreshCharts(): void
 }
+// Direct-answer controls (Submit/Confirm/Cancel) stay rendered disabled when a
+// card answers nowhere, but a fill-only card hides them: a permanently disabled
+// button that looks usable is a fake action, while Fill composer does the work.
+const directAnswer = (ctx: Ctx) => ctx.onSubmit !== undefined || ctx.onFillDraft === undefined
 const TONES = ['good', 'warn', 'bad']
 const CALLOUT_TONES = ['info', 'good', 'warn', 'bad']
 const optionsOf = (node: ViewNode) => (Array.isArray(node.options) ? node.options : []) as { label: string; value?: string | number | boolean; description?: string }[]
@@ -105,7 +113,7 @@ function OptionsInput({ node, ctx, t }: { node: ViewNode; ctx: Ctx; t: ViewT }) 
     })}</div>
     {staged ? <div className="dvui-actions">
       {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.fillLocked || picked.length === 0} onClick={() => ctx.onFillDraft?.(node.id!, values())}>{t('Fill composer')}</ActionButton> : null}
-      <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked || picked.length === 0} onClick={() => ctx.onSubmit?.(node.id!, values())}>{t('Submit')}</ActionButton>
+      {directAnswer(ctx) ? <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked || picked.length === 0} onClick={() => ctx.onSubmit?.(node.id!, values())}>{t('Submit')}</ActionButton> : null}
     </div> : null}
   </Fragment>
 }
@@ -117,8 +125,8 @@ function SettledOptions({ node, answer, t }: { node: ViewNode; answer?: Answer |
 function ConfirmInput({ node, ctx, t }: { node: ViewNode; ctx: Ctx; t: ViewT }) {
   return <div className="dvui-actions">
     {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.fillLocked} onClick={() => ctx.onFillDraft?.(node.id!, { confirmed: true })}>{t('Fill composer')}</ActionButton> : null}
-    <ActionButton host={ctx.ButtonComponent} disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, { confirmed: false })}>{node.cancelLabel ?? t('Cancel')}</ActionButton>
-    <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, { confirmed: true })}>{node.confirmLabel ?? t('Confirm')}</ActionButton>
+    {directAnswer(ctx) ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, { confirmed: false })}>{node.cancelLabel ?? t('Cancel')}</ActionButton> : null}
+    {directAnswer(ctx) ? <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, { confirmed: true })}>{node.confirmLabel ?? t('Confirm')}</ActionButton> : null}
   </div>
 }
 function SettledConfirm({ node, answer, t }: { node: ViewNode; answer?: Answer | null; t: ViewT }) {
@@ -157,9 +165,10 @@ function FormInput({ node, ctx, t }: { node: ViewNode; ctx: Ctx; t: ViewT }) {
       </label>
     })}
     <div className="dvui-actions">
-      {node.cancelLabel ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.answerLocked} onClick={cancel}>{node.cancelLabel}</ActionButton> : null}
-      {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.fillLocked} onClick={() => ctx.onFillDraft?.(node.id!, values())}>{t('Fill composer')}</ActionButton> : null}
-      <ActionButton host={ctx.ButtonComponent} primary type="submit" disabled={ctx.answerLocked}>{node.submitLabel ?? t('Submit')}</ActionButton>
+      {node.cancelLabel && directAnswer(ctx) ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.answerLocked} onClick={cancel}>{node.cancelLabel}</ActionButton> : null}
+      {ctx.onFillDraft && ctx.onSubmit ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.fillLocked} onClick={() => ctx.onFillDraft?.(node.id!, values())}>{t('Fill composer')}</ActionButton> : null}
+      {ctx.onSubmit ? <ActionButton host={ctx.ButtonComponent} primary type="submit" disabled={ctx.answerLocked}>{node.submitLabel ?? t('Submit')}</ActionButton>
+        : ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} primary type="submit" disabled={ctx.fillLocked}>{t('Fill composer')}</ActionButton> : null}
     </div>
   </form>
 }
@@ -300,28 +309,53 @@ function WidgetNode({ node, ctx, Markdown, labels, t }: { node: ViewNode; ctx: C
     case 'choice': return <ChoiceInput node={node} ctx={ctx} />
     case 'toggle': return <ToggleInput node={node} ctx={ctx} />
     case 'submit': return ctx.settled ? null : <div className="dvui-actions">
-      {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.fillLocked} onClick={() => ctx.onFillDraft?.(node.id!, {})}>{t('Fill composer')}</ActionButton> : null}
-      <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, {})}>{node.label || t('Send')}</ActionButton>
+      {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} disabled={ctx.fillLocked} onClick={() => ctx.onFillDraft?.(node.id!, {})}>{directAnswer(ctx) ? t('Fill composer') : node.label || t('Fill composer')}</ActionButton> : null}
+      {directAnswer(ctx) ? <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, {})}>{node.label || t('Send')}</ActionButton> : null}
     </div>
-    case 'options': return ctx.settled ? <SettledOptions node={node} answer={ctx.answer} t={t} /> : <OptionsInput node={node} ctx={ctx} t={t} />
-    case 'confirm': return ctx.settled ? <SettledConfirm node={node} answer={ctx.answer} t={t} /> : <ConfirmInput node={node} ctx={ctx} t={t} />
-    case 'form': return ctx.settled ? <SettledForm node={node} answer={ctx.answer} t={t} /> : <FormInput node={node} ctx={ctx} t={t} />
+    case 'options': return ctx.settled || !ctx.onSubmit && !ctx.onFillDraft ? <SettledOptions node={node} answer={ctx.answer} t={t} /> : <OptionsInput node={node} ctx={ctx} t={t} />
+    case 'confirm': return ctx.settled || !ctx.onSubmit && !ctx.onFillDraft ? <SettledConfirm node={node} answer={ctx.answer} t={t} /> : <ConfirmInput node={node} ctx={ctx} t={t} />
+    case 'form': return ctx.settled || !ctx.onSubmit && !ctx.onFillDraft ? <SettledForm node={node} answer={ctx.answer} t={t} /> : <FormInput node={node} ctx={ctx} t={t} />
+    case 'math': case 'flow': case 'explore': case 'map': return <RichNode node={node} lookup={lookup} setInput={ctx.setInput} editable={ctx.editable} t={t} />
     default: return null
   }
 }
-export function WidgetView({ view, onSubmit, onFillDraft, settled = false, answer = null, busy = false, ButtonComponent, registerChart, refreshCharts, t = english, labels = { code: { copyLabel: 'Copy', copiedLabel: 'Copied' }, footnotes: 'Footnotes' }, Markdown = FallbackMarkdown }: Omit<WidgetCardProps, 'title'> & { registerChart: Ctx['registerChart']; refreshCharts: () => void }) {
-  const inputs = viewInputs(view) as ViewNode[]
-  const [values, setValues] = useState<Record<string, unknown>>(() => Object.fromEntries(inputs.map(node => [node.id, inputDefault(node)])))
+export function WidgetView({ view, onSubmit, onFillDraft, settled = false, answer = null, busy = false, ButtonComponent, registerChart, refreshCharts, t = english, labels = { code: { copyLabel: 'Copy', copiedLabel: 'Copied' }, footnotes: 'Footnotes' }, Markdown = FallbackMarkdown, values: controlled, onValuesChange }: Omit<WidgetCardProps, 'title'> & { registerChart: Ctx['registerChart']; refreshCharts: () => void }) {
+  const inputs = useMemo(() => viewInputs(view) as ViewNode[], [view])
+  const [localValues, setLocalValues] = useState<Record<string, unknown>>(() => Object.fromEntries(inputs.map(node => [node.id, inputDefault(node)])))
+  const supplied = controlled ?? localValues
+  const values = useMemo(() => Object.fromEntries(inputs.map(node => [node.id,
+    supplied && Object.hasOwn(supplied, node.id!) ? supplied[node.id!] : inputDefault(node)])), [inputs, supplied])
+  const valueRef = useRef(values)
+  valueRef.current = values
+  const changeRef = useRef(onValuesChange)
+  changeRef.current = onValuesChange
+  const setInput = useCallback((id: string, value: unknown) => {
+    const next = { ...valueRef.current }
+    // Coordinates are formula bindings, not extra answer fields. Persist only
+    // the math node's declared nested point map.
+    const math = inputs.find(node => node.type === 'math' && node.mathPoints?.some(point => `${point.id}X` === id || `${point.id}Y` === id))
+    const point = math?.mathPoints?.find(item => `${item.id}X` === id || `${item.id}Y` === id)
+    if (math?.id && point) {
+      const previous = next[math.id] !== null && typeof next[math.id] === 'object' && !Array.isArray(next[math.id])
+        ? next[math.id] as Record<string, unknown> : mathDefaults(math)
+      const pair: unknown[] = Array.isArray(previous[point.id]) ? [...previous[point.id] as unknown[]] : [point.x, point.y]
+      pair[`${point.id}X` === id ? 0 : 1] = value
+      next[math.id] = { ...previous, [point.id]: pair }
+    } else next[id] = value
+    valueRef.current = next
+    setLocalValues(next)
+    changeRef.current?.(next)
+  }, [inputs])
   const sent = answer?.values?.inputs
   const current = settled && sent !== null && typeof sent === 'object' ? { ...values, ...sent } : values
   const withInputs = (extra: Record<string, unknown>) => inputs.length > 0 ? { ...extra, inputs: current } : extra
-  const submit = (action: string, extra: Record<string, unknown>) => onSubmit?.(action, withInputs(extra))
+  const submit = onSubmit === undefined ? undefined : (action: string, extra: Record<string, unknown>) => onSubmit(action, withInputs(extra))
   const fill = onFillDraft === undefined ? undefined : (action: string, extra: Record<string, unknown>) => onFillDraft(action, withInputs(extra))
-  const editable = !settled && !busy && (onSubmit !== undefined || fill !== undefined)
+  const editable = !settled && !busy && (onSubmit !== undefined || fill !== undefined || hasInputs(view))
   const ctx: Ctx = {
     onSubmit: submit, onFillDraft: fill, settled, answer, busy, editable, lookup: viewScope(view, current), values: current, ButtonComponent,
     locked: settled || busy, answerLocked: settled || busy || onSubmit === undefined, fillLocked: settled || busy || fill === undefined,
-    setInput: (id, value) => setValues(before => ({ ...before, [id]: value })), registerChart, refreshCharts,
+    setInput, registerChart, refreshCharts,
   }
   return <WidgetNode node={view} ctx={ctx} Markdown={Markdown} labels={labels} t={t} />
 }
@@ -349,13 +383,13 @@ function ViewMenu({ charts, t }: { charts: ChartHandle[]; t: ViewT }) {
   }, [open])
   return <div ref={root} className="dvui-tools" data-open={open ? '' : undefined}><button type="button" className="dvui-more" aria-label={t('Chart options')} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)}><DotsIcon /></button>{open ? <div className="dvui-menu" role="menu">{charts.map((chart, index) => <Fragment key={`${chart.label}-${index}`}>{charts.length > 1 ? <div className="dvui-menu-label">{chart.label ?? t('Chart {n}', { n: index + 1 })}</div> : null}<button type="button" role="menuitem" onClick={() => { setOpen(false); chart.toggleTable() }}><TableIcon />{chart.asTable ? t('View as chart') : t('View as table')}</button><button type="button" role="menuitem" onClick={() => { setOpen(false); chart.copy() }}><CopyIcon />{t('Copy data')}</button></Fragment>)}</div> : null}</div>
 }
-export function WidgetCard({ title = '', view, onSubmit, onFillDraft, onDismiss, busy = false, settled = false, answer = null, t = english, labels, Markdown, localOnly = false, localNote, ButtonComponent }: WidgetCardProps) {
+export function WidgetCard({ title = '', view, onSubmit, onFillDraft, onDismiss, busy = false, settled = false, answer = null, t = english, labels, Markdown, localOnly = false, localNote, ButtonComponent, values, onValuesChange }: WidgetCardProps) {
   const titleId = useId()
   const { charts, registerChart, refreshCharts } = useChartHandles()
-  const framed = hasType(view, new Set(['slider', 'number', 'choice', 'toggle', 'options', 'confirm', 'form', 'submit']))
+  const framed = hasType(view, new Set(['slider', 'number', 'choice', 'toggle', 'options', 'confirm', 'form', 'submit', 'math']))
   return <div className={`dvui-view ${framed ? 'dvui-framed' : 'dvui-bare'}${settled ? ' dvui-settled' : ''}`} role="group" aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : t('View')} aria-busy={busy || undefined}>
     {title || onDismiss || charts.length > 0 ? <div className="dvui-head"><p className="dvui-title" id={titleId}>{title}</p>{charts.length > 0 ? <ViewMenu charts={charts} t={t} /> : null}{onDismiss ? <button type="button" className="dvui-dismiss" aria-label={t('Dismiss view')} onClick={onDismiss} disabled={busy}>×</button> : null}</div> : null}
-    <div className="dvui-body"><WidgetView view={view} onSubmit={onSubmit} onFillDraft={onFillDraft} settled={settled} answer={answer} busy={busy} ButtonComponent={ButtonComponent} registerChart={registerChart} refreshCharts={refreshCharts} t={t} labels={labels} Markdown={Markdown} /></div>
+    <div className="dvui-body"><WidgetView view={view} onSubmit={onSubmit} onFillDraft={onFillDraft} settled={settled} answer={answer} busy={busy} ButtonComponent={ButtonComponent} registerChart={registerChart} refreshCharts={refreshCharts} t={t} labels={labels} Markdown={Markdown} values={values} onValuesChange={onValuesChange} /></div>
     {localOnly && hasType(view, new Set(['options', 'confirm', 'form', 'submit'])) ? <p className="dvui-local-note" role="note">{localNote ?? t('Local preview only; this card does not send an answer.')}</p> : null}
   </div>
 }

@@ -49,7 +49,7 @@ describe('cards in the final reply', () => {
     expect(replyCards(data, 2)).toEqual([one, two])
     expect(replyCards(data, 1)).toEqual([])
   })
-  it('shows a real card while running and only status when settled', () => {
+  it('keeps display views inline and gives a settled answer one editable owner', () => {
     const store = createViewStateStore()
     const markup = renderToStaticMarkup(<ToolCallStatus sessionId="session" callId="one" phase="start" block={card('one')} t={key => key}
       store={store} call={async () => ({ ok: true, value: null })} useSession={selector => selector({ running: true })} />)
@@ -59,6 +59,36 @@ describe('cards in the final reply', () => {
       store={store} call={async () => ({ ok: true, value: null })} useSession={selector => selector({ running: false })} />)
     expect(settled).toContain('prepared')
     expect(settled).not.toContain('Choose')
+    const display = { callId: 'display', kind: 'tool-result' as const, meta: { owner: 'dsh-deep-view', title: 'Result', view: { type: 'metric', label: 'Total', value: 42 }, interactive: false, awaitReply: false } }
+    const inline = renderToStaticMarkup(<ToolCallStatus sessionId="session" callId="display" phase="result" block={display} t={key => key}
+      store={store} call={async () => ({ ok: true, value: null })} useSession={selector => selector({ running: false })} />)
+    expect(inline).toContain('Result')
+    expect(inline).toContain('42')
+  })
+  it('commits a superseding result even when only the first position renders it', async () => {
+    const first = { callId: 'one', kind: 'tool-result' as const, meta: { owner: 'dsh-deep-view', viewId: 'shared', title: 'First', view: { type: 'metric' as const, label: 'Count', value: 1 }, interactive: false, awaitReply: false, revision: 1 } }
+    const second = { callId: 'two', kind: 'tool-result' as const, meta: { ...first.meta, title: 'Second', view: { type: 'metric' as const, label: 'Count', value: 2 }, revision: 2 } }
+    const p = props([], vi.fn(async () => ({ ok: true, value: null })))
+    p.useSession = selector => selector({ running: true })
+    const root = createRoot(document.getElementById('root')!)
+    const render = (blocks: typeof first[]) => <main>{blocks.map(block => <ToolCallStatus key={block.callId} sessionId="session" callId={block.callId} phase="result" block={block} t={p.t} store={p.store} call={p.call} useSession={p.useSession} />)}</main>
+    await act(async () => root.render(render([first])))
+    await act(async () => root.render(render([first, second])))
+    expect(p.store.latest('session', 'shared')).toMatchObject({ revision: 2, title: 'Second' })
+    expect(document.querySelectorAll('.dvui-view')).toHaveLength(1)
+    expect(document.body.textContent).toContain('Second')
+    expect(document.body.textContent).toContain('2')
+    const settled = renderToStaticMarkup(<ReplyView {...props([first, second], p.call)} />)
+    expect(settled).toContain('Second')
+    expect(settled).toContain('2')
+    const closed = { ...props([first, second], p.call), store: p.store, useSession: <T,>(selector: (snapshot: { running: boolean }) => T) => selector({ running: false }) }
+    await act(async () => root.render(<main>
+      {[first, second].map(block => <ToolCallStatus key={block.callId} sessionId="session" callId={block.callId} phase="result" block={block} t={p.t} store={p.store} call={p.call} useSession={closed.useSession} />)}
+      <ReplyView {...closed} />
+    </main>))
+    expect(document.querySelectorAll('.dvui-view')).toHaveLength(1)
+    expect(document.querySelector('[data-deep-view-reply]')?.textContent).toContain('Second')
+    await act(async () => root.unmount())
   })
   it('moves the only editable answer card into the dock and submits once', async () => {
     const one = card('one')
@@ -80,6 +110,22 @@ describe('cards in the final reply', () => {
     expect(call.mock.calls.filter(([endpoint]) => endpoint === 'reply')).toHaveLength(1)
     expect(call).toHaveBeenCalledWith('reply', { sessionId: 'session', viewId: 'one', action: 'pick', values: { selected: ['One'] } })
     expect(document.querySelector('.dvui-dock')).toBeNull()
+    await act(async () => root.unmount())
+  })
+  it('has one editable answer after the turn closes', async () => {
+    const one = card('one')
+    const call = vi.fn(async (endpoint: string) => endpoint === 'pending'
+      ? { ok: true, value: { id: 'one', sessionId: 'session', callId: 'one', title: 'Choose', view } }
+      : { ok: true, value: null })
+    const p = { ...props([one], call), useSession: <T,>(selector: (snapshot: { running: boolean }) => T) => selector({ running: false }) }
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<main>
+      <ToolCallStatus sessionId="session" callId="one" phase="result" block={one} t={p.t} store={p.store} call={call} useSession={p.useSession} />
+      <ActivityDock sessionId="session" callId="one" phase="result" block={one} t={p.t} store={p.store} call={call} useSession={p.useSession} useInput={p.useInput} inputActions={p.inputActions} />
+      <ReplyView {...p} />
+    </main>))
+    expect(document.querySelectorAll('.dvui-view')).toHaveLength(1)
+    expect(document.querySelector('[data-deep-view-reply] button.dvui-option')).not.toBeNull()
     await act(async () => root.unmount())
   })
   it('retires a stale answer instead of offering endless retries', async () => {

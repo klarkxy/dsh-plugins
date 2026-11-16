@@ -16,6 +16,22 @@ const FUNCTIONS = {
   fixed: { args: [1, 2], run: (value, digits = 0) => roundTo(num(value), digitsOf(digits)).toFixed(digitsOf(digits)) },
   format: { args: [1, 2], run: (value, digits = 0) => grouped(num(value), digitsOf(digits)) },
   percent: { args: [1, 2], run: (value, digits = 0) => `${grouped(num(value) * 100, digitsOf(digits))}%` },
+  count: { args: [1, 1], run: value => Array.isArray(value) ? value.length : value !== null && typeof value === 'object' ? Object.keys(value).length : value == null || value === '' ? 0 : 1 },
+  sum: { args: [1, 1], run: value => numbers(value).reduce((sum, current) => sum + current, 0) },
+  mean: { args: [1, 1], run: value => { const values = numbers(value); if (!values.length) return 0; return values.reduce((sum, current) => sum + current, 0) / values.length } },
+  join: { args: [1, 2], run: (value, separator = ', ') => Array.isArray(value) ? value.map(String).join(String(separator)) : String(value ?? '') },
+  contains: { args: [2, 2], run: (values, expected) => Array.isArray(values) && values.some(value => value === expected) },
+  sin: { args: [1, 1], run: value => Math.sin(num(value)) },
+  cos: { args: [1, 1], run: value => Math.cos(num(value)) },
+  tan: { args: [1, 1], run: value => Math.tan(num(value)) },
+  exp: { args: [1, 1], run: value => Math.exp(num(value)) },
+  ln: { args: [1, 1], run: value => Math.log(num(value)) },
+  log: { args: [1, 1], run: value => Math.log10(num(value)) },
+}
+function numbers(value) {
+  if (!Array.isArray(value)) fail('expected a list of numbers')
+  if (value.length > 1000) fail('list exceeds the limit of 1000')
+  return value.map(num)
 }
 export const FORMULA_FUNCTIONS = Object.keys(FUNCTIONS)
 const CONSTANTS = new Map([['true', true], ['false', false]])

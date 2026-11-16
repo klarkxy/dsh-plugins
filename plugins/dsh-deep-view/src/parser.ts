@@ -2,6 +2,33 @@ import { checkShownView } from './core/index.js'
 import type { ShownView } from './contracts.ts'
 
 export type TextPart = { kind: 'markdown' | 'view'; key: string; text: string; shown?: ShownView }
+/**
+ * Single-fence-body compile result. 'partial' means JSON.parse failed, which a
+ * streaming caller may keep waiting on; 'invalid' means the JSON parsed and
+ * checkShownView rejected it, a definitive failure for the same text.
+ */
+export type DeepUiCompile =
+  | { state: 'complete'; shown: ShownView }
+  | { state: 'invalid'; error: string }
+  | { state: 'partial' }
+
+/**
+ * Compile one deepui/deep-view fence body: JSON.parse, then checkShownView on
+ * either {title, view} or a bare ViewNode. Callers decide how to present
+ * 'partial' while streaming versus after the fence is final.
+ */
+export function compileDeepUi(body: string): DeepUiCompile {
+  try {
+    const payload: unknown = JSON.parse(body)
+    const record = payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : undefined
+    const sent = record && Object.hasOwn(record, 'view') ? record.view : payload
+    const title = record && Object.hasOwn(record, 'view') && typeof record.title === 'string' ? record.title : undefined
+    const shown = checkShownView(title, sent) as ShownView | { error: string }
+    return 'error' in shown ? { state: 'invalid', error: shown.error } : { state: 'complete', shown }
+  } catch {
+    return { state: 'partial' }
+  }
+}
 type Fence = { at: number; marker: string; language: string; contentStart: number }
 const OPEN = /(^|\n)(`{3,}|~{3,})([^\r\n`~]*)(?:\n|$)/g
 function closeFence(source: string, from: number, marker: string): { at: number; next: number } | undefined {
@@ -51,18 +78,12 @@ export function parseDeepUi(source: string): TextPart[] {
       return parts
     }
     const body = source.slice(start.contentStart, close.at)
-    try {
-      const payload: unknown = JSON.parse(body)
-      const record = payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : undefined
-      const sent = record && Object.hasOwn(record, 'view') ? record.view : payload
-      const title = record && Object.hasOwn(record, 'view') && typeof record.title === 'string' ? record.title : undefined
-      const shown = checkShownView(title, sent) as ShownView | { error: string }
-      parts.push('error' in shown
-        ? { kind: 'markdown', key: `m-${start.at}`, text: source.slice(start.at, close.next) }
-        : { kind: 'view', key: `v-${start.at}`, text: body, shown })
-    } catch {
-      parts.push({ kind: 'markdown', key: `m-${start.at}`, text: source.slice(start.at, close.next) })
-    }
+    // A closed fence's compile result is final here: 'partial' and 'invalid'
+    // alike fall back to verbatim Markdown, only 'complete' becomes a view.
+    const compiled = compileDeepUi(body)
+    parts.push(compiled.state === 'complete'
+      ? { kind: 'view', key: `v-${start.at}`, text: body, shown: compiled.shown }
+      : { kind: 'markdown', key: `m-${start.at}`, text: source.slice(start.at, close.next) })
     offset = close.next
   }
   markdown(source.length)

@@ -3,11 +3,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/host-rpc'
+import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import { installPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { checkShownView, validateViewAnswer, viewSummary } from './core/index.js'
 import { answerText } from './answer-text.ts'
 import { DEEP_VIEW_SKILL, DEEP_VIEW_SKILL_DESCRIPTION } from './skill.ts'
-import { HOST_SERVICE, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type DeepViewHost, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation, type ViewAnswerMetadata } from './contracts.ts'
+import { HOST_SERVICE, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type DeepViewHost, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation, type ViewAnswerMetadata, type ViewSnapshot } from './contracts.ts'
 
 export const name = 'deep-view'
 export const inject = ['tools', 'skills', 'sessionController', 'sessions', 'agents', 'connection', 'webServer'] as const
@@ -60,9 +61,14 @@ type AgentLike = {
   session: unknown
   followup(message: ReturnType<typeof createUserMessage>): void
 }
-// The real `agents` service returns the runtime Agent type; our local narrow
-// shape cannot feed includes() against it, so compare by id.
-const isLiveRoot = (host: Host, agent: AgentLike | undefined) => agent !== undefined && host.agents.roots().some(root => (root as unknown as AgentLike).id === agent.id)
+// list() includes delegated agents in rc.3; it cannot replace roots(). Older
+// hosts can explicitly attest plugin-owned roots. Without that API, use the
+// shared persisted-header guard, which admits ordinary human forks too.
+const isLiveRoot = (host: Host, agent: AgentLike | undefined): boolean => {
+  if (!agent || host.agents.get(agent.id) !== agent) return false
+  if (typeof host.agents.roots === 'function') return host.agents.roots().some(root => root === agent)
+  return isRecord(agent.session) && isRecord(agent.session.header) && !isSubagentSession(agent.session)
+}
 type Host = Context & HostRpcContext & {
   tools: {
     get(name: string, scope?: object): unknown
@@ -78,7 +84,7 @@ type Host = Context & HostRpcContext & {
       invocation: { modelInvocable: boolean; userInvocable: boolean }
     }): () => void
   }
-  agents: { get(id: string): AgentLike | undefined; roots(): AgentLike[] }
+  agents: { get(id: string): AgentLike | undefined; list?(): AgentLike[]; roots?(): AgentLike[] }
   sessionController: { resolveAgent(id: string): Promise<{ agent?: AgentLike; error?: { message?: string } }> }
   sessions: { flush(session: unknown): Promise<boolean> }
   logger?: { warn(message: string, ...args: unknown[]): void }
@@ -91,13 +97,15 @@ const isShown = (value: ShownView | { error: string }): value is ShownView => !(
 
 // The host snapshots presentationMeta as JSON on every result, so a result
 // without a card reports null; undefined fails the whole call as invalid output.
-function presentation(args: unknown, value: unknown): ViewPresentation | null {
-  if (!isRecord(value) || value.owner !== VIEW_OWNER || !['shown', 'pending'].includes(String(value.status))) return null
-  const shown = checkedShown(isRecord(args) ? args.title : undefined, isRecord(args) ? args.view : undefined)
-  if (!isShown(shown)) return null
+function presentation(_args: unknown, value: unknown): ViewPresentation | null {
+  if (!isRecord(value) || value.owner !== VIEW_OWNER || !['shown', 'pending'].includes(String(value.status)) || !isRecord(value.snapshot)) return null
+  const snapshot = value.snapshot
+  const shown = checkedShown(snapshot.title, snapshot.view)
+  if (!isShown(shown) || !short(snapshot.id, 80) || !short(snapshot.sessionId, 200)
+    || typeof snapshot.revision !== 'number' || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 1) return null
   return {
-    owner: VIEW_OWNER, ...(short(value.viewId, 80) ? { viewId: value.viewId } : {}),
-    ...shown, awaitReply: value.awaitReply === true,
+    owner: VIEW_OWNER, viewId: snapshot.id, ...shown, revision: snapshot.revision,
+    awaitReply: value.awaitReply === true,
   }
 }
 
@@ -106,22 +114,25 @@ export function createShowViewTool(
   pending: Map<string, PendingView>,
   makeId: () => string = randomUUID,
   logger?: PluginLogger,
+  latest: Map<string, ViewSnapshot> = new Map(),
 ): Record<string, unknown> {
   return {
     name: 'show_view',
-    description: 'Show one interactive Deep View card as soon as its arguments are complete and preserve it with the reply. Load the deep-view skill before using this tool; it contains the usage and ViewNode format. await_reply is only for answer controls.',
+    description: 'Show a native interface during the task or preserve an interactive answer with the reply. Load the deep-view skill before using this tool; it explains when a deepui reply fence is the lighter surface. await_reply is only for answer controls.',
     // tools.register() takes raw JSON Schema; the per-field DSL is only for defineTool().
     parameters: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'Short heading above the card.' },
+        title: { type: 'string', description: 'Optional short task heading; omit it when the reply already names the subject.' },
         view: { type: 'object', additionalProperties: true, description: 'One ViewNode. Load the deep-view skill for the complete format and examples.' },
         await_reply: { type: 'boolean', description: 'Whether this card asks the user for a response.' },
+        view_id: { type: 'string', description: 'Update an existing view id in this session. Omit when creating a view.' },
+        base_revision: { type: 'integer', description: 'The positive revision this complete replacement is based on; required for an update and checked again by the Host.' },
       },
       required: ['view'],
     } satisfies ObjectJsonSchema,
     output: {
-      schema: { type: 'object', properties: { owner: { type: 'string', const: VIEW_OWNER }, status: { type: 'string' }, viewId: { type: 'string' }, awaitReply: { type: 'boolean' }, summary: { type: 'string' } }, required: ['owner', 'status', 'awaitReply', 'summary'], additionalProperties: false },
+      schema: { type: 'object', properties: { owner: { type: 'string', const: VIEW_OWNER }, status: { type: 'string' }, viewId: { type: 'string' }, revision: { type: 'integer', description: 'Positive immutable snapshot revision' }, awaitReply: { type: 'boolean' }, snapshot: { type: 'object', additionalProperties: true }, summary: { type: 'string' } }, required: ['owner', 'status', 'awaitReply', 'summary'], additionalProperties: false },
       render: (_args: unknown, value: { summary?: string }) => [{ type: 'text', text: String(value.summary ?? '') }],
       presentationMeta: presentation,
     },
@@ -144,18 +155,43 @@ export function createShowViewTool(
       }
       const id = exec.agent?.id
       const agent = id === undefined ? undefined : host.agents.get(id)
+      const requestedId = input.view_id === undefined ? undefined : input.view_id
+      if (requestedId !== undefined && !short(requestedId, 80)) return { owner: VIEW_OWNER, status: 'invalid', awaitReply: false, summary: 'view_id: expected a bounded view id' }
+      const current = requestedId === undefined ? undefined : latest.get(requestedId)
+      if (requestedId !== undefined && (!current || current.sessionId !== id || !isLiveRoot(host, agent))) {
+        return { owner: VIEW_OWNER, status: 'stale', awaitReply: false, summary: 'view_id: no updateable view with this id in the current root session' }
+      }
+      if (current && input.base_revision !== current.revision) {
+        return { owner: VIEW_OWNER, status: 'stale', awaitReply: false, summary: `base_revision: expected ${current.revision}; reload the current view before updating` }
+      }
+      if (!current && input.base_revision !== undefined) return { owner: VIEW_OWNER, status: 'invalid', awaitReply: false, summary: 'base_revision is only valid when updating an existing view' }
+      if (current && current.interactive !== shown.interactive) {
+        return { owner: VIEW_OWNER, status: 'invalid', awaitReply: false, summary: 'Changing answer controls requires a new view, not an in-place update' }
+      }
+      if (current?.interactive && (!pending.has(id ?? '') || pending.get(id ?? '')?.id !== current.id)) {
+        return { owner: VIEW_OWNER, status: 'stale', awaitReply: false, summary: 'This answer has already closed; create a new view instead of updating it' }
+      }
       if (awaitReply && !isLiveRoot(host, agent)) {
         logger?.debug('view.non-root-rejected', 'Rejected interactive show_view outside a live root session.', {
           sessionId: id ?? null,
         })
         return { owner: VIEW_OWNER, status: 'invalid', awaitReply: false, summary: 'An interactive view only works in a live root session. Put the question or decision in your response instead.' }
       }
-      let viewId: string | undefined
+      const revision = current ? current.revision + 1 : 1
+      const snapshot: ViewSnapshot = {
+        ...shown, revision, id: requestedId ?? makeId(), sessionId: id ?? '',
+        ...(exec.callId ? { callId: exec.callId } : {}),
+      }
+      const viewId = snapshot.id
+      // Every canonical result owns its complete immutable snapshot. Later
+      // updates never mutate this value, so replay remains exact.
+      latest.delete(viewId)
+      latest.set(viewId, snapshot)
+      while (latest.size > 256) latest.delete(latest.keys().next().value!)
       if (awaitReply && agent) {
-        viewId = makeId()
         // set() alone replaces an earlier unanswered card: the old card becomes
-        // stale and its pending record points at the newest view only.
-        pending.set(agent.id, { id: viewId, sessionId: agent.id, ...(exec.callId ? { callId: exec.callId } : {}), ...shown })
+        // stale and its pending record points at the newest revision only.
+        pending.set(agent.id, snapshot)
       }
       logger?.info('view.prepared', 'Prepared Deep View card.', {
         sessionId: agent?.id ?? id ?? null,
@@ -163,10 +199,10 @@ export function createShowViewTool(
         awaitReply,
       })
       return {
-        owner: VIEW_OWNER, status: awaitReply ? 'pending' : 'shown', ...(viewId ? { viewId } : {}), awaitReply,
-        // A tool result is process data. The completed-turn reply surface owns
-        // the card, so the model must still produce its final answer.
-        summary: `Card prepared for the final reply. Finish with a concise final answer; do not call this tool again for the same card.${awaitReply ? ' The user can answer the card after your reply finishes; do not wait or poll.' : ''} ${viewSummary(shown.view)}`,
+        owner: VIEW_OWNER, status: awaitReply ? 'pending' : 'shown', viewId, revision, snapshot, awaitReply,
+        // A tool result is process data. The interface may already be visible
+        // while the turn runs; the model must still produce its final answer.
+        summary: `${current ? `Updated interface revision ${revision}` : 'Interface shown to the user'}. viewId=${viewId}; revision=${revision}. Finish with a concise final answer; do not repeat its data or create a duplicate view. ${viewSummary(shown.view)}${awaitReply ? ' The user can answer this revision directly or fill the composer; do not wait or poll.' : ''}`,
       }
     },
     isConcurrencySafe: () => false,
@@ -193,7 +229,8 @@ export function createRpc(
       return ok(true)
     }
     if (endpoint !== 'reply') return fail('not-found', 'Unknown Deep View endpoint')
-    if (!record || !short(payload.viewId, 80) || payload.viewId !== record.id || !short(payload.action, 160) || !isRecord(payload.values)) {
+    if (!record || !short(payload.viewId, 80) || payload.viewId !== record.id || !short(payload.action, 160) || !isRecord(payload.values)
+      || !(payload.revision === record.revision || payload.revision === undefined && record.revision === 1)) {
       logger?.debug('reply.stale', 'Rejected reply for stale or closed Deep View card.', { sessionId })
       return fail('stale', 'This view is no longer open')
     }
@@ -224,13 +261,13 @@ export function createRpc(
       const live = host.agents.get(sessionId)
       const resolved = isLiveRoot(host, live) ? { agent: live } : await host.sessionController.resolveAgent(sessionId)
       const agent = resolved.agent
-      if (!agent || host.agents.get(agent.id) !== agent || !host.agents.roots().some(root => (root as unknown as AgentLike).id === agent.id)) throw new Error(('error' in resolved ? resolved.error?.message : undefined) ?? 'The session is not a live root session')
+      if (!agent || host.agents.get(agent.id) !== agent || !isLiveRoot(host, agent)) throw new Error(('error' in resolved ? resolved.error?.message : undefined) ?? 'The session is not a live root session')
       if (signal.aborted) return fail('cancelled', 'The request was cancelled')
       // Text and answer facts share one durable message: neither can survive
       // without the other, and fork/history boundaries preserve their pairing.
       const deepView: ViewAnswerMetadata = {
         owner: VIEW_OWNER, version: 1,
-        answer: { id: record.id, action: payload.action, values: checked },
+        answer: { id: record.id, action: payload.action, values: checked, revision: record.revision },
       }
       agent.followup(createUserMessage({
         content: [{ type: 'text', text: answerText(record, payload.action, checked) }],
@@ -264,6 +301,7 @@ export async function apply(ctx: Context): Promise<void> {
   const logger = installPluginLogger(ctx, PLUGIN_NAME, { forwardHostWarnError: false })
   const pending = new Map<string, PendingView>()
   const redirects = new Map<string, string>()
+  const latest = new Map<string, ViewSnapshot>()
   ctx.effect(() => host.skills.register({
     name: 'deep-view',
     description: DEEP_VIEW_SKILL_DESCRIPTION,
@@ -275,7 +313,11 @@ export async function apply(ctx: Context): Promise<void> {
   ctx.provide(HOST_SERVICE, {
     handoffSession: (fromSessionId, toSessionId) => {
       const moved = handoffPendingSession(pending, redirects, fromSessionId, toSessionId)
-      if (moved) logger.debug('session.handoff', 'Moved pending Deep View card across session handoff.', { fromSessionId, toSessionId })
+      if (moved) {
+        const current = pending.get(toSessionId)
+        if (current) latest.set(current.id, current)
+        logger.debug('session.handoff', 'Moved pending Deep View card across session handoff.', { fromSessionId, toSessionId })
+      }
       return moved
     },
   })
@@ -286,7 +328,7 @@ export async function apply(ctx: Context): Promise<void> {
       return () => {}
     }
     try {
-      return host.tools.register(createShowViewTool(host, pending, randomUUID, logger))
+      return host.tools.register(createShowViewTool(host, pending, randomUUID, logger, latest))
     }
     catch (error) {
       logger.warn('tool.register-failed', 'show_view tool registration failed.', error)

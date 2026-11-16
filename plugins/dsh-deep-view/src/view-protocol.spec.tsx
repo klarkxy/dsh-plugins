@@ -142,6 +142,17 @@ describe('widget rendering for steps and forms', () => {
     expect(onSubmit).toHaveBeenLastCalledWith('f', { canceled: true })
     await act(async () => root.unmount())
   })
+  it('restores multiline form answers filled through the composer', () => {
+    const card = { id: 'v', title: '反馈', view: { type: 'form' as const, id: 'f', fields: [
+      { id: 'name', label: '姓名' },
+      { id: 'note', label: '备注', multiline: true },
+      { id: 'city', label: '城市' },
+    ] } }
+    const values = { fields: { name: 'Ada', note: '第一行\n第二行\n第三行', city: '上海' } }
+    const text = answerText(card, 'f', values)
+    expect(text).toBe('反馈\n姓名: Ada\n备注: 第一行\n第二行\n第三行\n城市: 上海')
+    expect(legacyAnswer(card, text)).toEqual({ id: 'v', action: 'f', values })
+  })
   it('shows a compact receipt once a form is settled', async () => {
     const root = createRoot(document.getElementById('root')!)
     const view = { type: 'form' as const, id: 'f', cancelLabel: '放弃', submitLabel: '发送', fields: [{ id: 'name', label: 'Name', value: 'seed' }] }

@@ -29,7 +29,7 @@ describe('durable card answers', () => {
     const host = { agents: { get: () => agent, roots: () => [agent] },
       sessionController: { resolveAgent: async () => ({ agent }) },
       sessions: { flush: async () => true } }
-    const pending = new Map<string, PendingView>([[id, { id: 'v1', sessionId: id, callId: 'c1', title: '订单', view }]])
+    const pending = new Map<string, PendingView>([[id, { id: 'v1', sessionId: id, callId: 'c1', title: '订单', view, interactive: true, revision: 1 }]])
     const rpc = createRpc(host as never, pending)
     expect(await rpc('reply', { sessionId: id, viewId: 'v1', action: 'result', values: savedAnswer.values }, new AbortController().signal)).toMatchObject({ ok: true })
     // Restore through the Host's validation, as a cold-opened persisted session.
@@ -37,7 +37,7 @@ describe('durable card answers', () => {
     const [message] = restored.deriveMessages()
     expect(message.content).toEqual([{ type: 'text', text: '订单\n确认结果\n单价=6; 数量=2' }])
     expect(message.source).toMatchObject({ kind: 'user', deepView: { owner: 'dsh-deep-view', version: 1, answer: savedAnswer } })
-    expect(checkedAnswer(replyAnswers(fromSources([message.source])).get('v1'), 'v1', view)).toEqual(savedAnswer)
+    expect(checkedAnswer(replyAnswers(fromSources([message.source])).get('v1'), 'v1', view)).toEqual({ ...savedAnswer, revision: 1 })
     expect(await rpc('reply', { sessionId: id, viewId: 'v1', action: 'result', values: savedAnswer.values }, new AbortController().signal)).toMatchObject({ ok: false })
     expect(events).toHaveLength(1)
   })
@@ -50,6 +50,12 @@ describe('durable card answers', () => {
     expect(checkedAnswer(savedAnswer, 'other-card', view)).toBeNull()
     expect(checkedAnswer({ ...savedAnswer, values: { selected: ['forged'] } }, 'v1', view)).toBeNull()
     expect(checkedAnswer({ ...savedAnswer, values: { ...savedAnswer.values, inputs: { price: 6, count: 999 } } }, 'v1', view)).toBeNull()
+  })
+  it('matches the answer revision without rejecting legacy revision-one messages', () => {
+    expect(checkedAnswer(savedAnswer, 'v1', view, 1)).toEqual(savedAnswer)
+    expect(checkedAnswer(savedAnswer, 'v1', view, 2)).toBeNull()
+    expect(checkedAnswer({ ...savedAnswer, revision: 2 }, 'v1', view, 2)?.revision).toBe(2)
+    expect(checkedAnswer({ ...savedAnswer, revision: 2 }, 'v1', view, 1)).toBeNull()
   })
   it('restores the previous readable reply without rewriting its history', () => {
     const card = { id: 'v1', title: '订单', view }
@@ -64,7 +70,7 @@ describe('durable card answers', () => {
       ['answer', { kind: 'user', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } }],
     ])
     const snapshot = { order: ['card', 'answer'], locations: { getTurn: () => [] }, nodes: { get: (id: string) => nodes.get(id) } } as ReplySnapshot
-    expect(replyAnswers(snapshot).get('v1')).toEqual(savedAnswer)
+    expect(replyAnswers(snapshot).get('v1')).toEqual({ ...savedAnswer, revision: 1 })
     const unrelated = { kind: 'user', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Another question' }] } }
     expect(replyAnswers({ ...snapshot, order: ['card', 'unrelated', 'answer'], nodes: { get: id => id === 'unrelated' ? unrelated : snapshot.nodes.get(id) } }).size).toBe(0)
   })
@@ -77,6 +83,65 @@ describe('durable card answers', () => {
       { type: 'options', id: 'b', options: [{ label: 'Yes' }] },
     ] }
     expect(legacyAnswer({ id: 'v', title: 'Choose', view: ambiguous }, 'Choose\nYes')).toBeNull()
+  })
+  it('answers the latest revision when a composer reply matches several revisions of one view', () => {
+    const pick: ViewNode = { type: 'stack', children: [{ type: 'options', id: 'pick', options: [{ label: 'Yes' }, { label: 'No' }] }] }
+    const card = (revision: number, callId: string) => ({ callId, kind: 'tool-result' as const, meta: {
+      owner: 'dsh-deep-view', viewId: 'q', title: 'Choose', view: pick, awaitReply: true, revision,
+    } })
+    const message = { kind: 'user', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Choose\nYes' }] } }
+    const nodes = new Map([
+      ['r1', { kind: 'tool-call', data: { root: card(1, 'one') } }],
+      ['r2', { kind: 'tool-call', data: { root: card(2, 'two') } }],
+      ['m', message],
+    ])
+    const snapshot = { order: ['r1', 'r2', 'm'], locations: { getTurn: () => [] }, nodes: { get: (id: string) => nodes.get(id) } } as ReplySnapshot
+    // Both revisions produce identical text for 'Yes'; the answer settles the newest revision.
+    const answer = replyAnswers(snapshot).get('q')
+    expect(answer).toEqual({ id: 'q', action: 'pick', values: { selected: ['Yes'] }, revision: 2 })
+    expect(checkedAnswer(answer, 'q', pick, 2)).toEqual(answer)
+    expect(checkedAnswer(answer, 'q', pick, 1)).toBeNull()
+  })
+  it('keeps the revision when only the newest revision matches the composer text', () => {
+    const pick = (label: string): ViewNode => ({ type: 'stack', children: [{ type: 'options', id: 'pick', options: [{ label }, { label: 'No' }] }] })
+    const card = (revision: number, callId: string, view: ViewNode) => ({ callId, kind: 'tool-result' as const, meta: {
+      owner: 'dsh-deep-view', viewId: 'q', title: 'Choose', view, awaitReply: true, revision,
+    } })
+    const nodes = new Map([
+      ['r1', { kind: 'tool-call', data: { root: card(1, 'one', pick('One')) } }],
+      ['r2', { kind: 'tool-call', data: { root: card(2, 'two', pick('Two')) } }],
+      ['m', { kind: 'user', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Choose\nTwo' }] } }],
+    ])
+    const snapshot = { order: ['r1', 'r2', 'm'], locations: { getTurn: () => [] }, nodes: { get: (id: string) => nodes.get(id) } } as ReplySnapshot
+    const answer = replyAnswers(snapshot).get('q')
+    expect(answer).toEqual({ id: 'q', action: 'pick', values: { selected: ['Two'] }, revision: 2 })
+    expect(checkedAnswer(answer, 'q', pick('Two'), 2)).toEqual(answer)
+  })
+  it('still rejects identical text answering different views and never matches future revisions', () => {
+    const pick: ViewNode = { type: 'stack', children: [{ type: 'options', id: 'pick', options: [{ label: 'Yes' }, { label: 'No' }] }] }
+    const card = (viewId: string, revision: number, callId: string) => ({ callId, kind: 'tool-result' as const, meta: {
+      owner: 'dsh-deep-view', viewId, title: 'Choose', view: pick, awaitReply: true, revision,
+    } })
+    const message = { kind: 'user', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Choose\nYes' }] } }
+    const all = new Map<string, { kind: string; data: unknown }>([
+      ['a1', { kind: 'tool-call', data: { root: card('a', 1, 'a1') } }],
+      ['b1', { kind: 'tool-call', data: { root: card('b', 1, 'b1') } }],
+      ['m1', message],
+      ['a2', { kind: 'tool-call', data: { root: card('a', 2, 'a2') } }],
+      ['m2', message],
+    ])
+    const take = (order: string[]) => ({ order, locations: { getTurn: () => [] }, nodes: { get: (id: string) => all.get(id) } } as ReplySnapshot)
+    // Two different views legitimately answerable by the same text stay ambiguous.
+    expect(replyAnswers(take(['a1', 'b1', 'm1'])).size).toBe(0)
+    // A message predating revision 2 cannot settle it, even with matching text;
+    // revision 2 remains unanswered and stale-revision checks still reject it.
+    const later = replyAnswers(take(['a1', 'm1', 'a2']))
+    expect(later.get('a')).toEqual({ id: 'a', action: 'pick', values: { selected: ['Yes'] }, revision: 1 })
+    expect(checkedAnswer(later.get('a'), 'a', pick, 2)).toBeNull()
+    expect(checkedAnswer(later.get('a'), 'a', pick, 1)).toEqual(later.get('a'))
+    // The first accepted reply settles a view; later identical text cannot move it to a newer revision.
+    const next = replyAnswers(take(['a1', 'm1', 'a2', 'm2']))
+    expect(next.get('a')).toEqual(later.get('a'))
   })
   it('round-trips legacy confirm, form, submit and scalar input replies', () => {
     const cases: { view: ViewNode; action: string; values: Record<string, unknown> }[] = [

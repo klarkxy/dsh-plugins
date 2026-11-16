@@ -60,10 +60,18 @@ export function legacyAnswer(card: Card, text: string): ViewAnswer | null {
       } else {
         const fields: Record<string, string> = {}
         let valid = true
-        for (const field of node.fields ?? []) {
-          const line = rest.shift(), prefix = `${field.label}: `
-          if (line === undefined || !line.startsWith(prefix)) { valid = false; break }
-          fields[field.id] = line.slice(prefix.length)
+        const declared = node.fields ?? []
+        const inputs = viewInputs(card.view) as ViewNode[]
+        const inputPrefix = inputs[0] ? `${inputs[0].label || inputs[0].id}=` : undefined
+        const boundary = (line: string | undefined) => line !== undefined && (declared.some(field => line.startsWith(`${field.label}: `)) || (inputPrefix !== undefined && line.startsWith(inputPrefix)))
+        for (let index = 0; index < declared.length; index++) {
+          const field = declared[index], prefix = `${field.label}: `
+          if (rest[0] === undefined || !rest[0].startsWith(prefix)) { valid = false; break }
+          const value = [rest.shift()!.slice(prefix.length)]
+          // Only a field declared as multiline may consume continuation lines.
+          // Otherwise a malformed ordinary message must not be guessed as an answer.
+          if (field.multiline === true) while (rest[0] !== undefined && !boundary(rest[0])) value.push(rest.shift()!)
+          fields[field.id] = value.join('\n')
         }
         if (!valid) continue
         values.fields = fields

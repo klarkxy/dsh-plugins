@@ -21,6 +21,29 @@ const STRUCTURAL_TOKENS = new Set([
 
 const ALLOWED = new Set([...OFFICIAL_THEME_TOKEN_NAMES, ...STRUCTURAL_TOKENS])
 
+// These two adapters bridge the libraries' public CSS properties to host tokens.
+// Keep exceptions local and explicit: they are not additional DSH theme tokens.
+const LIBRARY_PROPERTIES = new Map<string, Set<string>>([
+  ['plugins/dsh-deep-view/src/math-styles.ts', new Set([
+    '--mafs-bg', '--mafs-fg', '--mafs-origin-color', '--mafs-line-color',
+    '--mafs-axis-stroke-width', '--grid-line-subdivision-color',
+    '--mafs-line-stroke-dash-style', '--mafs-pink',
+    '--movable-point-color', '--movable-point-ring-size',
+  ])],
+  ['plugins/dsh-deep-view/src/rich-styles.ts', new Set([
+    '--xy-edge-stroke-default', '--xy-edge-stroke-selected-default',
+    '--xy-attribution-background-color-default', '--xy-minimap-background-color-default',
+    '--xy-minimap-mask-background-color-default', '--xy-minimap-mask-stroke-color-default',
+    '--xy-minimap-node-background-color-default', '--xy-background-pattern-dots-color-default',
+    '--xy-node-color-default', '--xy-node-border-default', '--xy-node-background-color-default',
+    '--xy-node-border-radius-default', '--xy-handle-background-color-default',
+    '--xy-handle-border-color-default', '--xy-controls-button-background-color-default',
+    '--xy-controls-button-background-color-hover-default', '--xy-controls-button-color-default',
+    '--xy-controls-button-border-color-default', '--xy-edge-label-background-color-default',
+    '--xy-edge-label-color-default',
+  ])],
+])
+
 /** Build output and vendored dependencies carry no authored styling. */
 const SKIP_DIRS = new Set(['node_modules', 'lib', 'dist', 'outDir', '.test-output', 'coverage'])
 
@@ -73,7 +96,7 @@ describe('official UI contract', () => {
         // Private `--_name` custom properties (e.g. a component's animated
         // position channel, `--_p`) are author-owned values, not theme tokens.
         if (token.startsWith('--_')) continue
-        if (!ALLOWED.has(token)) offenders.push(`${relative}: ${token}`)
+        if (!ALLOWED.has(token) && !LIBRARY_PROPERTIES.get(relative.replaceAll('\\', '/'))?.has(token)) offenders.push(`${relative}: ${token}`)
       }
     }
     expect(offenders).toEqual([])

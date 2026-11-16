@@ -17,6 +17,14 @@ export type StepStatus = 'done' | 'active' | 'pending' | 'blocked'
 export type SourceItem = { label: string; url: string }
 export type StepItem = { label: string; detail?: Value; status?: Value }
 export type FormField = { id: string; label: string; placeholder?: string; value?: string; multiline?: boolean; readOnly?: boolean }
+export type MathPoint = { id: string; label?: string; x: number; y: number; constrain?: 'free' | 'horizontal' | 'vertical' }
+export type MathCurve = { label?: string; expression: string }
+export type FlowNode = { id: string; label: string; detail?: string; x: number; y: number; tone?: 'neutral' | 'accent' | 'success' | 'warn' | 'bad' }
+export type FlowEdge = { id: string; source: string; target: string; label?: string }
+export type ExploreDatum = Record<string, Scalar>
+export type MapLocation = { id: string; label: string; detail?: string; coordinates: [number, number] }
+export type MapRoute = { label?: string; coordinates: [number, number][] }
+export type ViewBinding = { id: string; value: unknown; kind?: 'input' | 'math' | 'flow' | 'explore' | 'map'; node?: ViewNode }
 // The wire shares `items` between sources ({label,url}) and steps
 // ({label,detail?,status?}); the validator enforces the shape per node type.
 // Narrow with `isSourceItem`/`isStepItem` before reading `url` or `status`.
@@ -29,6 +37,7 @@ export function isStepItem(item: SourceItem | StepItem): item is StepItem {
 export type ViewNode = {
   type: 'stack' | 'row' | 'text' | 'metric' | 'table' | 'chart' | 'progress' | 'callout' | 'sources' | 'steps'
     | 'slider' | 'number' | 'choice' | 'toggle' | 'options' | 'confirm' | 'form' | 'submit'
+    | 'math' | 'flow' | 'explore' | 'map'
   id?: string
   children?: ViewNode[]
   let?: Record<string, string>
@@ -55,11 +64,31 @@ export type ViewNode = {
   cancelLabel?: string
   fields?: FormField[]
   submitLabel?: string
+  /** Interactive math: point ids expose `<id>X` and `<id>Y` bindings. */
+  mathPoints?: MathPoint[]
+  curves?: MathCurve[]
+  domain?: [number, number]
+  range?: [number, number]
+  /** Node graph: id receives the selected node id. */
+  nodes?: FlowNode[]
+  edges?: FlowEdge[]
+  /** Bounded data exploration: id receives selected category values or an x/y interval. */
+  data?: ExploreDatum[]
+  xKey?: string
+  yKey?: string
+  colorKey?: string
+  select?: 'point' | 'interval'
+  /** Map: id receives the selected location id. */
+  center?: [number, number]
+  zoom?: number
+  locations?: MapLocation[]
+  routes?: MapRoute[]
 }
-export type ShownView = { title: string; view: ViewNode; interactive: boolean }
+export type ShownView = { title: string; view: ViewNode; interactive: boolean; revision?: number }
 export type ViewFailure = { error: string }
-export type PendingView = { id: string; sessionId: string; callId?: string; title: string; view: ViewNode }
-export type ViewAnswer = { id: string; action: string; values: Record<string, unknown> }
+export type ViewSnapshot = ShownView & { id: string; sessionId: string; callId?: string; revision: number }
+export type PendingView = ViewSnapshot
+export type ViewAnswer = { id: string; action: string; values: Record<string, unknown>; revision?: number }
 /** Stored on the same user message as its readable answer, outside model text. */
 export type ViewAnswerMetadata = { owner: typeof VIEW_OWNER; version: 1; answer: ViewAnswer }
 export type ViewPresentation = {
@@ -69,6 +98,7 @@ export type ViewPresentation = {
   view: ViewNode
   interactive: boolean
   awaitReply: boolean
+  revision?: number
 }
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)

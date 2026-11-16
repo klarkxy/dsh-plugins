@@ -332,10 +332,10 @@
       "package": "@klarkxy/dsh-deep-view",
       "category": "workflow",
       "kind": "plugin",
-      "title": { "zh": "Deep View 回复卡片", "en": "Deep View reply cards" },
+      "title": { "zh": "Deep View 智能界面", "en": "Deep View intelligent UI" },
       "summary": {
-        "zh": "在回复中展示流程步骤、图表、指标和安全联动的本地输入，支持填草稿及已校验的回答。",
-        "en": "Workflow steps, charts, metrics and safe local inputs in replies, with composer drafts and validated show_view answers."
+        "zh": "在正文中组合图表、交互数学、节点图、数据探索、地图与可调估算，让模型用合适的界面表达并接收你的操作。",
+        "en": "Compose native visuals, interactive math, node graphs, data exploration, maps and adjustable estimates inside replies, then turn interactions into answers."
       },
       "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
       "repository": "https://github.com/klarkxy/dsh-plugins",

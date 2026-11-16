@@ -8,11 +8,15 @@ import { PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type PendingView, type 
 import type { ToolViewProps, ToolArgsView, ReplyViewProps, ReplySnapshot } from './runtime.ts'
 import { WidgetCard, type Answer } from './widget.tsx'
 import { viewStyles } from './styles.ts'
+import { mathStyles } from './math-styles.ts'
+import { richStyles } from './rich-styles.ts'
+import { vendorCss } from './vendor-css.generated.ts'
 import { checkedAnswer, replyAnswers, sameAnswers } from './answers.ts'
 import { uiEn, uiZh } from './copy.ts'
-import { createViewStateStore, useLatestPending, useViewPending, useViewProgress, useViewStatus, useViewT } from './client-state.ts'
+import { createViewStateStore, useLatestPending, useLiveSnapshot, useViewPending, useViewProgress, useViewStatus, useViewT, useViewValues } from './client-state.ts'
 import { answerText } from './answer-text.ts'
 import { fillComposerDraft, type ComposerActions, type FillDraft, type InputSnapshot } from './draft.ts'
+import { DeepViewFence, type DeepViewFenceProps } from './fence.tsx'
 
 export const name = 'dsh-deep-view-client'
 export const inject = ['slots', 'connection', 'locale'] as const
@@ -30,6 +34,12 @@ const viewT = (t: UiT): ((key: string, params?: Record<string, unknown>) => stri
     Options: 'options', Submit: 'submit', Cancel: 'cancel', Confirm: 'confirm', Send: 'send', Selected: 'selected',
     sending: 'sending', filling: 'filling', filled: 'filled', fillFailed: 'fillFailed', fillDraft: 'fillDraft', waitingDock: 'waitingDock', expired: 'expired', dismissFailed: 'dismissFailed', 'Dismiss view': 'dismissView',
     draftConflict: 'draftConflict', replaceDraft: 'replaceDraft', appendDraft: 'appendDraft', 'Fill composer': 'fillDraft', Steps: 'steps',
+    'Node graph': 'nodeGraph', 'Select a node': 'selectNode', 'Nothing to explore': 'nothingToExplore',
+    '{n} selected: {values}': 'selectedValues', 'Drag to select a range; double-click to clear': 'exploreIntervalHint',
+    'Click points to select; double-click to clear': 'explorePointHint', 'The chart could not be drawn.': 'exploreFailed',
+    'Data: {n} rows': 'dataRows', 'Showing {shown} of {n} rows': 'dataTruncated', Map: 'map', 'Map marker': 'mapMarker',
+    'Zoom in': 'zoomIn', 'Zoom out': 'zoomOut', 'Reset bearing to north': 'resetBearing', 'Map is unavailable in this environment.': 'mapUnavailable',
+    'Map failed to load.': 'mapFailed', 'You can still pick a location below.': 'mapFallback', Locations: 'locations',
   }
   return keys[key] ? t(keys[key], params) : key.replace(/\{(\w+)\}/g, (_, name) => String(params?.[name] ?? `{${name}}`))
 }
@@ -64,7 +74,7 @@ export function readToolCall(props: Pick<ToolViewProps, 'phase' | 'block'>): { p
   if (isRecord(meta) && meta.owner === VIEW_OWNER) {
     const shown = checkShownView(meta.title, meta.view) as ShownView | { error: string }
     if ('error' in shown) return { title: meta.title, view: meta.view, viewReady: true, phase, isError: true }
-    return { presentation: { owner: VIEW_OWNER, ...shown, ...(typeof meta.viewId === 'string' ? { viewId: meta.viewId } : {}), awaitReply: meta.awaitReply === true }, title: meta.title, view: meta.view, viewReady: true, phase, isError }
+    return { presentation: { owner: VIEW_OWNER, ...shown, ...(typeof meta.viewId === 'string' ? { viewId: meta.viewId } : {}), awaitReply: meta.awaitReply === true, ...(typeof meta.revision === 'number' && Number.isSafeInteger(meta.revision) && meta.revision > 0 ? { revision: meta.revision } : {}) }, title: meta.title, view: meta.view, viewReady: true, phase, isError }
   }
   const args = block.args
   const title = argField(args, 'title')
@@ -78,24 +88,38 @@ type SharedViewProps = ToolViewProps & {
   call(endpoint: string, payload: unknown): Promise<unknown>
   store: ViewStore
   surface?: 'inline' | 'dock' | 'history' | 'standalone'
+  /** Display views keep the first message position and read the latest snapshot. */
+  liveSnapshot?: boolean
   fillDraft?: FillDraft
 }
 export function ToolCallView(props: SharedViewProps) {
   const t = useViewT(props.store, props.t) as UiT
   const labels = useMarkdownLabels(t)
   const read = useMemo(() => readToolCall(props), [props.block, props.phase])
+  const requestedId = read.presentation?.viewId ?? (typeof argField(props.block.args, 'view_id') === 'string' ? argField(props.block.args, 'view_id') as string : props.callId)
+  const live = useLiveSnapshot(props.store, props.sessionId, requestedId)
   const shown = useMemo(() => {
+    if (props.liveSnapshot && live) return { ...live, awaitReply: live.interactive }
     if (read.presentation) return read.presentation
     if (!read.viewReady || read.phase === 'preparing') return undefined
     const checked = checkShownView(read.title, read.view) as ShownView | { error: string }
     return 'error' in checked ? undefined : { ...checked, awaitReply: checked.interactive }
-  }, [read.presentation, read.viewReady, read.phase, read.title, read.view])
+  }, [read.presentation, read.viewReady, read.phase, read.title, read.view, live, props.liveSnapshot])
+  const snapshotId = live?.id ?? requestedId
+  const sharedValues = useViewValues(props.store, props.sessionId, snapshotId)
+  const onValuesChange = useCallback((values: Record<string, unknown>) => props.store.setValues(props.sessionId, snapshotId, values), [props.store, props.sessionId, snapshotId])
+  useEffect(() => {
+    if (!shown || shown.revision === undefined) return
+    props.store.setSnapshot({ id: snapshotId, sessionId: props.sessionId, title: shown.title, view: shown.view,
+      interactive: shown.interactive, revision: shown.revision,
+      callId: props.callId, originCallId: props.callId })
+  }, [shown, snapshotId, props.store, props.sessionId, props.callId])
   const pending = useViewPending(props.store, props.sessionId, props.callId)
   const status = useViewStatus(props.store, props.callId)
   const [localAnswer, setAnswer] = useState<Answer | null>(null)
   const [draftChoice, setDraftChoice] = useState<{ action: string; values: Record<string, unknown> } | null>(null)
   const restored = useMemo(() => shown
-    ? checkedAnswer(props.restoredAnswer, read.presentation?.viewId, shown.view) : null,
+    ? checkedAnswer(props.restoredAnswer, read.presentation?.viewId, shown.view, shown.revision) : null,
   [props.restoredAnswer, read.presentation?.viewId, shown])
   const answer = restored ?? localAnswer
   const sequence = useRef(0)
@@ -116,16 +140,19 @@ export function ToolCallView(props: SharedViewProps) {
     }).catch(() => {})
     return () => { sequence.current += 1 }
   }, [props.call, props.sessionId, callId, read.presentation?.awaitReply, read.presentation?.viewId, restored, props.store])
+  // Keep one editable owner. The inline occurrence is the durable home after
+  // the turn; the composer dock only borrows it while work is still running.
   const standalone = props.surface === 'standalone' || props.surface === undefined
-  const editable = standalone || props.surface === 'dock'
+  const running = props.useSession?.(snapshot => snapshot.running) ?? false
+  const editable = standalone || props.surface === 'dock' || (props.surface === 'history' && !running)
   const canAnswer = shown?.awaitReply === true && pending !== undefined && answer === null && status?.state !== 'filled' && editable
   const submit = useCallback((action: string, values: Record<string, unknown>) => {
     if (!pending || !canAnswer || status?.state === 'sending') return
     props.store.setStatus(callId, { state: 'sending', text: t('sending'), copyKey: 'sending' })
-    void props.call('reply', { sessionId: props.sessionId, viewId: pending.id, action, values }).then(result => {
+    void props.call('reply', { sessionId: props.sessionId, viewId: pending.id, revision: pending.revision, action, values }).then(result => {
       const envelope = result as RpcResult | undefined
       if (envelope?.ok) {
-        setAnswer({ id: pending.id, action, values })
+        setAnswer({ id: pending.id, action, values, revision: pending.revision })
         props.store.clearPending(props.sessionId, callId)
         props.store.setStatus(callId, undefined)
       } else {
@@ -188,7 +215,8 @@ export function ToolCallView(props: SharedViewProps) {
       onDismiss={canAnswer ? dismiss : undefined} busy={busy}
       settled={answer !== null || inactive} answer={answer} t={viewT(t)} labels={labels} Markdown={ViewMarkdown}
       localOnly={answer === null && shown.interactive && !canAnswer}
-      localNote={pending && !editable ? t('waitingDock') : undefined} />
+      localNote={pending && !editable && running ? t('waitingDock') : undefined}
+      values={sharedValues} onValuesChange={onValuesChange} />
     {status ? <p className={status.state === 'failed' ? 'dvui-tool-error' : 'dvui-status'} role={status.state === 'failed' ? 'alert' : 'status'}>{status.copyKey ? t(status.copyKey) : status.text}</p> : null}
     {draftChoice ? <div className="dvui-draft-choice" role="group" aria-label={t('draftConflict')}>
       <p>{t('draftConflict')}</p><div className="dvui-actions">
@@ -213,7 +241,7 @@ export function ActivityDock(props: ToolViewProps & { call(endpoint: string, pay
   const t = useViewT(props.store, props.t) as UiT
   const labels = useMarkdownLabels(t)
   const pendingBlock = useMemo(() => pending ? { callId: pending.callId!, kind: 'tool-result' as const,
-    meta: { owner: VIEW_OWNER, viewId: pending.id, title: pending.title, view: pending.view, interactive: true, awaitReply: true } } : undefined, [pending])
+    meta: { owner: VIEW_OWNER, viewId: pending.id, title: pending.title, view: pending.view, interactive: true, awaitReply: true, revision: pending.revision } } : undefined, [pending])
   useEffect(() => { if (!running) props.store.clearProgress(props.sessionId) }, [running, props.store, props.sessionId])
   useEffect(() => {
     if (!pending?.callId || latestMessage === undefined) return
@@ -225,12 +253,12 @@ export function ActivityDock(props: ToolViewProps & { call(endpoint: string, pay
     }).catch(() => {})
     return () => { current = false }
   }, [latestMessage, pending?.callId, props.call, props.sessionId, props.store])
-  if (pending && status?.state !== 'filled') {
+  if (running && pending && status?.state !== 'filled') {
     return <div className="dvui-root dvui-dock"><ToolCallView {...props} key={pending.id} callId={pending.callId!} phase="result"
       block={pendingBlock!}
       store={props.store} surface="dock" /></div>
   }
-  if (running && progress) return <div className="dvui-root dvui-dock"><WidgetCard key={progress.callId} title={progress.title} view={progress.view} ButtonComponent={Button} t={viewT(t)} labels={labels} Markdown={ViewMarkdown} /></div>
+  if (running && progress) return <div className="dvui-root dvui-dock dvui-activity"><WidgetCard key={progress.callId} title={progress.title} view={progress.view} ButtonComponent={Button} t={viewT(t)} labels={labels} Markdown={ViewMarkdown} /></div>
   return null
 }
 
@@ -260,15 +288,27 @@ export function replyCards(snapshot: ReplySnapshot, turn: number): ToolViewProps
 const sameCards = (left: ToolViewProps['block'][], right: ToolViewProps['block'][]) =>
   left.length === right.length && left.every((block, index) => block === right[index])
 
-/** Native completed-turn surface: always outside the process disclosure. */
+/** Native turn surface: answers and revised final snapshots settle at the tail;
+ * initial display views stay at their tool position while work is running. */
 export function ReplyView(props: ReplyViewProps & { store: ViewStore }) {
-  const cards = props.useChat(snapshot => replyCards(snapshot, props.turn.turn), sameCards)
+  const cards = props.useChat(snapshot => {
+    const latest = new Map<string, ToolViewProps['block']>()
+    for (const block of replyCards(snapshot, props.turn.turn)) {
+      const read = readToolCall({ phase: 'result', block })
+      const presentation = read.presentation
+      if (!presentation || presentation.awaitReply !== true && (presentation.revision ?? 1) <= 1) continue
+      const id = presentation.viewId ?? block.callId
+      const previous = latest.get(id)
+      if (!previous || (readToolCall({ phase: 'result', block: previous }).presentation?.revision ?? 1) < (presentation.revision ?? 1)) latest.set(id, block)
+    }
+    return [...latest.values()]
+  }, sameCards)
   const answers = props.useChat(replyAnswers, sameAnswers)
   if (props.turn.status !== 'closed' || cards.length === 0) return null
   return <div className="dvui-root" data-deep-view-reply>{cards.map(block =>
     <ToolCallView key={`${props.sessionId}:${block.callId}`} sessionId={props.sessionId} callId={block.callId}
       phase="result" block={block} t={props.t} call={props.call} store={props.store} surface="history"
-      inputActions={props.inputActions} useInput={props.useInput} useSession={props.useSession}
+      inputActions={props.inputActions} useInput={props.useInput} useSession={props.useSession} useChat={props.useChat}
       restoredAnswer={isRecord(block.meta) && typeof block.meta.viewId === 'string' ? answers.get(block.meta.viewId) : undefined} />)}</div>
 }
 
@@ -284,6 +324,16 @@ export function ToolCallStatus(props: ToolViewProps & { store: ViewStore; call(e
     const checked = checkShownView(read.title, read.view) as ShownView | { error: string }
     return 'error' in checked ? undefined : { ...checked, awaitReply: checked.interactive }
   }, [read.presentation, read.viewReady, read.phase, read.title, read.view])
+  const live = useLiveSnapshot(props.store, props.sessionId, read.presentation?.viewId)
+  // A superseded result still owns its canonical snapshot. Commit it here even
+  // though only the first tool position renders the live display.
+  useEffect(() => {
+    const snapshot = read.presentation
+    if (!snapshot?.viewId || snapshot.revision === undefined) return
+    props.store.setSnapshot({ id: snapshot.viewId, sessionId: props.sessionId, title: snapshot.title,
+      view: snapshot.view, interactive: snapshot.interactive, revision: snapshot.revision,
+      callId: props.callId, originCallId: props.callId })
+  }, [read.presentation, props.store, props.sessionId, props.callId])
   useEffect(() => {
     if (!running || !shown || !isActivityView(shown.view)) {
       props.store.clearProgress(props.sessionId)
@@ -294,8 +344,12 @@ export function ToolCallStatus(props: ToolViewProps & { store: ViewStore; call(e
       if (props.store.progress(props.sessionId)?.callId === props.callId) props.store.clearProgress(props.sessionId)
     }
   }, [running, shown, props.store, props.sessionId, props.callId])
-  if (running && read.phase !== 'preparing' && !read.isError && shown && progress?.callId !== props.callId) {
-    return <ToolCallView {...props} surface="inline" />
+  const superseded = live !== undefined && live.originCallId !== props.callId && live.id === read.presentation?.viewId
+  const tailOwned = !running && shown?.awaitReply === false && (live?.revision ?? shown?.revision ?? 1) > 1
+  if (read.phase !== 'preparing' && !read.isError && shown && !superseded && !tailOwned
+    && (!running || (!isActivityView(shown.view) && progress?.callId !== props.callId))
+    && (running || !shown.awaitReply)) {
+    return <ToolCallView {...props} surface="inline" liveSnapshot={live?.originCallId === props.callId} />
   }
   return <div className="dvui-root dvui-tool-loading" role="status">{t(read.isError ? 'error'
     : read.phase === 'result' && !read.presentation ? 'invalid'
@@ -356,6 +410,10 @@ export function createCards(call: (endpoint: string, payload: unknown) => Promis
   return { Card, store }
 }
 
+export function DeepViewFenceSlot(props: DeepViewFenceProps) {
+  return <div className="dvui-root" data-deep-view-inline><DeepViewFence {...props} /></div>
+}
+
 type Client = Context & {
   connection: { rpc: { call(channel: string, endpoint: string, payload: unknown): Promise<unknown> } }
   slots: {
@@ -377,7 +435,7 @@ export function apply(ctx: Context): void {
     if (typeof document === 'undefined') return () => {}
     const style = document.createElement('style')
     style.setAttribute('data-plugin', PLUGIN_NAME)
-    style.textContent = officialUiCss(['.dvui-root']) + viewStyles
+    style.textContent = officialUiCss(['dvui-root']) + viewStyles + mathStyles + richStyles + vendorCss
     document.head.appendChild(style)
     return () => style.remove()
   }, 'deep-view.styles')
@@ -385,6 +443,9 @@ export function apply(ctx: Context): void {
     name: 'tool.call.toolview', key: 'show_view', locale: LOCALE,
     inject: () => ({ call, store }),
   }, ToolCallStatus)), 'deep-view.tool')
+  for (const language of ['deepui', 'deep-view']) ctx.effect(() => client.slots.inject('conversation.chat.markdown.fence', () => client.slots.register({
+    name: 'conversation.chat.markdown.fence', id: 'deep-view', key: language, locale: LOCALE,
+  }, DeepViewFenceSlot)), `deep-view.fence.${language}`)
   ctx.effect(() => client.slots.inject('conversation.input.dock', () => client.slots.register({
     name: 'conversation.input.dock', id: 'deep-view', order: 12, locale: LOCALE,
     inject: () => ({ call, store }),

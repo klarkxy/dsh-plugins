@@ -8,7 +8,7 @@ import { compileFormula, createScope, evaluate, isName, show } from './formula.j
 
 const LAYOUT = ['stack', 'row']
 const DISPLAY = ['text', 'metric', 'table', 'chart', 'progress', 'callout', 'sources', 'steps']
-const INPUT_TYPES = ['slider', 'choice', 'toggle', 'number']
+const INPUT_TYPES = ['slider', 'choice', 'toggle', 'number', 'math', 'flow', 'explore', 'map']
 const ANSWERS = ['options', 'confirm', 'form', 'submit']
 const COMPONENTS = [...LAYOUT, ...DISPLAY, ...INPUT_TYPES, ...ANSWERS]
 const TONES = ['good', 'warn', 'bad']
@@ -18,20 +18,24 @@ export const CHART_KINDS = ['bar', 'hbar', 'line', 'area', 'donut']
 const INTERACTIVE = new Set(ANSWERS)
 const INPUTS = new Set(INPUT_TYPES)
 const PROPS = {
-  stack: ['children', 'let'],
-  row: ['children', 'let'],
-  text: ['text', 'tone'],
-  metric: ['label', 'value', 'tone', 'caption'],
-  table: ['columns', 'rows'],
-  chart: ['kind', 'categories', 'series', 'unit', 'caption'],
-  progress: ['label', 'percent', 'value', 'max', 'valueLabel', 'tone'],
-  callout: ['text', 'tone'],
-  sources: ['items'],
-  steps: ['items'],
+  stack: ['id', 'children', 'let'],
+  row: ['id', 'children', 'let'],
+  text: ['id', 'text', 'tone'],
+  metric: ['id', 'label', 'value', 'tone', 'caption'],
+  table: ['id', 'columns', 'rows'],
+  chart: ['id', 'kind', 'categories', 'series', 'unit', 'caption'],
+  progress: ['id', 'label', 'percent', 'value', 'max', 'valueLabel', 'tone'],
+  callout: ['id', 'text', 'tone'],
+  sources: ['id', 'items'],
+  steps: ['id', 'items'],
   slider: ['id', 'label', 'min', 'max', 'step', 'value', 'unit'],
   choice: ['id', 'label', 'options', 'value'],
   toggle: ['id', 'label', 'value'],
   number: ['id', 'label', 'min', 'max', 'step', 'value', 'unit'],
+  math: ['id', 'mathPoints', 'curves', 'domain', 'range', 'caption'],
+  flow: ['id', 'nodes', 'edges', 'caption'],
+  explore: ['id', 'data', 'xKey', 'yKey', 'colorKey', 'select', 'caption'],
+  map: ['id', 'center', 'zoom', 'locations', 'routes', 'caption'],
   options: ['id', 'options', 'multi'],
   confirm: ['id', 'confirmLabel', 'cancelLabel'],
   form: ['id', 'fields', 'submitLabel', 'cancelLabel'],
@@ -127,6 +131,10 @@ function checkNode(node, path, depth, ctx) {
   if (ctx.nodes > MAX_NODES) return `${path}: ${ctx.nodes} components exceeds the limit of ${MAX_NODES}`
   const type = node.type
   if (!COMPONENTS.includes(type)) return `${path}.type: unknown component ${quoted(type)}; allowed: ${allowed(COMPONENTS)}`
+  if (node.id !== undefined && !INPUTS.has(type) && !INTERACTIVE.has(type)) {
+    const idError = checkId(node, path, ctx)
+    if (idError !== undefined) return idError
+  }
   const props = PROPS[type]
   for (const key of Object.keys(node)) {
     if (key === 'type' || props.includes(key)) continue
@@ -146,6 +154,7 @@ function checkNode(node, path, depth, ctx) {
     case 'slider': case 'number': return checkNumberInput(node, path, ctx)
     case 'choice': return checkChoice(node, path, ctx)
     case 'toggle': return checkToggle(node, path, ctx)
+    case 'math': case 'flow': case 'explore': case 'map': return checkRichNode(node, path, ctx)
     case 'options': return checkOptions(node, path, ctx)
     case 'confirm': return checkConfirm(node, path, ctx)
     case 'form': return checkForm(node, path, ctx)
@@ -324,6 +333,9 @@ function checkInputId(node, path, ctx) {
   if (!isName(node.id) || RESERVED.has(node.id)) return `${path}.id: an input id is letters, digits and _, and starts with a letter or _, so formulas can use it`
   if (ctx.ids.has(node.id)) return `${path}.id: duplicate id ${quoted(node.id)}`
   ctx.ids.add(node.id)
+  // A <pointId>X/<pointId>Y name an earlier math node publishes is taken too;
+  // an input taking that name would silently overwrite the binding.
+  if (ctx.inputs.has(node.id)) return `${path}.id: ${quoted(node.id)} collides with a math point binding`
   if (typeof node.label !== 'string') return `${path}.label: expected a string`
   return undefined
 }
@@ -376,6 +388,116 @@ function checkToggle(node, path, ctx) {
   if (idError !== undefined) return idError
   if (node.value !== undefined && typeof node.value !== 'boolean') return `${path}.value: expected true or false`
   ctx.inputs.set(node.id, node.value === true)
+  return undefined
+}
+
+function richId(node, path, ctx) {
+  if (!isName(node.id) || RESERVED.has(node.id)) return `${path}.id: an interaction id is letters, digits and _, and starts with a letter or _`
+  if (ctx.ids.has(node.id)) return `${path}.id: duplicate id ${quoted(node.id)}`
+  ctx.ids.add(node.id)
+  // Same guard as checkInputId: a rich node id may not take a math point's
+  // derived <pointId>X/<pointId>Y binding published by an earlier node.
+  if (ctx.inputs.has(node.id)) return `${path}.id: ${quoted(node.id)} collides with a math point binding`
+  return undefined
+}
+const pair = (value) => Array.isArray(value) && value.length === 2 && value.every(isNumber) && Math.abs(value[0]) <= 1e7 && Math.abs(value[1]) <= 1e7
+const richLabel = (value, at) => typeof value !== 'string' || value.trim() === '' || value.length > MAX_TEXT ? `${at}: expected a non-empty label` : undefined
+
+function checkRichNode(node, path, ctx) {
+  const idError = richId(node, path, ctx)
+  if (idError !== undefined) return idError
+  if (node.caption !== undefined && typeof node.caption !== 'string') return `${path}.caption: expected a string`
+  if (node.type === 'math') {
+    if (!Array.isArray(node.mathPoints) || node.mathPoints.length < 1 || node.mathPoints.length > 4) return `${path}.mathPoints: expected 1 to 4 points`
+    const ids = new Set()
+    for (let index = 0; index < node.mathPoints.length; index++) {
+      const point = node.mathPoints[index], at = `${path}.mathPoints[${index}]`
+      if (!isRecord(point) || !isName(point.id) || RESERVED.has(point.id) || ids.has(point.id)) return `${at}.id: expected a unique safe point id`
+      if (Object.keys(point).some(key => !['id', 'label', 'x', 'y', 'constrain'].includes(key))) return `${at}: unknown point property`
+      if (!isNumber(point.x) || !isNumber(point.y) || Math.abs(point.x) > 1e6 || Math.abs(point.y) > 1e6) return `${at}: expected finite x/y within ±1000000`
+      if (point.label !== undefined && typeof point.label !== 'string') return `${at}.label: expected a string`
+      if (point.constrain !== undefined && !['free', 'horizontal', 'vertical'].includes(point.constrain)) return `${at}.constrain: expected free, horizontal or vertical`
+      ids.add(point.id)
+      for (const key of [`${point.id}X`, `${point.id}Y`]) {
+        // A derived binding may not shadow an input already bound or the math
+        // node's own id; later input ids are refused in checkInputId/richId so
+        // the same collision is rejected whatever order the nodes come in.
+        if (ctx.inputs.has(key) || key === node.id) return `${at}: duplicate binding ${key}`
+        ctx.inputs.set(key, point[key.endsWith('X') ? 'x' : 'y'])
+      }
+    }
+    if (node.curves !== undefined && (!Array.isArray(node.curves) || node.curves.length > 4)) return `${path}.curves: expected at most 4 curves`
+    for (let index = 0; index < (node.curves ?? []).length; index++) {
+      const curve = node.curves[index], at = `${path}.curves[${index}]`
+      if (!isRecord(curve) || Object.keys(curve).some(key => !['label', 'expression'].includes(key))) return `${at}: unknown curve property`
+      if (curve.label !== undefined && typeof curve.label !== 'string') return `${at}.label: expected a string`
+      if (typeof curve.expression !== 'string' || curve.expression.length > 300) return `${at}.expression: expected a bounded formula`
+      const compiled = compileFormula(curve.expression)
+      if (compiled.error !== undefined) return `${at}.expression: ${compiled.error}`
+      const unknown = compiled.names.find(name => name !== 'x' && !ctx.inputs.has(name))
+      if (unknown !== undefined) return `${at}.expression: unknown name ${quoted(unknown)}`
+    }
+    for (const key of ['domain', 'range']) if (node[key] !== undefined && (!pair(node[key]) || node[key][0] === node[key][1])) return `${path}.${key}: expected two distinct finite numbers`
+    ctx.inputs.set(node.id, mathDefaults(node))
+    return undefined
+  }
+  if (node.type === 'flow') {
+    if (!Array.isArray(node.nodes) || node.nodes.length < 1 || node.nodes.length > 40) return `${path}.nodes: expected 1 to 40 nodes`
+    const ids = new Set()
+    for (let index = 0; index < node.nodes.length; index++) {
+      const item = node.nodes[index], at = `${path}.nodes[${index}]`
+      if (!isRecord(item) || !isName(item.id) || ids.has(item.id)) return `${at}.id: expected a unique safe node id`
+      if (Object.keys(item).some(key => !['id', 'label', 'detail', 'x', 'y', 'tone'].includes(key))) return `${at}: unknown node property`
+      const error = richLabel(item.label, `${at}.label`) ?? (item.detail !== undefined && typeof item.detail !== 'string' ? `${at}.detail: expected a string` : undefined) ?? (!isNumber(item.x) || !isNumber(item.y) ? `${at}: expected finite x/y` : undefined)
+      if (error) return error
+      if (item.tone !== undefined && !['neutral', 'accent', 'success', 'warn', 'bad'].includes(item.tone)) return `${at}.tone: unsupported tone`
+      ids.add(item.id)
+    }
+    if (node.edges !== undefined && (!Array.isArray(node.edges) || node.edges.length > 80)) return `${path}.edges: expected at most 80 edges`
+    for (let index = 0; index < (node.edges ?? []).length; index++) {
+      const edge = node.edges[index], at = `${path}.edges[${index}]`
+      if (!isRecord(edge) || !isName(edge.id) || Object.keys(edge).some(key => !['id', 'source', 'target', 'label'].includes(key))) return `${at}: expected a safe edge object`
+      if (!ids.has(edge.source) || !ids.has(edge.target) || edge.source === edge.target) return `${at}: source and target must be distinct declared nodes`
+      if (edge.label !== undefined && typeof edge.label !== 'string') return `${at}.label: expected a string`
+    }
+    ctx.inputs.set(node.id, '')
+    return undefined
+  }
+  if (node.type === 'explore') {
+    if (!Array.isArray(node.data) || node.data.length < 1 || node.data.length > 200) return `${path}.data: expected 1 to 200 inline records`
+    for (const key of ['xKey', 'yKey']) if (!isName(node[key])) return `${path}.${key}: expected a safe field name`
+    if (node.colorKey !== undefined && !isName(node.colorKey)) return `${path}.colorKey: expected a safe field name`
+    if (node.select !== undefined && !['point', 'interval'].includes(node.select)) return `${path}.select: expected point or interval`
+    for (let index = 0; index < node.data.length; index++) {
+      const row = node.data[index]
+      if (!isRecord(row) || Object.keys(row).some(key => !isName(key)) || Object.keys(row).length > 12) return `${path}.data[${index}]: expected a bounded flat record`
+      for (const key of ['xKey', 'yKey']) if (!isNumber(row[node[key]]) || Math.abs(row[node[key]]) > 1e12) return `${path}.data[${index}].${node[key]}: expected a finite number`
+      if (node.colorKey !== undefined && !isScalar(row[node.colorKey])) return `${path}.data[${index}].${node.colorKey}: expected a scalar category`
+      if (Object.values(row).some(value => !isScalar(value) || typeof value === 'string' && value.length > MAX_CELL)) return `${path}.data[${index}]: cells must be bounded scalars`
+    }
+    // An omitted select means point, as exploreMeta on the client resolves it.
+    ctx.inputs.set(node.id, node.select === 'interval' ? {} : [])
+    return undefined
+  }
+  if (!Array.isArray(node.locations) || node.locations.length < 1 || node.locations.length > 60) return `${path}.locations: expected 1 to 60 locations`
+  const ids = new Set()
+  for (let index = 0; index < node.locations.length; index++) {
+    const location = node.locations[index], at = `${path}.locations[${index}]`
+    if (!isRecord(location) || !isName(location.id) || ids.has(location.id)) return `${at}.id: expected a unique safe location id`
+    if (Object.keys(location).some(key => !['id', 'label', 'detail', 'coordinates'].includes(key))) return `${at}: unknown location property`
+    const error = richLabel(location.label, `${at}.label`) ?? (location.detail !== undefined && typeof location.detail !== 'string' ? `${at}.detail: expected a string` : undefined) ?? (!pair(location.coordinates) || Math.abs(location.coordinates[0]) > 180 || Math.abs(location.coordinates[1]) > 90 ? `${at}.coordinates: expected [longitude, latitude]` : undefined)
+    if (error) return error
+    ids.add(location.id)
+  }
+  if (node.center !== undefined && (!pair(node.center) || Math.abs(node.center[0]) > 180 || Math.abs(node.center[1]) > 90)) return `${path}.center: expected [longitude, latitude]`
+  if (node.zoom !== undefined && (!isNumber(node.zoom) || node.zoom < 0 || node.zoom > 22)) return `${path}.zoom: expected a number from 0 to 22`
+  if (node.routes !== undefined && (!Array.isArray(node.routes) || node.routes.length > 8)) return `${path}.routes: expected at most 8 routes`
+  for (let index = 0; index < (node.routes ?? []).length; index++) {
+    const route = node.routes[index]
+    if (!isRecord(route) || Object.keys(route).some(key => !['label', 'coordinates'].includes(key)) || !Array.isArray(route.coordinates) || route.coordinates.length < 2 || route.coordinates.length > 200) return `${path}.routes[${index}]: expected a route with 2 to 200 coordinates`
+    if (route.coordinates.some(point => !pair(point) || Math.abs(point[0]) > 180 || Math.abs(point[1]) > 90)) return `${path}.routes[${index}]: invalid coordinates`
+  }
+  ctx.inputs.set(node.id, '')
   return undefined
 }
 
@@ -533,7 +655,27 @@ export function viewInputs(view) {
 export function inputDefault(node) {
   if (node.type === 'toggle') return node.value === true
   if (node.type === 'choice') return node.value ?? choiceValue(Array.isArray(node.options) ? node.options[0] : undefined)
+  if (node.type === 'math') return mathDefaults(node)
+  if (node.type === 'explore') return node.select === 'interval' ? {} : []
+  if (node.type === 'flow' || node.type === 'map') return ''
   return node.value
+}
+
+export function mathDefaults(node) {
+  return Object.fromEntries((node.mathPoints ?? []).map(point => [point.id, [point.x, point.y]]))
+}
+
+// Component ids expose small JSON values, not library event objects. Math
+// coordinates also appear as <pointId>X/<pointId>Y so existing formulas can use them.
+export function viewBindings(view) {
+  const bindings = []
+  for (const node of viewInputs(view)) {
+    if (node.type === 'math') for (const point of node.mathPoints ?? []) {
+      bindings.push({ id: `${point.id}X`, value: undefined, kind: 'math', node }, { id: `${point.id}Y`, value: undefined, kind: 'math', node })
+    }
+    bindings.push({ id: node.id, value: undefined, kind: node.type, node })
+  }
+  return bindings
 }
 
 export const hasInputs = view => viewInputs(view).length > 0
@@ -541,7 +683,15 @@ export const hasInputs = view => viewInputs(view).length > 0
 // The values a view's formulas read: each input's default unless `values` sets it.
 export function viewScope(view, values = {}) {
   const inputs = new Map()
-  for (const node of viewInputs(view)) inputs.set(node.id, Object.hasOwn(values, node.id) ? values[node.id] : inputDefault(node))
+  for (const binding of viewBindings(view)) {
+    const { id, node } = binding
+    if (binding.kind === 'math' && id !== node.id) {
+      const point = node.mathPoints.find(item => `${item.id}X` === id || `${item.id}Y` === id)
+      const sent = isRecord(values[node.id]) ? values[node.id][point.id] : undefined
+      const coordinate = Array.isArray(sent) ? sent[id.endsWith('X') ? 0 : 1] : point[id.endsWith('X') ? 'x' : 'y']
+      inputs.set(id, coordinate)
+    } else inputs.set(id, Object.hasOwn(values, id) ? values[id] : inputDefault(node))
+  }
   const lets = new Map()
   for (const [name, source] of Object.entries(isRecord(view?.let) ? view.let : {})) {
     const entry = compileFormula(source)
@@ -572,9 +722,23 @@ function clip(text) {
 
 const choiceLabel = (node, value) => (Array.isArray(node.options) ? node.options : []).find(option => choiceValue(option) === value)?.label ?? asText(value)
 
+export function richSelectionSummary(node, value) {
+  if (node.type === 'math') return Object.fromEntries((node.mathPoints ?? []).map(point => [point.id, value?.[point.id] ?? [point.x, point.y]]))
+  if (node.type === 'flow') return { selected: (node.nodes ?? []).find(item => item.id === value)?.label ?? '' }
+  if (node.type === 'map') return { selected: (node.locations ?? []).find(item => item.id === value)?.label ?? '' }
+  if (node.type === 'explore') return { selected: value }
+  return { value }
+}
+
 function inputText(node, value) {
   if (node.type === 'toggle') return value === true ? 'on' : 'off'
   if (node.type === 'choice') return choiceLabel(node, value)
+  if (node.type === 'math') return (node.mathPoints ?? []).map(point => `${point.label || point.id}=(${Array.isArray(value?.[point.id]) ? value[point.id].map(asText).join(', ') : 'unset'})`).join(', ')
+  if (node.type === 'flow') return (node.nodes ?? []).find(item => item.id === value)?.label || 'No selection'
+  if (node.type === 'map') return (node.locations ?? []).find(item => item.id === value)?.label || 'No selection'
+  if (node.type === 'explore') return node.select === 'interval'
+    ? (isRecord(value) ? Object.entries(value).map(([key, range]) => `${key}=${Array.isArray(range) ? range.map(asText).join('–') : asText(range)}`).join(', ') : 'No selection')
+    : `${Array.isArray(value) ? value.length : 0} selected`
   return `${asText(value)}${node.unit ? ` ${node.unit}` : ''}`
 }
 
@@ -600,7 +764,7 @@ function componentSummary(node, lookup) {
     case 'callout': return `callout: ${value(node.text)}`
     case 'sources': return `sources: ${(Array.isArray(node.items) ? node.items : []).map(item => item?.label).filter(Boolean).join('/')}`
     case 'steps': return `steps: ${(Array.isArray(node.items) ? node.items : []).map(item => item?.label).filter(Boolean).join('/')}`
-    case 'slider': case 'number': case 'choice': case 'toggle': return `${node.type}: ${node.label}=${inputText(node, inputDefault(node))}`
+    case 'slider': case 'number': case 'choice': case 'toggle': case 'math': case 'flow': case 'explore': case 'map': return `${node.type}: ${node.label || node.id}=${inputText(node, inputDefault(node))}`
     case 'options': return `options: ${(Array.isArray(node.options) ? node.options : []).map(option => option?.label).filter(Boolean).join('/')}`
     case 'confirm': return 'confirm'
     case 'form': return `form: ${(Array.isArray(node.fields) ? node.fields : []).map(field => field?.label ?? field?.id).filter(Boolean).join('/')}`
@@ -635,6 +799,13 @@ export function inputsSummary(view, inputs) {
     .join('; ')
 }
 
+export function answersSummary(view, inputs) {
+  if (!isRecord(inputs)) return ''
+  return viewInputs(view)
+    .filter(node => ['math', 'flow', 'explore', 'map'].includes(node.type) && Object.hasOwn(inputs, node.id))
+    .map(node => ({ id: node.id, ...richSelectionSummary(node, inputs[node.id]) }))
+}
+
 // -------------------------------------------------------------------------
 // Answers
 
@@ -660,6 +831,40 @@ export function validateViewAnswer(view, action, values) {
   return own.error === undefined ? { ...own, ...extra } : own
 }
 
+function validateRichInput(node, value, at) {
+  if (node.type === 'flow') {
+    if (value !== '' && !(node.nodes ?? []).some(item => item.id === value)) return `${at}: expected a declared node id or an empty selection`
+  }
+  if (node.type === 'map') {
+    if (value !== '' && !(node.locations ?? []).some(item => item.id === value)) return `${at}: expected a declared location id or an empty selection`
+  }
+  if (node.type === 'math') {
+    if (!isRecord(value)) return `${at}: expected point coordinates`
+    const ids = (node.mathPoints ?? []).map(point => point.id)
+    if (Object.keys(value).some(key => !ids.includes(key))) return `${at}: unknown point`
+    for (const point of node.mathPoints ?? []) {
+      if (!pair(value[point.id]) || Math.abs(value[point.id][0]) > 1e6 || Math.abs(value[point.id][1]) > 1e6) return `${at}.${point.id}: expected finite [x, y] within ±1000000`
+    }
+  }
+  if (node.type === 'explore') {
+    if (node.select !== 'interval') {
+      // Point values are categories: the client picks on colorKey when the view
+      // declares one, else on xKey — so the answer must be a value a row has.
+      const category = node.colorKey ?? node.xKey
+      if (!Array.isArray(value) || value.length > node.data.length || value.some(item => !isScalar(item) || !node.data.some(row => row[category] === item))) return `${at}: expected declared category values`
+      if (new Set(value).size !== value.length) return `${at}: duplicate selection`
+    } else {
+      // Interval keys are the real field names only; the literal 'xKey'/'yKey'
+      // the old check admitted never reach the client.
+      if (!isRecord(value) || Object.keys(value).some(key => key !== node.xKey && key !== node.yKey)) return `${at}: expected a bounded interval`
+      for (const [key, range] of Object.entries(value)) {
+        if (!Array.isArray(range) || range.length !== 2 || !range.every(isNumber) || range[0] > range[1]) return `${at}.${key}: expected an ordered numeric range`
+      }
+    }
+  }
+  return undefined
+}
+
 // Every input of the view, as sent or else as the Bot set it.
 function validateInputs(view, sent) {
   const nodes = viewInputs(view)
@@ -679,6 +884,8 @@ function validateInputs(view, sent) {
       if (!isNumber(value)) return { error: `${at}: expected a number` }
       if ((node.min !== undefined && value < node.min) || (node.max !== undefined && value > node.max)) return { error: `${at}: expected a number from ${node.min ?? '-∞'} to ${node.max ?? '∞'}` }
     }
+    const richError = validateRichInput(node, value, at)
+    if (richError !== undefined) return { error: richError }
     inputs[node.id] = value
   }
   return { inputs }

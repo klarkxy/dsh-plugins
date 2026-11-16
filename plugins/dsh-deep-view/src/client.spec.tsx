@@ -44,9 +44,11 @@ describe('tool.call.toolview contract', () => {
     }
     apply(ctx as never)
     expect([...inject]).toEqual(['slots', 'connection', 'locale'])
-    expect(slots).toEqual(['tool.call.toolview', 'conversation.input.dock', 'conversation.chat.turnTail'])
-    expect(registrations[2]).toMatchObject({ name: 'conversation.chat.turnTail', id: 'deep-view', locale: 'deep-view' })
-    expect(registrations[1]).toMatchObject({ name: 'conversation.input.dock', id: 'deep-view', locale: 'deep-view' })
+    expect(slots).toEqual(['tool.call.toolview', 'conversation.chat.markdown.fence', 'conversation.chat.markdown.fence', 'conversation.input.dock', 'conversation.chat.turnTail'])
+    expect(registrations[1]).toMatchObject({ name: 'conversation.chat.markdown.fence', id: 'deep-view', key: 'deepui', locale: 'deep-view' })
+    expect(registrations[2]).toMatchObject({ name: 'conversation.chat.markdown.fence', id: 'deep-view', key: 'deep-view', locale: 'deep-view' })
+    expect(registrations[4]).toMatchObject({ name: 'conversation.chat.turnTail', id: 'deep-view', locale: 'deep-view' })
+    expect(registrations[3]).toMatchObject({ name: 'conversation.input.dock', id: 'deep-view', locale: 'deep-view' })
     expect(registrations[0]).toMatchObject({ name: 'tool.call.toolview', key: 'show_view', locale: 'deep-view' })
     // Plugin-drawn chats read the same card through this client service.
     expect(provided).toEqual(['dshDeepView'])

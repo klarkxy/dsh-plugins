@@ -1,4 +1,4 @@
-import type { Formula, Scalar, ShownView, ViewFailure, ViewNode } from '../contracts.ts'
+import type { Formula, Scalar, ShownView, ViewBinding, ViewFailure, ViewNode } from '../contracts.ts'
 
 export declare const CHART_KINDS: readonly string[]
 export declare const VIEW_BYTE_LIMIT: number
@@ -10,8 +10,11 @@ export declare function checkShownView(title: unknown, sent: unknown): ShownView
 export declare function normalizeView(value: unknown, inFormFields?: boolean): unknown
 export declare function validateView(view: unknown): { ok: true; interactive: boolean } | { ok: false; error: string }
 export declare function viewBytes(title: unknown, view: unknown): number
+export declare function viewBindings(view: ViewNode): ViewBinding[]
 export declare function viewInputs(view: ViewNode): ViewNode[]
 export declare function inputDefault(node: ViewNode): unknown
+export declare function mathDefaults(node: ViewNode): Record<string, [number, number]>
+export declare function answersSummary(view: ViewNode, inputs: unknown): unknown
 export declare function choiceValue(option: { label?: string; value?: Scalar } | undefined): Scalar | undefined
 export declare function viewScope(view: ViewNode, values?: Record<string, unknown>): (name: string) => unknown
 export declare function resolve(value: unknown, lookup: (name: string) => unknown, fallback?: unknown): unknown

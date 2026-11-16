@@ -21,3 +21,14 @@ validated answer channel. Original icons in icon.svg are new artwork for this
 package, not upstream artwork.
 
 The surrounding DSH integration code is provided under Apache License 2.0.
+
+Bundled third-party components retain their original license notices and metadata:
+- Mafs, Vega, Vega-Lite, vega-embed and their transitive browser components:
+  BSD 3-Clause. Copyright the respective Vega and Mafs contributors.
+- React Flow (@xyflow/react) and its transitive browser components: MIT.
+  Copyright React Flow contributors.
+- MapLibre GL JS and its bundled worker: BSD 3-Clause.
+  Copyright MapLibre contributors.
+
+These notices supplement, and do not replace, the licenses distributed with the
+corresponding pinned npm dependencies.

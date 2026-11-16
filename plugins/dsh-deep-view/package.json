@@ -1,13 +1,13 @@
 {
   "name": "@klarkxy/dsh-deep-view",
   "version": "0.3.0",
-  "description": "Interactive reply cards with workflow steps, charts, safe formulas, composer drafts and validated show_view answers.",
+  "description": "Intelligent reply interfaces with native visuals, interactive math, node graphs, data exploration, maps and validated answers.",
   "icon": "./icon.svg",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=22",
-    "dsh": ">=0.2.1-rc.1"
+    "dsh": ">=0.2.2-rc.3"
   },
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
@@ -82,12 +82,18 @@
     }
   },
   "scripts": {
-    "build": "tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-deep-view",
+    "build": "node scripts/map-worker.mjs && node scripts/vendor-css.mjs && tsdown && node ../../scripts/editor-plugins/wrap-client.mjs @klarkxy/dsh-deep-view",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-deep-view/src"
   },
   "dependencies": {
-    "@klarkxy/dsh-plugin-kit": "workspace:*"
+    "@klarkxy/dsh-plugin-kit": "workspace:*",
+    "@xyflow/react": "12.12.1",
+    "mafs": "0.21.0",
+    "maplibre-gl": "6.18.0",
+    "vega": "6.4.0",
+    "vega-embed": "7.3.0",
+    "vega-lite": "6.5.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.4",
@@ -130,7 +136,8 @@
     "@types/react": "18.3.31",
     "@types/react-dom": "^18.3.0",
     "jsdom": "29.1.1",
-    "@types/jsdom": "28.0.3"
+    "@types/jsdom": "28.0.3",
+    "postcss": "8.5.27"
   },
   "keywords": [
     "dsh",

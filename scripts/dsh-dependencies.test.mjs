@@ -60,9 +60,11 @@ test('DSH host dependencies stay optional peers and injected UI stays developmen
     }
     if (pkg.engines?.dsh) {
       // This YAML preset uses the renamed modelSelection option and merged
-      // list_agents tool. Its browser code retains the common compile baseline,
-      // but the preset must reject hosts older than the new runtime contract.
-      const runtimeTarget = pkg.name === '@klarkxy/dsh-unrestricted' ? '0.2.2-rc.1' : target
+      // list_agents tool. Deep View's optional deepui fence uses the Markdown
+      // fence Slot contract introduced in rc.3. Both retain the common compile
+      // baseline, but must reject hosts older than their runtime contracts.
+      const runtimeTarget = pkg.name === '@klarkxy/dsh-unrestricted' ? '0.2.2-rc.1'
+        : pkg.name === '@klarkxy/dsh-deep-view' ? '0.2.2-rc.3' : target
       assertOpenCompatibleRange(pkg.engines.dsh, pkg.name, runtimeTarget)
     }
     const descriptor = join(root, 'plugins', pkg.name.split('/').at(-1), 'dsh.plugin.json')

@@ -56,7 +56,8 @@ describe('widget interactions without a browser', () => {
     await act(async () => { setter.call(range, '4'); range.dispatchEvent(new dom.window.Event('input', { bubbles: true })) })
     expect(document.body.textContent).toContain('12')
     expect(document.querySelector('input[type=range]')!.disabled).toBe(false)
-    expect(document.querySelector('.dvui-option')!.disabled).toBe(true)
+    expect(document.querySelector('button.dvui-option')).toBeNull()
+    expect(document.querySelector('.dvui-option')!.getAttribute('role')).not.toBe('button')
     expect(document.body.textContent).toContain('Local preview only; this card does not send an answer.')
     await act(async () => root.unmount())
   })
@@ -65,6 +66,51 @@ describe('widget interactions without a browser', () => {
     await act(async () => root.render(<WidgetCard view={{ type: 'confirm', id: 'answer' }} localOnly t={t} labels={labels} />))
     expect(document.body.textContent).toContain('Local preview only; this card does not send an answer.')
     expect([...document.querySelectorAll('button')].every(button => button.disabled)).toBe(true)
+    await act(async () => root.unmount())
+  })
+  it('shows only the real fill action in fill-only mode', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const fillDraft = vi.fn()
+    const onSubmit = vi.fn()
+    const view = { type: 'stack' as const, children: [
+      { type: 'form' as const, id: 'ask', fields: [{ id: 'name', label: 'Name' }], cancelLabel: 'Skip' },
+      { type: 'confirm' as const, id: 'go' },
+      { type: 'options' as const, id: 'pick', options: [{ label: 'One' }] },
+    ] }
+    await act(async () => root.render(<WidgetCard view={view} t={t} labels={labels} onFillDraft={fillDraft} onSubmit={undefined} />))
+    const labels_ = [...document.querySelectorAll('button')].map(button => button.textContent)
+    expect(labels_).toContain('Fill composer')
+    expect(labels_).not.toContain('Submit')
+    expect(labels_).not.toContain('Confirm')
+    expect(labels_).not.toContain('Cancel')
+    expect(labels_).not.toContain('Skip')
+    // The form's primary action is the fill itself; it must not call onSubmit.
+    await act(async () => (document.querySelector('form') as HTMLFormElement).dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })))
+    expect(fillDraft).toHaveBeenCalledWith('ask', { fields: { name: '' } })
+    expect(onSubmit).not.toHaveBeenCalled()
+    // Picking an option enables its fill path without a fake Submit button.
+    await act(async () => (document.querySelector('.dvui-option') as HTMLButtonElement).click())
+    const fills = [...document.querySelectorAll('.dvui-actions button')].filter(button => button.textContent === 'Fill composer')
+    await act(async () => (fills.at(-1) as HTMLButtonElement).click())
+    expect(fillDraft).toHaveBeenCalledWith('pick', { selected: ['One'] })
+    await act(async () => root.unmount())
+  })
+  it('uses the task-specific label for a fill-only submit node', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const onFillDraft = vi.fn()
+    await act(async () => root.render(<WidgetCard view={{ type: 'submit', id: 'plan', label: 'Use these assumptions' }} t={t} labels={labels} onFillDraft={onFillDraft} />))
+    const button = [...document.querySelectorAll('button')].find(button => button.textContent === 'Use these assumptions')!
+    await act(async () => button.click())
+    expect(onFillDraft).toHaveBeenCalledWith('plan', {})
+    await act(async () => root.unmount())
+  })
+  it('keeps direct submit when only onSubmit is given', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const onSubmit = vi.fn()
+    await act(async () => root.render(<WidgetCard view={{ type: 'confirm', id: 'go' }} t={t} labels={labels} onSubmit={onSubmit} />))
+    const confirm = [...document.querySelectorAll('button')].find(button => button.textContent === 'Confirm')!
+    await act(async () => confirm.click())
+    expect(onSubmit).toHaveBeenCalledWith('go', { confirmed: true })
     await act(async () => root.unmount())
   })
   it('switches a chart to a table and back through its chart options', async () => {

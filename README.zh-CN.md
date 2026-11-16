@@ -20,7 +20,7 @@ klarkxy 的 DeepSeek Harness（DSH）插件。可以在[插件站点](https://kl
 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.zh-CN.md) | 破限：解除模型的回答限制、交付完整成果的会话 Preset，只作用于选用它的会话；可能导致账号被封禁。 |
 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.zh-CN.md) | DSH 文档：在插件页浏览 DSH 官方开发文档；智能体获得两个只读工具检索文档与核对插件（`dsh_docs`、`dsh_plugins`）。 |
 | [`@klarkxy/dsh-context-cleaner`](plugins/dsh-context-cleaner/docs/README.zh-CN.md) | 上下文面板清理：隐藏 dsh-context 仪表盘顶部的插件信息与推广卡片。 |
-| [`@klarkxy/dsh-deep-view`](plugins/dsh-deep-view/docs/README.zh-CN.md) | Deep View 回复卡片：流程步骤、图表、指标和安全联动的本地输入，支持填草稿及已校验的回答。 |
+| [`@klarkxy/dsh-deep-view`](plugins/dsh-deep-view/docs/README.zh-CN.md) | Deep View 智能界面：在正文中组合图表、交互数学、节点图、数据探索、地图与可调估算，支持填草稿及已校验的回答。 |
 | [`@klarkxy/dsh-model-picker`](plugins/dsh-model-picker/docs/README.zh-CN.md) | 模型选择器：输入框里的模型搜索与推理档位滑杆；其他插件可复用同一选择器。 |
 
 `@klarkxy/dsh-plugin-kit`（运行时、界面与诊断日志辅助）和 `@klarkxy/dsh-model-route` 是共享库，其他插件会自动安装它们。

@@ -6,12 +6,19 @@ import { legacyAnswer } from './answer-text.ts'
 /** Read visible, durable user/steering messages only, including inherited history. */
 export function replyAnswers(snapshot: ReplySnapshot): ReadonlyMap<string, ViewAnswer> {
   const answers = new Map<string, ViewAnswer>()
-  let cards: { id: string; title: string; view: ViewNode }[] = []
+  type Card = { id: string; title: string; view: ViewNode; revision: number }
+  // Cards with the same viewId are immutable revisions of one view. Only the
+  // newest snapshot can still be answered, so merge to the latest revision
+  // instead of letting two revisions compete over one composer message.
+  let cards = new Map<string, Card>()
   const collect = (block: ToolViewBlock) => {
     const meta = block.meta
     if (block.kind === 'tool-result' && !block.isError && isRecord(meta) && meta.owner === VIEW_OWNER && meta.awaitReply === true && typeof meta.viewId === 'string') {
       const shown = checkShownView(meta.title, meta.view)
-      if (!('error' in shown)) cards.push({ id: meta.viewId, title: shown.title, view: shown.view })
+      if (!('error' in shown)) {
+        const revision = typeof meta.revision === 'number' && Number.isSafeInteger(meta.revision) && meta.revision > 0 ? meta.revision : 1
+        if (revision >= (cards.get(meta.viewId)?.revision ?? 0)) cards.set(meta.viewId, { id: meta.viewId, title: shown.title, view: shown.view, revision })
+      }
     }
     for (const child of block.subCalls ?? []) collect(child)
   }
@@ -25,10 +32,14 @@ export function replyAnswers(snapshot: ReplySnapshot): ReadonlyMap<string, ViewA
     // match exactly one card. Ambiguous/edited legacy text remains a preview.
     if (source.deepView === undefined) {
       const text = node.data?.content?.filter(isRecord).filter(block => block.type === 'text').map(block => block.text).join('') ?? ''
-      const candidates = cards.map(card => legacyAnswer(card, text)).filter((answer): answer is ViewAnswer => answer !== null)
-      if (candidates.length === 1 && !answers.has(candidates[0].id)) answers.set(candidates[0].id, candidates[0])
+      const candidates = [...cards.values()].map(card => ({ card, answer: legacyAnswer(card, text) }))
+        .filter((candidate): candidate is { card: Card; answer: ViewAnswer } => candidate.answer !== null)
+      if (candidates.length === 1 && !answers.has(candidates[0].answer.id)) {
+        const [{ card, answer }] = candidates
+        answers.set(card.id, { ...answer, revision: card.revision })
+      }
     }
-    cards = []
+    cards = new Map()
     if (!isRecord(source.deepView)) continue
     const meta = source.deepView
     if (meta.owner !== VIEW_OWNER || meta.version !== 1 || !isRecord(meta.answer)) continue
@@ -40,15 +51,16 @@ export function replyAnswers(snapshot: ReplySnapshot): ReadonlyMap<string, ViewA
   return answers
 }
 
-export function checkedAnswer(answer: ViewAnswer | undefined, id: string | undefined, view: ViewNode): ViewAnswer | null {
-  if (!answer || !id || answer.id !== id) return null
+export function checkedAnswer(answer: ViewAnswer | undefined, id: string | undefined, view: ViewNode, revision?: number): ViewAnswer | null {
+  if (!answer || !id || answer.id !== id || revision !== undefined && (answer.revision ?? 1) !== revision) return null
   const values = validateViewAnswer(view, answer.action, answer.values)
-  return values.error === undefined ? { id, action: answer.action, values } : null
+  return values.error === undefined ? { id, action: answer.action, values, ...(answer.revision !== undefined ? { revision: answer.revision } : {}) } : null
 }
 
 export function sameAnswers(left: ReadonlyMap<string, ViewAnswer>, right: ReadonlyMap<string, ViewAnswer>): boolean {
   return left.size === right.size && [...left].every(([id, answer]) => {
     const next = right.get(id)
-    return next === answer || next?.action === answer.action && JSON.stringify(next.values) === JSON.stringify(answer.values)
+    return next === answer || next?.action === answer.action && (next.revision ?? 1) === (answer.revision ?? 1)
+      && JSON.stringify(next.values) === JSON.stringify(answer.values)
   })
 }

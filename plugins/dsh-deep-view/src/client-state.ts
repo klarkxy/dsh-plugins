@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore } from 'react'
-import type { PendingView, ViewNode } from './contracts.ts'
+import type { PendingView, ViewNode, ViewSnapshot } from './contracts.ts'
 import { uiEn, uiZh } from './copy.ts'
 
 export type LocaleSource = { getSnapshot?(): { active?: string }; subscribe?(listener: () => void): () => void }
@@ -12,11 +12,14 @@ export type ViewStatus = {
   copyKey?: 'filling' | 'filled' | 'sending' | 'answerFailed' | 'fillFailed' | 'expired' | 'dismissFailed'
 }
 export type ProgressRecord = { callId: string; title: string; view: ViewNode; at: number }
+export type LiveSnapshot = ViewSnapshot & { originCallId: string }
 type Store = ReturnType<typeof createViewStateStore>
 export function createViewStateStore(locale?: LocaleSource) {
   let statuses: Record<string, ViewStatus> = {}
   let pending: Record<string, PendingView> = {}
   let progress: Record<string, ProgressRecord> = {}
+  let snapshots: Record<string, LiveSnapshot> = {}
+  let bindings: Record<string, Record<string, unknown>> = {}
   const listeners = new Set<() => void>()
   const publish = () => { for (const fn of [...listeners]) fn() }
   return {
@@ -59,9 +62,30 @@ export function createViewStateStore(locale?: LocaleSource) {
       publish()
     },
     progress: (sessionId: string) => progress[sessionId],
+    latest: (sessionId: string, viewId: string | undefined) => viewId ? snapshots[`${sessionId}:${viewId}`] : undefined,
+    setSnapshot: (record: LiveSnapshot) => {
+      const key = `${record.sessionId}:${record.id}`
+      const current = snapshots[key]
+      if (current && current.revision >= record.revision) return
+      const originCallId = current?.originCallId ?? record.originCallId
+      snapshots = { ...snapshots, [key]: { ...record, originCallId } }
+      publish()
+    },
+    values: (sessionId: string, viewId: string) => bindings[`${sessionId}:${viewId}`],
+    setValues: (sessionId: string, viewId: string, values: Record<string, unknown>) => {
+      bindings = { ...bindings, [`${sessionId}:${viewId}`]: values }
+      publish()
+    },
     localeSnapshot: () => locale?.getSnapshot?.(),
     localeSubscribe: (fn: () => void) => locale?.subscribe?.(fn) ?? (() => {}),
   }
+}
+
+export function useLiveSnapshot(store: Store, sessionId: string, viewId: string | undefined) {
+  return useSyncExternalStore(store.subscribe, () => store.latest(sessionId, viewId), () => store.latest(sessionId, viewId))
+}
+export function useViewValues(store: Store, sessionId: string, viewId: string) {
+  return useSyncExternalStore(store.subscribe, () => store.values(sessionId, viewId), () => store.values(sessionId, viewId))
 }
 
 export function useViewLocale(store: Store) {

@@ -4,7 +4,7 @@ import { createRpc, createShowViewTool, handoffPendingSession, resolveSessionId,
 import { DEEP_VIEW_SKILL, DEEP_VIEW_SKILL_DESCRIPTION } from './skill.ts'
 
 function hostFixture(options: { flush?: () => Promise<boolean>; followup?: (message: unknown) => void } = {}) {
-  const agent = { id: 'session-test', session: { id: 'session-test' }, followup(message: unknown) { messages.push(message); options.followup?.(message) } }
+  const agent = { id: 'session-test', session: { id: 'session-test', header: {} as Record<string, unknown> }, followup(message: unknown) { messages.push(message); options.followup?.(message) } }
   const messages: unknown[] = []
   const host = {
     agents: { get: (id: string) => id === agent.id ? agent : undefined, roots: () => [agent] },
@@ -80,6 +80,81 @@ describe('show_view Host boundary', () => {
     expect(value).toMatchObject({ owner: 'dsh-deep-view', viewId: 'view-fixed', status: 'pending', awaitReply: true })
     expect(tool.output.presentationMeta({ title: 'Choose', view: interactiveView }, value)).toMatchObject({ owner: 'dsh-deep-view', viewId: 'view-fixed', interactive: true, awaitReply: true })
     expect(pending.get('session-test')).toMatchObject({ id: 'view-fixed', callId: 'call-one' })
+  })
+  it('updates complete immutable snapshots, rejects stale revisions and accepts the current answer', async () => {
+    const { host, agent, messages } = hostFixture()
+    const pending = new Map()
+    const latest = new Map()
+    const tool = createShowViewTool(host, pending, () => 'revisions', undefined, latest) as { execute(args: unknown, exec: unknown): Promise<Record<string, unknown>>; output: { presentationMeta(args: unknown, value: unknown): unknown } }
+    const exec = { agent, callId: 'r1', concludeTurn() {} }
+    const first = await tool.execute({ title: 'Choose', view: interactiveView }, exec)
+    expect(first).toMatchObject({ revision: 1, status: 'pending' })
+    const stale = await tool.execute({ view_id: 'revisions', view: interactiveView, base_revision: 0 }, { ...exec, callId: 'stale' })
+    expect(stale.status).toBe('stale')
+    expect(pending.get('session-test')).toMatchObject({ revision: 1, callId: 'r1' })
+    const secondView = { ...interactiveView, options: [{ label: 'Two' }] }
+    const second = await tool.execute({ view_id: 'revisions', view: secondView, base_revision: 1 }, { ...exec, callId: 'r2' })
+    expect(second).toMatchObject({ revision: 2, status: 'pending' })
+    expect(first).not.toBe(second)
+    expect(tool.output.presentationMeta({}, first)).toMatchObject({ revision: 1, view: interactiveView })
+    expect(tool.output.presentationMeta({}, second)).toMatchObject({ revision: 2, view: secondView })
+    const rpc = createRpc(host, pending)
+    expect(await rpc('reply', { sessionId: 'session-test', viewId: 'revisions', action: 'pick', values: { selected: ['Two'] }, revision: 1 }, new AbortController().signal)).toMatchObject({ ok: false, error: { code: 'stale' } })
+    expect(await rpc('reply', { sessionId: 'session-test', viewId: 'revisions', action: 'pick', values: { selected: ['Two'] }, revision: 2 }, new AbortController().signal)).toMatchObject({ ok: true })
+    expect(messages[0].source.deepView.answer).toMatchObject({ revision: 2 })
+    expect(await tool.execute({ view_id: 'revisions', view: secondView, base_revision: 2 }, { ...exec, callId: 'r3' })).toMatchObject({ status: 'stale' })
+  })
+  it('rejects changing answer controls during a revision', async () => {
+    const { host, agent } = hostFixture()
+    const pending = new Map()
+    const tool = createShowViewTool(host, pending, () => 'fixed') as { execute(args: unknown, exec: unknown): Promise<Record<string, unknown>> }
+    const exec = { agent, callId: 'r1', concludeTurn() {} }
+    await tool.execute({ title: 'Choose', view: interactiveView }, exec)
+    expect(await tool.execute({ view_id: 'fixed', base_revision: 1, view: { type: 'text', text: 'Done' } }, exec)).toMatchObject({ status: 'invalid' })
+    expect(pending.get('session-test')).toMatchObject({ revision: 1 })
+  })
+  it('uses persisted root metadata when rc.3 only exposes agents.list()', async () => {
+    const { host, agent, messages } = hostFixture()
+    const agents = (host as never as { agents: { roots?: () => unknown[]; list?: () => unknown[] } }).agents
+    delete agents.roots
+    agents.list = () => [agent]
+    const pending = new Map()
+    const tool = createShowViewTool(host, pending, () => 'view-list') as { execute(args: unknown, exec: unknown): Promise<Record<string, unknown>> }
+    const value = await tool.execute({ title: 'Choose', view: interactiveView }, { agent, callId: 'call-list' })
+    expect(value).toMatchObject({ status: 'pending', viewId: 'view-list' })
+    const rpc = createRpc(host, pending)
+    expect(await rpc('reply', { sessionId: 'session-test', viewId: 'view-list', action: 'pick', values: { selected: ['One'] } }, new AbortController().signal)).toMatchObject({ ok: true })
+    expect(messages).toHaveLength(1)
+  })
+  it.each([
+    { origin: 'subagent', parentSession: 'lead', delegationDepth: 1 },
+    { origin: 'subagent' },
+    { parentSession: 'lead', delegationDepth: 1 },
+  ])('rejects delegated agents listed alongside roots: %j', async header => {
+    const { host, agent, messages } = hostFixture()
+    agent.session.header = header
+    const agents = (host as never as { agents: { roots?: () => unknown[]; list?: () => unknown[] } }).agents
+    delete agents.roots
+    agents.list = () => [agent]
+    const pending = new Map()
+    const tool = createShowViewTool(host, pending, () => 'child-view') as { execute(args: unknown, exec: unknown): Promise<Record<string, unknown>> }
+    expect(await tool.execute({ view: interactiveView }, { agent })).toMatchObject({ status: 'invalid' })
+    expect(pending.size).toBe(0)
+    // A previously saved pending record cannot bypass the same reply boundary.
+    pending.set(agent.id, { id: 'child-view', sessionId: agent.id, title: '', view: interactiveView })
+    expect(await createRpc(host, pending)('reply', {
+      sessionId: agent.id, viewId: 'child-view', action: 'pick', values: { selected: ['One'] },
+    }, new AbortController().signal)).toMatchObject({ ok: false })
+    expect(messages).toHaveLength(0)
+  })
+  it('admits a human fork and refuses missing metadata without a roots API', async () => {
+    const { host, agent } = hostFixture()
+    delete (host as never as { agents: { roots?: () => unknown[] } }).agents.roots
+    const tool = createShowViewTool(host, new Map()) as { execute(args: unknown, exec: unknown): Promise<Record<string, unknown>> }
+    agent.session.header = { parentSession: 'previous', isSeeded: true, classification: 'ordinary' }
+    expect(await tool.execute({ view: interactiveView }, { agent })).toMatchObject({ status: 'pending' })
+    delete (agent.session as { header?: unknown }).header
+    expect(await tool.execute({ view: interactiveView }, { agent })).toMatchObject({ status: 'invalid' })
   })
   it('replaces an unanswered card instead of deleting the record', async () => {
     const { host } = hostFixture()

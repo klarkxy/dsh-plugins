@@ -8,8 +8,7 @@ import { english, type ViewT } from './ui.tsx'
 
 export const PALETTE = [
   'var(--dsw-alias-state-business-primary)', 'var(--dsw-alias-brand-primary)',
-  'var(--dsw-alias-state-success-primary)', 'var(--dsw-alias-state-warn-primary)',
-  'var(--dsw-alias-state-error-primary)',
+  'var(--dsw-alias-label-tertiary)',
 ]
 const colorAt = (index: number) => PALETTE[index % PALETTE.length]
 const TICK = 10
@@ -85,7 +84,7 @@ function columns({ categories, series, unit, kind }: ChartData, width: number, a
   const hi = ticks.at(-1)!
   const left = Math.ceil(Math.max(...ticks.map(tick => textWidth(withUnit(tick, unit), TICK)))) + 10
   const top = 8
-  const height = 220
+  const height = 176
   const bottom = 24
   const plot = { x: left, y: top, w: Math.max(40, width - left - 4), h: height - top - bottom }
   const y = (value: number) => plot.y + plot.h - ((value - lo) / (hi - lo)) * plot.h
