@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { assertObjectJsonSchema, projectToolSchema, validateJsonSchemaValue, type ToolDefinition } from '@deepseek-ai/dsh-tools'
-import { createRpc, createShowViewTool, handoffPendingSession, resolveSessionId } from './index.ts'
+import { createRpc, createShowViewTool, handoffPendingSession, resolveSessionId, apply } from './index.ts'
+import { DEEP_VIEW_SKILL, DEEP_VIEW_SKILL_DESCRIPTION } from './skill.ts'
 
 function hostFixture(options: { flush?: () => Promise<boolean>; followup?: (message: unknown) => void } = {}) {
   const agent = { id: 'session-test', session: { id: 'session-test' }, followup(message: unknown) { messages.push(message); options.followup?.(message) } }
@@ -14,6 +15,37 @@ function hostFixture(options: { flush?: () => Promise<boolean>; followup?: (mess
   return { host: host as never, agent, messages }
 }
 const interactiveView = { type: 'options', id: 'pick', options: [{ label: 'One' }, { label: 'Two' }] }
+describe('Deep View skill', () => {
+  it('keeps the full ViewNode instructions out of the tool schema until the skill is loaded', async () => {
+    const registrations: Record<string, unknown>[] = []
+    const disposers: Array<() => void> = []
+    const { host } = hostFixture()
+    const ctx = host as never as {
+      effect(setup: () => () => void): void
+      provide(): void
+      on(): void
+    }
+    ctx.effect = setup => { disposers.push(setup()) }
+    ctx.provide = () => {}
+    ctx.on = () => () => {}
+    ;(host as never as { skills: { register(skill: Record<string, unknown>): () => void } }).skills = {
+      register(skill) { registrations.push(skill); return () => {} },
+    }
+    ;(host as never as { webServer: { register(): () => void } }).webServer = { register: () => () => {} }
+    await apply(ctx as never)
+    expect(registrations).toHaveLength(1)
+    expect(registrations[0]).toMatchObject({
+      name: 'deep-view', description: DEEP_VIEW_SKILL_DESCRIPTION, content: DEEP_VIEW_SKILL,
+      source: 'runtime', invocation: { modelInvocable: true, userInvocable: true },
+    })
+    expect(DEEP_VIEW_SKILL).toContain('Do not read the plugin package')
+    expect(DEEP_VIEW_SKILL).toContain('Workflow: `steps`')
+    expect(registrations[0]!.description).not.toContain('ViewNode')
+    const tool = createShowViewTool(host, new Map())
+    expect(JSON.stringify(tool)).not.toContain('For a workflow')
+    for (const dispose of disposers) dispose()
+  })
+})
 describe('show_view Host boundary', () => {
   it('exports a valid model-facing schema through the real Host projection', () => {
     const { host } = hostFixture()

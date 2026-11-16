@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Deep View reply cards",
-    "description": "Charts, metrics, tables and safe local inputs in replies, with validated answers to show_view cards."
+    "description": "Workflow steps, charts, metrics and safe local inputs in replies, with composer drafts and validated show_view answers."
   }
 }

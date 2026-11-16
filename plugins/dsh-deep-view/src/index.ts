@@ -6,10 +6,11 @@ import { registerHostRpc, type HostRpcContext } from '@klarkxy/dsh-plugin-kit/ho
 import { installPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { checkShownView, validateViewAnswer, viewSummary } from './core/index.js'
 import { answerText } from './answer-text.ts'
+import { DEEP_VIEW_SKILL, DEEP_VIEW_SKILL_DESCRIPTION } from './skill.ts'
 import { HOST_SERVICE, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type DeepViewHost, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation, type ViewAnswerMetadata } from './contracts.ts'
 
 export const name = 'deep-view'
-export const inject = ['tools', 'sessionController', 'sessions', 'agents', 'connection', 'webServer'] as const
+export const inject = ['tools', 'skills', 'sessionController', 'sessions', 'agents', 'connection', 'webServer'] as const
 
 declare module '@deepseek-ai/cordis' {
   interface Context { [HOST_SERVICE]: DeepViewHost }
@@ -67,6 +68,16 @@ type Host = Context & HostRpcContext & {
     get(name: string, scope?: object): unknown
     register(definition: Record<string, unknown>): () => void
   }
+  skills: {
+    register(skill: {
+      name: string
+      description: string
+      whenToUse: string
+      content: string
+      source: string
+      invocation: { modelInvocable: boolean; userInvocable: boolean }
+    }): () => void
+  }
   agents: { get(id: string): AgentLike | undefined; roots(): AgentLike[] }
   sessionController: { resolveAgent(id: string): Promise<{ agent?: AgentLike; error?: { message?: string } }> }
   sessions: { flush(session: unknown): Promise<boolean> }
@@ -98,22 +109,13 @@ export function createShowViewTool(
 ): Record<string, unknown> {
   return {
     name: 'show_view',
-    description: [
-      'Attach one card below your final reply when a visual or interactive form beats prose: compared numbers, a trend, a share, progress; an estimate with user-adjustable inputs; or a choice the user answers afterwards (use ask_user_question when you cannot continue without it).',
-      'Prefer plain Markdown otherwise. Call once, then finish the reply; the card is not yet visible when this tool returns.',
-      'Never end on the call, wait or poll, repeat the card JSON, or claim the user saw it. Answers accept one reply, sent as the next user message. Never collect keys, tokens or passwords.',
-    ].join(' '),
+    description: 'Show one interactive Deep View card as soon as its arguments are complete and preserve it with the reply. Load the deep-view skill before using this tool; it contains the usage and ViewNode format. await_reply is only for answer controls.',
     // tools.register() takes raw JSON Schema; the per-field DSL is only for defineTool().
     parameters: {
       type: 'object',
       properties: {
         title: { type: 'string', description: 'Short heading above the card.' },
-        view: { type: 'object', additionalProperties: true, description: [
-          'One ViewNode, nodes nest under stack|row(children,let?).',
-          'Display: text,metric{label,value},table{columns:[{key,label}],rows:[[cell]]},chart{kind:bar|hbar|line|area|donut,categories,series:[{name?,values}]},progress{percent|value+max},callout{text},sources{items:[{label,url}]}.',
-          'Inputs: slider,number,choice,toggle{id,label,value}. A {"=":"expr"} formula replaces a value or cell, reading input ids and let names.',
-          'Answers(need await_reply true): options{id,options:[{label,description?}],multi?},confirm{id},form{id,fields:[{id,label,placeholder?}]},submit{id,label}. No html.',
-        ].join(' ') },
+        view: { type: 'object', additionalProperties: true, description: 'One ViewNode. Load the deep-view skill for the complete format and examples.' },
         await_reply: { type: 'boolean', description: 'Whether this card asks the user for a response.' },
       },
       required: ['view'],
@@ -262,6 +264,14 @@ export async function apply(ctx: Context): Promise<void> {
   const logger = installPluginLogger(ctx, PLUGIN_NAME, { forwardHostWarnError: false })
   const pending = new Map<string, PendingView>()
   const redirects = new Map<string, string>()
+  ctx.effect(() => host.skills.register({
+    name: 'deep-view',
+    description: DEEP_VIEW_SKILL_DESCRIPTION,
+    whenToUse: DEEP_VIEW_SKILL_DESCRIPTION,
+    content: DEEP_VIEW_SKILL,
+    source: 'runtime',
+    invocation: { modelInvocable: true, userInvocable: true },
+  }), 'deep-view.skill')
   ctx.provide(HOST_SERVICE, {
     handoffSession: (fromSessionId, toSessionId) => {
       const moved = handoffPendingSession(pending, redirects, fromSessionId, toSessionId)

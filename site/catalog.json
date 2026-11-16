@@ -334,8 +334,8 @@
       "kind": "plugin",
       "title": { "zh": "Deep View 回复卡片", "en": "Deep View reply cards" },
       "summary": {
-        "zh": "在回复中展示图表、指标、表格和安全联动的本地输入；show_view 可接收已校验的用户回答。",
-        "en": "Charts, metrics, tables and safe local inputs in replies, with validated answers to show_view cards."
+        "zh": "在回复中展示流程步骤、图表、指标和安全联动的本地输入，支持填草稿及已校验的回答。",
+        "en": "Workflow steps, charts, metrics and safe local inputs in replies, with composer drafts and validated show_view answers."
       },
       "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
       "repository": "https://github.com/klarkxy/dsh-plugins",
