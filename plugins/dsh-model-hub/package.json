@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-hub",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Subagents: configure the model and reasoning effort for new subagents, and see each one's last-used model in the conversation popup.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -113,6 +113,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/",
   "dshRelease": {
-    "contentHash": "7a5015eb9f1e63ea983aff068674217111016dc4b2157fb1519269086e92a44d"
+    "contentHash": "bef62c707699d414ce1241b324b72450d05ace90ef1d44acbec349be9ef47779"
   }
 }

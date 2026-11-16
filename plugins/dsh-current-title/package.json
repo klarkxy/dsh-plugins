@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-current-title",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Auto Title: keep session titles following the latest task; names you set by hand stay put.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -134,6 +134,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "45b6ad26af709df5718c40c9631cf85483a53a796b8ae643653d5fb833bcb7de"
+    "contentHash": "cf69a56fc7fbb819610e03fb9d6231560ddbf927afbb1f94b9fbd2c0ca5b82f3"
   }
 }
