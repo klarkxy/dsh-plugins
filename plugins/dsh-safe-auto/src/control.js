@@ -10,8 +10,12 @@ const PERMISSION_EVENTS = new Set(['permission/preset', 'sandbox/mode', 'approva
 export const isPermissionEvent = event => PERMISSION_EVENTS.has(event?.type);
 
 /** UI writes only reviewer preferences. The enable switch and budgets remain operator-owned profile config. */
-export function createControl(base, { table, presets, sandboxPolicy, sessions, platform = process.platform, onChange = () => {}, onSettingsChanged = () => {} }) {
+export function createControl(base, { table, recentTable, presets, sandboxPolicy, sessions, platform = process.platform, onChange = () => {}, onSettingsChanged = () => {} }) {
   let settings = table.get('reviewer') ?? { revision: 0, values: {} };
+  const recent = recentTable?.get('lastSelection');
+  // Invalid or legacy data fails closed. Only a remembered Safe Auto selection
+  // opts a future fresh session in; native presets remain the host's own default.
+  let inheritSafeAuto = recent?.value === 'safe-auto';
   let tail = Promise.resolve();
   const lifetime = new AbortController();
   const selections = new WeakMap();
@@ -92,6 +96,34 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
     if (isSubagentSession(session)) throw new Error('Child sessions cannot select Safe Auto');
     return session;
   }
+  function rememberSelection(value) {
+    const enabled = value === 'safe-auto';
+    inheritSafeAuto = enabled;
+    // This is a best-effort memo: the session's committed native permission
+    // remains authoritative even when this small profile write fails.
+    try { return Promise.resolve(recentTable?.put('lastSelection', { value: enabled ? 'safe-auto' : 'native' })).catch(() => {}); }
+    catch { return Promise.resolve(); }
+  }
+  function observeSession(session) {
+    // Each session.open is a composer navigation, including a return to a
+    // previously viewed session. List reads and focus refreshes stay read-only.
+    return rememberSelection(sessionView(session).safeAuto ? 'safe-auto' : 'native');
+  }
+  /**
+   * Runs before the factory releases a genuinely new session's first prompt.
+   * Forks have their own inherited native permissions and are not "new chats".
+   */
+  function seedSession(agent, source, signal) {
+    if (source !== 'startup' || lifetime.signal.aborted) return Promise.resolve(false);
+    const session = agent?.session;
+    if (!session || sessions.get(session.id) !== session || isSubagentSession(session)
+      || typeof session.header?.parentSession === 'string') return Promise.resolve(false);
+    // Share the UI queue: reads that opened an older session and a manual
+    // permission switch ahead of creation are applied before inheritance.
+    // Deliberately no early `inheritSafeAuto` check: a queued explicit Safe
+    // Auto selection may be the operation that enables this inheritance.
+    return api.call('session.inherit', { sessionId: session.id }, signal);
+  }
   async function dispatch(endpoint, payload, signal) {
     signal?.throwIfAborted();
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Invalid request');
@@ -114,12 +146,19 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
       .filter(s => !isSubagentSession(s) && sessions.get(s.id) === s)
       .map(s => ({ sessionId: s.id, header: Object.fromEntries(['id', 'createdAt', 'cwd', 'isSeeded', 'agentPreset']
         .filter(k => s.header?.[k] !== undefined).map(k => [k, s.header[k]])), ...sessionView(s) })) };
-    if (!['session.get', 'session.select', 'session.disable'].includes(endpoint)) throw new Error('Unknown endpoint');
+    if (!['session.get', 'session.open', 'session.select', 'session.disable', 'session.inherit'].includes(endpoint)) throw new Error('Unknown endpoint');
     const session = getSession(payload.sessionId);
     if (endpoint === 'session.get') return sessionView(session);
+    if (endpoint === 'session.open') { await observeSession(session); return sessionView(session); }
+    if (endpoint === 'session.inherit') {
+      if (!inheritSafeAuto || !policyView().available || selections.has(session)) return false;
+      await dispatch('session.select', { sessionId: session.id, expectedRevision: sessionView(session).revision, value: 'safe-auto' }, signal);
+      return true;
+    }
     if (payload.expectedRevision !== sessionView(session).revision) throw new Error('Session changed; refresh the list and retry');
     if (endpoint === 'session.disable') {
       selections.set(session, { enabled: false, generation: ++generation });
+      await rememberSelection('native');
       onChange();
       return sessionView(session);
     }
@@ -136,10 +175,11 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
       selections.set(session, { enabled: false, generation: ++generation });
       presets.set(session, option.value);
     }
+    await rememberSelection(payload.value);
     onChange();
     return sessionView(session);
   }
-  return { state, config, settingsView, getSession, signal: lifetime.signal,
+  const api = { state, config, settingsView, getSession, seedSession, signal: lifetime.signal,
     async dispose() {
       lifetime.abort(new Error('Safe Auto control unloaded'));
       await tail;
@@ -152,4 +192,5 @@ export function createControl(base, { table, presets, sandboxPolicy, sessions, p
       return work;
     },
   };
+  return api;
 }

@@ -62,7 +62,7 @@ test('Safe Auto permission menu follows host locale without re-reading the sessi
     const snapshot = { current: 'workspace-write', available: true, revision: '1', safeAuto: false, options: [
       { value: 'read-only', name: 'server Read' }, { value: 'workspace-write', name: 'server Write' }, { value: 'safe-auto', name: 'server Safe' },
     ] };
-    const api = { getSession: async () => { reads++; return snapshot; } };
+    const api = { getSession: async () => { reads++; return snapshot; }, openSession: async () => { reads++; return snapshot; } };
     await act(async () => root.render(React.createElement(PermissionMenu, { sessionId: 's', api, locale })));
     await act(async () => dom.window.document.querySelector('[aria-haspopup="menu"]').click());
     const before = reads;
@@ -77,7 +77,7 @@ test('Safe Auto permission menu follows host locale without re-reading the sessi
 test('an unready session keeps the permission control quiet', async () => {
   await mount(async (dom, root, locale) => {
     let reads = 0;
-    const api = { getSession: async () => { reads++; throw new Error('Session is not active; open it and retry'); } };
+    const api = { openSession: async () => { reads++; throw new Error('Session is not active; open it and retry'); }, getSession: async () => { throw new Error('unexpected refresh'); } };
     await act(async () => root.render(React.createElement(PermissionMenu, { sessionId: 's', api, locale })));
     assert.equal(reads, 1);
     assert.equal(dom.window.document.querySelector('[role="alert"]'), null);
@@ -88,7 +88,7 @@ test('an unready session keeps the permission control quiet', async () => {
 
 test('a real permission read failure still shows', async () => {
   await mount(async (dom, root, locale) => {
-    const api = { getSession: async () => { throw new Error('Request failed'); } };
+    const api = { openSession: async () => { throw new Error('Request failed'); }, getSession: async () => { throw new Error('unexpected refresh'); } };
     await act(async () => root.render(React.createElement(PermissionMenu, { sessionId: 's', api, locale })));
     assert.match(dom.window.document.querySelector('[role="alert"]').textContent, /Request failed/);
   });

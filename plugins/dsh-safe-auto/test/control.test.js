@@ -11,17 +11,24 @@ function fixture(extra = {}) {
   let current = 'workspace-write';
   const specs = { 'read-only': { sandbox: 'read-only', approval: 'ask' }, 'workspace-write': { sandbox: 'workspace-write', approval: 'ask' }, 'danger-full-access': { sandbox: 'danger-full-access', approval: 'never' } };
   const saved = new Map();
+  const remembered = new Map();
   const table = { get: key => saved.get(key), put: async (key, value) => saved.set(key, structuredClone(value)) };
+  const recentTable = { get: key => remembered.get(key), put: async (key, value) => remembered.set(key, structuredClone(value)) };
   const presets = { catalog: () => ({ options: Object.keys(specs).map(value => ({ value, name: value })) }),
     resolve: value => specs[value], current: () => current,
     set(_session, value) { if (current === value) return; current = value; events.push({ type: 'permission/preset', data: { preset: value } }); } };
   const sandboxPolicy = { resolve: () => ({ mode: specs[current].sandbox, workspaceRoot: root }) };
   const base = parseConfig({ provider: 'p', model: 'm', ...extra });
   const live = new Map([['s', session]]);
-  const options = { table, presets, sandboxPolicy, sessions: { get: id => live.get(id), list: () => [...live.values()] } };
+  const options = { table, recentTable, presets, sandboxPolicy, sessions: { get: id => live.get(id), list: () => [...live.values()] } };
   const control = createControl(base, options);
   const select = async value => control.call('session.select', { sessionId: 's', expectedRevision: (await control.call('session.get', { sessionId: 's' })).revision, value });
-  return { base, control, select, session, events, root, options, live, specs };
+  const fresh = (id, header = {}) => {
+    const next = { id, header: { id, cwd: root, createdAt: 2, isSeeded: false, ...header }, get seq() { return events.length; }, snapshotEvents: () => events };
+    live.set(id, next);
+    return next;
+  };
+  return { base, control, select, session, events, root, options, live, specs, recentTable, remembered, fresh };
 }
 
 test('durable cancelled settings writes notify the adopted revision despite failing observers', async () => {
@@ -139,7 +146,102 @@ test('request cancellation rejects queued permissions without cancelling another
   assert.equal(f.options.presets.current(), 'workspace-write');
   await f.control.dispose();
 });
-test('native no-op switches still reject stale concurrent activation', async () => {
+test('a new top-level session inherits Safe Auto, including after a control restart', async () => {
+  const f = fixture();
+  await f.select('safe-auto');
+  assert.equal(f.remembered.get('lastSelection').value, 'safe-auto');
+  const next = f.fresh('next');
+  assert.equal(await f.control.seedSession({ session: next }, 'startup'), true);
+  assert.equal(f.control.config(next).enabled, true);
+  const restored = createControl(f.base, f.options);
+  const later = f.fresh('later');
+  assert.equal(await restored.seedSession({ session: later }, 'startup'), true);
+  assert.equal(restored.config(later).enabled, true);
+  await f.control.dispose(); await restored.dispose();
+});
+
+test('the most recently opened native session stops inheritance without an extra click', async () => {
+  const f = fixture();
+  await f.select('safe-auto');
+  const other = f.fresh('other');
+  await f.control.call('session.open', { sessionId: 'other' });
+  assert.equal(f.remembered.get('lastSelection').value, 'native');
+  const next = f.fresh('next');
+  assert.equal(await f.control.seedSession({ session: next }, 'startup'), false);
+  assert.equal(f.control.config(next).enabled, false);
+  await f.control.dispose();
+});
+
+test('inheritance fails closed for unavailable, resumed, forked and child sessions', async () => {
+  for (const unavailable of [fixture({ enabled: false }), fixture()]) {
+    unavailable.remembered.set('lastSelection', { value: 'safe-auto' });
+    const restored = createControl(unavailable.base, unavailable.options);
+    if (unavailable.base.enabled) unavailable.options.presets.catalog = () => ({ options: [{ value: 'read-only' }] });
+    const next = unavailable.fresh('next');
+    assert.equal(await restored.seedSession({ session: next }, 'startup'), false);
+    assert.equal(restored.config(next).enabled, false);
+    await restored.dispose(); await unavailable.control.dispose();
+  }
+  const f = fixture(); await f.select('safe-auto');
+  for (const [id, source, header] of [
+    ['resumed', 'resume', {}], ['cleared', 'clear', {}], ['compacted', 'compact', {}],
+    ['fork', 'startup', { parentSession: 's' }], ['child', 'startup', { origin: 'subagent' }],
+  ]) {
+    const session = f.fresh(id, header);
+    assert.equal(await f.control.seedSession({ session }, source), false);
+    assert.equal(f.control.config(session).enabled, false);
+  }
+  await f.control.dispose();
+});
+
+test('returning to a Safe Auto session after a native session restores inheritance; background refresh does not', async () => {
+  const f = fixture(); await f.select('safe-auto');
+  f.fresh('other');
+  await f.control.call('session.open', { sessionId: 'other' });
+  await f.control.call('session.get', { sessionId: 's' });
+  assert.equal(f.remembered.get('lastSelection').value, 'native');
+  await f.control.call('session.open', { sessionId: 's' });
+  const next = f.fresh('next');
+  assert.equal(await f.control.seedSession({ session: next }, 'startup'), true);
+  assert.equal(f.control.config(next).enabled, true);
+  await f.control.dispose();
+});
+
+test('inheritance waits for an earlier session-open memory write and preserves its result', async () => {
+  const f = fixture();
+  const write = Promise.withResolvers();
+  f.recentTable.put = () => write.promise;
+  const opened = f.control.call('session.open', { sessionId: 's' });
+  const next = f.fresh('next');
+  const seeding = f.control.seedSession({ session: next }, 'startup');
+  let settled = false; void seeding.then(() => { settled = true; });
+  await new Promise(setImmediate);
+  assert.equal(settled, false);
+  write.resolve();
+  await opened;
+  assert.equal(await seeding, false);
+  assert.equal(f.control.config(next).enabled, false);
+  await f.control.dispose();
+});
+
+test('a queued explicit Safe Auto choice enables the next creation before inheritance runs', async () => {
+  const f = fixture(); const next = f.fresh('next');
+  const selecting = f.control.call('session.select', { sessionId: 's', expectedRevision: '0:0', value: 'safe-auto' });
+  const seeding = f.control.seedSession({ session: next }, 'startup');
+  assert.equal((await selecting).safeAuto, true);
+  assert.equal(await seeding, true);
+  assert.equal(f.control.config(next).enabled, true);
+  await f.control.dispose();
+});
+
+test('native preset selection clears the remembered Safe Auto choice', async () => {
+  const f = fixture(); await f.select('safe-auto'); await f.select('read-only');
+  assert.equal(f.remembered.get('lastSelection').value, 'native');
+  assert.equal(await f.control.seedSession({ session: f.fresh('next') }, 'startup'), false);
+  await f.control.dispose();
+});
+
+test('a native no-op switch still rejects stale concurrent activation', async () => {
   const f = fixture(); const enabled = await f.select('safe-auto');
   const results = await Promise.allSettled(['workspace-write', 'safe-auto'].map(value => f.control.call('session.select', { sessionId: 's', expectedRevision: enabled.revision, value })));
   assert.equal(results[0].status, 'fulfilled'); assert.equal(results[1].status, 'rejected');

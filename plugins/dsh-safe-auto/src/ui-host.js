@@ -36,10 +36,11 @@ export async function apply(ctx) {
     settings: domainTable(z.object({ revision: z.number().int().nonnegative(),
       values: z.object(Object.fromEntries(REVIEW_FIELDS.map(k => [k, z.string().max(4096).optional()]))),
     }).strict()),
+    recent: domainTable(z.object({ value: z.enum(['safe-auto', 'native']) }).strict()),
   } }));
   let control;
   ctx.effect(() => async () => { await control?.dispose(); await domain.close(); });
-  control = createControl(ctx.safeAutoRuntime.base, { table: domain.table('settings'), presets: ctx.permissionPresets,
+  control = createControl(ctx.safeAutoRuntime.base, { table: domain.table('settings'), recentTable: domain.table('recent'), presets: ctx.permissionPresets,
     sandboxPolicy: ctx.sandboxPolicy, sessions: ctx.sessions,
     onSettingsChanged: revision => notifyModelSettingsChanged(ctx, '@klarkxy/dsh-safe-auto', revision) });
   // Validate stored settings before publishing any UI endpoint.
@@ -61,6 +62,20 @@ export async function apply(ctx) {
     },
   }));
   ctx.effect(() => ctx.safeAutoRuntime.attach(control));
+  // The serial creation hook completes before queued first input is released.
+  // Resume/clear/compact never opt an existing session back in.
+  ctx.effect(() => ctx.on('agent/created', async ({ agent, source, signal }) => {
+    try {
+      const enabled = await control.seedSession(agent, source, signal);
+      if (enabled) logger.info('session.inherited', 'Inherited Safe Auto for a new top-level session.', { sessionId: agent.session?.id ?? agent.id });
+    } catch (error) {
+      // Creation must remain available when this optional inheritance fails.
+      logger.warn('session.inherit-failed', 'Could not inherit Safe Auto; the session keeps native permissions.', error, {
+        sessionId: agent.session?.id ?? agent.id, source,
+      });
+      try { ctx.logger?.warn?.('safe-auto could not inherit the last permission mode: %s', error instanceof Error ? error.message : String(error)); } catch {}
+    }
+  }));
   ctx.effect(() => registerControlRoute(ctx, async (endpoint, payload, signal) => {
     try {
       control.signal.throwIfAborted();

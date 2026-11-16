@@ -73,6 +73,38 @@ test('UI host mounts an authenticated route and disposes control without model c
   assert.equal(attached, false); assert.equal(closed, true); assert.equal(removed, true);
 });
 
+test('the UI host inherits Safe Auto on agent startup from persisted state', async () => {
+  const disposers = []; const listeners = new Map(); const rows = new Map();
+  rows.set('recent:lastSelection', { value: 'safe-auto' });
+  const events = [];
+  const session = { id: 'new', header: { id: 'new', isSeeded: false }, get seq() { return events.length; }, snapshotEvents: () => events };
+  const spec = { sandbox: 'workspace-write', approval: 'ask' };
+  let attachedControl;
+  const ctx = new Context();
+  Object.assign(ctx, {
+    on(event, callback) { listeners.set(event, callback); return () => listeners.delete(event); },
+    safeAutoRuntime: { base: parseConfig(), attach(control) { attachedControl = control; return () => {}; } },
+    storageDomain: { async open() { return { table: name => ({
+      get: key => rows.get(`${name}:${key}`), put: async (key, value) => rows.set(`${name}:${key}`, structuredClone(value)),
+    }), close: async () => {} }; } },
+    permissionPresets: { catalog: () => ({ options: [{ value: 'workspace-write' }] }), current: () => 'workspace-write', resolve: () => spec, set: () => {} },
+    sandboxPolicy: { resolve: () => ({ mode: 'workspace-write' }) }, sessions: { get: id => id === 'new' ? session : undefined },
+    connection: { requestRejection: () => undefined }, webServer: { register: () => () => {} },
+    effect(fn) { disposers.push(fn()); },
+    inject(_dependencies, callback) { callback({ remote: { $mount: async () => async () => {} }, effect: () => () => {} }); },
+  });
+  await apply(ctx);
+  await listeners.get('agent/created')({ agent: { session }, source: 'startup' });
+  assert.equal(attachedControl.config(session).enabled, true);
+  assert.equal(rows.get('recent:lastSelection').value, 'safe-auto');
+  // The host owns resume behavior; a resumed session is never opted back in.
+  const resumed = { ...session, id: 'resumed', header: { ...session.header, id: 'resumed' } };
+  ctx.sessions.get = id => id === resumed.id ? resumed : undefined;
+  await listeners.get('agent/created')({ agent: { session: resumed }, source: 'resume' });
+  assert.equal(attachedControl.config(resumed).enabled, false);
+  for (const dispose of disposers.reverse()) await dispose();
+});
+
 test('control route fails closed and rejects malformed requests before the handler', async () => {
   const calls = [];
   const mount = rejection => {

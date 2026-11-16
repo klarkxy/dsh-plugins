@@ -307,7 +307,10 @@ export function PermissionMenu({ sessionId, locked, api, locale, initialSnapshot
   useEffect(() => {
     const scope = createRequestScope(); scopeRef.current = scope;
     setSnapshot(null); setError('');
-    refreshRef.current(true);
+    void scope.run(() => api.openSession(sessionId), {
+      value: value => { setSnapshot(value); setError(''); },
+      error: e => { const message = shownPermissionError(e); if (message) setError(message); },
+    });
     const focus = () => refreshRef.current(true);
     const stopConnection = api.subscribeGeneration?.(() => { scope.invalidate(); refreshRef.current(true); });
     globalThis.addEventListener?.('focus', focus);
@@ -691,6 +694,7 @@ export function apply(ctx) {
     historyList: payload => call('history.list', payload),
     historyGet: id => call('history.get', { id }),
     getSession: sessionId => call('session.get', { sessionId }),
+    openSession: sessionId => call('session.open', { sessionId }),
     selectSession: payload => call('session.select', payload),
   });
   // Replacement slot: this renders the whole composer permission control,

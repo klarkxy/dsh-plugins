@@ -14,7 +14,7 @@ test('reviewer contributor preserves prompt, uses CAS and unloads', async () => 
     storageDomain: { open: async () => ({ table: () => ({ get: () => row, put: async (_key, value) => { row = value; } }), close: async () => {} }) },
     permissionPresets: { catalog: () => ({ options: [] }) }, sandboxPolicy: {}, sessions: {},
     connection: { requestRejection: () => undefined }, webServer: { register: () => () => {} },
-    effect(fn) { off.push(fn()); }, on(_event, callback) { collect = callback; return () => { collect = undefined; }; },
+    effect(fn) { off.push(fn()); }, on(event, callback) { if (event === 'model-settings/collect') collect = callback; return () => { if (event === 'model-settings/collect') collect = undefined; }; },
     inject(_dependencies, callback) { callback({ remote: { $mount: async () => async () => {} }, effect(fn) { off.push(fn()); } }); },
   });
   await apply(ctx);

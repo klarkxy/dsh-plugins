@@ -16,7 +16,7 @@ Replace `web` with your profile name and restart the profile.
 
 ## Use
 
-Pick **Safe Auto** from the permission menu next to the chat input. It applies only to that session once selected; choosing any other level turns it off.
+Pick **Safe Auto** from the permission menu next to the chat input. It applies only to that session once selected; choosing any other level turns it off. When the most recently opened or selected session uses Safe Auto, a new top-level session inherits it. If Safe Auto is unavailable, the new session keeps its native permissions instead of escalating.
 
 Under **Settings → Session Management → Safe Auto** choose the reviewer model, its reasoning effort, and extra review rules. Leaving the model empty follows the default auxiliary model; with no default set, it follows the current session model. The default auxiliary model is shared: set it once under **Settings → Session Management**, and every feature that follows it uses the same one. Changes made elsewhere update this page on their own.
 
