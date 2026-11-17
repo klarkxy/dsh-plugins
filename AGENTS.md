@@ -16,9 +16,9 @@
 - **开发说明写进代码与提交**：设计理由写进代码注释、提交信息或 PR；临时记录放 `.scratch/`，用完删除。仓库只保留面向用户的文档。
 - **只写用户实际用得到的能力**：先在代码里找到工具注册、RPC 或界面入口再写，只记录已有入口的功能（例：知乎仅记录已开放入口的能力）。依赖宿主能力的功能写明条件（例：会话管理的自由聊天、删除、编辑重发需宿主支持）。
 - **保持内容持久有效**：最低版本以 `package.json` 的 `engines` 为准；外部 CLI 版本限制以代码检查为准。正文省略具体的 DSH 版本号、插件数量、日期、预发布通道和「已验证某版本」字样。
-- **中英文成对维护**：结构一致、内容对应。中文 README 位置（`docs/README.zh-CN.md` 或 `README.zh-CN.md`）以包的 `files` 和 catalog 为准，保持原路径。
+- **中英文成对维护**：结构一致、内容对应。`README.md` 为中文默认文档，`README.en.md` 为同包根目录下的英文对照文档，两者均列入包的 `files` 并在 `site/catalog.json` 中登记。
 - **一处简介改了，几处一起改**：`package.json` `description`、`locale/zh.json` / `en.json` `meta`、`site/catalog.json` `summary`、根 README 插件表格、包内 README。
-- **测试固定的内容**：每个包的 `README.md` 保留 `<!-- release-state-note -->`；根 README 生命周期表只由 `pnpm release:docs` 生成；`plugins/dsh-dev-index/tests/bundle.test.ts` 要求双语 README 含 `allowBuilds` 示例、官方文档地址和 `cordis_inspect_list`；`dsh-unrestricted` 的 `NOTICE.md` 必须随包发布。
+- **测试固定的内容**：每个包的 `README.md` 和 `README.en.md` 均保留 `<!-- release-state-note -->`；根 README 生命周期表只由 `pnpm release:docs` 生成；`plugins/dsh-dev-index/tests/bundle.test.ts` 要求双语 README 含 `allowBuilds` 示例、官方文档地址和 `cordis_inspect_list`；`dsh-unrestricted` 的 `NOTICE.md` 必须随包发布。
 - **锁定的交付目录**：`host-patches/thread-management/` 由 `delivery-sha256.json` 锁定，改动须同步更新校验记录。
 - 只改 README、`docs/` 等包内文档时，npm 文档随下次代码发布一起更新。
 
@@ -29,7 +29,7 @@
 - **移除插件源码**：清单条目设 `retired: true`，保留阶段和发布凭据；从 catalog 和根 README 表格移除。
 - **删除包内文件**：同步检查 `files`、测试文件清单、`plugin-release-states.json` 的 `evidence` 引用；保留既有的 `publication` 记录。
 
-定期核对：catalog 与 npm 一致（`klarkxy` 名下带 `latest` 且维护中的 DSH 插件都收录，已封存的 `dsh-plugin-autoevo` 除外，核对用 `dsh-dev-index`）；README 与代码一致（以源码为准）；过时内容（`rg -n -g "README*.md" -e "-rc\." -e "-alpha\." -e "预发布" -e "已验证" README.md README.zh-CN.md plugins`，代码里的外部 CLI 版本检查和 `NOTICE.md` 署名版本属于有效信息）；死链与失效引用。
+定期核对：catalog 与 npm 一致（`klarkxy` 名下带 `latest` 且维护中的 DSH 插件都收录，已封存的 `dsh-plugin-autoevo` 除外，核对用 `dsh-dev-index`）；README 与代码一致（以源码为准）；过时内容（`rg -n -g "README*.md" -e "-rc\." -e "-alpha\." -e "预发布" -e "已验证" README.md README.en.md plugins`，代码里的外部 CLI 版本检查和 `NOTICE.md` 署名版本属于有效信息）；死链与失效引用。
 
 验证按需选择：
 

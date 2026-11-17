@@ -1,27 +1,34 @@
-# Model Picker
-
-Searchable model selection with a reasoning-effort slider for the DeepSeek Harness composer — and the same picker as a reusable component that other plugins can mount.
+# 模型选择器
 
 <!-- release-state-note -->
 
-## What it does
+简体中文 / [English](README.en.md)
 
-- Replaces the composer model button with a single-pane picker: a searchable model list grouped by provider, plus a thick gradient reasoning-effort slider with a larger handle and drag feedback. Motion follows your system's reduced-motion preference.
-- Successful model and effort selections become the defaults for new sessions. Switching back to a model used during this page visit restores its last selected effort when still supported; otherwise it follows the model default. Choosing Default clears the explicit effort.
-- Choosing a model or adjusting its effort keeps the panel open, preserving the search and scroll position. Loading failures offer a retry; a saved model that is no longer routable is marked and cannot be re-picked.
-- Model selection is unavailable in subagent sessions, matching the native picker.
+为 DeepSeek Harness 输入框提供带搜索的模型选择与推理档位滑杆，同时向其他插件提供可复用的共享选择器。
 
-## Install
+## 安装
 
-The plugin needs no configuration; enable it and the composer model button is replaced.
+```sh
+dsh plugin --profile web add @klarkxy/dsh-model-picker
+```
 
-With this plugin and `reasoning-slider` both installed, this picker wins. Disabling or removing it restores whichever picker was active before — `reasoning-slider`, or the native button.
+把 `web` 换成你的 profile 名，安装后重启 profile。插件无需额外配置，启用后即替换输入框的模型按钮。
 
-## Other plugins
+与 `reasoning-slider` 同时安装时本插件优先显示；停用或卸载本插件后，输入框会自动回退到之前的占用者（`reasoning-slider` 或原生模型按钮）。
 
-Feature plugins can mount the same picker in their own settings and cards. Mounting is optional: while this plugin is absent each feature keeps its existing menu, so nothing breaks when it is disabled or uninstalled. Consumers should refer to the shared contract in `@klarkxy/dsh-model-route`.
+## 使用
 
-## Limitations
+- **搜索与推理档位滑杆**：点击输入框模型按钮即可在单层面板内按供应商分组搜索模型，并在下方通过推理档位滑杆调节思考强度；动效遵循系统的「减少动态效果」设置。
+- **新会话默认与页内记忆**：成功选中的模型与思考强度会保存为新会话默认。在当前页面会话期间切回使用过的模型时，若该模型仍支持上次选中的思考强度会自动恢复，否则跟随模型默认；选择「默认」会清除显式档位。
+- **连续调整不关闭面板**：选择模型或调节推理档位后面板保持打开，保留当前搜索词与滚动位置；目录加载失败时可点击重试。
+- **其他插件可选接入**：功能插件可通过 `@klarkxy/dsh-model-route` 共享契约挂载同一选择器。该集成是可选的：本插件未安装或停用时，各功能保留原有菜单，不会产生依赖问题。
 
-- Covers the composer model button and the shared picker; the Settings → Models page keeps its native layout.
-- A saved model that left the catalog stays shown but is marked not routable and cannot be re-picked.
+## 主要限制
+
+- 仅覆盖输入框模型按钮与共享选择器；「设置 → 模型」页面保持原生布局。
+- 子代理会话不可用模型选择，与原生行为一致。
+- 已保存但离开当前可用目录的模型仍会显示，但会被标记为不可路由且不能再次选中。
+
+## 许可证
+
+[SATA License 2.1](LICENSE)

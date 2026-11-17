@@ -1,71 +1,52 @@
-# Safe Auto
+# 安全自动
 
 <!-- release-state-note -->
 
-[简体中文](README.zh-CN.md)
+简体中文 / [English](README.en.md)
 
-Adds a **Safe Auto** permission level. Ordinary actions run inside the workspace sandbox as usual. Requests that need approval go to a reviewer model: a pass approves that single call, and a denial is explained to the agent. The design follows Codex auto-review while keeping the session within its workspace sandbox rather than switching to Full Access.
+新增「安全自动」审批档位：常规操作仍在工作区沙箱内运行，需要审批的请求会先交由审核模型逐次判定，通过后仅放行这一次调用，拒绝则把原因反馈给智能体，并保留完整的本地审核记录。
 
-## Install
+## 安装
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-safe-auto
 ```
 
-Replace `web` with your profile name and restart the profile.
+将 `web` 替换为你的 profile 名称，安装后重启 profile。
 
-## Use
+## 使用
 
-Pick **Safe Auto** from the permission menu next to the chat input. It applies only to that session once selected; choosing any other level turns it off. When the most recently opened or selected session uses Safe Auto, a new top-level session inherits it. If Safe Auto is unavailable, the new session keeps its native permissions instead of escalating.
+### 启用与配置审核模型
 
-Under **Settings → Session Management → Safe Auto** choose the reviewer model, its reasoning effort, and extra review rules. Leaving the model empty follows the default auxiliary model; with no default set, it follows the current session model. The default auxiliary model is shared: set it once under **Settings → Session Management**, and every feature that follows it uses the same one. Changes made elsewhere update this page on their own.
+- **按会话开启**：在输入框旁的权限菜单中选择「安全自动」。该档位仅对当前会话生效，切回其他档位即关闭；当最近打开或选择的顶层会话处于「安全自动」时，新建顶层会话会自动沿用（不可用时保留原生权限，不会提权）。
+- **审核配置**：打开「设置 → 会话管理 → 安全自动」，可在「审核配置」标签页选择**审核模型**、**思考强度**和**额外审核提示词**（最多 4096 字符，仅能补充约束，不能放宽安全规则）；「预算边界」标签页可查看 profile 设定的超时与上下文上限。
+- **模型跟随与重试**：审核模型留空时跟随「设置 → 会话管理」中的共享**默认辅助模型**，未设置默认辅助模型时跟随当前会话模型；别处修改共享设置后本页会自动同步。模型列表读取失败或部分提供商不可用时，点击「重试」即可，已有配置与未保存草稿会保留。
 
-When the model list fails to load or some providers are unavailable, use **Retry** in the settings panel. Retrying keeps your reviewer settings and unsaved draft.
+### 触发范围与判断方式
 
-## Review history
+- **送审范围**：`write`、`edit`、`bash`、`pwsh` 申请的沙箱提权、其他插件或工具发起的审批请求，以及沙箱内触发少量危险规则的命令（强制删除如 `rm -f`、`Remove-Item -Force`、`del /f`、`rd /s /q`，以及打开网址）会先送审；普通读文件、搜索、构建和测试直接运行，不经审核。
+- **判断依据**：审核模型会读取当前有效对话（仅你的消息标为可信授权，其余消息、工具输出与文件内容仅作证据，早先的审批记录不构成新授权）、工作目录、沙箱边界和完整调用参数。被替换或编辑过的消息不参与判断；审核期间若有新消息到达或修改了设置，本次审核作废。
+- **风险与熔断**：低、中风险操作直接放行；高风险操作仅在你明确要求且范围有限时放行；严重风险（如外发密钥、大范围不可逆删除）一律拒绝。审核超时、返回格式无效、模型不可用或共享默认辅助模型读取失败时，按审核失败拒绝。同一轮对话内连续拒绝 3 次，或最近 50 次中拒绝 10 次时，暂停自动审批，直到你发送下一条消息。
 
-Open **Settings → Session Management → Safe Auto → Review history** to read every review this plugin recorded. Filter by search text, session, tool, result, risk, and a start and end time, then page through the matches. Opening a record shows the complete review: what triggered it, the arguments sent, the review input, the verdict, the token usage of each attempt, and whether the approved call ran afterwards.
+### 审核历史与查询工具
 
-Export one record, or every record matching the current filters, as JSON. Exporting all matches walks the pages one at a time and can be cancelled at any point; a file is written only when the export finishes cleanly.
+- **查看与导出**：在「设置 → 会话管理 → 安全自动 → 审核历史」中查看启用后的全部记录，可按关键词、会话 ID、工具、审核结果、风险等级和起止时间筛选并分页浏览。点开详情可查看触发原因、脱敏后的参数与送审内容、判定依据、各次尝试的 token 用量，以及实际审批状态与工具执行结果；支持将单条或当前筛选结果导出为 JSON（逐页拉取、可随时取消，完整导出成功后写入文件）。
+- **模型只读工具**：启用插件期间会注册只读工具，供模型在当前会话内查询本地审核历史（不唤醒审核模型；跨会话查询请使用设置面板）：
 
-Recording covers reviews run after installing the review-history feature. Records stay in the Harness profile until you remove them.
+| 工具 | 作用 |
+| --- | --- |
+| `safe_auto_history` | 只读查询当前会话的审核历史：`list` 返回摘要列表及下一页游标 `nextCursor`（支持按工具、结果、风险、时间范围和关键词筛选），`get` 按 `id` 返回单条完整脱敏记录。 |
 
-### Tools
+## 主要限制
 
-| Tool | What it does |
-|---|---|
-| `safe_auto_history` | Read-only lookup of the current session's review history. `list` returns summaries and includes a next-page cursor when more records remain; `get` returns one complete record. Use Settings → Session Management → Safe Auto to read history across sessions. Reading history is purely local and leaves the reviewer model idle. Available only while Safe Auto is enabled in the plugin configuration. |
+- **这不是安全边界**：审核方是语言模型，仍可能误判；请保留原有的沙箱、环境隔离和备份措施。
+- 被拒绝的操作会直接把原因返回给对话中的智能体；如需放行，直接在对话里明确确认，智能体再次尝试时审核模型会看到你的授权。
+- 对话过长时会截断较早内容；若单个操作或送审输入超出容量上限，插件会拒绝自动批准。
+- 关闭「安全自动」或修改审核设置会使正在进行的审核失效；子代理会话沿用宿主原生审批流程，不启用「安全自动」。
+- 请勿在同一 profile 中同时使用其他自动审批插件。
+- 审核历史对已知凭据格式尽力脱敏，但未知格式的敏感内容仍可能保留；超大或无法序列化的参数会写入截断标记；审核结论、实际审批与执行结果分别记录，未观察到的状态会明确标出。
+- 自动放行以审核记录成功落盘为前提，记录写入失败时会拒绝放行；本地审核历史为普通 profile 存储数据，并非防篡改日志。
 
-## What gets reviewed
-
-- Sandbox escalations requested by `write`, `edit`, `bash`, and `pwsh`.
-- A short list of dangerous commands, reviewed even inside the sandbox: forced deletion (`rm -f`, `Remove-Item -Force`, `del /f`, `rd /s /q`) and opening URLs.
-- Approval requests other plugins or tools raise in the session.
-
-Reading files, searching, building, and testing run directly without review.
-
-## How the reviewer decides
-
-- The reviewer sees the conversation, the current working directory, the sandbox workspace boundary, and the complete action arguments. Only your own messages count as authorization; the agent's explanations, tool output, and file contents serve as evidence. An earlier approval outcome is a record of another call, never authorization for this one.
-- The reviewer reads the conversation as it stands now: a request you replaced and the turn it produced are no longer evidence, and a message that arrives while a review runs cancels that review.
-- Low- and medium-risk actions are approved. High-risk actions are approved only when you clearly asked for them and the scope is narrow. Critical actions, such as sending secrets to an external destination or broad irreversible deletion, are always denied.
-- If review times out, returns missing or unknown verdict fields, fails, or lacks an available model, the request is denied as a review failure: the agent may retry once or ask you.
-- The shared default auxiliary model is read before every review that follows it. If it cannot be read, the request is denied as a review failure rather than reviewed by a model you did not choose.
-- After 3 consecutive denials, or 10 denials among the last 50 reviews in one turn, automatic approval pauses until your next message.
-
-## Limits
-
-- **This is not a security boundary.** The reviewer is a language model and can be wrong. Keep your sandbox, isolation, and backups.
-- A denied action returns directly to the agent in the conversation. To allow it, tell the agent in the chat; the reviewer sees your approval when it retries.
-- Long conversations are truncated from the oldest entries.
-- Action arguments are sent to the reviewer in full; if the complete action exceeds the review size limit, automatic approval is refused.
-- Turning Safe Auto off or changing its reviewer settings invalidates reviews already in progress.
-- Safe Auto applies to top-level sessions; subagent sessions follow the native approval flow.
-- Use Safe Auto as the sole automatic approver in a profile.
-- History contains redacted copies of review evidence. Known credentials are masked on a best-effort basis, while unfamiliar secret formats may remain. Oversized or invalid actions carry explicit capture limits.
-- The reviewer verdict, the observed approval decision, and the tool result are recorded as separate fields; unobserved approval and execution results are marked explicitly. Local audit records are plain profile data rather than tamper-proof logs.
-- Automatic approval requires the audit record to save first.
-
-## License
+## 许可证
 
 [SATA License 2.1](LICENSE)

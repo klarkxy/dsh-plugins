@@ -1,42 +1,38 @@
-# Workspace Folders
-
-Add multiple folders to each DeepSeek Harness workspace and use them together in Agent conversations.
-
-[简体中文](docs/README.zh-CN.md)
+# 工作区文件夹
 
 <!-- release-state-note -->
 
-## What it does
+简体中文 / [English](README.en.md)
 
-- Adds a **Folders…** action to the workspace menu.
-- Keeps the primary folder and manages additional folders in a single dialog.
-- Saves a separate folder list for each workspace, shared by its conversations.
-- Makes the folder list available to the Agent and includes those directories in workspace-write access, while retaining the session's permission mode.
+为每个 DeepSeek Harness 工作区添加多个附加文件夹，并在同一工作区的智能体对话中共同访问。
 
-## Install
+## 安装
 
-This plugin is under local development. From the repository root, build and install the local package:
+本插件目前处于本地开发阶段，尚未发布到 npm。请在仓库根目录构建并安装本地包：
 
 ```sh
 pnpm --filter @klarkxy/dsh-workspace-folders build
 dsh plugin --profile web add ./plugins/dsh-workspace-folders
 ```
 
-Restart the target profile and enable the plugin. Runtime requirements are listed in [package.json](package.json).
+把 `web` 换成你的 profile 名，重启目标配置并确认插件已启用。运行环境要求见 [package.json](package.json)。
 
-## Use
+## 使用
 
-1. Open the workspace's **⋯** menu and choose **Folders…**.
-2. Choose a folder on the machine running DSH, or enter its absolute path.
-3. Add or remove additional folders, then select **Save**. **Cancel** discards the draft.
+1. 在侧边栏打开工作区的 **⋯** 菜单，选择 **文件夹…**。
+2. 弹窗会展示固定的主文件夹（标记为「主要」）以及该工作区已保存的附加文件夹。
+3. 点击 **添加文件夹**：在 DSH 宿主机器上浏览目录（若支持原生选择器可点击 **浏览…**），或直接输入绝对路径后点击 **打开**，确认后点击 **添加此文件夹**。
+4. 如需移除附加文件夹，点击行末的移除按钮（不会删除磁盘上的文件）；最后点击 **保存** 应用修改，或点击 **取消** 放弃本次编辑。
 
-Changes apply on the next conversation turn. The primary working directory stays the same; commands and relative file paths continue to resolve there. Ask the Agent to use an additional folder by name or absolute path when needed.
+修改从下一轮对话开始生效，供该工作区下的所有对话（含委派子代理会话）共用。附加文件夹会提供给智能体作为工作区上下文，并在工作区可写模式下纳入可写目录范围；主工作目录保持不变，命令与相对路径仍以主目录为起点，需要操作附加文件夹时可在对话中提及文件夹名称或绝对路径。
 
-Removing a folder from the list keeps its files on disk. Reopening the dialog shows the saved list.
+## 主要限制
 
-## Limitations
+- Web 界面浏览和校验的是 DSH 宿主机器上的目录，远程连接时亦然；所选路径必须在该机器上存在且可访问。
+- 只读会话仍保持只读，其他宿主审批与沙箱规则照常生效。
+- 附加文件夹仅提供工作上下文与文件访问权限；项目配置、技能、hook 与指令文件的自动发现仍以主项目为准。
+- 已开始的回合继续沿用启动时的目录权限，列表修改从后续回合生效（单个工作区最多保存 64 个附加文件夹）。
 
-- The Web interface manages folders on the DSH host, including when you connect from another machine. Each selected folder must exist and be accessible there.
-- Read-only sessions remain read-only. Other host approval and sandbox rules still apply.
-- Additional folders provide working context and file access. Project configuration and automatic instruction discovery continue to follow the primary project.
-- Existing processes retain the permissions they started with; a folder-list edit applies to subsequent turns.
+## 许可证
+
+[SATA License 2.1](LICENSE)

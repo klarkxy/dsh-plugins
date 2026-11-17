@@ -99,12 +99,22 @@ export async function fetchPackage(plugin, {
   const archive = await get(url.href, "archive", options);
   verifyArchive(archive, full.dist);
   const iconPath = typeof full.icon === "string" ? full.icon.replace(/^\.\//, "") : "icon.svg";
-  const { files, contents } = await readArchive(archive, new Set(["package.json", ...Object.values(plugin.readme), iconPath]));
+  const wanted = new Set(["package.json", ...Object.values(plugin.readme), "README.md", "README.en.md", "README.zh-CN.md", "docs/README.zh-CN.md", iconPath]);
+  const { files, contents } = await readArchive(archive, wanted);
   const published = JSON.parse(contents.get("package.json")?.toString("utf8") ?? "null");
   if (published?.name !== name || published.version !== version) throw new Error(`${name}: archive package identity mismatch`);
   const manifest = Object.fromEntries(MANIFEST_FIELDS.filter(key => published[key] !== undefined).map(key => [key, published[key]]));
   const readme = {};
-  for (const [lang, path] of Object.entries(plugin.readme)) {
+  // Pre-flip npm tarballs still ship English README.md and Chinese (docs/)README.zh-CN.md until their next code release.
+  const legacyZh = contents.has("docs/README.zh-CN.md")
+    ? "docs/README.zh-CN.md"
+    : contents.has("README.zh-CN.md")
+      ? "README.zh-CN.md"
+      : null;
+  const readmePaths = plugin.readme.zh === "README.md" && !contents.has(plugin.readme.en) && legacyZh
+    ? { zh: legacyZh, en: "README.md" }
+    : plugin.readme;
+  for (const [lang, path] of Object.entries(readmePaths)) {
     const content = contents.get(path);
     if (!content) { warn(`warn: ${name}@${version} does not ship ${path}; the ${lang} page falls back to the other language`); continue; }
     readme[lang] = { path, text: content.toString("utf8") };

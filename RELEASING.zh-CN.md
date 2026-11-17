@@ -1,6 +1,6 @@
 # 插件生命周期与发布
 
-[English](RELEASING.md) · [当前清单](README.zh-CN.md#插件生命周期)
+[English](RELEASING.md) · [当前清单](README.md#插件生命周期)
 
 `scripts/plugin-release-states.json` 记录所有 `plugins/*` 包（含共享库、私有开发包）的生命周期，单向向前推进：**草稿 → 测试中 → 已发布**。
 

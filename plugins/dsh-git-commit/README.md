@@ -1,42 +1,45 @@
-# Git Commit
+# Git 提交
 
 <!-- release-state-note -->
 
-[简体中文](docs/README.zh-CN.md)
+简体中文 / [English](README.en.md)
 
-Commit workspace changes directly from the conversation. A model groups your changes into a few sensible commits and writes their messages.
+在对话中直接提交工作区改动，由模型按逻辑分组并生成提交信息。
 
-## Install
+## 安装
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-git-commit
 ```
 
-Replace `web` with your profile name and restart it if DSH asks.
+将 `web` 替换为你的 profile 名称，按 DSH 提示重启 profile。
 
-## Use
+## 使用
 
-1. Open a conversation whose workspace is inside a Git repository.
-2. Click **Commit** in the top-right of the conversation.
-3. Check the branch, file count, and model, then confirm.
-4. The panel lists the commits it created.
+### 提交工作区改动
 
-Inside the Commit panel you can choose the **Commit planning model** — your pick is saved as the default for future runs — and turn on **Commit even without a model plan**, which makes one single commit when the model is unavailable. With the optional **Model Picker** plugin installed, this menu upgrades to the shared searchable picker with a reasoning-effort slider; without it it keeps working as today.
+1. 打开工作目录位于 Git 仓库内的对话。
+2. 点击对话右上角的「提交」。
+3. 确认分支、改动文件数和规划模型，点击「分次提交全部工作区修改」并确认提交。
+4. 面板会列出本次创建的各条提交及其包含的文件。
 
-When the planning model is left empty the feature follows the **default auxiliary model**; with no default set it uses the current session model, then the host default chat model. The default auxiliary model is shared: set it once under **Settings → Session Management**, and every feature that follows it uses the same one.
+### 模型与回退选项
 
-When the model list fails to load or some providers are unavailable, use **Retry** beside the model picker; your saved model stays selected.
+- **提交规划模型**：选中的模型会保存为后续提交的默认值；留空时跟随「默认辅助模型」，若未设置默认辅助模型，则依次回落到当前会话模型和宿主默认对话模型。
+- **共享默认辅助模型**：在「设置 → 会话管理」中设置一次「默认辅助模型」，所有跟随它的插件都会使用同一配置。
+- **模型选择器集成**：安装可选的「模型选择器」插件后，该菜单会升级为带搜索和推理档位滑杆的共享选择器；未安装时使用内置菜单。
+- **模型目录重试**：模型列表读取失败或部分提供商不可用时，点击选择器旁的「重试」即可重新拉取，已保存的模型选择不会丢失。
+- **模型不可用时仍然提交**：默认关闭（规划失败时取消提交，保持工作区不变）；开启后，模型不可用时会将全部改动合并为一个提交并由插件生成提交信息。
 
-## Good to know
+## 主要限制
 
-- The repository follows the conversation's current working directory; changing directories while a commit is being planned stops the run.
-- All uncommitted changes are included, including new files.
-- Commit planning uses the selected model's normal output settings, without an extra output limit imposed by this plugin.
-- The plugin creates local commits only; pushing stays manual.
-- If the run stops partway, finished commits stay and the panel shows what remains for you to handle.
-- Each planning call rebuilds its input from the workspace's current changes; earlier plans are never reused. If the shared default auxiliary model cannot be read, the run fails rather than planning on a model you did not choose.
-- The button is active while the session is idle.
+- 按钮在会话空闲且工作区存在未提交改动时可用；仓库跟随对话当前的工作目录，规划或提交期间切换目录或分支会中止本次操作。
+- 会纳入仓库内全部未提交改动（含已暂存、未暂存和未跟踪的新文件）。
+- 提交规划沿用所选模型的常规输出设置，插件不额外施加输出长度上限。
+- 仅在本地创建提交，不会自动推送到远程仓库。
+- 中途停止时，已创建的提交会保留在本地，面板会列出尚未提交（或结果待确认）的分组供手动处理。
+- 每次规划都会按当前工作区改动重新构造输入，不复用历史规划；若共享默认辅助模型无法读取，插件会阻止提交，不会改用未指定的模型。
 
-## License
+## 许可证
 
 [SATA License 2.1](LICENSE)

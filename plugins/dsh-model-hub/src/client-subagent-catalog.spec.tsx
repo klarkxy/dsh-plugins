@@ -2,8 +2,9 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
+import { OFFICIAL_THEME_TOKEN_NAMES } from '@klarkxy/dsh-plugin-kit/official-ui'
 import {
-  SubagentCatalogAction, SubagentHeaderLineage, subagentCatalogCopy,
+  SubagentCatalogAction, SubagentHeaderLineage, subagentCatalogCopy, subagentCatalogCss,
   type SubagentAddress, type SubagentSessionsState,
 } from './client-subagent-catalog.tsx'
 import { apply } from './client.tsx'
@@ -262,5 +263,28 @@ describe('subagent catalog model readout', () => {
     for (const key of Object.keys(subagentCatalogCopy.en)) {
       expect(subagentCatalogCopy.en[key as keyof typeof subagentCatalogCopy.en], `en.${key}`).not.toMatch(/[\u3400-\u9fff]/)
     }
+  })
+
+  it('opens the catalog as a MenuSurface card whose fallback skin matches the portal root', async () => mounted(async (dom, root) => {
+    await act(async () => root.render(createElement(SubagentCatalogAction, catalogProps())))
+    await openCatalog(dom)
+    const panel = dom.window.document.querySelector<HTMLElement>('[data-subagent-panel]')
+    expect(panel).not.toBeNull()
+    expect(panel!.className.split(/\s+/)).toEqual(expect.arrayContaining(['dsh-model-hub-subagent', 'mh-menu']))
+    expect(dom.window.document.querySelector('[aria-haspopup="tree"][aria-expanded="true"]')).not.toBeNull()
+    expect(panel!.getAttribute('role')).not.toBe('dialog')
+    expect(panel!.querySelector('[role="tree"]')).not.toBeNull()
+    expect(panel!.querySelectorAll('[role="treeitem"]').length).toBeGreaterThan(0)
+  }))
+
+  it('styles the portaled panel itself and keeps catalog tokens on the host list', () => {
+    expect(subagentCatalogCss).toContain(':where(.dsh-model-hub-subagent.mh-menu)')
+    expect(subagentCatalogCss).toContain(':where(.dsh-model-hub-subagent.mh-root)')
+    expect(subagentCatalogCss).toContain('var(--dsw-menu-surface-fill)')
+    expect(subagentCatalogCss).not.toMatch(/mh-menu\)\{[^}]*background:var\(--dsw-alias-bg-layer-3\)/)
+    const allowed = new Set(OFFICIAL_THEME_TOKEN_NAMES)
+    const used = [...subagentCatalogCss.matchAll(/var\((--[A-Za-z0-9-]+)/g)].map(match => match[1])
+    expect(used.length).toBeGreaterThan(0)
+    for (const token of used) expect(allowed.has(token), `${token} is not a host token`).toBe(true)
   })
 })

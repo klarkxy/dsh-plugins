@@ -58,8 +58,25 @@ function scopedRules(input, allowed) {
   const css = input.replace(/\/\*[\s\S]*?\*\//g, '')
   const stack = [], problems = []
   let statement = '', quote = ''
-  const rooted = branch => allowed.some(root => branch.startsWith(root) &&
-    (root.endsWith('-') || !/[\w-]/.test(branch[root.length] ?? '')))
+  const rooted = branch => {
+    // :where() contributes zero specificity, but every alternative still needs
+    // a plugin root; accepting only one branch would let global selectors out.
+    if (branch.startsWith(':where(')) {
+      // Sibling combinators can leave the root. Keep this deliberately narrow:
+      // new wrapped selectors containing +/~ need explicit review.
+      if (/[+~]/.test(branch)) return false
+      let depth = 1
+      for (let index = 7; index < branch.length; index++) {
+        if (branch[index] === '(') depth++
+        else if (branch[index] === ')' && --depth === 0) {
+          return branches(branch.slice(7, index)).every(rooted)
+        }
+      }
+      return false
+    }
+    return allowed.some(root => branch.startsWith(root) &&
+      (root.endsWith('-') || !/[\w-]/.test(branch[root.length] ?? '')))
+  }
   for (let index = 0; index < css.length; index++) {
     const char = css[index]
     if (quote) {
@@ -99,12 +116,18 @@ function interpolation(expression, source) {
       ['officialUiCss', 'officialFocus', 'officialElevation', 'officialStrokedElevation'].includes(expression.expression.getText(source))) return ''
   throw new Error(`Unreviewed CSS interpolation: ${source.fileName}: ${text}`)
 }
-function sheets(path) {
-  const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true)
+function sheets(path, text = readFileSync(path, 'utf8')) {
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true)
   const result = []
   const visit = node => {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) {
       const parts = ts.isTemplateExpression(node) ? [node.head.text, ...node.templateSpans.map(span => span.literal.text)] : [node.text]
+      // These reviewed prompt constants contain {type: ...} wire examples,
+      // never styles. Do not infer prose from content: a heading can also be
+      // followed by CSS rules that browsers still apply.
+      if (/[\\/]dsh-deep-view[\\/]src[\\/](?:prompt|skill)\.ts$/.test(path) &&
+          ts.isVariableDeclaration(node.parent) &&
+          ['DEEP_VIEW_PROMPT', 'DEEP_VIEW_SKILL'].includes(node.parent.name.getText(source))) return
       // CSS has a block with a declaration; incidental message templates do not.
       const cssLiteral = !ts.isStringLiteral(node) || /^\s*[.#\[&@:]/.test(node.text)
       if (cssLiteral && parts.some(part => /\{[^{}]*[\w-]+\s*:/.test(part))) {
@@ -145,10 +168,26 @@ describe('repository stylesheet scope', () => {
       '@media (width < 500px) { .bare { color: red } }',
       '@supports (display: grid) { @media (width > 1px) { p { color: red } } }',
       '& .child { color: red }',
+      ':where(.root, .bare) { color: red }',
+      ':where(.root-other) { color: red }',
+      ':where(.root + body) { color: red }',
+      ':where(.root ~ *) { color: red }',
+      ':where(.root) + body { color: red }',
     ]) expect(scopedRules(css, ['.root']), css).not.toEqual([])
   })
 
+  it('distinguishes Markdown protocol examples from CSS without allowing unknown CSS interpolation', () => {
+    expect(sheets('plugins/dsh-deep-view/src/prompt.ts', 'const DEEP_VIEW_PROMPT = `## Reply format\n{type:"table"}`')).toEqual([])
+    expect(sheets('plugins/dsh-deep-view/src/skill.ts', 'const DEEP_VIEW_SKILL = `# Reference\n${COMMON}\n{type:"table"}`')).toEqual([])
+    const headingCss = sheets('style.ts', 'const css = `# heading\n.root { color: red }\nbody { color: red }`')
+    expect(headingCss).toHaveLength(1)
+    expect(scopedRules(headingCss[0], ['.root'])).toContain('body')
+    expect(sheets('style.ts', 'const css = `.root { color: red }`')).toEqual(['.root { color: red }'])
+    expect(() => sheets('style.ts', 'const css = `.root { color: ${UNKNOWN} }`')).toThrow('Unreviewed CSS interpolation')
+  })
+
   it('accepts scoped nesting and keyframes without letting later rules escape', () => {
+    expect(scopedRules(':where(.root.mh-menu:not([data-menu-material]))::before { color: red }', ['.root'])).toEqual([])
     expect(scopedRules('.root { color: red; @media (width < 500px) { & .child, .other { display: grid } } }', ['.root'])).toEqual([])
     expect(scopedRules('@media (width < 500px) { .root .child { display: grid } }', ['.root'])).toEqual([])
     expect(scopedRules('@keyframes pulse { from { opacity: 0 } to { opacity: 1 } } .bare { color: red }', ['.root'])).toEqual(['.bare'])

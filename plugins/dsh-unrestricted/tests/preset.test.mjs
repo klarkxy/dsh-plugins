@@ -365,7 +365,7 @@ test("package manifest declares the browser half the bundle row loads", () => {
 });
 
 test("package manifest packs every declared file and credits upstream in NOTICE.md", () => {
-  for (const name of ["icon.svg", "cordis.patch.yml", "README.md", "README.zh-CN.md",
+  for (const name of ["icon.svg", "cordis.patch.yml", "README.md", "README.en.md",
     "NOTICE.md", "LICENSE", "locale/en.json", "locale/zh.json"]) {
     assert.ok(existsSync(`${pkgRoot}${name}`), name);
   }

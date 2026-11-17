@@ -616,7 +616,12 @@ function detailPage(ctx, plugin, lang) {
   const own = npm.readme[lang];
   const readme = own ?? npm.readme[lang === "zh" ? "en" : "zh"];
   const readmePages = {};
-  for (const l of LANGS) readmePages[`${dir}${plugin.readme[l]}`] = pageFor(plugin, l);
+  for (const l of LANGS) {
+    readmePages[`${dir}${plugin.readme[l]}`] = pageFor(plugin, l);
+    if (npm.readme[l]?.path && npm.readme[l].path !== plugin.readme[l]) {
+      readmePages[`${dir}${npm.readme[l].path}`] = pageFor(plugin, l);
+    }
+  }
   const packagePages = Object.fromEntries(plugins.map((p) => [p.package, pageFor(p)]));
   const assetPages = Object.fromEntries(Object.keys(npm.assets ?? {}).map(file => [file, root + assetUrl(plugin.slug, file)]));
   const rendered = readme

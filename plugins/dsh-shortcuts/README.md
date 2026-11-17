@@ -1,43 +1,59 @@
-# Shortcuts
+# 快捷键
 
 <!-- release-state-note -->
 
-[简体中文](docs/README.zh-CN.md)
+简体中文 / [English](README.en.md)
 
-Customize DeepSeek Harness application and recognized local shortcuts, and run participating plugins' commands from a command palette.
+修改 DeepSeek Harness 应用快捷键与已识别的局部操作按键，并通过命令面板快速运行已接入插件的命令。
 
-## Install
+## 安装
 
-For local evaluation before npm publication, build the complete package with its client bundle and install that artifact through the official DSH plugin manager. Once published, install the package through the same manager.
+本插件目前处于本地开发阶段，尚未发布至 npm。请先在仓库根目录构建含客户端产物的完整包，再通过本地路径安装：
 
-Enable the plugin in your GUI profile, then reload the page or restart the profile as the manager requires.
+```sh
+pnpm --filter @klarkxy/dsh-shortcuts build
+dsh plugin --profile web add ./plugins/dsh-shortcuts
+```
 
-## Use
+正式发布后，可直接使用标准包名安装：
 
-Open **Settings → Shortcuts**:
+```sh
+dsh plugin --profile web add @klarkxy/dsh-shortcuts
+```
 
-- Browse current native command shortcuts and fixed local actions; the list updates as commands are added or removed.
-- Change, unbind, or restore application shortcuts and recognized local actions: send, newline, complementary send, `/`, `@`, approval allow/reject, menu movement/selection/dismissal, and double-press stop.
-- In **Additional shortcuts**, each binding has its own edit, unbind, and restore controls, showing original and effective keys together. Menu Up/Down and complementary Control/Meta bindings are edited separately.
-- Stop keeps its double-press confirmation: choose one unmodified key, such as F8, and press it twice.
-- Open the command palette to find and run commands registered by plugins. This plugin's commands also appear in the native shortcut list.
-- When a local shortcut fails, a brief notification appears, and the settings page shows the same failure while the notification is active.
+将 `web` 替换为你的配置档（profile）名称；在图形界面配置档中启用插件后，按管理器提示刷新页面或重启配置档。
 
-In the **Web GUI**, the additional palette shortcut defaults to **Ctrl+Shift+P**, matching VS Code. Change this local opening shortcut in the settings page, including choosing **Ctrl+K**. It runs when the browser delivers the keypress to the page.
+## 使用
 
-On **Desktop**, the palette also defaults to **Ctrl+Shift+P**, changeable in the settings page. **Ctrl+K** is assigned to session search (`session.search`) by default; to use it for the palette, review and explicitly confirm the binding change in the settings page to replace the session search binding.
+打开「**设置 → 快捷键**」进行浏览、搜索和改键：
 
-DSH saves native shortcut changes: in the browser for Web, and on the current computer for Desktop. This plugin saves the extra Web palette shortcut and local-action overrides locally, separated by Web/Desktop and operating system.
+### 命令面板快捷入口
 
-## Limits
+- **Web 端**：默认使用 `Ctrl+Shift+P`（与 VS Code 一致），可在设置页修改、解绑或恢复为 `Ctrl+Shift+P`（支持设为 `Ctrl+K`，需为 Control、Alt 或 Meta 搭配字母或数字）。仅当浏览器将按键送达页面且无冲突、未打开模态弹窗时触发。
+- **桌面端**：默认同样为 `Ctrl+Shift+P`（可在下方应用快捷键列表中改键）。由于 `Ctrl+K` 默认绑定在会话搜索（`session.search`），如需用 `Ctrl+K` 打开面板，可在设置页点击「使用 Ctrl+K」并在确认弹窗中显式确认，插件会先解除会话搜索的 `Ctrl+K` 绑定再绑定命令面板（会话搜索仍可通过界面打开，或在列表中另设按键）。
 
-- The command palette runs commands explicitly registered with it by this or other participating plugins, while native commands remain listed in the shortcut table for reference and keybinding.
-- Available commands depend on the current GUI and loaded plugins, and fixed actions appear while their owning interface is open. Collection covers shortcuts and actions registered with DSH.
-- Application shortcuts follow native binding rules. Local overrides act in the recognized input, approval, menu, or conversation area, reject known global-key conflicts, and keep the host's reserved-key declarations intact.
-- Local overrides adapt this host's existing controls. If a host upgrade changes an action's signature or a third-party fixed action lacks a recognized adapter, the editor reports incompatibility directly. Restoring the action's defaults or disabling the plugin restores native behavior.
-- If the browser or OS captures Ctrl+K or another opening key before the page receives it, choose a different key in settings.
-- Web and Desktop preferences are stored locally per environment and device.
+### 应用快捷键与本地局部覆盖
 
-## License
+- **应用快捷键**：实时列出并搜索宿主原生命令快捷键，支持单条改键、清除、重置以及「重置全部快捷键」。桌面端改键窗口支持勾选录制同时按住的双键。原生快捷键改动由 DSH 宿主保存（Web 保存在当前浏览器本地，桌面端保存在本机）。
+- **其他快捷键（局部操作）**：支持查看与修改已识别的局部快捷键，涵盖输入框（发送、换行、互补发送、`/`、`@`）、菜单（上下移动、选择、关闭）、审批弹窗（允许、拒绝）以及停止回复。
+  - 每个槽位均可独立改键、解绑与恢复，同时展示「原始键」与「生效键」；菜单上下移动及互补发送的 Control／Meta 绑定可分别修改。
+  - **双击停止快捷键**：停止回复保留双击确认机制，仅允许选择单个无修饰键（例如 `F8`）；录制时按一次即可，使用时连续按两次生效键以停止回复。
+  - 局部快捷键执行失败时会短暂弹出提示，设置页在提示显示期间同步展示该失败信息。
+  - Web 端额外面板开键与局部操作覆盖由本插件保存在本地，按 Web／桌面端与操作系统分别存储。
+
+### 命令面板
+
+- 通过面板快捷键或设置页中的「打开快捷键面板」按钮打开命令面板，搜索并执行已接入插件注册的命令；面板底部提供「查看与修改全部快捷键」入口，可在弹窗中调整后返回面板。本插件注册的「打开快捷命令面板」命令也会出现在应用快捷键列表中。
+
+## 主要限制
+
+- 命令面板仅执行已接入插件向面板服务注册的命令；宿主原生命令只在应用快捷键列表中展示，供查阅与改键。
+- 可用命令取决于当前界面与已加载插件，固定局部操作仅在所属界面打开时显示；收集范围仅限向 DSH 注册的快捷键与操作。
+- 应用快捷键遵循宿主改键规则；局部覆盖仅在已识别的输入框、菜单、审批弹窗或会话区域内生效，会自动拦截已知全局按键冲突，并保留宿主的保留键声明。
+- 局部覆盖通过适配器兼容当前宿主控件；若宿主升级改变操作签名，或第三方固定操作缺少已识别适配，设置页会提示「暂不可编辑」并保持原生行为。恢复默认键或停用插件即可恢复原生操作。
+- 若浏览器或操作系统提前接管了 `Ctrl+K` 等按键，页面无法收到该按键，请在设置中改用其他组合。
+- Web 与桌面端的本地覆盖及偏好分别保存在各自环境与设备本地，不跨设备同步。
+
+## 许可证
 
 [SATA License 2.1](LICENSE)

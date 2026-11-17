@@ -9,7 +9,7 @@ import { packSnapshot } from './release-content.mjs';
 
 export function syncStateDocs(root, workspace, write = false) {
   for (const language of ['zh', 'en']) {
-    const filename = language === 'zh' ? 'README.zh-CN.md' : 'README.md';
+    const filename = language === 'zh' ? 'README.md' : 'README.en.md';
     const path = join(root, filename);
     const before = readFileSync(path, 'utf8');
     const marker = /<!-- plugin-release-states:start -->[\s\S]*?<!-- plugin-release-states:end -->/g;

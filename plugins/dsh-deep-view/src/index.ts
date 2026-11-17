@@ -7,11 +7,12 @@ import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import { installPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { checkShownView, validateViewAnswer, viewSummary } from './core/index.js'
 import { answerText } from './answer-text.ts'
+import { DEEP_VIEW_PROMPT } from './prompt.ts'
 import { DEEP_VIEW_SKILL, DEEP_VIEW_SKILL_DESCRIPTION } from './skill.ts'
 import { HOST_SERVICE, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type DeepViewHost, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation, type ViewAnswerMetadata, type ViewSnapshot } from './contracts.ts'
 
 export const name = 'deep-view'
-export const inject = ['tools', 'skills', 'sessionController', 'sessions', 'agents', 'connection', 'webServer'] as const
+export const inject = ['tools', 'systemPrompt', 'skills', 'sessionController', 'sessions', 'agents', 'connection', 'webServer'] as const
 
 declare module '@deepseek-ai/cordis' {
   interface Context { [HOST_SERVICE]: DeepViewHost }
@@ -74,6 +75,15 @@ type Host = Context & HostRpcContext & {
     get(name: string, scope?: object): unknown
     register(definition: Record<string, unknown>): () => void
   }
+  systemPrompt: {
+    context(contribution: {
+      name: string
+      order: number
+      required?: boolean
+      interpolate?: boolean
+      text: string | ((context: { agent?: { session?: unknown } }) => string)
+    }): () => void
+  }
   skills: {
     register(skill: {
       name: string
@@ -94,6 +104,21 @@ const fail = (code: string, message: string): RpcResult<never> => ({ ok: false, 
 const short = (value: unknown, max = 160): value is string => typeof value === 'string' && value.length > 0 && value.length <= max
 const checkedShown = (title: unknown, view: unknown) => checkShownView(title, view) as ShownView | { error: string }
 const isShown = (value: ShownView | { error: string }): value is ShownView => !('error' in value)
+
+// Runtime context has its own order space. Keep reply-format guidance after
+// the host's identity and operational facts, independently of persona sections.
+const REPLY_INTERFACE_ORDER = 850
+
+// Header-only gate: a human root or ordinary fork, including one that is not
+// currently in the agent registry. A missing header contributes nothing.
+// Step tool filters are ignored; the prompt tells the model to call show_view
+// only when that tool is available, and inline deepui stays valid either way.
+function replyInterfaceContextText(context: { agent?: { session?: unknown } }): string {
+  const session = context.agent?.session
+  if (!isRecord(session) || !isRecord(session.header)) return ''
+  if (isSubagentSession(session)) return ''
+  return DEEP_VIEW_PROMPT
+}
 
 // The host snapshots presentationMeta as JSON on every result, so a result
 // without a card reports null; undefined fails the whole call as invalid output.
@@ -118,13 +143,13 @@ export function createShowViewTool(
 ): Record<string, unknown> {
   return {
     name: 'show_view',
-    description: 'Show a native interface during the task or preserve an interactive answer with the reply. Load the deep-view skill before using this tool; it explains when a deepui reply fence is the lighter surface. await_reply is only for answer controls.',
+    description: 'Display or update a native view during work, or collect a validated optional answer. For comparisons, architecture diagrams and charts in the final reply, use a deepui fence directly. Common view instructions are in the reply-interface context; the deep-view skill is the reference for advanced widgets and answer controls. await_reply is only for answer controls.',
     // tools.register() takes raw JSON Schema; the per-field DSL is only for defineTool().
     parameters: {
       type: 'object',
       properties: {
         title: { type: 'string', description: 'Optional short task heading; omit it when the reply already names the subject.' },
-        view: { type: 'object', additionalProperties: true, description: 'One ViewNode. Load the deep-view skill for the complete format and examples.' },
+        view: { type: 'object', additionalProperties: true, description: 'One ViewNode using the common protocol in the reply-interface context. The deep-view reference skill covers advanced widgets and answer controls.' },
         await_reply: { type: 'boolean', description: 'Whether this card asks the user for a response.' },
         view_id: { type: 'string', description: 'Update an existing view id in this session. Omit when creating a view.' },
         base_revision: { type: 'integer', description: 'The positive revision this complete replacement is based on; required for an update and checked again by the Host.' },
@@ -321,19 +346,45 @@ export async function apply(ctx: Context): Promise<void> {
       return moved
     },
   })
+  // One required runtime context supplies the protocol in every preset/mode:
+  // complete system prompts discard sections, and optional contexts may be
+  // suppressed. The host snapshots/deduplicates this context and refreshes it
+  // on admission; do not append manual messages or register a second section.
+  // Keep its lifetime paired with our tool so conflicts leave no stale guidance.
   ctx.effect(() => {
     if (host.tools.get('show_view')) {
       logger.warn('tool.already-registered', 'show_view is already registered by another plugin; skipping registration.')
       host.logger?.warn('deep-view: show_view is already registered by another plugin; this bundle stays disabled for its own tool')
       return () => {}
     }
+    let disposeTool: () => void
     try {
-      return host.tools.register(createShowViewTool(host, pending, randomUUID, logger, latest))
+      disposeTool = host.tools.register(createShowViewTool(host, pending, randomUUID, logger, latest))
     }
     catch (error) {
       logger.warn('tool.register-failed', 'show_view tool registration failed.', error)
       host.logger?.warn('deep-view: show_view registration skipped: %s', error instanceof Error ? error.message : String(error))
       return () => {}
+    }
+    let disposeContext: () => void
+    try {
+      disposeContext = host.systemPrompt.context({
+        name: 'deep-view:reply-interface',
+        order: REPLY_INTERFACE_ORDER,
+        required: true,
+        interpolate: false,
+        text: replyInterfaceContextText,
+      })
+    }
+    catch (error) {
+      disposeTool()
+      logger.warn('prompt.register-failed', 'Deep View reply context was not registered.', error)
+      host.logger?.warn('deep-view: reply context registration skipped: %s', error instanceof Error ? error.message : String(error))
+      return () => {}
+    }
+    return () => {
+      disposeContext()
+      disposeTool()
     }
   }, 'deep-view.tool')
   // Only admission events are observed, never scanned. A new human message closes a stale card.

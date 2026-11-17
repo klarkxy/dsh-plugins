@@ -1,6 +1,6 @@
 import type { Context } from "@deepseek-ai/cordis";
 import z from "@deepseek-ai/schemastery";
-import type { ToolDefinition } from "@deepseek-ai/dsh-tools";
+import type { ToolDefinition, ToolRegistrationOptions } from "@deepseek-ai/dsh-tools";
 import { CREATOR_PRESET_ID } from "@klarkxy/dsh-plugin-kit/contracts";
 import { installPluginLogger } from "@klarkxy/dsh-plugin-kit/logger";
 
@@ -25,7 +25,7 @@ interface PromptSection {
 }
 
 export interface CreatorPromptHost {
-  tools: { register(tool: ToolDefinition): () => void };
+  tools: { register(tool: ToolDefinition, options?: ToolRegistrationOptions): () => void };
   systemPrompt: { section(section: PromptSection): () => void };
   agentPresets: { composedPreset(context: Context): string | undefined };
   effect(callback: () => () => void | Promise<void>, label: string): () => void;
@@ -45,14 +45,20 @@ export function resolveConfig(config: Config | undefined): Config {
 export function apply(ctx: Context & CreatorPromptHost, config: Config): void {
   resolveConfig(config);
   const logger = installPluginLogger(ctx, name);
+  // Both tools exist for plugin and preset development: the step-time condition
+  // keeps them out of sessions whose composition is not the Creator preset, so no
+  // other preset ever sees or dispatches them.
+  const creatorOnly: ToolRegistrationOptions = {
+    when: ({ agent }) => ctx.agentPresets.composedPreset(agent.ctx) === CREATOR_PRESET_ID,
+  };
   const client = new DocsClient();
   ctx.effect(() => () => client.dispose(), "dsh-dev-index.docs-client");
-  ctx.tools.register(docsTool(client, logger));
+  ctx.tools.register(docsTool(client, logger), creatorOnly);
   const registry = new PluginRegistry();
   ctx.effect(() => () => registry.dispose(), "dsh-dev-index.plugin-registry");
   const github = new GitHubClient();
   ctx.effect(() => () => github.dispose(), "dsh-dev-index.github-client");
-  ctx.tools.register(pluginsTool(registry, github, logger));
+  ctx.tools.register(pluginsTool(registry, github, logger), creatorOnly);
   ctx.effect(() => ctx.systemPrompt.section({
     name: "dsh-dev-index.creator-docs",
     order: 100,

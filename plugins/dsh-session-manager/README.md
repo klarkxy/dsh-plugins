@@ -1,46 +1,81 @@
-# Session Manager
+# 会话管理
 
 <!-- release-state-note -->
 
-[简体中文](README.zh-CN.md)
+简体中文 / [English](README.en.md)
 
-Search and read DeepSeek Harness sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, recap on return with context-compaction hints, and optionally let the agent fork the current session or message other sessions.
+跨工作目录搜索和阅读 DeepSeek Harness 会话，使用临时工作区，提供空输入续写建议、自动继续与久离回来摘要/压缩建议，并支持消息编辑重发与可控的智能体跨会话协作。
 
-## Install
+## 安装
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-session-manager
 ```
 
-Replace `web` with your profile name and restart the profile.
+把 `web` 换成你的 profile 名，安装后重启 profile。
 
-## Use
+## 使用
 
-Open **Settings → Session Management** to change the composer suggestion, Auto-continue, welcome-back, and agent-action options. Each row saves as soon as you change it — there is no Save button.
+打开 **设置 → 会话管理** 即可调整输入框建议、自动继续、回到会话时、会话交接与代理操作等设置；每项改动即时保存，无需点击保存按钮。
 
-On the new-session page, the chosen mode, permission preset, and Auto-continue all apply to the next new session automatically — the page remembers your latest successful picks, including after a restart. Sessions forked from an existing one inherit their parent's choices and never change the remembered ones; older sessions are unaffected. Permission presets stay limited to the fixed presets the host allows: **Auto** and **Custom** cannot be remembered as a default.
+### 会话列表与消息操作
 
-- **Agent tools**: `list_sessions`, `search_sessions`, and `read_session` find sessions by title or content and read a conversation, its full details, or a handoff summary. Reading a conversation returns one preview per turn, newest first; page back with the returned cursor and open full content in details mode.
-- **Agent actions (off by default)**: two independent switches under **Agent actions** in **Settings → Session Management**; each saves immediately. With **Allow self-fork** on, the agent may call `fork_session` on its own: it forks the current session into a new independent session and starts that branch with a prompt it supplies. The new session keeps the conversation up to the call, including a turn still in progress, and shares the same workspace files, so the two are not file-isolated. With **Allow sending messages** on, the agent may call `send_session_message` to deliver one message it writes to another session, marked as coming from the agent. Any unarchived session in any project can receive it; archived sessions cannot. A message to a running session waits for its next turn, while an idle session is woken to handle it. Neither switch asks for per-call confirmation.
-- **Session context menu**: right-click a session row or use its **⋯** button to open its actions menu while staying in the current conversation; left-click the row to open that session. The menu appears on saved session rows in the sidebar.
-- **Edit and resend**: an icon below each message opens an editor at the original message, with images and files above the text box. Change text, remove attachments, paste images, or drop files; cancelling restores the original message. Before sending, the editor explains that the conversation continues from the edited message, the previous version moves to the archive, and file, command, and external changes already made remain in place. After confirmation, the reply is regenerated in a session that keeps the chat's title and sidebar position, while the earlier version stays recoverable from the archive list. This requires a host that can read and fork sessions and read attachments; it keeps original attachments in their original order while editing text, and relies on host attachment support for new or replaced files.
-- **Temporary workspace**: pick it in the new-session workspace picker to chat in its own new folder.
-- **Composer suggestion**: after a turn ends and the composer is empty, a grey suggestion floats in the input area. Press `Tab` to fill it into the draft, or click it to send it at once. While a turn is running, the composer's own placeholder stays. **Fixed text** uses the configured text, or "Continue" when empty. **Model-generated** runs the selected model once after the previous turn ends and caches the line in the session. Mode, fixed text and the generation model all live in the **Composer suggestion** row (keys: `continueMode`, `continueText`); the generation model appears only in **Model-generated** mode.
-- **Auto-continue**: on the new-session page, pick **Off**, **Cautious**, or **Bold** from the Auto-continue chip above the composer before sending the first message; the choice locks once the session starts. The chip remembers your latest successful choice and applies it to the next new session automatically, including after a restart; a session forked from an existing one keeps its parent's state and does not change the remembered choice. When a reply stops early, one judge pass decides whether the host sends a follow-up message, shown in the conversation as an "auto-continue" notice. The sent text follows the Composer suggestion source: fixed text (or the "Continue" default) in **Fixed text** mode, the judge's suggested message in **Model-generated** mode. It continues at most `autoContinueMax` times (default 3) after each message you send, and stops on abort, error, a pending question or approval, no progress, or when the human is needed. The mode lives only on the new-session page; the **Auto-continue** row adjusts the limit (`autoContinueMax`) and the judge model.
-- **Welcome back**: returning to a session whose last response is older than `recapMinutes` (default 15) shows an inline card after the last turn, recapping what you were discussing, the progress, and a suggested next step. Past `compactMinutes` (default 60), the same card adds a prompt-cache expiry note and two optional buttons: **Compact context** invokes the host's native compaction; **Continue in a new session** creates a blank session in the source session's workspace (or keeps the original directory when the source is ungrouped) and fills its draft with the recap and source session ID for you to review and send. You can also send your next message directly; compaction and session switching happen only when you click their buttons, and the card disappears once you continue the conversation. Toggle each feature and set its idle threshold under **When you return**; once a change is saved, the current conversation is rechecked against the new thresholds. Idle time is measured from the last response.
-- **Feature models**: the welcome-back recap, the generated composer suggestion, the auto-continue judge, and `read_session` handoff summaries each have their own model selector, placed in that feature's row in **Session Management**: **Composer suggestion**, **Auto-continue**, **When you return** (enabled with **Show session recap**), and **Session handoff**. Leaving one on the default follows the shared **default auxiliary model** (a row on this same page), then the current conversation or host default model. A judge choice saved before the separate judge field existed keeps applying through migration. The model menu supports provider groups and search; when the list fails to load, a message and retry button appear. With the optional **Model Picker** plugin installed, these menus upgrade to the shared searchable picker with a reasoning-effort slider; without it they keep working as today.
+- **会话右键菜单**：右键点击侧边栏中已保存的会话行或点击其 **⋯** 按钮，可在不离开当前对话的前提下打开该会话的操作菜单；左键点击仍直接切换会话。
+- **删除聊天**：宿主支持删除会话时，会话操作菜单中会显示 **删除聊天**。删除自由聊天会同时清理其拥有的文件；删除普通会话会保留项目文件。
+- **编辑并重发**：宿主支持会话读取、会话分叉与附件读取时，每条已发送用户消息下方会显示编辑图标，点击可在原位置展开编辑框（图片和文件列在文本框上方）。你可以修改文本，并在宿主支持附件编辑时删除、粘贴或拖入附件；取消会恢复原消息。发送前会确认提示：对话将从编辑后的消息继续，原有版本移入归档，此前已执行的文件、命令和外部改动保持不变。确认后将在保留原标题与侧栏位置的新分支中重新生成回复，原版本可从归档列表找回。
+- **宿主能力条件**：自由聊天、删除聊天、编辑并重发以及后续已有改动时的显式确认均依赖宿主提供对应能力；仅当宿主支持时，界面才会显示对应按钮，未提供附件编辑能力时仅保留原附件顺序并编辑文字。
 
-## Limits
+### 新建会话、建议与自动继续
 
-- Edit and resend uses persistent storage. If sending fails after the new chat is created, sending again continues that same operation, including after a host restart. If chat creation is interrupted before its result is saved, further creation stops so you can check the session list for the new chat first.
-- Temporary workspaces remain on disk across restarts and uninstall until you remove them.
-- Content read from other sessions serves as background context rather than instructions.
-- Agent actions require a host that can fork sessions and deliver session messages; without those capabilities the tools report unavailable. A forked session is an independent conversation but shares the source workspace files, so changes on either side are visible to the other. A message wakes an idle session or queues in a running session and cannot be recalled after delivery; archived sessions are refused, and the host may also refuse some subagent-owned targets.
-- Free chats, deleting chats, and editing and resending a sent message require a DSH host with those capabilities; editing after later modifications also requires host support for explicit modification confirmation. The buttons appear when the host supports them. Image understanding depends on the selected model; audio, video, and other non-image attachments are sent as ordinary files, and reading them depends on the host and model. Modification warnings reflect changes recorded by the host.
-- Each finished turn in an auto-continue session costs one extra model call.
-- The welcome-back recap is model-generated; when a model route is unavailable or the call fails, the recap section is omitted while any compaction suggestion still appears on its own. The recap call is read-only and leaves session history unchanged. Compaction uses the host's native command and reports its result in the conversation entry. A new session carries a concise recap and the source session ID for looking up full details, leaving the original session and draft untouched.
-- The card is checked when you return to a session (window focus, tab visibility, or switching sessions) and periodically while the page stays visible. Your next send always goes through directly. Clicking the composer suggestion sends it directly, while the composer itself still requires non-empty input.
+- **记住新建会话选择**：在新建会话页选择的智能体模式/预设、权限预设和自动继续形态会自动记住并沿用到下次新建会话（重启后依然有效）；从已有会话分叉出的会话继承父会话设置，不覆盖记住的默认项。权限仍受宿主限制，**Auto** 与 **Custom** 无法被记为默认预设。
+- **临时工作区**：在新建会话的工作区选择器中选择 **临时工作区**，即可在一个独立新建的文件夹中开始对话。
+- **输入框建议**：当上一轮对话结束且输入框无草稿、无附件时，输入框内会浮现灰色续写建议；焦点在输入框且不处于输入法组合输入状态时，按 `Tab` 键即可填入草稿（运行中保持宿主原有占位提示）。可在 **设置 → 会话管理 → 输入框建议** 选择内容来源：
+  - **固定文本**：使用配置的文本，留空时默认显示「继续」。
+  - **模型生成**：上一轮结束后调用所选生成模型生成一次，并缓存在当前会话中。
+- **自动继续**：在新建会话发出第一条消息前，可通过输入框上方的 **自动继续** 选择 **关闭**、**谨慎** 或 **奔放**，会话开始后锁定（分叉会话继承父会话状态）。当回复提前结束时，判定模型会评估是否自动发出一条续跑消息（对话中显示为 `auto-continue` 提示）。续跑文本沿用 **输入框建议** 的内容来源：**固定文本** 模式发送配置文本（或默认「继续」），**模型生成** 模式发送判定模型给出的消息。可在 **设置 → 会话管理 → 自动继续** 设置每条用户消息后的 **续跑次数上限**（1–10，默认 3）与 **判断模型**；遇到手动中止、报错、待回答问题或审批、无进展或需要人工介入时自动停止。
 
-## License
+### 欢迎回来与压缩建议
+
+在 **设置 → 会话管理 → 回到会话时** 配置离开阈值与开关（按距离上次回复或活动的时间计算，修改后立即按新阈值重检当前会话）：
+
+- **显示会话摘要**：回到闲置超过阈值（默认 15 分钟）的会话时，在最后一轮已结束的回复后内嵌展示 **欢迎回来** 卡片，总结此前在聊的内容、当前进展与建议的下一步。
+- **建议压缩上下文**：闲置超过压缩阈值（默认 60 分钟）时，卡片会附带提示缓存可能已失效的提醒，并提供两个可选按钮：**压缩上下文**（调用宿主原生压缩命令）与 **在新会话中继续**（在来源会话所属工作区或原目录中新建空白会话，并将摘要与来源会话 ID 填入草稿等待你确认发送）。
+
+你也可以直接关闭卡片或继续发送下一条消息；只要继续对话，卡片就会自动收起。
+
+### 智能体工具与代理操作
+
+插件提供 5 个供智能体调用的会话工具：
+
+| 工具 | 默认状态 | 说明 |
+| --- | --- | --- |
+| `list_sessions` | 始终可用（只读） | 跨项目列出宿主可见会话（同目录优先），支持按会话 ID、工作目录、父会话、时间范围过滤及游标翻页。 |
+| `search_sessions` | 始终可用（只读） | 跨项目按字面文本搜索会话标题（`title`）、正文（`content`，默认）或两者（`both`），支持过滤与分页。 |
+| `read_session` | 始终可用（只读） | 读取会话内容：支持 `conversation`（按轮次预览，最新在前）、`handoff`（交接上下文，可选调用模型总结）和 `details`（原始消息/工具明细或模型可见视图）。 |
+| `fork_session` | 默认关闭（需开关与宿主支持） | 在 **代理操作** 中开启 **允许自我 fork** 后，智能体可将当前会话（含进行中的轮次）分叉为独立新会话并附带起始任务。 |
+| `send_session_message` | 默认关闭（需开关与宿主支持） | 在 **代理操作** 中开启 **允许发送消息** 后，智能体可向其他未归档的非子代理会话发送一条标记为来自智能体的消息，并唤醒空闲会话或排队等待运行中的会话。 |
+
+- **代理操作开关（默认关闭）**：在 **设置 → 会话管理 → 代理操作** 中独立开启 **允许自我 fork** 与 **允许发送消息**，改动即时保存，调用时不逐次弹出确认。两个工具均要求宿主具备对应的会话分叉或消息投递能力，宿主不支持时将不可用。
+
+### 模型设置
+
+在 **设置 → 会话管理** 中，以下四项功能各自提供独立的模型选择控件：
+
+- **输入框建议 → 生成模型**
+- **自动继续 → 判断模型**
+- **回到会话时 → 摘要模型**（随 **显示会话摘要** 启用）
+- **会话交接 → 摘要模型**（用于 `read_session` 的交接摘要）
+
+各控件保留 **默认辅助模型** 时，将跟随同页共享的 **默认辅助模型** 行；未设置全局默认辅助模型时，依次回落到当前会话模型或宿主默认模型。模型菜单支持按提供商分组与搜索（加载失败时显示原因与重试按钮）；安装可选的 **模型选择器** 插件后，模型菜单会自动升级为带搜索与思考强度滑杆的共享选择器。
+
+## 主要限制
+
+- **宿主能力依赖**：自由聊天、删除聊天、编辑并重发（含后续修改确认与附件增删）以及代理操作工具（`fork_session`、`send_session_message`）均依赖宿主提供对应能力；宿主不支持时相关按钮不会显示，或工具报告不可用。
+- **编辑并重发的持久化与副作用**：编辑重发状态会持久化到本地日志；若新会话已创建但发送失败，再次发送会继续同一次操作（宿主重启后亦然）。若分叉途中中断且结果未保存，会暂停继续创建，请先检查会话列表中是否已有新聊天。分叉重发不会撤销已发生的文件、命令或外部环境修改。
+- **临时工作区**：临时工作区目录在宿主重启或卸载插件后仍会保留在磁盘上，可按需手动清理。
+- **跨会话读取与代理操作边界**：`list_sessions`、`search_sessions` 和 `read_session` 读取的内容仅作为不可信的背景参考，而非执行指令。`fork_session` 创建的新会话与原会话共用同一工作区文件，不做文件隔离。`send_session_message` 不能发往当前会话自身、已归档会话或子代理会话，消息发出后无法撤回。
+- **模型调用与降级**：启用自动继续的会话在每轮结束后会额外执行一次判定模型调用。欢迎回来摘要和 `read_session` 交接摘要均为只读模型调用；当模型路由不可用或调用失败时，欢迎回来会省略摘要内容（压缩建议仍可独立显示），`read_session` 会保留原文摘录。欢迎回来卡片在窗口聚焦、标签页切回、切换会话及页面可见期间定期检查。
+
+## 许可证
 
 [SATA License 2.1](LICENSE)

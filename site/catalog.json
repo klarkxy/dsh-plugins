@@ -67,8 +67,8 @@
         "en": "Commit workspace changes from the conversation, with the model grouping commits and generating commit messages."
       },
       "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-git-commit"
@@ -87,8 +87,8 @@
         "en": "Per-session Delegation Mode: the main agent plans, delegates, and reviews while subagents carry out the work, enabling multi-agent orchestration."
       },
       "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-delegation"
@@ -107,8 +107,8 @@
         "en": "Session titles follow the latest task automatically; names you set by hand stay put. Auto-rename and manual naming coexist."
       },
       "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-current-title"
@@ -127,8 +127,8 @@
         "en": "Manage and rank web search and page-reading providers (DuckDuckGo, Exa, Tavily, Brave, Bocha, Serper, Firecrawl, Perplexity, You.com, Linkup, Zhipu, Jina, and plugin sources) in one settings page for web_search and web_fetch."
       },
       "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-web-search-manager"
@@ -147,8 +147,8 @@
         "en": "Search Zhihu and the web, check hot lists, Zhida AI answers, Q&A, comments, knowledge bases, creator stats, and quotas, and manage article, question, and pin drafts with image uploads."
       },
       "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-zhihu"
@@ -163,12 +163,12 @@
         "en": "DSH Docs"
       },
       "summary": {
-        "zh": "在插件页浏览 DSH 官方开发文档；智能体获得两个只读工具检索文档与核对插件（dsh_docs、dsh_plugins）。",
-        "en": "Browse official DSH developer documentation in the Plugins page; the agent gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs, dsh_plugins)."
+        "zh": "在插件页浏览 DSH 官方开发文档；Creator 模式下智能体另获两个只读工具检索文档与核对插件（dsh_docs、dsh_plugins）。",
+        "en": "Browse official DSH developer documentation in the Plugins page; in Creator mode the agent also gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs, dsh_plugins)."
       },
       "readme": {
-        "zh": "README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-dev-index"
@@ -187,8 +187,8 @@
         "en": "Adds a Safe Auto approval level: a reviewer model answers approval requests one call at a time, with full review history and audit trails."
       },
       "readme": {
-        "zh": "README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-safe-auto"
@@ -207,8 +207,8 @@
         "en": "Search and read DeepSeek Harness sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, recap on return with context-compaction hints, and optionally let the agent fork the current session or message other sessions."
       },
       "readme": {
-        "zh": "README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-session-manager"
@@ -227,8 +227,8 @@
         "en": "Shared runtime and UI support library for DSH plugins (default auxiliary model, shared settings, diagnostic logging, storage, RPC, official UI styling, optional shared model picker integration, and subagent session helpers), installed automatically by dependent plugins."
       },
       "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-plugin-kit"
@@ -247,8 +247,8 @@
         "en": "Shared library for DSH plugins to define provider, model, and reasoning-effort settings consistently and share model lists and picker menus; installed automatically by dependent plugins."
       },
       "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-model-route"
@@ -267,8 +267,8 @@
         "en": "Configure the model and reasoning effort for subagents, and see each one's last-used model in the conversation popup."
       },
       "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-model-hub"
@@ -287,8 +287,8 @@
         "en": "Customize the interface, conversation, code and terminal fonts and font sizes of the Web GUI; change font families and adjust typography."
       },
       "readme": {
-        "zh": "docs/README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-font"
@@ -307,8 +307,8 @@
         "en": "A session preset that removes the model's answer limits and delivers complete results, only in sessions that pick it; may get your account banned."
       },
       "readme": {
-        "zh": "README.zh-CN.md",
-        "en": "README.md"
+        "zh": "README.md",
+        "en": "README.en.md"
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-unrestricted"
@@ -323,7 +323,7 @@
         "zh": "隐藏 dsh-context 仪表盘顶部的插件信息与推广卡片。",
         "en": "Hides the plugin-info and promotion cards at the top of the dsh-context dashboard."
       },
-      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "readme": { "zh": "README.md", "en": "README.en.md" },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-context-cleaner"
     },
@@ -337,7 +337,7 @@
         "zh": "在正文中组合图表、交互数学、节点图、数据探索、地图与可调估算，让模型用合适的界面表达并接收你的操作。",
         "en": "Compose native visuals, interactive math, node graphs, data exploration, maps and adjustable estimates inside replies, then turn interactions into answers."
       },
-      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "readme": { "zh": "README.md", "en": "README.en.md" },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-deep-view"
     },
@@ -351,7 +351,7 @@
         "zh": "输入框里的模型搜索与推理档位滑杆；其他插件可复用同一选择器。",
         "en": "Searchable model selection with a reasoning-effort slider in the composer; other plugins can reuse the same picker."
       },
-      "readme": { "zh": "docs/README.zh-CN.md", "en": "README.md" },
+      "readme": { "zh": "README.md", "en": "README.en.md" },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-model-picker"
     }

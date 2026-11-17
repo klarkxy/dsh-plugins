@@ -1,51 +1,63 @@
-# Web Search
+# 网页搜索
 
 <!-- release-state-note -->
 
-[简体中文](docs/README.zh-CN.md)
+简体中文 / [English](README.en.md)
 
-Pick which service answers the model's web searches, set request limits, and let it read public pages — from one settings page with separate tabs for search, page reading, and request limits.
+在一个设置页里集中配置并排序网络搜索与网页读取服务、设置请求限制，并为模型提供 `web_search` 与 `web_fetch` 工具。
 
-## Install
+## 安装
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-Replace `web` with your profile name. Restart DSH Web, then open **Settings → Web Search**. Restart the profile after plugin updates as well so the new search code loads.
+把 `web` 换成你的 profile 名，安装后重启 DSH Web，再打开「设置 → 网页搜索」。更新插件后同样需要重启 profile，以加载新版搜索代码。
 
-## Set up search
+## 使用
 
-DuckDuckGo works out of the box with zero configuration. To use DeepSeek Search, Exa, Brave, Bocha, Serper, Firecrawl, Tavily, Perplexity, You.com, Linkup, or Zhipu, enter its API key. Drag the list to reorder: each search uses the first ready service. Search services from other plugins, such as Zhihu, appear in the same list and join the priority order once you enable them.
+### 搜索（`web-search` 页签）
 
-The **Settings** tab sets the number of results, queries per call, total timeout, and maximum page length.
+- **内置免配置后端**：**DuckDuckGo** 无需注册或 API Key，开箱即用。
+- **需配置 Key 的内置后端**：支持 **DeepSeek 搜索**（与模型设置共用 Key）、**Exa**、**Brave**、**博查**、**Serper**、**Firecrawl**、**Tavily**、**Perplexity**、**You.com**、**Linkup** 与 **智谱**，填写对应 API Key 并保存后即可使用。
+  - **Perplexity**：调用 Search API 直接返回网页来源，不生成回答。
+  - **You.com**：直接返回网页与新闻摘要，不额外提取全文。
+  - **Linkup**：使用 `fast` 检索，仅返回来源，不生成回答也不启用 `deep` 检索。
+  - **Tavily**：固定使用 `basic` 检索，不自动升级搜索深度。
+  - **智谱**：固定使用基础搜索（`search_std`），查询超过 70 个字符会在本地拒绝而不会截短发出。
+- **其他插件提供的服务**：其他插件注册的搜索服务（例如知乎全网搜索）会出现在同一列表中，手动开启开关后即加入优先级排序。
+- **优先级与测试**：开启搜索后，拖拽条目或使用上下方向键调整顺序；每次搜索使用排序最靠前且就绪的服务。搜索开启时可点击「测试连接（可能计费）」验证连通性。
 
-## Read web pages
+### 网页读取（`web-fetch` 页签）
 
-Turn on **Read web pages**, enable the services you want, then drag them or use the up/down arrow keys to set priority. Each fetch uses the first configured, available service. Fetch services from other plugins also appear and join the priority order once enabled; temporarily unloaded services keep their selection and position.
+- 打开「网页读取」后，开启需要参与的服务，并通过拖拽或上下方向键调整优先级；每次读取使用第一个已配置且可用的服务。
+- 内置 **网页读取** 默认优先通过免费匿名的 **Jina Reader** 读取公开网页，失败时回退为一次本机 HTTP 直连。
+- **Firecrawl** 可读取网页 Markdown，与 Firecrawl 搜索共用同一 API Key（搜索与网页读取分别计费）。
+- 其他插件或宿主接入的读取服务也会出现在同一列表中，开启后参与排序；暂时未加载的服务会保留其选中状态和排序位置。
 
-Your previously selected fetch service stays first. The bundled **Read web pages** service uses the free Jina Reader and falls back to one direct request if that fails; services from the host or other plugins use their own fetching method.
+### 请求限制（`设置` 页签）
 
-**Firecrawl** can also read Markdown pages with the same API key as Firecrawl search; search and page reads are billed separately. Perplexity uses its Search API to return search results directly; You.com returns web and news snippets directly. Linkup uses fast search and returns sources only, without an answer or deep search. Zhipu stays on basic search (`search_std`); a query longer than 70 characters is rejected locally and is not shortened.
+- 可设置**每条查询结果上限**（1–20）、**每次调用查询上限**（1–5）、**请求超时（毫秒）**（1000–120000）以及**正文字符上限**（1000–200000）。
+- 开关切换与排序修改立即生效；新输入的 API Key 与请求限制需点击「保存」生效。
 
-## Give the tools to the model
+## 让模型使用
 
-Add this to the plugin list of your `agent.cordis.yml`:
+在所用 `agent.cordis.yml` 的插件列表中加入：
 
 ```yaml
 - name: '@klarkxy/dsh-web-search-manager/tools'
 ```
 
-The model then gets `web_search` and `web_fetch` while search and fetch are on.
+当搜索或网页读取处于开启且存在可用后端的状态时，模型会分别获得 `web_search` 与 `web_fetch` 工具。
 
-## Limits
+## 主要限制
 
-- Paid services may charge per search or fetch; refer to your provider account for billing.
-- The bundled Jina Reader sends page addresses to Jina; use it only for public URLs free of private tokens.
-- Firecrawl page reads require a page status code and final URL in the response, and may serve cached page content. URLs are sent to the selected fetch service.
-- Each search or fetch request runs against the selected active service only.
-- Cancellation and timeouts ask the active service to stop and wait for it to finish cleaning up. A third-party service that ignores cancellation can delay results and plugin unloading, as code running inside DSH finishes cooperatively.
+- 付费服务可能按次或按积分收费，实际消耗与账单以各服务商账户为准。
+- 内置 Jina Reader 与 Firecrawl 网页读取都会将所请求的网址发送到对应第三方服务，请仅用于不含私密令牌或内网地址的公开链接。
+- Firecrawl 网页读取要求服务返回网页状态码与最终网址，返回的 Markdown 正文可能来自服务缓存。
+- 每次搜索或网页读取仅请求当前排在首位的单一就绪服务，不会自动跨服务重试或回退到其他付费后端。
+- 取消与超时会向当前服务发出中止信号并等待其完成清理。若第三方服务忽略中止信号，可能延迟结果返回或插件卸载，DSH 进程内的代码通过协作方式停止。
 
-## License
+## 许可证
 
 [SATA License 2.1](LICENSE)

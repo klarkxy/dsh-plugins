@@ -13,7 +13,7 @@ const registryManifest = JSON.parse(
 ) as Record<string, unknown>;
 const patch = readFileSync(new URL("../cordis.patch.yml", import.meta.url), "utf8");
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
-const readmeZh = readFileSync(new URL("../README.zh-CN.md", import.meta.url), "utf8");
+const readmeEn = readFileSync(new URL("../README.en.md", import.meta.url), "utf8");
 
 describe("prepare lifecycle", () => {
   const fixtures: string[] = [];
@@ -154,7 +154,7 @@ describe("bundle contract", () => {
   });
 
   it("documents the official docs pointer in both languages", () => {
-    for (const document of [readme, readmeZh]) {
+    for (const document of [readme, readmeEn]) {
       expect(document).toContain("allowBuilds:");
       expect(document).toContain("'@klarkxy/dsh-dev-index': true");
       expect(document).toContain("https://deepseek-harness.github.io/deepseek-harness/");

@@ -116,7 +116,7 @@
   "files": [
     "lib",
     "README.md",
-    "docs/README.zh-CN.md",
+    "README.en.md",
     "LICENSE"
   ],
   "scripts": {

@@ -4,6 +4,9 @@ import { CREATOR_PRESET_ID } from "@klarkxy/dsh-plugin-kit/contracts";
 import { CREATOR_GUIDANCE, OFFICIAL_LLMS_TXT, OFFICIAL_REPOSITORY } from "../src/creator-guidance.js";
 import { apply, resolveConfig, type CreatorPromptHost } from "../src/index.js";
 
+type Registration = Parameters<CreatorPromptHost["tools"]["register"]>;
+type Section = Parameters<CreatorPromptHost["systemPrompt"]["section"]>[0];
+
 describe("creator documentation guidance", () => {
   it("accepts an empty config and rejects leftover keys", () => {
     expect(resolveConfig(undefined)).toEqual({});
@@ -11,27 +14,52 @@ describe("creator documentation guidance", () => {
     expect(() => resolveConfig({ pagesBaseUrl: "https://example.com" } as never)).toThrow(/unknown config key/);
   });
 
-  it("contributes official docs only to the Creator preset", () => {
-    let section: Parameters<CreatorPromptHost["systemPrompt"]["section"]>[0] | undefined;
-    let preset: string = CREATOR_PRESET_ID;
-    const toolNames: string[] = [];
-    apply({
-      tools: { register(tool: { name: string }) { toolNames.push(tool.name); return () => undefined; } },
+  it("contributes both tools and the official docs only to the Creator preset", () => {
+    let section: Section | undefined;
+    let preset: string | undefined = CREATOR_PRESET_ID;
+    const registrations: Registration[] = [];
+    const composedWith: unknown[] = [];
+    const host: CreatorPromptHost = {
+      tools: {
+        register(tool, options) {
+          registrations.push([tool, options]);
+          return () => undefined;
+        },
+      },
       systemPrompt: {
-        section(value: Parameters<CreatorPromptHost["systemPrompt"]["section"]>[0]) {
+        section(value) {
           section = value;
           return () => undefined;
         },
       },
-      agentPresets: { composedPreset: () => preset },
-      effect(callback: () => () => void) {
+      agentPresets: {
+        composedPreset(context) {
+          composedWith.push(context);
+          return preset;
+        },
+      },
+      effect(callback) {
         callback();
         return () => undefined;
       },
-    } as never, {});
+    };
+    apply(host as never, {});
+
+    expect(registrations.map(([tool]) => tool.name)).toEqual(["dsh_docs", "dsh_plugins"]);
+    const agent = { ctx: {} as never };
+    for (const [, options] of registrations) {
+      expect(options?.when).toBeTypeOf("function");
+      expect(options?.when?.({ agent } as never)).toBe(true);
+      expect(composedWith.at(-1)).toBe(agent.ctx);
+    }
+
+    preset = "standard";
+    for (const [, options] of registrations) expect(options?.when?.({ agent } as never)).toBe(false);
+    preset = undefined;
+    for (const [, options] of registrations) expect(options?.when?.({ agent } as never)).toBe(false);
 
     expect(section?.name).toBe("dsh-dev-index.creator-docs");
-    expect(toolNames).toEqual(["dsh_docs", "dsh_plugins"]);
+    preset = CREATOR_PRESET_ID;
     expect(section?.text({ agent: { ctx: {} as never } })).toBe(CREATOR_GUIDANCE);
     preset = "standard";
     expect(section?.text({ agent: { ctx: {} as never } })).toBe("");

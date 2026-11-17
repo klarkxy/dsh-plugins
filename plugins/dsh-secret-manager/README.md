@@ -1,53 +1,58 @@
-# Secret Manager
+# 密钥管理器
 
 <!-- release-state-note -->
 
-[简体中文](docs/README.zh-CN.md)
+简体中文 / [English](README.en.md)
 
-Collect secrets outside the chat. When the agent needs an API key or token it asks through a dedicated prompt window: the value goes straight to the local Host, the value never enters the conversation, and the tool only receives a `secret://<slot>` reference. Use is permissioned per session — for the session's own shell calls and for exact HTTPS origins.
+在对话之外安全收集与管理密钥。智能体需要 API Key 或令牌时，通过专用弹窗向你请求：输入值直接发送到本机宿主保存而不进入对话，模型与工具只拿到 `secret://<slot>` 引用，使用权限按当前会话分别限定为 shell 环境变量或精确的 HTTPS 来源。
 
-## Install
+## 安装
 
-The package is in draft and not on npm yet. Install the development build from a checkout of this repository:
+本包目前处于本地开发阶段，尚未发布到 npm。请在仓库根目录构建后从本地路径安装：
 
 ```sh
+pnpm --filter @klarkxy/dsh-secret-manager build
 dsh plugin --profile web add ./plugins/dsh-secret-manager
 ```
 
-Replace `web` with your profile name and restart DSH Web. Once it is published, the same command works with the scoped package name `@klarkxy/dsh-secret-manager`.
+把 `web` 换成你的 profile 名，安装后重启 profile 或刷新页面。正式发布到 npm 后，可直接使用 scoped 包名 `@klarkxy/dsh-secret-manager` 安装。
 
-## Use
+## 使用
 
-### Answer an agent request
+### 模型工具
 
-When the model calls `request_secret`, the prompt window opens on its own in the conversation:
+| 工具 | 用途 | 返回内容 |
+| --- | --- | --- |
+| `request_secret` | 弹出专用请求窗口收集或复用密钥，并申请本会话使用授权 | 仅返回状态、`secret://<slot>` 引用、`DSH_SECRET_*` 变量名与授权标记 |
+| `secret_status` | 查询哪些 `secret://<slot>` 引用已保存 | 仅返回已配置引用与对应环境变量名，不读取也不返回明文 |
+| `secret_http` | 向当前会话已获授权的精确 `https://` 来源发起请求并附带认证头 | 返回响应状态与正文（不回显请求认证头与响应头，并脱敏正文中的密钥） |
 
-- Enter the value in the masked field, or leave it empty to reuse the value already stored under that slot.
-- Tick which use to allow for **this session**: shell use (`DSH_SECRET_*` environment variable) and/or sending the secret to the exact HTTPS origin shown with the authentication header shown (by default `Authorization: Bearer`, unless the agent asked for another header/prefix you approve).
-- **Decline request** rejects this request; closing the dialog does the same, so a request never hangs unanswered. If the decline cannot reach the Host, the dialog shows an error and you can retry — you are never told a request was cancelled when it was not. The field clears the moment you submit or close.
+### 回应请求（`request_secret` 弹窗）
 
-While the request is open, its chat row shows "Waiting for your secret" with an **Open authorization** button to bring the dialog back. The tool result carries only status — granted scopes and the `secret://` reference — never the value.
+模型调用 `request_secret` 时，对话中会自动打开专用授权弹窗，展示目标名称（slot）、`secret://<slot>` 引用、`DSH_SECRET_*` 环境变量名、用途说明与过期时间：
 
-### Manage secrets
+- **输入或复用**：在掩码输入框中键入密钥值；若该名称已保存旧值且你想继续复用，可留空直接提交。
+- **选择本会话权限**：shell 与 HTTP 权限彼此独立，且只作用于当前会话：
+  - **Shell 环境变量（`DSH_SECRET_*`）**：若请求包含 shell 权限，勾选后允许本会话的非持久 shell 调用读取对应的 `DSH_SECRET_*` 变量（例如 `github-token` 对应 `DSH_SECRET_GITHUB_TOKEN`）。
+  - **精确 HTTPS 来源**：若请求包含 HTTP 权限，勾选后允许本会话通过 `secret_http` 向弹窗中显示的精确 `https://` 来源发送认证头（默认为 `Authorization: Bearer`，若请求指定了其他请求头或前缀也会一并展示供你确认）。
+  - 若不勾选任何授权，则只保存密钥而不向当前会话开放使用权限。
+- **拒绝与重新打开**：点击「拒绝请求」或直接关闭弹窗都会立即拒绝本次请求并清空输入框；若拒绝请求未能到达宿主，界面会保留错误提示与「重试」按钮，不会谎称已取消。等待确认期间，对话中的工具行显示「等待你确认密钥」，可通过「打开授权」按钮重新打开弹窗。
 
-Open **Settings → Secret Manager** (密钥管理器):
+### 管理密钥与会话授权（设置 → 密钥管理器）
 
-- **Secrets**: add a name and value (same name overwrites), replace a value behind a confirmation dialog, or delete. Values are masked, never shown back and never carry a tail.
-- **This session's grants**: for the currently open session, revoke its grant for a secret — or revoke every session's grant — without deleting the value.
+打开 **设置 → 密钥管理器**：
 
-Shell use and HTTP sending are granted separately. A grant is bounded to the current session and expires; nothing is granted to all sessions by default.
+- **密钥**：输入小写字母、数字和连字符组成的名称（slot）与密钥值即可新增（同名覆盖），也可对已有条目执行「替换」或「删除」（均需二次确认）。输入框始终掩码，已保存的值永不回显，也不显示尾号或长度。
+- **本会话授权**：查看当前打开会话持有的 shell / HTTP 授权状态以及各密钥的已授权会话数，可点击「撤销本会话授权」或「撤销全部会话授权」立即收回访问权而不删除密钥本身。
 
-## Limits
+## 主要限制
 
-- The dialog submits the value directly to the Host. Save and authorization tool results contain only references and status, never the value. The plugin does not write submitted values to persistent browser storage or its own logs.
-- Values are stored locally in plaintext — this is a reference manager, not an encrypted vault. Anyone who can read your DSH data directory can read them.
-- Grants are bound to the current session: they expire after about an hour, are cleared when the plugin unloads or the Host restarts, and replacing or deleting a value revokes every grant for it immediately. They are not inherited by subagents, and every pending request expires after a few minutes if unanswered.
-- Shell use targets the native non-persistent shell. Persistent shells are not supported.
-- HTTP use is exact-origin only: the secret is attached with the authentication header you approved toward the shown `https://` origin — `Authorization: Bearer` unless the request asked for another header/prefix — never to a whole domain or wildcard.
-- Redaction covers the entry channel and normal tool results, not streamed output, spilled files, encoded rewrites or external logs — a session's own shell can also read its granted `DSH_SECRET_*` variables, so scope them deliberately.
-- There is no transparent whole-tool replacement: tools that already hold a raw secret in their arguments are not rewritten automatically.
-- No automatic granting: the agent may ask, but every save, grant, replacement and revocation is an explicit user action.
+- **本机明文存储**：密钥通过宿主凭据存储保存在本地，**以明文形式落盘**——本插件是引用管理器，而非加密保险箱；任何能够读取 DSH 数据目录的程序或用户都可以读取这些值。
+- **录入隔离与脱敏边界**：弹窗输入直达宿主并在提交、拒绝或关闭时立即清空，不写入对话记录、浏览器持久存储或插件日志；`tools/post-execute` 脱敏只覆盖工具正常返回的结果，**不覆盖**命令运行时的实时流式输出、溢出文件、经编码或变形改写后的输出（如 Base64/Hex）以及外部程序日志。获授 shell 权限的会话可直接读取对应的 `DSH_SECRET_*` 变量，请谨慎授权。
+- **按会话与时间严格限定**：授权仅对批准它的当前顶层会话有效，**不继承给子代理**，约 1 小时后自动过期，插件卸载或宿主重启即全部清除；替换或删除密钥值会立即撤销所有会话对该密钥的授权。未处理的 `request_secret` 请求约 5 分钟后自动过期。
+- **Shell 与 HTTP 使用边界**：shell 注入仅支持原生非持久 shell，不支持持久 shell；`secret_http` 仅支持精确匹配的 `https://` 来源（不支持整域通配、明文 HTTP、URL 内嵌凭据或 HTTP 重定向），且响应体受大小上限约束。
+- **无自动重写与自动授权**：其他工具参数中原本已经写死的明文密钥不会被自动替换；模型只能发起请求，保存、授权、替换与撤销均须由你显式确认。
 
-## License
+## 许可证
 
 [SATA License 2.1](LICENSE)

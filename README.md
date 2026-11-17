@@ -1,83 +1,83 @@
 # dsh-plugins
 
-[简体中文](README.zh-CN.md) / English
+简体中文 / [English](README.en.md)
 
-DeepSeek Harness (DSH) plugins by klarkxy. Browse them on the [plugin site](https://klarkxy.github.io/dsh-plugins/), which shows install commands and each plugin's documentation.
+klarkxy 的 DeepSeek Harness（DSH）插件集合。可前往[插件站点](https://klarkxy.github.io/dsh-plugins/)浏览安装命令、版本动态与各插件详细说明。
 
-## Plugins
+## 插件
 
-| Package | What it does |
-| --- | --- |
-| [`@klarkxy/dsh-current-title`](plugins/dsh-current-title/README.md) | Auto Title: session titles follow the latest task automatically; names you set by hand stay put. Auto-rename and manual naming coexist. |
-| [`@klarkxy/dsh-git-commit`](plugins/dsh-git-commit/README.md) | Git Commit: commit workspace changes from the conversation, with the model grouping commits and generating commit messages. |
-| [`@klarkxy/dsh-delegation`](plugins/dsh-delegation/README.md) | Delegation Mode: per-session switch where the main agent plans, delegates, and reviews while subagents carry out the work, enabling multi-agent orchestration. |
-| [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto: adds a Safe Auto approval level where a reviewer model answers approval requests one call at a time, with full review history and audit trails. |
-| [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | Session Manager: search and read DeepSeek Harness sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, recap on return with context-compaction hints, and optionally let the agent fork the current session or message other sessions. |
-| [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | Subagents: configure the model and reasoning effort for new subagents, and see their last-used model in the conversation popup. |
-| [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/README.md) | Web Search: manage and rank search and page-reading services, including Linkup, Zhipu and providers from installed plugins, in one settings page. |
-| [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | Zhihu: search Zhihu and the web, check hot lists, Zhida AI answers, Q&A, comments, knowledge bases, creator stats, and quotas, and manage article, question, and pin drafts with image uploads. |
-| [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | Font: customize the interface, conversation, code and terminal fonts and font sizes of the Web GUI. |
-| [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | Unrestricted: a session preset that removes the limits on what the model answers and delivers complete results, only in sessions that pick it; may get your account banned. |
-| [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH Docs: browse official DSH developer documentation in the Plugins page; the agent gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (`dsh_docs`, `dsh_plugins`). |
-| [`@klarkxy/dsh-context-cleaner`](plugins/dsh-context-cleaner/README.md) | Context Cleaner: hides the plugin-info and promotion cards at the top of the dsh-context dashboard. |
-| [`@klarkxy/dsh-deep-view`](plugins/dsh-deep-view/README.md) | Deep View intelligent UI: native visuals, interactive math, node graphs, data exploration, maps and adjustable estimates inside replies, with composer drafts and validated answers. |
-| [`@klarkxy/dsh-model-picker`](plugins/dsh-model-picker/README.md) | Model Picker: searchable model selection with a reasoning-effort slider in the composer; other plugins can reuse the same picker. |
+| 分类 | 包 | 作用 |
+| --- | --- | --- |
+| 工作方式 | [`@klarkxy/dsh-git-commit`](plugins/dsh-git-commit/README.md) | Git 提交：在对话里提交工作区改动，由模型分组并生成 Git 提交信息。 |
+| 工作方式 | [`@klarkxy/dsh-delegation`](plugins/dsh-delegation/README.md) | 委派模式：按会话开启，主代理负责拆解、委派和验收，子代理执行具体任务，支持多智能体协作。 |
+| 工作方式 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto：新增「Safe Auto」审批档位，需要审批的请求交给审核模型判断，通过才放行，并记录完整的审核历史。 |
+| 工作方式 | [`@klarkxy/dsh-deep-view`](plugins/dsh-deep-view/README.md) | Deep View 智能界面：在正文中组合图表、交互数学、节点图、数据探索、地图与可调估算，支持草稿填入与校验回答。 |
+| 工作方式 | [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | 字体：自定义 Web GUI 的界面、对话、代码与终端字体及字号。 |
+| 工作方式 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | 破限模式：解除模型回答限制、交付完整成果的会话预设（Preset），仅作用于选用它的会话；可能导致账号被封禁。 |
+| 会话与记忆 | [`@klarkxy/dsh-current-title`](plugins/dsh-current-title/README.md) | 自动标题：会话标题跟随最新任务自动更新，手动改过的名字不会被覆盖，自动重命名与人工命名两不误。 |
+| 会话与记忆 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | 会话管理：跨工作目录搜索和阅读 DeepSeek Harness 会话，使用临时工作区；空输入一键续写或自动继续，久离回来给出摘要与上下文压缩建议；可选让智能体分叉当前会话或向其他会话发消息。 |
+| 会话与记忆 | [`@klarkxy/dsh-context-cleaner`](plugins/dsh-context-cleaner/README.md) | 上下文面板清理：隐藏 `dsh-context` 仪表盘顶部的插件信息与推广卡片。 |
+| 模型与联网 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | 子代理：配置子代理的模型与推理强度，并在会话弹层查看最后使用的模型。 |
+| 模型与联网 | [`@klarkxy/dsh-model-picker`](plugins/dsh-model-picker/README.md) | 模型选择器：输入框里的模型搜索与推理档位滑杆；其他插件可复用同一选择器。 |
+| 模型与联网 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/README.md) | 网页搜索：在一个设置页管理和排序多家搜索与网页读取服务，内置 DuckDuckGo、Exa、Tavily、Linkup、智谱等，并整合已安装插件的搜索源，为模型提供 `web_search` 与 `web_fetch`。 |
+| 模型与联网 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | 知乎：知乎站内与全网搜索、热榜、Zhida 直答、知识库、问题推荐与回答摘要、内容与评论读取、创作数据与额度统计，以及草稿管理和配图上传。 |
+| 插件开发 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH 文档：在插件页浏览 DSH 官方开发文档；Creator 模式下智能体另获两个只读工具检索文档与核对插件（`dsh_docs`、`dsh_plugins`）。 |
 
-`@klarkxy/dsh-plugin-kit` (runtime, UI and diagnostic logging helpers) and `@klarkxy/dsh-model-route` are shared libraries that other plugins install automatically.
+[`@klarkxy/dsh-plugin-kit`](plugins/dsh-plugin-kit/README.md)（运行时、界面与诊断日志辅助）和 [`@klarkxy/dsh-model-route`](plugins/dsh-model-route/README.md)（模型路由与选择契约）是共享库，其他插件会自动安装它们。
 
-## Install
+## 安装
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-current-title
 ```
 
-Replace `web` with your profile name and restart the profile after installing. The shared libraries a plugin depends on are installed along with it.
+把 `web` 换成你的 profile 名，安装后重启该 profile。插件依赖的共享库会随它一起装上。
 
-To browse the plugin list in DSH, enable the experimental **Custom Plugin Market** bundle, then choose **Plugins → Discover → Add index source** and enter:
+要在 DSH 中浏览插件列表，先启用实验性的「自定义插件市场」组合包，再选择「插件 → 发现 → 添加索引源」，输入：
 
 ```text
 https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/index.json
 ```
 
-The same source provides list updates. DSH asks for confirmation before installing any plugin.
+列表更新也来自这个索引源。安装任何插件前，DSH 都会要求确认。
 
-## Development
+## 开发
 
-Requires Node.js 24+ and pnpm 10.
+需要 Node.js 24+ 与 pnpm。
 
 ```bash
 pnpm install
 pnpm check
 ```
 
-The code is the developer documentation. Releases follow the [release guide](RELEASING.md).
+代码就是开发文档。发布流程见[发布指南](RELEASING.zh-CN.md)。
 
-## Plugin lifecycle
+## 插件生命周期
 
 <!-- plugin-release-states:start -->
-| Package | Lifecycle | Notes |
+| 包 | 生命周期 | 说明 |
 | --- | --- | --- |
-| [@klarkxy/dsh-context-cleaner](plugins/dsh-context-cleaner/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
-| [@klarkxy/dsh-current-title](plugins/dsh-current-title/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-deep-view](plugins/dsh-deep-view/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
-| [@klarkxy/dsh-delegation](plugins/dsh-delegation/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
-| [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-font](plugins/dsh-font/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-model-hub](plugins/dsh-model-hub/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-model-picker](plugins/dsh-model-picker/README.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
-| [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.md) | Draft (`draft`) | New secret manager; host acceptance precedes the first release. |
-| [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-shortcuts](plugins/dsh-shortcuts/README.md) | Draft (`draft`) | New shortcut manager and extensible command palette; awaiting first-release acceptance. |
-| [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-workspace-folders](plugins/dsh-workspace-folders/README.md) | Draft (`draft`) | New workspace folder management; host acceptance precedes the first release. |
-| [@klarkxy/dsh-zhihu](plugins/dsh-zhihu/README.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
+| [@klarkxy/dsh-context-cleaner](plugins/dsh-context-cleaner/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
+| [@klarkxy/dsh-current-title](plugins/dsh-current-title/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-deep-view](plugins/dsh-deep-view/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
+| [@klarkxy/dsh-delegation](plugins/dsh-delegation/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
+| [@klarkxy/dsh-dev-index](plugins/dsh-dev-index/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-font](plugins/dsh-font/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-git-commit](plugins/dsh-git-commit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-model-hub](plugins/dsh-model-hub/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-model-picker](plugins/dsh-model-picker/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
+| [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.md) | 草稿 (`draft`) | 新增密钥管理器，首次发布前完成宿主验收。 |
+| [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-shortcuts](plugins/dsh-shortcuts/README.md) | 草稿 (`draft`) | 新增快捷键管理与可扩展命令面板，待完成首次发布验收。 |
+| [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-workspace-folders](plugins/dsh-workspace-folders/README.md) | 草稿 (`draft`) | 新增工作区多文件夹管理，首次发布前完成宿主验收。 |
+| [@klarkxy/dsh-zhihu](plugins/dsh-zhihu/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 <!-- plugin-release-states:end -->
 
-## License
+## 许可证
 
 [SATA License 2.1](LICENSE)

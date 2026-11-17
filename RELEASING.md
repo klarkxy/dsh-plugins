@@ -1,6 +1,6 @@
 # Plugin lifecycle and releases
 
-[简体中文](RELEASING.zh-CN.md) · [Current registry](README.md#plugin-lifecycle)
+[简体中文](RELEASING.zh-CN.md) · [Current registry](README.en.md#plugin-lifecycle)
 
 `scripts/plugin-release-states.json` records the lifecycle of every `plugins/*` package, including shared libraries and private development packages. It moves forward in one direction: **Draft → Testing → Published**.
 

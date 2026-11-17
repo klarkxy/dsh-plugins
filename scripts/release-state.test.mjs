@@ -32,7 +32,7 @@ function fixture(t, overrides = {}) {
     return { name: pkg.name, state: 'published', reason, publication };
   });
   writeFileSync(join(root, releaseStateFile), JSON.stringify({ schemaVersion: 2, packages }));
-  for (const file of ['README.md', 'README.zh-CN.md']) writeFileSync(join(root, file), table);
+  for (const file of ['README.md', 'README.en.md']) writeFileSync(join(root, file), table);
   return root;
 }
 function update(root, action) {
@@ -310,9 +310,14 @@ test('real packed source fingerprints survive version writeback but detect deliv
 test('docs sync exactly while preserving ordinary prose and repository registry consistency', t => {
   const root=fixture(t);assert.throws(()=>syncStateDocs(root,workspace(root)),/outdated/);
   syncStateDocs(root,workspace(root),true);syncStateDocs(root,workspace(root));
+  assert.match(readFileSync(join(root,'README.md'),'utf8'),/plugins\/dsh-base\/README\.md\)/);
+  assert.match(readFileSync(join(root,'README.en.md'),'utf8'),/plugins\/dsh-base\/README\.en\.md\)/);
   assert.ok(readFileSync(join(root,'README.md'),'utf8').startsWith('Original prose.\n'));
   assert.throws(()=>main(root,['--fingerprint','@klarkxy/dsh-missing']),/Unknown package/);
   writeFileSync(join(root,'README.md'),'Missing markers');assert.throws(()=>syncStateDocs(root,workspace(root),true),/expected one/);
   const repo=fileURLToPath(new URL('../',import.meta.url));syncStateDocs(repo,workspace(repo));
-  for(const pkg of workspace(repo).inventory)assert.match(readFileSync(join(repo,pkg.directory,'README.md'),'utf8'),/<!-- release-state-note -->/);
+  for(const pkg of workspace(repo).inventory) {
+    assert.match(readFileSync(join(repo,pkg.directory,'README.md'),'utf8'),/<!-- release-state-note -->/);
+    assert.match(readFileSync(join(repo,pkg.directory,'README.en.md'),'utf8'),/<!-- release-state-note -->/);
+  }
 });

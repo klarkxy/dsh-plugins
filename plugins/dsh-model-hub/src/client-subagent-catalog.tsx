@@ -25,8 +25,11 @@
  *
  * The catalog rows live in the host's private DOM contract: this module keeps
  * the host's CSS-module class names (pinned per host build) and its tree
- * roles, so the popup keeps the host's own look. When the host renames those
- * classes the popup falls back to this module's own stylesheet.
+ * roles, so the popup keeps the host's own look. The card skin is not in
+ * those classes — from host 0.2.2-rc.3 the native catalog wraps the panel in
+ * `MenuSurface`, and `.menu` itself has no fill. This copy does the same.
+ * When the host renames those classes the popup falls back to this module's
+ * own stylesheet for layout.
  */
 import {
   useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore,
@@ -34,7 +37,8 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  IconChevronDownOutlineRegular, IconChevronRightOutlineRegular, IconRefreshOutlineRegular, StateDot, Tooltip,
+  IconChevronDownOutlineRegular, IconChevronRightOutlineRegular, IconRefreshOutlineRegular,
+  MenuSurface, StateDot, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 
 /* ------------------------------------------------------------------ *
@@ -219,9 +223,10 @@ function useText(locale: LocaleLike): Translator {
 
 /**
  * The host's CSS-module class names for the subagent catalog, as of host
- * 0.2.2-rc.1. The host's stylesheet is injected into the document, so these
- * names keep the popup on the host's own look; the `mh-` classes below carry
- * a fallback stylesheet for hosts that renamed them.
+ * 0.2.2-rc.1 (layout hashes still match 0.2.2-rc.3). The host's stylesheet is
+ * injected into the document, so these names keep the popup on the host's
+ * own look; the `mh-` classes below carry a fallback stylesheet for hosts
+ * that renamed them. The card fill is owned by `MenuSurface`, not by `.menu`.
  */
 const NATIVE_CLASS = {
   activitySlot: 'rezYhW_activitySlot',
@@ -265,17 +270,24 @@ function cx(...parts: Array<string | false | undefined>): string {
  * Fallback stylesheet. Every selector is wrapped in `:where()` so it carries
  * no specificity: while the host's own stylesheet is present, the host wins;
  * when the host renamed its classes, these rules keep the popup readable.
+ *
+ * `.mh-root`, `.mh-switcher-root` and `.mh-menu` sit on the same node as
+ * `.dsh-model-hub-subagent`, so a descendant-only selector never reaches
+ * them. Those three also list `:where(.dsh-model-hub-subagent.mh-*)`.
+ * `MenuSurface` paints the card; the `::before` fill is only for a panel
+ * that is not a MenuSurface (`:not([data-menu-material])`).
  */
 const css = `
-.dsh-model-hub-subagent :where(.mh-root){position:relative;display:inline-flex;align-items:center;gap:10px;min-width:0}
-.dsh-model-hub-subagent :where(.mh-switcher-root){min-width:0;margin-left:6px}
+:where(.dsh-model-hub-subagent.mh-root),.dsh-model-hub-subagent :where(.mh-root){position:relative;display:inline-flex;align-items:center;gap:10px;min-width:0}
+:where(.dsh-model-hub-subagent.mh-switcher-root),.dsh-model-hub-subagent :where(.mh-switcher-root){min-width:0;margin-left:6px}
 .dsh-model-hub-subagent :where(.mh-trigger),.dsh-model-hub-subagent :where(.mh-switcher-trigger){display:inline-flex;align-items:center;gap:4px;min-height:28px;padding:3px 2px;border:0;border-radius:var(--dsw-radius-sm);background:transparent;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;cursor:pointer}
 .dsh-model-hub-subagent :where(.mh-switcher-trigger){min-width:0;max-width:244px;color:var(--dsw-alias-label-primary);font-weight:500}
 .dsh-model-hub-subagent :where(.mh-ancestor-switcher-trigger){color:var(--dsw-alias-label-tertiary);font-weight:400}
 .dsh-model-hub-subagent :where(.mh-switcher-title){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dsh-model-hub-subagent :where(.mh-activity-slot){display:inline-flex;flex:none;align-items:center;justify-content:center;width:14px;height:14px}
 .dsh-model-hub-subagent :where(.mh-trigger-open){transform:rotate(180deg)}
-.dsh-model-hub-subagent :where(.mh-menu){position:fixed;z-index:100;box-sizing:border-box;display:flex;flex-direction:column;width:336px;max-width:min(400px,calc(100vw - 32px));max-height:min(560px,calc(100vh - 140px));padding:3px;overflow:hidden;border-radius:var(--dsw-radius-lg);box-shadow:var(--dsw-elevation-prominent);background:var(--dsw-alias-bg-layer-3)}
+:where(.dsh-model-hub-subagent.mh-menu),.dsh-model-hub-subagent :where(.mh-menu){position:fixed;z-index:100;isolation:isolate;box-sizing:border-box;display:flex;flex-direction:column;width:336px;max-width:min(400px,calc(100vw - 32px));max-height:min(560px,calc(100vh - 140px));padding:3px;overflow:hidden;border-radius:var(--dsw-radius-lg);box-shadow:var(--dsw-elevation-prominent)}
+:where(.dsh-model-hub-subagent.mh-menu:not([data-menu-material]))::before,.dsh-model-hub-subagent :where(.mh-menu:not([data-menu-material]))::before{content:'';position:absolute;z-index:-1;inset:0;border-radius:inherit;background:var(--dsw-menu-surface-fill);backdrop-filter:var(--dsw-menu-backdrop-filter);pointer-events:none}
 .dsh-model-hub-subagent :where(.mh-menu-body){display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:auto}
 .dsh-model-hub-subagent :where(.mh-node){position:relative;min-width:0}
 .dsh-model-hub-subagent :where(.mh-row){position:relative;display:flex;align-items:flex-start;gap:6px;box-sizing:border-box;width:100%;min-height:44px;padding:6px 7px 6px 9px;border:0;border-radius:var(--dsw-radius-lg);background:transparent;color:var(--dsw-alias-label-primary);font-size:12px;line-height:17px;text-align:left;cursor:pointer;outline:none}
@@ -297,6 +309,8 @@ const css = `
 .dsh-model-hub-subagent :where(.mh-route-retry){padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;text-decoration:underline}
 .dsh-model-hub-subagent :where(.mh-sidebar-space){flex:none;width:28px}
 `
+/** Exported so the spec can check selectors and theme tokens. */
+export const subagentCatalogCss = css
 
 /* ------------------------------------------------------------------ *
  * Route readout
@@ -911,34 +925,37 @@ function CatalogDropdown({
       {variant === 'switcher' ? <SubagentSwitcherIcon />
         : <IconChevronDownOutlineRegular className={open ? cx(NATIVE_CLASS.triggerOpen, 'mh-trigger-open') : undefined} />}
     </button>
-    {open ? createPortal(<div
+    {open ? createPortal(<MenuSurface
       ref={menuRef}
       className={cx('dsh-model-hub-subagent', NATIVE_CLASS.menu, 'mh-menu')}
       style={menuPosition}
+      data-subagent-panel=""
       onPointerEnter={(event) => { if (event.pointerType !== 'touch') cancelHoverClose() }}
       onPointerLeave={scheduleHoverClose}
     >
-      <div className={cx(NATIVE_CLASS.menuBody, 'mh-menu-body')} role="tree" aria-label={t('tree.aria')}>
-        <CatalogRows
-          parentSessionId={rootSessionId}
-          currentSessionId={currentSessionId}
-          catalog={presentedCatalog}
-          catalogs={catalogs}
-          projections={projections}
-          summaries={summaries}
-          expanded={expanded}
-          level={1}
-          openChild={openChild}
-          openChildAside={openChildAside}
-          refreshProjection={refreshProjection}
-          requestProjection={requestProjection}
-          toggleBranch={toggleBranch}
-          closeCatalog={() => { changeOpen(false) }}
-          t={t}
-          routeT={routeT}
-        />
+      <div className={cx(NATIVE_CLASS.menuBody, 'mh-menu-body')}>
+        <div role="tree" aria-label={t('tree.aria')}>
+          <CatalogRows
+            parentSessionId={rootSessionId}
+            currentSessionId={currentSessionId}
+            catalog={presentedCatalog}
+            catalogs={catalogs}
+            projections={projections}
+            summaries={summaries}
+            expanded={expanded}
+            level={1}
+            openChild={openChild}
+            openChildAside={openChildAside}
+            refreshProjection={refreshProjection}
+            requestProjection={requestProjection}
+            toggleBranch={toggleBranch}
+            closeCatalog={() => { changeOpen(false) }}
+            t={t}
+            routeT={routeT}
+          />
+        </div>
       </div>
-    </div>, document.body) : null}
+    </MenuSurface>, document.body) : null}
   </div>
 }
 

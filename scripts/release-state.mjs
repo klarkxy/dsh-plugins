@@ -132,9 +132,10 @@ export function renderStateTable(packages, states, language) {
     ? ['| 包 | 生命周期 | 说明 |', '| --- | --- | --- |']
     : ['| Package | Lifecycle | Notes |', '| --- | --- | --- |'];
   const escape = value => value.replace(/\|/g, '&#124;').replace(/[\r\n]+/g, ' ');
+  const readme = language === 'zh' ? 'README.md' : 'README.en.md';
   for (const pkg of [...packages].sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
     const entry = states.get(pkg.name);
-    lines.push(`| [${pkg.name}](${pkg.directory}/README.md) | ${stateLabels[language][entry.state]} (\`${entry.state}\`)${pkg.private ? (language === 'zh' ? '；私有包' : '; private') : ''} | ${escape(entry.reason[language])} |`);
+    lines.push(`| [${pkg.name}](${pkg.directory}/${readme}) | ${stateLabels[language][entry.state]} (\`${entry.state}\`)${pkg.private ? (language === 'zh' ? '；私有包' : '; private') : ''} | ${escape(entry.reason[language])} |`);
   }
   return lines.join('\n');
 }

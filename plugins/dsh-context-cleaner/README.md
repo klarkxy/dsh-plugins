@@ -1,20 +1,30 @@
-# Context Cleaner
+# 上下文面板清理
 
 <!-- release-state-note -->
 
-Context Cleaner hides the two decoration cards at the top right of the dsh-context dashboard: the plugin-info card and the promotion/recommendation card. The freed column collapses and the stats card fills the header row.
+简体中文 / [English](README.en.md)
 
-## Install
+隐藏 `dsh-context` 仪表盘右上角的插件信息卡和推广推荐卡，让统计卡片铺满顶部一行。
 
-First install and enable `dsh-context` — this plugin only declutters it and does not provide the context panel itself.
+## 安装
 
-From a source checkout, install the bundle directory `plugins/dsh-context-cleaner` through the DSH plugin manager (its absolute path also works) and enable the **Context Cleaner** row. Nothing else needs configuring.
+请先安装并启用 `dsh-context`——本插件仅负责清理面板样式，不提供上下文面板本身。
 
-## Use
+```sh
+dsh plugin --profile web add @klarkxy/dsh-context-cleaner
+```
 
-No action needed. While the plugin is enabled, the plugin-info and promotion cards stay hidden in the dsh-context panel — in the context tab and the sidebar entry alike. Disabling or uninstalling the bundle removes the rule and restores the cards.
+把 `web` 换成你的 profile 名，安装后按提示重启 profile，并在插件列表中确认启用「上下文面板清理」。无需其他配置。
 
-## Limits
+## 使用
 
-- The hiding relies on dsh-context's rendered layout; an upstream redesign may need a matching update of this plugin.
-- The plugin removes the cards visually only — dsh-context still runs its recommendation fetch in the background.
+启用后即可自动生效，无需额外操作。插件启用期间，`dsh-context` 上下文标签页与侧边栏入口中的插件信息卡和推广卡都会保持隐藏，原本占用的右列随之收起。停用或卸载本插件后，卡片会立即恢复显示。
+
+## 主要限制
+
+- 隐藏效果依赖 `dsh-context` 当前渲染的界面结构，上游改版后可能需要同步更新本插件。
+- 本插件仅做界面视觉隐藏，`dsh-context` 后台仍会照常发起推荐内容请求。
+
+## 许可证
+
+[SATA License 2.1](LICENSE)

@@ -1,47 +1,62 @@
-# Deep View intelligent UI
+# Deep View 智能界面
 
 <!-- release-state-note -->
 
-Deep View composes intelligent interfaces inside assistant replies. Ordinary Markdown can flow into native charts, comparisons, workflow steps, metrics, adjustable estimates and answer controls, then continue as prose. Some interfaces are explorable: an interactive math plane, a node graph, a linked data explorer or a map. Interactions on a card update its formulas and other components immediately, without another model request.
+简体中文 / [English](README.en.md)
 
-## Install
+在助手回复中组合原生图表、对比、流程步骤、指标、可调估算与可探索互动视图，并将操作转化为回答。普通 Markdown 正文可与互动界面自然穿插。
 
-Install the `@klarkxy/dsh-deep-view` bundle through the DSH plugin manager, then enable **Deep View intelligent UI**. The package contains its Host and Web Client halves; no account or API key is required.
+## 安装
 
-## Use
+```sh
+dsh plugin --profile web add @klarkxy/dsh-deep-view
+```
 
-Ask naturally for a comparison, a trend, a process, an adjustable budget, an interactive math plot, a node diagram, a map or another task that benefits from a visual interface. You can also name Deep View explicitly. The model decides whether prose is sufficient and loads the on-demand `deep-view` skill only when an interface would help.
+把 `web` 换成你的 profile 名，安装或更新后重启 profile 并刷新页面。包内同时包含 Host 与 Web Client 两部分，无需账号或 API 密钥。
 
-Two complementary surfaces are available:
+## 使用
 
-- **Reply interfaces.** The model places a `deepui` declaration between paragraphs. Deep View replaces it with a native interface at that exact position as soon as its JSON becomes complete during streaming. Charts, tables, metrics and interactive estimates stay in the reading flow instead of moving to the end of the turn.
-- **Task interfaces.** The model calls `show_view` for progress that should be visible before the reply exists, or for a direct answer that must be validated by the Host. Current progress uses one replaceable activity view. Awaiting answers can use the composer dock during the turn and remain in the reply afterwards; there is only one editable instance at a time.
+直接提出方案对比、趋势、流程、可调预算、互动数学图、节点示意图、数据探索或地图等需求，无需点名 Deep View。插件会在普通会话中直接提供界面选用提示与常用组件说明，让模型主动用表格对齐方案差异、用关系图说明架构和调用链、用图表表达真实趋势；正文和代码仍可自然穿插。
 
-Both surfaces can contain the same components. Layouts are `stack` and `row`. Display components are `text`, `metric`, `table`, `chart` (`bar`, `hbar`, `line`, `area`, `donut`), `progress`, `callout`, `sources` and `steps`. `slider`, `number`, `choice` and `toggle` provide local input. Formulas use `{ "=": "price * count" }`; they support arithmetic, comparisons, conditionals and a fixed function set, not JavaScript execution.
+同一 profile 启用插件后，所有预设的面向用户会话共用这套提示，包括普通聊天、计划模式、PTC 代码执行模式，以及使用自定义完整提示词或关闭可选上下文的模式。切换模式无需重新配置。工具不可用时仍可在回复正文中生成常用视图；计划模式的执行限制、用户指定格式和严格结构化输出要求仍然有效。
 
-Four components are visual and interactive:
+常用对比表、关系图、流程、图表与可调估算无需先加载 skill。`deep-view` skill 保留为互动数学、联动数据探索、地图、复杂公式及回答控件的参考。你也可以明确要求「用纯文本回答」「只输出 Markdown」或指定其他格式；简短事实与纯代码任务不会被要求套上卡片。委派子代理不会收到这套主动选用提示，汇总答案的主会话负责组织最终界面。
 
-- `math` (Mafs) draws a coordinate plane with one to four draggable points and up to four `f(x)` curves over the declared domain and range. The plane stays within that declared view instead of panning or zooming; formulas and other components can read each point's live coordinates.
-- `flow` (React Flow) draws the declared node graph. You can pan, zoom, drag nodes into a layout and select one node; the rest of the card can read that selection.
-- `explore` (Vega-Lite) plots declared inline rows as a scatter and links one selection back to the card: click points to choose categories, or drag to select an `x`/`y` interval. A collapsible table lists the same rows.
-- `map` (MapLibre) shows declared locations and routes and always renders a location list beside the map; the rest of the card can read the selected location.
+### 两种界面入口
 
-Within one card that state is shared: inputs, math point positions and node, map or scatter selections feed every formula, metric and table on the card, and they are recorded in the readable answer.
+- **正文界面（`deepui` 声明）**：模型在段落之间输出 `deepui` 声明块，流式生成期间待其 JSON 完整后即在原位置替换为原生卡片，让图表、表格、指标与估算留在阅读顺序中。卡片内的回答操作通过 **填入输入框** 写入草稿，由你确认后发送。
+- **任务界面（`show_view` 工具）**：用于在回复正文出现前展示进度，或渲染需要由 Host 校验并直接提交的待答卡片。进度类视图通过输入框上方一个可替换的活动槽位实时刷新；待答卡片在回合运行期间可停靠在输入框上方，回复结束后保留在正文中，同一时间每个会话仅允许一个可编辑的待答卡片。
 
-`options`, `confirm`, `form` and `submit` provide answers. A `show_view` answer is checked by the Host against the card's declared controls and current revision before it is submitted. A reply interface uses **Fill composer** so you can review and send the answer yourself; it never silently sends or replaces an existing draft. Choices, field values, adjustable inputs and rich selections are included in the readable answer.
+### 组件、互动视图与公式
 
-`show_view` can also update a card instead of adding a second one: the model passes the card's `view_id` with the revision it last saw, and the card is replaced in place with the next revision. A stale revision, or an answer to a card that has been replaced or closed, is refused instead of overwriting newer state.
+两种入口共用同一套组件与共享状态：
 
-Directly submitted answers and unambiguous composer answers are restored with their interface after refreshing or reopening the conversation. Charts support keyboard inspection, table view and CSV copying; a card that has been answered becomes read-only.
+- **布局与基础组件**：布局支持 `stack`、`row`（最外层布局可定义 `let` 变量供公式读取）；展示支持 `text`、`metric`、`table`、`chart`（`bar`、`hbar`、`line`、`area`、`donut`，支持表格视图切换与复制数据）、`progress`、`callout`、`sources` 与 `steps`；本地输入支持 `slider`、`number`、`choice` 与 `toggle`。
+- **公式计算**：写作 `{ "=": "price * count" }`，支持算术、比较、条件表达式与固定函数集，不执行 JavaScript。
+- **四类可探索视图**：
+  - `math`（Mafs）：在声明的 `domain` 与 `range` 内绘制坐标系，支持 1–4 个可拖动坐标点与最多 4 条 `f(x)` 曲线。视图固定在声明范围内（不平移、不缩放），公式与其他组件可实时读取各点坐标。
+  - `flow`（React Flow）：绘制声明的节点关系图，支持平移、缩放、拖动节点排布及选中节点，选中结果可供同卡片读取（不支持新增、删除或连接节点）。
+  - `explore`（Vega-Lite）：将内联标量数据画成散点图并附带可折叠数据表，支持点击数据点按分类筛选或拖拽框选 `x`/`y` 区间（双击清除），选择结果联动回卡片。
+  - `map`（MapLibre）：显示声明的地点与路线，并在地图旁始终渲染无障碍地点列表；选中的地点同步供给同卡片读取。
+- **同卡片联动**：输入控件变更以及数学点坐标、节点、地点或散点选择会立即驱动同卡片公式、指标与表格重算，无需再次请求模型，并一并写入可读回答。
 
-## Limits
+### 回答、更新与恢复
 
-- Interfaces are opt-in and model-selected; the plugin does not force every answer into a visual layout or change the rest of the assistant's Markdown.
-- A `deepui` fence renders after its complete JSON is available, not as arbitrary node-by-node UI patches. Malformed declarations remain available as ordinary code. Model decisions depend on the selected model and prompt.
-- The rich components are closed native widgets, not a charting, diagramming or mapping language: no arbitrary JavaScript or HTML and no `html` component; `explore` accepts inline scalar rows, not a Vega-Lite spec or a remote data source; `map` accepts coordinates, not a style URL, tile server or API key; `flow` accepts declared nodes and edges, not custom node components. PNG export is not included.
-- Activity updates from `show_view` arrive at tool-call boundaries. The plugin does not stream arbitrary progress from inside another long-running tool or modify historical tool results.
-- Only a live `show_view` interface in a human-driven top-level session or ordinary conversation fork can submit through the Host channel. Delegated subagents cannot collect direct answers. A pending interface is lost when the plugin restarts, although its saved content remains visible. Reply-fence interactions fill the composer instead.
-- A card is interactive only while it is live: a pending interface closes after an answer or another ordinary user message, an answered card becomes read-only, and local changes that were never submitted are not persisted. Do not use interfaces to collect passwords, keys or tokens.
-- The map loads a fixed remote demo basemap and does not accept another style source. Without network access or WebGL, or when the basemap fails to load, the card shows a notice and the location list still works for choosing a location.
-- Each card is bounded: an excessive number of components, curves, graph nodes, inline rows or locations is rejected rather than silently truncated.
-- Theme and actual rendering depend on the installed DSH Web Client. A source build does not by itself prove runtime or visual compatibility.
+- **回答方式**：支持 `options`（单选/多选）、`confirm`、`form` 与 `submit`。`show_view` 的直接提交在写入会话前由 Host 按声明的控件与当前 `revision` 校验；正文 `deepui` 卡片（以及在 `show_view` 卡片中选择 **填入输入框**）会把回答格式化填入草稿（输入框已有草稿时会先询问替换或追加），从不静默发送。
+- **原地更新**：`show_view` 可携带 `view_id` 与上一版 `revision` 在原位置替换卡片为新版本；过期的 `revision` 或针对已替换、已关闭卡片的回答会被拒绝，不会覆盖最新状态。
+- **恢复与只读**：直接提交的回答以及可明确对应的输入框回答会在刷新或重新打开会话后随界面恢复；已回答过的卡片转为只读状态。
+
+## 主要限制
+
+- **选用与渲染时机**：直接提示会引导模型主动选用界面，但不保证每次生成卡片，也不会强制所有回复使用可视化布局或改变普通 Markdown 的渲染。`deepui` 围栏需等完整 JSON 就绪后才渲染，格式错误的声明保留原始代码供查看。
+- **封闭原生控件**：不支持任意 JavaScript、HTML 或 `html` 组件，也不支持导出 PNG。`explore` 仅接受内联标量行数据（不支持完整 Vega-Lite spec 或远程数据源）；`map` 仅接受坐标与路线（不支持自定义样式 URL、瓦片服务或 API Key）；`flow` 仅渲染声明的节点和连线（不支持自定义节点组件）。
+- **工具调用边界更新**：`show_view` 的活动更新以工具调用为边界，不会从其他长耗时工具内部流式推送进度，也不会改写历史工具结果。
+- **会话与生命周期边界**：仅真人顶层会话或普通会话分叉中有效的 `show_view` 可直接通过 Host 提交回答（委派子代理不能收集直接回答）。插件重启会清除内存中未决的待答状态，但已保存内容仍可在会话中查看。
+- **卡片有效期与隐私**：待答卡片在提交回答或收到新的普通用户消息后关闭，已回答卡片变为只读，未提交的本地调节不会自动持久化。请勿使用界面收集密码、密钥或 token。
+- **地图环境依赖**：地图加载固定的公开远程示例底图，不接受其他样式源；离线、无 WebGL 或底图加载失败时，卡片会显示提示，下方的地点列表仍可正常选择。
+- **体积与数量上限**：卡片载荷大小、组件数量与层级、曲线数、节点与连线数、数据行数及地点数均受上限限制，超限会被直接拒绝而不会静默截断。
+- **外观随宿主适配**：主题配色与实际渲染取决于当前安装的 DSH Web Client。
+
+## 许可证
+
+基于 [Apache License 2.0](LICENSE) 开源；上游来源与第三方组件声明见 [NOTICE](NOTICE)。

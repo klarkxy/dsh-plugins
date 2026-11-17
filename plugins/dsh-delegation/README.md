@@ -1,32 +1,37 @@
-# Delegation Mode
+# 委派模式
 
 <!-- release-state-note -->
 
-[简体中文](docs/README.zh-CN.md)
+简体中文 / [English](README.en.md)
 
-A per-session switch that has the main agent plan, delegate to subagents, and review results while subagents carry out the work. When on, the main agent acts as a coordinator — breaking the request into tasks, handing them to subagents, and checking their reports — while subagent sessions receive matching guidance to complete the assigned work.
+按会话开启的委派开关：开启后主代理负责拆解任务、委派子代理并验收结果，子代理会话会同步获得对应的执行指引。
 
-## Install
+## 安装
 
-```bash
+```sh
 dsh plugin --profile web add @klarkxy/dsh-delegation
 ```
 
-Enable the plugin in your profile, then reload the page or restart the profile as the manager requires.
+将 `web` 替换为你的 profile 名称，在 profile 中启用插件后，按插件管理器提示刷新页面或重启 profile。
 
-## Use
+## 使用
 
-- On the new-session page, use the **Delegate** chip on the same row as the workspace and preset selectors before sending the first message: the chip shows the theme color when delegation is on. The chip remembers your latest successful choice and applies it to the next new session automatically, including after a restart. The choice locks once the session starts, including after reopening it. A session forked from an existing one keeps its parent's state and does not change the remembered choice. The chip applies to the session's main agent, and its subagents automatically receive matching execution guidance.
-- Simple tasks can be completed directly. For larger tasks, the main agent assigns scoped work to subagents, coordinates shared interfaces, and checks their results before reporting completion.
+1. 在创建会话页，找到工作区、预设选择器同一行的「委派」按钮。
+2. 在发送第一条消息前切换状态：开启时按钮高亮为主题色。
+3. 会话开始后状态锁定，重新打开该会话仍保持原设置；已存在的会话保留原有状态。
 
-## Limits
+行为说明：
 
-- Presets that expose subagent tools — Standard and PTC — support delegation; presets without subagent tools (such as Minimal and other complete-persona presets) keep the chip disabled.
-- The chip updates prompt guidance only; tool access and permissions remain unchanged, and delegation is guided rather than strictly enforced.
-- Delegation Mode stays fixed once a session starts, keeping the session's prompt cache stable.
-- Existing sessions keep their current state; a previously saved global default still applies to newly created sessions that have no remembered choice.
-- The added prompt section may reduce provider prompt-cache hits.
+- **记忆新会话选择**：插件会记住你最近一次在创建页成功切换的选择，并在之后新建会话（含重启后）自动沿用；若尚无记住的选择，则回落到此前保存的全局默认值。
+- **分叉继承**：从已有会话分叉出的会话会继承父会话的委派状态，且不会改写新会话的记忆选择。
+- **主从协同**：开启后，主代理对简单任务可直接回答，对复杂或需多步实现的任务会先拆分委派给子代理并检查产出；派生的子代理会自动获得执行者指引。
 
-## License
+## 主要限制
+
+- 仅带子代理工具的预设（如 Standard 与 PTC）支持委派；缺少子代理工具的预设（如 Minimal 及其他完整人设预设）会将「委派」按钮置为禁用状态。
+- 本插件只调整提示词引导，不改变原有工具列表、审批与权限设置；委派通过提示词引导执行，而非硬性拦截。
+- 为保持会话内的提示词缓存稳定，会话开始后无法再切换委派模式；启用时额外注入的提示词小节可能会影响模型供应商的缓存命中率。
+
+## 许可证
 
 [SATA License 2.1](LICENSE)

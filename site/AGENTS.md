@@ -18,7 +18,7 @@
 
 ## 增改/下线插件
 
-只改 `catalog.json` 并同步根 README 插件表格。规则：只收录 npm 上有 `latest` 的 DSH 插件；`slug` 用小写字母数字连字符、通常去掉作用域和 `dsh-` 前缀，已发布 slug 保持稳定；`category` 用 `categories` 里的 id，`kind` 只取 `preset`/`plugin`/`service`；`title`/`summary` 双语，一句话说清用户价值；`readme.zh`/`readme.en` 填包内相对路径（缺语言仍填预期路径，构建时告警并回退另一语言）；`repository` 填 GitHub URL，`directory` 是子目录（根即包填 `""`）；版本、日期、依赖、图标由构建时从 npm 自动读取，依赖按 catalog 内同名依赖自动推导（安装命令只列插件本身和未标 `optional` 的必需 peer——`dsh plugin add` 转发 pnpm 且 profile `autoInstallPeers: false`，其余依赖自动安装）。
+只改 `catalog.json` 并同步根 README 插件表格。规则：只收录 npm 上有 `latest` 的 DSH 插件；`slug` 用小写字母数字连字符、通常去掉作用域和 `dsh-` 前缀，已发布 slug 保持稳定；`category` 用 `categories` 里的 id，`kind` 只取 `preset`/`plugin`/`service`；`title`/`summary` 双语，一句话说清用户价值；`readme.zh`/`readme.en` 固定填 `README.md`/`README.en.md`（下一次代码发布前，`site/npm.mjs` 会兼容读取旧版 npm 压缩包中的 `docs/README.zh-CN.md` / `README.zh-CN.md` 与英文 `README.md`；缺语言时构建仍告警并回退另一语言）；`repository` 填 GitHub URL，`directory` 是子目录（根即包填 `""`）；版本、日期、依赖、图标由构建时从 npm 自动读取，依赖按 catalog 内同名依赖自动推导（安装命令只列插件本身和未标 `optional` 的必需 peer——`dsh plugin add` 转发 pnpm 且 profile `autoInstallPeers: false`，其余依赖自动安装）。
 
 ## 修改渲染
 

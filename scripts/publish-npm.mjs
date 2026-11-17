@@ -179,7 +179,7 @@ export function recordVerifiedPublication(root, release, publication) {
   entry.publication = publication;
   entry.reason = { zh: '已有 npm 发布记录；后续版本按正常更新流程维护。', en: 'Published on npm; subsequent versions follow the normal update workflow.' };
   const changed = JSON.parse(readFileSync(join(root, planFile), 'utf8'));
-  changed.changedFiles = [...new Set([...(changed.changedFiles ?? []), releaseStateFile, 'README.md', 'README.zh-CN.md'])];
+  changed.changedFiles = [...new Set([...(changed.changedFiles ?? []), releaseStateFile, 'README.md', 'README.en.md'])];
   writeFileSync(join(root, planFile), JSON.stringify(changed, null, 2) + '\n');
   writeFileSync(join(root, releaseStateFile), JSON.stringify({ schemaVersion: 2, packages: [...states.values()] }, null, 2) + '\n');
   syncStateDocs(root, { inventory, states }, true);

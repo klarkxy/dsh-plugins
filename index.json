@@ -281,8 +281,8 @@
         "en": "DSH Docs"
       },
       "description": {
-        "zh": "在插件页浏览 DSH 官方开发文档；智能体获得两个只读工具检索文档与核对插件（dsh_docs、dsh_plugins）。",
-        "en": "Browse official DSH developer documentation in the Plugins page; the agent gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs, dsh_plugins)."
+        "zh": "在插件页浏览 DSH 官方开发文档；Creator 模式下智能体另获两个只读工具检索文档与核对插件（dsh_docs、dsh_plugins）。",
+        "en": "Browse official DSH developer documentation in the Plugins page; in Creator mode the agent also gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs, dsh_plugins)."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/dev-index/",

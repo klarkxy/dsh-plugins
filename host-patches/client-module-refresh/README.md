@@ -1,27 +1,27 @@
-# Web refresh module-loading fix
+# Web 刷新模块加载修复
 
-[简体中文](README.zh-CN.md)
+简体中文 / [English](README.en.md)
 
-Prevents the same client module from loading twice when DSH Web receives an unchanged startup configuration while its scripts are still loading.
+修复 DSH Web 启动脚本尚未加载完成时，收到相同启动配置而重复加载同一客户端模块的问题。
 
-## Install
+## 安装
 
-Stop the Web instance that uses the target profile. Stage a verified package into that profile's `node_modules/@deepseek-ai/dsh-client-modules` directory:
+先停止目标配置对应的 Web 实例，再将已校验的包副本放入该配置的 `node_modules/@deepseek-ai/dsh-client-modules` 目录：
 
 ```powershell
-node .\host-patches\client-module-refresh\stage.mjs --destination '<absolute profile path>\node_modules\@deepseek-ai\dsh-client-modules'
+node .\host-patches\client-module-refresh\stage.mjs --destination '<配置目录的绝对路径>\node_modules\@deepseek-ai\dsh-client-modules'
 ```
 
-The destination must not exist. The installer checks the original package before creating a separate copy; it does not modify the source installation. Start that Web profile again.
+目标目录必须不存在。安装器校验原包后创建独立副本，不修改原始安装。完成后重新启动该 Web 配置。
 
-## Use
+## 使用
 
-Refresh DSH Web normally. Real module changes still reload, and actual duplicate registrations still report an error.
+正常刷新 DSH Web。模块确有变化时仍会重新加载，真正的重复注册仍会报错。
 
-## Limits
+## 主要限制
 
-- Only the inspected Host artifact is supported. A Host upgrade requires another review.
-- This is a local Web profile fix. It does not update an existing desktop installation.
-- To undo it, stop that Web instance and remove only the staged package directory identified in `.refresh-patch.json`, then restart.
+- 仅支持已核验的宿主包版本；宿主升级后需要重新审查。
+- 这是本地 Web 配置修复，不会更新已有的桌面端安装。
+- 如需撤销，先停止该 Web 实例，仅移除 `.refresh-patch.json` 记录的补丁包目录，再重新启动。
 
-Original Host code is Copyright (c) 2026 DeepSeek under the accompanying MIT license.
+原宿主代码版权为 Copyright (c) 2026 DeepSeek，使用随附的 [MIT 许可证](UPSTREAM-LICENSE)。

@@ -46,6 +46,29 @@ test("README rendering drops the title and language switch, and rewrites links",
   assert.deepEqual(toc.map((h) => h.id), ["install", "install-1", "use-it"]);
 });
 
+test("README rendering strips zh-default and en-alternate language switchers", () => {
+  const postCtx = {
+    ...ctx,
+    readmePages: {
+      "packages/dsh-memory/README.md": "../../plugins/memory/",
+      "packages/dsh-memory/README.en.md": "../../en/plugins/memory/",
+    },
+  };
+  const zh = renderReadme(
+    "# 插件\n\n<!-- release-state-note -->\n\n简体中文 / [English](README.en.md)\n\n## 用法\n\n正文。",
+    { ...postCtx, readmePath: "README.md" },
+  );
+  assert.doesNotMatch(zh.html, /简体中文|English|README\.en\.md/);
+  assert.match(zh.html, /正文。/);
+
+  const en = renderReadme(
+    "# Plugin\n\n<!-- release-state-note -->\n\n[简体中文](README.md) / English\n\n## Usage\n\nBody.",
+    { ...postCtx, readmePath: "README.en.md" },
+  );
+  assert.doesNotMatch(en.html, /简体中文|English|README\.md/);
+  assert.match(en.html, /Body\./);
+});
+
 test("README rendering never passes raw HTML or unsafe URLs through", () => {
   const { html } = renderReadme(
     [
@@ -231,4 +254,35 @@ test("both languages serve package images and licenses from relative local asset
   assert.equal(files.get("assets/packages/zhihu/LICENSE").toString(), "Published license");
   pkg.assets["../escape.png"] = "AA==";
   assert.throws(() => renderSite(catalog, data, options), /Unsafe package asset path/);
+});
+
+test("detail pages strip language switchers for both post-flip and pre-flip tarballs", () => {
+  const data = fixture();
+  const gitCommit = data["@klarkxy/dsh-git-commit"];
+  gitCommit.readme = {
+    zh: { path: "README.md", text: "# Git 提交\n\n<!-- release-state-note -->\n\n简体中文 / [English](README.en.md)\n\n## 安装\n\n中文安装说明。" },
+    en: { path: "README.en.md", text: "# Git Commit\n\n<!-- release-state-note -->\n\n[简体中文](README.md) / English\n\n## Install\n\nInstall guide body." },
+  };
+  const zhihu = data["@klarkxy/dsh-zhihu"];
+  zhihu.readme = {
+    zh: { path: "docs/README.zh-CN.md", text: "# 知乎\n\n[English](../README.md)\n\n## 安装\n\n旧版中文说明。" },
+    en: { path: "README.md", text: "# Zhihu\n\n[简体中文](docs/README.zh-CN.md)\n\n## Install\n\nLegacy install body." },
+  };
+  const files = renderSite(catalog, data, { generatedAt: "2026-03-01T00:00:00.000Z" });
+  const body = (html) => {
+    const start = html.indexOf('<p class="readme-note">');
+    const afterNote = html.indexOf("</p>", start);
+    return html.slice(afterNote + 4, html.indexOf("</article>", afterNote));
+  };
+  for (const [slug, zhNeedle, enNeedle] of [
+    ["git-commit", "中文安装说明", "Install guide body"],
+    ["zhihu", "旧版中文说明", "Legacy install body"],
+  ]) {
+    const zhBody = body(files.get(`plugins/${slug}/index.html`));
+    const enBody = body(files.get(`en/plugins/${slug}/index.html`));
+    assert.match(zhBody, new RegExp(zhNeedle));
+    assert.match(enBody, new RegExp(enNeedle));
+    assert.doesNotMatch(zhBody, /简体中文|English|README\./);
+    assert.doesNotMatch(enBody, /简体中文|English|README\./);
+  }
 });

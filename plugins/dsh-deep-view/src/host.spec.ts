@@ -11,12 +11,13 @@ function hostFixture(options: { flush?: () => Promise<boolean>; followup?: (mess
     sessionController: { resolveAgent: async (id: string) => ({ agent: id === agent.id ? agent : undefined }) },
     sessions: { flush: options.flush ?? (async () => true) },
     tools: { get: () => undefined, register: () => () => {} },
+    systemPrompt: { context: () => () => {} },
   }
   return { host: host as never, agent, messages }
 }
 const interactiveView = { type: 'options', id: 'pick', options: [{ label: 'One' }, { label: 'Two' }] }
 describe('Deep View skill', () => {
-  it('keeps the full ViewNode instructions out of the tool schema until the skill is loaded', async () => {
+  it('registers the advanced reference without embedding its instructions in the tool schema', async () => {
     const registrations: Record<string, unknown>[] = []
     const disposers: Array<() => void> = []
     const { host } = hostFixture()
@@ -39,7 +40,6 @@ describe('Deep View skill', () => {
       source: 'runtime', invocation: { modelInvocable: true, userInvocable: true },
     })
     expect(DEEP_VIEW_SKILL).toContain('Do not read the plugin package')
-    expect(DEEP_VIEW_SKILL).toContain('Workflow: `steps`')
     expect(registrations[0]!.description).not.toContain('ViewNode')
     const tool = createShowViewTool(host, new Map())
     expect(JSON.stringify(tool)).not.toContain('For a workflow')

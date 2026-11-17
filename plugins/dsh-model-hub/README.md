@@ -1,33 +1,33 @@
-# Subagents
+# 子代理
 
 <!-- release-state-note -->
 
-[简体中文](docs/README.zh-CN.md)
+简体中文 / [English](README.en.md)
 
-Configure the models and reasoning effort available to new DeepSeek Harness subagents, and see each subagent's last-used model in the conversation's subagent popup.
+配置新建 DeepSeek Harness 子代理可用的模型与思考强度，并在会话的子代理弹层中只读查看每个子代理最后使用的模型。
 
-## Install
+## 安装
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-model-hub
 ```
 
-Replace `web` with your profile name and restart the profile.
+把 `web` 换成你的 profile 名，安装后重启 profile。
 
-## Use
+## 使用
 
-Open **Settings → Subagents** to add, replace, or remove models, choose their reasoning effort, and add optional task tendencies. These guide the agent when delegating; the agent makes the final choice. With the optional **Model Picker** plugin installed, these model menus upgrade to the shared searchable picker with a reasoning-effort slider; without it they keep working as today.
+- **配置子代理模型**：打开「设置 → 子代理」，添加、替换或移除允许的模型，为每个模型选择思考强度，并填写可选的任务倾向（失焦自动保存）。开启「启用子代理选模」前需至少添加一个模型；这些配置供智能体委派时参考，最终选模仍由智能体决定。
+- **可选菜单升级**：如果同时安装了「模型选择器」（`@klarkxy/dsh-model-picker`），此处的模型菜单会升级为带搜索与推理档位滑杆的共享选择器；未安装时保持现有控件不变。
+- **查看已用模型**：在会话顶部的子代理数量或面包屑切换器中打开子代理弹层，可只读查看每个子代理最后使用的模型与思考强度。
 
-In a conversation, open the subagent count or switcher to see each child's last-used model and effort. This is read-only.
+## 主要限制
 
-## Limits
+- 名单修改仅对新建会话生效，已有会话继续沿用创建时保存的名单；思考强度仅用于新建子代理，不会修改正在运行的子代理。
+- 显式选模需要宿主委派工具支持指定子代理模型；省略模型时仍继承父代理模型。
+- 模型与思考强度选项来自宿主目录；读取失败时可点击「重试」，其他可用提供方不受影响。
+- 子代理弹层依赖宿主私有的树结构与样式约定，且仅对发生过模型请求的子代理显示路由（外部子代理和尚未发起模型请求的子代理不会显示模型路由）。
+- 在别处修改配置会自动同步；发生编辑冲突时按提示刷新核对后再试。
 
-- List changes apply to new conversations; existing conversations keep their saved lists. Effort preferences guide new subagents and do not change running ones.
-- Selection requires host tools that support choosing a subagent model. Omitting a model still inherits the parent model.
-- Model lists use the host's model and effort metadata. If loading fails, use **Retry**; available providers remain usable.
-- The popup uses the host's private tree and style hooks, so host changes may require a plugin update. External subagents and children without a model request have no route to show.
-- Settings changed elsewhere update automatically; refresh to resolve a conflicting edit.
-
-## License
+## 许可证
 
 [SATA License 2.1](LICENSE)

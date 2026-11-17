@@ -101,6 +101,78 @@ test("a missing README language warns and retains the shipped language", async (
   assert.match(warnings[0], /does not ship missing.md/);
 });
 
+test("post-flip archive resolves Chinese README.md and English README.en.md without warnings", async () => {
+  const postPlugin = { package: "@example/post-plugin", readme: { zh: "README.md", en: "README.en.md" } };
+  const buffer = await archive([
+    ["package/package.json", JSON.stringify({ name: postPlugin.package, version, license: "SEE LICENSE IN LICENSE" })],
+    ["package/README.md", "# 新插件\n\n简体中文 / [English](README.en.md)\n\n中文默认文档"],
+    ["package/README.en.md", "# New plugin\n\n[简体中文](README.md) / English\n\nEnglish alternate README"],
+  ]);
+  const metadata = {
+    "dist-tags": { latest: version },
+    time: { created: "2026-01-01", [version]: "2026-10-01" },
+    versions: { [version]: { name: postPlugin.package, version, dist: { tarball, integrity: integrity(buffer) } } },
+  };
+  const warnings = [];
+  const result = await fetchPackage(postPlugin, {
+    fetcher: async url => url === tarball ? new Response(buffer) : Response.json(metadata),
+    sleep: async () => {},
+    warn: text => warnings.push(text),
+  });
+  assert.deepEqual(warnings, []);
+  assert.equal(result.readme.zh.path, "README.md");
+  assert.match(result.readme.zh.text, /中文默认文档/);
+  assert.equal(result.readme.en.path, "README.en.md");
+  assert.match(result.readme.en.text, /English alternate README/);
+});
+
+test("pre-flip legacy tarballs resolve (docs/)README.zh-CN.md as zh and README.md as en without warnings", async () => {
+  const postPlugin = { package: plugin.package, readme: { zh: "README.md", en: "README.en.md" } };
+  for (const zhLegacyPath of ["docs/README.zh-CN.md", "README.zh-CN.md"]) {
+    const buffer = await archive([
+      ["package/package.json", JSON.stringify({ name: postPlugin.package, version, license: "SEE LICENSE IN LICENSE" })],
+      ["package/README.md", `# Legacy English\n\n[简体中文](${zhLegacyPath})\n\nEnglish content`],
+      [`package/${zhLegacyPath}`, "# 旧版中文\n\n[English](../README.md)\n\n中文内容"],
+    ]);
+    const metadata = {
+      "dist-tags": { latest: version },
+      time: { created: "2026-01-01", [version]: "2026-10-01" },
+      versions: { [version]: { name: postPlugin.package, version, dist: { tarball, integrity: integrity(buffer) } } },
+    };
+    const warnings = [];
+    const result = await fetchPackage(postPlugin, {
+      fetcher: async url => url === tarball ? new Response(buffer) : Response.json(metadata),
+      sleep: async () => {},
+      warn: text => warnings.push(text),
+    });
+    assert.deepEqual(warnings, []);
+    assert.equal(result.readme.zh.path, zhLegacyPath);
+    assert.match(result.readme.zh.text, /中文内容/);
+    assert.equal(result.readme.en.path, "README.md");
+    assert.match(result.readme.en.text, /English content/);
+  }
+
+  // Without any legacy Chinese README, a missing README.en.md still warns.
+  const onlyZh = await archive([
+    ["package/package.json", JSON.stringify({ name: postPlugin.package, version, license: "SEE LICENSE IN LICENSE" })],
+    ["package/README.md", "# 仅中文\n\n缺少英文"],
+  ]);
+  const onlyZhMeta = {
+    "dist-tags": { latest: version },
+    time: { created: "2026-01-01", [version]: "2026-10-01" },
+    versions: { [version]: { name: postPlugin.package, version, dist: { tarball, integrity: integrity(onlyZh) } } },
+  };
+  const warnings = [];
+  const missingEn = await fetchPackage(postPlugin, {
+    fetcher: async url => url === tarball ? new Response(onlyZh) : Response.json(onlyZhMeta),
+    sleep: async () => {},
+    warn: text => warnings.push(text),
+  });
+  assert.match(missingEn.readme.zh.text, /缺少英文/);
+  assert.equal(missingEn.readme.en, undefined);
+  assert.match(warnings[0], /does not ship README\.en\.md/);
+});
+
 test("archive readers ignore symlinks and drain files not needed by the site", async () => {
   const input = await fixture([["package/secret-link", "", "symlink"], ["package/lib/code.js", "not retained"]]);
   const result = await readArchive(input.buffer, new Set(["package.json"]));

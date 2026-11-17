@@ -1,45 +1,44 @@
-# Auto Title
+# 自动标题
 
 <!-- release-state-note -->
 
-[简体中文](docs/README.zh-CN.md)
+简体中文 / [English](README.en.md)
 
-Keeps each DeepSeek Harness session title on the task you are working on; titles you rename by hand stay put.
+让 DeepSeek Harness 的会话标题紧跟当前处理的任务，同时保留你手动修改过的标题不被覆盖。
 
-```text
-0903 | Fix | Login callback fails
-```
-
-## Install
+## 安装
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-current-title
 ```
 
-Replace `web` with your profile name and restart it if DSH asks. Auto Title is enabled after installation and can be turned off in the plugin list.
+把 `web` 换成你的 profile 名，DSH 提示时重启 profile。安装后默认启用，可在插件列表中关闭。
 
-## Use
+## 使用
 
-Titles update automatically. Expand **Auto Title** under **Settings → Session Management** to:
+插件安装后会自动按任务更新标题，输出格式为「月日 | 类型 | 摘要」：
 
-- choose whether titles follow every message or only the first one;
-- add your own title instruction;
-- pick a title model (empty follows the default auxiliary model);
-- regenerate the title of the open session.
+```text
+0903 | 修复 | 登录回调失败
+```
 
-With the optional **Model Picker** plugin installed, these model menus upgrade to the shared searchable picker with a reasoning-effort slider; without it they keep working as today.
+在「设置 → 会话管理 → 自动标题」中可以查看和调整以下选项：
 
-When the title model is left empty the feature follows the **default auxiliary model**; with no default set it uses the current session model, then the host default chat model. The default auxiliary model is shared: set it once under **Settings → Session Management**, and every feature that follows it uses the same one.
+- **当前会话**：查看当前标题（手动改名后会标注「已手动命名」），点击「重新生成」刷新当前会话标题，或点击「重新加载（丢弃草稿）」重新读取设置。如果标题服务未接管，页面会提示状态并提供「重试」按钮。
+- **标题提示词**：填写自定义标题生成要求，离开输入框即自动保存；留空则使用内置提示词，仍返回类型与摘要。
+- **标题模型**：为标题生成单独指定模型，或保持「默认辅助模型」。列表读取失败或部分提供商不可用时，可点击旁的「重试」，重试不会丢弃已保存的模型和提示词草稿。
+- **更新节奏**：选择「跟随当前任务（每条消息）」或「仅首条消息」。
 
-When the model list fails to load or some providers are unavailable, use **Retry** beside the model picker; retrying keeps your saved model and prompt draft.
+当标题模型保持「默认辅助模型」且未设置全局默认辅助模型时，依次回落到当前会话模型和宿主默认对话模型。「默认辅助模型」在「设置 → 会话管理」中配置一次，所有跟随它的功能共用同一个模型。安装可选的「模型选择器」插件后，模型菜单会升级为带搜索和思考强度滑杆的共享选择器；未安装时保持现有控件不变。
 
-## Limits
+## 主要限制
 
-- Each title costs one model call at the model's lowest supported reasoning effort; a failed generation keeps the existing title.
-- Every call rebuilds its input from the session's current messages; earlier title answers are never fed back into later ones. If the shared default auxiliary model cannot be read, generation fails rather than using a model you did not choose.
-- Cancellation and timeouts wait for the model call to stop; a provider that ignores cancellation can delay completion.
-- Turning the plugin off hands titles back to the built-in DSH title feature.
+- 每次生成标题会调用一次模型，并使用该模型支持的最低思考强度；生成失败时保留原标题。
+- 每次调用都根据会话当前消息重新组织输入，不会把历史生成的标题带回后续调用；委派子代理会话会跳过自动标题生成，保留宿主默认标题。
+- 跟随共享「默认辅助模型」但无法读取该设置时，生成会直接失败，而不是改用其他未选择的模型。
+- 取消和超时会等待底层模型调用结束；如果模型提供商忽略取消请求，完成时间可能会延后。
+- 停用或卸载本插件后，会话标题生成交还给 DSH 自带的标题功能。
 
-## License
+## 许可证
 
 [SATA License 2.1](LICENSE)
