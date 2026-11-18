@@ -503,20 +503,42 @@ export function renderStudyMarkdown(report: ValidatedStudyReport): string {
   return lines.join('\n')
 }
 
+/** Standalone report sheet. Every selector stays under .zs-page so it is not a host rule. */
+export const STUDY_REPORT_CSS = `
+.zs-page { margin: 0 auto; max-width: 46rem; padding: 2rem 1.25rem 4rem; font: 16px/1.6 Palatino, "Palatino Linotype", "Songti SC", serif; color: #241c15; background: #f6f1e7; color-scheme: light; }
+.zs-page h1, .zs-page h2, .zs-page h3 { font-family: "Avenir Next", "Segoe UI", "PingFang SC", sans-serif; line-height: 1.25; }
+.zs-page a { color: #0f5c56; }
+.zs-page blockquote, .zs-page .zs-note, .zs-page small { color: #5c5146; }
+.zs-page .zs-banner { padding: 0.75rem 1rem; background: #efe4d2; border-left: 4px solid #0f5c56; }
+.zs-page .zs-views { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.75rem; }
+.zs-page .zs-views article, .zs-page .zs-block { background: #fffdf8; border: 1px solid #e2d5c3; padding: 0.75rem 1rem; }
+.zs-page .zs-time { list-style: none; padding: 0; border-left: 3px solid #0f5c56; }
+.zs-page .zs-time li { padding: 0 0 0.8rem 1rem; }
+.zs-page .zs-slider { display: grid; gap: 0.2rem; margin: 0.8rem 0; }
+.zs-page .zs-id, .zs-page code { font-family: ui-monospace, monospace; }
+.zs-page .zs-id { font-size: 0.85em; }
+`.trim()
+
 export const STUDY_PAGE_SCRIPT = `function zhihuStudyEvaluate(formula, values) {
   var index = 0;
   var tokens = [];
   var i = 0;
+  function pushToken(kind, text) {
+    var item = {};
+    item.kind = kind;
+    item.text = text;
+    tokens.push(item);
+  }
   while (i < formula.length) {
     var char = formula.charAt(i);
     if (char === ' ' || char === '\\t') { i += 1; continue; }
-    if ('+-*/'.indexOf(char) >= 0) { tokens.push({ kind: 'op', text: char }); i += 1; continue; }
-    if (char === '(') { tokens.push({ kind: 'lp', text: char }); i += 1; continue; }
-    if (char === ')') { tokens.push({ kind: 'rp', text: char }); i += 1; continue; }
+    if ('+-*/'.indexOf(char) >= 0) { pushToken('op', char); i += 1; continue; }
+    if (char === '(') { pushToken('lp', char); i += 1; continue; }
+    if (char === ')') { pushToken('rp', char); i += 1; continue; }
     var number = /^\\d+(?:\\.\\d+)?/.exec(formula.slice(i));
-    if (number) { tokens.push({ kind: 'num', text: number[0] }); i += number[0].length; continue; }
+    if (number) { pushToken('num', number[0]); i += number[0].length; continue; }
     var name = /^[A-Za-z_][A-Za-z0-9_]*/.exec(formula.slice(i));
-    if (name) { tokens.push({ kind: 'id', text: name[0] }); i += name[0].length; continue; }
+    if (name) { pushToken('id', name[0]); i += name[0].length; continue; }
     return null;
   }
   function peek() { return tokens[index]; }
@@ -568,7 +590,9 @@ function zhihuStudyBind() {
   if (typeof document === 'undefined') return;
   var node = document.getElementById('zs-data');
   if (!node) return;
-  var data = JSON.parse(node.textContent || '{"blocks":[]}');
+  var data = JSON.parse(node.textContent || 'null');
+  if (!data) data = {};
+  if (!data.blocks) data.blocks = [];
   function paint(block) {
     var values = {};
     block.inputs.forEach(function (input) {
@@ -657,23 +681,9 @@ export function renderStudyHtml(report: ValidatedStudyReport): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'">
 <title>${escapeHtml(report.title)}</title>
-<style>
-  :root { color-scheme: light; }
-  body { margin: 0 auto; max-width: 46rem; padding: 2rem 1.25rem 4rem; font: 16px/1.6 "Iowan Old Style", Palatino, "Palatino Linotype", "Songti SC", serif; color: #241c15; background: #f6f1e7; }
-  h1, h2, h3 { font-family: "Avenir Next", "Segoe UI", "PingFang SC", sans-serif; line-height: 1.25; }
-  a { color: #0f5c56; }
-  blockquote, .zs-note, small { color: #5c5146; }
-  .zs-banner { padding: 0.75rem 1rem; background: #efe4d2; border-left: 4px solid #0f5c56; }
-  .zs-views { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.75rem; }
-  .zs-views article, .zs-block { background: #fffdf8; border: 1px solid #e2d5c3; padding: 0.75rem 1rem; }
-  .zs-time { list-style: none; padding: 0; border-left: 3px solid #0f5c56; }
-  .zs-time li { padding: 0 0 0.8rem 1rem; }
-  .zs-slider { display: grid; gap: 0.2rem; margin: 0.8rem 0; }
-  .zs-id { font-family: ui-monospace, monospace; font-size: 0.85em; }
-  code { font-family: ui-monospace, monospace; }
-</style>
+<style>${STUDY_REPORT_CSS}</style>
 </head>
-<body>
+<body class="zs-page">
 <main>
 <h1>${escapeHtml(report.title)}</h1>
 <p>${escapeHtml(report.question)}</p>
