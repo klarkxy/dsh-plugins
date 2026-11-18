@@ -173,6 +173,42 @@ describe('validateView: flow / explore / map', () => {
   })
 })
 
+describe('checkShownView deep nesting', () => {
+  const nestedArray = (layers: number) => {
+    let value: unknown = 0
+    for (let layer = 0; layer < layers; layer += 1) value = [value]
+    return value
+  }
+  const utf8Length = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length
+
+  it('returns a validation error for a 1600-layer nested array inside the byte limit', () => {
+    const sent = nestedArray(1600)
+    expect(utf8Length(sent)).toBe(3201)
+    expect(utf8Length(sent)).toBeLessThan(8192)
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      expect(checkShownView('', sent)).toEqual({ error: 'view: expected a component object' })
+    }
+  })
+
+  it('still rejects a nested array deeper than the old stack overflow, without throwing', () => {
+    const sent = nestedArray(4000)
+    expect(utf8Length(sent)).toBe(8001)
+    expect(utf8Length(sent)).toBeLessThan(8192)
+    expect(checkShownView('', sent)).toEqual({ error: 'view: expected a component object' })
+  })
+
+  it('rejects a deeply nested table cell as too long instead of throwing', () => {
+    const sent = {
+      type: 'table',
+      columns: [{ key: 'a', label: 'A' }],
+      rows: [[nestedArray(1600)]],
+    }
+    expect(utf8Length(sent)).toBeLessThan(8192)
+    const shown = checkShownView('', sent) as { error?: string }
+    expect(shown.error).toContain('characters exceeds the limit')
+  })
+})
+
 describe('checkShownView wire checks', () => {
   it('trims the title, enforces the byte limit before normalize, and rejects a non-string title', () => {
     const shown = checkShownView('  Title  ', stack(flowNode))

@@ -44,6 +44,12 @@ const PROPS = {
 const FIELD_PROPS = ['id', 'label', 'placeholder', 'value', 'multiline', 'readOnly']
 const STEP_STATUSES = ['done', 'active', 'pending', 'blocked']
 const MAX_DEPTH = 8
+// Component nesting stops at MAX_DEPTH. This cap is separate: it bounds every
+// array and object normalizeView walks. A nested array still fits in
+// VIEW_BYTE_LIMIT at a few thousand levels, and the recursive walk overflows
+// the stack before that (sooner after this function grew a larger frame).
+// Past the cap the raw value stays in place so validation can reject it.
+const MAX_NORMALIZE_DEPTH = 64
 const MAX_NODES = 64
 const MAX_CHILDREN = 16
 const MAX_TEXT = 2000
@@ -405,26 +411,34 @@ function normalizeComponent(out, depth, state) {
 // A form field's `value` is the text the user starts with, so `value` inside a
 // `fields` array keeps its type: "42" must stay text, not become a number.
 // Returns a new object; the input is not mutated.
-export function normalizeView(value, inFormFields = false, depth = 0, state = { seq: 0, ids: new Set() }) {
-  if (Array.isArray(value)) return value.map(item => normalizeView(item, inFormFields, depth, state))
-  if (!isRecord(value)) return value
-  const keys = Object.keys(value)
-  // Unwrap recursively: a provider may nest the wrapper, as { item: { item: [...] } }.
-  if (keys.length === 1 && keys[0] === 'item') {
-    const inner = normalizeView(value.item, inFormFields, depth, state)
-    if (Array.isArray(inner)) return inner
+export function normalizeView(value, inFormFields = false, depth = 0, state = { seq: 0, ids: new Set(), nesting: 0 }) {
+  // `depth` is layout nesting for normalizeComponent. `state.nesting` counts
+  // every array element and object, which is what overflows the stack.
+  if (state.nesting > MAX_NORMALIZE_DEPTH) return value
+  state.nesting += 1
+  try {
+    if (Array.isArray(value)) return value.map(item => normalizeView(item, inFormFields, depth, state))
+    if (!isRecord(value)) return value
+    const keys = Object.keys(value)
+    // Unwrap recursively: a provider may nest the wrapper, as { item: { item: [...] } }.
+    if (keys.length === 1 && keys[0] === 'item') {
+      const inner = normalizeView(value.item, inFormFields, depth, state)
+      if (Array.isArray(inner)) return inner
+    }
+    // Define own properties: an incoming "__proto__" key must become data the
+    // validator can reject, not hit the prototype setter and vanish from the JSON.
+    const out = {}
+    const isLayout = typeof value.type === 'string' && LAYOUT.includes(value.type)
+    for (const key of keys) {
+      const nextDepth = isLayout && key === 'children' ? depth + 1 : depth
+      setOwn(out, key, normalizeView(value[key], inFormFields || key === 'fields', nextDepth, state))
+    }
+    for (const field of NUMERIC) if ((field !== 'value' || !inFormFields) && Object.hasOwn(out, field)) out[field] = numeric(out[field])
+    if (Array.isArray(out.values)) out.values = out.values.map(numeric)
+    return normalizeComponent(out, depth, state)
+  } finally {
+    state.nesting -= 1
   }
-  // Define own properties: an incoming "__proto__" key must become data the
-  // validator can reject, not hit the prototype setter and vanish from the JSON.
-  const out = {}
-  const isLayout = typeof value.type === 'string' && LAYOUT.includes(value.type)
-  for (const key of keys) {
-    const nextDepth = isLayout && key === 'children' ? depth + 1 : depth
-    setOwn(out, key, normalizeView(value[key], inFormFields || key === 'fields', nextDepth, state))
-  }
-  for (const field of NUMERIC) if ((field !== 'value' || !inFormFields) && Object.hasOwn(out, field)) out[field] = numeric(out[field])
-  if (Array.isArray(out.values)) out.values = out.values.map(numeric)
-  return normalizeComponent(out, depth, state)
 }
 
 export function validateView(view) {
@@ -449,8 +463,18 @@ export function checkShownView(title, sent) {
     return { error: 'title: expected a string' }
   }
   const named = String(title || inlineTitle || '').trim()
-  const view = normalizeView(sent)
-  const checked = validateView(view)
+  // The byte check above only catches JSON.stringify. Normalization is capped,
+  // and any RangeError that still escapes becomes a rejected view rather than
+  // an uncaught exception on the tool call.
+  let view
+  let checked
+  try {
+    view = normalizeView(sent)
+    checked = validateView(view)
+  } catch (error) {
+    if (error instanceof RangeError) return { error: 'The view is nested too deeply to check.' }
+    throw error
+  }
   if (!checked.ok) return { error: checked.error }
   return { title: named, view, interactive: checked.interactive }
 }
