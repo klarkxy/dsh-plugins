@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-route",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Shared library that lets DSH plugins describe provider, model, and reasoning-effort settings consistently and share model lists and picker menus; installed automatically by dependent plugins.",
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-route/",
   "license": "SEE LICENSE IN LICENSE",
@@ -107,6 +107,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "dd788847e11f92611a4c82998f34b1fa3d58a4e420a56717ef93987da257b069"
+    "contentHash": "fec6309078eac5e6ecfc90b79d3e30e10c86b2d498ce376e17a158630f822180"
   }
 }

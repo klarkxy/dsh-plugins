@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-context-cleaner",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Hide the plugin-info and promotion cards at the top of the dsh-context dashboard.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -66,6 +66,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "13c5e67f9b0bec7127312a32a66c7f96d5f347072c4d52b69e67f920edace6a7"
+    "contentHash": "07e0c8e030dee7b67a42a032c5eed990492597f3927b9805e61524bca334ba05"
   }
 }

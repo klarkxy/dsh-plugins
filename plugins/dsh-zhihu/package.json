@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-zhihu",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Zhihu site and web search, hot list, Zhida AI answers, knowledge bases, question recommendations and answer summaries, published content and comments, creator stats, quota tracking, and draft sync with image uploads.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -162,6 +162,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "e8352ab220a65f957f85dac0e5e0d9e01805cb6ee6e36eba2d2a741b0d51644b"
+    "contentHash": "4fadee53b5ef8784d81273121905ca745b6002bc294c6abfe36c802fd3148477"
   }
 }
