@@ -3,7 +3,7 @@ import type { ShownView } from './contracts.ts'
 
 export type TextPart = { kind: 'markdown' | 'view'; key: string; text: string; shown?: ShownView }
 /**
- * Single-fence-body compile result. 'partial' means JSON.parse failed, which a
+ * Single-fence-body compile result. 'partial' means JSON parsing failed, which a
  * streaming caller may keep waiting on; 'invalid' means the JSON parsed and
  * checkShownView rejected it, a definitive failure for the same text.
  */
@@ -13,21 +13,106 @@ export type DeepUiCompile =
   | { state: 'partial' }
 
 /**
- * Compile one deepui/deep-view fence body: JSON.parse, then checkShownView on
- * either {title, view} or a bare ViewNode. Callers decide how to present
- * 'partial' while streaming versus after the fence is final.
+ * String-aware cleanup for closed model fences: strips `//` and block comments,
+ * escapes raw literal control newlines/tabs inside JSON strings, and drops
+ * trailing commas before `}` or `]`. Incomplete streaming prefixes keep their
+ * unclosed brackets and still fail `JSON.parse`, preserving 'partial' state.
+ */
+export function sanitizeLenientJson(source: string): string {
+  let out = ''
+  let inString = false
+  let index = 0
+  while (index < source.length) {
+    const ch = source[index]
+    if (inString) {
+      if (ch === '\\' && index + 1 < source.length) {
+        out += ch + source[index + 1]
+        index += 2
+        continue
+      }
+      if (ch === '"') {
+        inString = false
+        out += ch
+        index += 1
+        continue
+      }
+      if (ch === '\n') { out += '\\n'; index += 1; continue }
+      if (ch === '\r') { out += '\\r'; index += 1; continue }
+      if (ch === '\t') { out += '\\t'; index += 1; continue }
+      out += ch
+      index += 1
+      continue
+    }
+    if (ch === '"') {
+      inString = true
+      out += ch
+      index += 1
+      continue
+    }
+    if (ch === '/' && source[index + 1] === '/') {
+      index += 2
+      while (index < source.length && source[index] !== '\n') index += 1
+      continue
+    }
+    if (ch === '/' && source[index + 1] === '*') {
+      const end = source.indexOf('*/', index + 2)
+      if (end === -1) return source
+      index = end + 2
+      continue
+    }
+    out += ch
+    index += 1
+  }
+  if (inString) return source
+  // Remove trailing commas outside string literals without disturbing strings.
+  let cleaned = ''
+  let quoted = false
+  for (let i = 0; i < out.length; i += 1) {
+    const c = out[i]
+    if (quoted) {
+      if (c === '\\' && i + 1 < out.length) { cleaned += c + out[i + 1]; i += 1; continue }
+      if (c === '"') quoted = false
+      cleaned += c
+      continue
+    }
+    if (c === '"') { quoted = true; cleaned += c; continue }
+    if (c === ',') {
+      let lookahead = i + 1
+      while (lookahead < out.length && /\s/.test(out[lookahead]!)) lookahead += 1
+      if (out[lookahead] === '}' || out[lookahead] === ']') continue
+    }
+    cleaned += c
+  }
+  return cleaned
+}
+
+function parseJsonBody(body: string): { ok: true; value: unknown } | { ok: false } {
+  try {
+    return { ok: true, value: JSON.parse(body) }
+  } catch {
+    try {
+      return { ok: true, value: JSON.parse(sanitizeLenientJson(body)) }
+    } catch {
+      return { ok: false }
+    }
+  }
+}
+
+/**
+ * Compile one deepui/deep-view fence body: JSON.parse (with lenient fallback for
+ * trailing commas/comments), then checkShownView on either {title, view} or a
+ * bare ViewNode. Callers decide how to present 'partial' while streaming versus
+ * after the fence is final.
  */
 export function compileDeepUi(body: string): DeepUiCompile {
-  try {
-    const payload: unknown = JSON.parse(body)
-    const record = payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : undefined
-    const sent = record && Object.hasOwn(record, 'view') ? record.view : payload
-    const title = record && Object.hasOwn(record, 'view') && typeof record.title === 'string' ? record.title : undefined
-    const shown = checkShownView(title, sent) as ShownView | { error: string }
-    return 'error' in shown ? { state: 'invalid', error: shown.error } : { state: 'complete', shown }
-  } catch {
-    return { state: 'partial' }
-  }
+  const parsed = parseJsonBody(body)
+  if (!parsed.ok) return { state: 'partial' }
+  const payload = parsed.value
+  const record = payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : undefined
+  const sent = record && Object.hasOwn(record, 'view') ? record.view : payload
+  const title = record && Object.hasOwn(record, 'view') ? record.title : undefined
+  const shown = checkShownView(title, sent) as ShownView | { error: string }
+  return 'error' in shown ? { state: 'invalid', error: shown.error } : { state: 'complete', shown }
 }
 type Fence = { at: number; marker: string; language: string; contentStart: number }
 const OPEN = /(^|\n)(`{3,}|~{3,})([^\r\n`~]*)(?:\n|$)/g

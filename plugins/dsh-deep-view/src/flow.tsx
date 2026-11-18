@@ -13,7 +13,7 @@ import type {
 import { asText } from './core/index.js'
 import type { ViewNode } from './contracts.ts'
 import type { RichNodeProps } from './rich-types.ts'
-import { english, type ViewT } from './ui.tsx'
+import { english } from './ui.tsx'
 
 export type FlowTone = 'neutral' | 'accent' | 'success' | 'warn' | 'bad'
 export type FlowNodeData = { label: string; detail: string; tone: FlowTone }
@@ -28,6 +28,20 @@ const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(
 export const flowToneOf = (tone: unknown): FlowTone => TONES.includes(tone as FlowTone) ? tone as FlowTone : 'neutral'
 /** First selected node id; the canvas never produces a multi-node selection. */
 export const selectedFlowNodeId = (nodes: readonly FlowGraphNode[]) => nodes.find(item => item.selected === true)?.id ?? ''
+
+function edgeHandles(sourcePos: { x: number; y: number } | undefined, targetPos: { x: number; y: number } | undefined): { sourceHandle: string; targetHandle: string } {
+  if (!sourcePos || !targetPos) return { sourceHandle: 's-right', targetHandle: 't-left' }
+  const dx = targetPos.x - sourcePos.x
+  const dy = targetPos.y - sourcePos.y
+  if (Math.abs(dy) > Math.abs(dx) * 1.15) {
+    return dy >= 0
+      ? { sourceHandle: 's-bottom', targetHandle: 't-top' }
+      : { sourceHandle: 's-top', targetHandle: 't-bottom' }
+  }
+  return dx >= 0
+    ? { sourceHandle: 's-right', targetHandle: 't-left' }
+    : { sourceHandle: 's-left', targetHandle: 't-right' }
+}
 
 export function flowGraph(node: ViewNode, selectedId?: unknown): { nodes: FlowGraphNode[]; edges: FlowGraphEdge[] } {
   const seen = new Set<string>()
@@ -47,21 +61,29 @@ export function flowGraph(node: ViewNode, selectedId?: unknown): { nodes: FlowGr
       selected: typeof selectedId === 'string' && selectedId !== '' && id === selectedId,
     } satisfies FlowGraphNode
   }).filter((item, index, all) => item.id !== '' && all.findIndex(other => other.id === item.id) === index)
+  const positionById = new Map(nodes.map(item => [item.id, item.position]))
   const edges = (Array.isArray(node.edges) ? node.edges : [])
     .filter(item => item !== null && typeof item === 'object')
-    .map(item => ({
-      id: asText(item.id) || `${asText(item.source)}→${asText(item.target)}`,
-      type: 'smoothstep' as const,
-      source: asText(item.source),
-      target: asText(item.target),
-      label: item.label === undefined ? undefined : asText(item.label),
-      className: 'dvui-flow-edge',
-      selectable: false,
-      deletable: false,
-      reconnectable: false,
-      focusable: false,
-      markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
-    } satisfies FlowGraphEdge))
+    .map(item => {
+      const source = asText(item.source)
+      const target = asText(item.target)
+      const handles = edgeHandles(positionById.get(source), positionById.get(target))
+      return {
+        id: asText(item.id) || `${source}→${target}`,
+        type: 'smoothstep' as const,
+        source,
+        target,
+        sourceHandle: handles.sourceHandle,
+        targetHandle: handles.targetHandle,
+        label: item.label === undefined ? undefined : asText(item.label),
+        className: 'dvui-flow-edge',
+        selectable: false,
+        deletable: false,
+        reconnectable: false,
+        focusable: false,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
+      } satisfies FlowGraphEdge
+    })
     .filter(item => item.source !== '' && item.target !== '' && seen.has(item.source) && seen.has(item.target))
   return { nodes, edges }
 }
@@ -74,17 +96,30 @@ export function applyFlowEdgeChanges(edges: readonly FlowGraphEdge[], changes: r
 }
 
 // One closed node type, registered once so React Flow never unmounts nodes when
-// FlowView re-renders. Handles exist so edges can attach; they are styled away
-// in CSS and connectable stays false.
+// FlowView re-renders. Four directional handle pairs let horizontal and vertical
+// layouts route along facing edges without S-loop detours.
 function DvuiFlowNode({ data }: NodeProps<FlowGraphNode>) {
   return <div className="dvui-flow-node-body">
     <span className="dvui-flow-node-label">{data.label}</span>
     {data.detail !== '' ? <span className="dvui-flow-node-detail">{data.detail}</span> : null}
-    <Handle type="target" position={Position.Left} isConnectable={false} />
-    <Handle type="source" position={Position.Right} isConnectable={false} />
+    <Handle id="t-left" type="target" position={Position.Left} isConnectable={false} />
+    <Handle id="t-top" type="target" position={Position.Top} isConnectable={false} />
+    <Handle id="t-right" type="target" position={Position.Right} isConnectable={false} />
+    <Handle id="t-bottom" type="target" position={Position.Bottom} isConnectable={false} />
+    <Handle id="s-right" type="source" position={Position.Right} isConnectable={false} />
+    <Handle id="s-bottom" type="source" position={Position.Bottom} isConnectable={false} />
+    <Handle id="s-left" type="source" position={Position.Left} isConnectable={false} />
+    <Handle id="s-top" type="source" position={Position.Top} isConnectable={false} />
   </div>
 }
 const NODE_TYPES = { [FLOW_NODE_TYPE]: DvuiFlowNode }
+
+function flowCanvasHeight(nodes: readonly FlowGraphNode[]): number {
+  if (nodes.length === 0) return 240
+  const ys = nodes.map(item => item.position.y)
+  const span = Math.max(...ys) - Math.min(...ys)
+  return Math.min(420, Math.max(236, Math.round(span + 150)))
+}
 
 export function FlowView({ node, lookup, setInput, t = english, editable = true }: RichNodeProps & { editable?: boolean }) {
   const selectedId = (() => { try { return node.id ? lookup(node.id) : '' } catch { return '' } })()
@@ -118,8 +153,10 @@ export function FlowView({ node, lookup, setInput, t = english, editable = true 
     const id = selectedFlowNodeId(rfNodes)
     return id === '' ? undefined : rfNodes.find(item => item.id === id)
   }, [rfNodes])
+  const height = useMemo(() => flowCanvasHeight(graph.nodes), [graph.nodes])
+  const caption = typeof node.caption === 'string' && node.caption !== '' ? node.caption : ''
   return <div className="dvui-flow">
-    <div className="dvui-flow-canvas" style={{ height: 320 }}>
+    <div className="dvui-flow-canvas" style={{ height }}>
       <ReactFlow
         nodes={rfNodes}
         edges={rfEdges}
@@ -128,9 +165,9 @@ export function FlowView({ node, lookup, setInput, t = english, editable = true 
         onSelectionChange={onSelectionChange}
         nodeTypes={NODE_TYPES}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
-        minZoom={0.2}
-        maxZoom={2.5}
+        fitViewOptions={{ padding: 0.22 }}
+        minZoom={0.25}
+        maxZoom={2.2}
         nodesDraggable={editable}
         nodesConnectable={false}
         elementsSelectable={editable}
@@ -144,7 +181,7 @@ export function FlowView({ node, lookup, setInput, t = english, editable = true 
       >
         <Background gap={20} className="dvui-flow-background" />
         <Controls showInteractive={false} position="top-left" />
-        <MiniMap pannable zoomable position="bottom-left" />
+        {rfNodes.length >= 8 ? <MiniMap pannable zoomable position="bottom-left" /> : null}
       </ReactFlow>
     </div>
     <div className="dvui-flow-selection" aria-live="polite">
@@ -152,5 +189,6 @@ export function FlowView({ node, lookup, setInput, t = english, editable = true 
         ? <span className="dvui-flow-hint">{t('Select a node')}</span>
         : <span className="dvui-flow-detail" data-tone={selected.data.tone}><strong className="dvui-flow-detail-label">{selected.data.label}</strong>{selected.data.detail !== '' ? <span className="dvui-flow-detail-text">{selected.data.detail}</span> : null}</span>}
     </div>
+    {caption !== '' ? <div className="dvui-caption">{caption}</div> : null}
   </div>
 }
