@@ -51,6 +51,7 @@ describe('zhihu_research global_search', () => {
       expect(u.searchParams.get('Query')).toBe('写作工具')
       expect(u.searchParams.get('Count')).toBe('20')
       expect(u.searchParams.get('SearchDB')).toBe('realtime')
+      expect(u.searchParams.has('Filter')).toBe(false)
       return jsonResponse(ENVELOPE({ Items: [{ Title: 't', ContentType: 'article', Url: 'u', ContentText: 's' }] }))
     })
     const result = await executeZhihuGlobalSearch(' 写作工具 ', 99, 'realtime', { fetcher, env: ENV })

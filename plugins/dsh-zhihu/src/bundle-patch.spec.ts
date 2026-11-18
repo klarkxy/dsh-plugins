@@ -24,6 +24,8 @@ describe('default-on bundle patch', () => {
 
   it('mounts the tools entry so its tools need no agent preset', () => {
     expect(patch).toMatch(/- id: zhihu-tools\n\s+name: '@klarkxy\/dsh-zhihu\/tools'/)
+    expect(patch).toMatch(/- id: zhihu-study\n\s+name: '@klarkxy\/dsh-zhihu\/study'/)
+    expect(Object.keys(manifest.exports)).toContain('./study')
     expect(Object.keys(manifest.exports)).toContain('./tools')
     expect(patch).not.toMatch(/disabled:\s*true/)
   })

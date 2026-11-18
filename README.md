@@ -22,7 +22,7 @@ klarkxy 的 DeepSeek Harness（DSH）插件集合。可前往[插件站点](http
 | 模型与联网 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | 子代理：配置子代理模型与推理强度、查看最后使用的模型，并按会话启用委派模式。 |
 | 模型与联网 | [`@klarkxy/dsh-model-picker`](plugins/dsh-model-picker/README.md) | 模型选择器：输入框里的模型搜索与推理档位滑杆；其他插件可复用同一选择器。 |
 | 模型与联网 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/README.md) | 网页搜索：在一个设置页管理和排序多家搜索与网页读取服务，内置 DuckDuckGo、Exa、Tavily、Linkup、智谱等，并整合已安装插件的搜索源，为模型提供 `web_search` 与 `web_fetch`。 |
-| 模型与联网 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | 知乎：知乎站内与全网搜索、热榜、Zhida 直答、知识库、问题推荐与回答摘要、内容与评论读取、创作数据与额度统计，以及草稿管理和配图上传。 |
+| 模型与联网 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | 知乎：站内与全网搜索、热榜、直答、知识库、问题与创作数据、草稿配图，以及深度研究、知乎观察和近 30 天速览的取证与本地报告。 |
 | 插件开发 | [`@klarkxy/dsh-dev-index`](plugins/dsh-dev-index/README.md) | DSH 文档：在插件页浏览 DSH 官方开发文档；Creator 模式下智能体另获两个只读工具检索文档与核对插件（`dsh_docs`、`dsh_plugins`）。 |
 
 [`@klarkxy/dsh-plugin-kit`](plugins/dsh-plugin-kit/README.md)（运行时、界面与诊断日志辅助）和 [`@klarkxy/dsh-model-route`](plugins/dsh-model-route/README.md)（模型路由与选择契约）是共享库，其他插件会自动安装它们。

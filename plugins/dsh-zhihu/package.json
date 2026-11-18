@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-zhihu",
   "version": "0.3.4",
-  "description": "Zhihu site and web search, hot list, Zhida AI answers, knowledge bases, question recommendations and answer summaries, published content and comments, creator stats, quota tracking, and draft sync with image uploads.",
+    "description": "Zhihu site and web search, hot list, Zhida AI answers, knowledge bases, bounded deep research, opinion comparison, 30-day briefings with local reports, question recommendations and answer summaries, published content and comments, creator stats, quota tracking, and draft sync with image uploads.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -31,6 +31,11 @@
       "types": "./lib/usage.d.ts",
       "import": "./lib/usage.js",
       "default": "./lib/usage.js"
+    },
+    "./study": {
+      "types": "./lib/study.d.ts",
+      "import": "./lib/study.js",
+      "default": "./lib/study.js"
     },
     "./client": {
       "default": "./lib/client.js"
@@ -83,6 +88,16 @@
         "title": "知乎工具",
         "description": "供写作搭档调用的知乎检索",
         "feature": "zhihu-tools",
+        "requires": [
+          "zhihu"
+        ]
+      },
+      {
+        "id": "zhihu-study",
+        "name": "@klarkxy/dsh-zhihu/study",
+        "title": "知乎研究",
+        "description": "深度研究、知乎观察与近况速览的技能路由",
+        "feature": "zhihu-study",
         "requires": [
           "zhihu"
         ]

@@ -2,6 +2,8 @@
 export const ZHIHU_RESEARCH_TOOL_NAME = 'zhihu_research'
 export const ZHIHU_ACCOUNT_TOOL_NAME = 'zhihu_account'
 export const ZHIHU_SYNC_TOOL_NAME = 'zhihu_sync'
+export const ZHIHU_STUDY_TOOL_NAME = 'zhihu_study'
+export const ZHIHU_STUDY_REPORT_TOOL_NAME = 'zhihu_study_report'
 export const ZHIHU_RPC_CHANNEL = '/zhihu'
 export const ZHIHU_CREDENTIAL_REF = 'ZHIHU_ACCESS_TOKEN'
 export const ZHIHU_SEARCH_EVENT = 'dsh-editor/zhihu-search'

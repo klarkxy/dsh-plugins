@@ -3,3 +3,5 @@
       name: '@klarkxy/dsh-zhihu'
     - id: zhihu-tools
       name: '@klarkxy/dsh-zhihu/tools'
+    - id: zhihu-study
+      name: '@klarkxy/dsh-zhihu/study'

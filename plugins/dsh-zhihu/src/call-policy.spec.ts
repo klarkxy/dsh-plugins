@@ -9,6 +9,7 @@ import { createZhihuService } from './index.ts'
 import { createZhihuResearchTool } from './tool-definitions.ts'
 import { createZhihuWebSearchProvider, registerZhihuGlobalSearchProvider } from './web-search-provider.ts'
 import { executeZhihuOpenPlatform } from './open-platform.ts'
+import { executeZhihuStudy } from './study.ts'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createElement } from 'react'
 import { ZhihuCallPolicySection, ZhihuCallPolicySummary } from './client-call-policy.tsx'
@@ -257,6 +258,27 @@ it('reports the applied server policy without reading official quota or billing'
   await service.dispose()
 })
 
+
+it('lets a study spend one free allowance per upstream call and keeps a blocked call visible', async () => {
+  const paths: string[] = []
+  const fetcher: ZhihuSearchFetcher = async url => {
+    const parsed = new URL(url)
+    paths.push(parsed.pathname)
+    const body = { Code: 0, Data: parsed.pathname === '/api/v1/quota'
+      ? [{ APIID: parsed.searchParams.get('APIIDs'), RemainingQuota: 1 }]
+      : { Items: [{ Title: '一条', Url: 'https://example.com/a', ContentText: '摘录', AuthorityLevel: '2' }], HasMore: false } }
+    return { ok: true, status: 200, async text() { return JSON.stringify(body) }, async json() { return body } }
+  }
+  const result = await executeZhihuStudy({
+    mode: 'deep', question: '普通资料', queries: ['第一问', '第二问'], sources: ['zhihu'], maxCalls: 2,
+  }, { fetcher, env: { ZHIHU_ACCESS_TOKEN: 'fixture-only-token' }, resolveCredential: async () => 'fixture-only-token', callPolicy: { directory } })
+  expect(result.finishedReport).toBe(false)
+  expect(result.status).not.toBe('empty')
+  expect(result.failures).toEqual([expect.objectContaining({ code: 'CALL_BLOCKED', retried: false })])
+  expect(result.evidence.length).toBe(1)
+  expect(paths).toEqual(['/api/v1/quota', '/api/v1/content/zhihu_search', '/api/v1/quota'])
+  expect(paths.some(path => path.includes('chat/completions'))).toBe(false)
+})
 
 it('never reuses an unchanged official free-remaining value across our clients', async () => {
   const results = await Promise.allSettled(Array.from({ length: 5 }, () => withZhihuCallPolicy(business, undefined, async group => [{ APIID: group, RemainingQuota: 1 }], async () => 'ok', options())))

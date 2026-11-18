@@ -44,6 +44,31 @@ export type ZhihuSearchResult = {
   count: number
   items: ZhihuSearchItem[]
   emptyReason?: string
+  /** Present only when upstream returns a boolean. The documented value is fixed false; there is no cursor. */
+  hasMore?: boolean
+  sortBy?: string
+}
+
+const SORT_FIELDS = ['CommentCount', 'VoteUpCount', 'EditTime', 'CreateTime'] as const
+const SORT_DIRECTIONS = ['asc', 'desc', 'none'] as const
+export type ZhihuSortField = (typeof SORT_FIELDS)[number]
+export type ZhihuSortDirection = (typeof SORT_DIRECTIONS)[number]
+
+/** Build the documented SortBy value. Bounds are inclusive unix seconds or counts, not event dates. */
+export function compileZhihuSortBy(field: ZhihuSortField, direction: ZhihuSortDirection = 'desc', min?: number, max?: number): string {
+  if (!(SORT_FIELDS as readonly string[]).includes(field)) throw new ZhihuSearchError('INVALID_ARGUMENTS', 'SortBy 字段无效。')
+  if (!(SORT_DIRECTIONS as readonly string[]).includes(direction)) throw new ZhihuSearchError('INVALID_ARGUMENTS', 'SortBy 方向无效。')
+  const bound = (value: number | undefined, label: string) => {
+    if (value === undefined) return
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+      throw new ZhihuSearchError('INVALID_ARGUMENTS', `${label} 必须是非负整数。`)
+    }
+  }
+  bound(min, 'SortBy 下界')
+  bound(max, 'SortBy 上界')
+  if (min !== undefined && max !== undefined && min > max) throw new ZhihuSearchError('INVALID_ARGUMENTS', 'SortBy 下界不能大于上界。')
+  const range = min === undefined && max === undefined ? '' : `:(${min ?? ''},${max ?? ''})`
+  return `${field}:${direction}${range}`
 }
 
 export type ZhihuSearchExecuteOptions = ZhihuClientOptions
@@ -62,24 +87,36 @@ function filterItems(data: unknown): { items: Record<string, unknown>[]; emptyRe
   return { items, emptyReason }
 }
 
+export async function fetchZhihuSearchData(
+  query: string,
+  count: number,
+  options: ZhihuSearchExecuteOptions = {},
+  sortBy?: string,
+): Promise<{ query: string; count: number; sortBy?: string; data: unknown }> {
+  const trimmed = query.trim()
+  if (!trimmed) throw new ZhihuSearchError('BAD_RESPONSE', '搜索词不能为空。')
+  const resolvedCount = clampCount(count)
+  const params: Record<string, string> = { Query: trimmed, Count: String(resolvedCount) }
+  if (sortBy) params.SortBy = sortBy
+  const body = await zhihuFetchJson(ZHIHU_SEARCH_PATH, { params }, '知乎搜索', options)
+  return { query: trimmed, count: resolvedCount, ...(sortBy ? { sortBy } : {}), data: parseZhihuEnvelope(body) }
+}
+
 export async function executeZhihuSearch(
   query: string,
   count: number,
   options: ZhihuSearchExecuteOptions = {},
 ): Promise<ZhihuSearchResult> {
-  const trimmed = query.trim()
-  if (!trimmed) throw new ZhihuSearchError('BAD_RESPONSE', '搜索词不能为空。')
-  const resolvedCount = clampCount(count)
-  const body = await zhihuFetchJson(ZHIHU_SEARCH_PATH, {
-    params: { Query: trimmed, Count: String(resolvedCount) },
-  }, '知乎搜索', options)
-  const { items, emptyReason } = filterItems(parseZhihuEnvelope(body))
+  const fetched = await fetchZhihuSearchData(query, count, options)
+  const data = fetched.data as { HasMore?: unknown }
+  const { items, emptyReason } = filterItems(fetched.data)
   return {
     version: ZHIHU_SEARCH_VERSION,
-    query: trimmed,
-    count: resolvedCount,
+    query: fetched.query,
+    count: fetched.count,
     items: items.map(normalizeSearchItem),
     ...(emptyReason !== undefined ? { emptyReason } : {}),
+    ...(typeof data.HasMore === 'boolean' ? { hasMore: data.HasMore } : {}),
   }
 }
 

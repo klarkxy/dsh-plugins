@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsdown'
 export default defineConfig([
   {
-    entry: { index: 'src/index.ts', tools: 'src/tools.ts', contracts: 'src/contracts.ts', usage: 'src/usage.ts' },
+    entry: { index: 'src/index.ts', tools: 'src/tools.ts', contracts: 'src/contracts.ts', usage: 'src/usage.ts', study: 'src/study-plugin.ts' },
     format: ['esm'], dts: true, clean: true, outDir: 'lib', platform: 'node', target: 'node22', sourcemap: true, hash: false,
     deps: { neverBundle: ['@deepseek-ai/cordis'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),

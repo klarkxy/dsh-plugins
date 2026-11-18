@@ -15,6 +15,8 @@ import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
 import { bindZhihuWebSearch } from './web-search-provider.ts'
 import { createZhihuSyncService, zhihuSyncDomainSpec, ZHIHU_SYNC_CREDENTIAL_REFS, ZhihuSyncServiceError } from './sync-service.ts'
 import { executeZhihuOpenPlatform, resolveZhihuOpenPlatformOperation, ZHIHU_OPEN_PLATFORM_APIS, zhihuOpenPlatformResultCount } from './open-platform.ts'
+import { executeZhihuStudy } from './study.ts'
+import { writeZhihuStudyReport } from './study-report.ts'
 
 export const name = '@klarkxy/dsh-zhihu'
 export const inject = ['connection', 'credentials', 'storageDomain', 'webServer'] as const
@@ -100,6 +102,19 @@ export function createZhihuService(
           value = result; results = result.items.length
         } else if (endpoint === 'knowledge.bases') {
           const result = await listZhihuKnowledgeBases(client); value = result; results = result.bases.length
+        } else if (endpoint === 'study' || endpoint === 'study.report') {
+          counted = endpoint === 'study'
+          if (endpoint === 'study') {
+            const result = await executeZhihuStudy(body, client)
+            value = result
+            results = result.evidence.length
+            record({ ok: result.status !== 'failed' && result.status !== 'cancelled', results })
+          } else {
+            const written = await writeZhihuStudyReport(body.directory, body.report)
+            value = { phase: 'report', finishedReport: true, directory: written.directory, markdown: written.markdown, json: written.json, html: written.html }
+            results = 1
+          }
+          return { ok: true, value }
         } else if (endpoint === 'knowledge.upload') {
           const contentBase64 = typeof body.contentBase64 === 'string' ? body.contentBase64 : ''
           if (!contentBase64) throw new Error('缺少文件内容。')
