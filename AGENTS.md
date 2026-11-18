@@ -47,6 +47,16 @@ pnpm check               # 较大改动时全仓检查
 
 提交、推送、npm 发布和站点部署都需用户明确授权；本地清理和文档修改属于本地操作。
 
+## 界面验收
+
+改了用户在 DeepSeek Harness 里看得见或点得到的界面时，合并前按 `CONTRIBUTING.md` 在 PR 正文附上用本 PR 代码录的真实 GIF，并写明录制 commit 与覆盖场景。录制用 `.agents/skills/dsh-web-acceptance/`：临时 home、隔离的 `DSH_HOME` 与 `DSH_AGENTS_HOME`，产物放在仓库外。纯文档、服务端或测试且界面不变时写明原因，不必补无意义 GIF。GIF 不代替自动测试和独立审查。
+
+施工和审查代理不合并、不开启 auto-merge、不直接推 `main`、不删分支、不强推，也不在合并后重建分支。合并由维护者手动完成，或由主对话里的 GitHub 巡检统一自动合并。推送前确认该 PR 仍是 open、远端 head 仍是自己的提交；已经 merged 或 closed 就停止仓库写入并报告。
+
+## 界面验收的旧入口
+
+`.agents/skills/dsh-web-isolated-test/` 已停用。不要再用它的 `start-web.mjs` 或 `shot.mjs`。
+
 ## 参考源码（只读镜像）
 
 - `H:\Refernece\ZCode`：ZCode 完整源码（写本节时 v3.14.3），与 DSH 同族，回答「DSH 实际怎么做」。查会话与子代理生命周期、插件与 hook 派发、RPC 与存储、客户端 UI 与主题 token。入口：`apps/zcode-cli/`（Agent CLI 与运行时）、`packages/{server,services,client,rpc,shared}`（宿主核心）、`packages/ui`、`packages/web`。

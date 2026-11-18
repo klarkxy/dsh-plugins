@@ -1,0 +1,20 @@
+# npm pack of the private workspace root uses this file instead of .gitignore.
+# Plugin tarballs are packed from plugins/<name> and use each package's files list.
+# Acceptance tooling in .agents/ must not be part of a root tarball.
+
+.agents/
+node_modules/
+node_modules.__*/
+.pnpm-store/
+.npm-cache/
+lib/
+coverage/
+*.tgz
+.scratch/
+.artifacts/
+_site/
+e2e/out/
+.playwright-cli/
+debug.log
+outreach/
+.codegraph/
