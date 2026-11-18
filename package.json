@@ -14,6 +14,7 @@
     "test": "pnpm --workspace-concurrency=2 --filter \"{plugins/*}\" test",
     "pack:check": "pnpm --filter \"{plugins/*}\" exec npm pack --dry-run --cache .npm-cache",
     "release:check": "node scripts/release-status.mjs --check-docs && node --test scripts/*.test.mjs",
+    "test:acceptance": "node --test .agents/skills/dsh-web-acceptance/scripts/dsh-qa-harness.test.js",
     "release:status": "node scripts/release-status.mjs",
     "release:docs": "node scripts/release-status.mjs --write-docs",
     "release:fingerprint": "node scripts/release-status.mjs --fingerprint",
@@ -21,7 +22,7 @@
     "site:market": "node site/market.mjs",
     "site:market:check": "node site/market.mjs --check",
     "site:test": "node --test site/*.test.mjs",
-    "check": "pnpm release:check && pnpm site:test && pnpm build && pnpm test:editor-build && pnpm typecheck && pnpm test && pnpm pack:check",
+    "check": "pnpm release:check && pnpm test:acceptance && pnpm site:test && pnpm build && pnpm test:editor-build && pnpm typecheck && pnpm test && pnpm pack:check",
     "test:editor-build": "vitest run --config vitest.editor-plugins.config.ts scripts/editor-plugins",
     "test:e2e:web-search": "node e2e/web-search-settings.mjs",
     "test:e2e:model-hub": "node e2e/model-hub-settings.mjs"
