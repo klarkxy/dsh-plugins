@@ -56,7 +56,7 @@ These three workflows are not separate official endpoints and not three prompts.
 
 1. Call `zhihu_study`. Deep research searches Zhihu and the web; two or three sub-questions fit in the six-call cap, while four sub-questions plus both sources are rejected before any request. Observation searches both. A briefing freezes an Asia/Shanghai calendar window at collection time, covering the start day through that day, for up to 30 days. Web search uses the realtime index and a publication-time filter.
 2. The result is evidence, not a finished report. Failure, exhausted budget, too few sources, and missing dates stay visible.
-3. After synthesis, call `zhihu_study_report` with that same evidence. Citations and sourced numbers must match the excerpts. A read-only workspace cannot write the files.
+3. After synthesis, call `zhihu_study_report` with that same evidence. A sourced quantity must show its name, number, and adjacent unit in the quoted excerpt; otherwise mark it as an assumption. Dividing 20 square meters by 2 yuan yields 10 square meters per yuan. Read-only and unknown workspace modes cannot write files. A finished report means the structure checked out.
 4. Open the returned `html`. The folder also contains `report.md` and `report.json`. The page loads nothing external and is not part of the settings UI.
 
 ### Input and output

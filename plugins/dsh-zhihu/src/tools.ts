@@ -17,6 +17,9 @@ export function apply(ctx: Context): void {
       host.zhihu.run(signal => execute(args, { ...exec, signal }), exec.signal) })
   }
   for (const create of [createZhihuResearchTool, createZhihuAccountTool, createZhihuStudyTool]) register(create(options))
-  const sandbox = (ctx as { get?(name: string): { resolve?(input: { session?: unknown }): { workspaceRoot?: string; mode?: string } } | undefined }).get?.('sandboxPolicy')
-  register(createZhihuStudyReportTool(session => sandbox?.resolve?.({ session })))
+  register(createZhihuStudyReportTool(session => {
+    const sandbox = (ctx as { get?(name: string): { resolve?(input: { session?: unknown }): { workspaceRoot?: string; mode?: string } } | undefined }).get?.('sandboxPolicy')
+    if (!sandbox?.resolve) return undefined
+    return sandbox.resolve({ session })
+  }))
 }

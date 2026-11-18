@@ -8,11 +8,11 @@ import { lstat, mkdir, rm, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { ZHIHU_STUDY_REPORT_TOOL_NAME } from './contracts.ts'
-import { ZHIHU_GLOBAL_AUTHORITY_LEGEND, ZHIHU_STUDY_MAX_CALLS, shanghaiDate, type ZhihuStudyWindow } from './study.ts'
+import { ZHIHU_GLOBAL_AUTHORITY_LEGEND, ZHIHU_STUDY_MAX_CALLS, ZHIHU_STUDY_MAX_WINDOW_DAYS, shanghaiDate, zhihuStudyWindow, type ZhihuStudyWindow } from './study.ts'
 import { ZhihuSearchError } from './zhihu-client.ts'
 
 export const STUDY_REPORT_DISCLAIMERS = {
-  deep: '交互结果只按页面上的公式和滑杆计算。每个输入都标了来源或假设。本页不提供默认的性能、价格或寿命。',
+  deep: '交互结果只按页面上的公式和滑杆计算。标为来源的数量必须连着摘录里的量名、数字和单位。换算和未在摘录中的范围是假设。20 平方米除以 2 元得到 10 平方米/元，不是 10 元。本页不提供默认性能、价格或寿命，也不证明所附证据未经改动。',
   observation: '下面是本次检索样本里的说法并列，不是知乎全体用户的共识。作者、赞同数只在来源实际带回时显示。',
   briefing: '已确认事件的日期必须能在来源摘录里找到。条目时间戳是发布或更新时间，不是事件发生时间。缺日期的条目不在已确认事件里。发布时间过滤也不能证明事件发生在窗口内。',
 } as const
@@ -33,7 +33,10 @@ type Source = {
   editTimeMeaning?: 'publish_or_update' | 'last_edit'
 }
 type Cited = { text: string; sourceIds: string[] }
-type InputProvenance = { kind: 'source'; sourceId: string } | { kind: 'assumption'; text: string }
+type InputProvenance =
+  | { kind: 'source'; sourceId: string; quote: string }
+  | { kind: 'assumption'; text: string }
+  | { kind: 'conversion'; sourceId: string; quote: string; original: number; originalUnit: string; factor: number; note: string }
 type InteractiveInput = {
   id: string
   label: string
@@ -199,24 +202,58 @@ function finiteNumber(value: unknown, label: string): number {
   return value
 }
 
-function numberInText(excerpt: string, value: number): boolean {
+function numberPattern(value: number): RegExp {
   const raw = Object.is(value, -0) ? '0' : String(value)
-  const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`(?<![\\d.])${escaped}(?![\\d.])`).test(excerpt)
+  return new RegExp(`(?<![\\d.])${raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\d.])`, 'g')
 }
 
-function provenance(value: unknown, sources: Map<string, Source>): InputProvenance {
+/** The token glued to a numeral. This is a bounded string check, not a claim that the sentence was understood. */
+function adjacentUnit(quote: string, index: number, length: number): string {
+  return /^\s*([A-Za-z\u4e00-\u9fff%㎡²³·/]{1,16})/.exec(quote.slice(index + length))?.[1] ?? ''
+}
+
+function citedQuantity(quote: string, value: number, unit: string | undefined, label?: string): boolean {
+  if (label !== undefined && !quote.includes(label)) return false
+  for (const match of quote.matchAll(numberPattern(value))) {
+    const attached = adjacentUnit(quote, match.index ?? 0, match[0].length)
+    if (unit ? attached === unit : attached === '') return true
+  }
+  return false
+}
+
+function provenance(value: unknown, sources: Map<string, Source>, label: string, unit: string | undefined, initial: number): InputProvenance {
   const row = record(value, '数值依据')
-  known(row, ['kind', 'sourceId', 'text'])
+  known(row, ['kind', 'sourceId', 'quote', 'text', 'original', 'originalUnit', 'factor', 'note'])
   if (row.kind === 'source') {
-    if (row.text !== undefined) invalid('来源依据不能同时写假设。')
-    return { kind: 'source', sourceId: sourceIds([row.sourceId], sources, '数值依据')[0]! }
+    const sourceId = sourceIds([row.sourceId], sources, '数值依据')[0]!
+    const quote = text(row.quote, '数值引文', 200)
+    const cited = sources.get(sourceId)
+    if (!cited?.excerpt.includes(quote) || !citedQuantity(quote, initial, unit, label)) {
+      invalid('标为来源的数量必须在摘录引文里同时出现量名、数字和紧挨着的单位。无关数字请改成假设。')
+    }
+    return { kind: 'source', sourceId, quote }
   }
   if (row.kind === 'assumption') {
-    if (row.sourceId !== undefined) invalid('假设不能伪装成来源。')
+    if (row.sourceId !== undefined || row.quote !== undefined) invalid('假设不能伪装成来源。')
     return { kind: 'assumption', text: text(row.text, '假设', 200) }
   }
-  invalid('数值依据必须是 source 或 assumption。')
+  if (row.kind === 'conversion') {
+    const sourceId = sourceIds([row.sourceId], sources, '换算依据')[0]!
+    const quote = text(row.quote, '换算引文', 200)
+    const original = finiteNumber(row.original, '原文数值')
+    const originalUnit = text(row.originalUnit, '原文单位', 16)
+    const factor = finiteNumber(row.factor, '换算系数')
+    const note = text(row.note, '换算说明', 200)
+    const cited = sources.get(sourceId)
+    if (!cited?.excerpt.includes(quote) || !citedQuantity(quote, original, originalUnit)) {
+      invalid('换算必须引用摘录里紧挨着的原数字和原单位，并写明这是换算假设。')
+    }
+    if (!Number.isFinite(original * factor) || Math.abs(original * factor - initial) > 1e-9 * Math.max(1, Math.abs(initial))) {
+      invalid('换算结果必须等于原文数值乘以写明的系数。')
+    }
+    return { kind: 'conversion', sourceId, quote, original, originalUnit, factor, note }
+  }
+  invalid('数值依据必须是 source、assumption 或 conversion。')
 }
 
 function interactive(value: unknown, sources: Map<string, Source>): InteractiveBlock {
@@ -234,14 +271,9 @@ function interactive(value: unknown, sources: Map<string, Source>): InteractiveB
     const unit = input.unit === undefined ? undefined : text(input.unit, '单位', 16)
     return {
       id: idOf(input.id, '输入编号'), label: text(input.label, '输入名称', 80),
-      min, max, step, value: initial, ...(unit ? { unit } : {}),       provenance: provenance(input.provenance, sources),
+      min, max, step, value: initial, ...(unit ? { unit } : {}), provenance: provenance(input.provenance, sources, text(input.label, '输入名称', 80), unit, initial),
     }
   })
-  for (const input of inputs) {
-    if (input.provenance.kind !== 'source') continue
-    const cited = sources.get(input.provenance.sourceId)
-    if (!cited || !numberInText(cited.excerpt, input.value)) invalid('标为来源的数字必须出现在对应取证摘录里。滑杆的最小、最大和步长只是交互范围。')
-  }
   if (inputs.some(item => !/^[a-z][a-z0-9]*$/.test(item.id))) invalid('输入编号只能是小写字母和数字，以便写进公式。')
   if (new Set(inputs.map(item => item.id)).size !== inputs.length) invalid('交互输入编号重复。')
   const formula = text(row.formula, '公式', 200)
@@ -251,11 +283,52 @@ function interactive(value: unknown, sources: Map<string, Source>): InteractiveB
   catch (error) { invalid(error instanceof Error ? error.message : '公式无效') }
   const names = new Set(tokenizeStudyFormula(formula).filter(token => token.kind === 'id').map(token => token.text))
   if ([...names].some(name => !inputs.some(item => item.id === name))) invalid('公式引用了未声明的输入。')
-  const outputUnit = row.outputUnit === undefined ? undefined : text(row.outputUnit, '结果单位', 16)
+  const composed = composeUnit(formula, Object.fromEntries(inputs.map(input => [input.id, input.unit ?? ''])))
+  const declared = row.outputUnit === undefined ? undefined : text(row.outputUnit, '结果单位', 32)
+  if (declared !== undefined && declared !== composed) invalid(`结果单位与输入单位的运算不一致：应为 ${composed || '无单位'}，不能写成 ${declared}。`)
+  const outputUnit = declared ?? (composed || undefined)
   return {
     id: idOf(row.id, '交互块编号'), title: text(row.title, '交互块标题', 120), inputs, formula,
     outputLabel: text(row.outputLabel, '结果名称', 80), ...(outputUnit ? { outputUnit } : {}), initialResult,
   }
+}
+
+function composeUnit(formula: string, units: Record<string, string>): string {
+  const tokens = tokenizeStudyFormula(formula)
+  let index = 0
+  const peek = () => tokens[index]
+  const eat = () => tokens[index++]
+  const factor = (): string => {
+    const token = peek()
+    if (!token) invalid('公式无效')
+    if (token.kind === 'op' && token.text === '-') { eat(); return factor() }
+    if (token.kind === 'num') { eat(); return '' }
+    if (token.kind === 'id') { eat(); return units[token.text] ?? '' }
+    if (token.kind === 'lp') { eat(); const value = expr(); if (peek()?.kind !== 'rp') invalid('公式无效'); eat(); return value }
+    invalid('公式无效')
+  }
+  const term = (): string => {
+    let value = factor()
+    while (peek()?.kind === 'op' && (peek()?.text === '*' || peek()?.text === '/')) {
+      const op = eat().text
+      const right = factor()
+      if (op === '*') value = !value ? right : !right ? value : `${value}·${right}`
+      else value = !right ? value : !value ? `1/${right}` : `${value}/${right}`
+    }
+    return value
+  }
+  const expr = (): string => {
+    let value = term()
+    while (peek()?.kind === 'op' && (peek()?.text === '+' || peek()?.text === '-')) {
+      eat()
+      const right = term()
+      if (value !== right) invalid('加减两边的单位不一致，不能合成一个结果单位。')
+    }
+    return value
+  }
+  const unit = expr()
+  if (index !== tokens.length) invalid('公式无效')
+  return unit
 }
 
 function dateForms(iso: string): string[] {
@@ -322,11 +395,29 @@ function readEvidence(value: unknown, mode: string, question: string): { items: 
     })
   }
   if (mode !== 'briefing') return { items }
-  const raw = record(row.window, '取证窗口')
-  if (raw.basis !== 'shanghai_calendar_day' || typeof raw.startDate !== 'string' || typeof raw.endDate !== 'string' || !realDate(raw.startDate) || !realDate(raw.endDate) || raw.startDate > raw.endDate) {
-    invalid('近况报告必须沿用取证时固定的上海日历窗口。')
+  return { items, window: canonicalStudyWindow(row.window) }
+}
+
+/** Accept only the window `zhihuStudyWindow(end, days)` would have frozen. Contradictory fields are not printed. */
+function canonicalStudyWindow(value: unknown): ZhihuStudyWindow {
+  const raw = record(value, '取证窗口')
+  known(raw, ['days', 'basis', 'startDate', 'endDate', 'start', 'end'])
+  if (raw.basis !== 'shanghai_calendar_day') invalid('近况窗口必须使用上海日历日。')
+  if (typeof raw.days !== 'number' || !Number.isSafeInteger(raw.days) || raw.days < 1 || raw.days > ZHIHU_STUDY_MAX_WINDOW_DAYS) {
+    invalid('取证窗口天数无效。')
   }
-  return { items, window: raw as ZhihuStudyWindow }
+  if (typeof raw.end !== 'string' || !Number.isFinite(Date.parse(raw.end))) invalid('取证窗口的结束时刻无效。')
+  const endMs = Date.parse(raw.end)
+  if (shanghaiDate(endMs) !== raw.endDate || !realDate(String(raw.endDate)) || !realDate(String(raw.startDate))) {
+    invalid('取证窗口的日期和结束时刻不一致。')
+  }
+  const expected = zhihuStudyWindow(endMs, raw.days)
+  const actual = {
+    days: raw.days, basis: raw.basis, startDate: raw.startDate, endDate: raw.endDate,
+    start: raw.start, end: new Date(endMs).toISOString(),
+  }
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) invalid('取证窗口的天数、起止日期和起止时刻必须来自同一次取证时钟，不能互相矛盾。')
+  return expected
 }
 
 function sameOrCopy<T>(host: T | undefined, evidence: T | undefined, label: string): T | undefined {
@@ -518,7 +609,9 @@ function provenanceText(input: InteractiveInput, sources: Source[]): string {
   const provenance = input.provenance
   if (provenance.kind === 'assumption') return `假设：${provenance.text}`
   const source = sources.find(item => item.id === provenance.sourceId)
-  return `来源：${source ? mdLink(source.url, source.title) : provenance.sourceId}`
+  const link = source ? mdLink(source.url, source.title) : provenance.sourceId
+  if (provenance.kind === 'conversion') return `换算假设：${provenance.note}（原文 ${provenance.original} ${provenance.originalUnit}，见 ${link}）`
+  return `来源引文：${provenance.quote}（${link}）`
 }
 
 export function renderStudyMarkdown(report: ValidatedStudyReport): string {
@@ -716,10 +809,13 @@ export function renderStudyHtml(report: ValidatedStudyReport): string {
     <p class="zs-formula"><code>${escapeHtml(block.formula)}</code></p>
     ${block.inputs.map(input => {
       const provenance = input.provenance
-      const cited = provenance.kind === 'source' ? report.sources.find(source => source.id === provenance.sourceId) : undefined
+      const cited = provenance.kind === 'assumption' ? undefined : report.sources.find(source => source.id === provenance.sourceId)
+      const link = provenance.kind === 'assumption' ? '' : htmlLink(cited?.url ?? '', cited?.title ?? provenance.sourceId)
       const basis = provenance.kind === 'assumption'
         ? `假设：${escapeHtml(provenance.text)}`
-        : `来源：${htmlLink(cited?.url ?? '', cited?.title ?? provenance.sourceId)}`
+        : provenance.kind === 'conversion'
+          ? `换算假设：${escapeHtml(provenance.note)}（原文 ${escapeHtml(String(provenance.original))} ${escapeHtml(provenance.originalUnit)}）${link}`
+          : `来源引文：${escapeHtml(provenance.quote)} ${link}`
       return `<label class="zs-slider">${escapeHtml(input.label)}
         <input type="range" min="${input.min}" max="${input.max}" step="${input.step}" value="${input.value}" data-zs-input="${escapeHtml(`${block.id}:${input.id}`)}">
         <output data-zs-value="${escapeHtml(`${block.id}:${input.id}`)}">${escapeHtml(String(input.value))}${input.unit ? ` ${escapeHtml(input.unit)}` : ''}</output>
@@ -844,6 +940,8 @@ export function renderZhihuStudyReportResult(result: { html: string }): string {
   return `已写好可打开的本地报告。请打开这个 HTML 文件：${result.html}\n同目录还有 report.md 和 report.json。页面不加载外部资源。这是宿主综合之后的导出，测试并不证明模型结论正确。`
 }
 
+const WRITABLE_SANDBOX_MODES = new Set(['workspace-write', 'danger-full-access'])
+
 export function createZhihuStudyReportTool(resolveWorkspace?: (session: unknown) => { workspaceRoot?: string; mode?: string } | undefined) {
   return defineTool({
     name: ZHIHU_STUDY_REPORT_TOOL_NAME,
@@ -859,11 +957,12 @@ export function createZhihuStudyReportTool(resolveWorkspace?: (session: unknown)
     },
     isConcurrencySafe() { return false },
     async execute(args, exec) {
-      const policy = resolveWorkspace?.(exec.agent?.session)
-      if (!policy?.workspaceRoot) throw new ZhihuSearchError('CALL_BLOCKED', '导出需要宿主工作区授权。')
-      const written = await writeZhihuStudyReport((args as { report?: unknown }).report, {
-        workspaceRoot: policy.workspaceRoot, readOnly: policy.mode === 'read-only',
-      })
+      let policy: { workspaceRoot?: string; mode?: string } | undefined
+      try { policy = resolveWorkspace?.(exec.agent?.session) } catch { policy = undefined }
+      if (!policy?.workspaceRoot || !policy.mode || !WRITABLE_SANDBOX_MODES.has(policy.mode)) {
+        throw new ZhihuSearchError('CALL_BLOCKED', '导出需要宿主当前的可写工作区授权；服务缺失、只读或未知模式都不能写文件。')
+      }
+      const written = await writeZhihuStudyReport((args as { report?: unknown }).report, { workspaceRoot: policy.workspaceRoot })
       return {
         phase: 'report' as const, finishedReport: true, directory: written.directory,
         markdown: written.markdown, json: written.json, html: written.html, sideEffect: written.sideEffect,

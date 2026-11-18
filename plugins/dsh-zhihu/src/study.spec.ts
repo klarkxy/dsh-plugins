@@ -8,7 +8,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { createZhihuResearchTool } from './tool-definitions.ts'
 import { compileZhihuGlobalFilter } from './operations.ts'
 import { executeZhihuStudy, renderZhihuStudy, ZHIHU_GLOBAL_AUTHORITY_LEGEND, zhihuStudyWindow } from './study.ts'
-import { STUDY_PAGE_SCRIPT, STUDY_REPORT_DISCLAIMERS, evaluateStudyFormula, validateZhihuStudyReport, writeZhihuStudyReport } from './study-report.ts'
+import { STUDY_PAGE_SCRIPT, STUDY_REPORT_DISCLAIMERS, createZhihuStudyReportTool, evaluateStudyFormula, validateZhihuStudyReport, writeZhihuStudyReport } from './study-report.ts'
 import { ZHIHU_STUDY_SKILLS } from './study-skill.ts'
 import * as studyPlugin from './study-plugin.ts'
 import * as toolsPlugin from './tools.ts'
@@ -207,19 +207,19 @@ describe('local study report', () => {
   const deepReport = {
     mode: 'deep', title: '空气净化器', question: '怎么选',
     evidence: evidenceFor('deep', '怎么选', [{
-      id: 'e1', url: 'https://example.com/spec', excerpts: ['说明书给出的单价是 2 元'],
+      id: 'e1', url: 'https://example.com/spec', excerpts: ['说明书给出的单价是2元，不是面积'],
       authority: '3', authorityMeaning: '高权威', editTime: String(INSIDE), editTimeMeaning: 'last_edit',
     }]),
-    sources: [source('e1', { url: 'https://example.com/spec', excerpt: '单价是 2 元', authority: '3', authorityMeaning: '高权威', editTime: String(INSIDE), editTimeMeaning: 'last_edit' })],
+    sources: [source('e1', { url: 'https://example.com/spec', excerpt: '单价是2元', authority: '3', authorityMeaning: '高权威', editTime: String(INSIDE), editTimeMeaning: 'last_edit' })],
     deep: {
       findings: [{ text: '只能引用说明书里的单价。', sourceIds: ['e1'] }],
       assumptions: [{ text: '房间面积由用户自己填写。' }],
       disputes: [],
       interactive: [{
-        id: 'cost', title: '面积乘以假设电价', outputLabel: '试算', outputUnit: '元', formula: 'area * price',
+        id: 'cost', title: '面积除以单价', outputLabel: '试算', outputUnit: '平方米/元', formula: 'area / price',
         inputs: [
           { id: 'area', label: '面积', min: 10, max: 40, step: 1, value: 20, unit: '平方米', provenance: { kind: 'assumption', text: '用户假设的房间面积' } },
-          { id: 'price', label: '单价', min: 1, max: 5, step: 1, value: 2, unit: '元', provenance: { kind: 'source', sourceId: 'e1' } },
+          { id: 'price', label: '单价', min: 1, max: 5, step: 1, value: 2, unit: '元', provenance: { kind: 'source', sourceId: 'e1', quote: '单价是2元' } },
         ],
       }],
     },
@@ -239,7 +239,7 @@ describe('local study report', () => {
     const hostile = structuredClone(deepReport)
     hostile.title = '</title><script>alert(1)</script>'
     hostile.sources[0].title = '<img src=x onerror=alert(1)>'
-    hostile.sources[0].excerpt = '单价是 2 元</script><script>alert(1)</script>'
+    hostile.sources[0].excerpt = '单价是2元</script><script>alert(1)</script>'
     hostile.evidence.evidence[0].excerpts = [hostile.sources[0].excerpt]
     const written = await writeZhihuStudyReport(hostile, { workspaceRoot: directory })
     const html = await readFile(written.html, 'utf8')
@@ -255,10 +255,30 @@ describe('local study report', () => {
     const unsourced = structuredClone(deepReport)
     unsourced.deep.interactive[0].inputs[1].max = 100
     unsourced.deep.interactive[0].inputs[1].value = 99
-    expect(() => validateZhihuStudyReport(unsourced)).toThrow(/必须出现在对应取证摘录里/)
+    expect(() => validateZhihuStudyReport(unsourced)).toThrow(/量名、数字和紧挨着的单位/)
+    const people = structuredClone(deepReport)
+    people.evidence.evidence[0].excerpts = ['说明书给出的单价是2元，不是面积']
+    people.sources[0].excerpt = '说明书给出的单价是2元，不是面积'
+    people.deep.interactive[0].inputs[1] = { id: 'price', label: '人数', min: 1, max: 5, step: 1, value: 2, unit: '人', provenance: { kind: 'source', sourceId: 'e1', quote: '单价是2元，不是面积' } }
+    expect(() => validateZhihuStudyReport(people)).toThrow(/量名、数字和紧挨着的单位/)
+    const chapter = structuredClone(deepReport)
+    chapter.evidence.evidence[0].excerpts = ['第2章只是序号']
+    chapter.sources[0].excerpt = '第2章只是序号'
+    chapter.deep.interactive[0].inputs[1].provenance = { kind: 'source', sourceId: 'e1', quote: '第2章只是序号' }
+    expect(() => validateZhihuStudyReport(chapter)).toThrow(/量名、数字和紧挨着的单位/)
+    const converted = structuredClone(deepReport)
+    converted.deep.interactive[0].inputs[1] = {
+      id: 'price', label: '单价', min: 0.5, max: 5, step: 0.5, value: 1, unit: '美元',
+      provenance: { kind: 'conversion', sourceId: 'e1', quote: '单价是2元', original: 2, originalUnit: '元', factor: 0.5, note: '示例假设汇率，不是摘录里的美元价格' },
+    }
+    converted.deep.interactive[0].outputUnit = '平方米/美元'
+    expect(validateZhihuStudyReport(converted).deep?.interactive[0]?.outputUnit).toBe('平方米/美元')
+    const wrongUnit = structuredClone(deepReport)
+    wrongUnit.deep.interactive[0].outputUnit = '元'
+    expect(() => validateZhihuStudyReport(wrongUnit)).toThrow(/平方米\/元/)
     const missing = structuredClone(deepReport)
     missing.deep.interactive[0].inputs[0].provenance = { kind: 'guess' }
-    await expect(writeZhihuStudyReport(missing, { workspaceRoot: directory })).rejects.toThrow(/source 或 assumption|不能识别的字段/)
+    await expect(writeZhihuStudyReport(missing, { workspaceRoot: directory })).rejects.toThrow(/source、assumption 或 conversion/)
     expect(await readdir(join(directory, 'zhihu-study'))).toHaveLength(1)
   })
 
@@ -406,6 +426,10 @@ describe('study plan and fixed window', () => {
     expect(validateZhihuStudyReport(report).briefing?.windowStart).toBe(result.window?.start)
     expect(zhihuStudyWindow(NOW + 3 * 86_400_000, 30).startDate).not.toBe(result.window?.startDate)
     expect(() => validateZhihuStudyReport({ ...report, briefing: { ...report.briefing, confirmedEvents: [{ id: 'early', title: '更早', sourceIds: ['e1'], eventOn: '2026-10-18', eventQuote: '2026年10月18日' }] } })).toThrow(/不在取证窗口内/)
+    const drifted = structuredClone(result)
+    drifted.window = { ...result.window!, days: 1, start: '2010-01-01T00:00:00.000Z' }
+    expect(() => validateZhihuStudyReport({ ...report, evidence: drifted })).toThrow(/不能互相矛盾/)
+    expect(validateZhihuStudyReport(report).briefing?.windowStart).not.toContain('2010')
   })
 
   it('rejects a source or sourced number that the evidence does not contain', () => {
@@ -427,5 +451,11 @@ describe('study plan and fixed window', () => {
     await symlink(outside, link)
     await expect(writeZhihuStudyReport({ mode: 'deep' }, { workspaceRoot: link })).rejects.toThrow(/符号链接/)
     expect(await readdir(outside)).toEqual([])
+    const signal = new AbortController().signal
+    for (const policy of [undefined, { workspaceRoot: directory, mode: 'read-only' }, { workspaceRoot: directory, mode: 'mystery' }, { mode: 'workspace-write' }]) {
+      const tool = createZhihuStudyReportTool(() => policy)
+      await expect(tool.execute({ report: { mode: 'deep' } }, { signal, agent: { session: {} } } as never)).rejects.toThrow(/可写工作区/)
+    }
+    expect(await readdir(directory)).toEqual(['linked'])
   })
 })

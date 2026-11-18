@@ -15,7 +15,7 @@ zhihu_study 的 phase 固定是 evidence，finishedReport 固定是 false。stat
 
 不要调用 zhihu_research 的 ask 充当原始来源。不要传 allowPaid、token 或密钥。一次 zhihu_study 最多 6 次上游检索；省略 maxCalls 时按计划调用，计划超过 6 次会在请求前拒绝。不要把同一次研究拆成多次调用累加。windowDays 最大是 30。每次上游请求仍走原有免费额度预查、北京时间日记录、未知映射拒绝和不自动重试。
 
-导出时把同一次返回的 evidence 原样放进 zhihu_study_report。来源编号、链接、摘录、作者、赞同数和权威字段必须来自该结果。标为 source 的交互数字必须出现在对应摘录里；范围和解释可以是假设，但要写成 assumption。只读工作区会拒绝写文件。报告写在会话工作区的 zhihu-study 目录，不接受任意绝对路径。
+导出时把同一次返回的 evidence 原样放进 zhihu_study_report。来源编号、链接、摘录、作者、赞同数和权威字段必须来自该结果。标为 source 的数量必须在引文里同时有量名、数字和紧挨着的单位；无关数字、序号和单位不符都要改成 assumption。换算要写明原文、系数和说明。20 平方米除以 2 元是 10 平方米/元，不是 10 元。finishedReport 只表示结构校验通过，不证明证据未经改动。只读或未知沙箱模式会拒绝写文件。报告写在会话工作区的 zhihu-study 目录。
 
 摘录不是全文。全网 AuthorityLevel 只有 1、2、3、4 才有低/中/高/超高的官方含义。知乎站内的 AuthorityLevel 和 RankingScore 只在上游实际返回时保留，不套用那四档说明。HasMore 为真也没有公开翻页参数。
 `.trim()
