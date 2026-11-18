@@ -3,10 +3,15 @@
   "packages": [
     {
       "name": "@klarkxy/dsh-workspace-folders",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "已进入首次发布流程；首次发布需显式选择。",
-        "en": "Entered the first-release process; first publication requires explicit selection."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-11-18T05:39:02.977Z",
+        "integrity": "sha512-Ffi6gBsbMuXO82SQZvA0XlJhlJpeiBcIb4y7HGVldr12zyFrTWYsgMFmSdAmEb27zKj2bjzx9WFQkNVuEx6lmA=="
       }
     },
     {
@@ -232,10 +237,15 @@
     },
     {
       "name": "@klarkxy/dsh-secret-manager",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "已进入首次发布流程；首次发布需显式选择。",
-        "en": "Entered the first-release process; first publication requires explicit selection."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-11-18T05:39:15.244Z",
+        "integrity": "sha512-UvCjbLy42v1NsV2t30H/tvc/Z94b+L1TEiZjmI4TvX+6FyBWgMo/KBCmAlbzy1X2Y2VKlWHxZf8r7jSaWeKFkA=="
       }
     },
     {
