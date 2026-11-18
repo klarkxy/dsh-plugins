@@ -487,6 +487,9 @@ importers:
 
   plugins/dsh-model-hub:
     dependencies:
+      '@klarkxy/dsh-delegation':
+        specifier: workspace:*
+        version: link:../dsh-delegation
       '@klarkxy/dsh-model-route':
         specifier: workspace:*
         version: link:../dsh-model-route

@@ -19,7 +19,7 @@ klarkxy 的 DeepSeek Harness（DSH）插件集合。可前往[插件站点](http
 | 会话与记忆 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | 会话管理：跨工作目录搜索和阅读 DeepSeek Harness 会话，使用临时工作区；空输入一键续写或自动继续，久离回来给出摘要与上下文压缩建议；可选让智能体分叉当前会话或向其他会话发消息。 |
 | 会话与记忆 | [`@klarkxy/dsh-workspace-folders`](plugins/dsh-workspace-folders/README.md) | 工作区文件夹：为每个工作区添加多个文件夹，在 Agent 对话中一起使用。 |
 | 会话与记忆 | [`@klarkxy/dsh-context-cleaner`](plugins/dsh-context-cleaner/README.md) | 上下文面板清理：隐藏 `dsh-context` 仪表盘顶部的插件信息与推广卡片。 |
-| 模型与联网 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | 子代理：配置子代理的模型与推理强度，并在会话弹层查看最后使用的模型。 |
+| 模型与联网 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | 子代理：配置子代理模型与推理强度、查看最后使用的模型，并按会话启用委派模式。 |
 | 模型与联网 | [`@klarkxy/dsh-model-picker`](plugins/dsh-model-picker/README.md) | 模型选择器：输入框里的模型搜索与推理档位滑杆；其他插件可复用同一选择器。 |
 | 模型与联网 | [`@klarkxy/dsh-web-search-manager`](plugins/dsh-web-search-manager/README.md) | 网页搜索：在一个设置页管理和排序多家搜索与网页读取服务，内置 DuckDuckGo、Exa、Tavily、Linkup、智谱等，并整合已安装插件的搜索源，为模型提供 `web_search` 与 `web_fetch`。 |
 | 模型与联网 | [`@klarkxy/dsh-zhihu`](plugins/dsh-zhihu/README.md) | 知乎：知乎站内与全网搜索、热榜、Zhida 直答、知识库、问题推荐与回答摘要、内容与评论读取、创作数据与额度统计，以及草稿管理和配图上传。 |

@@ -25,6 +25,28 @@ const context = (session: DelegationSessionLike | undefined) => ({
   scope: { session },
 })
 
+describe('delegation prompt contracts', () => {
+  it('gives coordinators a structured, verifiable task-brief contract', () => {
+    const text = delegationSectionText(context(top('s1')), lookups({
+      record: () => ({ enabled: true }),
+      toolVisible: name => name === 'subagent',
+    }))
+    for (const heading of ['Goal:', 'Non-goals:', 'Working directory:', 'Allowed changes:', 'Do not:', 'Contracts:', 'Dependencies:', 'Done when:', 'Report:']) {
+      expect(text).toContain(heading)
+    }
+    expect(text).toContain('write sets disjoint')
+    expect(text).toContain('tool availability, permissions, approvals')
+  })
+
+  it('gives executors a fixed evidence-based closeout format', () => {
+    for (const heading of ['Status:', 'Result:', 'Changed:', 'Verification:', 'Assumptions and open issues:']) {
+      expect(EXECUTOR_PROMPT).toContain(heading)
+    }
+    expect(EXECUTOR_PROMPT).toContain('Mark incomplete criteria partial or blocked')
+    expect(EXECUTOR_PROMPT).toContain('Prompt instructions do not grant or restrict actual tools')
+  })
+})
+
 describe.each([
   ['system section', delegationSectionText, EXECUTOR_PROMPT],
   ['role reminder', delegationReminderText, EXECUTOR_REMINDER],

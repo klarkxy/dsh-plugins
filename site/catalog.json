@@ -263,8 +263,8 @@
         "en": "Subagents"
       },
       "summary": {
-        "zh": "配置子代理的模型与推理强度（思考强度），并在会话弹层查看最后使用的模型。",
-        "en": "Configure the model and reasoning effort for subagents, and see each one's last-used model in the conversation popup."
+        "zh": "配置子代理模型与思考强度、查看最后使用的模型，并按会话开启委派模式。",
+        "en": "Configure subagent models and reasoning effort, review their last-used models, and enable Delegation Mode per session."
       },
       "readme": {
         "zh": "README.md",
