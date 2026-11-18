@@ -46,7 +46,7 @@ These model tools are enabled by default in agent presets:
 
 Site search and web search return an empty list when nothing matches, along with the upstream explanation when provided.
 
-When the host provides a skills service, the plugin also registers `zhihu-deep-research`, `zhihu-observation`, and `zhihu-recent-briefing`. Those routes say when to gather evidence, how to synthesize, and when to export. Retrieval and file writing stay in the tools above.
+The routes `zhihu-deep-research`, `zhihu-observation`, and `zhihu-recent-briefing` load only when the host provides a skills service. Without it, that insert stays inactive and the two tools still register from the tools bundle.
 
 ## Deep research, Zhihu observation, and 30-day briefing
 
@@ -54,10 +54,10 @@ These three workflows are not separate official endpoints and not three prompts.
 
 ### Entry
 
-1. Call `zhihu_study`. For `deep`, pass 2 to 4 decomposed `queries`; if omitted, only the original question is searched and the result says so. `observation` searches Zhihu and the web. `briefing` uses a rolling 30-day window, web `SearchDB=realtime` with a `publish_time` filter, then a Zhihu `EditTime` filter.
-2. Read `phase: "evidence"`. `finishedReport` is always `false`.
-3. Write the report object and call `zhihu_study_report` with an absolute `directory` the user can open.
-4. Give the user the returned `html` path. The same folder contains `report.md` and `report.json`. The page loads no external resources.
+1. Call `zhihu_study`. Deep research searches Zhihu and the web; two or three sub-questions fit in the six-call cap, while four sub-questions plus both sources are rejected before any request. Observation searches both. A briefing freezes an Asia/Shanghai calendar window at collection time, covering the start day through that day, for up to 30 days. Web search uses the realtime index and a publication-time filter.
+2. The result is evidence, not a finished report. Failure, exhausted budget, too few sources, and missing dates stay visible.
+3. After synthesis, call `zhihu_study_report` with that same evidence. Citations and sourced numbers must match the excerpts. A read-only workspace cannot write the files.
+4. Open the returned `html`. The folder also contains `report.md` and `report.json`. The page loads nothing external and is not part of the settings UI.
 
 ### Input and output
 
@@ -67,7 +67,7 @@ These three workflows are not separate official endpoints and not three prompts.
 
 ### Cost and boundaries
 
-Every upstream request still checks that API's free quota and keeps the Beijing-day ledger, unknown-mapping rejection, explicit `allowPaid`, and no automatic retry. The study tools accept neither a paid switch nor credentials. `maxCalls` cannot exceed 6, and `windowDays` cannot exceed 30. One study can spend several quota units; the allowance is whatever the official quota call returns at the time. The web `Filter` accepts structured host and publication-time fields only, not a raw expression, and it rejects `zhihu.com` as a host.
+Every upstream request still checks that API's free quota and keeps the Beijing-day ledger, unknown-mapping rejection, explicit `allowPaid`, and no automatic retry. The study tools accept neither a paid switch nor credentials. One study cannot make more than six upstream searches or cover more than 30 days. When the call budget is omitted, the tool uses the plan size; a plan that does not fit is rejected before any request and cannot be extended by calling the tool again. The allowance is whatever the official quota call returns. Web filters accept structured site and publication-time fields only. The model tool and the shared search entry use those parameters; the settings page has no new filter controls.
 
 Failure, exhausted budget, too few sources, missing dates, and cancellation each have their own status. They are not empty results. `empty` means the upstream call succeeded and returned nothing.
 

@@ -7,7 +7,7 @@ import {
   ZHIHU_HOT_LIST_DEFAULT_LIMIT, ZHIHU_HOT_LIST_MAX_LIMIT,
   ZHIHU_KNOWLEDGE_SEARCH_DEFAULT_LIMIT, ZHIHU_KNOWLEDGE_SEARCH_MAX_LIMIT,
   ZHIHU_ASK_MODELS, ZHIHU_ASK_DEFAULT_MODEL, ZHIHU_RECALL_SCOPES,
-  executeZhihuGlobalSearch, renderZhihuGlobalSearch,
+  executeZhihuGlobalSearch, renderZhihuGlobalSearch, readZhihuGlobalFilter,
   executeZhihuHotList, renderZhihuHotList,
   executeZhihuAsk, renderZhihuAsk,
   normalizeRecallScopes, executeZhihuKnowledgeSearch, renderZhihuKnowledgeSearch,
@@ -24,24 +24,6 @@ const ZHIHU_RESEARCH_ACTIONS = ['search', 'global_search', 'hot_list', 'ask', 'k
 export type ZhihuResearchAction = (typeof ZHIHU_RESEARCH_ACTIONS)[number]
 
 /** 合并前的五个检索工具各自执行逻辑不变，这里只按 action 分发。 */
-function globalFilterFrom(args: { host?: unknown; hostOperator?: unknown; publishTime?: unknown; publishTimeOperator?: unknown }): ZhihuGlobalFilterInput | undefined {
-  if (args.host === undefined && args.hostOperator === undefined && args.publishTime === undefined && args.publishTimeOperator === undefined) return undefined
-  const operators = ['eq', 'ne']
-  const timeOperators = ['gte', 'gt', 'lte', 'lt', 'eq', 'ne']
-  if (args.hostOperator !== undefined && (typeof args.hostOperator !== 'string' || !operators.includes(args.hostOperator))) {
-    throw new ZhihuSearchError('INVALID_ARGUMENTS', 'host 运算符无效。')
-  }
-  if (args.publishTimeOperator !== undefined && (typeof args.publishTimeOperator !== 'string' || !timeOperators.includes(args.publishTimeOperator))) {
-    throw new ZhihuSearchError('INVALID_ARGUMENTS', 'publishTime 运算符无效。')
-  }
-  return {
-    ...(args.host !== undefined ? { host: args.host as string } : {}),
-    ...(args.hostOperator !== undefined ? { hostOperator: args.hostOperator as ZhihuGlobalFilterInput['hostOperator'] } : {}),
-    ...(args.publishTime !== undefined ? { publishTime: args.publishTime as number } : {}),
-    ...(args.publishTimeOperator !== undefined ? { publishTimeOperator: args.publishTimeOperator as ZhihuGlobalFilterInput['publishTimeOperator'] } : {}),
-  }
-}
-
 function executeResearch(
   action: ZhihuResearchAction,
   args: { query?: string; count?: number; limit?: number; searchDb?: string; model?: string; recallScopes?: unknown; host?: unknown; hostOperator?: unknown; publishTime?: unknown; publishTimeOperator?: unknown },
@@ -49,7 +31,7 @@ function executeResearch(
   signal: AbortSignal,
 ): Promise<{ result: ZhihuSearchResult | ZhihuGlobalSearchResult | ZhihuHotListResult | ZhihuAskResult | ZhihuKnowledgeSearchResult; results: number }> {
   const options = { ...client, signal }
-  const filter = globalFilterFrom(args)
+  const filter = readZhihuGlobalFilter(args)
   if (filter && action !== 'global_search') throw new ZhihuSearchError('INVALID_ARGUMENTS', 'host 和 publishTime 只适用于 global_search。')
   if (action === 'search') {
     return executeZhihuSearch(args.query!, args.count ?? ZHIHU_SEARCH_DEFAULT_COUNT, options)

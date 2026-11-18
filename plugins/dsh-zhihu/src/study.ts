@@ -14,7 +14,6 @@ import {
 
 export const ZHIHU_STUDY_VERSION = 1
 export const ZHIHU_STUDY_MAX_CALLS = 6
-export const ZHIHU_STUDY_DEFAULT_CALLS = 4
 export const ZHIHU_STUDY_MAX_QUERIES = 4
 export const ZHIHU_STUDY_DEFAULT_WINDOW_DAYS = 30
 export const ZHIHU_STUDY_MAX_WINDOW_DAYS = 30
@@ -26,6 +25,40 @@ export const ZHIHU_STUDY_SOURCES = ['zhihu', 'web', 'knowledge'] as const
 export type ZhihuStudyMode = (typeof ZHIHU_STUDY_MODES)[number]
 export type ZhihuStudySource = (typeof ZHIHU_STUDY_SOURCES)[number]
 export type ZhihuStudyStatus = 'complete' | 'partial' | 'insufficient_sources' | 'insufficient_dates' | 'budget_exhausted' | 'failed' | 'empty' | 'cancelled'
+
+/** Calendar days in Asia/Shanghai. The day containing the rolling start is included whole. */
+export type ZhihuStudyWindow = {
+  days: number
+  basis: 'shanghai_calendar_day'
+  startDate: string
+  endDate: string
+  start: string
+  end: string
+}
+
+const SHANGHAI_OFFSET_MS = 8 * 3_600_000
+
+export function shanghaiDate(ms: number): string {
+  return new Date(ms + SHANGHAI_OFFSET_MS).toISOString().slice(0, 10)
+}
+
+export function zhihuStudyWindow(now: number, days: number): ZhihuStudyWindow {
+  const endDate = shanghaiDate(now)
+  const startDate = shanghaiDate(now - days * 86_400_000)
+  return {
+    days,
+    basis: 'shanghai_calendar_day',
+    startDate,
+    endDate,
+    start: new Date(Date.parse(`${startDate}T00:00:00+08:00`)).toISOString(),
+    end: new Date(now).toISOString(),
+  }
+}
+
+export function shanghaiDateInWindow(ms: number, window: ZhihuStudyWindow): boolean {
+  const date = shanghaiDate(ms)
+  return date >= window.startDate && date <= window.endDate
+}
 
 /** Documented for global search only. Do not apply this legend to Zhihu site search. */
 export const ZHIHU_GLOBAL_AUTHORITY_LEGEND: Record<string, string> = {
@@ -107,7 +140,7 @@ export type ZhihuStudyResult = {
   evidence: ZhihuStudyEvidence[]
   groups?: { publicationOrUpdate: string[]; outsideWindow: string[]; undated: string[] }
   sample: { zhihu: number; web: number; knowledge: number; notPopulation: true }
-  window?: { days: number; start: string; end: string; basis: 'rolling_hours' }
+  window?: ZhihuStudyWindow
   hasMore: boolean
   figures: { extracted: []; policy: string }
   hostSynthesis: {
@@ -305,12 +338,15 @@ function parseRequest(input: unknown, now: number): ParsedRequest {
       if (!recallScopes.includes(scope)) recallScopes.push(scope)
     }
   }
+  const plannedCalls = queries.length * sources.length
   let budgetRequested: number | null = null
   if (body.maxCalls !== undefined) {
     if (typeof body.maxCalls !== 'number' || !Number.isSafeInteger(body.maxCalls) || body.maxCalls < 1 || body.maxCalls > ZHIHU_STUDY_MAX_CALLS) {
       invalid(`maxCalls 必须是 1 到 ${ZHIHU_STUDY_MAX_CALLS} 的整数，不能提高上限。`)
     }
     budgetRequested = body.maxCalls
+  } else if (plannedCalls > ZHIHU_STUDY_MAX_CALLS) {
+    invalid(`这次计划需要 ${plannedCalls} 次上游检索，单次上限是 ${ZHIHU_STUDY_MAX_CALLS}。请减少子问题或来源；不要拆成多次调用绕过上限。`)
   }
   if (body.windowDays !== undefined && mode !== 'briefing') invalid('windowDays 只适用于 briefing。')
   let windowDays = ZHIHU_STUDY_DEFAULT_WINDOW_DAYS
@@ -333,14 +369,14 @@ function parseRequest(input: unknown, now: number): ParsedRequest {
   }
   return {
     mode, question, queries, querySource, sources, recallScopes,
-    budget: budgetRequested ?? ZHIHU_STUDY_DEFAULT_CALLS,
+    budget: budgetRequested ?? plannedCalls,
     budgetRequested, windowDays, ...(since !== undefined ? { since } : {}),
   }
 }
 
-function inWindowOf(presentEdits: number[], briefing: boolean, windowStart: number | undefined, now: number): boolean | null {
-  if (!briefing || windowStart === undefined || presentEdits.length === 0) return null
-  return presentEdits.every(value => value * 1000 >= windowStart && value * 1000 <= now)
+function inWindowOf(presentEdits: number[], window: ZhihuStudyWindow | undefined): boolean | null {
+  if (!window || presentEdits.length === 0) return null
+  return presentEdits.every(value => shanghaiDateInWindow(value * 1000, window))
 }
 
 function timeState(seconds: number | undefined, unparseable: boolean, nowSeconds: number): 'present' | 'missing' | 'unparseable' {
@@ -358,7 +394,7 @@ function meaningOf(sources: ZhihuStudySource[]): ZhihuStudyEvidence['editTimeMea
   return 'mixed'
 }
 
-function mergeHits(hits: Hit[], now: number, windowStart: number | undefined, since: number | undefined, briefing: boolean): ZhihuStudyEvidence[] {
+function mergeHits(hits: Hit[], now: number, window: ZhihuStudyWindow | undefined, since: number | undefined): ZhihuStudyEvidence[] {
   const groups: Array<{ key: string; hits: Hit[] }> = []
   for (const hit of hits) {
     const key = canonicalUrl(hit.url)
@@ -386,12 +422,12 @@ function mergeHits(hits: Hit[], now: number, windowStart: number | undefined, si
         : unparseable || uniqueEdits.length > 0
           ? 'unparseable'
           : 'missing'
-    const inWindow = inWindowOf(presentEdits, briefing, windowStart, now)
+    const inWindow = inWindowOf(presentEdits, window)
     const newest = presentEdits.length > 0 ? Math.max(...presentEdits) : undefined
     let novelty: ZhihuStudyEvidence['novelty'] = 'not_compared'
     if (since !== undefined) {
       novelty = newest === undefined || inWindow !== true ? 'unknown' : newest * 1000 >= since ? 'after_since' : 'in_window_before_since'
-    } else if (briefing && newest === undefined) novelty = 'unknown'
+    } else if (window && newest === undefined) novelty = 'unknown'
     const webOnly = sources.every(source => source === 'web')
     const authorityMeaning = !webOnly || authorities.length !== 1 ? undefined : ZHIHU_GLOBAL_AUTHORITY_LEGEND[authorities[0]!]
     const createTimes = [...new Set(group.hits.flatMap(hit => hit.createTime !== undefined ? [hit.createTime] : []))]
@@ -461,7 +497,8 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
     ? [...request.sources].sort((left, right) => briefingRank.indexOf(left) - briefingRank.indexOf(right))
     : request.sources
   const ordered = request.queries.flatMap(query => orderedSources.map(source => ({ source, query })))
-  const windowStart = request.mode === 'briefing' ? now - request.windowDays * 86_400_000 : undefined
+  const studyWindow = request.mode === 'briefing' ? zhihuStudyWindow(now, request.windowDays) : undefined
+  const windowStartSeconds = studyWindow ? Math.floor(Date.parse(studyWindow.start) / 1000) : undefined
   const calls: ZhihuStudyCall[] = []
   const failures: ZhihuStudyFailure[] = []
   const hits: Hit[] = []
@@ -472,8 +509,8 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
     const call: ZhihuStudyCall = { source, query, state: 'completed' }
     if (source === 'web') {
       const searchDb: ZhihuGlobalSearchDb = request.mode === 'briefing' ? 'realtime' : 'all'
-      const filter = request.mode === 'briefing' && windowStart !== undefined
-        ? { publishTime: Math.floor(windowStart / 1000), publishTimeOperator: 'gte' as const }
+      const filter = windowStartSeconds !== undefined
+        ? { publishTime: windowStartSeconds, publishTimeOperator: 'gte' as const }
         : undefined
       call.searchDb = searchDb
       const fetched = await fetchZhihuGlobalSearchData(query, 8, searchDb, options, filter)
@@ -485,8 +522,8 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
       call.resultCount = found.length
       hits.push(...found)
     } else if (source === 'zhihu') {
-      const sortBy = request.mode === 'briefing' && windowStart !== undefined
-        ? compileZhihuSortBy('EditTime', 'none', Math.floor(windowStart / 1000))
+      const sortBy = windowStartSeconds !== undefined
+        ? compileZhihuSortBy('EditTime', 'none', windowStartSeconds)
         : undefined
       if (sortBy) call.sortBy = sortBy
       const fetched = await fetchZhihuSearchData(query, 5, options, sortBy)
@@ -534,7 +571,7 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
       }
     }
   }
-  const evidence = mergeHits(hits, now, windowStart, request.since, request.mode === 'briefing')
+  const evidence = mergeHits(hits, now, studyWindow, request.since)
   const completed = calls.filter(call => call.state === 'completed').length
   const status = statusOf({ mode: request.mode, cancelled, budgetExhausted, failures, completed, evidence, briefing: request.mode === 'briefing' })
   const limitations = [
@@ -550,7 +587,7 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
   if (!request.sources.includes('knowledge')) limitations.push('本次没有检索知识库。已有知识库需要宿主显式加入 sources。')
   if (hasMore) limitations.push('上游 HasMore 为真，但公开文档没有翻页参数，不能把本次结果当成剩余全部。')
   if (failures.length > 0) limitations.push('有检索失败。失败不是空结果，没有自动重试。')
-  if (budgetExhausted) limitations.push('调用预算已用尽，未执行的检索不能当成没有资料。')
+  if (budgetExhausted) limitations.push('调用预算已用尽，未执行的检索不能当成没有资料，也不能靠再调用一次把同一次研究补满。')
   if (request.since === undefined && request.mode === 'briefing') limitations.push('没有提供 since，不能判断相对上一次阅读的新增。')
   const zhihu = evidence.filter(item => item.sources.includes('zhihu')).length
   const web = evidence.filter(item => item.sources.includes('web')).length
@@ -579,7 +616,7 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
     calls, failures, limitations, evidence,
     ...(groups ? { groups } : {}),
     sample: { zhihu, web, knowledge, notPopulation: true },
-    ...(request.mode === 'briefing' ? { window: { days: request.windowDays, start: new Date(windowStart!).toISOString(), end: new Date(now).toISOString(), basis: 'rolling_hours' as const } } : {}),
+    ...(studyWindow ? { window: studyWindow } : {}),
     hasMore,
     figures: { extracted: [], policy: FIGURE_POLICY },
     hostSynthesis: HOST_SYNTHESIS,
@@ -651,7 +688,7 @@ export function createZhihuStudyTool(options: ZhihuClientOptions & { onExecuted?
       sources: { type: 'array', items: { type: 'string', enum: [...ZHIHU_STUDY_SOURCES] }, description: '默认 zhihu 与 web。knowledge 只在要检索已有知识库时加入。未知来源会拒绝。' },
       includeKnowledge: { type: 'boolean', description: '与 sources 同时使用时必须一致。' },
       recallScopes: { type: 'array', items: { type: 'string', enum: ['personal', 'subscription', 'public'] }, description: '仅知识库检索可传。未知范围会拒绝。' },
-      maxCalls: { type: 'integer', description: `1 到 ${ZHIHU_STUDY_MAX_CALLS}，默认 ${ZHIHU_STUDY_DEFAULT_CALLS}。超过上限会拒绝，不能提高。` },
+      maxCalls: { type: 'integer', description: `省略时按本次计划调用，但计划超过 ${ZHIHU_STUDY_MAX_CALLS} 会在请求前拒绝。显式填写时为 1 到 ${ZHIHU_STUDY_MAX_CALLS}，不能提高，也不能靠多次调用累加。` },
       windowDays: { type: 'integer', description: `仅 briefing。1 到 ${ZHIHU_STUDY_MAX_WINDOW_DAYS}，默认 ${ZHIHU_STUDY_DEFAULT_WINDOW_DAYS}。` },
       since: { type: 'string', description: '仅 briefing。可选 ISO 时间，只标记窗口内新旧，不扩大窗口。' },
     },

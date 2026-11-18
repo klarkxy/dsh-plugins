@@ -94,6 +94,24 @@ const HOST_OPERATORS = { eq: '==', ne: '!=' } as const
 const TIME_OPERATORS = { gte: '>=', gt: '>', lte: '<=', lt: '<', eq: '==', ne: '!=' } as const
 
 /** Build the documented Filter expression from structured fields. Raw expressions are not accepted. */
+export function readZhihuGlobalFilter(body: { host?: unknown; hostOperator?: unknown; publishTime?: unknown; publishTimeOperator?: unknown }): ZhihuGlobalFilterInput | undefined {
+  if (body.host === undefined && body.hostOperator === undefined && body.publishTime === undefined && body.publishTimeOperator === undefined) return undefined
+  const hostOperators = ['eq', 'ne']
+  const timeOperators = ['gte', 'gt', 'lte', 'lt', 'eq', 'ne']
+  if (body.hostOperator !== undefined && (typeof body.hostOperator !== 'string' || !hostOperators.includes(body.hostOperator))) {
+    throw new ZhihuSearchError('INVALID_ARGUMENTS', 'host 运算符无效。')
+  }
+  if (body.publishTimeOperator !== undefined && (typeof body.publishTimeOperator !== 'string' || !timeOperators.includes(body.publishTimeOperator))) {
+    throw new ZhihuSearchError('INVALID_ARGUMENTS', 'publishTime 运算符无效。')
+  }
+  return {
+    ...(body.host !== undefined ? { host: body.host as string } : {}),
+    ...(body.hostOperator !== undefined ? { hostOperator: body.hostOperator as ZhihuGlobalFilterInput['hostOperator'] } : {}),
+    ...(body.publishTime !== undefined ? { publishTime: body.publishTime as number } : {}),
+    ...(body.publishTimeOperator !== undefined ? { publishTimeOperator: body.publishTimeOperator as ZhihuGlobalFilterInput['publishTimeOperator'] } : {}),
+  }
+}
+
 export function compileZhihuGlobalFilter(input: ZhihuGlobalFilterInput): string | undefined {
   const parts: string[] = []
   if (input.host !== undefined) {

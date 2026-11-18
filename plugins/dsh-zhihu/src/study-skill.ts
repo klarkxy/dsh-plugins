@@ -13,7 +13,9 @@ const SHARED = `
 
 zhihu_study 的 phase 固定是 evidence，finishedReport 固定是 false。status 为 failed、budget_exhausted、insufficient_sources、insufficient_dates、cancelled 或 partial 时，必须说明失败、未执行的检索、缺日期或样本不足。不能把这些状态写成“没有资料”或已完成研究。empty 只表示上游成功返回了零条。
 
-不要调用 zhihu_research 的 ask 充当原始来源。不要传 allowPaid、token 或密钥。maxCalls 最大是 6，windowDays 最大是 30，超出会被拒绝。每次上游请求仍走原有免费额度预查、北京时间日记录、未知映射拒绝和不自动重试。一个研究动作可能消耗多次额度。
+不要调用 zhihu_research 的 ask 充当原始来源。不要传 allowPaid、token 或密钥。一次 zhihu_study 最多 6 次上游检索；省略 maxCalls 时按计划调用，计划超过 6 次会在请求前拒绝。不要把同一次研究拆成多次调用累加。windowDays 最大是 30。每次上游请求仍走原有免费额度预查、北京时间日记录、未知映射拒绝和不自动重试。
+
+导出时把同一次返回的 evidence 原样放进 zhihu_study_report。来源编号、链接、摘录、作者、赞同数和权威字段必须来自该结果。标为 source 的交互数字必须出现在对应摘录里；范围和解释可以是假设，但要写成 assumption。只读工作区会拒绝写文件。报告写在会话工作区的 zhihu-study 目录，不接受任意绝对路径。
 
 摘录不是全文。全网 AuthorityLevel 只有 1、2、3、4 才有低/中/高/超高的官方含义。知乎站内的 AuthorityLevel 和 RankingScore 只在上游实际返回时保留，不套用那四档说明。HasMore 为真也没有公开翻页参数。
 `.trim()
@@ -29,11 +31,11 @@ export const ZHIHU_STUDY_SKILLS: readonly ZhihuStudySkill[] = [
 
 ${SHARED}
 
-调用 zhihu_study，mode 为 deep。先把问题拆成 2 到 4 条 queries。只有用户已有知识库要参与时才把 knowledge 放进 sources。全网检索使用现有 global_search，不新增端点。
+调用 zhihu_study，mode 为 deep。默认来源是知乎和全网。2 条子问题是 4 次调用，3 条是 6 次，都在单次上限内。不要一次提交 4 条，除非只保留一个来源。加入知识库后，子问题和来源相乘不能超过 6。全网检索使用现有 global_search，不新增端点。
 
-你负责综合：发现、争议和机制都要指向返回条目的 url。没有拆解字段 multiAngle 时，不要声称已经做过多角度研究。性能、价格、寿命这类数字要么引用某条 evidence，要么在报告里写成 assumption。插件不提供默认 CADR 或五年费用。交互块的每个滑杆都要带 provenance。
+你负责综合：发现和争议指向取证编号。没有 multiAngle 时，不要声称已经做过多角度研究。性能、价格、寿命要么能在摘录里找到对应数字，要么写成 assumption。插件不提供默认 CADR 或五年费用。
 
-然后调用 zhihu_study_report，directory 用用户能够打开的绝对目录。把返回的 html 路径交给用户。`,
+然后调用 zhihu_study_report，带上这次 evidence。把返回的 html 路径交给用户。`,
   },
   {
     name: 'zhihu-observation',

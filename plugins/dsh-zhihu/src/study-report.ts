@@ -4,11 +4,11 @@
  * Untrusted titles, excerpts and URLs are escaped and never executed.
  */
 import { randomBytes } from 'node:crypto'
-import { mkdir, realpath, stat, writeFile } from 'node:fs/promises'
-import { isAbsolute, join, sep } from 'node:path'
+import { lstat, mkdir, rm, writeFile } from 'node:fs/promises'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { ZHIHU_STUDY_REPORT_TOOL_NAME } from './contracts.ts'
-import { ZHIHU_GLOBAL_AUTHORITY_LEGEND, ZHIHU_STUDY_MAX_WINDOW_DAYS } from './study.ts'
+import { ZHIHU_GLOBAL_AUTHORITY_LEGEND, ZHIHU_STUDY_MAX_CALLS, shanghaiDate, type ZhihuStudyWindow } from './study.ts'
 import { ZhihuSearchError } from './zhihu-client.ts'
 
 export const STUDY_REPORT_DISCLAIMERS = {
@@ -199,6 +199,12 @@ function finiteNumber(value: unknown, label: string): number {
   return value
 }
 
+function numberInText(excerpt: string, value: number): boolean {
+  const raw = Object.is(value, -0) ? '0' : String(value)
+  const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?<![\\d.])${escaped}(?![\\d.])`).test(excerpt)
+}
+
 function provenance(value: unknown, sources: Map<string, Source>): InputProvenance {
   const row = record(value, '数值依据')
   known(row, ['kind', 'sourceId', 'text'])
@@ -228,9 +234,14 @@ function interactive(value: unknown, sources: Map<string, Source>): InteractiveB
     const unit = input.unit === undefined ? undefined : text(input.unit, '单位', 16)
     return {
       id: idOf(input.id, '输入编号'), label: text(input.label, '输入名称', 80),
-      min, max, step, value: initial, ...(unit ? { unit } : {}), provenance: provenance(input.provenance, sources),
+      min, max, step, value: initial, ...(unit ? { unit } : {}),       provenance: provenance(input.provenance, sources),
     }
   })
+  for (const input of inputs) {
+    if (input.provenance.kind !== 'source') continue
+    const cited = sources.get(input.provenance.sourceId)
+    if (!cited || !numberInText(cited.excerpt, input.value)) invalid('标为来源的数字必须出现在对应取证摘录里。滑杆的最小、最大和步长只是交互范围。')
+  }
   if (inputs.some(item => !/^[a-z][a-z0-9]*$/.test(item.id))) invalid('输入编号只能是小写字母和数字，以便写进公式。')
   if (new Set(inputs.map(item => item.id)).size !== inputs.length) invalid('交互输入编号重复。')
   const formula = text(row.formula, '公式', 200)
@@ -264,7 +275,66 @@ function realDate(value: string): boolean {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
 }
 
-function parseSources(value: unknown): Map<string, Source> {
+function bounded(value: unknown, label: string, max: number): unknown[] {
+  if (!Array.isArray(value)) invalid(`${label}必须是数组。`)
+  if (value.length > max) invalid(`${label}不能超过 ${max} 条。`)
+  return value
+}
+
+type BoundEvidence = {
+  id: string
+  url: string
+  excerpts: string[]
+  author?: string
+  votes?: number
+  authority?: string
+  authorityMeaning?: string
+  editTime?: string
+  editTimeMeaning?: 'publish_or_update' | 'last_edit' | 'mixed' | 'unavailable'
+}
+
+function readEvidence(value: unknown, mode: string, question: string): { items: Map<string, BoundEvidence>; window?: ZhihuStudyWindow } {
+  const row = record(value, '取证结果')
+  if (row.phase !== 'evidence' || row.finishedReport !== false || row.version !== 1) invalid('报告必须附上同一次 zhihu_study 取证结果。')
+  if (row.mode !== mode || row.question !== question) invalid('报告的模式和问题必须与取证结果一致。')
+  const stop = record(row.stop, '取证预算')
+  if (typeof stop.budgetApplied !== 'number' || !Number.isSafeInteger(stop.budgetApplied) || stop.budgetApplied < 1 || stop.budgetApplied > ZHIHU_STUDY_MAX_CALLS) {
+    invalid('取证预算超出单次上限。')
+  }
+  if (typeof stop.callsUsed !== 'number' || !Number.isSafeInteger(stop.callsUsed) || stop.callsUsed < 0 || stop.callsUsed > stop.budgetApplied) {
+    invalid('取证调用次数与预算不一致。')
+  }
+  const items = new Map<string, BoundEvidence>()
+  for (const item of bounded(row.evidence, '取证条目', 40)) {
+    const entry = record(item, '取证条目')
+    const id = typeof entry.id === 'string' ? entry.id : invalid('取证编号无效。')
+    if (!ID_PATTERN.test(id) || items.has(id)) invalid('取证编号无效或重复。')
+    const excerpts = Array.isArray(entry.excerpts) ? entry.excerpts.filter((part): part is string => typeof part === 'string' && part.length > 0) : []
+    const meaning = entry.editTimeMeaning
+    items.set(id, {
+      id, url: typeof entry.url === 'string' ? entry.url : '', excerpts,
+      ...(typeof entry.author === 'string' ? { author: entry.author } : {}),
+      ...(typeof entry.votes === 'number' ? { votes: entry.votes } : {}),
+      ...(typeof entry.authority === 'string' ? { authority: entry.authority } : {}),
+      ...(typeof entry.authorityMeaning === 'string' ? { authorityMeaning: entry.authorityMeaning } : {}),
+      ...(typeof entry.editTime === 'string' ? { editTime: entry.editTime } : {}),
+      ...(meaning === 'publish_or_update' || meaning === 'last_edit' || meaning === 'mixed' || meaning === 'unavailable' ? { editTimeMeaning: meaning } : {}),
+    })
+  }
+  if (mode !== 'briefing') return { items }
+  const raw = record(row.window, '取证窗口')
+  if (raw.basis !== 'shanghai_calendar_day' || typeof raw.startDate !== 'string' || typeof raw.endDate !== 'string' || !realDate(raw.startDate) || !realDate(raw.endDate) || raw.startDate > raw.endDate) {
+    invalid('近况报告必须沿用取证时固定的上海日历窗口。')
+  }
+  return { items, window: raw as ZhihuStudyWindow }
+}
+
+function sameOrCopy<T>(host: T | undefined, evidence: T | undefined, label: string): T | undefined {
+  if (host !== undefined && host !== evidence) invalid(`${label}必须与取证结果一致。`)
+  return evidence
+}
+
+function parseSources(value: unknown, evidence: Map<string, BoundEvidence>): Map<string, Source> {
   if (!Array.isArray(value) || value.length === 0 || value.length > 40) invalid('sources 必须是 1 到 40 条来源。')
   const sources = new Map<string, Source>()
   for (const item of value) {
@@ -294,37 +364,48 @@ function parseSources(value: unknown): Map<string, Source> {
       source.editTimeMeaning = row.editTimeMeaning
     }
     if (sources.has(source.id)) invalid('来源编号重复。')
+    const bound = evidence.get(source.id)
+    if (!bound) invalid(`来源 ${source.id} 不在这次取证结果里。`)
+    if (source.url !== bound.url) invalid('来源链接必须与取证结果一致。')
+    if (!bound.excerpts.some(excerpt => excerpt.includes(source.excerpt))) invalid('来源摘录必须出自取证结果，不能另写。')
+    source.author = sameOrCopy(source.author, bound.author, '作者')
+    source.votes = sameOrCopy(source.votes, bound.votes, '赞同数')
+    source.authority = sameOrCopy(source.authority, bound.authority, '权威原值')
+    source.authorityMeaning = sameOrCopy(source.authorityMeaning, bound.authorityMeaning, '权威含义')
+    source.editTime = sameOrCopy(source.editTime, bound.editTime, '条目时间')
+    source.editTimeMeaning = sameOrCopy(source.editTimeMeaning, bound.editTimeMeaning === 'mixed' || bound.editTimeMeaning === 'unavailable' ? undefined : bound.editTimeMeaning, '条目时间含义')
     sources.set(source.id, source)
   }
   return sources
 }
 
-export function validateZhihuStudyReport(input: unknown, options: { now?: number } = {}): ValidatedStudyReport {
+export function validateZhihuStudyReport(input: unknown): ValidatedStudyReport {
   const body = record(input, '报告')
   if (body.phase === 'evidence' || body.finishedReport === false) invalid('证据清单不是成品报告。请先综合，再提交报告结构。')
-  known(body, ['mode', 'title', 'question', 'limitations', 'sources', 'deep', 'observation', 'briefing'])
+  known(body, ['mode', 'title', 'question', 'limitations', 'sources', 'deep', 'observation', 'briefing', 'evidence'])
   if (body.mode !== 'deep' && body.mode !== 'observation' && body.mode !== 'briefing') invalid('报告 mode 无效。')
-  const sources = parseSources(body.sources)
-  const limitations = body.limitations === undefined ? [] : Array.isArray(body.limitations)
-    ? body.limitations.map(item => text(item, '局限', 500))
-    : invalid('limitations 必须是字符串数组。')
+  const question = text(body.question, '问题', 4000)
+  if (body.evidence === undefined) invalid('报告必须附上同一次取证结果，不能另填来源。')
+  const evidence = readEvidence(body.evidence, body.mode, question)
+  const sources = parseSources(body.sources, evidence.items)
+  const limitations = body.limitations === undefined ? [] : bounded(body.limitations, '局限', 20)
+    .map(item => text(item, '局限', 500))
   const report: ValidatedStudyReport = {
-    mode: body.mode, title: text(body.title, '标题', 120), question: text(body.question, '问题', 4000),
+    mode: body.mode, title: text(body.title, '标题', 120), question,
     limitations, sources: [...sources.values()],
   }
   if (body.mode === 'deep') {
     const deep = record(body.deep, '深度研究')
     known(deep, ['findings', 'assumptions', 'disputes', 'interactive', 'unansweredReason'])
     if (body.observation !== undefined || body.briefing !== undefined) invalid('报告段落与 mode 不一致。')
-    const findings = Array.isArray(deep.findings) ? deep.findings.map(item => cited(item, sources, '发现')) : invalid('findings 必须是数组。')
-    const assumptions = Array.isArray(deep.assumptions) ? deep.assumptions.map(item => {
+    const findings = bounded(deep.findings, '发现', 20).map(item => cited(item, sources, '发现'))
+    const assumptions = bounded(deep.assumptions, '假设', 20).map(item => {
       const row = record(item, '假设')
       known(row, ['text'])
       return { text: text(row.text, '假设', 500) }
-    }) : invalid('assumptions 必须是数组。')
-    const disputes = Array.isArray(deep.disputes) ? deep.disputes.map(item => cited(item, sources, '争议')) : invalid('disputes 必须是数组。')
-    const blocks = Array.isArray(deep.interactive) ? deep.interactive.map(item => interactive(item, sources)) : invalid('interactive 必须是数组。')
-    if (blocks.length > 3) invalid('交互块最多 3 个。')
+    })
+    const disputes = bounded(deep.disputes, '争议', 20).map(item => cited(item, sources, '争议'))
+    const blocks = bounded(deep.interactive, '交互块', 3).map(item => interactive(item, sources))
     if (new Set(blocks.map(item => item.id)).size !== blocks.length) invalid('交互块编号重复。')
     const unansweredReason = deep.unansweredReason === undefined ? undefined : text(deep.unansweredReason, '未回答原因', 500)
     if (findings.length === 0 && !unansweredReason) invalid('没有发现时必须写明未回答原因，不能导出空白结论。')
@@ -333,35 +414,31 @@ export function validateZhihuStudyReport(input: unknown, options: { now?: number
     const observation = record(body.observation, '知乎观察')
     known(observation, ['currentState', 'progress', 'viewpoints', 'openQuestions'])
     if (body.deep !== undefined || body.briefing !== undefined) invalid('报告段落与 mode 不一致。')
-    const viewpoints = Array.isArray(observation.viewpoints) ? observation.viewpoints.map(item => {
+    const viewpoints = bounded(observation.viewpoints, '观点', 12).map(item => {
       const row = record(item, '观点')
       known(row, ['id', 'text', 'sourceIds'])
       return { id: idOf(row.id, '观点编号'), text: text(row.text, '观点', 2000), sourceIds: sourceIds(row.sourceIds, sources, '观点') }
-    }) : invalid('viewpoints 必须是数组。')
+    })
     if (viewpoints.length < 2) invalid('并列观点至少要有两条，不能把单条样本写成各方看法。')
     const citedIds = new Set(viewpoints.flatMap(item => item.sourceIds))
     if (citedIds.size < 2) invalid('并列观点必须追到至少两个不同来源。')
     report.observation = {
-      currentState: Array.isArray(observation.currentState) ? observation.currentState.map(item => cited(item, sources, '现状')) : invalid('currentState 必须是数组。'),
-      progress: Array.isArray(observation.progress) ? observation.progress.map(item => cited(item, sources, '进展')) : invalid('progress 必须是数组。'),
+      currentState: bounded(observation.currentState, '现状', 20).map(item => cited(item, sources, '现状')),
+      progress: bounded(observation.progress, '进展', 20).map(item => cited(item, sources, '进展')),
       viewpoints,
-      openQuestions: Array.isArray(observation.openQuestions) ? observation.openQuestions.map(item => {
+      openQuestions: bounded(observation.openQuestions, '未决问题', 20).map(item => {
         const row = record(item, '未决问题')
         known(row, ['text'])
         return { text: text(row.text, '未决问题', 500) }
-      }) : invalid('openQuestions 必须是数组。'),
+      }),
     }
   } else {
     const briefing = record(body.briefing, '近况速览')
-    known(briefing, ['windowDays', 'confirmedEvents', 'publicationUpdates', 'undated', 'nextChecks'])
+    known(briefing, ['confirmedEvents', 'publicationUpdates', 'undated', 'nextChecks'])
     if (body.deep !== undefined || body.observation !== undefined) invalid('报告段落与 mode 不一致。')
-    const windowDays = briefing.windowDays === undefined ? 30 : briefing.windowDays
-    if (typeof windowDays !== 'number' || !Number.isSafeInteger(windowDays) || windowDays < 1 || windowDays > ZHIHU_STUDY_MAX_WINDOW_DAYS) {
-      invalid(`windowDays 必须是 1 到 ${ZHIHU_STUDY_MAX_WINDOW_DAYS}。`)
-    }
-    const now = options.now ?? Date.now()
-    const start = now - windowDays * 86_400_000
-    const eventRows = Array.isArray(briefing.confirmedEvents) ? briefing.confirmedEvents : invalid('confirmedEvents 必须是数组。')
+    const window = evidence.window
+    if (!window) invalid('近况报告必须沿用取证时固定的上海日历窗口。')
+    const eventRows = bounded(briefing.confirmedEvents, '已确认事件', 20)
     const confirmedEvents = eventRows.map(item => {
       const row = record(item, '已确认事件')
       known(row, ['id', 'title', 'sourceIds', 'eventOn', 'eventQuote'])
@@ -369,8 +446,7 @@ export function validateZhihuStudyReport(input: unknown, options: { now?: number
       const eventOn = text(row.eventOn, '事件日期', 10)
       const eventQuote = text(row.eventQuote, '事件引文', 500)
       if (!realDate(eventOn)) invalid('事件日期必须是真实的 YYYY-MM-DD。')
-      const eventMs = Date.parse(`${eventOn}T00:00:00+08:00`)
-      if (eventMs < start || eventMs > now) invalid('事件日期不在滚动窗口内，不能写入已确认时间线。')
+      if (eventOn < window.startDate || eventOn > window.endDate) invalid('事件日期不在取证窗口内，不能写入已确认时间线。')
       const quoted = sourceList.map(itemId => sources.get(itemId)!).find(source => source.excerpt.includes(eventQuote))
       if (!quoted || !dateForms(eventOn).some(form => eventQuote.includes(form))) invalid('事件日期必须出现在所引来源摘录中，不能补写。')
       return { id: idOf(row.id, '事件编号'), title: text(row.title, '事件标题', 120), sourceIds: sourceList, eventOn, eventQuote }
@@ -381,28 +457,29 @@ export function validateZhihuStudyReport(input: unknown, options: { now?: number
       if (seen.has(key)) invalid('相同标题和日期的事件需要先合并，不能重复列入时间线。')
       seen.add(key)
     }
-    const publicationUpdates = (Array.isArray(briefing.publicationUpdates) ? briefing.publicationUpdates : invalid('publicationUpdates 必须是数组。')).map(item => {
+    const publicationUpdates = bounded(briefing.publicationUpdates, '发布或更新', 20).map(item => {
       const row = record(item, '发布或更新')
       known(row, ['id', 'title', 'sourceIds'])
       const ids = sourceIds(row.sourceIds, sources, '发布或更新')
       for (const itemId of ids) {
         const source = sources.get(itemId)!
         const seconds = source.editTime ? Number(source.editTime) : Number.NaN
-        if (!source.editTime || !Number.isSafeInteger(seconds) || seconds * 1000 < start || seconds * 1000 > now) {
+        const date = Number.isSafeInteger(seconds) ? shanghaiDate(seconds * 1000) : ''
+        if (!source.editTime || date < window.startDate || date > window.endDate) {
           invalid('没有窗口内条目时间的来源不能写入发布或更新列表。')
         }
       }
       return { id: idOf(row.id, '更新编号'), title: text(row.title, '更新标题', 120), sourceIds: ids }
     })
-    const undated = (Array.isArray(briefing.undated) ? briefing.undated : invalid('undated 必须是数组。')).map(item => {
+    const undated = bounded(briefing.undated, '日期不确定', 20).map(item => {
       const row = record(item, '日期不确定')
       known(row, ['id', 'title', 'sourceIds'])
       return { id: idOf(row.id, '不确定编号'), title: text(row.title, '不确定标题', 120), sourceIds: sourceIds(row.sourceIds, sources, '日期不确定') }
     })
     report.briefing = {
-      windowDays, windowStart: new Date(start).toISOString(), windowEnd: new Date(now).toISOString(),
+      windowDays: window.days, windowStart: window.start, windowEnd: window.end,
       confirmedEvents, publicationUpdates, undated,
-      nextChecks: (Array.isArray(briefing.nextChecks) ? briefing.nextChecks : invalid('nextChecks 必须是数组。')).map(item => {
+      nextChecks: bounded(briefing.nextChecks, '后续核对', 10).map(item => {
         const row = record(item, '后续核对')
         known(row, ['text'])
         return { text: text(row.text, '后续核对', 500) }
@@ -700,58 +777,97 @@ ${report.limitations.length ? `<h2>局限</h2><ul>${report.limitations.map(item 
 </html>`
 }
 
-export async function writeZhihuStudyReport(directory: unknown, report: unknown, options: { now?: number } = {}): Promise<{
+async function rejectSymlink(path: string, missingOk = false) {
+  try {
+    const info = await lstat(path)
+    if (info.isSymbolicLink()) invalid('导出路径不能经过符号链接。')
+    return info
+  } catch (error) {
+    if (missingOk && (error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  }
+}
+
+export async function writeZhihuStudyReport(report: unknown, target: { workspaceRoot: string; readOnly?: boolean }): Promise<{
   directory: string
   markdown: string
   json: string
   html: string
   report: ValidatedStudyReport
+  sideEffect: { action: 'create'; workspaceRoot: string; symlinkPolicy: 'reject'; overwritten: false }
 }> {
-  if (typeof directory !== 'string' || !isAbsolute(directory) || directory.includes('\0')) invalid('directory 必须是已存在的绝对路径。')
-  const validated = validateZhihuStudyReport(report, options)
-  const root = await realpath(directory).catch(() => invalid('directory 必须是已存在的绝对路径。'))
-  const info = await stat(root)
-  if (!info.isDirectory()) invalid('directory 必须是目录。')
-  const folder = join(root, `zhihu-study-${randomBytes(8).toString('hex')}`)
-  await mkdir(folder)
+  if (target.readOnly) invalid('当前会话是只读的，不能写入研究报告。')
+  if (typeof target.workspaceRoot !== 'string' || !isAbsolute(target.workspaceRoot) || target.workspaceRoot.includes('\0')) {
+    invalid('导出需要宿主给出的工作区目录。')
+  }
+  const rootInfo = await lstat(target.workspaceRoot).catch(() => invalid('工作区目录不存在。'))
+  if (!rootInfo || rootInfo.isSymbolicLink() || !rootInfo.isDirectory()) invalid('工作区必须是不含符号链接的真实目录。')
+  const root = resolve(target.workspaceRoot)
+  const validated = validateZhihuStudyReport(report)
+  const payload = JSON.stringify(validated)
+  if (payload.length > 200_000) invalid('报告正文超过 20 万字符。')
+  const folder = join(root, 'zhihu-study', randomBytes(8).toString('hex'))
+  const relativeFolder = relative(root, folder)
+  if (relativeFolder.startsWith('..') || isAbsolute(relativeFolder)) invalid('导出目录必须在工作区内。')
+  let cursor = root
+  for (const part of relativeFolder.split(sep)) {
+    cursor = join(cursor, part)
+    const info = await rejectSymlink(cursor, true)
+    if (info && !info.isDirectory() && cursor !== folder) invalid('导出路径被已有文件挡住。')
+  }
   const markdownText = renderStudyMarkdown(validated)
   const htmlText = renderStudyHtml(validated)
-  const jsonText = `${JSON.stringify({ version: 1, renderer: 'dsh-zhihu-study', generatedAt: new Date(options.now ?? Date.now()).toISOString(), report: validated }, null, 2)}\n`
+  const jsonText = `${JSON.stringify({ version: 1, renderer: 'dsh-zhihu-study', ...(validated.briefing ? { generatedAt: validated.briefing.windowEnd } : {}), report: validated }, null, 2)}\n`
   const files = { markdown: join(folder, 'report.md'), json: join(folder, 'report.json'), html: join(folder, 'report.html') }
-  await writeFile(files.markdown, markdownText, { encoding: 'utf8', flag: 'wx' })
-  await writeFile(files.json, jsonText, { encoding: 'utf8', flag: 'wx' })
-  await writeFile(files.html, htmlText, { encoding: 'utf8', flag: 'wx' })
-  for (const file of Object.values(files)) {
-    const actual = await realpath(file)
-    if (actual !== file || !actual.startsWith(root.endsWith(sep) ? root : root + sep)) invalid('报告路径越出了指定目录。')
+  await mkdir(folder, { recursive: true })
+  try {
+    const created = await lstat(folder)
+    if (created.isSymbolicLink() || !created.isDirectory()) invalid('导出目录不能是符号链接。')
+    await writeFile(files.markdown, markdownText, { encoding: 'utf8', flag: 'wx' })
+    await writeFile(files.json, jsonText, { encoding: 'utf8', flag: 'wx' })
+    await writeFile(files.html, htmlText, { encoding: 'utf8', flag: 'wx' })
+    for (const file of Object.values(files)) {
+      const info = await lstat(file)
+      if (info.isSymbolicLink() || !info.isFile()) invalid('导出文件必须是新的普通文件。')
+    }
+  } catch (error) {
+    await rm(folder, { recursive: true, force: true })
+    throw error
   }
-  return { directory: folder, ...files, report: validated }
+  return {
+    directory: folder, ...files, report: validated,
+    sideEffect: { action: 'create', workspaceRoot: root, symlinkPolicy: 'reject', overwritten: false },
+  }
 }
 
 export function renderZhihuStudyReportResult(result: { html: string }): string {
   return `已写好可打开的本地报告。请打开这个 HTML 文件：${result.html}\n同目录还有 report.md 和 report.json。页面不加载外部资源。这是宿主综合之后的导出，测试并不证明模型结论正确。`
 }
 
-export function createZhihuStudyReportTool() {
+export function createZhihuStudyReportTool(resolveWorkspace?: (session: unknown) => { workspaceRoot?: string; mode?: string } | undefined) {
   return defineTool({
     name: ZHIHU_STUDY_REPORT_TOOL_NAME,
     description:
-      '把宿主综合后的研究结构写成 report.md、report.json 和单文件 report.html，并返回可打开的 HTML 路径。' +
-      '不发起知乎请求，不能打开付费，也不能把 zhihu_study 的证据清单直接当成成品。' +
-      '数字必须有来源或明确假设；观点必须追到来源；近况默认 30 天，事件日期必须能在摘录里找到，缺日期不能进已确认时间线。',
+      '把附有同一次 zhihu_study 取证结果的综合报告写进当前工作区的 zhihu-study 目录，返回可打开的 report.html。' +
+      '只读会话会拒绝。来源、摘录、赞同数和标为来源的数字必须对得上取证结果；假设要单独标明。不发起知乎请求，也不能打开付费。',
     parameters: {
-      directory: { type: 'string', required: true, description: '用户能打开的现有绝对目录。插件会在其中新建 zhihu-study-* 文件夹。' },
-      report: { type: 'object', required: true, description: '综合后的报告。mode 为 deep、observation 或 briefing，并带 sources 与对应段落。', additionalProperties: true },
+      report: { type: 'object', required: true, description: '综合结果。必须包含 evidence，即同一次 zhihu_study 的返回值，以及引用其中编号的 sources。', additionalProperties: true },
     },
     output: {
       schema: { type: 'object', additionalProperties: true, properties: {} },
       render(_args, value) { return [{ type: 'text' as const, text: renderZhihuStudyReportResult(value as { html: string }) }] },
     },
     isConcurrencySafe() { return false },
-    async execute(args) {
-      const input = args as { directory?: unknown; report?: unknown }
-      const written = await writeZhihuStudyReport(input.directory, input.report)
-      return { phase: 'report' as const, finishedReport: true, directory: written.directory, markdown: written.markdown, json: written.json, html: written.html }
+    async execute(args, exec) {
+      const policy = resolveWorkspace?.(exec.agent?.session)
+      if (!policy?.workspaceRoot) throw new ZhihuSearchError('CALL_BLOCKED', '导出需要宿主工作区授权。')
+      const written = await writeZhihuStudyReport((args as { report?: unknown }).report, {
+        workspaceRoot: policy.workspaceRoot, readOnly: policy.mode === 'read-only',
+      })
+      return {
+        phase: 'report' as const, finishedReport: true, directory: written.directory,
+        markdown: written.markdown, json: written.json, html: written.html, sideEffect: written.sideEffect,
+      }
     },
   })
 }

@@ -11,10 +11,12 @@ export function apply(ctx: Context): void {
   const host = ctx as Context & { zhihu: ZhihuService; tools: { register: (tool: unknown) => unknown } }
   const options = host.zhihu.toolOptions
   if (host.zhihu.syncCall) host.tools.register(createZhihuSyncTool(host.zhihu))
-  for (const create of [createZhihuResearchTool, createZhihuAccountTool, createZhihuStudyTool, createZhihuStudyReportTool]) {
-    const tool = create(options)
-    const execute = tool.execute as unknown as (args: unknown, exec: { signal: AbortSignal }) => Promise<unknown>
-    host.tools.register({ ...tool, execute: (args: unknown, exec: { signal: AbortSignal }) =>
+  const register = (tool: ReturnType<typeof createZhihuStudyTool>) => {
+    const execute = tool.execute as unknown as (args: unknown, exec: { signal: AbortSignal; agent?: { session?: unknown } }) => Promise<unknown>
+    host.tools.register({ ...tool, execute: (args: unknown, exec: { signal: AbortSignal; agent?: { session?: unknown } }) =>
       host.zhihu.run(signal => execute(args, { ...exec, signal }), exec.signal) })
   }
+  for (const create of [createZhihuResearchTool, createZhihuAccountTool, createZhihuStudyTool]) register(create(options))
+  const sandbox = (ctx as { get?(name: string): { resolve?(input: { session?: unknown }): { workspaceRoot?: string; mode?: string } } | undefined }).get?.('sandboxPolicy')
+  register(createZhihuStudyReportTool(session => sandbox?.resolve?.({ session })))
 }

@@ -5,7 +5,7 @@ import { installPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/
 import { executeZhihuSearch, ZHIHU_SEARCH_DEFAULT_COUNT } from './search-api.ts'
 import {
   executeZhihuGlobalSearch, executeZhihuHotList, executeZhihuAsk, executeZhihuKnowledgeSearch,
-  normalizeRecallScopes, ZHIHU_ASK_MODELS, ZHIHU_ASK_DEFAULT_MODEL,
+  normalizeRecallScopes, readZhihuGlobalFilter, ZHIHU_ASK_MODELS, ZHIHU_ASK_DEFAULT_MODEL,
 } from './operations.ts'
 import { listZhihuKnowledgeBases, uploadZhihuKnowledgeFile, ZHIHU_KNOWLEDGE_UPLOAD_MAX_BYTES } from './zhihu-knowledge.ts'
 import { type ZhihuClientOptions, type ZhihuSearchExecuted, ZhihuSearchError } from './zhihu-client.ts'
@@ -16,7 +16,6 @@ import { bindZhihuWebSearch } from './web-search-provider.ts'
 import { createZhihuSyncService, zhihuSyncDomainSpec, ZHIHU_SYNC_CREDENTIAL_REFS, ZhihuSyncServiceError } from './sync-service.ts'
 import { executeZhihuOpenPlatform, resolveZhihuOpenPlatformOperation, ZHIHU_OPEN_PLATFORM_APIS, zhihuOpenPlatformResultCount } from './open-platform.ts'
 import { executeZhihuStudy } from './study.ts'
-import { writeZhihuStudyReport } from './study-report.ts'
 
 export const name = '@klarkxy/dsh-zhihu'
 export const inject = ['connection', 'credentials', 'storageDomain', 'webServer'] as const
@@ -89,7 +88,8 @@ export function createZhihuService(
           value = result; results = result.items.length
         } else if (endpoint === 'global.search') {
           const result = await executeZhihuGlobalSearch(query, typeof body.count === 'number' ? body.count : 10,
-            body.searchDb === 'realtime' || body.searchDb === 'static' ? body.searchDb : 'all', client)
+            body.searchDb === 'realtime' || body.searchDb === 'static' ? body.searchDb : 'all',
+            { ...client, ...(readZhihuGlobalFilter(body) ? { filter: readZhihuGlobalFilter(body) } : {}) })
           value = result; results = result.items.length
         } else if (endpoint === 'hot.list') {
           const result = await executeZhihuHotList(typeof body.limit === 'number' ? body.limit : 10, client)
@@ -106,15 +106,11 @@ export function createZhihuService(
           counted = endpoint === 'study'
           if (endpoint === 'study') {
             const result = await executeZhihuStudy(body, client)
-            value = result
-            results = result.evidence.length
-            record({ ok: result.status !== 'failed' && result.status !== 'cancelled', results })
-          } else {
-            const written = await writeZhihuStudyReport(body.directory, body.report)
-            value = { phase: 'report', finishedReport: true, directory: written.directory, markdown: written.markdown, json: written.json, html: written.html }
-            results = 1
+            record({ ok: result.status !== 'failed' && result.status !== 'cancelled', results: result.evidence.length })
+            return { ok: true, value: result }
           }
-          return { ok: true, value }
+          counted = false
+          return fail('call-blocked', '研究报告只能由可写工作区里的 zhihu_study_report 工具导出。')
         } else if (endpoint === 'knowledge.upload') {
           const contentBase64 = typeof body.contentBase64 === 'string' ? body.contentBase64 : ''
           if (!contentBase64) throw new Error('缺少文件内容。')

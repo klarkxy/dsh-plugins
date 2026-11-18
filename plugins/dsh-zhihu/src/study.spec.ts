@@ -1,24 +1,26 @@
 import '../tests/legacy-call-policy.ts'
-import { mkdtemp, readdir, readFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { createZhihuResearchTool } from './tool-definitions.ts'
 import { compileZhihuGlobalFilter } from './operations.ts'
-import { executeZhihuStudy, renderZhihuStudy, ZHIHU_GLOBAL_AUTHORITY_LEGEND } from './study.ts'
+import { executeZhihuStudy, renderZhihuStudy, ZHIHU_GLOBAL_AUTHORITY_LEGEND, zhihuStudyWindow } from './study.ts'
 import { STUDY_PAGE_SCRIPT, STUDY_REPORT_DISCLAIMERS, evaluateStudyFormula, validateZhihuStudyReport, writeZhihuStudyReport } from './study-report.ts'
 import { ZHIHU_STUDY_SKILLS } from './study-skill.ts'
-import { apply as applyStudy } from './study-plugin.ts'
+import * as studyPlugin from './study-plugin.ts'
+import * as toolsPlugin from './tools.ts'
 import { createZhihuService } from './index.ts'
 import { createZhihuUsageRecorder, type ZhihuUsageTableLike } from './usage.ts'
 import type { ZhihuSearchFetcher } from './zhihu-client.ts'
 
 const NOW = Date.parse('2026-11-18T04:00:00Z')
-const WINDOW_START = Math.floor((NOW - 30 * 86_400_000) / 1000)
+const STUDY_WINDOW = zhihuStudyWindow(NOW, 30)
+const FILTER_START = Math.floor(Date.parse(STUDY_WINDOW.start) / 1000)
 const INSIDE = Math.floor(NOW / 1000) - 86_400
-const OUTSIDE = WINDOW_START - 86_400
+const OUTSIDE = Math.floor(Date.parse('2026-10-18T12:00:00+08:00') / 1000)
 
 function json(body: unknown, status = 200): Awaited<ReturnType<ZhihuSearchFetcher>> {
   return { ok: status < 400, status, async text() { return JSON.stringify(body) }, async json() { return body } }
@@ -159,8 +161,8 @@ describe('zhihu study evidence', () => {
     expect(seen).toHaveLength(2)
     expect(seen[0]?.pathname).toBe('/api/v1/content/global_search')
     expect(seen[0]?.searchParams.get('SearchDB')).toBe('realtime')
-    expect(seen[0]?.searchParams.get('Filter')).toBe(`publish_time>=${WINDOW_START}`)
-    expect(seen[1]?.searchParams.get('SortBy')).toBe(`EditTime:none:(${WINDOW_START},)`)
+    expect(seen[0]?.searchParams.get('Filter')).toBe(`publish_time>=${FILTER_START}`)
+    expect(seen[1]?.searchParams.get('SortBy')).toBe(`EditTime:none:(${FILTER_START},)`)
     expect(result.status).toBe('budget_exhausted')
     expect(result.stop.callsPlanned).toBe(4)
     expect(result.calls.filter(call => call.state === 'skipped')).toHaveLength(2)
@@ -178,7 +180,7 @@ describe('zhihu study evidence', () => {
         result.evidence.find(entry => entry.title === '坏时间')!.id,
       ],
     })
-    expect(result.window).toMatchObject({ days: 30, basis: 'rolling_hours' })
+    expect(result.window).toMatchObject({ days: 30, basis: 'shanghai_calendar_day', startDate: '2026-10-19', endDate: '2026-11-18' })
     expect(result.evidence.find(entry => entry.title === '无日期')?.votes).toBeUndefined()
   })
 
@@ -198,18 +200,26 @@ describe('local study report', () => {
   const source = (id: string, extra: Record<string, unknown> = {}) => ({
     id, title: `来源${id}`, url: `https://example.com/${id}`, excerpt: '2026年11月1日公布了试验数据', ...extra,
   })
+  const evidenceFor = (mode: string, question: string, items: Array<Record<string, unknown>>, window = mode === 'briefing' ? STUDY_WINDOW : undefined) => ({
+    version: 1, phase: 'evidence', finishedReport: false, mode, question,
+    stop: { budgetApplied: 2, callsUsed: 2 }, evidence: items, ...(window ? { window } : {}),
+  })
   const deepReport = {
     mode: 'deep', title: '空气净化器', question: '怎么选',
-    sources: [source('spec', { excerpt: '标称风量见说明书', authority: '3', authorityMeaning: '高权威', editTime: String(INSIDE), editTimeMeaning: 'last_edit' })],
+    evidence: evidenceFor('deep', '怎么选', [{
+      id: 'e1', url: 'https://example.com/spec', excerpts: ['说明书给出的单价是 2 元'],
+      authority: '3', authorityMeaning: '高权威', editTime: String(INSIDE), editTimeMeaning: 'last_edit',
+    }]),
+    sources: [source('e1', { url: 'https://example.com/spec', excerpt: '单价是 2 元', authority: '3', authorityMeaning: '高权威', editTime: String(INSIDE), editTimeMeaning: 'last_edit' })],
     deep: {
-      findings: [{ text: '只能引用说明书里的风量。', sourceIds: ['spec'] }],
+      findings: [{ text: '只能引用说明书里的单价。', sourceIds: ['e1'] }],
       assumptions: [{ text: '房间面积由用户自己填写。' }],
       disputes: [],
       interactive: [{
         id: 'cost', title: '面积乘以假设电价', outputLabel: '试算', outputUnit: '元', formula: 'area * price',
         inputs: [
           { id: 'area', label: '面积', min: 10, max: 40, step: 1, value: 20, unit: '平方米', provenance: { kind: 'assumption', text: '用户假设的房间面积' } },
-          { id: 'price', label: '单价', min: 1, max: 5, step: 1, value: 2, unit: '元', provenance: { kind: 'source', sourceId: 'spec' } },
+          { id: 'price', label: '单价', min: 1, max: 5, step: 1, value: 2, unit: '元', provenance: { kind: 'source', sourceId: 'e1' } },
         ],
       }],
     },
@@ -229,8 +239,9 @@ describe('local study report', () => {
     const hostile = structuredClone(deepReport)
     hostile.title = '</title><script>alert(1)</script>'
     hostile.sources[0].title = '<img src=x onerror=alert(1)>'
-    hostile.sources[0].excerpt = '</script><script>alert(1)</script>'
-    const written = await writeZhihuStudyReport(directory, hostile, { now: NOW })
+    hostile.sources[0].excerpt = '单价是 2 元</script><script>alert(1)</script>'
+    hostile.evidence.evidence[0].excerpts = [hostile.sources[0].excerpt]
+    const written = await writeZhihuStudyReport(hostile, { workspaceRoot: directory })
     const html = await readFile(written.html, 'utf8')
     expect(html.match(/<script/g)).toHaveLength(2)
     expect(html).not.toContain('<script>alert')
@@ -241,10 +252,14 @@ describe('local study report', () => {
     expect(html).toContain('假设：用户假设的房间面积')
     expect(html).toContain("default-src 'none'")
     expect((await readdir(written.directory)).sort()).toEqual(['report.html', 'report.json', 'report.md'])
+    const unsourced = structuredClone(deepReport)
+    unsourced.deep.interactive[0].inputs[1].max = 100
+    unsourced.deep.interactive[0].inputs[1].value = 99
+    expect(() => validateZhihuStudyReport(unsourced)).toThrow(/必须出现在对应取证摘录里/)
     const missing = structuredClone(deepReport)
     missing.deep.interactive[0].inputs[0].provenance = { kind: 'guess' }
-    await expect(writeZhihuStudyReport(directory, missing, { now: NOW })).rejects.toThrow(/source 或 assumption|不能识别的字段/)
-    expect((await readdir(directory)).filter(name => name.startsWith('zhihu-study-'))).toHaveLength(1)
+    await expect(writeZhihuStudyReport(missing, { workspaceRoot: directory })).rejects.toThrow(/source 或 assumption|不能识别的字段/)
+    expect(await readdir(join(directory, 'zhihu-study'))).toHaveLength(1)
   })
 
   it('rejects an evidence payload, a javascript link, and a single viewpoint', async () => {
@@ -255,6 +270,10 @@ describe('local study report', () => {
     expect(() => validateZhihuStudyReport(badLink)).toThrow(/http/)
     expect(() => validateZhihuStudyReport({
       mode: 'observation', title: '出海', question: '谁在赚钱',
+      evidence: evidenceFor('observation', '谁在赚钱', [
+        { id: 'one', url: 'https://example.com/one', excerpts: ['2026年11月1日公布了试验数据'] },
+        { id: 'two', url: 'https://example.com/two', excerpts: ['2026年11月1日公布了试验数据'] },
+      ]),
       sources: [source('one'), source('two')],
       observation: { currentState: [], progress: [], openQuestions: [], viewpoints: [{ id: 'only', text: '只有一说', sourceIds: ['one'] }] },
     })).toThrow(/至少要有两条/)
@@ -265,6 +284,10 @@ describe('local study report', () => {
     const directory = await mkdtemp(join(tmpdir(), 'zhihu-study-'))
     const report = {
       mode: 'briefing', title: '减肥药', question: '最近进展',
+      evidence: evidenceFor('briefing', '最近进展', [
+        { id: 'trial', url: 'https://example.com/trial', excerpts: ['2026年11月1日公布了试验数据'], editTime: String(INSIDE), editTimeMeaning: 'publish_or_update' },
+        { id: 'nodate', url: 'https://example.com/nodate', excerpts: ['日期没有写清'] },
+      ]),
       sources: [
         source('trial', { excerpt: '2026年11月1日公布了试验数据', editTime: String(INSIDE), editTimeMeaning: 'publish_or_update' }),
         source('nodate', { excerpt: '日期没有写清', url: 'https://example.com/nodate' }),
@@ -276,7 +299,7 @@ describe('local study report', () => {
         nextChecks: [{ text: '核对原始公告。' }],
       },
     }
-    const written = await writeZhihuStudyReport(directory, report, { now: NOW })
+    const written = await writeZhihuStudyReport(report, { workspaceRoot: directory })
     const html = await readFile(written.html, 'utf8')
     const markdown = await readFile(written.markdown, 'utf8')
     expect(html).toContain(STUDY_REPORT_DISCLAIMERS.briefing)
@@ -287,13 +310,14 @@ describe('local study report', () => {
     outside.briefing.confirmedEvents[0].eventOn = '2020-01-01'
     outside.briefing.confirmedEvents[0].eventQuote = '2020年1月1日'
     outside.sources[0].excerpt = '2020年1月1日的旧闻'
-    expect(() => validateZhihuStudyReport(outside, { now: NOW })).toThrow(/不在滚动窗口内/)
+    outside.evidence.evidence[0].excerpts = ['2020年1月1日的旧闻']
+    expect(() => validateZhihuStudyReport(outside)).toThrow(/不在取证窗口内/)
     const invented = structuredClone(report)
     invented.briefing.confirmedEvents[0].eventQuote = '下个月'
-    expect(() => validateZhihuStudyReport(invented, { now: NOW })).toThrow(/摘录/)
+    expect(() => validateZhihuStudyReport(invented)).toThrow(/摘录/)
     const undatedAsPublication = structuredClone(report)
     undatedAsPublication.briefing.publicationUpdates.push({ id: 'bad', title: '无时间', sourceIds: ['nodate'] })
-    expect(() => validateZhihuStudyReport(undatedAsPublication, { now: NOW })).toThrow(/不能写入发布或更新/)
+    expect(() => validateZhihuStudyReport(undatedAsPublication)).toThrow(/不能写入发布或更新/)
   })
 })
 
@@ -304,7 +328,7 @@ describe('study routing', () => {
       effect(setup: () => void) { setup() },
       skills: { register(skill: { name: string; content: string }) { registered.push(`${skill.name}:${skill.content}`) } },
     }
-    applyStudy(ctx as unknown as Context)
+    studyPlugin.apply(ctx as unknown as Context)
     expect(registered.map(item => item.split(':')[0])).toEqual(ZHIHU_STUDY_SKILLS.map(skill => skill.name))
     expect(registered.join('\n')).toContain('zhihu_study')
     expect(registered.join('\n')).toContain('zhihu_study_report')
@@ -319,6 +343,89 @@ describe('study routing', () => {
     }, createZhihuUsageRecorder({ get: key => rows.get(key), async put(key, value) { rows.set(key, value) } }))
     const result = await service.call('study', { mode: 'deep', question: '问题', sources: ['zhihu'] }, new AbortController().signal)
     expect(result).toMatchObject({ ok: true, value: { phase: 'evidence', finishedReport: false, status: 'empty' } })
+    const filtered = await service.call('global.search', { query: '净化器', searchDb: 'realtime', host: 'example.com', publishTime: 1778494631 }, new AbortController().signal)
+    expect(filtered.ok).toBe(true)
     await service.dispose()
+  })
+
+  it('keeps skill routes unloaded until skills exists, without blocking the tools', async () => {
+    const names: string[] = []
+    const skills: string[] = []
+    const ctx = new Context()
+    const provide = ctx.provide.bind(ctx) as (name: string, value: unknown) => void
+    provide('zhihu', { run: async (execute: (signal: AbortSignal) => Promise<unknown>, signal: AbortSignal) => execute(signal), toolOptions: {} })
+    provide('tools', { register(tool: { name: string }) { names.push(tool.name); return () => {} } })
+    const toolsFiber = ctx.plugin(toolsPlugin)
+    const studyFiber = ctx.plugin(studyPlugin)
+    await toolsFiber
+    expect(studyFiber.state).toBe(0)
+    expect(names).toEqual(expect.arrayContaining(['zhihu_study', 'zhihu_study_report']))
+    expect(skills).toEqual([])
+    provide('skills', { register(skill: { name: string }) { skills.push(skill.name); return () => {} } })
+    await studyFiber
+    expect(studyFiber.state).toBe(2)
+    expect(skills).toEqual(ZHIHU_STUDY_SKILLS.map(skill => skill.name))
+    await ctx.fiber.dispose()
+  })
+})
+
+describe('study plan and fixed window', () => {
+  const client = (seen: URL[] = []) => ({
+    fetcher: fetcher(() => ({ Items: [item()], HasMore: false }), seen),
+    env: { ZHIHU_ACCESS_TOKEN: 'primarytoken1' }, now: NOW,
+  })
+
+  it('finishes three default deep queries and rejects four before any request', async () => {
+    const seen: URL[] = []
+    const done = await executeZhihuStudy({ mode: 'deep', question: '怎么选', queries: ['甲', '乙', '丙'] }, client(seen))
+    expect(seen).toHaveLength(6)
+    expect(done.status).not.toBe('budget_exhausted')
+    expect(done.stop).toMatchObject({ callsPlanned: 6, callsUsed: 6, budgetApplied: 6, budgetRequested: null })
+    const blocked: URL[] = []
+    await expect(executeZhihuStudy({ mode: 'deep', question: '怎么选', queries: ['甲', '乙', '丙', '丁'] }, client(blocked))).rejects.toThrow(/不要拆成多次调用/)
+    expect(blocked).toHaveLength(0)
+  })
+
+  it('keeps the boundary Shanghai day and does not move the window at export', async () => {
+    const boundary = Math.floor(Date.parse('2026-10-19T01:00:00+08:00') / 1000)
+    const result = await executeZhihuStudy({ mode: 'briefing', question: '最近进展', sources: ['zhihu'] }, {
+      ...client(), now: NOW,
+      fetcher: fetcher(() => ({ Items: [item({ Title: '边界', EditTime: boundary, ContentText: '2026年10月19日下午公布' })] })),
+    })
+    expect(result.groups?.publicationOrUpdate).toEqual(['e1'])
+    expect(result.evidence[0]?.inWindow).toBe(true)
+    const report = {
+      mode: 'briefing', title: '近况', question: '最近进展', evidence: result,
+      sources: [{ id: 'e1', title: '边界', url: result.evidence[0]!.url, excerpt: '2026年10月19日下午公布', editTime: String(boundary), editTimeMeaning: 'publish_or_update' }],
+      briefing: {
+        confirmedEvents: [{ id: 'event', title: '公布', sourceIds: ['e1'], eventOn: '2026-10-19', eventQuote: '2026年10月19日' }],
+        publicationUpdates: [{ id: 'post', title: '更新', sourceIds: ['e1'] }],
+        undated: [], nextChecks: [],
+      },
+    }
+    expect(validateZhihuStudyReport(report).briefing?.windowStart).toBe(result.window?.start)
+    expect(zhihuStudyWindow(NOW + 3 * 86_400_000, 30).startDate).not.toBe(result.window?.startDate)
+    expect(() => validateZhihuStudyReport({ ...report, briefing: { ...report.briefing, confirmedEvents: [{ id: 'early', title: '更早', sourceIds: ['e1'], eventOn: '2026-10-18', eventQuote: '2026年10月18日' }] } })).toThrow(/不在取证窗口内/)
+  })
+
+  it('rejects a source or sourced number that the evidence does not contain', () => {
+    const forged = structuredClone({
+      mode: 'deep', title: '题', question: '怎么选',
+      evidence: { version: 1, phase: 'evidence', finishedReport: false, mode: 'deep', question: '怎么选', stop: { budgetApplied: 1, callsUsed: 1 }, evidence: [] },
+      sources: [{ id: 'e9', title: '假', url: 'https://example.com/fake', excerpt: '没检索过' }],
+      deep: { findings: [{ text: '假结论', sourceIds: ['e9'] }], assumptions: [], disputes: [], interactive: [] },
+    })
+    expect(() => validateZhihuStudyReport(forged)).toThrow(/不在这次取证结果里/)
+  })
+
+  it('refuses a read-only workspace and a symlinked root before writing', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'zhihu-workspace-'))
+    const outside = await mkdtemp(join(tmpdir(), 'zhihu-outside-'))
+    await expect(writeZhihuStudyReport({ mode: 'deep' }, { workspaceRoot: directory, readOnly: true })).rejects.toThrow(/只读/)
+    expect(await readdir(directory)).toEqual([])
+    const link = join(directory, 'linked')
+    await symlink(outside, link)
+    await expect(writeZhihuStudyReport({ mode: 'deep' }, { workspaceRoot: link })).rejects.toThrow(/符号链接/)
+    expect(await readdir(outside)).toEqual([])
   })
 })

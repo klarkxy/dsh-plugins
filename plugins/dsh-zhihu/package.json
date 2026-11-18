@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-zhihu",
   "version": "0.3.4",
-    "description": "Zhihu site and web search, hot list, Zhida AI answers, knowledge bases, bounded deep research, opinion comparison, 30-day briefings with local reports, question recommendations and answer summaries, published content and comments, creator stats, quota tracking, and draft sync with image uploads.",
+    "description": "Search Zhihu and the web, browse hot lists, Zhida, knowledge bases, Q&A, creator data, and drafts, and export local reports for deep research, opinion comparison, and rolling 30-day briefings.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
