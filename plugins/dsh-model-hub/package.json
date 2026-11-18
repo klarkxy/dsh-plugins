@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-model-hub",
   "version": "0.2.5",
-  "description": "Subagents: configure the model and reasoning effort for new subagents, and see each one's last-used model in the conversation popup.",
+  "description": "Subagents: configure models and reasoning effort, review each subagent's last-used model, and use per-session delegation mode.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -49,6 +49,7 @@
     "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-model-hub/src"
   },
   "dependencies": {
+    "@klarkxy/dsh-delegation": "workspace:*",
     "@klarkxy/dsh-model-route": "workspace:*",
     "@klarkxy/dsh-plugin-kit": "workspace:*"
   },

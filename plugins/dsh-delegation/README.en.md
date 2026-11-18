@@ -4,7 +4,7 @@
 
 [简体中文](README.md) / English
 
-A per-session switch where the main agent plans, delegates to subagents, and reviews results, while subagent sessions automatically receive matching execution guidance.
+A per-session switch where the main agent plans, delegates to subagents, and reviews results, while subagent sessions automatically receive matching execution guidance. Install `@klarkxy/dsh-model-hub` for a combined entry to subagent model configuration and Delegation Mode; this package remains available as a standalone compatibility option.
 
 ## Install
 

@@ -1,5 +1,8 @@
-# Model settings hub; self-test fields remain diagnostic only.
+# Model settings hub and its bundled per-session delegation feature.
 - insert:
     - id: model-hub
       name: '@klarkxy/dsh-model-hub'
+      disabled: false
+    - id: delegation
+      name: '@klarkxy/dsh-delegation'
       disabled: false
