@@ -672,6 +672,89 @@
           }
         }
       ]
+    },
+    {
+      "name": "@klarkxy/dsh-secret-manager",
+      "title": {
+        "zh": "密钥管理器",
+        "en": "Secret Manager"
+      },
+      "description": {
+        "zh": "在对话之外安全收集与管理密钥，工具只拿到引用，权限按会话限定。",
+        "en": "Collect and manage secrets securely outside chat with per-session usage limits."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/secret-manager/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-secret-manager"
+      },
+      "metadata": {
+        "category": "workflow",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "deepseek-harness-plugin",
+          "secrets",
+          "credentials",
+          "api-keys",
+          "authorization"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1794980355,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.2-rc.1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-workspace-folders",
+      "title": {
+        "zh": "工作区文件夹",
+        "en": "Workspace Folders"
+      },
+      "description": {
+        "zh": "为每个工作区添加多个文件夹，在 Agent 对话中一起使用。",
+        "en": "Add multiple folders to each workspace and use them together in Agent conversations."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/workspace-folders/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-workspace-folders"
+      },
+      "metadata": {
+        "category": "sessions",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "deepseek-harness",
+          "workspace",
+          "multi-root",
+          "folders"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1794980342,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.2-rc.1"
+          }
+        }
+      ]
     }
   ]
 }

@@ -11,11 +11,13 @@ klarkxy 的 DeepSeek Harness（DSH）插件集合。可前往[插件站点](http
 | 工作方式 | [`@klarkxy/dsh-git-commit`](plugins/dsh-git-commit/README.md) | Git 提交：在对话里提交工作区改动，由模型分组并生成 Git 提交信息。 |
 | 工作方式 | [`@klarkxy/dsh-delegation`](plugins/dsh-delegation/README.md) | 委派模式：按会话开启，主代理负责拆解、委派和验收，子代理执行具体任务，支持多智能体协作。 |
 | 工作方式 | [`@klarkxy/dsh-safe-auto`](plugins/dsh-safe-auto/README.md) | Safe Auto：新增「Safe Auto」审批档位，需要审批的请求交给审核模型判断，通过才放行，并记录完整的审核历史。 |
+| 工作方式 | [`@klarkxy/dsh-secret-manager`](plugins/dsh-secret-manager/README.md) | 密钥管理器：在对话之外安全收集与管理密钥，工具只拿到引用，权限按会话限定。 |
 | 工作方式 | [`@klarkxy/dsh-deep-view`](plugins/dsh-deep-view/README.md) | Deep View 智能界面：在正文中组合图表、交互数学、节点图、数据探索、地图与可调估算，支持草稿填入与校验回答。 |
 | 工作方式 | [`@klarkxy/dsh-font`](plugins/dsh-font/README.md) | 字体：自定义 Web GUI 的界面、对话、代码与终端字体及字号。 |
 | 工作方式 | [`@klarkxy/dsh-unrestricted`](plugins/dsh-unrestricted/README.md) | 破限模式：解除模型回答限制、交付完整成果的会话预设（Preset），仅作用于选用它的会话；可能导致账号被封禁。 |
 | 会话与记忆 | [`@klarkxy/dsh-current-title`](plugins/dsh-current-title/README.md) | 自动标题：会话标题跟随最新任务自动更新，手动改过的名字不会被覆盖，自动重命名与人工命名两不误。 |
 | 会话与记忆 | [`@klarkxy/dsh-session-manager`](plugins/dsh-session-manager/README.md) | 会话管理：跨工作目录搜索和阅读 DeepSeek Harness 会话，使用临时工作区；空输入一键续写或自动继续，久离回来给出摘要与上下文压缩建议；可选让智能体分叉当前会话或向其他会话发消息。 |
+| 会话与记忆 | [`@klarkxy/dsh-workspace-folders`](plugins/dsh-workspace-folders/README.md) | 工作区文件夹：为每个工作区添加多个文件夹，在 Agent 对话中一起使用。 |
 | 会话与记忆 | [`@klarkxy/dsh-context-cleaner`](plugins/dsh-context-cleaner/README.md) | 上下文面板清理：隐藏 `dsh-context` 仪表盘顶部的插件信息与推广卡片。 |
 | 模型与联网 | [`@klarkxy/dsh-model-hub`](plugins/dsh-model-hub/README.md) | 子代理：配置子代理的模型与推理强度，并在会话弹层查看最后使用的模型。 |
 | 模型与联网 | [`@klarkxy/dsh-model-picker`](plugins/dsh-model-picker/README.md) | 模型选择器：输入框里的模型搜索与推理档位滑杆；其他插件可复用同一选择器。 |

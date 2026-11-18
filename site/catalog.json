@@ -354,6 +354,46 @@
       "readme": { "zh": "README.md", "en": "README.en.md" },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-model-picker"
+    },
+    {
+      "slug": "secret-manager",
+      "package": "@klarkxy/dsh-secret-manager",
+      "category": "workflow",
+      "kind": "plugin",
+      "title": {
+        "zh": "密钥管理器",
+        "en": "Secret Manager"
+      },
+      "summary": {
+        "zh": "在对话之外安全收集与管理密钥，工具只拿到引用，权限按会话限定。",
+        "en": "Collect and manage secrets securely outside chat with per-session usage limits."
+      },
+      "readme": {
+        "zh": "README.md",
+        "en": "README.en.md"
+      },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-secret-manager"
+    },
+    {
+      "slug": "workspace-folders",
+      "package": "@klarkxy/dsh-workspace-folders",
+      "category": "sessions",
+      "kind": "plugin",
+      "title": {
+        "zh": "工作区文件夹",
+        "en": "Workspace Folders"
+      },
+      "summary": {
+        "zh": "为每个工作区添加多个文件夹，在 Agent 对话中一起使用。",
+        "en": "Add multiple folders to each workspace and use them together in Agent conversations."
+      },
+      "readme": {
+        "zh": "README.md",
+        "en": "README.en.md"
+      },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-workspace-folders"
     }
   ]
 }
