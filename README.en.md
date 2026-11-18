@@ -69,12 +69,12 @@ The code is the developer documentation. Releases follow the [release guide](REL
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.en.md) | Draft (`draft`) | New secret manager; host acceptance precedes the first release. |
+| [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.en.md) | Testing (`testing`) | Entered the first-release process; first publication requires explicit selection. |
 | [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-shortcuts](plugins/dsh-shortcuts/README.en.md) | Draft (`draft`) | New shortcut manager and extensible command palette; awaiting first-release acceptance. |
 | [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-workspace-folders](plugins/dsh-workspace-folders/README.en.md) | Draft (`draft`) | New workspace folder management; host acceptance precedes the first release. |
+| [@klarkxy/dsh-workspace-folders](plugins/dsh-workspace-folders/README.en.md) | Testing (`testing`) | Entered the first-release process; first publication requires explicit selection. |
 | [@klarkxy/dsh-zhihu](plugins/dsh-zhihu/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 <!-- plugin-release-states:end -->
 

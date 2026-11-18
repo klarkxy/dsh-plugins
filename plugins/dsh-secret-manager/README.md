@@ -8,14 +8,13 @@
 
 ## 安装
 
-本包目前处于本地开发阶段，尚未发布到 npm。请在仓库根目录构建后从本地路径安装：
+本插件通过宿主凭据存储保存密钥；智能体需要密钥时会向你弹出请求窗口，由你确认后才写入。
 
 ```sh
-pnpm --filter @klarkxy/dsh-secret-manager build
-dsh plugin --profile web add ./plugins/dsh-secret-manager
+dsh plugin --profile web add @klarkxy/dsh-secret-manager
 ```
 
-把 `web` 换成你的 profile 名，安装后重启 profile 或刷新页面。正式发布到 npm 后，可直接使用 scoped 包名 `@klarkxy/dsh-secret-manager` 安装。
+把 `web` 换成你的 profile 名，安装后按提示重启 profile，并在插件列表中确认启用「密钥管理器」。
 
 ## 使用
 

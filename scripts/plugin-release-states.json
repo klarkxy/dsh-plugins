@@ -3,10 +3,10 @@
   "packages": [
     {
       "name": "@klarkxy/dsh-workspace-folders",
-      "state": "draft",
+      "state": "testing",
       "reason": {
-        "zh": "新增工作区多文件夹管理，首次发布前完成宿主验收。",
-        "en": "New workspace folder management; host acceptance precedes the first release."
+        "zh": "已进入首次发布流程；首次发布需显式选择。",
+        "en": "Entered the first-release process; first publication requires explicit selection."
       }
     },
     {
@@ -232,10 +232,10 @@
     },
     {
       "name": "@klarkxy/dsh-secret-manager",
-      "state": "draft",
+      "state": "testing",
       "reason": {
-        "zh": "新增密钥管理器，首次发布前完成宿主验收。",
-        "en": "New secret manager; host acceptance precedes the first release."
+        "zh": "已进入首次发布流程；首次发布需显式选择。",
+        "en": "Entered the first-release process; first publication requires explicit selection."
       }
     },
     {

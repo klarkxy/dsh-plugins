@@ -8,14 +8,11 @@
 
 ## 安装
 
-本插件目前处于本地开发阶段，尚未发布到 npm。请在仓库根目录构建并安装本地包：
-
 ```sh
-pnpm --filter @klarkxy/dsh-workspace-folders build
-dsh plugin --profile web add ./plugins/dsh-workspace-folders
+dsh plugin --profile web add @klarkxy/dsh-workspace-folders
 ```
 
-把 `web` 换成你的 profile 名，重启目标配置并确认插件已启用。运行环境要求见 [package.json](package.json)。
+把 `web` 换成你的 profile 名，安装后按提示重启 profile，并在插件列表中确认启用「工作区文件夹」。运行环境要求见 [package.json](package.json)。
 
 ## 使用
 

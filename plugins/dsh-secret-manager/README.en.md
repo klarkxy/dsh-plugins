@@ -8,14 +8,13 @@ Collect and manage secrets outside chat. When the agent needs an API key or toke
 
 ## Install
 
-This package is currently under local development and not yet published to npm. Build it from a repository checkout and install from the local path:
+This plugin stores secrets in the Host credential store. When the agent needs a secret, it asks you through a dedicated dialog; nothing is saved until you confirm.
 
 ```sh
-pnpm --filter @klarkxy/dsh-secret-manager build
-dsh plugin --profile web add ./plugins/dsh-secret-manager
+dsh plugin --profile web add @klarkxy/dsh-secret-manager
 ```
 
-Replace `web` with your profile name, then restart the profile or reload the page. Once published to npm, the same command works with the scoped package name `@klarkxy/dsh-secret-manager`.
+Replace `web` with your profile name, restart the profile if prompted, and ensure **Secret Manager** is enabled in the plugin list.
 
 ## Usage
 

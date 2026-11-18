@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-secret-manager",
-  "version": "0.0.0-stage",
+  "version": "0.1.0",
   "description": "Collect secrets outside chat and use named references with per-session HTTP and shell permissions.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",

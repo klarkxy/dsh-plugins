@@ -8,14 +8,11 @@ Add multiple additional folders to each DeepSeek Harness workspace and access th
 
 ## Install
 
-This plugin is currently under local development and has not been published to npm yet. From the repository root, build and install the local package:
-
 ```sh
-pnpm --filter @klarkxy/dsh-workspace-folders build
-dsh plugin --profile web add ./plugins/dsh-workspace-folders
+dsh plugin --profile web add @klarkxy/dsh-workspace-folders
 ```
 
-Replace `web` with your profile name, restart the target profile, and ensure the plugin is enabled. Runtime requirements are listed in [package.json](package.json).
+Replace `web` with your profile name, restart the profile if prompted, and ensure **Workspace Folders** is enabled in the plugin list. Runtime requirements are listed in [package.json](package.json).
 
 ## Usage
 

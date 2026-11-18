@@ -69,12 +69,12 @@ pnpm check
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
-| [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.md) | 草稿 (`draft`) | 新增密钥管理器，首次发布前完成宿主验收。 |
+| [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.md) | 测试中 (`testing`) | 已进入首次发布流程；首次发布需显式选择。 |
 | [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-shortcuts](plugins/dsh-shortcuts/README.md) | 草稿 (`draft`) | 新增快捷键管理与可扩展命令面板，待完成首次发布验收。 |
 | [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
-| [@klarkxy/dsh-workspace-folders](plugins/dsh-workspace-folders/README.md) | 草稿 (`draft`) | 新增工作区多文件夹管理，首次发布前完成宿主验收。 |
+| [@klarkxy/dsh-workspace-folders](plugins/dsh-workspace-folders/README.md) | 测试中 (`testing`) | 已进入首次发布流程；首次发布需显式选择。 |
 | [@klarkxy/dsh-zhihu](plugins/dsh-zhihu/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 <!-- plugin-release-states:end -->
 
