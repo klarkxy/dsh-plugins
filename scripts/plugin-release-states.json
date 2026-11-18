@@ -284,6 +284,14 @@
       }
     },
     {
+      "name": "@klarkxy/dsh-update",
+      "state": "draft",
+      "reason": {
+        "zh": "新增更新前 Release 变更预览与确认后更新，待完成首次发布验收。",
+        "en": "New release-changelog preview before confirming updates; awaiting first-release acceptance."
+      }
+    },
+    {
       "name": "@klarkxy/dsh-unrestricted",
       "state": "published",
       "reason": {
