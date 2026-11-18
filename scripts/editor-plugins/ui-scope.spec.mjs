@@ -25,7 +25,7 @@ const roots = {
   'dsh-unrestricted': ['[data-dsh-unrestricted-warning]'],
   'dsh-web-search-manager': ['.ws-root'],
   'dsh-workspace-folders': ['.workspace-folders'],
-  'dsh-zhihu': ['.zhihu-panel'],
+  'dsh-zhihu': ['.zhihu-panel', '.zs-page'],
 }
 const skip = new Set(['node_modules', 'lib', 'dist', 'coverage', 'test', 'tests'])
 function files(directory) {
@@ -128,6 +128,11 @@ function sheets(path, text = readFileSync(path, 'utf8')) {
       if (/[\\/]dsh-deep-view[\\/]src[\\/](?:prompt|skill)\.ts$/.test(path) &&
           ts.isVariableDeclaration(node.parent) &&
           ['DEEP_VIEW_PROMPT', 'DEEP_VIEW_SKILL'].includes(node.parent.name.getText(source))) return
+      // The report calculator is a script, not a stylesheet. STUDY_REPORT_CSS
+      // in the same file stays under the normal scope check.
+      if (/[\\/]dsh-zhihu[\\/]src[\\/]study-report\.ts$/.test(path) &&
+          ts.isVariableDeclaration(node.parent) &&
+          node.parent.name.getText(source) === 'STUDY_PAGE_SCRIPT') return
       // CSS has a block with a declaration; incidental message templates do not.
       const cssLiteral = !ts.isStringLiteral(node) || /^\s*[.#\[&@:]/.test(node.text)
       if (cssLiteral && parts.some(part => /\{[^{}]*[\w-]+\s*:/.test(part))) {

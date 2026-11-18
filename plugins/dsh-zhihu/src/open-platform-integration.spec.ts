@@ -50,8 +50,8 @@ const accountTool = (tools: Tool[]) => tools.find(tool => tool.name === 'zhihu_a
 describe('open platform real RPC and optional tool registration', () => {
   it('registers the two merged tools that cover all former operations', async () => {
     const { service, tools } = fixture()
-    assert.equal(tools.length, 2)
-    assert.deepEqual(tools.map(tool => tool.name).sort(), ['zhihu_account', 'zhihu_research'])
+    assert.equal(tools.length, 4)
+    assert.deepEqual(tools.map(tool => tool.name).sort(), ['zhihu_account', 'zhihu_research', 'zhihu_study', 'zhihu_study_report'])
     const account = accountTool(tools)
     const actions = (((account.parameters as { properties?: Record<string, { enum?: string[] }> }).properties?.action?.enum) ?? []).sort()
     assert.deepEqual(actions, [...cases.map(([, action]) => action)].sort())

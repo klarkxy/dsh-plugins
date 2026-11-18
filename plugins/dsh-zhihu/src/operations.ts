@@ -78,27 +78,104 @@ export type ZhihuGlobalSearchResult = {
   searchDb: ZhihuGlobalSearchDb
   items: ZhihuSearchItem[]
   emptyReason?: string
+  /** Present only when the upstream envelope includes a boolean HasMore. There is no request cursor. */
+  hasMore?: boolean
+  filter?: string
+}
+
+export type ZhihuGlobalFilterInput = {
+  host?: string
+  hostOperator?: 'eq' | 'ne'
+  publishTime?: number
+  publishTimeOperator?: 'gte' | 'gt' | 'lte' | 'lt' | 'eq' | 'ne'
+}
+
+const HOST_OPERATORS = { eq: '==', ne: '!=' } as const
+const TIME_OPERATORS = { gte: '>=', gt: '>', lte: '<=', lt: '<', eq: '==', ne: '!=' } as const
+
+/** Build the documented Filter expression from structured fields. Raw expressions are not accepted. */
+export function readZhihuGlobalFilter(body: { host?: unknown; hostOperator?: unknown; publishTime?: unknown; publishTimeOperator?: unknown }): ZhihuGlobalFilterInput | undefined {
+  if (body.host === undefined && body.hostOperator === undefined && body.publishTime === undefined && body.publishTimeOperator === undefined) return undefined
+  const hostOperators = ['eq', 'ne']
+  const timeOperators = ['gte', 'gt', 'lte', 'lt', 'eq', 'ne']
+  if (body.hostOperator !== undefined && (typeof body.hostOperator !== 'string' || !hostOperators.includes(body.hostOperator))) {
+    throw new ZhihuSearchError('INVALID_ARGUMENTS', 'host 运算符无效。')
+  }
+  if (body.publishTimeOperator !== undefined && (typeof body.publishTimeOperator !== 'string' || !timeOperators.includes(body.publishTimeOperator))) {
+    throw new ZhihuSearchError('INVALID_ARGUMENTS', 'publishTime 运算符无效。')
+  }
+  return {
+    ...(body.host !== undefined ? { host: body.host as string } : {}),
+    ...(body.hostOperator !== undefined ? { hostOperator: body.hostOperator as ZhihuGlobalFilterInput['hostOperator'] } : {}),
+    ...(body.publishTime !== undefined ? { publishTime: body.publishTime as number } : {}),
+    ...(body.publishTimeOperator !== undefined ? { publishTimeOperator: body.publishTimeOperator as ZhihuGlobalFilterInput['publishTimeOperator'] } : {}),
+  }
+}
+
+export function compileZhihuGlobalFilter(input: ZhihuGlobalFilterInput): string | undefined {
+  const parts: string[] = []
+  if (input.host !== undefined) {
+    if (typeof input.host !== 'string') throw new ZhihuSearchError('INVALID_ARGUMENTS', 'host 必须是域名字符串。')
+    const host = input.host.trim().toLowerCase()
+    if (!/^[a-z0-9.-]+$/.test(host) || host.startsWith('.') || host.endsWith('.') || host.includes('..') || !host.includes('.')) {
+      throw new ZhihuSearchError('INVALID_ARGUMENTS', 'host 必须是不含协议、路径和通配符的域名。')
+    }
+    if (host === 'zhihu.com' || host.endsWith('.zhihu.com')) {
+      throw new ZhihuSearchError('INVALID_ARGUMENTS', '全网搜索不支持把 zhihu.com 及其子域当作 host，站内内容请用知乎搜索。')
+    }
+    const op = HOST_OPERATORS[input.hostOperator ?? 'eq']
+    if (!op) throw new ZhihuSearchError('INVALID_ARGUMENTS', 'host 运算符无效。')
+    parts.push(`host${op}"${host}"`)
+  } else if (input.hostOperator !== undefined) {
+    throw new ZhihuSearchError('INVALID_ARGUMENTS', '指定了 host 运算符但没有 host。')
+  }
+  if (input.publishTime !== undefined) {
+    if (typeof input.publishTime !== 'number' || !Number.isSafeInteger(input.publishTime) || input.publishTime < 0) {
+      throw new ZhihuSearchError('INVALID_ARGUMENTS', 'publishTime 必须是非负整数秒。')
+    }
+    const op = TIME_OPERATORS[input.publishTimeOperator ?? 'gte']
+    if (!op) throw new ZhihuSearchError('INVALID_ARGUMENTS', 'publishTime 运算符无效。')
+    parts.push(`publish_time${op}${input.publishTime}`)
+  } else if (input.publishTimeOperator !== undefined) {
+    throw new ZhihuSearchError('INVALID_ARGUMENTS', '指定了发布时间运算符但没有 publishTime。')
+  }
+  return parts.length > 0 ? parts.join(' AND ') : undefined
+}
+
+export async function fetchZhihuGlobalSearchData(
+  query: string,
+  count: number,
+  searchDb: ZhihuGlobalSearchDb,
+  options: ZhihuClientOptions = {},
+  filter?: ZhihuGlobalFilterInput,
+): Promise<{ query: string; count: number; searchDb: ZhihuGlobalSearchDb; filter?: string; data: unknown }> {
+  const trimmed = requireQuery(query, '搜索词不能为空。')
+  const resolvedCount = clampInt(count, ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT, ZHIHU_GLOBAL_SEARCH_MAX_COUNT)
+  const compiled = filter ? compileZhihuGlobalFilter(filter) : undefined
+  const params: Record<string, string> = { Query: trimmed, Count: String(resolvedCount), SearchDB: searchDb }
+  if (compiled) params.Filter = compiled
+  const body = await zhihuFetchJson(GLOBAL_SEARCH_PATH, { params }, '知乎全网搜索', options)
+  return { query: trimmed, count: resolvedCount, searchDb, ...(compiled ? { filter: compiled } : {}), data: parseZhihuEnvelope(body) }
 }
 
 export async function executeZhihuGlobalSearch(
   query: string,
   count: number,
   searchDb: ZhihuGlobalSearchDb,
-  options: ZhihuClientOptions = {},
+  options: ZhihuClientOptions & { filter?: ZhihuGlobalFilterInput } = {},
 ): Promise<ZhihuGlobalSearchResult> {
-  const trimmed = requireQuery(query, '搜索词不能为空。')
-  const resolvedCount = clampInt(count, ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT, ZHIHU_GLOBAL_SEARCH_MAX_COUNT)
-  const body = await zhihuFetchJson(GLOBAL_SEARCH_PATH, {
-    params: { Query: trimmed, Count: String(resolvedCount), SearchDB: searchDb },
-  }, '知乎全网搜索', options)
-  const data = parseZhihuEnvelope(body) as { Items?: unknown; EmptyReason?: unknown }
+  const { filter, ...client } = options
+  const fetched = await fetchZhihuGlobalSearchData(query, count, searchDb, client, filter)
+  const data = fetched.data as { Items?: unknown; EmptyReason?: unknown; HasMore?: unknown }
   return {
     version: ZHIHU_GLOBAL_SEARCH_VERSION,
-    query: trimmed,
-    count: resolvedCount,
-    searchDb,
+    query: fetched.query,
+    count: fetched.count,
+    searchDb: fetched.searchDb,
     items: objectItems(data).map(normalizeSearchItem),
     ...(typeof data.EmptyReason === 'string' ? { emptyReason: data.EmptyReason } : {}),
+    ...(typeof data.HasMore === 'boolean' ? { hasMore: data.HasMore } : {}),
+    ...(fetched.filter ? { filter: fetched.filter } : {}),
   }
 }
 
