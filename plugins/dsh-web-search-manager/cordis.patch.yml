@@ -1,6 +1,4 @@
-# Keep native provider rows and their own configuration. The manager observes ctx.web.
-- id: tool-web
-  disabled: true
+# Keep native provider rows and preset-scoped tool-web intact. The manager observes ctx.web.
 - insert:
     - id: web-search-manager
       name: '@klarkxy/dsh-web-search-manager'

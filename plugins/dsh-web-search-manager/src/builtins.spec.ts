@@ -27,7 +27,7 @@ describe('builtin web providers', () => {
     await manager.refresh()
     const providers = manager.status().providers
     expect(providers.map(row => `${row.kind}:${row.id}`).sort()).toEqual([
-      'fetch:firecrawl', 'fetch:http-managed',
+      'fetch:firecrawl', 'fetch:http-managed', 'fetch:jina',
       'search:bocha', 'search:brave', 'search:ddg', 'search:deepseek-managed',
       'search:exa', 'search:firecrawl', 'search:linkup', 'search:perplexity', 'search:serper', 'search:tavily', 'search:you', 'search:zhipu',
     ])

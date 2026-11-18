@@ -106,7 +106,7 @@ function TemporaryWorkspacePicker(props: PickerProps & {
   const getAnchorRect = useCallback(() => props.anchorRef?.current?.getBoundingClientRect() ?? null, [props.anchorRef])
   const openDirectory = () => { props.onClose(); setFailure(undefined); setFlowOpen(true) }
   return <>
-    <Menu open={props.open} anchor={null} portal getAnchorRect={getAnchorRect} selectedId={props.selectedId}
+    <Menu open={props.open} anchor={null} portal anchorRef={props.anchorRef} getAnchorRect={getAnchorRect} selectedId={props.selectedId}
       onClose={props.onClose} items={workspaces.items.map(workspace => ({ id: workspace.workspaceId,
         // The standard registry's first-use title is language-neutral; all user titles stay verbatim.
         label: workspace.title === 'default-workspace' ? props.t('workspace.defaultName') : workspace.title,

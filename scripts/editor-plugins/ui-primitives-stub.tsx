@@ -411,6 +411,8 @@ export function Toast({ text, icon, tone, anchor: _anchor, holdMs = 3000, action
 export function Menu({ open, anchor, items = [], children, footer, onSelect, listClassName }: {
   open: boolean
   anchor: React.ReactNode
+  anchorRef?: React.RefObject<HTMLElement | null>
+  getAnchorRect?: () => DOMRect | null
   items?: readonly MenuEntry[]
   footer?: readonly MenuEntry[]
   children?: React.ReactNode

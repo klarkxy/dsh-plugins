@@ -15,7 +15,21 @@ import { FirecrawlFetchProvider } from './firecrawl-fetch.ts'
 import { TavilySearchProvider } from './tavily.ts'
 import { registerNativeSearch, registerNativeFetch, type ProviderConfiguration } from './native-providers.ts'
 import { hasWebProvider, type WebRegistry } from './web-registry.ts'
-import type { ProviderDescriptor, SearchProviderFactory, FetchProviderFactory } from './contracts.ts'
+import type { ProviderDescriptor, ProviderOptions, SearchProviderFactory, FetchProviderFactory } from './contracts.ts'
+
+function createJinaFirstProvider(options: ProviderOptions): JinaFirstFetchProvider {
+  const limits = {
+    maxResponseBytes: 5_000_000, maxBodyChars: options.maxFetchChars,
+    timeoutMs: options.timeoutMs, maxRedirects: 5, userAgent: 'dsh-editor/managed-web',
+  }
+  const readerTimeoutMs = Math.min(15_000, Math.floor(options.timeoutMs / 2))
+  return new JinaFirstFetchProvider({
+    // Decode a complete JSON envelope before the manager applies maxFetchChars to its content.
+    reader: new HttpFetchProvider({ ...limits, maxBodyChars: limits.maxResponseBytes, timeoutMs: readerTimeoutMs }),
+    direct: new HttpFetchProvider(limits),
+    readerTimeoutMs,
+  })
+}
 
 export function registerBuiltins(web: WebRegistry, configuration: ProviderConfiguration): () => void {
   const registered: Array<() => void> = []
@@ -36,11 +50,11 @@ export function registerBuiltins(web: WebRegistry, configuration: ProviderConfig
   try {
     registerSearch({
       id: SEARCH_ENGINE_ID, label: 'DuckDuckGo', billing: 'none',
-      description: '无需注册。默认后端。',
+      description: '无需注册。免配置搜索后端。',
     }, () => new SearchEngineProvider())
     registerSearch({
       id: 'deepseek-managed', legacyId: 'deepseek-official', label: 'DeepSeek 搜索',
-      description: '使用已配置的 DeepSeek API Key，可能产生额外搜索费用。',
+      description: '通过 DeepSeek 模型触发服务端搜索，免按次搜索费，仅计模型 Token。',
       defaultBaseURL: DEEPSEEK_DEFAULT_BASE_URL, credentialRef: 'DEEPSEEK_API_KEY',
       credentialShared: true, credentialHint: '与模型设置共用 Key', billing: 'model-and-tools',
       signupUrl: 'https://platform.deepseek.com/api_keys',
@@ -103,22 +117,15 @@ export function registerBuiltins(web: WebRegistry, configuration: ProviderConfig
       defaultBaseURL: 'https://open.bigmodel.cn', credentialRef: 'DSH_EDITOR_WEB_ZHIPU_API_KEY', billing: 'request',
       signupUrl: 'https://bigmodel.cn/usercenter/proj-mgmt/apikeys',
     }, options => new ZhipuSearchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL }))
+    // Register standalone Jina Reader so hosts mounting native `http` still get Jina Markdown extraction.
+    registerFetch({
+      id: 'jina', label: 'Jina Reader', billing: 'none',
+      description: '通过匿名 Jina Reader 提取公开网页 Markdown，失败或内网地址回退本机 HTTP；无需 Key。',
+    }, createJinaFirstProvider)
     registerFetch({
       id: 'http-managed', legacyId: 'http', label: '网页读取', billing: 'none',
       description: '优先匿名 Jina Reader 读取，失败后本机 HTTP 直连；无需 Key。',
-    }, options => {
-      const limits = {
-        maxResponseBytes: 5_000_000, maxBodyChars: options.maxFetchChars,
-        timeoutMs: options.timeoutMs, maxRedirects: 5, userAgent: 'dsh-editor/managed-web',
-      }
-      const readerTimeoutMs = Math.min(15_000, Math.floor(options.timeoutMs / 2))
-      return new JinaFirstFetchProvider({
-        // Decode a complete JSON envelope before the manager applies maxFetchChars to its content.
-        reader: new HttpFetchProvider({ ...limits, maxBodyChars: limits.maxResponseBytes, timeoutMs: readerTimeoutMs }),
-        direct: new HttpFetchProvider(limits),
-        readerTimeoutMs,
-      })
-    })
+    }, createJinaFirstProvider)
     registerFetch({
       id: 'firecrawl', label: 'Firecrawl', description: '读取网页 Markdown；与 Firecrawl 搜索共用 Key。',
       defaultBaseURL: 'https://api.firecrawl.dev', credentialRef: 'DSH_EDITOR_WEB_FIRECRAWL_API_KEY', billing: 'request',
