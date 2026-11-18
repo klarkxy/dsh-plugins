@@ -412,7 +412,6 @@ export function Menu({ open, anchor, items = [], children, footer, onSelect, lis
   open: boolean
   anchor: React.ReactNode
   anchorRef?: React.RefObject<HTMLElement | null>
-  getAnchorRect?: () => DOMRect | null
   items?: readonly MenuEntry[]
   footer?: readonly MenuEntry[]
   children?: React.ReactNode
