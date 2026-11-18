@@ -180,9 +180,6 @@ const copy = {
     emptyFilteredPlugins: '没有匹配的插件。',
     openPluginDetail: '插件详情',
     desktopDownloadTriggered: '已确认更新，正在启动桌面端下载流程。下载完成后将由桌面端提示重启安装。',
-    generalRowTitle: '版本与插件更新预览',
-    generalRowHint: '更新前展示版本区间内的 Release 变更日志，确认后才开始更新。',
-    generalRowAction: '检查 DSH 更新',
     summaryUpdatable: (n: number) => `${n} 个插件可更新`,
     summaryAllLatest: '已检查插件均为最新',
     emptyReleaseBody: '（该版本 Release 未填写正文说明）',
@@ -245,9 +242,6 @@ const copy = {
     emptyFilteredPlugins: 'No plugins match the current filter.',
     openPluginDetail: 'Details',
     desktopDownloadTriggered: 'Confirmed: starting the Desktop update download. Desktop will prompt before restarting to install.',
-    generalRowTitle: 'DSH & Plugin Update Preview',
-    generalRowHint: 'Preview Release logs across version ranges before confirming any update.',
-    generalRowAction: 'Check DSH updates',
     summaryUpdatable: (n: number) => `${n} update${n === 1 ? '' : 's'} available`,
     summaryAllLatest: 'All checked plugins are up to date',
     emptyReleaseBody: '(No release notes body provided for this tag)',
@@ -294,6 +288,8 @@ function markdownLabelsFor(text: Copy): MarkdownLabels {
 export function createUpdateClientController(client: ClientHostContext, logger?: PluginLogger) {
   let state: StoreSnapshot = { ...INITIAL_SNAPSHOT }
   const listeners = new Set<() => void>()
+  let dshCheckGeneration = 0
+  let pluginCheckGeneration = 0
 
   const emit = () => {
     for (const listener of listeners) listener()
@@ -320,6 +316,7 @@ export function createUpdateClientController(client: ClientHostContext, logger?:
     forceRefresh?: boolean
   } = {}): Promise<DshUpdateCheckResult | null> {
     const hints = readClientRuntimeHints()
+    const generation = ++dshCheckGeneration
     setState({ dshLoading: true, dshError: null })
     try {
       const res = await rpcCall<DshUpdateCheckResult>('dsh.check', {
@@ -332,9 +329,11 @@ export function createUpdateClientController(client: ClientHostContext, logger?:
           : {}),
         ...(options.forceRefresh ? { forceRefresh: true } : {}),
       })
+      if (generation !== dshCheckGeneration) return null
       setState({ dshStatus: res, dshLoading: false, dshError: null })
       return res
     } catch (error) {
+      if (generation !== dshCheckGeneration) return null
       const msg = error instanceof Error ? error.message : String(error)
       logger?.warn('dsh.check.failed', 'Failed to check DSH release logs.', error)
       setState({ dshLoading: false, dshError: msg })
@@ -343,9 +342,11 @@ export function createUpdateClientController(client: ClientHostContext, logger?:
   }
 
   async function checkAllPlugins(forceRefresh = false): Promise<PluginCheckAllResult | null> {
+    const generation = ++pluginCheckGeneration
     setState({ pluginsLoading: true, pluginsError: null })
     try {
       const res = await rpcCall<PluginCheckAllResult>('plugins.checkAll', { forceRefresh })
+      if (generation !== pluginCheckGeneration) return null
       const nextMap: Record<string, PluginUpdateEntry> = { ...state.pluginsByName }
       const order: string[] = []
       for (const item of res.plugins) {
@@ -360,6 +361,7 @@ export function createUpdateClientController(client: ClientHostContext, logger?:
       })
       return res
     } catch (error) {
+      if (generation !== pluginCheckGeneration) return null
       const msg = error instanceof Error ? error.message : String(error)
       logger?.warn('plugins.checkAll.failed', 'Failed to check plugin updates.', error)
       setState({ pluginsLoading: false, pluginsError: msg })
@@ -371,6 +373,7 @@ export function createUpdateClientController(client: ClientHostContext, logger?:
     packageName: string,
     options: { targetVersionHint?: string; forceRefresh?: boolean } = {},
   ): Promise<PluginUpdateEntry | null> {
+    const generation = ++pluginCheckGeneration
     setState({ pluginsLoading: true, pluginsError: null })
     try {
       const entry = await rpcCall<PluginUpdateEntry>('plugins.checkOne', {
@@ -378,6 +381,7 @@ export function createUpdateClientController(client: ClientHostContext, logger?:
         ...(options.targetVersionHint ? { targetVersion: options.targetVersionHint } : {}),
         ...(options.forceRefresh ? { forceRefresh: true } : {}),
       })
+      if (generation !== pluginCheckGeneration) return null
       setState(prev => ({
         ...prev,
         pluginsLoading: false,
@@ -387,6 +391,7 @@ export function createUpdateClientController(client: ClientHostContext, logger?:
       }))
       return entry
     } catch (error) {
+      if (generation !== pluginCheckGeneration) return null
       const msg = error instanceof Error ? error.message : String(error)
       logger?.warn('plugins.checkOne.failed', 'Failed to check single plugin update.', error, { packageName })
       setState({ pluginsLoading: false, pluginsError: msg })
@@ -1221,31 +1226,6 @@ export function PluginDetailUpdateAction({
   )
 }
 
-export function GeneralSettingsUpdateRow({
-  client,
-  controller,
-}: {
-  client: ClientHostContext
-  controller: UpdateClientController
-}) {
-  const locale = useHostLocale(client)
-  const text = copy[locale]
-
-  return (
-    <div className={PLUGIN_ROOT_CLASS} data-testid="dsh-upd-general-item">
-      <div className="dsh-upd-general-row">
-        <div>
-          <div className="dsh-ui-heading">{text.generalRowTitle}</div>
-          <p className="dsh-ui-hint">{text.generalRowHint}</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => controller.openDshModal({ forceRefresh: false })}>
-          {text.generalRowAction}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 export function apply(ctx: Context): void {
   const logger = installClientPluginLogger(ctx, PLUGIN_NAME)
   const client = ctx as unknown as ClientHostContext
@@ -1341,15 +1321,4 @@ export function apply(ctx: Context): void {
     'dsh-update.detail-action',
   )
 
-  // 6. General Settings quick entry row (`settings.general.item`).
-  ctx.effect(
-    () =>
-      client.slots.inject('settings.general.item', () =>
-        client.slots.register(
-          { name: 'settings.general.item', id: 'dsh-update-general', order: 95 },
-          () => <GeneralSettingsUpdateRow client={client} controller={controller} />,
-        ),
-      ),
-    'dsh-update.general-item',
-  )
 }

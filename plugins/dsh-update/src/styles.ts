@@ -212,14 +212,6 @@ ${officialUiCss('.dsh-upd-root')}
     gap: 6px;
   }
 
-  & .dsh-upd-general-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 12px 0;
-  }
-
   @media (width < 640px) {
     & .dsh-upd-plugin-row {
       flex-direction: column;

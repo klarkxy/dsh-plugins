@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { createServer, request as httpRequest, type Server } from 'node:http'
+import { once } from 'node:events'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   RPC_CHANNEL,
   apply,
@@ -9,7 +11,7 @@ import {
   splitBilingualReleaseBody,
 } from './index.ts'
 import { PluginUpdateService, normalizeUpdateOutcome, type HostBundleSummary, type HostPluginManagerLike } from './plugin-updater.ts'
-import { ReleaseMetadataResolver, resolveGitHubRepoRef } from './releases.ts'
+import { FALLBACK_NPM_REGISTRY, ReleaseMetadataResolver, resolveGitHubRepoRef } from './releases.ts'
 
 describe('dsh-update contracts & release range logic', () => {
   it('orders prerelease and stable SemVer versions per SemVer 2.0', () => {
@@ -314,5 +316,304 @@ describe('PluginUpdateService & Host RPC safety', () => {
     } as never)
     expect(provided).toContain('dshUpdate')
     expect(routes).toEqual([RPC_CHANNEL])
+  })
+
+  it('does not treat a mirror packument as the install registry', async () => {
+    const resolver = new ReleaseMetadataResolver({
+      ghApiFn: async () => [],
+      fetchFn: (async (url: string | URL) => {
+        const href = String(url)
+        if (href.startsWith('https://registry.npmjs.org/')) return new Response('missing', { status: 404 })
+        if (href.startsWith(`${FALLBACK_NPM_REGISTRY}/`)) {
+          return new Response(JSON.stringify({
+            name: 'example-plugin',
+            versions: {
+              '1.0.0': { version: '1.0.0' },
+              '1.2.0': { version: '1.2.0' },
+            },
+          }), { status: 200, headers: { 'content-type': 'application/json' } })
+        }
+        return new Response('no', { status: 404 })
+      }) as typeof fetch,
+    })
+    const updates: Array<string | undefined> = []
+    const manager: HostPluginManagerLike = {
+      listBundles: async () => [{
+        name: 'example-plugin',
+        version: '1.0.0',
+        installed: true,
+        enabled: true,
+        removable: true,
+        updatable: true,
+        source: '^1.0.0',
+      }],
+      updateBundle: async (_name, _version, options) => {
+        updates.push(options?.registry)
+        return { application: 'applied', version: '1.2.0' }
+      },
+    }
+    const service = new PluginUpdateService({
+      resolver,
+      getPluginManager: () => manager,
+      getProfileDir: () => null,
+      getDshVersion: () => '0.2.2-rc.1',
+      isDesktopHost: () => false,
+    })
+    const [entry] = (await service.checkAllPlugins()).plugins
+    expect(entry?.latestVersion).toBe('1.2.0')
+    expect(entry?.registry).toBeUndefined()
+    const applied = await service.applyPluginUpdate({ name: 'example-plugin', targetVersion: '1.2.0', registry: FALLBACK_NPM_REGISTRY })
+    expect(applied.status).toBe('applied')
+    expect(updates).toEqual([undefined])
+  })
+
+  it('follows DSH 0.2.2-rc.1 updatable bundles and refuses a result with no application', async () => {
+    let version = '1.0.0'
+    const manager: HostPluginManagerLike = {
+      listBundles: async () => [{
+        name: 'example-plugin',
+        version,
+        installed: true,
+        enabled: true,
+        removable: true,
+        updatable: true,
+        source: '^1.0.0',
+      }],
+      updateBundle: async (_name, next) => {
+        version = next
+        return { from: '1.0.0', to: next, step: 'install', result: { changed: true, stage: 'install', target: 'example-plugin' } }
+      },
+    }
+    const service = new PluginUpdateService({
+      resolver: new ReleaseMetadataResolver({ ghApiFn: async () => undefined, fetchFn: (async () => new Response('no', { status: 404 })) as typeof fetch }),
+      getPluginManager: () => manager,
+      getProfileDir: () => null,
+      getDshVersion: () => '0.2.2-rc.1',
+      isDesktopHost: () => false,
+    })
+    const applied = await service.applyPluginUpdate({ name: 'example-plugin', targetVersion: '1.2.0' })
+    expect(applied.status).toBe('failed')
+    expect(applied.installedVersion).toBe('1.0.0')
+    expect(applied.bundlePreservedInProfile).toBe(true)
+  })
+
+  it('reinstalls the previous Git plugin when the replacement has no successful application', async () => {
+    let present = true
+    const calls: string[] = []
+    const previous = 'github:example/git-plugin'
+    const target = 'git+https://github.com/example/git-plugin.git#65018178591b3bcc7fd22a966485e2838c22e0a9'
+    const manager: HostPluginManagerLike = {
+      listBundles: async () => present ? [{
+        name: 'example-git-plugin',
+        version: '1.1.0',
+        installed: true,
+        enabled: true,
+        removable: true,
+        source: previous,
+      }] : [],
+      updateBundle: async () => { throw new Error('registry updateBundle must not run for this Git source') },
+      removeBundle: async () => {
+        calls.push('remove')
+        present = false
+        return { application: 'applied' }
+      },
+      installBundle: async spec => {
+        calls.push(`install:${spec}`)
+        if (spec === target) return {}
+        present = true
+        return { application: 'applied' }
+      },
+    }
+    const service = new PluginUpdateService({
+      resolver: new ReleaseMetadataResolver({ ghApiFn: async () => undefined, fetchFn: (async () => new Response('no', { status: 404 })) as typeof fetch }),
+      getPluginManager: () => manager,
+      getProfileDir: () => null,
+      getDshVersion: () => '0.2.2-rc.1',
+      isDesktopHost: () => false,
+    })
+    const applied = await service.applyPluginUpdate({
+      name: 'example-git-plugin',
+      targetVersion: '1.2.0',
+      targetSpec: target,
+    })
+    expect(applied.status).toBe('failed')
+    expect(applied.bundlePreservedInProfile).toBe(true)
+    expect(present).toBe(true)
+    expect(calls).toEqual(['remove', `install:${target}`, `install:${previous}`])
+  })
+
+  it('trusts a host restore and does not install again after a failed updateBundle', async () => {
+    const calls: string[] = []
+    let listed = true
+    const manager: HostPluginManagerLike = {
+      listBundles: async () => listed ? [{
+        name: 'example-plugin',
+        version: '1.0.0',
+        installed: true,
+        enabled: true,
+        updatable: true,
+        source: '^1.0.0',
+      }] : [],
+      updateBundle: async () => {
+        listed = false
+        return {
+          from: '1.0.0',
+          to: '1.2.0',
+          step: 'install',
+          result: { changed: false, application: 'failed', stage: 'install', target: 'example-plugin' },
+          restore: { changed: true, application: 'applied', stage: 'install', target: 'example-plugin@1.0.0' },
+        }
+      },
+      installBundle: async () => {
+        calls.push('install')
+        return { application: 'applied' }
+      },
+    }
+    const service = new PluginUpdateService({
+      resolver: new ReleaseMetadataResolver({ ghApiFn: async () => undefined, fetchFn: (async () => new Response('no', { status: 404 })) as typeof fetch }),
+      getPluginManager: () => manager,
+      getProfileDir: () => null,
+      getDshVersion: () => '0.2.2-rc.1',
+      isDesktopHost: () => false,
+    })
+    const applied = await service.applyPluginUpdate({ name: 'example-plugin', targetVersion: '1.2.0' })
+    expect(applied.status).toBe('failed')
+    expect(applied.bundlePreservedInProfile).toBe(true)
+    expect(calls).toEqual([])
+  })
+})
+
+describe('host RPC approval gate', () => {
+  const servers: Server[] = []
+  afterEach(async () => {
+    await Promise.all(servers.splice(0).map(server => new Promise<void>((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve())
+    })))
+  })
+
+  async function boot(options: {
+    approval?: { confirm: (request: unknown, signal?: AbortSignal) => Promise<boolean> } | undefined
+    manager?: HostPluginManagerLike
+    fixture?: {
+      plugins?: unknown[]
+      applyPlugin?: (request: unknown) => Promise<unknown>
+      applyCli?: (version: string) => Promise<unknown>
+    }
+  } = {}) {
+    let handler: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void
+    apply({
+      provide() { return () => {} },
+      effect(fn: () => () => void) { fn(); return () => {} },
+      get(name: string) {
+        if (name === 'dshUpdateApproval') return options.approval
+        if (name === 'dshUpdateFixture') return options.fixture
+        if (name === 'pluginManager') return options.manager
+        return undefined
+      },
+      pluginManager: options.manager,
+      connection: { requestRejection: () => undefined },
+      webServer: {
+        register(route: { handler: typeof handler }) {
+          handler = route.handler
+          return () => {}
+        },
+      },
+    } as never)
+    const server = createServer((req, res) => { void handler(req, res) })
+    servers.push(server)
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('No server address')
+    return `http://127.0.0.1:${address.port}${RPC_CHANNEL}`
+  }
+
+  async function post(base: string, endpoint: string, payload: Record<string, unknown>) {
+    const response = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const req = httpRequest(`${base}/${endpoint}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+      }, res => {
+        const chunks: Buffer[] = []
+        res.on('data', chunk => chunks.push(Buffer.from(chunk)))
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }))
+      })
+      req.on('error', reject)
+      req.end(JSON.stringify({ type: 'client-request', rpcId: 'rpc-1', method: endpoint, payload }))
+    })
+    return { status: response.status, json: response.body ? JSON.parse(response.body) as { result?: { ok?: boolean; error?: { code?: string }; value?: unknown } } : {} }
+  }
+
+  it('serves camelCase check routes and refuses writes that the host did not approve', async () => {
+    const updates: string[] = []
+    const cli: string[] = []
+    const base = await boot({
+      manager: {
+        listBundles: async () => [],
+        updateBundle: async name => {
+          updates.push(name)
+          return { application: 'applied', version: '1.2.0' }
+        },
+      },
+      fixture: {
+        applyCli: async version => {
+          cli.push(version)
+          return { previousVersion: '0.2.2-rc.1', targetVersion: version, status: 'failed', message: 'fixture' }
+        },
+      },
+    })
+    const checked = await post(base, 'plugins.checkAll', {})
+    expect(checked.status).toBe(200)
+    expect(checked.json.result?.ok).toBe(true)
+    const one = await post(base, 'plugins.checkOne', { name: 'missing-plugin' })
+    expect(one.status).toBe(200)
+    expect(one.json.result?.ok).toBe(false)
+
+    const forged = await post(base, 'plugins.apply', { name: 'example-plugin', targetVersion: '1.2.0', approved: true })
+    expect(forged.status).toBe(200)
+    expect(forged.json.result?.error?.code).toBe('HOST_APPROVAL_UNAVAILABLE')
+    const cliRefused = await post(base, 'dsh.applyCli', { targetVersion: '0.2.2-rc.4', confirmed: true })
+    expect(cliRefused.json.result?.error?.code).toBe('HOST_APPROVAL_UNAVAILABLE')
+    expect(updates).toEqual([])
+    expect(cli).toEqual([])
+  })
+
+  it('runs a write only after the host approval service accepts it', async () => {
+    const updates: string[] = []
+    const cli: string[] = []
+    let decision = false
+    const base = await boot({
+      approval: { confirm: async () => decision },
+      manager: {
+        listBundles: async () => [{
+          name: 'example-plugin',
+          version: '1.0.0',
+          installed: true,
+          enabled: true,
+          updatable: true,
+          source: '^1.0.0',
+        }],
+        updateBundle: async name => {
+          updates.push(name)
+          return { application: 'applied', version: '1.2.0' }
+        },
+      },
+      fixture: {
+        applyCli: async version => {
+          cli.push(version)
+          return { previousVersion: null, targetVersion: version, status: 'failed', message: 'fixture cli' }
+        },
+      },
+    })
+    const rejected = await post(base, 'plugins.apply', { name: 'example-plugin', targetVersion: '1.2.0' })
+    expect(rejected.json.result?.error?.code).toBe('HOST_APPROVAL_REJECTED')
+    expect(updates).toEqual([])
+    decision = true
+    const approved = await post(base, 'plugins.apply', { name: 'example-plugin', targetVersion: '1.2.0' })
+    expect(approved.json.result?.ok).toBe(true)
+    expect(updates).toEqual(['example-plugin'])
+    const cliApproved = await post(base, 'dsh.applyCli', { targetVersion: '0.2.2-rc.4' })
+    expect(cliApproved.json.result?.ok).toBe(true)
+    expect(cli).toEqual(['0.2.2-rc.4'])
   })
 })

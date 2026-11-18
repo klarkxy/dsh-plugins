@@ -9,6 +9,17 @@ export interface HostRpcContext {
 
 type Rejection = { status: number; body?: string }
 
+/**
+ * Endpoint names are one or more dot-separated identifiers. Each identifier
+ * starts with a lower-case letter so `plugins.checkAll` and `dsh.applyCli`
+ * match, while `/`, `..`, and an empty segment do not.
+ */
+export const HOST_RPC_ENDPOINT = /^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)*$/
+
+export function isHostRpcEndpoint(endpoint: string): boolean {
+  return HOST_RPC_ENDPOINT.test(endpoint)
+}
+
 export interface HostRpcTransportOptions {
   maxBodyBytes?: number
   isEndpoint?: (endpoint: string) => boolean
@@ -32,7 +43,7 @@ export function registerHostRpcTransport(
 ): () => void {
   const bodyLimit = options.maxBodyBytes ?? 64 * 1024
   if (!Number.isSafeInteger(bodyLimit) || bodyLimit <= 0) throw new Error('Invalid RPC body limit')
-  const isEndpoint = options.isEndpoint ?? ((endpoint: string) => /^[a-z.]+$/.test(endpoint))
+  const isEndpoint = options.isEndpoint ?? isHostRpcEndpoint
   const log = options.logger
   return ctx.webServer.register({ kind: 'prefix', path: channel, handler: async (req, res) => {
     const reject = (status: number, error?: unknown, override?: string) => {

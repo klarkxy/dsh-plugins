@@ -20,6 +20,7 @@ import {
   buildGitTargetSpec,
   checkManifestDshCompatibility,
   classifyPluginSource,
+  isSilentMirrorRegistry,
   resolveGitHubRepoRef,
   selectLatestCompatibleNpmVersion,
   type NpmVersionManifest,
@@ -37,6 +38,11 @@ export interface HostBundleSummary {
   official?: boolean
   optional?: boolean
   source?: string
+  /**
+   * Host 0.2.2-rc.1 lists `updatable` for a third-party registry dependency
+   * `updateBundle` will accept. Newer hosts also set `update`.
+   */
+  updatable?: boolean
   update?: 'registry' | 'git'
   meta?: Record<string, { title?: string; description?: string }>
 }
@@ -76,6 +82,8 @@ export interface HostUpdateOutcome {
     version?: string
     output?: string
   }
+  /** Reinstall of the previous bundle after a failed target install. */
+  restore?: HostUpdateOutcome
 }
 
 /**
@@ -110,7 +118,20 @@ export function normalizeUpdateOutcome(
     ...(typeof envelope.step === 'string' ? { step: envelope.step } : {}),
     ...(typeof envelope.to === 'string' ? { version: envelope.to } : {}),
     ...(diagnostic ? { diagnostic } : {}),
+    ...(envelope.restore && typeof envelope.restore === 'object' ? { restore: envelope.restore } : {}),
   }
+}
+
+export function isSuccessfulHostApplication(application: HostUpdateOutcome['application'] | undefined): boolean {
+  return application === 'applied' || application === 'restart-required'
+}
+
+/** A registry URL is passed to `updateBundle` only when the host named it and it is not the silent mirror. */
+export function installRegistryOption(registry: string | null | undefined): string | undefined {
+  if (typeof registry !== 'string') return undefined
+  const trimmed = registry.trim()
+  if (!trimmed || isSilentMirrorRegistry(trimmed)) return undefined
+  return trimmed
 }
 
 export interface HostPluginManagerLike {
@@ -281,14 +302,31 @@ export class PluginUpdateService {
 
     const wasEnabled = current.enabled !== false
     const sourceKind = classifyPluginSource(current.source, current.update)
+    const previousSpec = previousBundleSpec(current, previousVersion)
+    const registry = installRegistryOption(request.registry)
+
+    // Callers (the host RPC) must already hold a host approval. This method only
+    // performs the install and puts the previous bundle back when that fails.
+    const failed = async (message: string, outcome?: HostUpdateOutcome): Promise<PluginApplyUpdateResult> => {
+      const preserved = await preserveExistingBundle(manager, request.name, previousSpec, wasEnabled, outcome)
+      return {
+        name: request.name,
+        previousVersion,
+        installedVersion: previousVersion,
+        status: 'failed',
+        bundlePreservedInProfile: preserved,
+        message,
+        ...(outcome && extractDiagnostic(outcome) ? { diagnostic: extractDiagnostic(outcome) } : {}),
+      }
+    }
 
     let outcome: HostUpdateOutcome
     try {
-      if (current.update === 'registry') {
+      if (usesHostRegistryUpdate(current)) {
         outcome = normalizeUpdateOutcome(await manager.updateBundle(
           request.name,
           targetParsed.version,
-          request.registry ? { registry: request.registry } : undefined,
+          registry ? { registry } : undefined,
         ))
       } else if (current.update === 'git') {
         if (!request.targetSpec) {
@@ -311,19 +349,17 @@ export class PluginUpdateService {
         && typeof manager.removeBundle === 'function'
         && typeof manager.installBundle === 'function'
       ) {
-        // Unpinned Git installation (`github:owner/repo` without 40-char SHA):
-        // migrate cleanly to commit-pinned targetSpec upon user confirmation.
+        // Host 0.2.2-rc.1 `updateBundle` only replaces registry bundles. An unpinned
+        // Git install is removed and replaced only after the removal itself reports
+        // success; a failed replacement reinstalls the previous spec.
         const removed = await manager.removeBundle(request.name)
-        if (removed.application === 'failed') {
-          return {
-            name: request.name,
-            previousVersion,
-            installedVersion: previousVersion,
-            status: 'failed',
-            bundlePreservedInProfile: wasEnabled,
-            message: `移除旧版本 ${request.name} 失败，未执行覆盖安装。`,
-            diagnostic: extractDiagnostic(removed),
-          }
+        if (!isSuccessfulHostApplication(removed.application)) {
+          return failed(
+            removed.application === 'cancelled'
+              ? '更新已取消。'
+              : `移除旧版本 ${request.name} 失败，未执行覆盖安装。`,
+            removed,
+          )
         }
         outcome = await manager.installBundle(request.targetSpec, {
           enabled: wasEnabled,
@@ -342,31 +378,20 @@ export class PluginUpdateService {
         }
       }
     } catch (error) {
-      return {
-        name: request.name,
-        previousVersion,
-        installedVersion: previousVersion,
-        status: 'failed',
-        bundlePreservedInProfile: wasEnabled,
-        message: error instanceof Error ? error.message : String(error),
-      }
+      return failed(error instanceof Error ? error.message : String(error))
     }
 
-    const appStatus = outcome.application ?? 'applied'
-    if (appStatus === 'failed' || appStatus === 'cancelled') {
-      return {
-        name: request.name,
-        previousVersion,
-        installedVersion: previousVersion,
-        status: 'failed',
-        bundlePreservedInProfile: wasEnabled,
-        message: appStatus === 'cancelled' ? '更新已取消。' : `更新 ${request.name} 到 ${targetParsed.version} 失败。`,
-        diagnostic: extractDiagnostic(outcome),
-      }
+    if (!isSuccessfulHostApplication(outcome.application)) {
+      return failed(
+        outcome.application === 'cancelled'
+          ? '更新已取消。'
+          : `更新 ${request.name} 到 ${targetParsed.version} 失败。`,
+        outcome,
+      )
     }
 
     // Workaround for upstream DSH issue #13609:
-    // Git-pinned `updateBundle` in DSH 0.2.2-rc.x can drop the bundle from `dsh.profile.bundles`
+    // Git-pinned `updateBundle` can drop the bundle from `dsh.profile.bundles`
     // even when `wasEnabled` was true. Verify selection state and restore if needed.
     let bundlePreservedInProfile = wasEnabled
     let verifiedVersion: string | null = outcome.version ?? outcome.packageResult?.version ?? targetParsed.version
@@ -376,15 +401,17 @@ export class PluginUpdateService {
       if (updated?.version) verifiedVersion = updated.version
       if (wasEnabled && updated && updated.enabled === false && typeof manager.setBundleEnabled === 'function') {
         const reenabled = await manager.setBundleEnabled(request.name, true)
-        bundlePreservedInProfile = reenabled.application !== 'failed'
+        bundlePreservedInProfile = isSuccessfulHostApplication(reenabled.application)
       } else if (updated) {
         bundlePreservedInProfile = Boolean(updated.enabled)
+      } else {
+        bundlePreservedInProfile = false
       }
     } catch {
-      // Best-effort post-update verification.
+      bundlePreservedInProfile = false
     }
 
-    const status = appStatus === 'restart-required' ? 'restart-required' : 'applied'
+    const status = outcome.application === 'restart-required' ? 'restart-required' : 'applied'
     return {
       name: request.name,
       previousVersion,
@@ -495,11 +522,12 @@ export class PluginUpdateService {
     // 1. Resolve latest version from npm registry or Host pluginManager.listVersions for registry plugins.
     if (sourceKind === 'registry') {
       try {
-        const { packument, registry } = await this.resolver.fetchNpmPackument(bundle.name, {
+        const { packument } = await this.resolver.fetchNpmPackument(bundle.name, {
           forceRefresh: options.forceRefresh,
           signal: options.signal,
         })
-        registryUsed = registry
+        // The registry that answered metadata is not the install source. A silent
+        // mirror fallback must not be forwarded to `updateBundle`.
         const selection = selectLatestCompatibleNpmVersion(
           packument,
           installedVersion,
@@ -524,7 +552,8 @@ export class PluginUpdateService {
         if (typeof manager?.listVersions === 'function') {
           try {
             const listed = await manager.listVersions(bundle.name)
-            if (listed.registry) registryUsed = listed.registry
+            const hostRegistry = installRegistryOption(listed.registry)
+            if (hostRegistry) registryUsed = hostRegistry
             const firstCompatible = (listed.versions ?? []).find(
               item => !item.deprecated && item.bundle !== false && !item.incompatible
                 && (options.includePrerelease || !item.prerelease),
@@ -675,6 +704,52 @@ export class PluginUpdateService {
       return undefined
     }
     return undefined
+  }
+}
+
+function usesHostRegistryUpdate(bundle: HostBundleSummary): boolean {
+  if (bundle.update === 'git') return false
+  if (bundle.update === 'registry') return true
+  // DSH 0.2.2-rc.1 sets `updatable` and does not set `update`.
+  return bundle.updatable === true
+}
+
+function previousBundleSpec(bundle: HostBundleSummary, previousVersion: string | null): string | undefined {
+  const sourceKind = classifyPluginSource(bundle.source, bundle.update)
+  if (bundle.update === 'git' || sourceKind === 'git') {
+    return typeof bundle.source === 'string' && bundle.source.trim() ? bundle.source.trim() : undefined
+  }
+  if (previousVersion) return `${bundle.name}@${previousVersion}`
+  return typeof bundle.source === 'string' && bundle.source.trim() ? bundle.source.trim() : undefined
+}
+
+/**
+ * After a failed update, the previously installed bundle must still be listed.
+ * When the host already restored it, leave that result alone. When the bundle
+ * is gone, install the previous spec again.
+ */
+async function preserveExistingBundle(
+  manager: HostPluginManagerLike,
+  name: string,
+  previousSpec: string | undefined,
+  wasEnabled: boolean,
+  outcome?: HostUpdateOutcome,
+): Promise<boolean> {
+  if (outcome?.restore && isSuccessfulHostApplication(outcome.restore.application)) return true
+  let listed: HostBundleSummary | undefined
+  try {
+    const bundles = await manager.listBundles()
+    listed = bundles.find(item => item.name === name)
+  } catch {
+    return false
+  }
+  if (listed) return wasEnabled ? listed.enabled !== false : true
+  if (!previousSpec || typeof manager.installBundle !== 'function') return false
+  try {
+    const restored = await manager.installBundle(previousSpec, { enabled: wasEnabled })
+    return isSuccessfulHostApplication(restored.application)
+  } catch {
+    return false
   }
 }
 

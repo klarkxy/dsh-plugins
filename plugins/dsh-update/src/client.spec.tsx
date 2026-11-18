@@ -197,13 +197,13 @@ describe('dsh-update client button interception & confirmation flow', () => {
 
     expect(injectedSeats).not.toContain('plugins.bundle.config')
     expect(injectedSeats).not.toContain('plugins.row.config')
+    expect(injectedSeats).not.toContain('settings.general.item')
     expect(injectedSeats).toEqual(
       expect.arrayContaining([
         'shell.overlay',
         'plugins.tab',
         'plugins.detail.badge',
         'plugins.detail.actions',
-        'settings.general.item',
       ]),
     )
 
@@ -212,6 +212,124 @@ describe('dsh-update client button interception & confirmation flow', () => {
     expect(tabHtml).toContain('DeepSeek Harness')
     expect(renderToStaticMarkup(createElement(DshUpdateOverlay, { client, controller }))).toBe('')
     expect((client.connection.rpc.call as ReturnType<typeof vi.fn>).mock.calls).toEqual([])
-    expect(RPC_CHANNEL).toBe('/api/plugins/klarkxy-dsh-update')
+    expect(RPC_CHANNEL).toBe('/dsh-update')
+  })
+})
+
+describe('update checks ignore stale responses', () => {
+  function pluginEntry(version: string, spec: string) {
+    return {
+      name: 'example-plugin',
+      title: 'Example',
+      description: '',
+      installedVersion: '1.0.0',
+      latestVersion: version,
+      hasUpdate: true,
+      enabled: true,
+      removable: true,
+      sourceKind: 'registry' as const,
+      canApplyUpdate: true,
+      targetSpec: spec,
+      releases: [],
+      releaseNoteSource: 'none' as const,
+      checkedAt: '2026-11-18T00:00:00.000Z',
+    }
+  }
+
+  it('keeps the newer plugin target when an older checkOne and checkAll settle later', async () => {
+    const resolvers: Array<(value: { ok: true; value: unknown } | { ok: false; error: { message: string } }) => void> = []
+    const applied: Array<Record<string, unknown>> = []
+    let refresh = false
+    const client: ClientHostContext = {
+      connection: {
+        rpc: {
+          call: async (_channel, endpoint, payload) => {
+            if (endpoint === 'plugins.apply') {
+              applied.push(payload as Record<string, unknown>)
+              refresh = true
+              return {
+                ok: true,
+                value: {
+                  name: 'example-plugin',
+                  previousVersion: '1.0.0',
+                  installedVersion: '2.0.0',
+                  status: 'applied',
+                  bundlePreservedInProfile: true,
+                  message: 'updated',
+                },
+              }
+            }
+            if (refresh && endpoint === 'plugins.checkOne') {
+              return { ok: true, value: pluginEntry('2.0.0', 'spec-new') }
+            }
+            return new Promise(resolve => { resolvers.push(resolve) })
+          },
+        },
+      },
+    }
+    const controller = createUpdateClientController(client)
+    const olderOne = controller.checkOnePlugin('example-plugin')
+    const newerAll = controller.checkAllPlugins(true)
+    const newerOne = controller.checkOnePlugin('example-plugin')
+    expect(resolvers).toHaveLength(3)
+
+    resolvers[2]!({ ok: true, value: pluginEntry('2.0.0', 'spec-new') })
+    await newerOne
+    resolvers[1]!({
+      ok: true,
+      value: {
+        dshVersion: '0.2.2-rc.1',
+        checkedAt: '2026-11-18T00:00:00.000Z',
+        plugins: [pluginEntry('1.0.0', 'spec-old-all')],
+      },
+    })
+    await newerAll
+    resolvers[0]!({ ok: false, error: { message: 'stale plugin check' } })
+    await olderOne
+
+    expect(controller.getSnapshot().pluginsByName['example-plugin']?.latestVersion).toBe('2.0.0')
+    expect(controller.getSnapshot().pluginsByName['example-plugin']?.targetSpec).toBe('spec-new')
+    expect(controller.getSnapshot().pluginsError).toBeNull()
+    expect(controller.getSnapshot().pluginsLoading).toBe(false)
+
+    await controller.confirmPluginUpdate('example-plugin', 'zh')
+    expect(applied).toEqual([
+      expect.objectContaining({ name: 'example-plugin', targetVersion: '2.0.0', targetSpec: 'spec-new' }),
+    ])
+  })
+
+  it('keeps the newer DSH check when an older response fails afterwards', async () => {
+    const resolvers: Array<(value: { ok: true; value: unknown } | { ok: false; error: { message: string } }) => void> = []
+    const client: ClientHostContext = {
+      connection: {
+        rpc: {
+          call: async () => new Promise(resolve => { resolvers.push(resolve) }),
+        },
+      },
+    }
+    const controller = createUpdateClientController(client)
+    const older = controller.checkDsh()
+    const newer = controller.checkDsh({ forceRefresh: true })
+    resolvers[1]!({
+      ok: true,
+      value: {
+        currentVersion: '0.2.2-rc.1',
+        latestVersion: '0.2.2-rc.4',
+        targetVersion: '0.2.2-rc.4',
+        channel: 'prerelease',
+        hasUpdate: true,
+        isDesktopHost: false,
+        checkedAt: '2026-11-18T00:00:00.000Z',
+        releasesUrl: 'https://example.test/releases',
+        releases: [],
+        releaseSource: 'none',
+      },
+    })
+    await newer
+    resolvers[0]!({ ok: false, error: { message: 'stale dsh check' } })
+    await older
+    expect(controller.getSnapshot().dshStatus?.targetVersion).toBe('0.2.2-rc.4')
+    expect(controller.getSnapshot().dshError).toBeNull()
+    expect(controller.getSnapshot().dshLoading).toBe(false)
   })
 })

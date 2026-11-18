@@ -1,5 +1,5 @@
 export const PLUGIN_NAME = '@klarkxy/dsh-update'
-export const RPC_CHANNEL = '/api/plugins/klarkxy-dsh-update'
+export const RPC_CHANNEL = '/dsh-update'
 export const DSH_GITHUB_OWNER = 'deepseek-ai'
 export const DSH_GITHUB_REPO = 'deepseek-harness'
 export const DSH_RELEASES_WEB_URL = 'https://github.com/deepseek-ai/deepseek-harness/releases'
@@ -134,6 +134,30 @@ export interface DshApplyCliUpdateResult {
   command?: string
   message: string
   diagnostic?: string
+}
+
+/** Identity of a write the host itself must confirm. A page script cannot satisfy this. */
+export interface HostUpdateApprovalRequest {
+  kind: 'plugin' | 'dsh-cli'
+  targetVersion: string
+  name?: string
+  targetSpec?: string
+}
+
+export interface HostUpdateApproval {
+  confirm(request: HostUpdateApprovalRequest, signal?: AbortSignal): Promise<boolean>
+}
+
+/**
+ * Optional host-provided local data and install executor. Used by an isolated
+ * acceptance profile so checks and writes do not touch a public registry or a
+ * global package manager. Absent in normal hosts. It never skips approval.
+ */
+export interface DshUpdateFixture {
+  dsh?: DshUpdateCheckResult
+  plugins?: PluginUpdateEntry[]
+  applyPlugin?(request: PluginApplyUpdateRequest): Promise<PluginApplyUpdateResult>
+  applyCli?(targetVersion: string): Promise<DshApplyCliUpdateResult>
 }
 
 export interface ParsedSemver {

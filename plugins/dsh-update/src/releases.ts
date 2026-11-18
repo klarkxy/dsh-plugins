@@ -26,6 +26,12 @@ export const DEFAULT_HTTP_TIMEOUT_MS = 10_000
 export const OFFICIAL_NPM_REGISTRY = 'https://registry.npmjs.org'
 export const FALLBACK_NPM_REGISTRY = 'https://registry.npmmirror.com'
 
+/** Metadata read from the silent public mirror is not an install source. */
+export function isSilentMirrorRegistry(registry: string | null | undefined): boolean {
+  if (typeof registry !== 'string') return false
+  return registry.trim().replace(/\/+$/, '') === FALLBACK_NPM_REGISTRY
+}
+
 export interface RawGitHubRelease {
   tag_name?: unknown
   name?: unknown
