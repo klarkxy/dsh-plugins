@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-picker",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Model picker: searchable model selection with a reasoning-effort slider in the composer, plus a shared picker other plugins can reuse.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -112,6 +112,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "486ad9f25aa8e0b6ca75136684e0558d0039b0d8425c17939007630ebf5fe227"
+    "contentHash": "bb90acc63d16d1f38e3f4808f3bd379143dcfaae2d840e48cf3d8d67b37cdf75"
   }
 }

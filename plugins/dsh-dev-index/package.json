@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-dev-index",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "DSH Docs: browse official DSH developer documentation in the Plugins page; in Creator mode the agent also gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs, dsh_plugins).",
   "icon": "./icon.svg",
   "keywords": [
@@ -124,6 +124,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "1bc5f8bc7022b91fc522141f06c7a65b1094ed0ab6239d7c8272f6679d3ee154"
+    "contentHash": "e3ce5233d8af5c33e6e1807a4114ac9dd99afee79d002d76e0fc75ed662b5bfe"
   }
 }

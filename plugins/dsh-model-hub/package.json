@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-hub",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Subagents: configure models and reasoning effort, review each subagent's last-used model, and use per-session delegation mode.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -114,6 +114,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/",
   "dshRelease": {
-    "contentHash": "60d028ffe05f2eeba4322f5e5065f1fac0fd18bae1804788b4a5ea2c6e5bba65"
+    "contentHash": "d621d0112b80f65e002edc920a7a0dbf08e8e44565017db93dab3b062a478749"
   }
 }
