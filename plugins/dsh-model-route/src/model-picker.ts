@@ -57,6 +57,14 @@ export interface ModelPickerProps {
   readonly selected?: { readonly provider: string; readonly model: string }
   /** Model pick; the picker closes after the callback runs. */
   readonly onPick: (route: { provider: string; model: string }) => void
+  /**
+   * Atomic model + reasoning-effort pick (cards view). Preferred over the
+   * `onPick` + `onPickEffort` pair whenever the owner writes both through one
+   * saved snapshot: calling those in sequence loses the effort when the first
+   * write is still settling. `undefined` effort explicitly selects the route
+   * without a reasoning effort.
+   */
+  readonly onPickWithEffort?: (route: { provider: string; model: string }, effort: string | undefined) => void
   /** Extra rows above the model groups (e.g. a "follow default" row). */
   readonly leading?: readonly ModelPickerLeadingItem[]
   /** Leading-row pick; `undefined` keeps the menu open. */

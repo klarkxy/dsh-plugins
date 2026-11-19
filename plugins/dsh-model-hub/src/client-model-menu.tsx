@@ -58,6 +58,12 @@ export function FieldMenu({ t, catalog, current, disabled, label, allowFollow = 
     const supported = Boolean(effort) && Boolean(choice?.efforts.some(item => item.id === effort))
     onSet({ provider: picked.provider, model: picked.model, ...(supported ? { reasoningEffort: effort } : {}) })
   }
+  /* Cards view: the factory passes the chosen effort explicitly, so one
+   * onSet writes model + effort together (pick() above would already drop an
+   * unsupported effort; explicit undefined honors "no effort" as-is). */
+  const pickWithEffort = (picked: { provider: string; model: string }, effort: string | undefined): void => {
+    onSet({ provider: picked.provider, model: picked.model, ...(effort ? { reasoningEffort: effort } : {}) })
+  }
   return renderModelPicker(renderFactorySlot, {
     locale: t.language,
     disabled,
@@ -66,6 +72,7 @@ export function FieldMenu({ t, catalog, current, disabled, label, allowFollow = 
     choices,
     selected: follow ? undefined : { provider: route.provider, model: route.model },
     onPick: pick,
+    onPickWithEffort: pickWithEffort,
     leading: allowFollow ? [{ id: 'follow', label: followLabel || t('follow'), selected: follow }] : [],
     onPickLeading: () => onSet({ provider: '', model: '' }),
     efforts,

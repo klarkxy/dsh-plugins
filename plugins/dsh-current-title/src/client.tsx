@@ -302,6 +302,9 @@ export function TitleSettings(props: {
         choices,
         selected: follow ? undefined : { provider: savedModel.provider, model: savedModel.model },
         onPick: picked => saveSettings({ model: { provider: picked.provider, model: picked.model } }),
+        // One atomic save for "model + effort": a pick followed by a separate
+        // effort write loses the effort to the save lock while settling.
+        onPickWithEffort: (picked, effort) => saveSettings({ model: { provider: picked.provider, model: picked.model, ...(effort ? { reasoningEffort: effort } : {}) } }),
         leading: [{ id: 'default', label: text.modelDefault, selected: follow }],
         onPickLeading: () => saveSettings({ model: { provider: '', model: '' } }),
         efforts,

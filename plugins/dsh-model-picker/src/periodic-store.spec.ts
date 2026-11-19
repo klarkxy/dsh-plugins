@@ -2,9 +2,27 @@ import { describe, expect, it } from 'vitest'
 import type { ModelMenuChoice } from '@klarkxy/dsh-model-route'
 import {
   applyCardDrop, buildPeriodicCards, CARD_WIDTH_DEFAULT, CARD_WIDTH_MAX, CARD_WIDTH_MIN,
-  clampCardWidth, DEFAULT_PERIODIC_PREFS, dropModeFromRatio, loadPeriodicPrefs,
-  parsePeriodicPrefs, savePeriodicPrefs, type StorageLike,
+  clampCardWidth, createPeriodicPrefsStore, DEFAULT_PERIODIC_PREFS, dropModeFromRatio,
+  loadPeriodicPrefs, parsePeriodicPrefs, savePeriodicPrefs, STORAGE_KEY, type PeriodicPrefs,
+  type StorageLike,
 } from './periodic-store.ts'
+
+/* Minimal window stub: the store attaches its cross-tab `storage` listener on
+ * the first subscribe and detaches with the last unsubscribe. */
+type StorageEventHandler = (event: { key: string | null }) => void
+const storageEvents = {
+  handlers: new Set<StorageEventHandler>(),
+  get size() { return this.handlers.size },
+  emit(event: { key: string | null }) { for (const fn of [...this.handlers]) fn(event) },
+}
+;(globalThis as Record<string, unknown>).window = {
+  addEventListener(type: string, fn: StorageEventHandler) {
+    if (type === 'storage') storageEvents.handlers.add(fn)
+  },
+  removeEventListener(type: string, fn: StorageEventHandler) {
+    if (type === 'storage') storageEvents.handlers.delete(fn)
+  },
+}
 
 const CHOICES: ModelMenuChoice[] = [
   { provider: 'google', model: 'gemini-4-neon', label: 'Google / Gemini 4 Neon', providerLabel: 'Google', efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }] },
@@ -115,7 +133,57 @@ describe('prefs persistence & clamping', () => {
     savePeriodicPrefs(next, storage)
     expect(loadPeriodicPrefs(storage)).toEqual(next)
 
-    backing.set('dsh-model-picker:periodic:v1', '{not-json')
+    backing.set(STORAGE_KEY, '{not-json')
     expect(loadPeriodicPrefs(storage)).toEqual(DEFAULT_PERIODIC_PREFS)
+  })
+})
+
+describe('createPeriodicPrefsStore', () => {
+  it('one store instance owns the key: subscribers see each write, and the storage event reloads external changes', () => {
+    const backing = new Map<string, string>()
+    const storage: StorageLike = {
+      getItem: key => backing.get(key) ?? null,
+      setItem: (key, value) => { backing.set(key, value) },
+    }
+    const store = createPeriodicPrefsStore(storage)
+    const seen: PeriodicPrefs[] = []
+    const detach = store.subscribe(() => seen.push(store.get()))
+
+    // Any occurrence's write is visible to every subscriber immediately and
+    // persisted once, instead of being overwritten by a stale snapshot later.
+    const next = { ...DEFAULT_PERIODIC_PREFS, cardWidth: 204, viewMode: 'list' as const }
+    store.set(next)
+    expect(store.get()).toEqual(next)
+    expect(seen).toEqual([next])
+    expect(JSON.parse(backing.get(STORAGE_KEY) ?? '{}')).toEqual(next)
+
+    // An external change (another tab) reloads through the storage event.
+    backing.set(STORAGE_KEY, JSON.stringify({ ...DEFAULT_PERIODIC_PREFS, cardWidth: 240 }))
+    storageEvents.emit({ key: STORAGE_KEY })
+    expect(store.get().cardWidth).toBe(240)
+
+    detach()
+    expect(storageEvents.size).toBe(0)
+  })
+
+  it('detaches with the last subscriber and ignores unrelated keys', () => {
+    const backing = new Map<string, string>()
+    const storage: StorageLike = {
+      getItem: key => backing.get(key) ?? null,
+      setItem: (key, value) => { backing.set(key, value) },
+    }
+    const store = createPeriodicPrefsStore(storage)
+    const seen: number[] = []
+    const detach1 = store.subscribe(() => seen.push(1))
+    const detach2 = store.subscribe(() => seen.push(2))
+    detach1()
+    storageEvents.emit({ key: 'other-key' })
+    expect(seen).toEqual([])
+    backing.set(STORAGE_KEY, JSON.stringify({ cardWidth: 180 }))
+    storageEvents.emit({ key: STORAGE_KEY })
+    expect(store.get().cardWidth).toBe(180)
+    expect(seen).toEqual([2])
+    detach2()
+    expect(storageEvents.size).toBe(0)
   })
 })

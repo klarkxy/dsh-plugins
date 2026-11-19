@@ -46,6 +46,12 @@ export interface PeriodicCopy {
   readonly hint: string
 }
 
+/**
+ * A symbol single-click may still become a double-click rename, so the pick
+ * waits out this window; the rename cancels it. Exported for tests to shrink.
+ */
+export const SYMBOL_PICK_DELAY_MS = 240
+
 export function periodicCopy(locale: string | undefined): PeriodicCopy {
   const zh = locale?.toLowerCase().startsWith('zh') === true
   return zh
@@ -142,6 +148,12 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
   const [editingDraft, setEditingDraft] = useState('')
   const [dragSrcIndex, setDragSrcIndex] = useState<number | null>(null)
   const [dropState, setDropState] = useState<{ index: number; mode: CardDropMode } | null>(null)
+  /* Rename-cancel flag: a ref (not state) so the flag is visible to the blur
+   * commit even when Escape and the unmount-triggered blur share one batch. */
+  const editingCancelledRef = useRef(false)
+  /* A symbol single-click may still turn into a double-click rename; the
+   * selection is held for the double-click window and cancelled on rename. */
+  const pendingPickRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const cards = useMemo(
     () => buildPeriodicCards(choices, prefs, selected),
@@ -150,14 +162,45 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
 
   const gated = disabled || busy
 
+  const cancelPendingPick = (): void => {
+    if (pendingPickRef.current !== null) {
+      clearTimeout(pendingPickRef.current)
+      pendingPickRef.current = null
+    }
+  }
+  const schedulePendingPick = (route: { provider: string; model: string }): void => {
+    cancelPendingPick()
+    const delay = (globalThis as { __dshModelPickerPickDelay?: number }).__dshModelPickerPickDelay ?? SYMBOL_PICK_DELAY_MS
+    pendingPickRef.current = setTimeout(() => {
+      pendingPickRef.current = null
+      onPickCard(route, undefined)
+    }, delay)
+  }
+  useEffect(() => cancelPendingPick, [])
+
   useEffect(() => {
     if (!open) {
       setOpenMenuKey(null)
       setEditingKey(null)
+      editingCancelledRef.current = false
+      cancelPendingPick()
       setDragSrcIndex(null)
       setDropState(null)
     }
   }, [open])
+
+  // A lock rising mid-interaction must cancel any in-flight drag or rename:
+  // the contract says `disabled`/`busy` stop every menu action.
+  useEffect(() => {
+    if (gated) {
+      setOpenMenuKey(null)
+      setEditingKey(null)
+      editingCancelledRef.current = false
+      cancelPendingPick()
+      setDragSrcIndex(null)
+      setDropState(null)
+    }
+  }, [gated])
 
   useEffect(() => {
     if (!open) return
@@ -213,6 +256,11 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
   }, [open, cards.length, prefs.cardWidth])
 
   const commitAlias = (card: PeriodicCardEntry): void => {
+    if (gated || editingCancelledRef.current) {
+      setEditingKey(null)
+      editingCancelledRef.current = false
+      return
+    }
     const trimmed = editingDraft.trim()
     onPrefsChange(prev => {
       const nextAliases = { ...prev.aliases }
@@ -226,13 +274,14 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
   const pickProvider = (card: PeriodicCardEntry, route: ModelMenuChoice): void => {
     setOpenMenuKey(null)
     if (gated) return
+    cancelPendingPick()
     onPrefsChange(prev => ({
       ...prev,
       providers: { ...prev.providers, [card.canonicalKey]: route.provider },
     }))
-    const currentEffort = selected && selected.provider === route.provider && selected.model === route.model
-      ? (selectedEffort || undefined)
-      : undefined
+    // Switching to a route that already serves the current effort keeps that
+    // effort instead of silently clearing it (and its per-route memory).
+    const currentEffort = selectedEffort || undefined
     const supported = currentEffort && route.efforts.some(item => item.id === currentEffort)
       ? currentEffort
       : undefined
@@ -268,6 +317,7 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                 className="dsh-model-picker-viewBtn"
                 data-active=""
                 aria-pressed={true}
+                disabled={gated}
               >
                 {copy.viewCards}
               </button>
@@ -275,7 +325,8 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                 type="button"
                 className="dsh-model-picker-viewBtn"
                 aria-pressed={false}
-                onClick={() => onPrefsChange(prev => ({ ...prev, viewMode: 'list' }))}
+                disabled={gated}
+                onClick={() => { if (!gated) onPrefsChange(prev => ({ ...prev, viewMode: 'list' })) }}
               >
                 {copy.viewList}
               </button>
@@ -290,7 +341,9 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                 max={CARD_WIDTH_MAX}
                 step={4}
                 value={prefs.cardWidth}
+                disabled={gated}
                 onChange={event => {
+                  if (gated) return
                   const width = Number((event.target as HTMLInputElement).value)
                   if (Number.isFinite(width)) onPrefsChange(prev => ({ ...prev, cardWidth: width }))
                 }}
@@ -301,7 +354,8 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
               <button
                 type="button"
                 className="dsh-model-picker-resetBtn"
-                onClick={() => onPrefsChange(prev => ({ ...prev, order: [], aliases: {} }))}
+                disabled={gated}
+                onClick={() => { if (!gated) onPrefsChange(prev => ({ ...prev, order: [], aliases: {} })) }}
               >
                 {copy.resetOrder}
               </button>
@@ -363,7 +417,7 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                       setDropState(null)
                     }}
                     onDragOver={event => {
-                      if (dragSrcIndex === null || dragSrcIndex === index) return
+                      if (gated || dragSrcIndex === null || dragSrcIndex === index) return
                       event.preventDefault()
                       const rect = event.currentTarget.getBoundingClientRect()
                       const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0.5
@@ -377,7 +431,8 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                     }}
                     onDrop={event => {
                       event.preventDefault()
-                      if (dragSrcIndex === null || dragSrcIndex === index) return
+                      if (gated || dragSrcIndex === null || dragSrcIndex === index) return
+                      cancelPendingPick()
                       const rect = event.currentTarget.getBoundingClientRect()
                       const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0.5
                       const mode = dropModeFromRatio(ratio)
@@ -445,15 +500,27 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                       aria-disabled={gated || undefined}
                       tabIndex={gated ? -1 : 0}
                       title={copy.cardBodyTitle}
-                      onClick={() => {
+                      onClick={event => {
+                        // The rename double-click lands on the symbol line;
+                        // its first click holds the pick for the double-click
+                        // window so renaming never selects the model. Clicks
+                        // anywhere else on the body pick immediately.
                         if (gated || isEditing) return
                         setOpenMenuKey(null)
+                        if (event.detail > 1) { cancelPendingPick(); return }
+                        const target = event.target
+                        if (target instanceof Element && target.closest('.dsh-model-picker-symbolLine')) {
+                          schedulePendingPick(route)
+                          return
+                        }
+                        cancelPendingPick()
                         onPickCard({ provider: route.provider, model: route.model }, undefined)
                       }}
                       onKeyDown={event => {
                         if (gated || isEditing) return
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault()
+                          cancelPendingPick()
                           onPickCard({ provider: route.provider, model: route.model }, undefined)
                         }
                       }}
@@ -465,13 +532,14 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                           value={editingDraft}
                           maxLength={12}
                           autoFocus
+                          disabled={gated}
                           onClick={event => event.stopPropagation()}
                           onChange={event => setEditingDraft(event.target.value)}
                           onBlur={() => commitAlias(card)}
                           onKeyDown={event => {
                             event.stopPropagation()
                             if (event.key === 'Enter') commitAlias(card)
-                            else if (event.key === 'Escape') setEditingKey(null)
+                            else if (event.key === 'Escape') { editingCancelledRef.current = true; setEditingKey(null) }
                           }}
                         />
                       ) : (
@@ -481,7 +549,9 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                           onDoubleClick={event => {
                             event.stopPropagation()
                             if (gated) return
+                            cancelPendingPick()
                             setOpenMenuKey(null)
+                            editingCancelledRef.current = false
                             setEditingKey(card.canonicalKey)
                             setEditingDraft(card.short)
                           }}
@@ -512,6 +582,7 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                               onClick={event => {
                                 event.stopPropagation()
                                 if (gated) return
+                                cancelPendingPick()
                                 setOpenMenuKey(null)
                                 const nextEffort = cellSelected ? undefined : effort.id
                                 onPickCard({ provider: route.provider, model: route.model }, nextEffort)

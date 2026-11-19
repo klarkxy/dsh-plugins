@@ -7,7 +7,8 @@ import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selec
 import {
   ComposerModelSeat, directoryChoices, ModelPicker, modelPickerCss, pickerCopy,
 } from './client.tsx'
-import { STORAGE_KEY } from './periodic-store.ts'
+import { PeriodicCardMenu, SYMBOL_PICK_DELAY_MS } from './periodic-cards.tsx'
+import { createPeriodicPrefsStore, setPeriodicStoreForTests, STORAGE_KEY } from './periodic-store.ts'
 
 const zhT = pickerCopy('zh-CN')
 
@@ -62,6 +63,12 @@ function jsdomEnv(options?: { viewMode?: 'cards' | 'list' }) {
   if (options?.viewMode) {
     dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ viewMode: options.viewMode }))
   }
+  // Each test gets its own store singleton over this JSDOM's localStorage,
+  // so no state leaks between tests through the module-level periodicStore().
+  setPeriodicStoreForTests(createPeriodicPrefsStore({
+    getItem: (key: string) => dom.window.localStorage.getItem(key),
+    setItem: (key: string, value: string) => { dom.window.localStorage.setItem(key, value) },
+  }))
   const previous = new Map<string, PropertyDescriptor | undefined>()
   for (const [key, value] of Object.entries({
     window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
@@ -89,6 +96,7 @@ function jsdomEnv(options?: { viewMode?: 'cards' | 'list' }) {
     },
     async done(root: Root) {
       await act(async () => root.unmount())
+      setPeriodicStoreForTests(undefined)
       dom.window.localStorage.clear()
       for (const [key, descriptor] of previous) {
         if (descriptor) Object.defineProperty(globalThis, key, descriptor)
@@ -220,6 +228,139 @@ describe('ModelPicker periodic card grid (default view)', () => {
       const listBtn = [...env.dom.window.document.querySelectorAll('.dsh-model-picker-viewBtn')].find(btn => btn.textContent === 'List')!
       await env.click(listBtn)
       expect(env.dom.window.document.querySelector('input[role="searchbox"]')).not.toBeNull()
+    } finally { await env.done(root) }
+  })
+
+  it('double-click rename neither picks the model nor commits on Escape', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    const onPick = vi.fn(), onPickWithEffort = vi.fn()
+    try {
+      // Park the pick far in the future: the rename's cancel must win the
+      // race deterministically instead of racing a 0ms timer.
+      ;(globalThis as { __dshModelPickerPickDelay?: number }).__dshModelPickerPickDelay = 60_000
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={choices}
+          selected={{ provider: 'google', model: 'gemini-4-neon' }}
+          onPick={onPick}
+          onPickWithEffort={onPickWithEffort}
+          efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]}
+          selectedEffort="high"
+        />,
+      ))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const card = [...env.dom.window.document.querySelectorAll('.dsh-model-picker-card')][0]!
+      const symbolLine = card.querySelector('.dsh-model-picker-symbolLine')!
+
+      // A single click on the symbol line holds the pick for the double-click
+      // window; the rename that follows cancels it, so renaming never
+      // selects the model.
+      await env.click(symbolLine)
+      await act(async () => Simulate.doubleClick(symbolLine))
+      const input = card.querySelector<HTMLInputElement>('.dsh-model-picker-shortInput')!
+      expect(input).not.toBeNull()
+      await act(async () => { input.value = 'Zz'; Simulate.change(input, { target: { value: 'Zz' } } as never) })
+      await act(async () => Simulate.keyDown(input, { key: 'Escape' }))
+      const stored = env.dom.window.localStorage.getItem(STORAGE_KEY)
+      const storedAliases = stored ? JSON.parse(stored).aliases : {}
+      expect(storedAliases).toEqual({})
+      // The pending pick was cancelled by the rename: no pick happened.
+      expect(onPick).not.toHaveBeenCalled()
+      expect(onPickWithEffort).not.toHaveBeenCalled()
+    } finally {
+      delete (globalThis as { __dshModelPickerPickDelay?: number }).__dshModelPickerPickDelay
+      await env.done(root)
+    }
+  })
+
+  it('double-click rename commits on Enter and persists the alias', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    try {
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={choices}
+          onPick={() => {}}
+          onPickWithEffort={() => {}}
+          efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]}
+        />,
+      ))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const card = [...env.dom.window.document.querySelectorAll('.dsh-model-picker-card')][0]!
+      await act(async () => Simulate.doubleClick(card.querySelector('.dsh-model-picker-symbolLine')!))
+      const input = card.querySelector<HTMLInputElement>('.dsh-model-picker-shortInput')!
+      await act(async () => { input.value = 'NeonAlias'; Simulate.change(input, { target: { value: 'NeonAlias' } } as never) })
+      await act(async () => Simulate.keyDown(input, { key: 'Enter' }))
+      expect(JSON.parse(env.dom.window.localStorage.getItem(STORAGE_KEY) ?? '{}').aliases)
+        .toMatchObject({ 'gemini-4-neon': 'NeonAlias' })
+    } finally { await env.done(root) }
+  })
+
+  it('keeps the current effort when switching providers to a route that serves it', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    const onPickWithEffort = vi.fn()
+    try {
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={choices}
+          selected={{ provider: 'google', model: 'gemini-4-neon' }}
+          onPick={() => {}}
+          onPickWithEffort={onPickWithEffort}
+          efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]}
+          selectedEffort="high"
+        />,
+      ))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const card = [...env.dom.window.document.querySelectorAll('.dsh-model-picker-card')][0]!
+      await env.click(card.querySelector('.dsh-model-picker-provBtn')!)
+      const vertex = [...card.querySelectorAll('[role="option"]')].find(opt => opt.textContent?.includes('Vertex'))!
+      await env.click(vertex)
+      // Vertex also declares 'high': the effort rides along instead of being
+      // explicitly cleared.
+      expect(onPickWithEffort).toHaveBeenCalledWith({ provider: 'vertex', model: 'google/gemini-4-neon' }, 'high')
+    } finally { await env.done(root) }
+  })
+
+  it('locks every toolbar and drag action while disabled, and cancels in-flight interactions', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    const onPick = vi.fn(), onPickEffort = vi.fn()
+    let disabledNow = false
+    const Probe = (props: { disabled?: boolean }): React.ReactElement => (
+      <ModelPicker
+        {...kit}
+        disabled={props.disabled}
+        choices={choices}
+        selected={{ provider: 'google', model: 'gemini-4-neon' }}
+        onPick={onPick}
+        efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]}
+        selectedEffort="high"
+        onPickEffort={onPickEffort}
+      />
+    )
+    try {
+      await act(async () => root.render(<Probe disabled={disabledNow} />))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const surface = env.dom.window.document.querySelector<HTMLElement>('.dsh-model-picker-periodicSurface')!
+      expect(surface).not.toBeNull()
+
+      // Width slider and view switch are inert while disabled.
+      disabledNow = true
+      await act(async () => root.render(<Probe disabled={disabledNow} />))
+      const widthSlider = surface.querySelector<HTMLInputElement>('.dsh-model-picker-widthSlider')!
+      expect(widthSlider.disabled).toBe(true)
+      const viewBtns = [...surface.querySelectorAll('.dsh-model-picker-viewBtn')]
+      expect(viewBtns.every(btn => (btn as HTMLButtonElement).disabled)).toBe(true)
+      const resetBtn = surface.querySelector('.dsh-model-picker-resetBtn')
+      expect(resetBtn === null || (resetBtn as HTMLButtonElement).disabled).toBe(true)
+      const before = env.dom.window.localStorage.getItem(STORAGE_KEY)
+      await act(async () => Simulate.change(widthSlider, { target: { value: '240' } } as never))
+      expect(env.dom.window.localStorage.getItem(STORAGE_KEY)).toBe(before)
     } finally { await env.done(root) }
   })
 })

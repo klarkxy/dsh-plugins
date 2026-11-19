@@ -41,7 +41,7 @@ import {
 import { EffortPreference } from './effort-preference.ts'
 import { installClientPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { PeriodicCardMenu, periodicCopy } from './periodic-cards.tsx'
-import { loadPeriodicPrefs, savePeriodicPrefs, type PeriodicPrefs } from './periodic-store.ts'
+import { periodicStore, type PeriodicPrefs } from './periodic-store.ts'
 
 export const name = 'dsh-model-picker-client'
 export const inject = ['slots', 'locale', 'sessions'] as const
@@ -648,14 +648,18 @@ export function ModelPicker(props: ModelPickerComponentProps): ReactNode {
   const { t, useFactorySlot, useActiveLocale, ...input } = props as ModelPickerComponentProps & ModelPickerInternalProps
   const activeLocale = useActiveLocale ? String(useActiveLocale(snapshot => snapshot.active)) : 'en'
   const [open, setOpen] = useState(false)
-  const [prefs, setPrefs] = useState<PeriodicPrefs>(() => loadPeriodicPrefs())
+  // One module-level store owns the shared localStorage key: every occurrence
+  // sees the same snapshot and one commit path persists it (P1 multi-instance
+  // stale-overwrite fix; store shape mirrors dsh-font's conversation store).
+  const prefsStore = periodicStore()
+  const prefs = useSyncExternalStore(
+    useCallback((onStoreChange: () => void) => prefsStore.subscribe(onStoreChange), [prefsStore]),
+    useCallback(() => prefsStore.get(), [prefsStore]),
+    useCallback(() => prefsStore.get(), [prefsStore]),
+  )
   const updatePrefs = useCallback((updater: (prev: PeriodicPrefs) => PeriodicPrefs): void => {
-    setPrefs(prev => {
-      const next = updater(prev)
-      savePeriodicPrefs(next)
-      return next
-    })
-  }, [])
+    prefsStore.set(updater(prefsStore.get()))
+  }, [prefsStore])
 
   const disabled = input.disabled === true
   const busy = input.busy === true

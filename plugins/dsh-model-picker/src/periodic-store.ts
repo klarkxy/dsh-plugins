@@ -120,6 +120,76 @@ export function savePeriodicPrefs(prefs: PeriodicPrefs, storage: StorageLike | u
 }
 
 /**
+ * Cross-occurrence store owning the shared `STORAGE_KEY`: one in-memory
+ * snapshot, one persistence path, and a `storage` listener so sibling
+ * occurrences (or another tab) never overwrite each other with stale
+ * snapshots. Modeled on `createConversationFontStore` in dsh-font.
+ */
+export interface PeriodicPrefsStore {
+  get(): PeriodicPrefs
+  set(prefs: PeriodicPrefs): void
+  subscribe(fn: () => void): () => void
+}
+
+export function createPeriodicPrefsStore(storage: StorageLike | undefined = defaultStorage()): PeriodicPrefsStore {
+  let current = loadPeriodicPrefs(storage)
+  const listeners = new Set<() => void>()
+  let detachStorage: (() => void) | undefined
+
+  function notify(): void {
+    for (const fn of [...listeners]) fn()
+  }
+
+  function attach(): void {
+    if (detachStorage || typeof window === 'undefined') return
+    const onStorage = (event: StorageEvent): void => {
+      if (event.key !== STORAGE_KEY && event.key !== null) return
+      current = loadPeriodicPrefs(storage)
+      notify()
+    }
+    window.addEventListener('storage', onStorage)
+    detachStorage = () => window.removeEventListener('storage', onStorage)
+  }
+
+  return {
+    get: () => current,
+    set(prefs) {
+      current = prefs
+      savePeriodicPrefs(prefs, storage)
+      notify()
+    },
+    subscribe(fn) {
+      if (listeners.size === 0) attach()
+      listeners.add(fn)
+      return () => {
+        listeners.delete(fn)
+        if (listeners.size === 0) {
+          detachStorage?.()
+          detachStorage = undefined
+        }
+      }
+    },
+  }
+}
+
+/**
+ * Module-level singleton: every occurrence of the picker (composer seat,
+ * settings pages) resolves the same store, so `STORAGE_KEY` has exactly one
+ * owner per browser context. Swap in a fresh store for tests.
+ */
+let periodicPrefsStore: PeriodicPrefsStore | undefined
+
+export function periodicStore(): PeriodicPrefsStore {
+  if (!periodicPrefsStore) periodicPrefsStore = createPeriodicPrefsStore()
+  return periodicPrefsStore
+}
+
+/** Test hook: replace the singleton (or restore it with `undefined`). */
+export function setPeriodicStoreForTests(store: PeriodicPrefsStore | undefined): void {
+  periodicPrefsStore = store
+}
+
+/**
  * Group flat catalog choices into periodic cards:
  * - Multiple providers exposing the same canonical model merge into one card.
  * - Distinct model versions stay separate cards.
