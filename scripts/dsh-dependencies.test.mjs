@@ -10,6 +10,11 @@ const read = path => JSON.parse(readFileSync(join(root, path), 'utf8'))
 const manifest = read('package.json')
 const official = name => /^@deepseek-ai\/dsh(?:-|$)/.test(name)
 const target = manifest.devDependencies['@deepseek-ai/dsh-client-ui-primitives']
+// The Exa provider is a real runtime dependency of dsh-web-search-manager, but its
+// npm releases stopped at 0.2.2-rc.1 (the 0.2.2-rc.5 train never published it).
+// Everything else follows one baseline; Exa stays pinned one train behind until
+// upstream catches up, so it is exempted from the exact-version assertions.
+const versionExceptions = new Map([['@deepseek-ai/dsh-web-search-exa', '0.2.2-rc.1']])
 const plugins = readdirSync(join(root, 'plugins'), { withFileTypes: true })
   .filter(entry => entry.isDirectory() && existsSync(join(root, 'plugins', entry.name, 'package.json')))
   .map(entry => read(`plugins/${entry.name}/package.json`))
@@ -18,7 +23,7 @@ test('DSH development dependencies and workspace overrides share one baseline', 
   assert.equal(semver.valid(target), target)
   for (const pkg of [manifest, ...plugins]) {
     for (const [name, version] of Object.entries(pkg.devDependencies ?? {})) {
-      if (official(name)) assert.equal(version, target, `${pkg.name}: ${name}`)
+      if (official(name)) assert.equal(version, versionExceptions.get(name) ?? target, `${pkg.name}: ${name}`)
     }
   }
   const workspace = readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8')
@@ -28,8 +33,8 @@ test('DSH development dependencies and workspace overrides share one baseline', 
   assert.equal(manifest.pnpm, undefined, 'pnpm settings belong in pnpm-workspace.yaml')
   assert.ok(overrides.size > 0, 'workspace must declare DSH overrides')
   for (const [name, version] of overrides) {
-    assert.equal(version, target, name)
-    assert.equal(manifest.devDependencies[name], target, `${name}: missing development peer`)
+    assert.equal(version, versionExceptions.get(name) ?? target, name)
+    assert.equal(manifest.devDependencies[name], versionExceptions.get(name) ?? target, `${name}: missing development peer`)
   }
   const lock = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8')
   const lockOverrides = lock.split(/^overrides:\r?\n/m)[1]?.split(/^\S/m)[0] ?? ''
@@ -60,10 +65,11 @@ test('DSH host dependencies stay optional peers and injected UI stays developmen
     }
     if (pkg.engines?.dsh) {
       // This YAML preset uses the renamed modelSelection option and merged
-      // list_agents tool. Deep View's optional deepui fence uses the Markdown
+      // list_agents tool, and its standard roster mounts tool-office from
+      // rc.2 onward. Deep View's optional deepui fence uses the Markdown
       // fence Slot contract introduced in rc.3. Both retain the common compile
       // baseline, but must reject hosts older than their runtime contracts.
-      const runtimeTarget = pkg.name === '@klarkxy/dsh-unrestricted' ? '0.2.2-rc.1'
+      const runtimeTarget = pkg.name === '@klarkxy/dsh-unrestricted' ? '0.2.2-rc.2'
         : pkg.name === '@klarkxy/dsh-deep-view' ? '0.2.2-rc.3' : target
       assertOpenCompatibleRange(pkg.engines.dsh, pkg.name, runtimeTarget)
     }
@@ -78,5 +84,5 @@ test('the lockfile does not mix official DSH release versions', () => {
   const lock = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8')
   const versions = [...lock.matchAll(/^  ['"]?(@deepseek-ai\/dsh(?:-[^@'"\n]+)?)@([^('":\n]+)/gm)]
   assert.ok(versions.length > 0)
-  for (const [, name, version] of versions) assert.equal(version, target, name)
+  for (const [, name, version] of versions) assert.equal(version, versionExceptions.get(name) ?? target, name)
 })

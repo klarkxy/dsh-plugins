@@ -4,8 +4,9 @@ import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
  * The shared contract paints this page: the type tiers, the card, the field,
  * the button row, the notice, the focus ring and the state colours. What is
  * left here is only the geometry the contract does not cover — the reading
- * width of the panel, the ranked three-column row, the drag affordance, the
- * drop indicator, the screen-reader-only announcer and the limits grid.
+ * width of the panel, the ranked three-column row, the mode bar, the drag
+ * affordance, the drop indicator, the screen-reader-only announcer and the
+ * limits grid.
  *
  * Nothing below declares a colour of its own beyond naming a host token, and
  * nothing carries a literal fallback: the host publishes both themes and a
@@ -20,6 +21,25 @@ export const webSearchClientStyles = `${officialUiCss('ws-root')}
 .ws-root {
 
 .ws-card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 8px; }
+.ws-mode-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+.ws-optin-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
 .ws-sr-only {
   position: absolute;
   width: 1px;

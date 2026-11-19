@@ -6,12 +6,25 @@ export type RpcResult<T = unknown> = { ok: true; value: T } | {
   ok: false; error: { code: string; message: string; details: Record<string, unknown> }
 }
 export type ProviderKind = 'search' | 'fetch'
+export type SearchMode = 'fusion' | 'failover' | 'single'
+export type FetchMode = 'waterfall' | 'single'
 /** Management metadata only. Field contract lives in plugin-kit; execution stays with ctx.web. */
 export interface ProviderDescriptor extends DshWebManagementDescriptor {}
 export const WEB_MANAGER_OWNER = '@klarkxy/dsh-web-search-manager'
-/** Optional display metadata on a provider registered directly with ctx.web. */
-export type DiscoverableSearchProvider = WebSearchProvider & { readonly dshWebManagement?: ProviderDescriptor }
-export type DiscoverableFetchProvider = WebFetchProvider & { readonly dshWebManagement?: ProviderDescriptor }
+export type LocalizedProviderText = string | Readonly<Record<string, string | undefined>>
+/** Optional display & readiness metadata on a provider registered directly with ctx.web. */
+export type DiscoverableSearchProvider = WebSearchProvider & {
+  readonly title?: string
+  readonly description?: LocalizedProviderText
+  readonly ready?: (llmProvider?: string) => Promise<boolean>
+  readonly dshWebManagement?: ProviderDescriptor
+}
+export type DiscoverableFetchProvider = WebFetchProvider & {
+  readonly title?: string
+  readonly description?: LocalizedProviderText
+  readonly ready?: (llmProvider?: string) => Promise<boolean>
+  readonly dshWebManagement?: ProviderDescriptor
+}
 export interface ProviderOptions {
   readonly apiKey?: string
   readonly baseURL?: string
@@ -25,6 +38,10 @@ export interface WebSettings {
   revision: number
   searchEnabled: boolean
   fetchEnabled: boolean
+  searchMode: SearchMode
+  fetchMode: FetchMode
+  maxParallelSearch: number
+  multiSourceOptIn: string[]
   searchProvider: string
   fetchProvider: string
   searchOrder: string[]
@@ -36,13 +53,49 @@ export interface WebSettings {
   endpoints: Record<string, string>
 }
 export const DEFAULT_SEARCH_ORDER = ['ddg'] as const
+export const OFFICIAL_FREE_SEARCH_PRIORITY = ['deepseek-search-api', 'deepseek-official', 'deepseek-managed', 'ddg'] as const
+export const OFFICIAL_FREE_FETCH_PRIORITY = ['deepseek-fetch-api', 'jina', 'http', 'http-managed'] as const
+
+const AUTO_MULTISOURCE_HOST_IDS = new Set([
+  'ddg', 'jina', 'http', 'http-managed',
+  'deepseek-search-api', 'deepseek-fetch-api', 'deepseek-official', 'deepseek-managed',
+])
 
 export const defaultSettings = (): WebSettings => ({
-  revision: 0, searchEnabled: true, fetchEnabled: true,
-  searchProvider: 'ddg', fetchProvider: 'http', searchOrder: [...DEFAULT_SEARCH_ORDER], fetchOrder: ['http'],
-  maxResults: 5, maxQueries: 1,
-  timeoutMs: 30_000, maxFetchChars: 100_000, endpoints: {},
+  revision: 0,
+  searchEnabled: true,
+  fetchEnabled: true,
+  searchMode: 'fusion',
+  fetchMode: 'waterfall',
+  maxParallelSearch: 3,
+  multiSourceOptIn: [],
+  searchProvider: 'ddg',
+  fetchProvider: 'http',
+  searchOrder: [...DEFAULT_SEARCH_ORDER],
+  fetchOrder: ['http'],
+  maxResults: 10,
+  maxQueries: 10,
+  timeoutMs: 30_000,
+  maxFetchChars: 100_000,
+  endpoints: {},
 })
+
+/** True when a provider may incur per-call charges or comes from an unclassified third-party plugin. */
+export function requiresMultiSourceOptIn(
+  descriptor: Pick<ProviderDescriptor, 'id' | 'billing'>,
+): boolean {
+  if (AUTO_MULTISOURCE_HOST_IDS.has(descriptor.id)) return false
+  return descriptor.billing !== 'none' && descriptor.billing !== 'model-and-tools'
+}
+
+export function canJoinMultiSource(
+  descriptor: Pick<ProviderDescriptor, 'id' | 'billing'>,
+  kind: ProviderKind,
+  multiSourceOptIn: readonly string[],
+): boolean {
+  if (!requiresMultiSourceOptIn(descriptor)) return true
+  return multiSourceOptIn.includes(providerKey(kind, descriptor.id))
+}
 
 /** Keyed backends first, keyless last — same idea as OpenClaw auto-detect. */
 export function defaultSearchOrder(ids: readonly string[], keyed: (id: string) => boolean): string[] {
@@ -74,6 +127,8 @@ export interface ProviderView extends ProviderDescriptor {
   configured: boolean
   /** True only for configuration explicitly owned by this manager bundle. */
   configurationOwned?: boolean
+  /** Optional English description supplied by a native localized provider. */
+  englishDescription?: string
   baseURL?: string
   calls: number
   failures: number

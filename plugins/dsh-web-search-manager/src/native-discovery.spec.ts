@@ -202,26 +202,40 @@ describe('discovery from native ctx.web, using actual DSH and Cordis lifecycles'
     await manager.update({ ...legacy, fetchEnabled: false, fetchProvider: '' }, revision + 2)
     expect(manager.status().settings.fetchOrder).toEqual([])
   })
-  it('does not retry another fetch provider on a call failure or removal during a call', async () => {
+  it('falls back along the fetch waterfall on failure or mid-call removal, and single mode never retries', async () => {
     const { web } = host()
     const first = fetchProvider('first'), second = fetchProvider('second')
     const off = web.registerFetchProvider(first)
     web.registerFetchProvider(second)
     const { manager } = manage(web)
     await update(manager, { fetchEnabled: true, fetchOrder: ['first', 'second'] })
+    // A bare unclassified provider never joins the waterfall silently; its
+    // billing is unknown, so fallback requires an explicit opt-in first.
     vi.mocked(first.fetch).mockRejectedValueOnce(new Error('upstream failed'))
     await expect(web.fetch({ url: 'https://example.com' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
     expect(second.fetch).not.toHaveBeenCalled()
+    await update(manager, { multiSourceOptIn: ['fetch:second'] })
+    // Waterfall default: with the opt-in recorded, a failed first entry falls back to the next candidate.
+    vi.mocked(first.fetch).mockRejectedValueOnce(new Error('upstream failed'))
+    await expect(web.fetch({ url: 'https://example.com' })).resolves.toMatchObject({ statusCode: 200 })
+    expect(second.fetch).toHaveBeenCalledOnce()
+    // A mid-call removal aborts only the in-flight entry; the waterfall resumes on the next entry.
     let release!: () => void
     vi.mocked(first.fetch).mockImplementationOnce(() => new Promise(resolve => { release = () => resolve({ url: 'https://example.com', statusCode: 200, body: { kind: 'text', content: 'late' }, truncated: false }) }))
     const pending = web.fetch({ url: 'https://example.com' }).catch(error => error)
-    await vi.waitFor(() => expect(first.fetch).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(first.fetch).toHaveBeenCalledTimes(3))
     off()
     release()
-    expect(await pending).toMatchObject({ code: 'WEB_ABORTED' })
-    expect(second.fetch).not.toHaveBeenCalled()
+    expect(await pending).toMatchObject({ statusCode: 200 })
+    expect(second.fetch).toHaveBeenCalledTimes(2)
     await web.fetch({ url: 'https://example.com' })
-    expect(second.fetch).toHaveBeenCalledOnce()
+    expect(second.fetch).toHaveBeenCalledTimes(3)
+    expect(first.fetch).toHaveBeenCalledTimes(3)
+    // Single mode keeps the no-retry contract: the primary's error is the call's error.
+    await update(manager, { fetchMode: 'single', fetchOrder: ['first', 'second'] })
+    vi.mocked(second.fetch).mockRejectedValueOnce(new Error('solo failed'))
+    await expect(web.fetch({ url: 'https://example.com' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
+    expect(first.fetch).toHaveBeenCalledTimes(3)
   })
   it('keeps external config out of manager writes and filters unsafe optional links', async () => {
     const { web } = host()

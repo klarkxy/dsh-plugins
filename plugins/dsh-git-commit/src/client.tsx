@@ -6,9 +6,8 @@ import { ModelCatalogStatus, ModelMenu, modelMenuCss, useModelCatalog } from '@k
 import { renderModelPicker, useModelMenuAnchor, type RenderFactorySlot } from '@klarkxy/dsh-plugin-kit/model-picker'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import {
-  Button, IconChevronDownOutlineRegular, IconRefreshOutlineRegular, Switch, Tooltip, useAnchoredPosition, useDismissOnOutsidePointer,
-} from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronDownOutlineRegular, IconRefreshOutlineRegular, Switch, Tooltip, useDismissOnOutsidePointer } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useAnchoredPosition } from './anchored-position.ts'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { createModelSettingsSubscriber, mountModelSettingsChanges } from '@klarkxy/dsh-plugin-kit/model-settings-client'

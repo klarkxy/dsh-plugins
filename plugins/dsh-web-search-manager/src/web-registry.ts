@@ -1,11 +1,15 @@
 import { WebError, type WebSearchProvider, type WebFetchProvider } from '@deepseek-ai/dsh-web'
-import type { ProviderKind } from './contracts.ts'
+import type { LocalizedProviderText, ProviderKind } from './contracts.ts'
 
 export interface WebRegistry {
   registerSearchProvider(provider: WebSearchProvider): () => void
   registerFetchProvider(provider: WebFetchProvider): () => void
 }
-export type NativeProvider = WebSearchProvider | WebFetchProvider
+export type NativeProvider = (WebSearchProvider | WebFetchProvider) & {
+  readonly title?: string
+  readonly description?: LocalizedProviderText
+  readonly ready?: (llmProvider?: string) => Promise<boolean>
+}
 type Runtime = WebRegistry & {
   searchProviders: Map<string, NativeProvider>
   fetchProviders: Map<string, NativeProvider>
@@ -23,7 +27,7 @@ const owner = Symbol.for('@klarkxy/dsh-web-search-manager/registry-owner')
 /** The only private-host boundary. Public ctx.web has no selection API.
  * Old hosts snapshot config/env into own searchProviderId/fetchProviderId.
  * Current hosts read config.searchProvider.get() ?? searchProviderEnv on each call
- * (fetch uses the matching pair). Keep the actual Maps: Cordis effects capture them.
+ * (fetch and searchReady/fetchReady use the matching pair). Keep the actual Maps: Cordis effects capture them.
  */
 function runtimeOf(web: WebRegistry): Runtime {
   const runtime = web as Runtime
@@ -85,14 +89,23 @@ function isThisRuntime(runtime: Runtime, receiver: object): boolean {
       && Reflect.get(receiver, 'fetchProviders', receiver) === runtime.fetchProviders
   } catch { return false }
 }
-function installCallView(runtime: Runtime, key: 'search' | 'fetch', undo: Array<() => void>): void {
+function installCallView(
+  runtime: Runtime,
+  key: 'search' | 'fetch' | 'searchReady' | 'fetchReady',
+  undo: Array<() => void>,
+  optional = false,
+): void {
   // Own property on this service only. The Cordis proxy forwards defineProperty to that target;
   // writing the shared prototype would couple every WebRuntime.
-  if (Object.hasOwn(runtime, key)) throw new TypeError(`ctx.web.${key} is already owned by this runtime`)
+  if (Object.hasOwn(runtime, key)) {
+    if (optional) return
+    throw new TypeError(`ctx.web.${key} is already owned by this runtime`)
+  }
   let prototype: object | null = Object.getPrototypeOf(runtime)
   while (prototype && !Object.hasOwn(prototype, key)) prototype = Object.getPrototypeOf(prototype)
   const inherited = prototype ? Object.getOwnPropertyDescriptor(prototype, key) : undefined
   if (!inherited || !('value' in inherited) || typeof inherited.value !== 'function') {
+    if (optional) return
     throw new TypeError(`ctx.web.${key} is not a replaceable method`)
   }
   // Close over the prototype method so the wrapper cannot recurse through itself.
@@ -166,6 +179,8 @@ export function observeWebRegistry(web: WebRegistry, hooks: {
     }
     installCallView(runtime, 'search', undo)
     installCallView(runtime, 'fetch', undo)
+    installCallView(runtime, 'searchReady', undo, true)
+    installCallView(runtime, 'fetchReady', undo, true)
   } catch (error) {
     for (const restore of undo.reverse()) restore()
     throw new WebError('无法接管 ctx.web 注册表，已恢复原状。', 'WEB_REGISTRY_UNSUPPORTED', { cause: error })

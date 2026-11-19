@@ -43,18 +43,19 @@ describe('network search background read recovery', () => {
       } } }, locale: { getSnapshot: () => ({ active: 'en' }) } }
     const render = () => { hooks.cursor = 0; hooks.effects = []; return NetworkSearchSettings({ client: client as never }) }
     render(); const cleanup = hooks.effects.map(effect => effect()); await flush()
-    const input = descendants(render()).find(element => element.props.value === '5' && element.props.onChange)!
-    ;(input.props.onChange as (event: unknown) => void)({ target: { value: '8' } })
+    // The parallel-sources limit input ('3' from defaultSettings) stands in for any limit draft.
+    const input = descendants(render()).find(element => element.props.value === '3' && element.props.onChange)!
+    ;(input.props.onChange as (event: unknown) => void)({ target: { value: '4' } })
     failing = true; await vi.advanceTimersByTimeAsync(3000); await flush()
     // Nine scheduled ticks fit inside the fixed thirty-second cooldown.
     await vi.advanceTimersByTimeAsync(27_000); await flush()
     expect(endpoints).toEqual(['status', 'status'])
     const tree = descendants(render())
-    expect(tree.some(element => element.props.value === '8')).toBe(true)
+    expect(tree.some(element => element.props.value === '4')).toBe(true)
     const retry = tree.find(element => element.props.children === 'Reconnect')!
     failing = false; (retry.props.onClick as () => void)(); await flush()
     expect(endpoints).toEqual(['status', 'status', 'status'])
-    expect(descendants(render()).some(element => element.props.value === '8')).toBe(true)
+    expect(descendants(render()).some(element => element.props.value === '4')).toBe(true)
     reconnect?.(); await flush(); expect(endpoints).toHaveLength(4)
     cleanup.forEach(dispose => dispose?.()); expect(reconnect).toBeUndefined(); expect(vi.getTimerCount()).toBe(0)
   })

@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-web-search-manager",
-  "version": "0.3.8",
-  "description": "Manage and rank web search and page-reading providers in one settings page—with built-in DuckDuckGo, Exa, Tavily, Linkup, Zhipu, and others—for the model's web_search and web_fetch tools.",
+  "version": "0.4.0",
+  "description": "Orchestrate multi-source web search (parallel RRF fusion, failover, single) and waterfall page reading in one settings page—with built-in DuckDuckGo, Jina Reader, Exa, Tavily, Linkup, Zhipu, and plugin sources—for the model's web_search and web_fetch tools.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -67,7 +67,7 @@
       {
         "id": "web-search-manager",
         "title": "网页搜索",
-        "description": "在一个设置页管理搜索服务商和公开页面抓取",
+        "description": "在一个设置页编排多源联网搜索融合与网页读取回退",
         "feature": "web-search",
         "service": "webSearchManager"
       }
@@ -117,13 +117,13 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.1.0",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-credentials": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-tool-web": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-web": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-web-fetch-http": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-web-search-deepseek": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-credentials": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-tool-web": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-web": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-web-fetch-http": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-web-search-deepseek": "0.2.2-rc.5",
     "@types/react": "18.3.31",
     "react": "^18.2.0"
   },
@@ -166,6 +166,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "7872b7512d4a82463142f7a70d9e9036204465716fc4e43fb85457dfcc400215"
+    "contentHash": "6087344adc094e8e7d741cb53a4aa960965a136a3c226123ac4d739b8d4c12b2"
   }
 }

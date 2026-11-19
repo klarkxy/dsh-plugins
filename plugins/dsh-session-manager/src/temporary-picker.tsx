@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react'
 import { Button, IconFolderCloseRegular, IconNewChatOutlineRegular, IconPlusOutlineRegular, Menu, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from '@deepseek-ai/dsh-client-ui-workspace/client'
@@ -103,10 +103,9 @@ function TemporaryWorkspacePicker(props: PickerProps & {
   useEffect(() => () => { epoch.current++ }, [])
   useEffect(() => { epoch.current++; setFlowOpen(false); setAdopting(false) }, [source])
   const busy = flowOpen || adopting || state.creating
-  const getAnchorRect = useCallback(() => props.anchorRef?.current?.getBoundingClientRect() ?? null, [props.anchorRef])
   const openDirectory = () => { props.onClose(); setFailure(undefined); setFlowOpen(true) }
   return <>
-    <Menu open={props.open} anchor={null} portal getAnchorRect={getAnchorRect} selectedId={props.selectedId}
+    <Menu open={props.open} anchor={null} portal anchorRef={props.anchorRef} selectedId={props.selectedId}
       onClose={props.onClose} items={workspaces.items.map(workspace => ({ id: workspace.workspaceId,
         // The standard registry's first-use title is language-neutral; all user titles stay verbatim.
         label: workspace.title === 'default-workspace' ? props.t('workspace.defaultName') : workspace.title,
