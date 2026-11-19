@@ -5,8 +5,9 @@ import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import {
-  ComposerModelSeat, directoryChoices, ModelPicker, pickerCopy,
+  ComposerModelSeat, directoryChoices, ModelPicker, modelPickerCss, pickerCopy,
 } from './client.tsx'
+import { STORAGE_KEY } from './periodic-store.ts'
 
 const zhT = pickerCopy('zh-CN')
 
@@ -17,6 +18,25 @@ const groups: Groups = [
     { id: 'two', name: 'Two', reasoning: { efforts: [{ id: 'low', name: 'Low' }], defaultEffort: 'low' } },
   ] },
   { id: 'q', name: 'Q', models: [{ id: 'plain', name: 'Plain' }] },
+]
+
+const periodicGroups: Groups = [
+  {
+    id: 'google', name: 'Google AI', models: [
+      { id: 'gemini-4-neon', name: 'Gemini 4 Neon', reasoning: { efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }] } },
+    ],
+  },
+  {
+    id: 'vertex', name: 'Vertex', models: [
+      { id: 'google/gemini-4-neon', name: 'Gemini 4 Neon', reasoning: { efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }] } },
+    ],
+  },
+  {
+    id: 'xai', name: 'xAI', models: [
+      { id: 'grok-4.6', name: 'Grok 4.6', reasoning: { efforts: [{ id: 'medium', name: 'Medium' }, { id: 'high', name: 'High' }] } },
+      { id: 'grok-4.7', name: 'Grok 4.7', reasoning: { efforts: [{ id: 'high', name: 'High' }] } },
+    ],
+  },
 ]
 
 function makeDirectory(state: Partial<ModelDirectoryState> = {}) {
@@ -37,11 +57,15 @@ function makeDirectory(state: Partial<ModelDirectoryState> = {}) {
 }
 
 /* Install the JSDOM globals for one test. Returns cleanup. */
-function jsdomEnv() {
-  const dom = new JSDOM('<div id="root"></div>')
+function jsdomEnv(options?: { viewMode?: 'cards' | 'list' }) {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' })
+  if (options?.viewMode) {
+    dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ viewMode: options.viewMode }))
+  }
   const previous = new Map<string, PropertyDescriptor | undefined>()
   for (const [key, value] of Object.entries({
-    window: dom.window, document: dom.window.document, Node: dom.window.Node,
+    window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
+    Node: dom.window.Node,
     Element: dom.window.Element, HTMLElement: dom.window.HTMLElement,
     HTMLInputElement: dom.window.HTMLInputElement, HTMLButtonElement: dom.window.HTMLButtonElement,
     MouseEvent: dom.window.MouseEvent, KeyboardEvent: dom.window.KeyboardEvent,
@@ -60,15 +84,12 @@ function jsdomEnv() {
     async slide(el: HTMLInputElement, value: string) {
       // React 18 tracks input values: Simulate.change exercises the real
       // controlled-input path, then a pointerup commits the slider gesture.
-      // A native keyup must NOT be used here: jsdom makes React take its
-      // legacy input-event polyfill (no InputEvent support check), where a
-      // keyup touches a null activeElementInst and the whole dispatch dies
-      // inside ChangeEventPlugin before onKeyUp ever runs.
       await act(async () => Simulate.change(el, { target: { value } } as never))
       await act(() => { el.dispatchEvent(new dom.window.Event('pointerup', { bubbles: true })) })
     },
     async done(root: Root) {
       await act(async () => root.unmount())
+      dom.window.localStorage.clear()
       for (const [key, descriptor] of previous) {
         if (descriptor) Object.defineProperty(globalThis, key, descriptor)
         else Reflect.deleteProperty(globalThis, key)
@@ -82,16 +103,128 @@ function mount(dom: JSDOM): Root {
   return createRoot(dom.window.document.getElementById('root')!)
 }
 
-describe('directory adapters', () => {
+describe('directory adapters & stylesheet guards', () => {
   it('flattens provider groups into choices and keeps a saved route selectable', () => {
     const choices = directoryChoices(groups, { provider: 'gone', model: 'lost' })
     expect(choices).toHaveLength(4)
     expect(choices[0]).toMatchObject({ provider: 'p', model: 'one', providerLabel: 'Provider', efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }] })
     expect(choices.at(-1)).toMatchObject({ provider: 'gone', model: 'lost', efforts: [] })
   })
+
+  it('keeps modelPickerCss free of literal hex/rgb colors', () => {
+    expect(modelPickerCss).toContain('.dsh-model-picker-grid')
+    expect(modelPickerCss).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
+    expect(modelPickerCss).not.toMatch(/\brgba?\(/)
+    expect(modelPickerCss).not.toMatch(/\bhsla?\(/)
+  })
 })
 
-describe('ModelPicker factory component', () => {
+describe('ModelPicker periodic card grid (default view)', () => {
+  const choices = directoryChoices(periodicGroups)
+  const kit = {
+    t: pickerCopy('en'),
+    useFactorySlot: (_name: string, fallback: unknown) => fallback,
+    useActiveLocale: (selector?: (s: { active: string }) => unknown) => selector ? selector({ active: 'en' }) : { active: 'en' },
+  }
+
+  it('merges multi-provider models into one card, separates versions with superscripts, and switches providers via dropdown', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    const onPick = vi.fn(), onPickEffort = vi.fn()
+    try {
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={choices}
+          selected={{ provider: 'google', model: 'gemini-4-neon' }}
+          onPick={onPick}
+          efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]}
+          selectedEffort="high"
+          onPickEffort={onPickEffort}
+        />,
+      ))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const cards = [...env.dom.window.document.querySelectorAll('.dsh-model-picker-card')]
+      // Gemini 4 Neon (merged from Google + Vertex), Grok 4.6, Grok 4.7 => 3 cards.
+      expect(cards).toHaveLength(3)
+      expect(cards[0]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Ne')
+      expect(cards[1]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Gr')
+      expect(cards[1]!.querySelector('.dsh-model-picker-ver')!.textContent).toBe('4.6')
+      expect(cards[2]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Gr')
+      expect(cards[2]!.querySelector('.dsh-model-picker-ver')!.textContent).toBe('4.7')
+
+      // Open provider dropdown on the Neon card and pick Vertex.
+      const provBtn = cards[0]!.querySelector('.dsh-model-picker-provBtn')!
+      await env.click(provBtn)
+      const options = [...cards[0]!.querySelectorAll('[role="option"]')]
+      expect(options).toHaveLength(2)
+      const vertexOption = options.find(opt => opt.textContent?.includes('Vertex'))!
+      await env.click(vertexOption)
+      expect(onPick).toHaveBeenCalledWith({ provider: 'vertex', model: 'google/gemini-4-neon' })
+    } finally { await env.done(root) }
+  })
+
+  it('clicks card center to pick without effort and clicks bottom effort cells to pick/clear effort', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    const onPick = vi.fn(), onPickEffort = vi.fn()
+    try {
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={choices}
+          selected={{ provider: 'google', model: 'gemini-4-neon' }}
+          onPick={onPick}
+          efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]}
+          selectedEffort="high"
+          onPickEffort={onPickEffort}
+        />,
+      ))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const cards = [...env.dom.window.document.querySelectorAll('.dsh-model-picker-card')]
+
+      // Click center of active Neon card -> clears effort (undefined).
+      await env.click(cards[0]!.querySelector('.dsh-model-picker-cardBody')!)
+      expect(onPickEffort).toHaveBeenCalledWith(undefined)
+
+      // Click 'H' on Grok 4.7 -> picks route + 'high'.
+      const grok47High = cards[2]!.querySelector('.dsh-model-picker-effortCell')!
+      await env.click(grok47High)
+      expect(onPick).toHaveBeenCalledWith({ provider: 'xai', model: 'grok-4.7' })
+      expect(onPickEffort).toHaveBeenLastCalledWith('high')
+    } finally { await env.done(root) }
+  })
+
+  it('adjusts card width via slider and switches smoothly between Cards and List views', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    try {
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={choices}
+          selected={{ provider: 'google', model: 'gemini-4-neon' }}
+          onPick={() => {}}
+          efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]}
+          selectedEffort="high"
+          onPickEffort={() => {}}
+        />,
+      ))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const surface = env.dom.window.document.querySelector<HTMLElement>('.dsh-model-picker-periodicSurface')!
+      const widthSlider = env.dom.window.document.querySelector<HTMLInputElement>('.dsh-model-picker-widthSlider')!
+      await act(async () => Simulate.change(widthSlider, { target: { value: '204' } } as never))
+      expect(surface.style.getPropertyValue('--_card-w')).toBe('204px')
+
+      // Switch to List view and verify searchbox renders.
+      const listBtn = [...env.dom.window.document.querySelectorAll('.dsh-model-picker-viewBtn')].find(btn => btn.textContent === 'List')!
+      await env.click(listBtn)
+      expect(env.dom.window.document.querySelector('input[role="searchbox"]')).not.toBeNull()
+    } finally { await env.done(root) }
+  })
+})
+
+describe('ModelPicker factory component (list view)', () => {
   const choices = directoryChoices(groups)
   const kit = {
     t: pickerCopy('en'),
@@ -100,7 +233,7 @@ describe('ModelPicker factory component', () => {
   }
 
   it('opens on the model pane with a visible search row, a real range slider, and trigger aria', async () => {
-    const env = jsdomEnv()
+    const env = jsdomEnv({ viewMode: 'list' })
     const root = mount(env.dom)
     try {
       await act(async () => root.render(<ModelPicker {...kit} choices={choices} selected={{ provider: 'p', model: 'one' }} onPick={() => {}} efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]} selectedEffort="high" onPickEffort={() => {}} />))
@@ -117,7 +250,7 @@ describe('ModelPicker factory component', () => {
   })
 
   it('picking a model reports the route verbatim; a slider gesture commits its effort id', async () => {
-    const env = jsdomEnv()
+    const env = jsdomEnv({ viewMode: 'list' })
     const root = mount(env.dom)
     const onPick = vi.fn(), onPickEffort = vi.fn()
     try {
@@ -134,7 +267,7 @@ describe('ModelPicker factory component', () => {
   })
 
   it('disabled gates every pick and suppresses opening', async () => {
-    const env = jsdomEnv()
+    const env = jsdomEnv({ viewMode: 'list' })
     const root = mount(env.dom)
     const onPick = vi.fn(), onPickEffort = vi.fn()
     try {
@@ -148,7 +281,7 @@ describe('ModelPicker factory component', () => {
   })
 
   it('a pick followed by the save lock keeps the same menu node; slider commits once the lock releases', async () => {
-    const env = jsdomEnv()
+    const env = jsdomEnv({ viewMode: 'list' })
     const root = mount(env.dom)
     const onPick = vi.fn(), onPickEffort = vi.fn()
     const efforts = [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]
@@ -161,23 +294,19 @@ describe('ModelPicker factory component', () => {
       await act(async () => root.render(<Harness saving={false} />))
       await env.click(env.dom.window.document.querySelector('button')!)
       const menu = env.dom.window.document.querySelector('.dsh-model-menu-menu')!
-      // The real flow: pick a model — the selection is reported and the card stays.
       const twoRow = [...env.dom.window.document.querySelectorAll('[role="menuitemradio"]')].find(row => row.textContent?.includes('Two'))!
       await env.click(twoRow)
       expect(onPick).toHaveBeenCalledWith({ provider: 'p', model: 'two' })
       expect(env.dom.window.document.querySelector('.dsh-model-menu-menu')).toBe(menu)
-      // The owner's save lock rises: the same DOM card stays mounted, rows gated.
       await act(async () => root.render(<Harness saving={true} />))
       expect(env.dom.window.document.querySelector('.dsh-model-menu-menu')).toBe(menu)
       expect(env.dom.window.document.querySelector('[role="menuitemradio"]:not([disabled])')).toBeNull()
-      // Success lands and the lock releases: same card, slider fully usable.
       await act(async () => root.render(<Harness saving={false} />))
       expect(env.dom.window.document.querySelector('.dsh-model-menu-menu')).toBe(menu)
       const slider = env.dom.window.document.querySelector<HTMLInputElement>('input[type="range"]')!
       await env.slide(slider, '1')
       expect(onPickEffort).toHaveBeenCalledWith('low')
       expect(env.dom.window.document.querySelector('.dsh-model-menu-menu')).toBe(menu)
-      // A second save pulse still does not move the card; Escape still closes it.
       await act(async () => root.render(<Harness saving={true} />))
       expect(env.dom.window.document.querySelector('.dsh-model-menu-menu')).toBe(menu)
       await act(async () => env.dom.window.document.querySelector<HTMLInputElement>('[role="searchbox"]')!
@@ -187,7 +316,7 @@ describe('ModelPicker factory component', () => {
   })
 
   it('one Escape closes the search-first picker from anywhere in the card', async () => {
-    const env = jsdomEnv()
+    const env = jsdomEnv({ viewMode: 'list' })
     const root = mount(env.dom)
     try {
       await act(async () => root.render(<ModelPicker {...kit} choices={choices} selected={{ provider: 'p', model: 'one' }} onPick={() => {}} />))
@@ -202,12 +331,10 @@ describe('ModelPicker factory component', () => {
   })
 
   it('renders the status header with a working retry and a loading row only while choices are empty', async () => {
-    const env = jsdomEnv()
+    const env = jsdomEnv({ viewMode: 'list' })
     const root = mount(env.dom)
     const retry = vi.fn()
     try {
-      // Populated choices + busy: error/failure rows render, the loading row
-      // stays out so a background refresh never disturbs an open menu.
       await act(async () => root.render(<ModelPicker {...kit} choices={choices} onPick={() => {}}
         status={{ busy: true, error: 'boom', failures: [{ id: 'q', name: 'Q', message: 'down' }], retry }} />))
       await env.click(env.dom.window.document.querySelector('button')!)
@@ -217,7 +344,6 @@ describe('ModelPicker factory component', () => {
       expect(banner.textContent).not.toContain('Refreshing model list')
       await env.click(banner.querySelector('.dsh-model-picker-retry')!)
       expect(retry).toHaveBeenCalledTimes(1)
-      // Empty choices + busy: the initial-load row shows.
       await act(async () => root.render(<ModelPicker {...kit} choices={[]} onPick={() => {}}
         status={{ busy: true, retry }} />))
       await env.click(env.dom.window.document.querySelector('button')!)
@@ -226,7 +352,7 @@ describe('ModelPicker factory component', () => {
   })
 
   it('a custom anchor local component replaces the trigger and receives the contract props without DOM leakage warnings', async () => {
-    const env = jsdomEnv()
+    const env = jsdomEnv({ viewMode: 'list' })
     const root = mount(env.dom)
     const seen: Record<string, unknown>[] = []
     const errors: unknown[] = []
@@ -280,7 +406,6 @@ describe('ComposerModelSeat', () => {
       await env.click(trigger)
       const twoRow = [...env.dom.window.document.querySelectorAll('[role="menuitemradio"]')].find(row => row.textContent?.includes('Two'))!
       await env.click(twoRow)
-      // Native semantics: no reasoningEffort travels with a model switch.
       expect(props.select).toHaveBeenCalledWith({ provider: 'p', model: 'two' })
     } finally { await env.done(root) }
   })
@@ -301,19 +426,15 @@ describe('ComposerModelSeat', () => {
   it('the default row marks the provider default, and re-picking an explicit effort equal to the default is still submitted', async () => {
     const env = jsdomEnv()
     const root = mount(env.dom)
-    // current has NO saved effort; 'high' is the provider default.
     const { directory } = makeDirectory({ current: { provider: 'p', model: 'one' } })
     const props = seatProps({ directory: directory as never })
     try {
       await act(async () => root.render(<ComposerModelSeat {...props} />))
       const trigger = env.dom.window.document.querySelector('button')!
-      // Nothing saved → the caption is the provider-default label, not 'High'.
       expect(trigger.textContent).toContain('跟随模型默认')
       await env.click(trigger)
       const slider = env.dom.window.document.querySelector<HTMLInputElement>('input[type="range"]')!
-      // default row (index 0) is the provider default while nothing is saved.
       expect(slider.value).toBe('0')
-      // Committing 'high' writes it explicitly even though it resolves to the default.
       await env.slide(slider, '2')
       expect(props.select).toHaveBeenCalledWith({ provider: 'p', model: 'one', reasoningEffort: 'high' })
     } finally { await env.done(root) }
@@ -329,7 +450,6 @@ describe('ComposerModelSeat', () => {
       expect(env.dom.window.document.querySelector('button')!.textContent).toContain('extinct')
       await env.click(env.dom.window.document.querySelector('button')!)
       const slider = env.dom.window.document.querySelector<HTMLInputElement>('input[type="range"]')!
-      // Only declared efforts + the default row: max = 2, not 3.
       expect(slider.max).toBe('2')
     } finally { await env.done(root) }
   })
@@ -344,14 +464,10 @@ describe('ComposerModelSeat', () => {
     try {
       await act(async () => root.render(<ComposerModelSeat {...props} />))
       await env.click(env.dom.window.document.querySelector('button')!)
-      // A slider gesture submits without closing the menu — the real
-      // asynchronous-selection path, unlike a model pick (which closes).
       const slider = env.dom.window.document.querySelector<HTMLInputElement>('input[type="range"]')!
       await env.slide(slider, '1')
       expect(select).toHaveBeenCalledWith({ provider: 'p', model: 'one', reasoningEffort: 'low' })
       expect(env.dom.window.document.querySelector('input[type="range"]')).not.toBeNull()
-      // The directory reports the in-flight selection: rows disable but the
-      // menu stays open, mirroring the native posture.
       await act(async () => set({ status: 'selecting', pending: { provider: 'p', model: 'one', reasoningEffort: 'low' } }))
       expect(env.dom.window.document.querySelector('[role="menuitemradio"]:not([disabled])')).toBeNull()
       expect(env.dom.window.document.querySelector('input[type="range"]')!.getAttribute('aria-disabled')).toBe('true')
@@ -372,19 +488,14 @@ describe('ComposerModelSeat', () => {
       await act(async () => root.render(<ComposerModelSeat {...props} />))
       await env.click(env.dom.window.document.querySelector('button')!)
       await act(async () => set({ status: 'loading' }))
-      // A refresh over a populated catalog is silent: no banner row, the menu
-      // and slider stay put — the user is not interrupted by catalog reloads.
       expect(env.dom.window.document.querySelector('.dsh-model-picker-status')).toBeNull()
       expect(env.dom.window.document.querySelector('input[type="range"]')).not.toBeNull()
       const twoRow = [...env.dom.window.document.querySelectorAll('[role="menuitemradio"]:not([disabled])')].find(row => row.textContent?.includes('Two'))
       expect(twoRow).not.toBeUndefined()
-      // The bare-menu fallback follows the same rule on the empty initial load.
       const { directory: emptyDir } = makeDirectory({ status: 'loading', groups: [], current: null })
       await act(async () => root.render(<ComposerModelSeat {...seatProps({ directory: emptyDir as never, renderFactorySlot: undefined })} />))
       await env.click(env.dom.window.document.querySelector('button')!)
       expect(env.dom.window.document.querySelector('.dsh-model-picker-status')!.textContent).toContain('正在刷新模型列表')
-      // …while a refresh over a populated list stays silent there too (the
-      // open menu persists across the re-render, so read it without toggling).
       await act(async () => root.render(<ComposerModelSeat {...seatProps({ directory: directory as never, renderFactorySlot: undefined })} />))
       expect(env.dom.window.document.querySelector('.dsh-model-menu-menu')).not.toBeNull()
       expect(env.dom.window.document.querySelector('.dsh-model-picker-status')).toBeNull()
@@ -427,7 +538,6 @@ describe('ComposerModelSeat', () => {
       await act(async () => root.render(<ComposerModelSeat {...props} />))
       await env.click(env.dom.window.document.querySelector('button')!)
       expect(env.dom.window.document.body.textContent).toContain('不在可用目录中')
-      // The row renders the short model name; its title carries the full label.
       const lostRow = env.dom.window.document.querySelector('[role="menuitemradio"][title="gone / lost"]')!
       expect(lostRow.textContent).toContain('lost')
       await env.click(lostRow)
@@ -463,11 +573,11 @@ describe('ComposerModelSeat', () => {
       await env.click(env.dom.window.document.querySelector('button')!)
       const search = env.dom.window.document.querySelector<HTMLInputElement>('[role="searchbox"]')!
       const menu = env.dom.window.document.querySelector('.dsh-model-menu-menu')!
-      const groups = env.dom.window.document.querySelector<HTMLElement>('.dsh-model-menu-groups')!
+      const groupsEl = env.dom.window.document.querySelector<HTMLElement>('.dsh-model-menu-groups')!
       const slider = env.dom.window.document.querySelector<HTMLInputElement>('input[type="range"]')!
       await act(async () => Simulate.change(search, { target: { value: 'Tw' } } as never))
       search.focus()
-      groups.scrollTop = 48
+      groupsEl.scrollTop = 48
       const loads = props.load.mock.calls.length
       await env.slide(slider, '1')
       expect(props.select).toHaveBeenCalledWith({ provider: 'p', model: 'one', reasoningEffort: 'low' })
@@ -478,12 +588,12 @@ describe('ComposerModelSeat', () => {
       }))
       await act(async () => set({ status: 'ready', pending: null, error: null }))
       expect(env.dom.window.document.querySelector('.dsh-model-menu-menu')).toBe(menu)
-      expect(env.dom.window.document.querySelector('.dsh-model-menu-groups')).toBe(groups)
+      expect(env.dom.window.document.querySelector('.dsh-model-menu-groups')).toBe(groupsEl)
       expect(env.dom.window.document.querySelector('input[type="range"]')).toBe(slider)
       expect(search.isConnected).toBe(true)
       expect(search.value).toBe('Tw')
       expect(env.dom.window.document.activeElement).toBe(search)
-      expect(groups.scrollTop).toBe(48)
+      expect(groupsEl.scrollTop).toBe(48)
       expect(props.load).toHaveBeenCalledTimes(loads)
       const twoRow = [...env.dom.window.document.querySelectorAll('[role="menuitemradio"]')].find(row => row.textContent?.includes('Two'))!
       await env.click(twoRow)
@@ -493,9 +603,9 @@ describe('ComposerModelSeat', () => {
         current: { provider: 'p', model: 'two', reasoningEffort: 'low' },
       }))
       expect(env.dom.window.document.querySelector('.dsh-model-menu-menu')).toBe(menu)
-      expect(env.dom.window.document.querySelector('.dsh-model-menu-groups')).toBe(groups)
+      expect(env.dom.window.document.querySelector('.dsh-model-menu-groups')).toBe(groupsEl)
       expect(search.value).toBe('Tw')
-      expect(groups.scrollTop).toBe(48)
+      expect(groupsEl.scrollTop).toBe(48)
       expect(props.load).toHaveBeenCalledTimes(loads)
     } finally { await env.done(root) }
   })

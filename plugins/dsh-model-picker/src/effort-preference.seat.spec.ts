@@ -56,6 +56,14 @@ describe('createPreferredSelect (seat wiring)', () => {
     expect(preference.effortFor({ provider: 'p', model: 'two' })).toBe('low')
   })
 
+  it('an explicit reasoningEffort: undefined (card center click) bypasses remembered effort and clears it on success', async () => {
+    const { directory, preference, select } = harness()
+    preference.remember({ provider: 'p', model: 'two' }, 'low')
+    await select({ provider: 'p', model: 'two', reasoningEffort: undefined })
+    expect(directory.select).toHaveBeenCalledWith({ provider: 'p', model: 'two' })
+    expect(preference.effortFor({ provider: 'p', model: 'two' })).toBeUndefined()
+  })
+
   it('a cross-route pick to a model not declaring the remembered effort goes out bare', async () => {
     const { directory, select } = harness()
     // 'two' declares only 'low': a 'high' memory can never reach it.
