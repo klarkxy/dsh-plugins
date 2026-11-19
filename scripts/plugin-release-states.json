@@ -285,10 +285,10 @@
     },
     {
       "name": "@klarkxy/dsh-update",
-      "state": "draft",
+      "state": "testing",
       "reason": {
-        "zh": "新增更新前 Release 变更预览与确认后更新，待完成首次发布验收。",
-        "en": "New release-changelog preview before confirming updates; awaiting first-release acceptance."
+        "zh": "隔离实例实测通过，等待首次发布。",
+        "en": "Passed isolated-instance testing; awaiting first release."
       }
     },
     {
