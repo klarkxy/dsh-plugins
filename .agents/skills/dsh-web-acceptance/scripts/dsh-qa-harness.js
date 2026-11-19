@@ -444,7 +444,15 @@ export async function materializePluginMounts(closure, tempHome) {
       const source = path.join(item.dir, entry.name)
       const dest = path.join(item.mountDir, entry.name)
       const type = entry.isDirectory() ? (process.platform === 'win32' ? 'junction' : 'dir') : 'file'
-      await fs.symlink(source, dest, type)
+      try {
+        await fs.symlink(source, dest, type)
+      } catch (error) {
+        // Windows without Developer Mode denies unprivileged file symlinks.
+        // A copied mount serves the same read-only purpose for the isolated
+        // profile; directory junctions still work, so only files fall back.
+        if (type !== 'file' || !(['EPERM', 'EACCES'].includes(error?.code))) throw error
+        await fs.copyFile(source, dest)
+      }
     }
     mounts.push({ ...item, manifest: rewritten })
   }

@@ -270,6 +270,9 @@ export function AuxiliaryModelCard({ client, subscribe, renderFactorySlot }: {
         choices,
         selected: follow ? undefined : { provider: current.provider, model: current.model },
         onPick: picked => save({ provider: picked.provider, model: picked.model }),
+        // One atomic save for "model + effort": a pick followed by a separate
+        // effort write loses the effort to the save lock while settling.
+        onPickWithEffort: (picked, effort) => save({ provider: picked.provider, model: picked.model, ...(effort ? { reasoningEffort: effort } : {}) }),
         leading: [{ id: 'default', label: text.modelDefault, selected: follow }],
         onPickLeading: () => save(null),
         efforts,
