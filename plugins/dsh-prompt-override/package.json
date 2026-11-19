@@ -84,5 +84,8 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "dshRelease": {
+    "contentHash": "d551c705ddc7a215232866c2cd6a798d9b7d589d3622549ee89a3719fd0ee935"
   }
 }

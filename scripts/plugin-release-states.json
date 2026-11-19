@@ -285,18 +285,28 @@
     },
     {
       "name": "@klarkxy/dsh-update",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "隔离实例实测通过，等待首次发布。",
-        "en": "Passed isolated-instance testing; awaiting first release."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-11-19T16:57:18.452Z",
+        "integrity": "sha512-z9CzXHZM2VOH9IGvADJuhhochzyZ9fXgBF1JZv9NeqfIGI98BXX/1eYiV5wnKgGh+iX5Tk3RBEwMhTiP6KLYOg=="
       }
     },
     {
       "name": "@klarkxy/dsh-prompt-override",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "隔离实例实测通过，等待首次发布。",
-        "en": "Passed isolated-instance testing; awaiting first release."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-11-19T16:58:02.709Z",
+        "integrity": "sha512-b8nH9A4aIAdg+0oFkbPQf9LFrhF7c04vJorYSCxoI6xNvljCpbkQZOvgO0yh5V8K7Bu6lw5WMjLB+ASwV0VZrg=="
       }
     },
     {
