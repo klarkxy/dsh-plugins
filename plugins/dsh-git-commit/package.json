@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-git-commit",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Git Commit: commit workspace changes from the conversation, with the model grouping commits and generating commit messages.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -139,6 +139,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "8d68394bc9b08e2f5bad1dbe1e6d16fcefef1f2eb3977631a067fa59dc3cd6bd"
+    "contentHash": "d2274a334cbac86070cd9ca4ec097270c5fccc5b3569d0a89ecfad2e90f3e9eb"
   }
 }

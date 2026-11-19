@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-plugin-kit",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "Shared support library for klarkxy DSH plugins, providing the default auxiliary model, shared session settings, diagnostic logging, independent feature contexts, RPC, UI helpers and optional shared model picker integration; installed automatically by dependent plugins.",
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/plugin-kit/",
   "license": "SEE LICENSE IN LICENSE",
@@ -196,6 +196,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "488936bfb15c05f7fb3a6f5101567b1c72ad5ff23a4fd0d2d19b1a73a2ade6e5"
+    "contentHash": "1f4ee0cdece27261c9f7eba177acd2d5621ae1a17cd275910af7f057661d23c3"
   }
 }
