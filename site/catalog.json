@@ -394,6 +394,46 @@
       },
       "repository": "https://github.com/klarkxy/dsh-plugins",
       "directory": "plugins/dsh-workspace-folders"
+    },
+    {
+      "slug": "prompt-override",
+      "package": "@klarkxy/dsh-prompt-override",
+      "category": "workflow",
+      "kind": "plugin",
+      "title": {
+        "zh": "提示词优化",
+        "en": "Prompt Override"
+      },
+      "summary": {
+        "zh": "为 DSH 原生系统提示词补上通用工作规范，并改写过于简略的内置工具指引，对所有会话生效。",
+        "en": "Adds a working contract to DSH's native system prompt and rewrites its terse built-in tool guidance, in every session."
+      },
+      "readme": {
+        "zh": "README.md",
+        "en": "README.en.md"
+      },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-prompt-override"
+    },
+    {
+      "slug": "update",
+      "package": "@klarkxy/dsh-update",
+      "category": "dev",
+      "kind": "plugin",
+      "title": {
+        "zh": "更新与变更预览",
+        "en": "Update and Changelog Preview"
+      },
+      "summary": {
+        "zh": "拦截「新版本」自动下载并提供插件级更新能力，先展示版本区间的 Release 变更日志，用户确认后再更新生效。",
+        "en": "Intercepts automatic version downloads and adds plugin-level updates: preview the release changelog across the version range first, then apply after confirmation."
+      },
+      "readme": {
+        "zh": "README.md",
+        "en": "README.en.md"
+      },
+      "repository": "https://github.com/klarkxy/dsh-plugins",
+      "directory": "plugins/dsh-update"
     }
   ]
 }

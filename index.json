@@ -755,6 +755,91 @@
           }
         }
       ]
+    },
+    {
+      "name": "@klarkxy/dsh-prompt-override",
+      "title": {
+        "zh": "提示词优化",
+        "en": "Prompt Override"
+      },
+      "description": {
+        "zh": "为 DSH 原生系统提示词补上通用工作规范，并改写过于简略的内置工具指引，对所有会话生效。",
+        "en": "Adds a working contract to DSH's native system prompt and rewrites its terse built-in tool guidance, in every session."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/prompt-override/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-prompt-override"
+      },
+      "metadata": {
+        "category": "workflow",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "deepseek-harness-plugin",
+          "system-prompt",
+          "prompt",
+          "tool-guidance"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1795107482,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.2-rc.1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@klarkxy/dsh-update",
+      "title": {
+        "zh": "更新与变更预览",
+        "en": "Update and Changelog Preview"
+      },
+      "description": {
+        "zh": "拦截「新版本」自动下载并提供插件级更新能力，先展示版本区间的 Release 变更日志，用户确认后再更新生效。",
+        "en": "Intercepts automatic version downloads and adds plugin-level updates: preview the release changelog across the version range first, then apply after confirmation."
+      },
+      "author": "klarkxy",
+      "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/update/",
+      "repository": {
+        "url": "https://github.com/klarkxy/dsh-plugins",
+        "directory": "plugins/dsh-update"
+      },
+      "metadata": {
+        "category": "dev",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "dsh-plugins",
+          "deepseek-harness",
+          "deepseek-harness-plugin",
+          "update",
+          "changelog",
+          "release-notes",
+          "plugin-manager"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1795107438,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.2"
+          }
+        }
+      ]
     }
   ]
 }
