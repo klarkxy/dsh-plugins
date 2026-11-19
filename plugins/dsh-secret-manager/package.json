@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-secret-manager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Collect secrets outside chat and use named references with per-session HTTP and shell permissions.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -144,6 +144,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "137675e414ea090af2cc1c463540fbbf1f186334df22e6791f8952250da05fe8"
+    "contentHash": "0dd59dddc37cbe986a5c26cc4ef096dd1d5aa55b7c272a07cd7db4922737c520"
   }
 }
