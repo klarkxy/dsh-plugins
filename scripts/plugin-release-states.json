@@ -292,6 +292,14 @@
       }
     },
     {
+      "name": "@klarkxy/dsh-prompt-override",
+      "state": "testing",
+      "reason": {
+        "zh": "隔离实例实测通过，等待首次发布。",
+        "en": "Passed isolated-instance testing; awaiting first release."
+      }
+    },
+    {
       "name": "@klarkxy/dsh-unrestricted",
       "state": "published",
       "reason": {

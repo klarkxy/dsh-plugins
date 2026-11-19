@@ -70,6 +70,7 @@ The code is the developer documentation. Releases follow the [release guide](REL
 | [@klarkxy/dsh-model-picker](plugins/dsh-model-picker/README.en.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
+| [@klarkxy/dsh-prompt-override](plugins/dsh-prompt-override/README.en.md) | Testing (`testing`) | Passed isolated-instance testing; awaiting first release. |
 | [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.en.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |

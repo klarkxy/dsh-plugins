@@ -70,6 +70,7 @@ pnpm check
 | [@klarkxy/dsh-model-picker](plugins/dsh-model-picker/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
+| [@klarkxy/dsh-prompt-override](plugins/dsh-prompt-override/README.md) | 测试中 (`testing`) | 隔离实例实测通过，等待首次发布。 |
 | [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |

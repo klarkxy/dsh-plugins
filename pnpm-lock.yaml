@@ -668,6 +668,21 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  plugins/dsh-prompt-override:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: 4.1.0
+        version: 4.1.0(@deepseek-ai/cordis-plugin-include@1.1.0)(@deepseek-ai/cordis-plugin-loader@1.1.0)
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: 0.2.2-rc.5
+        version: 0.2.2-rc.5(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-llm@0.2.2-rc.5(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-error@0.2.2-rc.5(@deepseek-ai/cordis@4.1.0)))(@deepseek-ai/dsh-scope@0.2.2-rc.5(@deepseek-ai/cordis@4.1.0))
+      '@deepseek-ai/schemastery':
+        specifier: 3.19.0
+        version: 3.19.0
+      '@klarkxy/dsh-plugin-kit':
+        specifier: workspace:*
+        version: link:../dsh-plugin-kit
+
   plugins/dsh-safe-auto:
     dependencies:
       '@klarkxy/dsh-plugin-kit':

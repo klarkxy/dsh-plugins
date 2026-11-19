@@ -1,0 +1,5 @@
+# Enabled when installed. Rewrites the native system prompt in every session.
+- insert:
+    - id: prompt-override
+      name: '@klarkxy/dsh-prompt-override'
+      disabled: false
