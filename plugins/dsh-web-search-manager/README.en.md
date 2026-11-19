@@ -4,7 +4,7 @@
 
 [简体中文](README.md) / English
 
-Manage and rank web search and page-reading providers, configure request limits, and expose `web_search` and `web_fetch` to the model from one settings page.
+Orchestrate multi-source web search and page-reading providers, manage API keys and request limits, and power `web_search` and `web_fetch` over `ctx.web` with parallel RRF fusion and waterfall fallback from one settings page.
 
 ## Install
 
@@ -18,31 +18,39 @@ Replace `web` with your profile name, restart DSH Web, and open **Settings → W
 
 ### Search (`web-search` tab)
 
-- **Zero-config provider**: **DuckDuckGo** works out of the box without registration or an API key.
-- **Key-based providers**: Enter and save an API key to use **DeepSeek search** (shares the key configured for model settings), **Exa**, **Brave**, **Bocha**, **Serper**, **Firecrawl**, **Tavily**, **Perplexity**, **You.com**, **Linkup**, or **Zhipu**.
-  - **Perplexity**: calls the Search API to return web sources directly without generating an answer.
-  - **You.com**: returns web and news snippets directly without extra full-page extraction.
-  - **Linkup**: uses `fast` retrieval and returns sources only, with no generated answer or `deep` search.
-  - **Tavily**: stays on `basic` search and never upgrades search depth automatically.
-  - **Zhipu**: stays on basic search (`search_std`); queries longer than 70 characters are rejected locally instead of being truncated.
-- **Plugin providers**: Search services contributed by other plugins (such as Zhihu Web Search) appear in the same list and join the priority order once switched on.
-- **Priority and testing**: Drag rows or use the up/down arrow keys to reorder; each search uses the first ready, enabled service. When search is active, use **Test connection (may be billed)** to verify connectivity.
+- **Three orchestration modes** (applied immediately):
+  - **Parallel fusion** (default): queries top-ranked free sources concurrently, strips tracking parameters for URL canonicalization, deduplicates and reranks results via weighted Reciprocal Rank Fusion (RRF), and merges richer summaries, snippets, and publication dates. Equivalent DeepSeek search backends are grouped automatically so the same index is never queried twice in one call.
+  - **Failover**: tries enabled sources in rank order and falls back to the next permitted source when an upstream fails or is unavailable.
+  - **Single**: queries only the highest-ranked ready source with no cross-source fan-out or fallback.
+- **Billing guardrails**: Sources without per-call tool fees (such as bundled **DuckDuckGo**, host **DeepSeek Search API**, and **DeepSeek search**) join parallel fusion and failover automatically. Per-request or credit-billed providers and unclassified third-party plugin sources require checking **Allow in multi-source fan-out / fallback (may bill per call)** on their row before joining fan-out or fallback chains. If an un-opted paid source is ranked first, it runs alone as your primary choice.
+- **Bundled search backends**:
+  - **DuckDuckGo**: works out of the box without registration or an API key.
+  - **Key-based providers**: enter and save an API key to use **DeepSeek search** (shares the key configured for model settings), **Exa**, **Brave**, **Bocha**, **Serper**, **Firecrawl**, **Tavily**, **Perplexity**, **You.com**, **Linkup**, or **Zhipu**.
+    - **Perplexity**: calls the Search API to return web sources directly without generating an answer.
+    - **You.com**: returns web and news snippets directly without extra full-page extraction.
+    - **Linkup**: uses `fast` retrieval and returns sources only, with no generated answer or `deep` search.
+    - **Tavily**: stays on `basic` search and never upgrades search depth automatically.
+    - **Zhipu**: stays on basic search (`search_std`); queries longer than 70 characters are rejected locally instead of being truncated.
+- **Host and plugin providers**: Built-in host search services and search providers registered by other plugins (such as Zhihu Web Search) appear in the same list and join the priority order once switched on. When search is active, use **Test connection (may be billed)** to verify connectivity.
 
 ### Page Reading (`web-fetch` tab)
 
-- Enable **Read web pages**, toggle on the services you want, and drag or use the up/down arrow keys to set priority; each fetch uses the first configured, available service.
-- The bundled **Read web pages** service tries free anonymous **Jina Reader** first for public pages and falls back to one direct HTTP request if that fails.
-- **Firecrawl** reads page Markdown using the same API key as Firecrawl search (search and page reads are billed separately).
-- Fetch services from the host or other plugins also appear here and join the priority order once enabled; temporarily unloaded services retain their selection and rank.
+- **Two fetch modes** (applied immediately):
+  - **Waterfall** (default): tries enabled fetch services in priority order, automatically advancing to the next permitted service on network or cross-origin redirect errors, non-success HTTP status codes, or empty page bodies.
+  - **Single**: uses only the highest-ranked ready fetch service.
+- **Bundled and host fetch services**:
+  - **Jina Reader** and **Read web pages**: extract public page Markdown via free anonymous Jina Reader first and fall back to direct local HTTP when needed; no API key required.
+  - **Firecrawl**: reads page Markdown using the same API key as Firecrawl search (search and page reads are billed separately; check the row opt-in box to include it in waterfall fallback).
+  - **Local and intranet URL protection**: requests targeting `localhost`, loopback addresses, private RFC1918/CGNAT/ULA ranges, or local-only hostnames automatically bypass cloud reader services (such as DeepSeek Fetch API, Jina Reader, and Firecrawl) and use direct local HTTP only.
 
 ### Request Limits (`Settings` tab)
 
-- Configure **Max results/query** (1–20), **Max queries/call** (1–5), **Request timeout (ms)** (1000–120000), and **Max text chars** (1000–200000).
-- Switches and order changes apply immediately; newly entered API keys and limit edits require clicking **Save**.
+- Configure **Max results/query** (1–20, default 10), **Max queries/call** (1–10, default 10), **Max parallel sources** (2–5, default 3), **Request timeout (ms)** (1000–120000), and **Max text chars** (1000–200000).
+- Switches, mode selections, billing opt-ins, and order changes apply immediately; newly entered API keys and limit edits require clicking **Save**.
 
 ## Agent Tools
 
-Add this entry to the plugin list in your `agent.cordis.yml`:
+Presets that already include the host `tool-web` plugin automatically use this orchestrator through `ctx.web`. For custom `agent.cordis.yml` files without `tool-web`, add:
 
 ```yaml
 - name: '@klarkxy/dsh-web-search-manager/tools'
@@ -52,11 +60,10 @@ The model receives `web_search` and `web_fetch` while search and page reading ar
 
 ## Limitations
 
-- Paid providers may charge per request or credit; refer to your provider account for authoritative usage and billing.
-- Both the bundled Jina Reader and Firecrawl page reading send requested URLs to those third-party services; use them only for public URLs free of private tokens or internal endpoints.
+- Paid providers may charge per request or credit; enabling **Allow in multi-source fan-out / fallback** sends live requests to opted-in providers during parallel search or fallback, and your provider account remains authoritative for billing.
+- Cloud page-reading services (such as DeepSeek Fetch API, Jina Reader, and Firecrawl) receive the requested public URL; do not use them for URLs carrying private capability tokens.
 - Firecrawl page reading requires a page status code and final URL in the response and may return cached page content.
-- Each search or page-read request runs against only the highest-ranked ready service and does not fail over across multiple paid backends.
-- Cancellation and timeouts signal the active service to abort and wait for cleanup. A third-party service that ignores cancellation can delay results and plugin unloading, as code inside DSH stops cooperatively.
+- Cancellation and timeouts signal all active providers to abort and wait for cleanup. A third-party service that ignores cancellation can delay results and plugin unloading, as code inside DSH stops cooperatively.
 
 ## License
 

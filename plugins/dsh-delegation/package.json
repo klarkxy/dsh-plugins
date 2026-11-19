@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-delegation",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Delegation Mode: a per-session switch where the main agent plans, delegates, and reviews while subagents carry out the work.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -111,13 +111,13 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.1.0",
-    "@deepseek-ai/dsh-agent": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-session": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-session-query": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-tools": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-agent": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-session": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-session-query": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.5",
     "zod": "4.4.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -152,6 +152,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "098d6021904929b776ddcfe805cb3b93e38b4abe1b96d0870cf12f5107608651"
+    "contentHash": "e1fea9749111bb107d0197243c9d3f724614ce7719ce17f55f7a2983688ad273"
   }
 }

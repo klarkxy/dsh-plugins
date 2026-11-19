@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-zhihu",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Search Zhihu and the web, browse hot lists, Zhida, knowledge bases, Q&A, creator data, and drafts, and export local reports for deep research, opinion comparison, and rolling 30-day briefings.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -123,14 +123,14 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.1.0",
-    "@deepseek-ai/dsh-credentials": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-tools": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-credentials": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.5",
     "react": "^18.2.0",
     "@types/react": "18.3.31",
     "react-dom": "^18.2.0",
     "@types/react-dom": "^18.3.1",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1"
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.5"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -177,6 +177,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "eabd2c0e4afdbd0da94b552d595dc58655cf1a23a8206ec076293b00dab7ed4d"
+    "contentHash": "5fc7f65ed6bfc680086714864fd431b901f32abccaad6f22a2733f9f6375d427"
   }
 }

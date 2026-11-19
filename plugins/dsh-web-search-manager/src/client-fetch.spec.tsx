@@ -123,7 +123,7 @@ describe('fetch provider settings UI', () => {
       await act(async () => vi.advanceTimersByTimeAsync(6000))
       expect(ui.call.mock.calls).toHaveLength(calls)
       expect(ui.toggle('search', 'same').disabled).toBe(true)
-      expect(ui.updates[0].maxResults).toBe(5)
+      expect(ui.updates[0].maxResults).toBe(10)
       expect(ui.set).not.toHaveBeenCalled()
       await ui.release()
       expect(ui.ids('fetch')).toEqual(['same', 'gone', 'other', 'new'])
@@ -170,6 +170,38 @@ describe('fetch provider settings UI', () => {
       await ui.click(master)
       expect(ui.current.settings.fetchEnabled).toBe(true)
       expect(ui.row('fetch', 'new').dataset.inUse).toBe('true')
+    } finally { await ui.close() }
+  })
+
+  it('switches orchestration modes and opts paid sources into multi-source fan-out from row controls', async () => {
+    const paid = provider('paid-engine', 'search', { billing: 'request', configurationOwned: true, credentialRef: 'search:paid-engine' })
+    const free = provider('free-engine', 'search')
+    const ui = await mount([paid, free, provider('http', 'fetch'), provider('jina', 'fetch')], {
+      searchEnabled: true, fetchEnabled: true,
+      searchOrder: ['free-engine', 'paid-engine'], fetchOrder: ['http', 'jina'],
+      searchMode: 'fusion', fetchMode: 'waterfall', multiSourceOptIn: [],
+    })
+    try {
+      // The active top pick is "in use"; fusion plans only free sources, so the
+      // un-opted paid row shows the opt-in checkbox instead of a fusion tag.
+      expect(ui.row('search', 'free-engine').dataset.inUse).toBe('true')
+      expect(ui.row('search', 'paid-engine').dataset.multiRole).toBeUndefined()
+      const optIn = ui.row('search', 'paid-engine').querySelector<HTMLInputElement>('[data-testid="web-search-optin-paid-engine"] input[type="checkbox"]')!
+      await ui.click(optIn)
+      expect(ui.current.settings.multiSourceOptIn).toEqual(['search:paid-engine'])
+      expect(ui.row('search', 'paid-engine').dataset.multiRole).toBe('parallel')
+      // Mode bar switches persistence without touching limit drafts.
+      const single = [...ui.dom.window.document.querySelectorAll('[data-testid="web-search-mode-bar"] [role="tab"]')].find(tab => tab.textContent === 'Single')!
+      await ui.click(single)
+      expect(ui.current.settings.searchMode).toBe('single')
+      expect(ui.row('search', 'paid-engine').querySelector('[data-testid="web-search-optin-paid-engine"]')).toBeNull()
+      const failover = [...ui.dom.window.document.querySelectorAll('[data-testid="web-search-mode-bar"] [role="tab"]')].find(tab => tab.textContent === 'Failover')!
+      await ui.click(failover)
+      expect(ui.current.settings.searchMode).toBe('failover')
+      expect(ui.row('search', 'free-engine').dataset.multiRole).toBeUndefined()
+      expect(ui.row('search', 'paid-engine').dataset.multiRole).toBe('fallback')
+      // Fetch waterfall tags the next ready entry as fallback while the first stays in use.
+      expect(ui.row('fetch', 'jina').dataset.multiRole).toBe('fallback')
     } finally { await ui.close() }
   })
 })

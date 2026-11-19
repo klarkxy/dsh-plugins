@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-hub",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Subagents: configure models and reasoning effort, review each subagent's last-used model, and use per-session delegation mode.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -78,16 +78,16 @@
     "@types/jsdom": "28.0.3",
     "@deepseek-ai/cordis": "4.1.0",
     "@deepseek-ai/schemastery": "3.19.0",
-    "@deepseek-ai/dsh-settings": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-tool-subagent": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-settings": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-tool-subagent": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "@types/react": "18.3.31",
     "@types/react-dom": "^18.3.0",
-    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.5",
     "esbuild": "^0.25.0"
   },
   "keywords": [
@@ -114,6 +114,6 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-hub/",
   "dshRelease": {
-    "contentHash": "8061be6db0674f1a7985d1f7a9e03bcee1cb81e319138a66a7013304f6c108cf"
+    "contentHash": "60d028ffe05f2eeba4322f5e5065f1fac0fd18bae1804788b4a5ea2c6e5bba65"
   }
 }

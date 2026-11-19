@@ -411,6 +411,7 @@ export function Toast({ text, icon, tone, anchor: _anchor, holdMs = 3000, action
 export function Menu({ open, anchor, items = [], children, footer, onSelect, listClassName }: {
   open: boolean
   anchor: React.ReactNode
+  anchorRef?: React.RefObject<HTMLElement | null>
   items?: readonly MenuEntry[]
   footer?: readonly MenuEntry[]
   children?: React.ReactNode
@@ -474,22 +475,14 @@ export const IconWarningOutlineRegular = icon('warning')
  * to measure and no pointer to dismiss with, so these are inert but keep their
  * signatures and their return shapes. --- */
 
-export function useAnchoredPosition(options: {
-  open: boolean
-  anchorRef: React.RefObject<HTMLElement | null>
-  panelRef: React.RefObject<HTMLElement | null>
-  side?: 'top' | 'bottom'
-  align?: 'start' | 'end'
-  gap: number
-  margin: number
-}): React.CSSProperties | null {
-  const [position, setPosition] = React.useState<React.CSSProperties | null>(null)
-  React.useLayoutEffect(() => {
-    if (!options.open) { setPosition(null); return }
-    const rect = options.anchorRef.current?.getBoundingClientRect()
-    if (rect) setPosition({ left: rect.left, top: rect.bottom + options.gap })
-  }, [options.open, options.anchorRef, options.panelRef, options.gap])
-  return position
+/** rc.5 replaced useAnchoredPosition with this clamp; no plugin here uses it yet. */
+export function useAnchoredMaxHeight(
+  _ref: React.RefObject<HTMLElement | null>,
+  cap: number,
+  _signal: unknown,
+  _margin?: number,
+): number {
+  return cap
 }
 
 export function useDismissOnOutsidePointer(
@@ -532,7 +525,7 @@ const known = new Set([
   'PermissionIconFullAccessRegular', 'PermissionIconReadOnlyRegular', 'PermissionIconWorkspaceWriteRegular',
   'IconGlobeOutlineRegular', 'IconQuestionOutlineRegular',
   'IconDataOutlineRegular', 'IconDataOutlineMedium', 'IconWarningOutlineRegular',
-  'useAnchoredPosition',
+  'useAnchoredMaxHeight',
   'useDismissOnOutsidePointer', 'useModalLayer', 'modalSelector', 'closeTopModal', 'isBehindModal',
   'observeStickyMenuGroups', 'rankByName', 'Toast', 'FileTypeIcon',
 ])

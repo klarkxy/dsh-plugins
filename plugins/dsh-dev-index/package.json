@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-dev-index",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "DSH Docs: browse official DSH developer documentation in the Plugins page; in Creator mode the agent also gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs, dsh_plugins).",
   "icon": "./icon.svg",
   "keywords": [
@@ -112,18 +112,18 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "4.1.0",
     "@deepseek-ai/schemastery": "3.19.0",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-agent-preset-registry": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-tools": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-scope": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-util-values": "0.2.2-rc.1"
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-scope": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-util-values": "0.2.2-rc.5"
   },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "0e52a28698f46b3d63778bc7dd7009233425ae4534e945cea2aaaf2369a6f421"
+    "contentHash": "1bc5f8bc7022b91fc522141f06c7a65b1094ed0ab6239d7c8272f6679d3ee154"
   }
 }

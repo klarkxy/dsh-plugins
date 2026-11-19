@@ -1,14 +1,15 @@
 import { localErrorText } from './client-error.ts'
 import { webSearchClientStyles } from './client-styles.ts'
 import type { Context } from '@deepseek-ai/cordis'
-import { Button, IconGlobeOutlineRegular, Input, SegmentedTabs, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Checkbox, IconGlobeOutlineRegular, Input, SegmentedTabs, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import { installClientPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { createPluginReadGate } from '@klarkxy/dsh-plugin-kit/client-utils'
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { PROVIDER_PRICING_CHECKED, providerDisplayLabel, searchProviderInfo, usesBundledPricing } from './provider-info.ts'
+import { planFetchEntries, planSearchEntries } from './multi-source.ts'
 import {
-  WEB_SEARCH_RPC_CHANNEL, WEB_MANAGER_OWNER, safeConfigurationUrl,
-  providerKey, type ProviderKind, type ProviderView, type RpcResult, type WebSettings, type WebStatus,
+  WEB_SEARCH_RPC_CHANNEL, WEB_MANAGER_OWNER, requiresMultiSourceOptIn, safeConfigurationUrl,
+  providerKey, type FetchMode, type ProviderKind, type ProviderView, type RpcResult, type SearchMode, type WebSettings, type WebStatus,
 } from './contracts.ts'
 
 export const name = 'dsh-web-search-manager-client'
@@ -119,6 +120,31 @@ export function isProviderOn(status: WebStatus, provider: ProviderView): boolean
     return status.fetchActive && selectedBackend(status, 'fetch')?.id === provider.id
   }
   return status.searchActive && selectedSearchBackend(status)?.id === provider.id
+}
+
+export function plannedBackendIds(status: WebStatus, kind: ProviderKind): string[] {
+  const readyById = new Map(
+    status.providers
+      .filter(provider => provider.kind === kind && provider.configured)
+      .map(provider => [provider.id, { descriptor: provider, kind }]),
+  )
+  if (kind === 'search') {
+    if (!status.searchActive) return []
+    return planSearchEntries(
+      readyById,
+      status.settings.searchOrder,
+      status.settings.searchMode,
+      status.settings.maxParallelSearch,
+      status.settings.multiSourceOptIn,
+    ).map(entry => entry.descriptor.id)
+  }
+  if (!status.fetchActive) return []
+  return planFetchEntries(
+    readyById,
+    status.settings.fetchOrder,
+    status.settings.fetchMode,
+    status.settings.multiSourceOptIn,
+  ).map(entry => entry.descriptor.id)
 }
 
 export function dormantSearchPlaceholder(id: string): ProviderView { return dormantPlaceholder(id, 'search') }
@@ -244,14 +270,23 @@ const copy = {
     storageFailed: '保存失败，重新保存前网络访问已暂停。',
     empty: '暂无可用搜索后端，请启用一个供应商。', toolTitle: '联网搜索', needBackend: '需选择搜索服务并配置 Key。',
     backends: '搜索后端', dragPrefix: '拖动排序 ', dragHint: '拖动排序，或用上下方向键',
-    inUse: '当前使用', available: '可用', unavailable: '暂不可用', dormant: '未加载，保留选择',
+    inUse: '当前使用', inFusion: '并发融合', standby: '顺位后备',
+    available: '可用', unavailable: '暂不可用', dormant: '未加载，保留选择',
+    searchModeLabel: '搜索调度模式', fetchModeLabel: '网页读取模式',
+    modeFusion: '多源融合', modeFailover: '主备降级', modeSingle: '单源', fetchModeWaterfall: '链式回退',
+    modeFusionHint: '免计费源默认并发检索并做 RRF 去重重排；按次计费源需单独勾选。',
+    modeFailoverHint: '按顺位依次请求，主源失败时自动切换后备源。',
+    modeSingleHint: '仅调用顺位第一的可用源，不跨源并发或回退。',
+    fetchWaterfallHint: '上游抓取失败、被拦截或正文为空时顺位回退；内网地址自动走本机直连。',
+    fetchSingleHint: '仅调用顺位第一的可用读取服务。',
+    optInMultiSource: '允许参与多源并发／回退（可能产生按次费用）',
     signup: '去注册', pricing: '费用说明', website: '官网', openConfig: '打开配置',
     needsKey: '待配置 Key', sharedKey: '与其他设置共用凭据',
     keyConfigured: '已配置，留空不替换', keyPlaceholder: '输入 API Key',
     saveKey: '保存 Key', deleteKey: '删除 Key', confirmDelete: '确认删除 Key？',
     test: '测试连接（可能计费）', unsaved: '有未保存的修改', save: '保存',
-    saveHint: '开关与排序立即生效；Key 与限制需保存。',
-    maxResults: '每条查询结果上限', maxQueries: '每次调用查询上限',
+    saveHint: '开关、模式与排序立即生效；Key 与限制需保存。',
+    maxResults: '每条查询结果上限', maxQueries: '每次调用查询上限', maxParallelSearch: '多源并发上限',
     timeoutMs: '请求超时（毫秒）', maxFetchChars: '正文字符上限',
     fetchTitle: '网页读取', fetchProvider: '读取服务', fetchBackends: '读取后端', needFetchBackend: '需选择并配置读取服务。', ownerSettings: '配置入口：',
     unknownOwner: '请在服务所属插件中配置',
@@ -264,14 +299,23 @@ const copy = {
     storageFailed: 'Save failed; network access is paused until you save again.',
     empty: 'No search backends yet; enable a provider.', toolTitle: 'Web search', needBackend: 'Needs a search service with a key.',
     backends: 'Search backends', dragPrefix: 'Reorder ', dragHint: 'Drag to reorder, or use arrow keys',
-    inUse: 'In use', available: 'Available', unavailable: 'Unavailable', dormant: 'Not loaded; selection kept',
+    inUse: 'In use', inFusion: 'In fusion', standby: 'Fallback',
+    available: 'Available', unavailable: 'Unavailable', dormant: 'Not loaded; selection kept',
+    searchModeLabel: 'Search orchestration mode', fetchModeLabel: 'Page fetch mode',
+    modeFusion: 'Parallel fusion', modeFailover: 'Failover', modeSingle: 'Single', fetchModeWaterfall: 'Waterfall',
+    modeFusionHint: 'Free sources run in parallel with RRF reranking; per-call paid sources require opt-in.',
+    modeFailoverHint: 'Tries sources in rank order and falls back on failure.',
+    modeSingleHint: 'Calls only the top-ranked ready source without cross-source fallback.',
+    fetchWaterfallHint: 'Falls back on errors or empty pages; local URLs bypass cloud readers.',
+    fetchSingleHint: 'Calls only the top-ranked ready fetch service.',
+    optInMultiSource: 'Allow in multi-source fan-out / fallback (may bill per call)',
     signup: 'Sign up', pricing: 'Pricing', website: 'Website', openConfig: 'Open configuration',
     needsKey: 'Key required', sharedKey: 'Shares a credential with other settings',
     keyConfigured: 'Configured; empty keeps it', keyPlaceholder: 'Enter API key',
     saveKey: 'Save key', deleteKey: 'Delete key', confirmDelete: 'Delete this key?',
     test: 'Test connection (may be billed)', unsaved: 'Unsaved changes', save: 'Save',
-    saveHint: 'Switches and order apply now; keys and limits need saving.',
-    maxResults: 'Max results/query', maxQueries: 'Max queries/call',
+    saveHint: 'Switches, modes and order apply now; keys and limits need saving.',
+    maxResults: 'Max results/query', maxQueries: 'Max queries/call', maxParallelSearch: 'Max parallel sources',
     timeoutMs: 'Request timeout (ms)', maxFetchChars: 'Max text chars',
     fetchTitle: 'Read web pages', fetchProvider: 'Fetch service', fetchBackends: 'Fetch backends', needFetchBackend: 'Choose and configure a fetch service.', ownerSettings: 'Configure in: ',
     unknownOwner: 'Configure this service in its plugin',
@@ -317,7 +361,8 @@ function limitInvalidText(locale: 'zh' | 'en', label: string, min: number, max: 
 
 const LIMITS = [
   ['maxResults', 1, 20],
-  ['maxQueries', 1, 5],
+  ['maxQueries', 1, 10],
+  ['maxParallelSearch', 2, 5],
   ['timeoutMs', 1000, 120000],
   ['maxFetchChars', 1000, 200000],
 ] as const
@@ -362,9 +407,19 @@ export function immediateUpdate(
 
 function limitTexts(settings: WebSettings): Record<LimitKey, string> {
   return {
-    maxResults: String(settings.maxResults), maxQueries: String(settings.maxQueries),
-    timeoutMs: String(settings.timeoutMs), maxFetchChars: String(settings.maxFetchChars),
+    maxResults: String(settings.maxResults),
+    maxQueries: String(settings.maxQueries),
+    maxParallelSearch: String(settings.maxParallelSearch),
+    timeoutMs: String(settings.timeoutMs),
+    maxFetchChars: String(settings.maxFetchChars),
   }
+}
+
+function usesRichFetchInfo(provider: ProviderView): boolean {
+  if (ownsProviderConfiguration(provider)) {
+    return provider.id === 'firecrawl' || provider.id === 'jina'
+  }
+  return provider.id === 'deepseek-fetch-api' || (provider.id === 'http' && !provider.description.trim())
 }
 
 function readLocale(client: Client): Client['locale'] {
@@ -583,6 +638,22 @@ export function NetworkSearchSettings({
     }).then(() => { if (pendingRef.current === null) setPendingOrder(null) })
   }
 
+  /** Mode switches and per-row billing opt-in: persist directly without touching limit drafts. */
+  function runPatch(patch: Partial<Omit<WebSettings, 'revision'>>) {
+    clearTimeout(timerRef.current); timerRef.current = undefined
+    pendingRef.current = null
+    void action(async () => {
+      const current = statusRef.current
+      if (!current) return
+      const next = await call<WebStatus>('update', {
+        settings: { ...editable(current.settings), ...patch },
+        expectedRevision: current.settings.revision,
+      })
+      adopt(next)
+      await load()
+    }).then(() => { if (pendingRef.current === null) setPendingOrder(null) })
+  }
+
   /** Writes every typed key. Explicit actions only (Save, Save key, Test). */
   async function saveKeys(only?: ProviderView) {
     if (!status) return
@@ -701,11 +772,22 @@ export function NetworkSearchSettings({
       const catalog = catalogBackends(saved, kind)
       const backends = [...order.flatMap(id => catalog.find(provider => provider.id === id) ?? []), ...catalog.filter(provider => !order.includes(provider.id))]
       const selected = selectedBackend(saved, kind)
+      const plannedIds = plannedBackendIds(saved, kind)
       const on = kind === 'search' ? saved.settings.searchEnabled : saved.settings.fetchEnabled
       const canEnable = order.some(id => saved.providers.some(provider => provider.kind === kind && provider.id === id && provider.configured))
       const sortingOther = pendingOrder !== null && pendingOrder.kind !== kind
       const locked = busy || sortingOther || Boolean(dragSource && !dragSource.startsWith(kind + ':'))
       const title = kind === 'search' ? text.toolTitle : text.fetchTitle
+      const modeHint = kind === 'search'
+        ? saved.settings.searchMode === 'fusion'
+          ? text.modeFusionHint
+          : saved.settings.searchMode === 'failover'
+            ? text.modeFailoverHint
+            : text.modeSingleHint
+        : saved.settings.fetchMode === 'waterfall'
+          ? text.fetchWaterfallHint
+          : text.fetchSingleHint
+      const multiModeActive = kind === 'search' ? saved.settings.searchMode !== 'single' : saved.settings.fetchMode !== 'single'
       return <div key={kind} role="tabpanel"
         id={tabsId + '-' + kind + '-panel'} aria-labelledby={tabsId + '-' + kind + '-tab'}
         hidden={tab !== kind} tabIndex={0}>
@@ -725,13 +807,40 @@ export function NetworkSearchSettings({
             onChange={next => runImmediate(next, order, [], kind)}
           />
         </header>
+        <div className="ws-mode-bar" data-testid={`web-${kind}-mode-bar`}>
+          {kind === 'search' ? <SegmentedTabs<SearchMode>
+            size="sm"
+            value={saved.settings.searchMode}
+            onChange={nextMode => { if (!locked && dragSource === null && nextMode !== saved.settings.searchMode) runPatch({ searchMode: nextMode }) }}
+            label={text.searchModeLabel}
+            items={[
+              { value: 'fusion', label: text.modeFusion, id: tabsId + '-mode-fusion', panelId: tabsId + '-search-panel' },
+              { value: 'failover', label: text.modeFailover, id: tabsId + '-mode-failover', panelId: tabsId + '-search-panel' },
+              { value: 'single', label: text.modeSingle, id: tabsId + '-mode-search-single', panelId: tabsId + '-search-panel' },
+            ]}
+          /> : <SegmentedTabs<FetchMode>
+            size="sm"
+            value={saved.settings.fetchMode}
+            onChange={nextMode => { if (!locked && dragSource === null && nextMode !== saved.settings.fetchMode) runPatch({ fetchMode: nextMode }) }}
+            label={text.fetchModeLabel}
+            items={[
+              { value: 'waterfall', label: text.fetchModeWaterfall, id: tabsId + '-mode-waterfall', panelId: tabsId + '-fetch-panel' },
+              { value: 'single', label: text.modeSingle, id: tabsId + '-mode-fetch-single', panelId: tabsId + '-fetch-panel' },
+            ]}
+          />}
+          <span className="dsh-ui-meta">{modeHint}</span>
+        </div>
         <ol className="web-search-rank" aria-label={kind === 'search' ? text.backends : text.fetchBackends}>
           {backends.map(provider => {
             const participating = order.includes(provider.id)
             const rank = order.indexOf(provider.id)
             const dormant = !isRegistered(saved, provider.id, kind)
             const active = !dormant && (kind === 'search' ? saved.searchActive : saved.fetchActive) && selected?.id === provider.id
-            const info = kind === 'search' || (ownsProviderConfiguration(provider) && provider.id === 'firecrawl') ? searchProviderInfo(provider, locale) : {
+            const inPlan = !dormant && !active && plannedIds.includes(provider.id)
+            const secondaryRole = inPlan
+              ? (kind === 'search' && saved.settings.searchMode === 'fusion' ? 'parallel' : 'fallback')
+              : undefined
+            const info = kind === 'search' || usesRichFetchInfo(provider) ? searchProviderInfo(provider, locale) : {
               description: ownsProviderConfiguration(provider) && provider.id === 'http-managed'
                 && provider.description === '优先匿名 Jina Reader 读取，失败后本机 HTTP 直连；无需 Key。' && locale === 'en'
                 ? 'Reads with anonymous Jina Reader first, then direct HTTP if needed; no key required.' : provider.description,
@@ -742,20 +851,24 @@ export function NetworkSearchSettings({
             const needsKey = owned && Boolean(provider.credentialRef)
             const shared = Boolean(provider.credentialShared)
             const showKey = !dormant && needsKey && participating && (!shared || !provider.configured)
+            const entryKey = providerKey(provider.kind, provider.id)
+            const needsOptIn = !dormant && participating && multiModeActive && requiresMultiSourceOptIn(provider)
+            const optedIn = saved.settings.multiSourceOptIn.includes(entryKey)
             const canSort = participating && order.length > 1
             const readOnly = writable[provider.credentialRef ?? ''] === false
-            const typedKey = (keys[providerKey(provider.kind, provider.id)] ?? '').trim()
+            const typedKey = (keys[entryKey] ?? '').trim()
             const availability = dormant ? 'dormant' : provider.configured ? 'available' : 'unavailable'
             return <li key={provider.id} className={active ? 'is-active' : undefined} data-testid={`web-${kind}-rank-${provider.id}`}
               data-availability={availability}
               data-in-use={active || undefined}
-              data-dragging={dragSource === providerKey(kind, provider.id) || undefined}
-              data-drop={dropTarget === providerKey(kind, provider.id) && dragSource ? (order.indexOf(dragSource.slice(kind.length + 1)) < rank ? 'after' : 'before') : undefined}
+              data-multi-role={secondaryRole}
+              data-dragging={dragSource === entryKey || undefined}
+              data-drop={dropTarget === entryKey && dragSource ? (order.indexOf(dragSource.slice(kind.length + 1)) < rank ? 'after' : 'before') : undefined}
               onDragOver={event => {
-                if (locked || !canSort || !dragSource?.startsWith(kind + ':') || dragSource === providerKey(kind, provider.id)) return
+                if (locked || !canSort || !dragSource?.startsWith(kind + ':') || dragSource === entryKey) return
                 event.preventDefault()
                 event.dataTransfer.dropEffect = 'move'
-                setDropTarget(providerKey(kind, provider.id))
+                setDropTarget(entryKey)
               }}
               onDragLeave={event => {
                 if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(null)
@@ -768,8 +881,8 @@ export function NetworkSearchSettings({
               }}>
               {canSort ? <Button variant="ghost" size="sm" className="web-search-drag-handle"
                 ref={(element: HTMLButtonElement | null) => {
-                  if (element) handleRefs.current.set(providerKey(kind, provider.id), element)
-                  else handleRefs.current.delete(providerKey(kind, provider.id))
+                  if (element) handleRefs.current.set(entryKey, element)
+                  else handleRefs.current.delete(entryKey)
                 }}
                 icon={<svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor" aria-hidden="true">
                   <circle cx="5" cy="5" r="1.5" /><circle cx="11" cy="5" r="1.5" />
@@ -785,9 +898,9 @@ export function NetworkSearchSettings({
                   event.dataTransfer.setData(`application/x-dsh-${kind}-provider`, provider.id)
                   const row = event.currentTarget.closest('li')
                   if (row) event.dataTransfer.setDragImage(row, 16, 16)
-                  dragRef.current = providerKey(kind, provider.id)
+                  dragRef.current = entryKey
                   requestSeq.current += 1
-                  setDragSource(providerKey(kind, provider.id))
+                  setDragSource(entryKey)
                   setSortAnnouncement('')
                 }}
                 onDragEnd={endDrag}
@@ -804,6 +917,8 @@ export function NetworkSearchSettings({
                     <span>{dormant ? text.dormant : provider.configured ? text.available : text.unavailable}</span>
                   </span>
                   {active && <Tag tone="success">{text.inUse}</Tag>}
+                  {secondaryRole === 'parallel' && <Tag tone="info">{text.inFusion}</Tag>}
+                  {secondaryRole === 'fallback' && <Tag tone="neutral">{text.standby}</Tag>}
                   {provider.signupUrl && <AppLink url={provider.signupUrl} label={providerDisplayLabel(provider, locale) + ' ' + text.signup}>{text.signup}</AppLink>}
                 </div>
                 <div className="web-search-provider-info">
@@ -815,6 +930,19 @@ export function NetworkSearchSettings({
                   : access.kind === 'owner' ? <p className="dsh-ui-hint">{text.ownerSettings}{access.name}</p>
                     : access.kind === 'unknown' ? <p className="dsh-ui-hint">{text.unknownOwner}</p>
                       : null}
+                {needsOptIn ? <div className="ws-optin-row" data-testid={`web-${kind}-optin-${provider.id}`}>
+                  <Checkbox
+                    checked={optedIn}
+                    disabled={locked || dragSource !== null}
+                    label={text.optInMultiSource}
+                    onChange={checked => {
+                      const nextOptIn = checked
+                        ? [...new Set([...saved.settings.multiSourceOptIn, entryKey])]
+                        : saved.settings.multiSourceOptIn.filter(item => item !== entryKey)
+                      runPatch({ multiSourceOptIn: nextOptIn })
+                    }}
+                  />
+                </div> : null}
                 {shared && participating && owned ? <small className="dsh-ui-meta">{provider.credentialHint === '与模型设置共用 Key'
                   ? locale === 'zh' ? provider.credentialHint : 'Shares a key with model settings'
                   : owned && provider.id === 'firecrawl' && locale === 'en' ? 'Search and page reads share a Firecrawl key'
@@ -823,9 +951,9 @@ export function NetworkSearchSettings({
                   <span className="dsh-ui-label">API Key</span>
                   <Input className="ws-input" type="password" autoComplete="off" spellCheck={false}
                     disabled={busy || reordering || readOnly}
-                    value={keys[providerKey(provider.kind, provider.id)] ?? ''}
+                    value={keys[entryKey] ?? ''}
                     placeholder={provider.configured ? text.keyConfigured : text.keyPlaceholder}
-                    onChange={event => setKeys(current => ({ ...current, [providerKey(provider.kind, provider.id)]: event.target.value }))} />
+                    onChange={event => setKeys(current => ({ ...current, [entryKey]: event.target.value }))} />
                 </label> : null}
                 {showKey || (needsKey && !shared && provider.configured) ? <div className="dsh-ui-actions">
                   {showKey ? <Button variant="outline" size="sm" disabled={busy || reordering || readOnly || !typedKey}

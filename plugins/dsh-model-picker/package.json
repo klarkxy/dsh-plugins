@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-picker",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Model picker: searchable model selection with a reasoning-effort slider in the composer, plus a shared picker other plugins can reuse.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -75,10 +75,10 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.1.0",
-    "@deepseek-ai/dsh-client-ui-model-selection": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-model-selection": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.5",
     "jsdom": "29.1.1",
     "@types/jsdom": "28.0.3",
     "react": "^18.2.0",
@@ -112,6 +112,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "599eec59f6805923eebd2fb66f7845c0fd21ba5a38623791fb3028f4c1396412"
+    "contentHash": "486ad9f25aa8e0b6ca75136684e0558d0039b0d8425c17939007630ebf5fe227"
   }
 }

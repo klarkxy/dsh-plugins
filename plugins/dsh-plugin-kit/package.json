@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-plugin-kit",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "Shared support library for klarkxy DSH plugins, providing the default auxiliary model, shared session settings, diagnostic logging, independent feature contexts, RPC, UI helpers and optional shared model picker integration; installed automatically by dependent plugins.",
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/plugin-kit/",
   "license": "SEE LICENSE IN LICENSE",
@@ -162,19 +162,19 @@
   "devDependencies": {
     "zod": "4.4.3",
     "@deepseek-ai/cordis": "4.1.0",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-storage-json": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-storage-json": "0.2.2-rc.5",
     "@types/react": "18.3.31",
     "@types/react-dom": "^18.3.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-api-gateway": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-attachment": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-tools": "0.2.2-rc.1"
+    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-api-gateway": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-attachment": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.5"
   },
   "keywords": [
     "dsh",
@@ -196,6 +196,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "1f4ee0cdece27261c9f7eba177acd2d5621ae1a17cd275910af7f057661d23c3"
+    "contentHash": "eb1ec0bc226e31adbeaa5df271bc90f563b5e5b7b62f5466b13d9f33c54ac294"
   }
 }

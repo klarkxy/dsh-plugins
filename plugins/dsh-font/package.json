@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-font",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "Font: customize the interface, conversation, code and terminal fonts and font sizes of the DeepSeek Harness Web GUI.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -67,8 +67,8 @@
     "@types/react": "18.3.31",
     "react-dom": "^18.2.0",
     "@types/react-dom": "^18.3.1",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-theme": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-theme": "0.2.2-rc.5",
     "jsdom": "29.1.1",
     "@types/jsdom": "28.0.3"
   },
@@ -99,7 +99,7 @@
   },
   "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/font/",
   "dshRelease": {
-    "contentHash": "19ad6635def65c8d4fe05b51df7d797d8df79633254641a9107aa4c9f03064c0"
+    "contentHash": "af17f5e3efa201a94b6d93f0ffa8125766df57fd8558dd6cf7d43ec6b5a9c364"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {

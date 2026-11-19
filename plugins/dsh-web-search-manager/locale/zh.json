@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "网页搜索",
-    "description": "在一个设置页管理和排序联网搜索与网页读取（抓取）服务，包括 Linkup、智谱及已安装插件提供的能力，为模型提供 web_search 与 web_fetch 工具。"
+    "description": "在一个设置页配置多源联网搜索（RRF 并发融合、主备降级、单源）与网页读取链式回退，按需勾选付费源参与并发，为模型提供 web_search 与 web_fetch。"
   }
 }

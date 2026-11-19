@@ -85,6 +85,7 @@ const STANDARD_ROSTER = [
   ["tool-todo", "@deepseek-ai/dsh-tool-todo"],
   ["tool-web", "@deepseek-ai/dsh-tool-web"],
   ["present", "@deepseek-ai/dsh-tool-present"],
+  ["tool-office", "@deepseek-ai/dsh-tool-office"],
   ["tool-plugin-manager", "@deepseek-ai/dsh-plugin-manager/tools"],
   ["tool-plugin-market", "@deepseek-ai/dsh-plugin-market/tools"],
 ];
@@ -325,19 +326,19 @@ test("package manifest follows the repository release conventions", () => {
     access: "public",
     registry: "https://registry.npmjs.org/",
   });
-  // The preset uses modelSelection and the merged control tool from this host;
-  // its small browser entry still compiles against the shared development baseline.
-  assert.equal(manifest.engines.dsh, '>=0.2.2-rc.1');
+  // The preset uses modelSelection and the merged control tool from this host,
+  // and its standard roster mounts tool-office from rc.2 onward.
+  assert.equal(manifest.engines.dsh, '>=0.2.2-rc.2');
   assert.deepEqual(manifest.dsh, {
     bundle: { patch: "./cordis.patch.yml" },
     client: { platform: "web", inject: ["@deepseek-ai/dsh-client-locale"] },
   });
   const expectedDev = {
-    '@deepseek-ai/dsh-agent': '0.2.2-rc.1',
-    '@deepseek-ai/dsh-agent-preset-registry': '0.2.2-rc.1',
-    '@deepseek-ai/dsh-llm': '0.2.2-rc.1',
-    '@deepseek-ai/dsh-session': '0.2.2-rc.1',
-    '@deepseek-ai/dsh-system-prompt': '0.2.2-rc.1',
+    '@deepseek-ai/dsh-agent': '0.2.2-rc.5',
+    '@deepseek-ai/dsh-agent-preset-registry': '0.2.2-rc.5',
+    '@deepseek-ai/dsh-llm': '0.2.2-rc.5',
+    '@deepseek-ai/dsh-session': '0.2.2-rc.5',
+    '@deepseek-ai/dsh-system-prompt': '0.2.2-rc.5',
     '@deepseek-ai/schemastery': '3.19.0',
   };
   for (const [dependency, version] of Object.entries(expectedDev)) {

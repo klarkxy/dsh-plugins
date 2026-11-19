@@ -57,7 +57,8 @@ describe('external providers through the managed native web registry', () => {
     expect(grokRun).not.toHaveBeenCalled()
     expect(resolveCredential).not.toHaveBeenCalled()
     await expect(web.search({ query: 'disabled' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
-    await update(manager, { searchOrder: ['chatgpt', 'grok-build'] })
+    // Single-source ordering semantics: exactly one engine answers each call.
+    await update(manager, { searchMode: 'single', searchOrder: ['chatgpt', 'grok-build'] })
     expect((await web.search({ query: 'first' })).content).toBe('Chat answer')
     expect(grokRun).not.toHaveBeenCalled()
     chatReady = false
