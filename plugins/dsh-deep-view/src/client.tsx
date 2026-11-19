@@ -34,6 +34,7 @@ const viewT = (t: UiT): ((key: string, params?: Record<string, unknown>) => stri
     Options: 'options', Submit: 'submit', Cancel: 'cancel', Confirm: 'confirm', Send: 'send', Selected: 'selected',
     sending: 'sending', filling: 'filling', filled: 'filled', fillFailed: 'fillFailed', fillDraft: 'fillDraft', waitingDock: 'waitingDock', expired: 'expired', dismissFailed: 'dismissFailed', 'Dismiss view': 'dismissView',
     draftConflict: 'draftConflict', replaceDraft: 'replaceDraft', appendDraft: 'appendDraft', 'Fill composer': 'fillDraft', Steps: 'steps',
+    'Composing interface…': 'composing', 'Point values': 'pointValues',
     'Node graph': 'nodeGraph', 'Select a node': 'selectNode', 'Nothing to explore': 'nothingToExplore',
     '{n} selected: {values}': 'selectedValues', 'Drag to select a range; double-click to clear': 'exploreIntervalHint',
     'Click points to select; double-click to clear': 'explorePointHint', 'The chart could not be drawn.': 'exploreFailed',

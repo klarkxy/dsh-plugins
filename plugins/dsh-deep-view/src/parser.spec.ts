@@ -41,12 +41,23 @@ describe('compileDeepUi', () => {
     expect(compiled.state).toBe('complete')
     expect(compiled.state === 'complete' && compiled.shown.title).toBe('Report')
   })
-  it('compiles a bare ViewNode body', () => {
-    const compiled = compileDeepUi(JSON.stringify({ type: 'metric', label: 'Revenue', value: 42 }))
+  it('compiles a bare ViewNode body and lifts an inline title', () => {
+    const compiled = compileDeepUi(JSON.stringify({ type: 'metric', title: 'Inline', label: 'Revenue', value: 42 }))
+    expect(compiled.state).toBe('complete')
+    expect(compiled.state === 'complete' && compiled.shown.title).toBe('Inline')
+  })
+  it('recovers trailing commas, comments and literal newlines inside strings', () => {
+    const lenient = `{
+      // model comment
+      "type": "callout",
+      "text": "Line 1
+Line 2",
+    }`
+    const compiled = compileDeepUi(lenient)
     expect(compiled.state).toBe('complete')
   })
   it('reports incomplete JSON as partial and rejected views as invalid', () => {
-    expect(compileDeepUi('{"title":"R','"view":{"type":"metric"}}').state).toBe('partial')
+    expect(compileDeepUi('{"title":"R').state).toBe('partial')
     expect(compileDeepUi('{broken').state).toBe('partial')
     const invalid = compileDeepUi(JSON.stringify({ view: { type: 'unknown' } }))
     expect(invalid.state).toBe('invalid')

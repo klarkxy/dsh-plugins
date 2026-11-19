@@ -3,6 +3,7 @@ import type { Formula, Scalar, ShownView, ViewBinding, ViewFailure, ViewNode } f
 export declare const CHART_KINDS: readonly string[]
 export declare const VIEW_BYTE_LIMIT: number
 export declare const FORMULA_FUNCTIONS: readonly string[]
+export declare const MATH_CONSTANTS: ReadonlyMap<string, number>
 export declare function isName(value: unknown): value is string
 export declare function show(value: unknown): string
 export declare function asText(value: unknown): string

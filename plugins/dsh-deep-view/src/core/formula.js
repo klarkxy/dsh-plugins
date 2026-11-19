@@ -1,7 +1,7 @@
 // Adapted from deep-view/src/core/formula.js (deep-view 0.1.0, Apache-2.0).
 // Kept as the same bounded expression interpreter: no eval, property access,
-// assignment or loops. The DSH migration preserves its grammar and error model.
-// It reads names and calls a fixed set of functions without reaching the page.
+// assignment or loops. The DSH migration preserves its grammar and error model
+// while adding standard exponentiation (** / ^) and math constants (PI / E).
 
 const FUNCTIONS = {
   min: { args: [1, Infinity], run: (...values) => Math.min(...values.map(num)) },
@@ -19,6 +19,7 @@ const FUNCTIONS = {
   count: { args: [1, 1], run: value => Array.isArray(value) ? value.length : value !== null && typeof value === 'object' ? Object.keys(value).length : value == null || value === '' ? 0 : 1 },
   sum: { args: [1, 1], run: value => numbers(value).reduce((sum, current) => sum + current, 0) },
   mean: { args: [1, 1], run: value => { const values = numbers(value); if (!values.length) return 0; return values.reduce((sum, current) => sum + current, 0) / values.length } },
+  avg: { args: [1, 1], run: value => { const values = numbers(value); if (!values.length) return 0; return values.reduce((sum, current) => sum + current, 0) / values.length } },
   join: { args: [1, 2], run: (value, separator = ', ') => Array.isArray(value) ? value.map(String).join(String(separator)) : String(value ?? '') },
   contains: { args: [2, 2], run: (values, expected) => Array.isArray(values) && values.some(value => value === expected) },
   sin: { args: [1, 1], run: value => Math.sin(num(value)) },
@@ -27,6 +28,7 @@ const FUNCTIONS = {
   exp: { args: [1, 1], run: value => Math.exp(num(value)) },
   ln: { args: [1, 1], run: value => Math.log(num(value)) },
   log: { args: [1, 1], run: value => Math.log10(num(value)) },
+  log2: { args: [1, 1], run: value => Math.log2(num(value)) },
 }
 function numbers(value) {
   if (!Array.isArray(value)) fail('expected a list of numbers')
@@ -35,6 +37,8 @@ function numbers(value) {
 }
 export const FORMULA_FUNCTIONS = Object.keys(FUNCTIONS)
 const CONSTANTS = new Map([['true', true], ['false', false]])
+// Fallback math constants resolved only when no input or let binding shadows them.
+export const MATH_CONSTANTS = new Map([['PI', Math.PI], ['pi', Math.PI], ['E', Math.E]])
 // Nesting deeper than this is no calculation a view needs; the parser recurses per level.
 const MAX_NESTING = 64
 
@@ -69,7 +73,7 @@ function grouped(value, digits) {
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/
 export const isName = value => typeof value === 'string' && IDENT.test(value)
-const OPERATORS = ['==', '!=', '<=', '>=', '&&', '||', '+', '-', '*', '/', '%', '<', '>', '!', '?', ':', '(', ')', ',']
+const OPERATORS = ['==', '!=', '<=', '>=', '&&', '||', '**', '^', '+', '-', '*', '/', '%', '<', '>', '!', '?', ':', '(', ')', ',']
 
 function tokenize(source) {
   const tokens = []
@@ -139,13 +143,23 @@ function parse(source) {
     }
     return left
   }
+  // Unary binds looser than exponentiation so `-x^2` means `-(x^2)` while `2^-3`
+  // still accepts a signed right-hand exponent.
   const unary = () => {
     if (isOp('-') || isOp('!') || isOp('+')) {
       const op = peek().value
       index += 1
       return nest(() => ({ type: 'unary', op, value: unary() }))
     }
-    return primary()
+    return power()
+  }
+  const power = () => {
+    const left = primary()
+    if (isOp('**') || isOp('^')) {
+      index += 1
+      return nest(() => ({ type: 'binary', op: '**', left, right: unary() }))
+    }
+    return left
   }
   const primary = () => {
     const token = peek()
@@ -225,6 +239,7 @@ function binary(node, lookup) {
   const left = run(node.left, lookup)
   const right = run(node.right, lookup)
   switch (node.op) {
+    case '**': return num(left) ** num(right)
     case '+': return typeof left === 'string' || typeof right === 'string' ? `${show(left)}${show(right)}` : num(left) + num(right)
     case '-': return num(left) - num(right)
     case '*': return num(left) * num(right)
@@ -254,7 +269,10 @@ export function createScope(inputs, lets) {
     if (inputs.has(name)) return inputs.get(name)
     if (done.has(name)) return done.get(name)
     const tree = lets.get(name)
-    if (tree === undefined) fail(`unknown name "${name}"`)
+    if (tree === undefined) {
+      if (MATH_CONSTANTS.has(name)) return MATH_CONSTANTS.get(name)
+      fail(`unknown name "${name}"`)
+    }
     if (busy.has(name)) fail(`"${name}" refers to itself`)
     busy.add(name)
     try {

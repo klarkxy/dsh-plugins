@@ -7,12 +7,16 @@ import type { ViewNode } from './contracts.ts'
 import { english, type ViewT } from './ui.tsx'
 
 export const PALETTE = [
-  'var(--dsw-alias-state-business-primary)', 'var(--dsw-alias-brand-primary)',
-  'var(--dsw-alias-label-tertiary)',
+  'var(--dsw-alias-state-business-primary)',
+  'var(--dsw-alias-state-success-primary)',
+  'var(--dsw-alias-state-warn-primary)',
+  'var(--dsw-alias-brand-primary)',
+  'var(--dsw-alias-state-error-primary)',
+  'var(--dsw-alias-label-secondary)',
 ]
 const colorAt = (index: number) => PALETTE[index % PALETTE.length]
-const TICK = 10
-const LABEL = 11
+const TICK = 11
+const LABEL = 12
 const textWidth = (text: unknown, size: number) => [...String(text)].reduce((sum, char) => sum + (char.charCodeAt(0) > 0x2e80 ? size : size * 0.58), 0)
 const fit = (text: unknown, room: number, size: number) => {
   if (textWidth(text, size) <= room) return String(text)
@@ -82,27 +86,27 @@ function columns({ categories, series, unit, kind }: ChartData, width: number, a
   const ticks = valueAxis(visible.flatMap(item => item.values), kind !== 'line')
   const lo = ticks[0]
   const hi = ticks.at(-1)!
-  const left = Math.ceil(Math.max(...ticks.map(tick => textWidth(withUnit(tick, unit), TICK)))) + 10
-  const top = 8
-  const height = 176
-  const bottom = 24
-  const plot = { x: left, y: top, w: Math.max(40, width - left - 4), h: height - top - bottom }
+  const left = Math.ceil(Math.max(...ticks.map(tick => textWidth(withUnit(tick, unit), TICK)))) + 12
+  const top = 12
+  const height = 216
+  const bottom = 28
+  const plot = { x: left, y: top, w: Math.max(40, width - left - 6), h: height - top - bottom }
   const y = (value: number) => plot.y + plot.h - ((value - lo) / (hi - lo)) * plot.h
   const band = plot.w / categories.length
   const parts: React.ReactNode[] = []
   for (const tick of ticks) {
     parts.push(<line key={`g${tick}`} className="dvui-chart-grid" x1={plot.x} x2={plot.x + plot.w} y1={y(tick)} y2={y(tick)} />)
-    parts.push(<text key={`t${tick}`} className="dvui-chart-tick" x={plot.x - 8} y={y(tick) + 3} textAnchor="end">{withUnit(tick, unit)}</text>)
+    parts.push(<text key={`t${tick}`} className="dvui-chart-tick" x={plot.x - 8} y={y(tick) + 4} textAnchor="end">{withUnit(tick, unit)}</text>)
   }
   const points: Point[] = []
   categories.forEach((label, at) => {
     const cx = plot.x + band * at + band / 2
-    parts.push(<text key={`c${at}`} className="dvui-chart-label" x={cx} y={height - 7} textAnchor="middle">{fit(label, band - 4, LABEL)}</text>)
+    parts.push(<text key={`c${at}`} className="dvui-chart-label" x={cx} y={height - 8} textAnchor="middle">{fit(label, band - 4, LABEL)}</text>)
     points.push({ x: cx, y: y(Math.max(...visible.map(item => item.values[at]), lo)) })
   })
   if (kind === 'bar') {
-    const group = band * 0.72
-    const gap = visible.length > 1 ? 2 : 0
+    const group = Math.min(band * 0.68, visible.length * 44)
+    const gap = visible.length > 1 ? 3 : 0
     const barW = Math.max(2, (group - gap * (visible.length - 1)) / visible.length)
     const zero = y(Math.max(lo, Math.min(0, hi)))
     categories.forEach((_, at) => visible.forEach((item, row) => {
@@ -110,7 +114,7 @@ function columns({ categories, series, unit, kind }: ChartData, width: number, a
       const x = plot.x + band * at + (band - group) / 2 + row * (barW + gap)
       const top2 = Math.min(y(value), zero)
       const tall = Math.max(1, Math.abs(y(value) - zero))
-      const r = Math.min(4, barW / 2, tall)
+      const r = Math.min(5, barW / 2, tall)
       const d = value >= 0
         ? `M${x},${top2 + tall}V${top2 + r}q0,-${r} ${r},-${r}h${barW - 2 * r}q${r},0 ${r},${r}V${top2 + tall}z`
         : `M${x},${top2}V${top2 + tall - r}q0,${r} ${r},${r}h${barW - 2 * r}q${r},0 ${r},-${r}V${top2}z`
@@ -125,7 +129,7 @@ function columns({ categories, series, unit, kind }: ChartData, width: number, a
         parts.push(<path key={`a${row}`} className="dvui-chart-area" d={`${line}L${xs.at(-1)},${base}L${xs[0]},${base}z`} style={{ fill: item.color }} />)
       }
       parts.push(<path key={`l${row}`} className="dvui-chart-line" d={line} style={{ stroke: item.color }} />)
-      item.values.forEach((value, at) => parts.push(<circle key={`p${row}-${at}`} className="dvui-chart-dot" cx={xs[at]} cy={y(value)} r={active === at ? 4 : 2.5} style={{ fill: item.color }} />))
+      item.values.forEach((value, at) => parts.push(<circle key={`p${row}-${at}`} className="dvui-chart-dot" cx={xs[at]} cy={y(value)} r={active === at ? 4.5 : 3} style={{ fill: item.color }} />))
     })
     if (active !== null) parts.unshift(<line key="guide" className="dvui-chart-guide" x1={xs[active]} x2={xs[active]} y1={plot.y} y2={plot.y + plot.h} />)
   }
@@ -136,12 +140,12 @@ function rows({ categories, series, unit }: ChartData, width: number, active: nu
   const ticks = valueAxis(visible.flatMap(item => item.values), true)
   const lo = ticks[0]
   const hi = ticks.at(-1)!
-  const labelW = Math.min(width * 0.38, Math.ceil(Math.max(...categories.map(label => textWidth(label, LABEL)))) + 10)
-  const valueW = Math.ceil(Math.max(...visible.flatMap(item => item.values).map(value => textWidth(withUnit(value, unit), LABEL)))) + 10
-  const barH = 14
-  const rowH = 10 + visible.length * barH + (visible.length - 1) * 2
-  const top = 4
-  const height = top + rowH * categories.length + 22
+  const labelW = Math.min(width * 0.38, Math.ceil(Math.max(...categories.map(label => textWidth(label, LABEL)))) + 12)
+  const valueW = Math.ceil(Math.max(...visible.flatMap(item => item.values).map(value => textWidth(withUnit(value, unit), LABEL)))) + 14
+  const barH = 18
+  const rowH = 12 + visible.length * barH + (visible.length - 1) * 3
+  const top = 6
+  const height = top + rowH * categories.length + 26
   const plot = { x: labelW, y: top, w: Math.max(40, width - labelW - valueW), h: rowH * categories.length }
   const x = (value: number) => plot.x + ((value - lo) / (hi - lo)) * plot.w
   const parts: React.ReactNode[] = []
@@ -152,24 +156,24 @@ function rows({ categories, series, unit }: ChartData, width: number, active: nu
   const points: Point[] = []
   const zero = x(Math.max(lo, Math.min(0, hi)))
   categories.forEach((label, at) => {
-    const rowY = plot.y + rowH * at + 5
-    parts.push(<text key={`c${at}`} className="dvui-chart-label" x={labelW - 10} y={rowY + (rowH - 10) / 2 + 4} textAnchor="end">{fit(label, labelW - 12, LABEL)}</text>)
+    const rowY = plot.y + rowH * at + 6
+    parts.push(<text key={`c${at}`} className="dvui-chart-label" x={labelW - 10} y={rowY + (rowH - 12) / 2 + 4} textAnchor="end">{fit(label, labelW - 12, LABEL)}</text>)
     visible.forEach((item, row) => {
       const value = item.values[at]
-      const by = rowY + row * (barH + 2)
+      const by = rowY + row * (barH + 3)
       const left = Math.min(x(value), zero)
       const long = Math.max(1, Math.abs(x(value) - zero))
-      parts.push(<rect key={`b${at}-${row}`} className="dvui-chart-mark" data-dim={active !== null && active !== at ? '' : undefined} x={left} y={by} width={long} height={barH} rx={Math.min(4, long / 2)} style={{ fill: item.color }} />)
-      parts.push(<text key={`v${at}-${row}`} className="dvui-chart-value" x={left + long + 6} y={by + barH - 3}>{withUnit(value, unit)}</text>)
+      parts.push(<rect key={`b${at}-${row}`} className="dvui-chart-mark" data-dim={active !== null && active !== at ? '' : undefined} x={left} y={by} width={long} height={barH} rx={Math.min(5, long / 2)} style={{ fill: item.color }} />)
+      parts.push(<text key={`v${at}-${row}`} className="dvui-chart-value" x={left + long + 6} y={by + barH - 4}>{withUnit(value, unit)}</text>)
     })
     points.push({ x: Math.max(...visible.map(item => x(item.values[at])), zero), y: rowY })
   })
   return { parts, height, points, hits: categories.map((_, at) => ({ x: 0, y: plot.y + rowH * at, w: width, h: rowH })) }
 }
-function donut({ categories, series }: ChartData, width: number, active: number | null, hover: (at: number) => void): Drawn {
+function donut({ series }: ChartData, width: number, active: number | null, hover: (at: number) => void): Drawn {
   const values = (series[0]?.values ?? []).map(value => Math.max(0, value))
   const total = values.reduce((sum, value) => sum + value, 0)
-  const size = Math.min(180, Math.max(120, width * 0.42))
+  const size = Math.min(188, Math.max(132, width * 0.44))
   const r = size / 2
   const inner = r * 0.62
   const cx = r
@@ -244,6 +248,14 @@ export function WidgetChart({ node, lookup, registerChart, refreshCharts, t = en
   const point = active === null ? null : drawn.points[active]
   const share = (at: number) => unit === '%' ? withUnit(drawn.values![at], unit) : `${withUnit(drawn.values![at], unit)} · ${drawn.total! > 0 ? Math.round((drawn.values![at] / drawn.total!) * 100) : 0}%`
   const tipRows = active === null || isDonut ? [] : series.filter((_, index) => shown[index]).map(item => ({ color: item.color, name: item.name, value: withUnit(item.values[active], unit) }))
+  const tipStyle: CSSProperties | undefined = point
+    ? {
+      left: point.x,
+      top: point.y,
+      '--_dvui-tip-x': point.x < 72 ? '0%' : point.x > svgWidth - 72 ? '-100%' : '-50%',
+      '--_dvui-tip-y': point.y < 44 ? '12px' : 'calc(-100% - 8px)',
+    } as CSSProperties
+    : undefined
   const copy = () => {
     void navigator.clipboard?.writeText(chartCsv(data, t)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200) }).catch(() => {})
   }
@@ -263,7 +275,7 @@ export function WidgetChart({ node, lookup, registerChart, refreshCharts, t = en
         : <Fragment><text className="dvui-chart-center-name" x={svgWidth / 2} y={drawn.height / 2 - 4} textAnchor="middle">{fit(categories[active], drawn.size! * 0.56, LABEL)}</text><text className="dvui-chart-center" x={svgWidth / 2} y={drawn.height / 2 + 14} textAnchor="middle">{share(active)}</text></Fragment>)
         : drawn.hits.map((hit, at) => <rect key={`h${at}`} className="dvui-chart-hit" x={hit.x} y={hit.y} width={hit.w} height={hit.h} onPointerEnter={() => setActive(at)} />)}
     </svg>
-    {point && !asTable && !isDonut ? <div className="dvui-chart-tip" role="status" style={{ left: point.x, top: point.y } as CSSProperties}><b>{categories[active!]}</b>{tipRows.map((row, index) => <span key={index}><i style={{ background: row.color }} />{row.name ? `${row.name}  ` : ''}{row.value}</span>)}</div> : null}
+    {point && !asTable && !isDonut ? <div className="dvui-chart-tip" role="status" style={tipStyle}><b>{categories[active!]}</b>{tipRows.map((row, index) => <span key={index}><i style={{ background: row.color }} />{row.name ? `${row.name}  ` : ''}{row.value}</span>)}</div> : null}
   </div>
   return <figure ref={box} className="dvui-chart" data-kind={kind}>
     <span id={labelId} hidden>{label}</span>

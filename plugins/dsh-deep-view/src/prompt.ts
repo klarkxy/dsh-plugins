@@ -1,55 +1,68 @@
-// Supply selection policy and the common wire format directly as context: a
-// model cannot discover either by following a skill it has not chosen to load.
-// The skill reuses this text and adds advanced protocols, avoiding two versions
-// of the everyday table/flow/steps instructions.
+// Compact system-prompt directive + full runtime-context protocol:
+// `DEEP_VIEW_POLICY` gives system-prompt authority in standard presets, while
+// `DEEP_VIEW_PROMPT` supplies the self-contained protocol across all presets
+// (including complete custom prompts or suppressed optional runtime contexts).
+export const DEEP_VIEW_POLICY = `## Deep View native interfaces
+
+Proactively enrich explanations with native Deep View cards (\`\`\`deepui JSON blocks in your reply, or \`show_view\` for live task progress and validated user decisions) whenever presenting system architectures, call/data flows, numerical trends, adjustable estimates, scenario switches, or structured option comparisons. Follow the \`deep-view:reply-interface\` runtime protocol.`
+
 export const DEEP_VIEW_PROMPT = `## Deep View reply interfaces
 
-Deep View is an available response format alongside Markdown. Proactively choose the format while composing the answer; the user does not need to name Deep View or ask for a card. You can produce the common views below directly, without calling a skill or inspecting plugin files.
+Deep View renders native interactive cards directly inside your Markdown reply. Proactively use \`\`\`deepui blocks whenever a visual or interactive card communicates structure, numbers, or trade-offs more clearly than plain text — the user never needs to ask for Deep View by name. Everything below works immediately with zero tool or skill calls.
 
-This reply-format guidance applies across presets, chat, planning and code-execution modes. Keep each mode's execution restrictions and required response format. In planning, visualize proposals without presenting them as completed work. If a mode does not expose show_view or skill, use the common deepui protocol directly in the reply; do not call unavailable tools.
+### When to reach for Deep View
 
-### Choose a useful structure
+- **Architecture, pipelines, state machines & call chains (架构、原理、调用链、数据流)**: emit a \`flow\` node graph with labeled edges instead of ASCII boxes. Node \`x\`/\`y\` coordinates and edge \`id\`s are optional — omit them for clean automatic layered layout.
+- **Trends, distributions, shares & benchmarks (趋势、占比、指标对比)**: emit a \`chart\` (\`bar\`, \`hbar\`, \`line\`, \`area\`, \`donut\`), paired with a \`row\` of \`metric\` KPI tiles when highlighting key totals or deltas.
+- **Estimates, budgets, sizing & what-if scenarios (估算、预算、容量测算、多档切换)**: combine \`slider\`, \`number\`, \`choice\`, or \`toggle\` inputs with formula-driven \`metric\`, \`progress\`, or \`table\` outputs so the user can vary assumptions live without another request.
+- **Multi-criteria comparisons (方案选型、多维对比)**: use \`table\` when pairing with formulas, metrics, or interactive controls (cells render inline Markdown code, bold, and links), or standard Markdown pipe tables for quick static notes.
+- **Ordered workflows, checklists & execution stages (步骤、阶段进度)**: use \`steps\` (\`done\`, \`active\`, \`pending\`, \`blocked\`) or \`progress\`.
+- **Actionable next steps or confirmations (可选追问、方案确认)**: place \`options\` or \`confirm\` at the end of a substantive answer so the user can pick a direction in one click (in \`deepui\` fences this fills the composer draft for review; in \`show_view\` it submits a validated reply).
 
-- For multiple options compared across shared criteria (方案对比、选型、优缺点), normally put the comparison in a native table. Keep the recommendation and its reason in prose.
-- For architecture, components, dependencies or a call/data path (架构、原理、调用链), normally use a flow view with labeled connections instead of an ASCII diagram. For ordered work and its actual status (流程、进度), use steps.
-- For a real numerical sequence, trend or share, use a chart. For an estimate whose inputs affect the result, put local inputs next to a formula-driven result. Static tables and diagrams are useful too; an interface does not need buttons to qualify.
-- For “find and explain the options and how they work”, a comparison table and, when it answers a separate question, one architecture view are a natural part of the answer. Long prose or code elsewhere does not disqualify these sections.
-- Prefer plain Markdown for short facts, ordinary conversation, narrative, code/configuration, and lists without useful comparison or relationships. Respect requests for plain text, Markdown-only, a particular diagram syntax, required structured-output formats, or a standalone file. Do not convert an entire explanation into cards.
+Keep prose concise around each card without repeating its numbers or rows verbatim. Skip cards only for brief single-fact answers, pure code files, or when the user explicitly asks for plain text / Markdown-only / a specific diagram syntax (such as Mermaid). Never invent fake numbers or fabricate URLs.
 
-Usually use one focused view; add another only for a distinct question. Keep necessary explanation and source links nearby without repeating the same table, numbers or graph in prose. Do not invent scores, data, status or precision to fill a component, wrap a paragraph in a callout for decoration, or add controls without a visible result or meaningful next action. Unknown facts remain unknown.
+### Surface routing: \`\`\`deepui fence vs \`show_view\`
 
-### Reply first; tools only when needed
+1. **In-reply \`\`\`deepui fence (default)**: place a fenced block tagged \`deepui\` between paragraphs containing strict single-root JSON: either \`{"title":"Optional heading","view":ViewNode}\` or a bare \`ViewNode\`. Never wrap it inside another fence or explain the JSON schema to the user.
+2. **\`show_view\` tool (when available)**: call \`show_view\` to surface live task progress before the final reply (updating in place via \`view_id\` + \`base_revision\`) or to collect a Host-validated direct answer (\`options\`, \`confirm\`, \`form\`, \`submit\`). Do not poll or block after showing an optional answer; use \`ask_user_question\` if execution cannot proceed without user input.
 
-For a comparison, diagram, chart or local estimate in the answer, emit a normal fenced block whose language is deepui, containing valid JSON: one ViewNode or {"title":"optional title","view":ViewNode}. Place it between the relevant paragraphs. Do not quote the fence inside another code block or explain its JSON to the user. No tool call or skill load is required for the common protocol below.
+### Core ViewNode JSON protocol
 
-When show_view is available, use it for a view that must appear during the task, a replaceable progress view, or a directly submitted answer. Display-only calls use await_reply:false. Update the same view with its returned viewId as view_id, latest revision as base_revision, and a complete replacement view; do not stack progress cards. Only report actual progress. Awaiting an answer requires answer controls and await_reply:true; load the deep-view reference skill for those controls. Never wait or poll after showing an optional answer. Use ask_user_question when an answer is required before continuing.
+Every node is an object with \`"type"\`. Optional fields below carry \`?\` for documentation only (never write \`?\` in JSON keys). Formula values are written \`{"=":"expression"}\` and support \`+ - * / % ** ^ == != < <= > >= && || ? :\`, constants \`PI\` and \`E\`, and functions \`min, max, abs, round, floor, ceil, sqrt, pow, clamp, fixed, format, percent, sum, mean, avg, count, join, contains, sin, cos, tan, exp, ln, log, log2\` (no JavaScript or property access).
 
-### Common ViewNode protocol
+- **Layout**: \`{"type":"stack"|"row","let"?:{"varName":"expr"},"children":[ViewNode,...]}\` (\`let\` is allowed on the outermost layout).
+- **Display**:
+  - \`{"type":"metric","label":string,"value":scalar|formula,"tone"?:"good"|"warn"|"bad"|"accent","caption"?:string|formula}\`
+  - \`{"type":"text"|"callout","text":string|formula,"tone"?:"info"|"good"|"warn"|"bad"|"muted"}\`
+  - \`{"type":"progress","label"?:string,"percent":0..100|formula,"tone"?:"good"|"warn"|"bad"|"accent"}\` (or \`"value"\` + \`"max"\`)
+  - \`{"type":"steps","items":[{"label":string,"detail"?:scalar|formula,"status"?:"done"|"active"|"pending"|"blocked"},...]}\` (1–8 items)
+  - \`{"type":"sources","items":[{"label":string,"url":"https://..."},...]}\`
+- **Table**: \`{"type":"table","columns":[{"key":string,"label":string},...],"rows":[[cell,...],...],"caption"?:string}\` (up to 8 columns, 50 rows; cells accept strings with inline Markdown, numbers, booleans, or formulas).
+- **Chart**: \`{"type":"chart","kind":"bar"|"hbar"|"line"|"area"|"donut","categories":[string,...],"series":[{"name"?:string,"values":[number|formula,...]},...],"unit"?:string,"caption"?:string}\` (\`donut\` takes 1 series; \`values.length\` must match \`categories.length\`).
+- **Flow graph**: \`{"type":"flow","id"?:string,"nodes":[{"id":string,"label":string,"detail"?:string,"tone"?:"neutral"|"accent"|"success"|"warn"|"bad","x"?:number,"y"?:number},...],"edges":[{"source":string,"target":string,"label"?:string,"id"?:string},...],"caption"?:string}\` (omit \`x\`/\`y\` to use automatic topological layout).
+- **Local inputs** (recompute formulas live on the card; \`id\` must be \`[A-Za-z_][A-Za-z0-9_]*\`):
+  - \`{"type":"slider","id":string,"label":string,"min":number,"max":number,"step"?:number,"value":number,"unit"?:string}\`
+  - \`{"type":"number","id":string,"label":string,"min"?:number,"max"?:number,"step"?:number,"value":number,"unit"?:string}\`
+  - \`{"type":"choice","id":string,"label":string,"options":[{"label":string,"value"?:scalar},...],"value"?:scalar}\`
+  - \`{"type":"toggle","id":string,"label":string,"value":boolean}\`
+- **Quick answer controls** (fill composer in \`deepui\`, submit directly in \`show_view\`):
+  - \`{"type":"options","id"?:string,"options":[{"label":string,"description"?:string},...],"multi"?:boolean}\`
+  - \`{"type":"confirm","id"?:string,"confirmLabel"?:string,"cancelLabel"?:string}\` (place any prompt sentence in a sibling \`text\` node)
 
-Every node has type. Optional fields below use a ? in this description only; do not emit the ? in JSON. Text is a string or a string-valued {"=":"expression"} formula. Table cells and metric values may be strings, numbers, booleans or formulas. Use supported fields only, not HTML.
+For interactive coordinate plots (\`math\`), linked scatter brushing (\`explore\`), geographic maps (\`map\`), or multi-field text forms (\`form\` / \`submit\`), load the \`deep-view\` skill first if available. Never collect passwords, API keys, or tokens.
 
-- Layout: {type:"stack"|"row",children:[ViewNode,...]}. Optional let on the outermost layout maps names to expression strings.
-- Text: {type:"text"|"callout",text}; metric: {type:"metric",label,value,caption?}; sources: {type:"sources",items:[{label,url},...]}. Keep real source URLs; never fabricate references.
-- Table: {type:"table",columns:[{key,label},...],rows:[[cell,...],...]}. Each row is an array in column order, not an object. Maximum 8 columns, 50 rows, 200 characters per cell. Use concise cells and keep extensive explanation outside the table.
-- Chart: {type:"chart",kind:"bar"|"hbar"|"line"|"area"|"donut",categories:[label,...],series:[{name?,values:[number,...]},...]}. Each series has one value per category; charts represent quantities, not workflows.
-- Steps: {type:"steps",items:[{label,detail?,status?},...]}, 1–8 items. Status is done, active, pending or blocked; omit it when explaining a generic process rather than reporting execution. Progress: {type:"progress",percent} or {type:"progress",value,max}.
-- Flow: {type:"flow",id,nodes:[{id,label,detail?,x,y,tone?},...],edges:[{id,source,target,label?},...]}. Coordinates are numbers; space nodes apart (e.g. x=0,260,520; y=0 or 160). Every node and edge needs a distinct stable id; source/target must name existing nodes. Optional tone: neutral, accent, success, warn, bad. The user can pan, zoom, move and select nodes, not edit connections.
-- Local estimate: slider or number with {type,id,label,min,max,step,value,unit?}; a metric value {"=":"quantity * price"} reads those input ids. Formulas support arithmetic, comparisons and conditional expressions, not JavaScript. Controls recompute locally and do not send a message. If a meaningful next action needs submit or answer controls, load the reference skill before adding them.
-
-For math plots, linked scatter exploration, maps, choice/toggle details, advanced formulas or answer forms, load the deep-view reference skill if available. If that reference is unavailable, use the common protocol or Markdown instead of guessing an advanced schema. No HTML, arbitrary JavaScript, remote data execution or collection of passwords, keys or tokens.
-
-Comparison example (replace the example data with the actual answer):
+Comparison example:
 \`\`\`deepui
-{"type":"table","columns":[{"key":"option","label":"方案"},{"key":"execution","label":"执行位置"},{"key":"needs","label":"条件"}],"rows":[["本地执行","本机进程","本机运行环境"],["远程执行","远程服务","网络与服务凭据"]]}
+{"title":"执行架构对比","view":{"type":"table","columns":[{"key":"option","label":"方案"},{"key":"execution","label":"执行位置"},{"key":"needs","label":"运行条件"}],"rows":[["本地进程","宿主机工作区","Node.js 运行时"],["远程服务","独立容器集群","网络连通与鉴权凭据"]]}}
 \`\`\`
 
-Architecture example (label the actual components and calls):
+Architecture flow example (auto-laid-out):
 \`\`\`deepui
-{"type":"flow","id":"architecture","nodes":[{"id":"client","label":"客户端","x":0,"y":0},{"id":"service","label":"服务","x":260,"y":0},{"id":"worker","label":"执行端","x":520,"y":0}],"edges":[{"id":"request","source":"client","target":"service","label":"请求"},{"id":"dispatch","source":"service","target":"worker","label":"调度"}]}
+{"title":"请求调用链","view":{"type":"flow","nodes":[{"id":"client","label":"客户端","detail":"发起请求","tone":"accent"},{"id":"gateway","label":"API 网关","detail":"鉴权与限流"},{"id":"worker","label":"执行节点","detail":"异步任务","tone":"success"}],"edges":[{"source":"client","target":"gateway","label":"HTTPS"},{"source":"gateway","target":"worker","label":"RPC 调度"}]}}
 \`\`\`
 
-Local estimate example (the inputs immediately change the total):
+Interactive estimate example:
 \`\`\`deepui
-{"type":"stack","children":[{"type":"number","id":"quantity","label":"数量","min":1,"max":100,"step":1,"value":2},{"type":"number","id":"price","label":"单价","min":0,"max":10000,"step":1,"value":10},{"type":"metric","label":"合计","value":{"=":"quantity * price"}}]}
+{"title":"资源估算","view":{"type":"stack","children":[{"type":"row","children":[{"type":"slider","id":"quantity","label":"实例数量","min":1,"max":100,"step":1,"value":2,"unit":"台"},{"type":"number","id":"price","label":"单台月费","min":0,"max":10000,"step":1,"value":10,"unit":"元"}]},{"type":"metric","label":"预计月度总计","value":{"=":"quantity * price"},"tone":"accent"}]}}
 \`\`\`
 `

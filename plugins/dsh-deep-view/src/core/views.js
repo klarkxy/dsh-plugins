@@ -1,17 +1,17 @@
 // Adapted from deep-view/src/core/views.js (deep-view 0.1.0, Apache-2.0).
 // DSH migration: html is deliberately rejected rather than migrating its frame;
-// validation, formulas and answers retain the original bounded JSON semantics.
-// Pure validation and evaluation of a declarative card, on Host and Client.
-// Formulas use formula.js; model-authored code never enters the DOM.
+// validation, formulas and answers retain the original bounded JSON semantics,
+// while normalizeView absorbs common model authoring habits (inline titles,
+// object table rows, tone aliases, hyphenated ids and auto-laid-out graphs).
 
-import { compileFormula, createScope, evaluate, isName, show } from './formula.js'
+import { compileFormula, createScope, evaluate, isName, MATH_CONSTANTS, show } from './formula.js'
 
 const LAYOUT = ['stack', 'row']
 const DISPLAY = ['text', 'metric', 'table', 'chart', 'progress', 'callout', 'sources', 'steps']
 const INPUT_TYPES = ['slider', 'choice', 'toggle', 'number', 'math', 'flow', 'explore', 'map']
 const ANSWERS = ['options', 'confirm', 'form', 'submit']
 const COMPONENTS = [...LAYOUT, ...DISPLAY, ...INPUT_TYPES, ...ANSWERS]
-const TONES = ['good', 'warn', 'bad']
+const TONES = ['good', 'warn', 'bad', 'accent']
 const TEXT_TONES = ['muted']
 const CALLOUT_TONES = ['info', 'good', 'warn', 'bad']
 export const CHART_KINDS = ['bar', 'hbar', 'line', 'area', 'donut']
@@ -22,7 +22,7 @@ const PROPS = {
   row: ['id', 'children', 'let'],
   text: ['id', 'text', 'tone'],
   metric: ['id', 'label', 'value', 'tone', 'caption'],
-  table: ['id', 'columns', 'rows'],
+  table: ['id', 'columns', 'rows', 'caption'],
   chart: ['id', 'kind', 'categories', 'series', 'unit', 'caption'],
   progress: ['id', 'label', 'percent', 'value', 'max', 'valueLabel', 'tone'],
   callout: ['id', 'text', 'tone'],
@@ -44,10 +44,16 @@ const PROPS = {
 const FIELD_PROPS = ['id', 'label', 'placeholder', 'value', 'multiline', 'readOnly']
 const STEP_STATUSES = ['done', 'active', 'pending', 'blocked']
 const MAX_DEPTH = 8
+// Component nesting stops at MAX_DEPTH. This cap is separate: it bounds every
+// array and object normalizeView walks. A nested array still fits in
+// VIEW_BYTE_LIMIT at a few thousand levels, and the recursive walk overflows
+// the stack before that (sooner after this function grew a larger frame).
+// Past the cap the raw value stays in place so validation can reject it.
+const MAX_NORMALIZE_DEPTH = 64
 const MAX_NODES = 64
 const MAX_CHILDREN = 16
 const MAX_TEXT = 2000
-const MAX_CELL = 200
+const MAX_CELL = 400
 const MAX_COLUMNS = 8
 const MAX_ROWS = 50
 const MAX_OPTIONS = 8
@@ -66,6 +72,7 @@ const quoted = value => JSON.stringify(value)
 const allowed = list => list.join(', ')
 const isNumber = value => typeof value === 'number' && Number.isFinite(value)
 const isScalar = value => typeof value === 'string' || typeof value === 'boolean' || isNumber(value)
+const setOwn = (target, key, value) => Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true })
 
 // `{ "=": "a * b" }`: a value worked out from the view's inputs.
 export const isFormula = value => isRecord(value) && Object.keys(value).length === 1 && Object.hasOwn(value, '=')
@@ -77,29 +84,361 @@ export function viewBytes(title, view) {
 const NUMERIC = ['value', 'percent', 'min', 'max', 'step', 'height']
 const numeric = value => (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value)) ? Number(value) : value)
 
+const METRIC_TONE_ALIASES = {
+  success: 'good', positive: 'good', ok: 'good',
+  warning: 'warn', caution: 'warn',
+  error: 'bad', danger: 'bad', critical: 'bad', negative: 'bad',
+  info: 'accent', primary: 'accent', highlight: 'accent',
+}
+const CALLOUT_TONE_ALIASES = {
+  neutral: 'info', accent: 'info', primary: 'info', default: 'info', note: 'info', tip: 'info',
+  success: 'good', positive: 'good', ok: 'good',
+  warning: 'warn', caution: 'warn',
+  error: 'bad', danger: 'bad', critical: 'bad',
+}
+const FLOW_TONE_ALIASES = {
+  good: 'success', positive: 'success', ok: 'success',
+  info: 'accent', primary: 'accent', highlight: 'accent',
+  warning: 'warn', caution: 'warn',
+  error: 'bad', danger: 'bad', critical: 'bad',
+  default: 'neutral', muted: 'neutral',
+}
+const CHART_KIND_ALIASES = {
+  pie: 'donut',
+  column: 'bar', vertical: 'bar',
+  horizontal: 'hbar', 'horizontal-bar': 'hbar', 'bar-horizontal': 'hbar',
+}
+const STEP_STATUS_ALIASES = {
+  completed: 'done', complete: 'done', success: 'done', finished: 'done',
+  running: 'active', in_progress: 'active', 'in-progress': 'active', current: 'active', ongoing: 'active',
+  todo: 'pending', waiting: 'pending', queued: 'pending',
+  error: 'blocked', failed: 'blocked',
+}
+const NEEDS_AUTO_ID = new Set(['flow', 'map', 'explore', 'math', 'options', 'confirm', 'form', 'submit'])
+
+function safeIdentifier(raw, fallbackPrefix, used) {
+  const cleaned = typeof raw === 'string'
+    ? raw.trim().replace(/[^A-Za-z0-9_]+/g, '_').replace(/^(\d)/, '_$1').replace(/^_+$/, '')
+    : ''
+  let candidate = cleaned !== '' && isName(cleaned) && !RESERVED.has(cleaned) ? cleaned : fallbackPrefix
+  if (used) {
+    let suffix = 2
+    const base = candidate
+    while (used.has(candidate) || RESERVED.has(candidate)) candidate = `${base}_${suffix++}`
+    used.add(candidate)
+  }
+  return candidate
+}
+
+// Compute clean topological layered coordinates when the model omits node (x, y)
+// or leaves every node stacked at (0, 0). Keeps explicit non-overlapping coords intact.
+function autoLayoutFlowNodes(nodes, edges) {
+  if (!Array.isArray(nodes) || nodes.length === 0) return nodes
+  const validRecords = nodes.every(item => isRecord(item))
+  if (!validRecords) return nodes
+  const allMissing = nodes.every(item => item.x === undefined && item.y === undefined)
+  const allZero = nodes.length > 1 && nodes.every(item => item.x === 0 && item.y === 0)
+  const anyBothMissing = nodes.some(item => item.x === undefined && item.y === undefined)
+  if (!allMissing && !allZero && !anyBothMissing) return nodes
+
+  const ids = nodes.map(item => (typeof item.id === 'string' ? item.id : ''))
+  const indexById = new Map(ids.map((id, index) => [id, index]))
+  const outgoing = Array.from({ length: nodes.length }, () => [])
+  const indegree = new Array(nodes.length).fill(0)
+  for (const edge of Array.isArray(edges) ? edges : []) {
+    if (!isRecord(edge)) continue
+    const u = indexById.get(edge.source)
+    const v = indexById.get(edge.target)
+    if (u === undefined || v === undefined || u === v) continue
+    outgoing[u].push(v)
+    indegree[v] += 1
+  }
+
+  const hasEdges = outgoing.some(list => list.length > 0)
+  const rank = new Array(nodes.length).fill(0)
+  if (!hasEdges) {
+    const perRow = nodes.length <= 4 ? nodes.length : 3
+    return nodes.map((item, index) => {
+      if (!allMissing && !allZero && !(item.x === undefined && item.y === undefined)) return item
+      const col = index % perRow
+      const row = Math.floor(index / perRow)
+      const next = {}
+      for (const k of Object.keys(item)) setOwn(next, k, item[k])
+      setOwn(next, 'x', col * 228)
+      setOwn(next, 'y', row * 108)
+      return next
+    })
+  }
+
+  // Kahn's topological longest-path rank assignment with deterministic cycle breaking.
+  const remaining = [...indegree]
+  const settled = new Array(nodes.length).fill(false)
+  let processed = 0
+  while (processed < nodes.length) {
+    let queue = []
+    for (let i = 0; i < nodes.length; i++) if (!settled[i] && remaining[i] <= 0) queue.push(i)
+    if (queue.length === 0) {
+      // Break cycle at the earliest unsettled node.
+      const pick = settled.findIndex(done => !done)
+      queue = [pick]
+    }
+    for (const u of queue) {
+      settled[u] = true
+      processed += 1
+      for (const v of outgoing[u]) {
+        if (!settled[v]) rank[v] = Math.max(rank[v], Math.min(nodes.length - 1, rank[u] + 1))
+        remaining[v] -= 1
+      }
+    }
+  }
+
+  const maxRank = Math.max(...rank, 0)
+  const groups = new Map()
+  for (let i = 0; i < nodes.length; i++) {
+    const r = rank[i]
+    if (!groups.has(r)) groups.set(r, [])
+    groups.get(r).push(i)
+  }
+  // Wide multi-hop pipelines (> 4 stages) read cleaner top-to-bottom in narrow chat columns.
+  const vertical = maxRank >= 4
+  const coords = new Array(nodes.length)
+  for (const [r, members] of groups) {
+    const count = members.length
+    members.forEach((nodeIndex, slot) => {
+      const offset = (slot - (count - 1) / 2)
+      coords[nodeIndex] = vertical
+        ? { x: Math.round(offset * 224), y: r * 116 }
+        : { x: r * 236, y: Math.round(offset * 108) }
+    })
+  }
+  return nodes.map((item, index) => {
+    if (!allMissing && !allZero && !(item.x === undefined && item.y === undefined)) return item
+    const next = {}
+    for (const k of Object.keys(item)) setOwn(next, k, item[k])
+    setOwn(next, 'x', coords[index].x)
+    setOwn(next, 'y', coords[index].y)
+    return next
+  })
+}
+
+function normalizeComponent(out, depth, state) {
+  if (Object.hasOwn(out, '__proto__')) return out
+  const type = out.type
+  if (typeof type !== 'string' || !COMPONENTS.includes(type)) return out
+
+  // Models frequently attach `title` directly on a ViewNode instead of the outer
+  // { title, view } envelope, or on nested chart/table/flow blocks.
+  if (typeof out.title === 'string') {
+    const trimmed = out.title.trim()
+    delete out.title
+    if (depth > 0 && trimmed !== '') {
+      if (PROPS[type].includes('label') && out.label === undefined) setOwn(out, 'label', trimmed)
+      else if (PROPS[type].includes('caption') && out.caption === undefined) setOwn(out, 'caption', trimmed)
+    }
+  }
+
+  // Unify tone synonyms across metric/progress, callout, text and flow.
+  if (typeof out.tone === 'string') {
+    if (type === 'metric' || type === 'progress') {
+      if (out.tone === 'neutral' || out.tone === 'default') delete out.tone
+      else if (Object.hasOwn(METRIC_TONE_ALIASES, out.tone)) setOwn(out, 'tone', METRIC_TONE_ALIASES[out.tone])
+    } else if (type === 'callout') {
+      if (Object.hasOwn(CALLOUT_TONE_ALIASES, out.tone)) setOwn(out, 'tone', CALLOUT_TONE_ALIASES[out.tone])
+    } else if (type === 'text') {
+      if (out.tone === 'default' || out.tone === 'neutral') delete out.tone
+      else if (out.tone === 'secondary' || out.tone === 'subtle') setOwn(out, 'tone', 'muted')
+    }
+  }
+
+  // Supply or sanitize component ids where required so hyphenated ids ("api-flow")
+  // or omitted display-only rich ids never discard a valid card.
+  if (NEEDS_AUTO_ID.has(type)) {
+    if (out.id === undefined) {
+      setOwn(out, 'id', safeIdentifier('', `${type}_${++state.seq}`, state.ids))
+    } else if (typeof out.id === 'string' && out.id.trim() !== '' && !isName(out.id) && !RESERVED.has(out.id)) {
+      // Only rewrite when called through checkShownView's wire normalization;
+      // direct validateView(raw) calls still enforce strict identifier syntax.
+      setOwn(out, 'id', safeIdentifier(out.id, `${type}_${++state.seq}`, state.ids))
+    } else if (typeof out.id === 'string' && isName(out.id)) {
+      state.ids.add(out.id)
+    }
+  } else if (INPUTS.has(type) && typeof out.id === 'string' && out.id.trim() !== '' && !isName(out.id) && !RESERVED.has(out.id)) {
+    setOwn(out, 'id', safeIdentifier(out.id, `${type}_${++state.seq}`, state.ids))
+  }
+
+  if (type === 'table') {
+    if (Array.isArray(out.columns)) {
+      const cols = out.columns.map((col, idx) => {
+        if (typeof col === 'string') return { key: `col_${idx}`, label: col }
+        if (!isRecord(col) || Object.hasOwn(col, '__proto__')) return col
+        const keys = Object.keys(col)
+        if (keys.some(k => !['key', 'id', 'label', 'title', 'name'].includes(k))) return col
+        const label = typeof col.label === 'string' ? col.label
+          : typeof col.title === 'string' ? col.title
+            : typeof col.name === 'string' ? col.name : col.label
+        const key = typeof col.key === 'string' && col.key !== '' ? col.key
+          : typeof col.id === 'string' && col.id !== '' ? col.id
+            : typeof label === 'string' ? `col_${idx}` : col.key
+        const nextCol = {}
+        if (key !== undefined) setOwn(nextCol, 'key', key)
+        if (label !== undefined) setOwn(nextCol, 'label', label)
+        return nextCol
+      })
+      setOwn(out, 'columns', cols)
+      if (Array.isArray(out.rows)) {
+        setOwn(out, 'rows', out.rows.map(row => {
+          if (!isRecord(row) || isFormula(row)) return row
+          return cols.map(col => isRecord(col)
+            ? (Object.hasOwn(row, col.key) ? row[col.key] : Object.hasOwn(row, col.label) ? row[col.label] : '')
+            : '')
+        }))
+      }
+    }
+  } else if (type === 'chart') {
+    if (typeof out.kind === 'string' && Object.hasOwn(CHART_KIND_ALIASES, out.kind)) setOwn(out, 'kind', CHART_KIND_ALIASES[out.kind])
+    if (out.categories === undefined && Array.isArray(out.labels)) {
+      setOwn(out, 'categories', out.labels)
+      delete out.labels
+    }
+    if (Array.isArray(out.series)) {
+      setOwn(out, 'series', out.series.map(item => {
+        if (!isRecord(item) || Object.hasOwn(item, '__proto__')) return item
+        const nextSeries = {}
+        for (const k of Object.keys(item)) {
+          if (k === 'label' && item.name === undefined) setOwn(nextSeries, 'name', item.label)
+          else if (k === 'data' && item.values === undefined && Array.isArray(item.data)) setOwn(nextSeries, 'values', item.data.map(numeric))
+          else setOwn(nextSeries, k, item[k])
+        }
+        return nextSeries
+      }))
+    }
+  } else if (type === 'steps' && Array.isArray(out.items)) {
+    setOwn(out, 'items', out.items.map(item => {
+      if (!isRecord(item) || Object.hasOwn(item, '__proto__')) return item
+      const nextStep = {}
+      for (const k of Object.keys(item)) {
+        if (k === 'title' && item.label === undefined) setOwn(nextStep, 'label', item.title)
+        else if ((k === 'description' || k === 'text') && item.detail === undefined) setOwn(nextStep, 'detail', item[k])
+        else if (k === 'status' && typeof item.status === 'string' && Object.hasOwn(STEP_STATUS_ALIASES, item.status)) setOwn(nextStep, 'status', STEP_STATUS_ALIASES[item.status])
+        else setOwn(nextStep, k, item[k])
+      }
+      return nextStep
+    }))
+  } else if (type === 'flow') {
+    const nodeIds = new Set()
+    const remap = new Map()
+    if (Array.isArray(out.nodes)) {
+      const normalizedNodes = out.nodes.map((item, idx) => {
+        if (!isRecord(item) || Object.hasOwn(item, '__proto__')) return item
+        const nextNode = {}
+        for (const k of Object.keys(item)) {
+          if (k === 'title' && item.label === undefined) setOwn(nextNode, 'label', item.title)
+          else if ((k === 'description' || k === 'subtitle') && item.detail === undefined) setOwn(nextNode, 'detail', item[k])
+          else if (k === 'tone' && typeof item.tone === 'string' && Object.hasOwn(FLOW_TONE_ALIASES, item.tone)) setOwn(nextNode, 'tone', FLOW_TONE_ALIASES[item.tone])
+          else setOwn(nextNode, k, item[k])
+        }
+        if (typeof nextNode.id === 'string' && nextNode.id.trim() !== '') {
+          const original = nextNode.id
+          if (!isName(original) || RESERVED.has(original)) {
+            const safe = safeIdentifier(original, `node_${idx + 1}`, nodeIds)
+            remap.set(original, safe)
+            setOwn(nextNode, 'id', safe)
+          } else nodeIds.add(original)
+        } else if (nextNode.id === undefined && typeof nextNode.label === 'string' && nextNode.label.trim() !== '') {
+          setOwn(nextNode, 'id', safeIdentifier(nextNode.label, `node_${idx + 1}`, nodeIds))
+        }
+        if (typeof nextNode.x === 'string') setOwn(nextNode, 'x', numeric(nextNode.x))
+        if (typeof nextNode.y === 'string') setOwn(nextNode, 'y', numeric(nextNode.y))
+        return nextNode
+      })
+      const edgeIds = new Set()
+      const normalizedEdges = Array.isArray(out.edges)
+        ? out.edges.map((edge, idx) => {
+          if (!isRecord(edge) || Object.hasOwn(edge, '__proto__')) return edge
+          const nextEdge = {}
+          for (const k of Object.keys(edge)) {
+            if (k === 'from' && edge.source === undefined) setOwn(nextEdge, 'source', edge.from)
+            else if (k === 'to' && edge.target === undefined) setOwn(nextEdge, 'target', edge.to)
+            else setOwn(nextEdge, k, edge[k])
+          }
+          if (typeof nextEdge.source === 'string' && remap.has(nextEdge.source)) setOwn(nextEdge, 'source', remap.get(nextEdge.source))
+          if (typeof nextEdge.target === 'string' && remap.has(nextEdge.target)) setOwn(nextEdge, 'target', remap.get(nextEdge.target))
+          if (nextEdge.id === undefined || (typeof nextEdge.id === 'string' && (!isName(nextEdge.id) || RESERVED.has(nextEdge.id) || edgeIds.has(nextEdge.id)))) {
+            setOwn(nextEdge, 'id', safeIdentifier(typeof nextEdge.id === 'string' ? nextEdge.id : '', `edge_${idx + 1}`, edgeIds))
+          } else if (typeof nextEdge.id === 'string') {
+            edgeIds.add(nextEdge.id)
+          }
+          return nextEdge
+        })
+        : out.edges
+      if (normalizedEdges !== undefined) setOwn(out, 'edges', normalizedEdges)
+      setOwn(out, 'nodes', autoLayoutFlowNodes(normalizedNodes, normalizedEdges))
+    }
+  } else if (type === 'map' && Array.isArray(out.locations)) {
+    const locIds = new Set()
+    setOwn(out, 'locations', out.locations.map((loc, idx) => {
+      if (!isRecord(loc) || Object.hasOwn(loc, '__proto__')) return loc
+      const nextLoc = {}
+      for (const k of Object.keys(loc)) {
+        if (k === 'name' && loc.label === undefined) setOwn(nextLoc, 'label', loc.name)
+        else if (k === 'description' && loc.detail === undefined) setOwn(nextLoc, 'detail', loc.description)
+        else if ((k === 'lat' || k === 'lng' || k === 'lon') && loc.coordinates === undefined) continue
+        else setOwn(nextLoc, k, loc[k])
+      }
+      if (nextLoc.coordinates === undefined && isNumber(numeric(loc.lat)) && isNumber(numeric(loc.lng ?? loc.lon))) {
+        setOwn(nextLoc, 'coordinates', [numeric(loc.lng ?? loc.lon), numeric(loc.lat)])
+      }
+      if (nextLoc.id === undefined || (typeof nextLoc.id === 'string' && nextLoc.id.trim() !== '' && (!isName(nextLoc.id) || RESERVED.has(nextLoc.id)))) {
+        setOwn(nextLoc, 'id', safeIdentifier(typeof nextLoc.id === 'string' ? nextLoc.id : '', `loc_${idx + 1}`, locIds))
+      } else if (typeof nextLoc.id === 'string') locIds.add(nextLoc.id)
+      return nextLoc
+    }))
+  } else if (type === 'confirm' && depth < MAX_DEPTH && (typeof out.label === 'string' || typeof out.text === 'string')) {
+    // Models routinely pass `label` or `text` to `confirm`; lift it into a
+    // sibling text node instead of failing the card.
+    const promptText = String(out.label ?? out.text).trim()
+    delete out.label
+    delete out.text
+    if (promptText !== '') return { type: 'stack', children: [{ type: 'text', text: promptText }, out] }
+  }
+  return out
+}
+
 // Some providers serialize nested arrays as `{ item: [...] }` (XML-style) and
 // numbers as strings. Normalize the blueprint before validation so a model is
-// not asked to retry a call whose only fault is the provider's encoding.
-// Arrays are unwrapped; numeric fields and chart values accept a numeric string.
+// not asked to retry a call whose only fault is the provider's encoding or a
+// harmless schema alias.
 // A form field's `value` is the text the user starts with, so `value` inside a
 // `fields` array keeps its type: "42" must stay text, not become a number.
 // Returns a new object; the input is not mutated.
-export function normalizeView(value, inFormFields = false) {
-  if (Array.isArray(value)) return value.map(item => normalizeView(item, inFormFields))
-  if (!isRecord(value)) return value
-  const keys = Object.keys(value)
-  // Unwrap recursively: a provider may nest the wrapper, as { item: { item: [...] } }.
-  if (keys.length === 1 && keys[0] === 'item') {
-    const inner = normalizeView(value.item, inFormFields)
-    if (Array.isArray(inner)) return inner
+export function normalizeView(value, inFormFields = false, depth = 0, state = { seq: 0, ids: new Set(), nesting: 0 }) {
+  // `depth` is layout nesting for normalizeComponent. `state.nesting` counts
+  // every array element and object, which is what overflows the stack.
+  if (state.nesting > MAX_NORMALIZE_DEPTH) return value
+  state.nesting += 1
+  try {
+    if (Array.isArray(value)) return value.map(item => normalizeView(item, inFormFields, depth, state))
+    if (!isRecord(value)) return value
+    const keys = Object.keys(value)
+    // Unwrap recursively: a provider may nest the wrapper, as { item: { item: [...] } }.
+    if (keys.length === 1 && keys[0] === 'item') {
+      const inner = normalizeView(value.item, inFormFields, depth, state)
+      if (Array.isArray(inner)) return inner
+    }
+    // Define own properties: an incoming "__proto__" key must become data the
+    // validator can reject, not hit the prototype setter and vanish from the JSON.
+    const out = {}
+    const isLayout = typeof value.type === 'string' && LAYOUT.includes(value.type)
+    for (const key of keys) {
+      const nextDepth = isLayout && key === 'children' ? depth + 1 : depth
+      setOwn(out, key, normalizeView(value[key], inFormFields || key === 'fields', nextDepth, state))
+    }
+    for (const field of NUMERIC) if ((field !== 'value' || !inFormFields) && Object.hasOwn(out, field)) out[field] = numeric(out[field])
+    if (Array.isArray(out.values)) out.values = out.values.map(numeric)
+    return normalizeComponent(out, depth, state)
+  } finally {
+    state.nesting -= 1
   }
-  // Define own properties: an incoming "__proto__" key must become data the
-  // validator can reject, not hit the prototype setter and vanish from the JSON.
-  const out = {}
-  for (const key of keys) Object.defineProperty(out, key, { value: normalizeView(value[key], inFormFields || key === 'fields'), writable: true, enumerable: true, configurable: true })
-  for (const field of NUMERIC) if ((field !== 'value' || !inFormFields) && Object.hasOwn(out, field)) out[field] = numeric(out[field])
-  if (Array.isArray(out.values)) out.values = out.values.map(numeric)
-  return out
 }
 
 export function validateView(view) {
@@ -117,9 +456,25 @@ export function checkShownView(title, sent) {
   try { bytes = viewBytes(title, sent) } catch { return { error: 'The view is not JSON data.' } }
   if (bytes > VIEW_BYTE_LIMIT) return { error: `The view is ${bytes} bytes; the limit is ${VIEW_BYTE_LIMIT}.` }
   if (title !== undefined && title !== null && typeof title !== 'string') return { error: 'title: expected a string' }
-  const named = String(title ?? '').trim()
-  const view = normalizeView(sent)
-  const checked = validateView(view)
+  const inlineTitle = (title === undefined || title === null || title.trim() === '')
+    && isRecord(sent) && typeof sent.type === 'string' && typeof sent.title === 'string'
+    ? sent.title : undefined
+  if (isRecord(sent) && Object.hasOwn(sent, 'title') && sent.title !== undefined && sent.title !== null && typeof sent.title !== 'string') {
+    return { error: 'title: expected a string' }
+  }
+  const named = String(title || inlineTitle || '').trim()
+  // The byte check above only catches JSON.stringify. Normalization is capped,
+  // and any RangeError that still escapes becomes a rejected view rather than
+  // an uncaught exception on the tool call.
+  let view
+  let checked
+  try {
+    view = normalizeView(sent)
+    checked = validateView(view)
+  } catch (error) {
+    if (error instanceof RangeError) return { error: 'The view is nested too deeply to check.' }
+    throw error
+  }
   if (!checked.ok) return { error: checked.error }
   return { title: named, view, interactive: checked.interactive }
 }
@@ -241,6 +596,7 @@ function checkTable(node, path, ctx) {
       if (text.length > MAX_CELL) return `${at}: ${text.length} characters exceeds the limit of ${MAX_CELL}`
     }
   }
+  if (node.caption !== undefined) return checkValue(node, 'caption', path, ctx, 'string')
   return undefined
 }
 
@@ -434,8 +790,9 @@ function checkRichNode(node, path, ctx) {
       if (typeof curve.expression !== 'string' || curve.expression.length > 300) return `${at}.expression: expected a bounded formula`
       const compiled = compileFormula(curve.expression)
       if (compiled.error !== undefined) return `${at}.expression: ${compiled.error}`
-      const unknown = compiled.names.find(name => name !== 'x' && !ctx.inputs.has(name))
-      if (unknown !== undefined) return `${at}.expression: unknown name ${quoted(unknown)}`
+      // Defer identifier resolution to checkFormulas so curves can read sliders
+      // placed below the plot as well as outermost `let` bindings.
+      ctx.formulas.push({ source: curve.expression, path: `${at}.expression`, kind: 'curve' })
     }
     for (const key of ['domain', 'range']) if (node[key] !== undefined && (!pair(node[key]) || node[key][0] === node[key][1])) return `${path}.${key}: expected two distinct finite numbers`
     ctx.inputs.set(node.id, mathDefaults(node))
@@ -584,14 +941,15 @@ function checkId(node, path, ctx) {
 // Every formula parses, reads only inputs and names the view defines, and gives the
 // right kind of value with the inputs as the Bot set them.
 function checkFormulas(ctx) {
-  const known = new Set([...ctx.inputs.keys(), ...ctx.lets.keys()])
+  const userNames = [...ctx.inputs.keys(), ...ctx.lets.keys()]
+  const known = new Set([...userNames, ...MATH_CONSTANTS.keys()])
   const lets = new Map()
   for (const [name, entry] of ctx.lets) {
     if (ctx.inputs.has(name)) return `${entry.path}: ${quoted(name)} is already an input id`
     const compiled = compileFormula(entry.source)
     if (compiled.error !== undefined) return `${entry.path}: ${compiled.error}`
     const unknown = compiled.names.find(item => !known.has(item))
-    if (unknown !== undefined) return `${entry.path}: unknown name ${quoted(unknown)}; known: ${allowed([...known]) || '(none)'}`
+    if (unknown !== undefined) return `${entry.path}: unknown name ${quoted(unknown)}; known: ${allowed(userNames) || '(none)'}`
     lets.set(name, compiled.tree)
   }
   const lookup = createScope(ctx.inputs, lets)
@@ -602,8 +960,13 @@ function checkFormulas(ctx) {
   for (const formula of ctx.formulas) {
     const compiled = compileFormula(formula.source)
     if (compiled.error !== undefined) return `${formula.path}: ${compiled.error}`
+    if (formula.kind === 'curve') {
+      const unknown = compiled.names.find(item => item !== 'x' && !known.has(item))
+      if (unknown !== undefined) return `${formula.path}: unknown name ${quoted(unknown)}; known: ${allowed(['x', ...userNames])}`
+      continue
+    }
     const unknown = compiled.names.find(item => !known.has(item))
-    if (unknown !== undefined) return `${formula.path}: unknown name ${quoted(unknown)}; known: ${allowed([...known]) || '(none)'}`
+    if (unknown !== undefined) return `${formula.path}: unknown name ${quoted(unknown)}; known: ${allowed(userNames) || '(none)'}`
     const result = evaluate(compiled.tree, lookup)
     if (result.error !== undefined) return `${formula.path}: ${result.error}`
     const problem = kindProblem(result.value, formula.kind)
