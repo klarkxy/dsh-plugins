@@ -1,13 +1,16 @@
 /**
  * Local overrides at `$DSH_HOME/prompt-override/overrides.json`.
  *
- * Read once when the plugin starts; malformed fields are ignored individually
- * so one typo does not disable the whole plugin.
+ * Read once when the plugin starts. Malformed fields are ignored
+ * individually so one typo does not disable the whole plugin; a broken file
+ * (unreadable, invalid JSON, non-object root) is fatal instead — silently
+ * rewriting every session's prompt with the built-in defaults would hide the
+ * misconfiguration from the user.
  */
 
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import type { DevContextMode } from './rewrite.ts'
 
 /** Validated local overrides; every field is optional. */
@@ -19,10 +22,23 @@ export interface Overrides {
   sections?: Record<string, string | null>
 }
 
-/** @returns the configured DSH home, falling back to `~/.dsh`. */
+/**
+ * Expand supported tilde prefixes against the operating-system home — the
+ * same semantics as `@deepseek-ai/dsh-home-paths`.
+ */
+export function expandHomePath(path: string): string {
+  if (path === '~') return homedir()
+  if (path.startsWith('~/') || path.startsWith('~\\')) return join(homedir(), path.slice(2))
+  return path
+}
+
+/**
+ * @returns the configured DSH home, normalized the way the host does:
+ * `$DSH_HOME` wins (tilde-expanded, resolved absolute), then `~/.dsh`.
+ */
 export function resolveDshHome(env: NodeJS.ProcessEnv = process.env): string {
   const configured = String(env.DSH_HOME ?? '').trim()
-  return configured === '' ? join(homedir(), '.dsh') : configured
+  return resolve(configured === '' ? join(homedir(), '.dsh') : expandHomePath(configured))
 }
 
 /** @returns the absolute overrides file path. */
@@ -69,21 +85,24 @@ export function parseOverrides(raw: unknown): { overrides: Overrides, ignored: s
 }
 
 /**
- * Read the overrides file; a missing file is not an error.
+ * Read the overrides file; a missing file is not an error. An unreadable or
+ * unparseable file throws: this plugin rewrites the system prompt of every
+ * session, so a broken configuration must stop the plugin from loading
+ * rather than silently run on built-in defaults.
  * @param path - file to read.
- * @returns the overrides, ignored field names, and a read/parse error message if any.
+ * @returns the overrides and the names of individually ignored fields.
  */
-export function readOverrides(path: string = overridesPath()): { overrides: Overrides, ignored: string[], error?: string } {
+export function readOverrides(path: string = overridesPath()): { overrides: Overrides, ignored: string[] } {
   let text: string
   try {
     text = readFileSync(path, 'utf8')
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { overrides: {}, ignored: [] }
-    return { overrides: {}, ignored: [], error: (error as Error).message }
+    throw error
   }
-  try {
-    return parseOverrides(JSON.parse(text.replace(/^\uFEFF/, '')))
-  } catch (error) {
-    return { overrides: {}, ignored: [], error: (error as Error).message }
-  }
+  const raw: unknown = JSON.parse(text.replace(/^\uFEFF/, ''))
+  const parsed = parseOverrides(raw)
+  // A non-object root is a broken file, not a field typo.
+  if (parsed.ignored.includes('<root>')) throw new Error(`overrides file ${path} must contain a JSON object`)
+  return parsed
 }

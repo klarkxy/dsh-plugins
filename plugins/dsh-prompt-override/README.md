@@ -24,23 +24,23 @@ dsh plugin --profile web add @klarkxy/dsh-prompt-override
 
 | 内容 | 说明 |
 | --- | --- |
-| 通用工作规范 | 在身份说明之后插入一段英文规范：先理解再改动、最小改动、改完验证、不虚报结果、危险操作前确认、并行调用独立工具、用用户的语言简洁回复 |
-| 内置工具指引 | 改写 read、write、edit、glob、grep、bash/pwsh 的使用指引，补充 edit 唯一匹配、行号前缀、并行搜索、后台长任务等要点；工具未启用时对应指引照常不出现 |
-| DSH 开发说明 | 默认移除每轮附带的 DSH 自身源码与 Web GUI 开发说明；官方 `cordis`（定制 DSH）Preset 中保留 |
+| 通用工作规范 | 在身份说明之后插入一段英文规范：先理解再改动、最小改动、改完验证、不虚报结果、危险操作前确认、并行调用独立工具、用用户的语言简洁回复；宿主的计划模式、权限与 Preset 限制优先于本规范 |
+| 内置工具指引 | 改写 read、write、edit、glob、grep 的使用指引，补充 edit 唯一匹配、行号前缀、并行搜索等要点；bash/pwsh 不整段替换，在宿主原文后追加 shell 纪律；工具未启用时对应指引照常不出现 |
+| DSH 开发说明 | 默认移除每轮附带的 DSH 自身源码与 Web GUI 开发说明；识别依据是会话的 agent preset（官方 `cordis` 即定制 DSH，保留），拿不到 preset 时回退 persona 判定并从保留兜底 |
 
 其他插件贡献的提示词保持原样。
 
 ### 本地覆盖
 
-在 `$DSH_HOME/prompt-override/overrides.json`（未设置 `$DSH_HOME` 时为 `~/.dsh/prompt-override/overrides.json`）放置配置，修改后重启 profile 生效；格式错误的字段会被忽略：
+在 `$DSH_HOME/prompt-override/overrides.json`（未设置 `$DSH_HOME` 时为 `~/.dsh/prompt-override/overrides.json`）放置配置，修改后重启 profile 生效；格式错误的字段会被忽略，但文件本身无法读取或不是 JSON 对象时插件会加载失败——避免在用户不知情时用内置默认值改写所有会话：
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
 | `core` | `true` | 是否插入通用工作规范 |
 | `tools` | `true` | 是否改写内置工具指引 |
-| `devContext` | `"auto"` | DSH 开发说明：`auto`（仅 `cordis` Preset 保留）、`keep`、`drop` |
-| `coreText` | — | 用自己的文本替换通用工作规范 |
-| `sections` | `{}` | 按提示词段名替换文本，值为 `null` 时删除该段 |
+| `devContext` | `"auto"` | DSH 开发说明：`auto`（会话使用 `cordis` 等 DSH 开发类 Preset 时保留）、`keep`、`drop` |
+| `coreText` | — | 用自己的文本替换通用工作规范；设为空字符串会完全不插入 |
+| `sections` | `{}` | 按提示词段名替换文本，值为 `null` 时删除该段；显式声明可保留/替换默认会被移除的 DSH 开发说明段 |
 
 示例：
 
@@ -61,3 +61,4 @@ dsh plugin --profile web add @klarkxy/dsh-prompt-override
 - 只改写系统提示词，工具自身的说明与参数描述保持原生内容。
 - 使用 `minimal` Preset 的会话由宿主锁定完整提示词，本插件对其不生效。
 - 替换文本为英文，模型仍按规范使用用户的语言回复。
+- 改写按提示词段名进行：宿主未来改名或重排提示词段时，对应改写会整段失效并保留原生文本，不会错切。

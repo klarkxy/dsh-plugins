@@ -41,6 +41,9 @@ export function resolveSettings(config: Config, overrides: Overrides): RewriteSe
  * rewrite only changes prompt text and never tool visibility or permissions.
  */
 export function apply(ctx: Context, config: Config = {}): void {
+  // A broken overrides file stops the plugin here: this plugin rewrites every
+  // session's prompt, so running on hidden built-in defaults would silently
+  // ignore the user's configuration.
   const read = readOverrides()
   const settings = resolveSettings(config, read.overrides)
   const logger = installPluginLogger(ctx, PLUGIN_NAME, {
@@ -53,13 +56,15 @@ export function apply(ctx: Context, config: Config = {}): void {
       customCore: settings.coreText !== undefined,
     },
   })
-  if (read.error !== undefined) logger.warn('overrides.unreadable', 'Overrides file ignored.', undefined, { error: read.error })
   if (read.ignored.length > 0) logger.warn('overrides.invalid-fields', 'Invalid override fields ignored.', undefined, { fields: read.ignored.join(', ') })
 
-  ctx.effect(() => ctx.on('system-prompt/assemble', async (_assembly: PromptPresentation, _context, next) => {
+  ctx.effect(() => ctx.on('system-prompt/assemble', async (assembly: PromptPresentation, context: unknown, next) => {
     const original = await next()
     try {
-      return rewriteSections(original, settings)
+      // The assembly context's `agent` is host-provided and not part of the
+      // public AssembleContext type; read it defensively.
+      const agent = (context as { agent?: unknown } | undefined)?.agent
+      return rewriteSections(original, settings, agent)
     } catch (error) {
       // A rewrite bug must never take the session's prompt down.
       logger.error('rewrite.failed', 'Prompt rewrite failed; native prompt kept.', error)

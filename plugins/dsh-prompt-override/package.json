@@ -37,7 +37,8 @@
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-prompt-override/src"
+    "test": "vitest run --root ../.. --config vitest.editor-plugins.config.ts --maxWorkers=2 plugins/dsh-prompt-override/src",
+    "prepack": "pnpm build"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.4",

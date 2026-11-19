@@ -8,7 +8,11 @@
  * Tool sections are only rewritten when the native section rendered non-empty
  * text, because each native section already returns '' when its tool is not
  * visible in the assembling scope. The replacement therefore inherits the
- * host's visibility decision instead of re-deriving it.
+ * host's visibility decision instead of re-deriving it. The two shell
+ * sections are the exception: their native text is static and does not track
+ * visibility, so they are appended to (TOOL_APPENDS) rather than replaced —
+ * host updates survive, and a scope that denied the tool is not given more
+ * shell guidance than the host itself wrote.
  *
  * Tool schema `description` fields are deliberately left untouched: the only
  * public way to change them is an agent-scoped shadow registration, and the
@@ -28,7 +32,8 @@ Act as a careful senior engineer who owns the task end to end in the user's work
 - Understand before changing: read the relevant code, configuration and instructions first. Follow the project's existing conventions, structure, libraries and style instead of introducing your own.
 - Prefer the smallest change that fully solves the problem. Do not refactor, rename, reformat or "improve" unrelated code, and do not add features, files or dependencies the task does not need.
 - Fix root causes, not symptoms. Never make a failure disappear by weakening or deleting tests, swallowing errors, or hard-coding expected output.
-- When the task is clear, carry it through to a working result instead of stopping at a plan. Ask a brief question first only when the request is genuinely ambiguous or the next step is destructive or hard to reverse and was not requested.
+- When the task is clear, carry it through to a working result instead of stopping at a plan — unless the harness or the user has put this session in a planning-only mode, in which case follow that policy: stay within it and produce the plan it asks for. Host policies, preset restrictions and standing configuration take precedence over this contract whenever they conflict.
+- Ask a brief question first only when the request is genuinely ambiguous or the next step is destructive or hard to reverse and was not requested.
 - Stay within the scope the user asked for. Mention other problems you notice instead of silently fixing them.
 
 ## Verification
@@ -63,11 +68,19 @@ export type Presence = (name: string) => boolean
 /** A replacement for one native section, computed from the assembly. */
 export type SectionRewrite = (has: Presence) => string
 
+/** Extra guidance appended to a native section instead of replacing it. */
 const shellCommon = 'Use the shell for builds, tests, version control, package managers and other programs — not for reading, searching or editing files when the dedicated tools are available. '
   + 'Quote paths that contain spaces. Chain dependent commands in one call; issue independent commands as parallel calls. '
   + 'Start servers, watchers and other long-running processes as background jobs instead of blocking on them.'
 
-/** Native section name → replacement text. */
+/**
+ * Native section name → replacement text.
+ *
+ * The shell sections (`tool:bash`, `tool:pwsh`) are static host text whose
+ * presence does not track that scope's tool visibility, so they are appended
+ * to rather than replaced: host updates (new markers, platform facts) stay
+ * visible, and a scope that denied the tool still sees only native text.
+ */
 export const TOOL_REWRITES: Readonly<Record<string, SectionRewrite>> = {
   'tool:read': () =>
     'Use the read tool — not cat, head, tail, sed or Get-Content — to inspect text files. '
@@ -93,15 +106,12 @@ export const TOOL_REWRITES: Readonly<Record<string, SectionRewrite>> = {
     'Use the grep tool — not shell grep, rg, findstr or Select-String — to search file contents. '
     + 'Narrow it with path and include when you know where to look, and run independent searches in parallel.'
     + (has('tool:read') ? ' Use read on a matched file when you need surrounding context.' : ''),
+}
 
-  'tool:bash': () =>
-    'Check the [exit code: N] marker on every bash result; investigate failures before moving on. '
-    + shellCommon,
-
-  'tool:pwsh': () =>
-    'Non-zero exits are reported as `[exit code: N]` markers; investigate failures before moving on. '
-    + 'On Windows a killed process settles as `[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption as a termination, not a command failure. '
-    + shellCommon,
+/** Native section name → text appended to the native section (newline-separated). */
+export const TOOL_APPENDS: Readonly<Record<string, string>> = {
+  'tool:bash': shellCommon,
+  'tool:pwsh': shellCommon,
 }
 
 /** Sections that describe DSH's own development surface. */
