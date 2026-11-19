@@ -45,7 +45,7 @@ describe('portable Editor plugin boundaries', () => {
  * or model-route, including a side-effect `import 'pkg'`. This only checks
  * that the install dependency can stay a devDependency.
  */
-const bundledOnly = ['dsh-font', 'dsh-shortcuts']
+const bundledOnly = ['dsh-font', 'dsh-shortcuts', 'dsh-update']
 const bundledSpecifier = String.raw`['"](@klarkxy\/dsh-plugin-kit(?:\/[^'"]*)?|@klarkxy\/dsh-model-route(?:\/[^'"]*)?)['"]`
 const runtimeImport = new RegExp([
   String.raw`(?:^|[^\w.$])import\s+${bundledSpecifier}`,
@@ -81,6 +81,7 @@ const clientBundled = [
   'dsh-session-manager',
   'dsh-safe-auto',
   'dsh-git-commit',
+  'dsh-update',
 ]
 
 describe('browser client bundles do not require plugin-kit or model-route at runtime', () => {
