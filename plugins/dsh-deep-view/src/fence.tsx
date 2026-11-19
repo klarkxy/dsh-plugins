@@ -1,7 +1,7 @@
 // Inline deepui/deep-view fence renderer for the 'conversation.chat.markdown.fence'
 // hoc layer. Streaming keeps a quiet placeholder, a complete body mounts the
 // live WidgetCard even mid-stream, and a final invalid body keeps the raw code
-// reachable. Answers only fill the composer; nothing submits for the user.
+// reachable alongside its concrete validation diagnostic.
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { Button, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import { validateViewAnswer } from './core/index.js'
@@ -9,7 +9,7 @@ import type { ShownView } from './contracts.ts'
 import { compileDeepUi } from './parser.ts'
 import { answerText } from './answer-text.ts'
 import { fillComposerDraft, type ComposerActions, type InputSnapshot } from './draft.ts'
-import { WidgetCard, type MarkdownProps, type ViewLabels } from './widget.tsx'
+import { WidgetCard, type ViewLabels } from './widget.tsx'
 import type { ViewT } from './ui.tsx'
 
 /** Standard props a session-scoped markdown fence layer receives, plus owner content. */
@@ -37,7 +37,7 @@ const VIEW_KEYS: Record<string, string> = {
   Value: 'value', Series: 'series', View: 'view', Sources: 'sources', Progress: 'progress', 'Your answer': 'yourAnswer',
   'Local preview only; this card does not send an answer.': 'local',
   Options: 'options', Submit: 'submit', Cancel: 'cancel', Confirm: 'confirm', Send: 'send', Selected: 'selected',
-  'Fill composer': 'fillDraft', Steps: 'steps',
+  'Fill composer': 'fillDraft', Steps: 'steps', 'Composing interface…': 'composing', 'Point values': 'pointValues',
   'Node graph': 'nodeGraph', 'Select a node': 'selectNode', 'Nothing to explore': 'nothingToExplore',
   '{n} selected: {values}': 'selectedValues', 'Drag to select a range; double-click to clear': 'exploreIntervalHint',
   'Click points to select; double-click to clear': 'explorePointHint', 'The chart could not be drawn.': 'exploreFailed',
@@ -100,10 +100,12 @@ export function DeepViewFence(props: DeepViewFenceProps) {
     else fill({ action, values })
   }, [input.draft, fill])
 
-  // Final invalid bodies fall back: never blank, and the raw code stays viewable.
+  // Final invalid bodies fall back: never blank, surface the concrete field reason,
+  // and keep the raw code reachable inside a collapsible disclosure.
   if (compiled.state !== 'complete' && !props.streaming) {
+    const detail = compiled.state === 'invalid' && compiled.error ? `${t('invalid')} — ${compiled.error}` : t('invalid')
     return <div className="dvui-fence dvui-fence-failed" role="group" aria-label={t('invalid')}>
-      <p className="dvui-tool-error" role="status">{t('invalid')}</p>
+      <p className="dvui-tool-error" role="status">{detail}</p>
       {props.children ? <details className="dvui-fence-source"><summary>{t('code')}</summary><div className="dvui-fence-code">{props.children}</div></details> : null}
     </div>
   }

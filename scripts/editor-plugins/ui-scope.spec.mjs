@@ -23,6 +23,7 @@ const roots = {
   'dsh-session-manager': ['.dsh-free-chat'],
   'dsh-shortcuts': ['.shortcuts-root', '.shortcuts-fixed-root'],
   'dsh-unrestricted': ['[data-dsh-unrestricted-warning]'],
+  'dsh-update': ['.dsh-upd-root'],
   'dsh-web-search-manager': ['.ws-root'],
   'dsh-workspace-folders': ['.workspace-folders'],
   'dsh-zhihu': ['.zhihu-panel', '.zs-page'],

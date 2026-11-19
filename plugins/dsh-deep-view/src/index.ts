@@ -7,7 +7,7 @@ import { isSubagentSession } from '@klarkxy/dsh-plugin-kit/contracts'
 import { installPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { checkShownView, validateViewAnswer, viewSummary } from './core/index.js'
 import { answerText } from './answer-text.ts'
-import { DEEP_VIEW_PROMPT } from './prompt.ts'
+import { DEEP_VIEW_POLICY, DEEP_VIEW_PROMPT } from './prompt.ts'
 import { DEEP_VIEW_SKILL, DEEP_VIEW_SKILL_DESCRIPTION } from './skill.ts'
 import { HOST_SERVICE, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type DeepViewHost, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation, type ViewAnswerMetadata, type ViewSnapshot } from './contracts.ts'
 
@@ -76,6 +76,13 @@ type Host = Context & HostRpcContext & {
     register(definition: Record<string, unknown>): () => void
   }
   systemPrompt: {
+    section?(contribution: {
+      name: string
+      order: number
+      complete?: boolean
+      interpolate?: boolean
+      text: string | ((context: { agent?: { session?: unknown } }) => string)
+    }): () => void
     context(contribution: {
       name: string
       order: number
@@ -105,19 +112,21 @@ const short = (value: unknown, max = 160): value is string => typeof value === '
 const checkedShown = (title: unknown, view: unknown) => checkShownView(title, view) as ShownView | { error: string }
 const isShown = (value: ShownView | { error: string }): value is ShownView => !('error' in value)
 
-// Runtime context has its own order space. Keep reply-format guidance after
-// the host's identity and operational facts, independently of persona sections.
+// Keep system-prompt policy and runtime-context protocol after core operational
+// instructions while staying gated to user-facing root/fork sessions.
 const REPLY_INTERFACE_ORDER = 850
 
-// Header-only gate: a human root or ordinary fork, including one that is not
-// currently in the agent registry. A missing header contributes nothing.
-// Step tool filters are ignored; the prompt tells the model to call show_view
-// only when that tool is available, and inline deepui stays valid either way.
-function replyInterfaceContextText(context: { agent?: { session?: unknown } }): string {
+function isUserFacingSession(context: { agent?: { session?: unknown } }): boolean {
   const session = context.agent?.session
-  if (!isRecord(session) || !isRecord(session.header)) return ''
-  if (isSubagentSession(session)) return ''
-  return DEEP_VIEW_PROMPT
+  return isRecord(session) && isRecord(session.header) && !isSubagentSession(session)
+}
+
+function replyInterfacePolicyText(context: { agent?: { session?: unknown } }): string {
+  return isUserFacingSession(context) ? DEEP_VIEW_POLICY : ''
+}
+
+function replyInterfaceContextText(context: { agent?: { session?: unknown } }): string {
+  return isUserFacingSession(context) ? DEEP_VIEW_PROMPT : ''
 }
 
 // The host snapshots presentationMeta as JSON on every result, so a result
@@ -143,16 +152,16 @@ export function createShowViewTool(
 ): Record<string, unknown> {
   return {
     name: 'show_view',
-    description: 'Display or update a native view during work, or collect a validated optional answer. For comparisons, architecture diagrams and charts in the final reply, use a deepui fence directly. Common view instructions are in the reply-interface context; the deep-view skill is the reference for advanced widgets and answer controls. await_reply is only for answer controls.',
+    description: 'Display or update a live native progress/status card during multi-step work, or present an interactive card (options, confirm, form, submit) that collects a Host-validated user answer. For charts, architecture flows, tables and local estimates inside the reply text itself, emit a ```deepui block directly.',
     // tools.register() takes raw JSON Schema; the per-field DSL is only for defineTool().
     parameters: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'Optional short task heading; omit it when the reply already names the subject.' },
-        view: { type: 'object', additionalProperties: true, description: 'One ViewNode using the common protocol in the reply-interface context. The deep-view reference skill covers advanced widgets and answer controls.' },
-        await_reply: { type: 'boolean', description: 'Whether this card asks the user for a response.' },
-        view_id: { type: 'string', description: 'Update an existing view id in this session. Omit when creating a view.' },
-        base_revision: { type: 'integer', description: 'The positive revision this complete replacement is based on; required for an update and checked again by the Host.' },
+        title: { type: 'string', description: 'Optional short card heading; omit when the surrounding text already names the subject.' },
+        view: { type: 'object', additionalProperties: true, description: 'One ViewNode object following the Deep View protocol (e.g. steps, progress, options, confirm, form, stack, flow, chart).' },
+        await_reply: { type: 'boolean', description: 'Optional boolean; automatically inferred from whether the view contains answer controls (options, confirm, form, submit).' },
+        view_id: { type: 'string', description: 'Existing viewId to replace in place within this session. Omit when creating a new view.' },
+        base_revision: { type: 'integer', description: 'Latest positive revision being replaced; required when view_id is set.' },
       },
       required: ['view'],
     } satisfies ObjectJsonSchema,
@@ -174,10 +183,9 @@ export function createShowViewTool(
       if (typeof input.await_reply !== 'undefined' && typeof input.await_reply !== 'boolean') {
         return { owner: VIEW_OWNER, status: 'invalid', awaitReply: false, summary: 'await_reply: expected true or false' }
       }
-      const awaitReply = input.await_reply ?? shown.interactive
-      if (awaitReply !== shown.interactive) {
-        return { owner: VIEW_OWNER, status: 'invalid', awaitReply: false, summary: shown.interactive ? 'This card has answer controls; omit await_reply or set it true.' : 'A display-only card cannot wait for an answer; omit await_reply or set it false.' }
-      }
+      // Align awaitReply automatically with the card's actual answer controls so
+      // models passing await_reply:true on local sliders never fail a valid view.
+      const awaitReply = shown.interactive
       const id = exec.agent?.id
       const agent = id === undefined ? undefined : host.agents.get(id)
       const requestedId = input.view_id === undefined ? undefined : input.view_id
@@ -346,11 +354,9 @@ export async function apply(ctx: Context): Promise<void> {
       return moved
     },
   })
-  // One required runtime context supplies the protocol in every preset/mode:
-  // complete system prompts discard sections, and optional contexts may be
-  // suppressed. The host snapshots/deduplicates this context and refreshes it
-  // on admission; do not append manual messages or register a second section.
-  // Keep its lifetime paired with our tool so conflicts leave no stale guidance.
+  // Pair a concise system-prompt policy section (active in standard presets)
+  // with one required runtime context (carrying the full protocol across all
+  // presets, including complete custom prompts or suppressed optional contexts).
   ctx.effect(() => {
     if (host.tools.get('show_view')) {
       logger.warn('tool.already-registered', 'show_view is already registered by another plugin; skipping registration.')
@@ -366,8 +372,15 @@ export async function apply(ctx: Context): Promise<void> {
       host.logger?.warn('deep-view: show_view registration skipped: %s', error instanceof Error ? error.message : String(error))
       return () => {}
     }
+    let disposeSection: (() => void) | undefined
     let disposeContext: () => void
     try {
+      disposeSection = host.systemPrompt.section?.({
+        name: 'deep-view:policy',
+        order: REPLY_INTERFACE_ORDER,
+        interpolate: false,
+        text: replyInterfacePolicyText,
+      })
       disposeContext = host.systemPrompt.context({
         name: 'deep-view:reply-interface',
         order: REPLY_INTERFACE_ORDER,
@@ -377,6 +390,7 @@ export async function apply(ctx: Context): Promise<void> {
       })
     }
     catch (error) {
+      disposeSection?.()
       disposeTool()
       logger.warn('prompt.register-failed', 'Deep View reply context was not registered.', error)
       host.logger?.warn('deep-view: reply context registration skipped: %s', error instanceof Error ? error.message : String(error))
@@ -384,6 +398,7 @@ export async function apply(ctx: Context): Promise<void> {
     }
     return () => {
       disposeContext()
+      disposeSection?.()
       disposeTool()
     }
   }, 'deep-view.tool')

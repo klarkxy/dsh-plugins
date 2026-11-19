@@ -2,14 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { SystemPrompt, renderContextSnapshot, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import { apply, inject } from './index.ts'
-import { DEEP_VIEW_PROMPT } from './prompt.ts'
+import { DEEP_VIEW_POLICY, DEEP_VIEW_PROMPT } from './prompt.ts'
 
 const NAME = 'deep-view:reply-interface'
+const POLICY_NAME = 'deep-view:policy'
 type AssemblyContext = { agent?: { session?: unknown }; toolSet?: ReadonlySet<string> }
 type Contribution = {
   name: string
   order: number
   required?: boolean
+  complete?: boolean
   interpolate?: boolean
   text: (context: AssemblyContext) => string
 }
@@ -19,6 +21,7 @@ function registrationHost(options: {
   registerError?: Error
   contextError?: Error
 } = {}) {
+  const sections = new Map<string, Contribution>()
   const contexts = new Map<string, Contribution>()
   const tools = new Map<string, unknown>()
   const disposers: Array<() => void> = []
@@ -41,6 +44,11 @@ function registrationHost(options: {
     skills: { register: () => () => {} },
     webServer: { register: () => () => {} },
     systemPrompt: {
+      section(contribution: Contribution) {
+        if (sections.has(contribution.name)) throw new Error(`duplicate section ${contribution.name}`)
+        sections.set(contribution.name, contribution)
+        return () => { sections.delete(contribution.name) }
+      },
       context(contribution: Contribution) {
         contextCalls.push(contribution.name)
         if (options.contextError) throw options.contextError
@@ -56,7 +64,7 @@ function registrationHost(options: {
     provide() {},
     on() { return () => {} },
   }
-  return { host, contexts, tools, disposers, contextCalls }
+  return { host, sections, contexts, tools, disposers, contextCalls }
 }
 
 const root = { agent: { id: 'root', session: { id: 'root', header: {} } } }
@@ -74,6 +82,7 @@ function officialHost(includeRuntimeContext = true) {
   const ctx = new Context()
   const systemPrompt = new SystemPrompt(ctx, { includeHarnessIdentity: false, includeRuntimeContext })
   const fixture = registrationHost()
+  fixture.host.systemPrompt.section = contribution => systemPrompt.section(contribution as never)
   fixture.host.systemPrompt.context = contribution => systemPrompt.context(contribution as never)
   return { ...fixture, ctx, systemPrompt, dispose: () => { for (const dispose of fixture.disposers) dispose() } }
 }
@@ -92,7 +101,14 @@ describe('universal Deep View context with the official host service', () => {
     try {
       await apply(host as never)
       const assembly = await systemPrompt.assemble(rootContext as never)
-      expect(renderPrompt(assembly)).toBe('The selected persona stays intact.')
+      expect(renderPrompt(assembly)).toContain('The selected persona stays intact.')
+      if (complete) {
+        expect(renderPrompt(assembly)).toBe('The selected persona stays intact.')
+        expect(assembly.sections.some(section => section.name === POLICY_NAME)).toBe(false)
+      } else {
+        expect(renderPrompt(assembly)).toContain(DEEP_VIEW_POLICY)
+        expect(assembly.sections.some(section => section.name === POLICY_NAME)).toBe(true)
+      }
       expect(assembly.sections.some(section => section.name === NAME)).toBe(false)
       expect(assembly.contexts.filter(entry => entry.name === NAME)).toEqual([
         { name: NAME, text: DEEP_VIEW_PROMPT, interpolate: false },
@@ -103,7 +119,9 @@ describe('universal Deep View context with the official host service', () => {
       expect(renderContextSnapshot(repeated)).toBe(renderContextSnapshot(assembly))
       expect(repeated.contexts.filter(entry => entry.name === NAME)).toHaveLength(1)
     } finally { fixture.dispose() }
-    expect(renderContextSnapshot(await systemPrompt.assemble(rootContext as never))).not.toContain(DEEP_VIEW_PROMPT)
+    const cleaned = await systemPrompt.assemble(rootContext as never)
+    expect(renderPrompt(cleaned)).not.toContain(DEEP_VIEW_POLICY)
+    expect(renderContextSnapshot(cleaned)).not.toContain(DEEP_VIEW_PROMPT)
     expect(fixture.tools.has('show_view')).toBe(false)
   })
 
@@ -158,6 +176,7 @@ describe('universal Deep View context with the official host service', () => {
       const assembly = await systemPrompt.assemble({ ...rootContext, toolSet: new Set() } as never)
       expect(renderPrompt(assembly)).toContain('Plan before execution.')
       expect(renderPrompt(assembly)).toContain('Execute tools only through run_code.')
+      expect(renderPrompt(assembly)).toContain(DEEP_VIEW_POLICY)
       expect(assembly.tools).toEqual([])
       expect(renderContextSnapshot(assembly)).toContain(DEEP_VIEW_PROMPT)
     } finally { fixture.dispose() }
@@ -169,10 +188,12 @@ describe('universal Deep View context with the official host service', () => {
       await apply(fixture.host as never)
       for (const context of [root, fork]) {
         const assembly = await fixture.systemPrompt.assemble({ ...context, scope: context.agent } as never)
+        expect(renderPrompt(assembly)).toContain(DEEP_VIEW_POLICY)
         expect(renderContextSnapshot(assembly)).toContain(DEEP_VIEW_PROMPT)
       }
       for (const context of [child, {}]) {
         const assembly = await fixture.systemPrompt.assemble(context as never)
+        expect(renderPrompt(assembly)).not.toContain(DEEP_VIEW_POLICY)
         expect(renderContextSnapshot(assembly)).not.toContain(DEEP_VIEW_PROMPT)
       }
     } finally { fixture.dispose() }
@@ -180,12 +201,15 @@ describe('universal Deep View context with the official host service', () => {
 })
 
 describe('Deep View context registration lifecycle', () => {
-  it('registers one required literal context independent of agent registry and tool filters', async () => {
+  it('registers paired policy section and required literal context independent of agent registry and tool filters', async () => {
     expect(inject).toContain('systemPrompt')
-    const { host, contexts, contextCalls } = registrationHost()
+    const { host, sections, contexts, contextCalls } = registrationHost()
     await apply(host as never)
     expect(contextCalls).toEqual([NAME])
+    expect(sections.get(POLICY_NAME)).toMatchObject({ name: POLICY_NAME, order: 850, interpolate: false })
     expect(registered(contexts)).toMatchObject({ name: NAME, order: 850, required: true, interpolate: false })
+    expect(sections.get(POLICY_NAME)!.text(root)).toBe(DEEP_VIEW_POLICY)
+    expect(sections.get(POLICY_NAME)!.text(child)).toBe('')
     expect(registered(contexts).text(root)).toBe(DEEP_VIEW_PROMPT)
     expect(registered(contexts).text({ ...fork, toolSet: new Set() })).toBe(DEEP_VIEW_PROMPT)
     expect(registered(contexts).text(child)).toBe('')
@@ -194,47 +218,55 @@ describe('Deep View context registration lifecycle', () => {
     expect(registered(contexts).text({ agent: { session: { header: 'subagent' } } })).toBe('')
   })
 
-  it('releases context with the tool and supports a clean registration after reload', async () => {
-    const { host, contexts, tools, disposers } = registrationHost()
+  it('releases section and context with the tool and supports a clean registration after reload', async () => {
+    const { host, sections, contexts, tools, disposers } = registrationHost()
     await apply(host as never)
+    expect(sections.size).toBe(1)
     expect(contexts.size).toBe(1)
     for (const dispose of disposers) dispose()
+    expect(sections.size).toBe(0)
     expect(contexts.size).toBe(0)
     expect(tools.size).toBe(0)
     disposers.length = 0
     await apply(host as never)
+    expect(sections.size).toBe(1)
     expect(contexts.size).toBe(1)
     expect(registered(contexts).text(root)).toBe(DEEP_VIEW_PROMPT)
   })
 
   it('does not duplicate a live registration or dispose another instance', async () => {
-    const { host, contexts, contextCalls, disposers } = registrationHost()
+    const { host, sections, contexts, contextCalls, disposers } = registrationHost()
     await apply(host as never)
     const first = disposers.splice(0)
     await apply(host as never)
     expect(contextCalls).toEqual([NAME])
     for (const dispose of disposers) dispose()
+    expect(sections.size).toBe(1)
     expect(contexts.size).toBe(1)
     for (const dispose of first) dispose()
+    expect(sections.size).toBe(0)
     expect(contexts.size).toBe(0)
   })
 
   it('leaves no context when tool registration conflicts or fails', async () => {
     const conflict = registrationHost({ existingTool: true })
     await apply(conflict.host as never)
+    expect(conflict.sections.size).toBe(0)
     expect(conflict.contextCalls).toEqual([])
     expect(conflict.tools.get('show_view')).toMatchObject({ foreign: true })
     const failed = registrationHost({ registerError: new Error('register failed') })
     await expect(apply(failed.host as never)).resolves.toBeUndefined()
+    expect(failed.sections.size).toBe(0)
     expect(failed.contexts.size).toBe(0)
     expect(failed.contextCalls).toEqual([])
     expect(failed.tools.size).toBe(0)
   })
 
-  it('rolls back tool registration if context registration fails', async () => {
-    const { host, contexts, contextCalls, tools } = registrationHost({ contextError: new Error('context failed') })
+  it('rolls back tool and section registration if context registration fails', async () => {
+    const { host, sections, contexts, contextCalls, tools } = registrationHost({ contextError: new Error('context failed') })
     await expect(apply(host as never)).resolves.toBeUndefined()
     expect(contextCalls).toEqual([NAME])
+    expect(sections.size).toBe(0)
     expect(contexts.size).toBe(0)
     expect(tools.has('show_view')).toBe(false)
   })

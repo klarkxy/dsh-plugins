@@ -56,6 +56,32 @@ describe('normalizeView', () => {
     const form = normalizeView({ type: 'form', id: 'f', fields: [{ id: 'a', label: 'A', value: '42' }] }) as { fields: { value: unknown }[] }
     expect(form.fields[0].value).toBe('42')
   })
+  it('normalizes model authoring shorthands: object table rows, tone aliases, auto-laid-out flow and confirm labels', () => {
+    const shownTable = checkShownView('', {
+      type: 'table', title: 'Comparison',
+      columns: ['Option', 'Latency'],
+      rows: [{ Option: 'Local', Latency: '12ms' }, ['Remote', '80ms']],
+    })
+    expect(shownTable).not.toHaveProperty('error')
+    if ('view' in shownTable) {
+      expect(shownTable.title).toBe('Comparison')
+      expect(shownTable.view.rows).toEqual([['Local', '12ms'], ['Remote', '80ms']])
+    }
+    const shownFlow = checkShownView('', {
+      type: 'flow',
+      nodes: [{ id: 'api-gw', label: 'Gateway', tone: 'good' }, { id: 'db-main', label: 'Database', tone: 'danger' }],
+      edges: [{ from: 'api-gw', to: 'db-main', label: 'SQL' }],
+    })
+    expect(shownFlow).not.toHaveProperty('error')
+    if ('view' in shownFlow) {
+      expect(shownFlow.view.nodes?.[0]).toMatchObject({ id: 'api_gw', tone: 'success', x: 0, y: 0 })
+      expect(shownFlow.view.nodes?.[1]).toMatchObject({ id: 'db_main', tone: 'bad', x: 236, y: 0 })
+      expect(shownFlow.view.edges?.[0]).toMatchObject({ source: 'api_gw', target: 'db_main', label: 'SQL' })
+    }
+    const shownConfirm = checkShownView('', { type: 'confirm', label: 'Proceed with deployment?' })
+    expect(shownConfirm).not.toHaveProperty('error')
+    if ('view' in shownConfirm) expect(shownConfirm.view.type).toBe('stack')
+  })
   it('keeps __proto__ as an own data property instead of mutating the prototype', () => {
     const out = normalizeView(JSON.parse('{"__proto__":{"polluted":true}}')) as Record<string, unknown>
     expect(Object.hasOwn(out, '__proto__')).toBe(true)
@@ -89,15 +115,16 @@ describe('validateView / checkShownView: math', () => {
     expect(validateView({ type: 'math', id: 'm', mathPoints: [{ id: 'p', x: 0, y: 0 }], curves: [] }).ok).toBe(true)
     expect(validateView({ type: 'math', id: 'm', mathPoints: [{ id: 'p', x: 0, y: 0 }] }).ok).toBe(true)
   })
-  it('checks curve expressions at the node position: names must be seen already', () => {
-    // compileFormula runs while walking the node; unlike `=` formulas checked at
-    // the end, a curve may only read inputs declared BEFORE the math node.
+  it('allows curve expressions to read inputs in any order, outermost let bindings and PI', () => {
     const speed = { type: 'number', id: 'speed', label: 'S', value: 2 }
     const after = stack(speed, { type: 'math', id: 'm', mathPoints: [{ id: 'p', x: 0, y: 0 }], curves: [{ expression: 'speed * x' }] })
     expect(validateView(after).ok).toBe(true)
-    const before = stack({ type: 'math', id: 'm', mathPoints: [{ id: 'p', x: 0, y: 0 }], curves: [{ expression: 'speed * x' }] }, speed)
-    expect(validateView(before).error).toContain('unknown name "speed"')
-    // 'x' is the curve's free variable, but other names need a declaration.
+    const before = { type: 'stack', let: { scaled: 'speed * 0.5' }, children: [
+      { type: 'math', id: 'm', mathPoints: [{ id: 'p', x: 0, y: 0 }], curves: [{ expression: 'scaled * x^2 + sin(PI * x)' }] },
+      speed,
+    ] }
+    expect(validateView(before).ok).toBe(true)
+    // 'x' is the curve's free variable, but undeclared names are still rejected.
     expect(validateView({ type: 'math', id: 'm', mathPoints: [{ id: 'p', x: 0, y: 0 }], curves: [{ expression: 'mystery * x' }] }).error).toContain('unknown name')
     expect(validateView({ type: 'math', id: 'm', mathPoints: [{ id: 'p', x: 0, y: 0 }], curves: [{ expression: 'x +' }] }).error).toContain('expression')
     expect(validateView({ type: 'math', id: 'm', mathPoints: [{ id: 'p', x: 0, y: 0 }], curves: [{ expression: `x * ${'a'.repeat(300)}` }] }).error).toContain('bounded formula')
@@ -143,6 +170,42 @@ describe('validateView: flow / explore / map', () => {
   it('rejects ids that formulas cannot read and duplicate ids across rich nodes', () => {
     expect(validateView({ type: 'flow', id: 'has-dash', nodes: [{ id: 'a', label: 'A', x: 0, y: 0 }], edges: [] }).error).toContain('id')
     expect(validateView(stack(flowNode, { ...mapNode, id: 'net' })).error).toContain('duplicate id')
+  })
+})
+
+describe('checkShownView deep nesting', () => {
+  const nestedArray = (layers: number) => {
+    let value: unknown = 0
+    for (let layer = 0; layer < layers; layer += 1) value = [value]
+    return value
+  }
+  const utf8Length = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length
+
+  it('returns a validation error for a 1600-layer nested array inside the byte limit', () => {
+    const sent = nestedArray(1600)
+    expect(utf8Length(sent)).toBe(3201)
+    expect(utf8Length(sent)).toBeLessThan(8192)
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      expect(checkShownView('', sent)).toEqual({ error: 'view: expected a component object' })
+    }
+  })
+
+  it('still rejects a nested array deeper than the old stack overflow, without throwing', () => {
+    const sent = nestedArray(4000)
+    expect(utf8Length(sent)).toBe(8001)
+    expect(utf8Length(sent)).toBeLessThan(8192)
+    expect(checkShownView('', sent)).toEqual({ error: 'view: expected a component object' })
+  })
+
+  it('rejects a deeply nested table cell as too long instead of throwing', () => {
+    const sent = {
+      type: 'table',
+      columns: [{ key: 'a', label: 'A' }],
+      rows: [[nestedArray(1600)]],
+    }
+    expect(utf8Length(sent)).toBeLessThan(8192)
+    const shown = checkShownView('', sent) as { error?: string }
+    expect(shown.error).toContain('characters exceeds the limit')
   })
 })
 

@@ -75,6 +75,7 @@ The code is the developer documentation. Releases follow the [release guide](REL
 | [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-shortcuts](plugins/dsh-shortcuts/README.en.md) | Draft (`draft`) | New shortcut manager and extensible command palette; awaiting first-release acceptance. |
 | [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
+| [@klarkxy/dsh-update](plugins/dsh-update/README.en.md) | Draft (`draft`) | New release-changelog preview before confirming updates; awaiting first-release acceptance. |
 | [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-workspace-folders](plugins/dsh-workspace-folders/README.en.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-zhihu](plugins/dsh-zhihu/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |

@@ -11,7 +11,7 @@ import type { TopLevelSpec } from 'vega-lite'
 import { asText } from './core/index.js'
 import { isRecord, type Scalar, type ViewNode } from './contracts.ts'
 import type { RichNodeProps } from './rich-types.ts'
-import { formatNumber } from './chart.tsx'
+import { formatNumber, PALETTE } from './chart.tsx'
 import { english, type ViewT } from './ui.tsx'
 
 export const PICK_SIGNAL = 'pick'
@@ -77,7 +77,7 @@ export function exploreSpec(node: ViewNode, editable = true, selection?: unknown
   const initial = exploreSelectionValue(meta, selection, xKey, yKey)
   const spec: Record<string, unknown> = {
     data: { values: rows },
-    mark: { type: 'circle', tooltip: true, size: 64, opacity: 0.9 },
+    mark: { type: 'circle', tooltip: true, size: 72, opacity: 0.9 },
     width: 'container',
     height: 260,
     autosize: { type: 'fit-x', contains: 'padding' },
@@ -85,14 +85,14 @@ export function exploreSpec(node: ViewNode, editable = true, selection?: unknown
     encoding: {
       x: { field: xKey, type: 'quantitative' },
       y: { field: yKey, type: 'quantitative' },
-      color: colorKey === null ? { value: 'var(--dsw-alias-state-business-primary)' } : { field: colorKey, type: 'nominal', scale: { range: ['var(--dsw-alias-state-business-primary)', 'var(--dsw-alias-brand-primary)', 'var(--dsw-alias-label-tertiary)'] } },
+      color: colorKey === null ? { value: 'var(--dsw-alias-state-business-primary)' } : { field: colorKey, type: 'nominal', scale: { range: [...PALETTE] } },
       opacity: { condition: { param: meta.signal, value: 1 }, value: 0.28 },
     },
     config: {
       background: 'transparent',
       view: { stroke: 'transparent' },
-      axis: { domain: false, tickSize: 0, gridDash: [3, 3], gridColor: 'var(--dsw-alias-border-l2)', labelColor: 'var(--dsw-alias-label-tertiary)', titleColor: 'var(--dsw-alias-label-secondary)', labelFontSize: 11 },
-      legend: { labelColor: 'var(--dsw-alias-label-secondary)', titleColor: 'var(--dsw-alias-label-secondary)', labelFontSize: 11, titleFontSize: 11 },
+      axis: { domain: false, tickSize: 0, gridDash: [3, 3], gridColor: 'var(--dsw-alias-border-l2)', labelColor: 'var(--dsw-alias-label-tertiary)', titleColor: 'var(--dsw-alias-label-secondary)', labelFontSize: 12 },
+      legend: { labelColor: 'var(--dsw-alias-label-secondary)', titleColor: 'var(--dsw-alias-label-secondary)', labelFontSize: 12, titleFontSize: 12 },
     },
   }
   return spec as unknown as TopLevelSpec

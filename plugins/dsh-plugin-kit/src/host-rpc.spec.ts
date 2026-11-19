@@ -1,7 +1,7 @@
 import { createServer, request as httpRequest, type Server } from 'node:http'
 import { once } from 'node:events'
 import { afterEach, expect, it } from 'vitest'
-import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
+import { isHostRpcEndpoint, registerHostRpc, type HostRpcContext } from './host-rpc.ts'
 import type { RpcResult } from './contracts.ts'
 
 const servers: Server[] = []
@@ -82,6 +82,46 @@ it('serializes RpcResult shapes that carry extra error fields', async () => {
     type: 'server-response', rpcId: 'test', result: extra,
   })
   expect(detailed.ok).toBe(false)
+})
+
+it('routes camelCase endpoints and rejects separators the default pattern does not name', async () => {
+  expect(isHostRpcEndpoint('plugins.checkAll')).toBe(true)
+  expect(isHostRpcEndpoint('plugins.checkOne')).toBe(true)
+  expect(isHostRpcEndpoint('dsh.applyCli')).toBe(true)
+  expect(isHostRpcEndpoint('plugins.apply')).toBe(true)
+  expect(isHostRpcEndpoint('status')).toBe(true)
+  expect(isHostRpcEndpoint('../plugins.apply')).toBe(false)
+  expect(isHostRpcEndpoint('plugins/checkAll')).toBe(false)
+  expect(isHostRpcEndpoint('plugins..checkAll')).toBe(false)
+  expect(isHostRpcEndpoint('.plugins.checkAll')).toBe(false)
+
+  let handler: Parameters<HostRpcContext['webServer']['register']>[0]['handler']
+  const seen: string[] = []
+  registerHostRpc({
+    connection: { requestRejection: () => undefined },
+    webServer: { register: route => { handler = route.handler; return () => {} } },
+  }, '/dsh-plugin-kit', async endpoint => {
+    seen.push(endpoint)
+    return { ok: true, value: { endpoint } }
+  })
+  const server = createServer((req, res) => { void handler(req, res) })
+  servers.push(server)
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  if (!address || typeof address === 'string') throw new Error('No server address')
+  const accepted = await request(`http://127.0.0.1:${address.port}/dsh-plugin-kit/plugins.checkAll`, {
+    type: 'client-request', rpcId: 'camel', method: 'plugins.checkAll', payload: {},
+  })
+  const rejected = await request(`http://127.0.0.1:${address.port}/dsh-plugin-kit/plugins/checkAll`, {
+    type: 'client-request', rpcId: 'slash', method: 'plugins/checkAll', payload: {},
+  })
+  expect(accepted.status).toBe(200)
+  expect(await accepted.json()).toEqual({
+    type: 'server-response', rpcId: 'camel', result: { ok: true, value: { endpoint: 'plugins.checkAll' } },
+  })
+  expect(rejected.status).toBe(404)
+  expect(seen).toEqual(['plugins.checkAll'])
 })
 
 it('supplies the required native connection failure details when a plugin omits them', async () => {
