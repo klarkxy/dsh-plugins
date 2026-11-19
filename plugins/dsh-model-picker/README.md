@@ -10,7 +10,7 @@
 
 - **元素周期表风格卡片视图（默认）**：
   - 每张卡片展示序号、右上角可切换的供应商下拉菜单、居中大号模型简称（小字显示完整模型名），以及底部紧贴的推理强度分格。
-  - **预置常见模型简称**：内置 Gemini 4 元素符号（`H`、`He`、`C`、`Ne`、`Ar`、`Kr`、`Xe` 等）、Claude（`Op`/`Fb`/`Sn`/`Hk`）、DeepSeek（`Ds`/`Dr`/`Dc`）、OpenAI GPT/Codex/o 系列（`Gp`/`Cx`/`O3`/`O4`）、Grok（`Gr` 搭配版本角标区分 `4.6` / `4.7` 等并行版本）、GLM、MiniMax、Kimi、Qwen、Step 等常见模型简称，未匹配模型自动生成两位简称；双击简称可就地改名，清空恢复默认。
+  - **预置常见模型简称**：覆盖主流实验室与 `models.dev` 常见模型家族，包括 Gemini 4 元素符号（`H`、`He`、`C`、`Ne`、`Ar`、`Kr`、`Xe` 等）、Nano Banana / Gemma、Claude（`Op`/`Fb`/`Sn`/`Hk`）、DeepSeek（`Ds`/`Dr`/`Dc`）、OpenAI GPT-6 Astra/Sol/Luna/Terra/Cyber 与 Codex/o 系列、Grok（`Gr` 搭配版本角标区分 `4.6` / `4.7` 等并行版本）、GLM、MiniMax、Kimi、Qwen/QwQ、小米 MiMo、腾讯 Hy/混元、字节 Seed/Seedance/豆包、美团 LongCat、Ling/Ring、Step、Meta Muse/Llama、Microsoft MAI Code/Phi、NVIDIA Nemotron、Mistral 全系、Amazon Nova、Cohere Command、Perplexity Sonar、Inception Mercury（`Hg`）、Thinking Machines Inkling、Reflection Beam、Sakana Fugu、Upstage Solar 等，未匹配模型自动生成两位简称；双击简称可就地改名，清空恢复默认。
   - **同模型多渠道合并**：来自不同供应商的同名模型合并为同一张卡片，通过右上角下拉菜单直接切换供应商；同一家族不同版本保持为独立卡片并用角标区分。
   - **支持不传思考强度**：直接点击卡片中间只选中模型、不传推理强度；点击底部某个强度格一步选中模型与对应强度，再次点击已激活格子可取消。
   - **自由排版与宽度调节**：顶部滑块可实时调节卡片宽窄；拖拽卡片到目标卡片左右边缘执行「插入」，拖到中间区域执行「原地交换」，顺序、宽度、别名和首选供应商保存在当前浏览器中。

@@ -1,6 +1,7 @@
 /**
  * Periodic-table style short-name presets and canonical model grouping for
- * `@klarkxy/dsh-model-picker`.
+ * `@klarkxy/dsh-model-picker`, covering mainstream model families cataloged on
+ * models.dev as well as deterministic fallbacks for custom models.
  *
  * Grouping rule:
  * - Same model across multiple providers (e.g. `google/gemini-4-neon` and
@@ -68,12 +69,16 @@ function compactVersion(raw: string | undefined): string {
 }
 
 const PRESET_RULES: readonly PresetRule[] = [
-  // Gemini 4 periodic-table element models (Hydrogen, Carbon, Neon, Argon, etc.)
+  // Google: Gemini 4 periodic-table element models (Hydrogen, Carbon, Neon, Argon, etc.)
   ...GEMINI_ELEMENTS.map(([element, symbol]): PresetRule => ({
     pattern: new RegExp(`(?:^|[-_.])gemini[-_.]?4(?:\\.\\d+)?[-_.]?${element}(?:$|[-_.])`, 'i'),
     resolve: () => ({ short: symbol, version: '', family: 'gemini' }),
   })),
-  // Gemini classic / numbered series (2.5, 3, 3.1, 3.5 ...)
+  // Google: Nano Banana, Gemini numbered series, Gemma
+  {
+    pattern: /nano[-_.]?banana[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Nb', version: compactVersion(m[1]), family: 'gemini' }),
+  },
   {
     pattern: /gemini[-_.]?(\d+(?:[.-]\d+)?)[-_.]?flash[-_.]?lite/i,
     resolve: m => ({ short: 'Gm', version: `${compactVersion(m[1])}L`, family: 'gemini' }),
@@ -89,6 +94,10 @@ const PRESET_RULES: readonly PresetRule[] = [
   {
     pattern: /gemini[-_.]?(\d+(?:[.-]\d+)?)/i,
     resolve: m => ({ short: 'Gm', version: compactVersion(m[1]), family: 'gemini' }),
+  },
+  {
+    pattern: /gemma[-_.]?(\d+(?:[.-]\d+)?)/i,
+    resolve: m => ({ short: 'Ga', version: compactVersion(m[1]), family: 'gemini' }),
   },
 
   // Anthropic Claude (Opus, Fable, Sonnet, Haiku)
@@ -151,14 +160,38 @@ const PRESET_RULES: readonly PresetRule[] = [
     resolve: () => ({ short: 'Ds', version: '', family: 'deepseek' }),
   },
 
-  // OpenAI GPT / Codex / o-series
+  // OpenAI GPT (Astra, Sol, Luna, Terra, Cyber, Codex, Image, OSS, mini/nano/4o) & o-series
   {
     pattern: /(?:gpt[-_.]?(\d+(?:[.-]\d+)?)[-_.]?)?codex(?:[-_.]?(\d+(?:[.-]\d+)?))?/i,
     resolve: m => ({ short: 'Cx', version: compactVersion(m[1] || m[2]), family: 'openai' }),
   },
   {
+    pattern: /gpt[-_.]?(\d+(?:[.-]\d+)?)[-_.]?astra/i,
+    resolve: m => ({ short: 'As', version: compactVersion(m[1]), family: 'openai' }),
+  },
+  {
+    pattern: /gpt[-_.]?(\d+(?:[.-]\d+)?)[-_.]?sol/i,
+    resolve: m => ({ short: 'So', version: compactVersion(m[1]), family: 'openai' }),
+  },
+  {
+    pattern: /gpt[-_.]?(\d+(?:[.-]\d+)?)[-_.]?luna/i,
+    resolve: m => ({ short: 'Lu', version: compactVersion(m[1]), family: 'openai' }),
+  },
+  {
     pattern: /gpt[-_.]?(\d+(?:[.-]\d+)?)[-_.]?terra/i,
     resolve: m => ({ short: 'Gt', version: compactVersion(m[1]), family: 'openai' }),
+  },
+  {
+    pattern: /gpt[-_.]?(\d+(?:[.-]\d+)?)[-_.]?cyber/i,
+    resolve: m => ({ short: 'Cy', version: compactVersion(m[1]), family: 'openai' }),
+  },
+  {
+    pattern: /gpt[-_.]?image[-_.]?(\d+(?:[.-]\d+)?)/i,
+    resolve: m => ({ short: 'Gi', version: compactVersion(m[1]), family: 'openai' }),
+  },
+  {
+    pattern: /gpt[-_.]?oss[-_.]?(\d+(?:[.-]\d+)?b?)?/i,
+    resolve: m => ({ short: 'Go', version: compactVersion(m[1]), family: 'openai' }),
   },
   {
     pattern: /gpt[-_.]?(\d+(?:[.-]\d+)?)[-_.]?mini/i,
@@ -193,10 +226,14 @@ const PRESET_RULES: readonly PresetRule[] = [
     resolve: m => ({ short: `O${m[1]}`, version: '', family: 'openai' }),
   },
 
-  // xAI Grok (explicitly preserves 4.6 vs 4.7, etc.)
+  // xAI Grok (explicitly preserves parallel versions such as 4.6 vs 4.7)
   {
     pattern: /grok[-_.]?code(?:[-_.]?(\d+(?:[.-]\d+)?))?/i,
     resolve: m => ({ short: 'Gc', version: compactVersion(m[1]), family: 'grok' }),
+  },
+  {
+    pattern: /grok[-_.]?imagine(?:[-_.]?\w+)*[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Gi', version: compactVersion(m[1]), family: 'grok' }),
   },
   {
     pattern: /grok[-_.]?(\d+(?:[.-]\d+)?)[-_.]?mini/i,
@@ -211,7 +248,7 @@ const PRESET_RULES: readonly PresetRule[] = [
     resolve: () => ({ short: 'Gr', version: '', family: 'grok' }),
   },
 
-  // Zhipu GLM
+  // Zhipu AI / Z.ai GLM
   {
     pattern: /glm[-_.]?(\d+(?:[.-]\d+)?)[-_.]?flash/i,
     resolve: m => ({ short: 'Gl', version: `${compactVersion(m[1])}F`, family: 'cn' }),
@@ -235,11 +272,19 @@ const PRESET_RULES: readonly PresetRule[] = [
     resolve: m => ({ short: 'Mm', version: compactVersion(m[1]), family: 'cn' }),
   },
   {
+    pattern: /minimax[-_.]?h(\d+(?:[.-]\d+)?)/i,
+    resolve: m => ({ short: 'Mh', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
     pattern: /minimax/i,
     resolve: () => ({ short: 'Mm', version: '', family: 'cn' }),
   },
 
-  // Moonshot Kimi
+  // Moonshot AI Kimi
+  {
+    pattern: /kimi[-_.]?k(\d+(?:[.-]\d+)?)[-_.]?pro/i,
+    resolve: m => ({ short: 'Km', version: `${compactVersion(m[1])}P`, family: 'cn' }),
+  },
   {
     pattern: /kimi[-_.]?k(\d+(?:[.-]\d+)?)/i,
     resolve: m => ({ short: 'Km', version: compactVersion(m[1]), family: 'cn' }),
@@ -249,14 +294,26 @@ const PRESET_RULES: readonly PresetRule[] = [
     resolve: () => ({ short: 'Km', version: '', family: 'cn' }),
   },
 
-  // Alibaba Qwen
+  // Alibaba Qwen / QwQ
   {
     pattern: /qwq[-_.]?(\d+(?:[.-]\d+)?)?/i,
     resolve: m => ({ short: 'Qq', version: compactVersion(m[1]), family: 'cn' }),
   },
   {
+    pattern: /qwen[-_.]?image[-_.]?(\d+(?:[.-]\d+)?)/i,
+    resolve: m => ({ short: 'Qi', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
     pattern: /qwen[-_.]?(\d+(?:[.-]\d+)?)[-_.]?coder/i,
     resolve: m => ({ short: 'Qc', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
+    pattern: /qwen[-_.]?(\d+(?:[.-]\d+)?)[-_.]?omni/i,
+    resolve: m => ({ short: 'Qo', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
+    pattern: /qwen[-_.]?(\d+(?:[.-]\d+)?)[-_.]?max/i,
+    resolve: m => ({ short: 'Qw', version: `${compactVersion(m[1])}M`, family: 'cn' }),
   },
   {
     pattern: /qwen[-_.]?(\d+(?:[.-]\d+)?)/i,
@@ -267,19 +324,133 @@ const PRESET_RULES: readonly PresetRule[] = [
     resolve: () => ({ short: 'Qw', version: '', family: 'cn' }),
   },
 
-  // StepFun / Doubao / Llama / Mistral
+  // Xiaomi MiMo
   {
-    pattern: /step[-_.]?(\d+(?:[.-]\d+)?)/i,
-    resolve: m => ({ short: 'St', version: compactVersion(m[1]), family: 'cn' }),
+    pattern: /mimo[-_.]?v?(\d+(?:[.-]\d+)?)[-_.]?pro/i,
+    resolve: m => ({ short: 'Mo', version: `${compactVersion(m[1])}P`, family: 'cn' }),
+  },
+  {
+    pattern: /mimo[-_.]?v?(\d+(?:[.-]\d+)?)[-_.]?flash/i,
+    resolve: m => ({ short: 'Mo', version: `${compactVersion(m[1])}F`, family: 'cn' }),
+  },
+  {
+    pattern: /mimo[-_.]?v?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Mo', version: compactVersion(m[1]), family: 'cn' }),
+  },
+
+  // Tencent Hy / Hunyuan
+  {
+    pattern: /(?:^|[-_.])hy[-_.]?(\d+(?:[.-]\d+)?)[-_.]?flash/i,
+    resolve: m => ({ short: 'Hy', version: `${compactVersion(m[1])}F`, family: 'cn' }),
+  },
+  {
+    pattern: /(?:^|[-_.])hy[-_.]?(\d+(?:[.-]\d+)?)(?:$|[-_.])/i,
+    resolve: m => ({ short: 'Hy', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
+    pattern: /hunyuan[-_.]?([a-z]?\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Hy', version: compactVersion(m[1]), family: 'cn' }),
+  },
+
+  // ByteDance Seed / Seedance / Doubao
+  {
+    pattern: /seedance[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Sc', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
+    pattern: /seed[-_.]?(\d+(?:[.-]\d+)?)[-_.]?lite/i,
+    resolve: m => ({ short: 'Sd', version: `${compactVersion(m[1])}L`, family: 'cn' }),
+  },
+  {
+    pattern: /(?:^|[-_.])seed[-_.]?(\d+(?:[.-]\d+)?)/i,
+    resolve: m => ({ short: 'Sd', version: compactVersion(m[1]), family: 'cn' }),
   },
   {
     pattern: /doubao[-_.]?(\d+(?:[.-]\d+)?)?/i,
     resolve: m => ({ short: 'Db', version: compactVersion(m[1]), family: 'cn' }),
   },
+
+  // StepFun / Meituan LongCat / inclusionAI Ling & Ring / OpenBMB / Baidu / Huawei / Baichuan
+  {
+    pattern: /step[-_.]?(\d+(?:[.-]\d+)?)/i,
+    resolve: m => ({ short: 'St', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
+    pattern: /longcat[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Lc', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
+    pattern: /(?:^|[-_.])ling[-_.]?(\d+(?:[.-]\d+)?)[-_.]?flash/i,
+    resolve: m => ({ short: 'Lg', version: `${compactVersion(m[1])}F`, family: 'cn' }),
+  },
+  {
+    pattern: /(?:^|[-_.])ling[-_.]?(\d+(?:[.-]\d+)?)/i,
+    resolve: m => ({ short: 'Lg', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
+    pattern: /(?:^|[-_.])ring[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Rg', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
+    pattern: /minicpm[-_.]?(?:v[-_.]?)?(\d+(?:[.-]\d+)?)/i,
+    resolve: m => ({ short: 'Cp', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
+    pattern: /ernie[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Er', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
+    pattern: /(?:open)?pangu[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Pg', version: compactVersion(m[1]), family: 'cn' }),
+  },
+  {
+    pattern: /baichuan[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Bc', version: compactVersion(m[1]), family: 'cn' }),
+  },
+
+  // Meta (Muse Ember/Wonder/Spark & Llama)
+  {
+    pattern: /muse[-_.]?ember(?:[-_.]?(\d+(?:[.-]\d+)?))?/i,
+    resolve: m => ({ short: 'Me', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /muse[-_.]?wonder(?:[-_.]?(\d+(?:[.-]\d+)?))?/i,
+    resolve: m => ({ short: 'Mw', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /muse[-_.]?spark/i,
+    resolve: () => ({ short: 'Ms', version: '', family: 'other' }),
+  },
   {
     pattern: /llama[-_.]?(\d+(?:[.-]\d+)?)/i,
     resolve: m => ({ short: 'Lm', version: compactVersion(m[1]), family: 'other' }),
   },
+
+  // Microsoft (MAI Code & Phi)
+  {
+    pattern: /mai[-_.]?code[-_.]?(\d+(?:[.-]\d+)?)[-_.]?flash/i,
+    resolve: m => ({ short: 'Mc', version: `${compactVersion(m[1])}F`, family: 'other' }),
+  },
+  {
+    pattern: /mai[-_.]?code[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Mc', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /phi[-_.]?(\d+(?:[.-]\d+)?)/i,
+    resolve: m => ({ short: 'Ph', version: compactVersion(m[1]), family: 'other' }),
+  },
+
+  // NVIDIA Nemotron
+  {
+    pattern: /nemotron[-_.]?(\d+(?:[.-]\d+)?)[-_.]?(?:super[-_.]?)?vl/i,
+    resolve: m => ({ short: 'Nm', version: `${compactVersion(m[1])}V`, family: 'other' }),
+  },
+  {
+    pattern: /nemotron[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Nm', version: compactVersion(m[1]), family: 'other' }),
+  },
+
+  // Mistral AI (Codestral, Devstral, Magistral, Pixtral, Ministral, Mistral Large/Small)
   {
     pattern: /codestral/i,
     resolve: () => ({ short: 'Cs', version: '', family: 'other' }),
@@ -289,8 +460,157 @@ const PRESET_RULES: readonly PresetRule[] = [
     resolve: () => ({ short: 'Dv', version: '', family: 'other' }),
   },
   {
+    pattern: /magistral/i,
+    resolve: () => ({ short: 'Ma', version: '', family: 'other' }),
+  },
+  {
+    pattern: /pixtral/i,
+    resolve: () => ({ short: 'Px', version: '', family: 'other' }),
+  },
+  {
+    pattern: /ministral[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Mn', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /mistral[-_.]?large[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Ml', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /mistral[-_.]?small[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Mi', version: `${compactVersion(m[1])}S`, family: 'other' }),
+  },
+  {
     pattern: /mistral/i,
     resolve: () => ({ short: 'Mi', version: '', family: 'other' }),
+  },
+
+  // Amazon Nova / Cohere Command & Aya / Perplexity Sonar
+  {
+    pattern: /nova[-_.]?(\d+(?:[.-]\d+)?)/i,
+    resolve: m => ({ short: 'Nv', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /nova[-_.]?(premier|pro|lite|micro)/i,
+    resolve: m => {
+      const tier = m[1]!.toLowerCase()
+      const suffix = tier === 'premier' ? 'Pr' : tier === 'pro' ? 'P' : tier === 'lite' ? 'L' : 'm'
+      return { short: 'Nv', version: suffix, family: 'other' }
+    },
+  },
+  {
+    pattern: /command[-_.]?a(?:$|[-_.])/i,
+    resolve: () => ({ short: 'Cm', version: 'A', family: 'other' }),
+  },
+  {
+    pattern: /command[-_.]?r[-_.]?(?:plus|\+)/i,
+    resolve: () => ({ short: 'Cm', version: 'R+', family: 'other' }),
+  },
+  {
+    pattern: /command[-_.]?r/i,
+    resolve: () => ({ short: 'Cm', version: 'R', family: 'other' }),
+  },
+  {
+    pattern: /aya[-_.]?(vision|expanse)?/i,
+    resolve: m => ({ short: 'Ay', version: m[1] ? m[1][0]!.toUpperCase() : '', family: 'other' }),
+  },
+  {
+    pattern: /sonar[-_.]?deep[-_.]?research/i,
+    resolve: () => ({ short: 'Sr', version: 'D', family: 'other' }),
+  },
+  {
+    pattern: /sonar[-_.]?reasoning/i,
+    resolve: () => ({ short: 'Sr', version: 'R', family: 'other' }),
+  },
+  {
+    pattern: /sonar[-_.]?pro/i,
+    resolve: () => ({ short: 'Sr', version: 'P', family: 'other' }),
+  },
+  {
+    pattern: /\bsonar\b/i,
+    resolve: () => ({ short: 'Sr', version: '', family: 'other' }),
+  },
+
+  // Additional labs cataloged on models.dev (Inception, Thinking Machines, Reflection,
+  // Recursive, DeepReinforce, Sakana, Upstage, IBM, Nous, AI21, AllenAI, Swiss AI, QuiverAI, Liquid, Reka)
+  {
+    pattern: /mercury[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Hg', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /inkling[-_.]?(\d+(?:[.-]\d+)?)[-_.]?small/i,
+    resolve: m => ({ short: 'Ik', version: `${compactVersion(m[1])}S`, family: 'other' }),
+  },
+  {
+    pattern: /inkling[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Ik', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /beam[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Bm', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /\bflint\b/i,
+    resolve: () => ({ short: 'Fl', version: '', family: 'other' }),
+  },
+  {
+    pattern: /ornith[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Or', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /fugu[-_.]?ultra[-_.]?v?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Fg', version: `U${compactVersion(m[1])}`, family: 'other' }),
+  },
+  {
+    pattern: /fugu[-_.]?max/i,
+    resolve: () => ({ short: 'Fg', version: 'M', family: 'other' }),
+  },
+  {
+    pattern: /solar[-_.]?mini[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Sl', version: `${compactVersion(m[1])}m`, family: 'other' }),
+  },
+  {
+    pattern: /solar[-_.]?pro[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Sl', version: `${compactVersion(m[1])}P`, family: 'other' }),
+  },
+  {
+    pattern: /granite[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Gn', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /hermes[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Hm', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /jamba[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Jb', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /olmo[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Ol', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /apertus[-_.]?v?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Ap', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /arrow[-_.]?(\d+(?:[.-]\d+)?)[-_.]?telos/i,
+    resolve: m => ({ short: 'Aw', version: `${compactVersion(m[1])}T`, family: 'other' }),
+  },
+  {
+    pattern: /arrow[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Aw', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /ember[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Em', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /particle[-_.]?(\d+(?:[.-]\d+)?)?/i,
+    resolve: m => ({ short: 'Pt', version: compactVersion(m[1]), family: 'other' }),
+  },
+  {
+    pattern: /reka[-_.]?(flash|core|edge)?/i,
+    resolve: m => ({ short: 'Rk', version: m[1] ? m[1][0]!.toUpperCase() : '', family: 'other' }),
   },
 ]
 
