@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Prompt Override",
+    "description": "Adds a working contract to DSH's native system prompt and rewrites its terse built-in tool guidance, in every session."
+  }
+}
