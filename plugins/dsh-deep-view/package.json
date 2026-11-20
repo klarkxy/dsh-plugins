@@ -89,6 +89,7 @@
   "dependencies": {
     "@klarkxy/dsh-plugin-kit": "workspace:*",
     "@xyflow/react": "12.12.1",
+    "jsonrepair": "3.15.0",
     "mafs": "0.21.0",
     "maplibre-gl": "6.18.0",
     "vega": "6.4.0",

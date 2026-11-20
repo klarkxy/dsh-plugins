@@ -258,6 +258,9 @@ importers:
       '@xyflow/react':
         specifier: 12.12.1
         version: 12.12.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      jsonrepair:
+        specifier: 3.15.0
+        version: 3.15.0
       mafs:
         specifier: 0.21.0
         version: 0.21.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -6103,6 +6106,10 @@ packages:
 
   json-stringify-pretty-compact@4.0.0:
     resolution: {integrity: sha512-3CNZ2DnrpByG9Nqj6Xo8vqbjT4F6N+tb4Gb28ESAZjYZ5yqvmc56J+/kuIwkaAMOyblTQhUW7PxMkUb8Q36N3Q==}
+
+  jsonrepair@3.15.0:
+    resolution: {integrity: sha512-wy8OTjwsJwQRnQJkKnMJJ9vcytRdBPAgIF/Hy6+s1dAj42BHMKiyL8JzEieIl3JY7idt8eyHwBWTO8mh/+mtwA==}
+    hasBin: true
 
   jwa@2.0.1:
     resolution: {integrity: sha512-hRF04fqJIP8Abbkq5NKGN0Bbr3JxlQ+qhZufXVr0DvujKy93ZCbXZMHDL4EOtodSbCWxOqR8MS1tXA5hwqCXDg==}
@@ -12857,6 +12864,8 @@ snapshots:
   json-schema-traverse@1.0.0: {}
 
   json-stringify-pretty-compact@4.0.0: {}
+
+  jsonrepair@3.15.0: {}
 
   jwa@2.0.1:
     dependencies:
