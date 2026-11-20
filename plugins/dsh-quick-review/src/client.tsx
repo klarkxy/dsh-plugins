@@ -789,7 +789,7 @@ export const clientCss = `${officialUiCss('qrv-root')}${modelMenuCss}
 .qrv-root.qrv-panel { position: fixed; width: min(340px, calc(100vw - 32px)); max-height: min(480px, calc(100vh - 32px)); overflow: auto; }
 .qrv-root .dsh-ui-textarea { width: 100%; resize: vertical; min-height: 44px; }
 .qrv-root.qrv-tab { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-.qrv-root .qrv-tab-status { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--dsw-alias-border-subtle, transparent); flex: none; }
+.qrv-root .qrv-tab-status { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 0.5px solid var(--dsw-alias-border-l2); flex: none; }
 .qrv-root.qrv-tab > *:last-child { flex: 1; min-height: 0; }
 `
 
