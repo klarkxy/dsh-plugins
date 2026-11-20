@@ -4,19 +4,33 @@
 
 [简体中文](README.md) / English
 
-Dual-view model picker (periodic-table card grid and searchable list with reasoning-effort slider) for the DeepSeek Harness composer — and the same picker as a reusable component that other plugins can mount.
+Replaces the model button in the DeepSeek Harness composer: pick a model and reasoning effort from a periodic-table style card grid, or switch back to a searchable list. Other plugins can reuse the same picker.
 
 ## What it does
 
-- **Periodic-table card grid (default)**:
-  - Each card shows its sequence number, a clickable provider dropdown at the top right, a large monospace short symbol with the full model name beneath, and a flush reasoning-effort strip along the bottom.
-  - **Built-in short-name presets**: Covers mainstream labs and `models.dev` model families, including Gemini 4 element models (`H`, `He`, `C`, `Ne`, `Ar`, `Kr`, `Xe`, etc.), Nano Banana / Gemma, Claude (`Op`/`Fb`/`Sn`/`Hk`), DeepSeek (`Ds`/`Dr`/`Dc`), OpenAI GPT-6 Astra/Sol/Luna/Terra/Cyber & Codex/o-series, xAI Grok (`Gr` with version superscripts such as `4.6` and `4.7`), GLM, MiniMax, Kimi, Qwen/QwQ, Xiaomi MiMo, Tencent Hy/Hunyuan, ByteDance Seed/Seedance/Doubao, Meituan LongCat, Ling/Ring, Step, Meta Muse/Llama, Microsoft MAI Code/Phi, NVIDIA Nemotron, Mistral, Amazon Nova, Cohere Command, Perplexity Sonar, Inception Mercury (`Hg`), Thinking Machines Inkling, Reflection Beam, Sakana Fugu, Upstage Solar, and deterministic short fallbacks (two letters when possible). Double-click any symbol to edit a custom alias inline (clear to restore the preset; Enter saves, Escape discards).
-  - **Multi-provider merging**: Identical canonical models exposed by multiple providers merge into one card with a provider dropdown; distinct versions stay separate cards with compact version superscripts. Switching providers keeps the current reasoning effort when the new provider serves it.
-  - **Optional reasoning effort**: Click the center of a card to select the model without sending `reasoningEffort`; click a bottom effort cell to select model + effort in one click, or click the active cell again to clear it.
-  - **Resizable & reorderable**: Adjust card width live with the toolbar slider. Drag a card onto the left/right edges of another card to insert before/after, or onto the center to swap in place. Order, width, custom aliases, and preferred providers persist in browser storage and stay in sync across every mounted picker. Renaming a symbol never selects the model. While the picker is disabled or a selection is settling, every toolbar, drag, rename, and pick action is locked.
-- **Classic list view**: Toggle **Cards / List** to switch to the searchable provider-grouped list and discrete gradient reasoning-effort slider. Motion follows your system's reduced-motion preference.
-- **Memory & status**: Successful model and effort selections become the defaults for new sessions. In list mode, switching back to a model used during this page visit restores its last selected effort when still supported. Choosing a model or adjusting effort keeps the panel open; loading failures offer a retry; a saved model that is no longer routable is marked and cannot be re-picked.
-- Model selection is unavailable in subagent sessions, matching the native picker.
+### Card view (default)
+
+One card per model: a sequence number at the top left, the provider at the top right, a large short symbol with the full model name in the middle, and reasoning-effort cells along the bottom.
+
+- **Filter**: just start typing once the panel is open. Matches model names, symbols and providers (`gpt5` also finds `gpt-5`). Enter picks the first result; Escape clears the filter first, then closes.
+- **Pick a model**: click the middle of a card. This selects the model without setting reasoning effort.
+- **Pick a model and effort**: click an effort cell at the bottom. Click the selected cell again to clear the effort.
+- **Switch providers**: when several providers serve the same model, they share one card; switch with the button at the top right. The current effort is kept if the new provider supports it.
+- **Symbols**: common models come with built-in symbols (Gemini element symbols, Claude `Op` / `Sn` / `Hk`, DeepSeek `Ds`, and so on). Versions in the same family are told apart by a superscript; other models get two letters automatically. Double-click a symbol to rename it: Enter saves, Escape discards, and an empty name restores the default.
+- **Layout**: drop a card on either edge of another card to insert it there, or on the center to swap the two. The slider at the top sets card width, and **Reset layout** clears the custom order and symbols.
+- **Right-click menu**: right-click a card to favorite it (favorites come first and show a ★), move it to the front or end, rename or restore its symbol, copy the model ID, or hide it. Hidden models can be shown again with the **Hidden** button at the top and unhidden from there.
+- **Motion**: the panel, cards and menus fade and slide in, and cards glide into place when reordered. All motion turns off when your system's reduced-motion setting is on.
+
+### List view
+
+Click **List** at the top for a searchable list grouped by provider, with a slider for reasoning effort. Click **Cards** to go back.
+
+### Other behavior
+
+- The model and effort you pick become the defaults for new sessions.
+- In list view, switching back to a model you used since opening the page restores its last effort.
+- If the model list fails to load, you can retry. A saved model that is no longer in the catalog is marked and cannot be picked again.
+- Subagent sessions do not offer model selection, matching the native button.
 
 ## Install
 
@@ -24,19 +38,18 @@ Dual-view model picker (periodic-table card grid and searchable list with reason
 dsh plugin --profile web add @klarkxy/dsh-model-picker
 ```
 
-Replace `web` with your profile name and restart the profile. No configuration is needed; enabling the plugin replaces the composer model button.
+Replace `web` with your profile name and restart the profile. No configuration is needed.
 
-With this plugin and `reasoning-slider` both installed, this picker wins. Disabling or removing it restores whichever picker was active before — `reasoning-slider`, or the native button.
+If `reasoning-slider` is also installed, this plugin takes precedence. Disabling or removing it brings back `reasoning-slider` or the native button.
 
 ## Other plugins
 
-Feature plugins can mount the same picker in their own settings and cards. Mounting is optional: while this plugin is absent each feature keeps its existing menu, so nothing breaks when it is disabled or uninstalled. Consumers should refer to the shared contract in `@klarkxy/dsh-model-route`.
+Feature plugins can mount this picker in their own settings pages or cards. Without this plugin, those features keep their existing menus. See `@klarkxy/dsh-model-route` for how to integrate.
 
 ## Limitations
 
-- Covers the composer model button and the shared picker; the Settings → Models page keeps its native layout.
-- View mode, card width, custom order, aliases, and preferred providers are stored locally in browser `localStorage` and do not sync across devices.
-- A saved model that left the catalog stays shown but is marked not routable and cannot be re-picked.
+- Only the composer model button and the shared picker are replaced; the Settings → Models page is unchanged.
+- View, card width, order, favorites, hidden models, custom symbols, and preferred providers are stored in the current browser only and do not sync across devices.
 
 ## License
 

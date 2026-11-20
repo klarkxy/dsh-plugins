@@ -3,8 +3,8 @@ import type { ModelMenuChoice } from '@klarkxy/dsh-model-route'
 import {
   applyCardDrop, buildPeriodicCards, CARD_WIDTH_DEFAULT, CARD_WIDTH_MAX, CARD_WIDTH_MIN,
   clampCardWidth, createPeriodicPrefsStore, DEFAULT_PERIODIC_PREFS, dropModeFromRatio,
-  loadPeriodicPrefs, parsePeriodicPrefs, savePeriodicPrefs, STORAGE_KEY, type PeriodicPrefs,
-  type StorageLike,
+  filterPeriodicCards, loadPeriodicPrefs, mergeSubsetOrder, moveCardKey, parsePeriodicPrefs,
+  savePeriodicPrefs, STORAGE_KEY, toggleKey, type PeriodicPrefs, type StorageLike,
 } from './periodic-store.ts'
 
 /* Minimal window stub: the store attaches its cross-tab `storage` listener on
@@ -107,6 +107,8 @@ describe('prefs persistence & clamping', () => {
       order: ['a', 'a', '', 42, 'b'],
       aliases: { a: '  VeryLongAliasName12345  ', empty: '   ' },
       providers: { a: 'vertex' },
+      favorites: ['fav', 'fav', ' ', 7],
+      hidden: ['h', 'h', null],
     })
     expect(parsed).toEqual({
       viewMode: 'list',
@@ -114,7 +116,24 @@ describe('prefs persistence & clamping', () => {
       order: ['a', 'b'],
       aliases: { a: 'VeryLongAlia' },
       providers: { a: 'vertex' },
+      favorites: ['fav'],
+      hidden: ['h'],
     })
+  })
+
+  it('defaults favorites/hidden and parses legacy payloads without them', () => {
+    expect(DEFAULT_PERIODIC_PREFS.favorites).toEqual([])
+    expect(DEFAULT_PERIODIC_PREFS.hidden).toEqual([])
+    // Payloads stored before favorites/hidden existed must still parse cleanly.
+    const legacy = parsePeriodicPrefs({
+      viewMode: 'cards',
+      cardWidth: 180,
+      order: ['grok-4.7'],
+      aliases: { 'grok-4.7': 'G7' },
+      providers: { 'gemini-4-neon': 'vertex' },
+    })
+    expect(legacy.favorites).toEqual([])
+    expect(legacy.hidden).toEqual([])
   })
 
   it('round-trips through a storage adapter and degrades gracefully on malformed JSON', () => {
@@ -129,6 +148,8 @@ describe('prefs persistence & clamping', () => {
       order: ['grok-4.7', 'grok-4.6'],
       aliases: { 'grok-4.7': 'G7' },
       providers: { 'gemini-4-neon': 'vertex' },
+      favorites: ['grok-4.7'],
+      hidden: ['deepseek-v4.1'],
     }
     savePeriodicPrefs(next, storage)
     expect(loadPeriodicPrefs(storage)).toEqual(next)
@@ -185,5 +206,137 @@ describe('createPeriodicPrefsStore', () => {
     expect(seen).toEqual([2])
     detach2()
     expect(storageEvents.size).toBe(0)
+  })
+})
+
+describe('favorites & hidden arrangement', () => {
+  it('partitions favorites first while preserving their arranged relative order', () => {
+    const prefs = { ...DEFAULT_PERIODIC_PREFS, favorites: ['deepseek-v4.1', 'grok-4.6'] }
+    const cards = buildPeriodicCards(CHOICES, prefs)
+    // Both favorited cards lead, keeping catalog order between them regardless
+    // of the order they were favorited in.
+    expect(cards.map(card => card.canonicalKey)).toEqual([
+      'grok-4.6',
+      'deepseek-v4.1',
+      'gemini-4-neon',
+      'grok-4.7',
+    ])
+    expect(cards.map(card => card.favorite)).toEqual([true, true, false, false])
+    // A stored user order still applies inside each partition.
+    const ordered = buildPeriodicCards(CHOICES, {
+      ...DEFAULT_PERIODIC_PREFS,
+      favorites: ['deepseek-v4.1'],
+      order: ['grok-4.7', 'gemini-4-neon'],
+    })
+    expect(ordered.map(card => card.canonicalKey)).toEqual([
+      'deepseek-v4.1',
+      'grok-4.7',
+      'gemini-4-neon',
+      'grok-4.6',
+    ])
+  })
+
+  it('excludes hidden cards unless showHidden or they serve the selected route, numbering positions over the visible list', () => {
+    const prefs = { ...DEFAULT_PERIODIC_PREFS, hidden: ['grok-4.6', 'deepseek-v4.1'] }
+
+    const hiddenOff = buildPeriodicCards(CHOICES, prefs)
+    expect(hiddenOff.map(card => card.canonicalKey)).toEqual(['gemini-4-neon', 'grok-4.7'])
+    expect(hiddenOff.map(card => card.position)).toEqual([1, 2])
+
+    const shown = buildPeriodicCards(CHOICES, prefs, undefined, { showHidden: true })
+    expect(shown.map(card => card.canonicalKey)).toEqual([
+      'gemini-4-neon',
+      'grok-4.6',
+      'grok-4.7',
+      'deepseek-v4.1',
+    ])
+    expect(shown.map(card => card.hidden)).toEqual([false, true, false, true])
+    expect(shown.map(card => card.position)).toEqual([1, 2, 3, 4])
+
+    // The card serving the active selection stays visible even while hidden.
+    const withSelected = buildPeriodicCards(CHOICES, prefs, { provider: 'deepseek', model: 'deepseek-v4.1' })
+    expect(withSelected.map(card => card.canonicalKey)).toEqual(['gemini-4-neon', 'grok-4.7', 'deepseek-v4.1'])
+    expect(withSelected.at(-1)!.position).toBe(3)
+  })
+})
+
+describe('list helpers: moveCardKey, toggleKey, mergeSubsetOrder', () => {
+  it('moves a key to the front or end and returns a copy for missing keys', () => {
+    expect(moveCardKey(['a', 'b', 'c'], 'a', 'last')).toEqual(['b', 'c', 'a'])
+    expect(moveCardKey(['a', 'b', 'c'], 'c', 'first')).toEqual(['c', 'a', 'b'])
+    expect(moveCardKey(['a', 'b', 'c'], 'z', 'first')).toEqual(['a', 'b', 'c'])
+  })
+
+  it('toggles key membership preserving order', () => {
+    expect(toggleKey(['a', 'b'], 'b')).toEqual(['a'])
+    expect(toggleKey(['a', 'b'], 'c')).toEqual(['a', 'b', 'c'])
+    expect(toggleKey([], 'a')).toEqual(['a'])
+  })
+
+  it('merges a reordered visible subset into its original slots', () => {
+    // Slots held by {b, d, e} in the full list get refilled in the new order;
+    // non-visible keys stay exactly where they were (drag while filtered).
+    expect(mergeSubsetOrder(['a', 'b', 'c', 'd', 'e'], ['e', 'b', 'd'])).toEqual(['a', 'e', 'c', 'b', 'd'])
+    expect(mergeSubsetOrder(['a', 'b', 'c', 'd'], ['d', 'b'])).toEqual(['a', 'd', 'c', 'b'])
+    expect(mergeSubsetOrder(['a', 'b'], [])).toEqual(['a', 'b'])
+  })
+
+  it('keeps a hidden favorite in its slot when a same-partition drop merges back', () => {
+    // Full arranged order A,B,C,D with favorites A,B and B hidden: the visible
+    // list is A,C,D, and a swap inside it must not displace hidden favorite B.
+    const prefs = {
+      ...DEFAULT_PERIODIC_PREFS,
+      favorites: ['grok-4.6', 'deepseek-v4.1'],
+      hidden: ['deepseek-v4.1'],
+    }
+    const fullKeys = buildPeriodicCards(CHOICES, prefs, undefined, { showHidden: true })
+      .map(card => card.canonicalKey)
+    expect(fullKeys).toEqual(['grok-4.6', 'deepseek-v4.1', 'gemini-4-neon', 'grok-4.7'])
+    const visibleKeys = buildPeriodicCards(CHOICES, prefs).map(card => card.canonicalKey)
+    expect(visibleKeys).toEqual(['grok-4.6', 'gemini-4-neon', 'grok-4.7'])
+
+    const nextVisible = applyCardDrop(visibleKeys, 1, 2, 'swap')
+    expect(nextVisible).toEqual(['grok-4.6', 'grok-4.7', 'gemini-4-neon'])
+    const nextOrder = mergeSubsetOrder(fullKeys, nextVisible)
+    expect(nextOrder).toEqual(['grok-4.6', 'deepseek-v4.1', 'grok-4.7', 'gemini-4-neon'])
+
+    const rebuilt = buildPeriodicCards(CHOICES, { ...prefs, order: nextOrder }, undefined, { showHidden: true })
+    expect(rebuilt.map(card => card.canonicalKey)).toEqual(nextOrder)
+    expect(rebuilt[0]!.canonicalKey).toBe('grok-4.6')
+    expect(rebuilt[1]!.canonicalKey).toBe('deepseek-v4.1')
+    expect(rebuilt[1]!.hidden).toBe(true)
+  })
+})
+
+describe('filterPeriodicCards', () => {
+  const FILTER_CHOICES: ModelMenuChoice[] = [
+    ...CHOICES,
+    { provider: 'openai', model: 'gpt-5', label: 'OpenAI / GPT-5', providerLabel: 'OpenAI', efforts: [] },
+  ]
+  const cards = buildPeriodicCards(FILTER_CHOICES, DEFAULT_PERIODIC_PREFS)
+  const keys = (query: string): string[] => filterPeriodicCards(cards, query).map(card => card.canonicalKey)
+
+  it('passes through empty and whitespace queries', () => {
+    expect(filterPeriodicCards(cards, '')).toEqual(cards)
+    expect(filterPeriodicCards(cards, '   ')).toEqual(cards)
+  })
+
+  it('matches symbol, full name, and provider labels', () => {
+    expect(keys('ne')).toEqual(['gemini-4-neon'])
+    expect(keys('neon')).toEqual(['gemini-4-neon'])
+    expect(keys('vertex')).toEqual(['gemini-4-neon'])
+    expect(keys('ds')).toEqual(['deepseek-v4.1'])
+  })
+
+  it('matches the compact form so separator-free queries find dashed models', () => {
+    expect(keys('gpt5')).toEqual(['gpt-5'])
+    expect(keys('grok46')).toEqual(['grok-4.6'])
+    expect(keys('ds v4')).toEqual(['deepseek-v4.1'])
+  })
+
+  it('ANDs multiple tokens across the haystack', () => {
+    expect(keys('grok 4.6')).toEqual(['grok-4.6'])
+    expect(keys('openai gpt')).toEqual(['gpt-5'])
+    expect(keys('zzz nothing')).toEqual([])
   })
 })
