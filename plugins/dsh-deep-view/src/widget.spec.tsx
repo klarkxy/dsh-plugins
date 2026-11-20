@@ -179,6 +179,34 @@ describe('widget interactions without a browser', () => {
     expect(onFillDraft).not.toHaveBeenCalled()
     await act(async () => root.unmount())
   })
+  it('restores the answer inputs on a closed card', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const view = { type: 'stack' as const, children: [
+      { type: 'number' as const, id: 'price', label: 'Price', value: 2 },
+      { type: 'metric' as const, label: 'Total', value: { '=': 'price * 5' } },
+      { type: 'confirm' as const, id: 'go', confirmLabel: 'Confirm' },
+    ] }
+    const answer = { id: 'v', action: 'go', values: { confirmed: true, inputs: { price: 3 } } }
+    await act(async () => root.render(<WidgetCard view={view} t={t} labels={labels} closed answer={answer} />))
+    expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('15')
+    expect((document.querySelector('input[type=number]') as HTMLInputElement).value).toBe('3')
+    expect(document.querySelector('.dvui-badge')!.textContent).toBe('Confirm')
+    expect(document.querySelectorAll('button').length).toBe(0)
+    await act(async () => root.unmount())
+  })
+  it('keeps default inputs on the same view without closed or settled', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const view = { type: 'stack' as const, children: [
+      { type: 'number' as const, id: 'price', label: 'Price', value: 2 },
+      { type: 'metric' as const, label: 'Total', value: { '=': 'price * 5' } },
+      { type: 'confirm' as const, id: 'go', confirmLabel: 'Confirm' },
+    ] }
+    const answer = { id: 'v', action: 'go', values: { confirmed: true, inputs: { price: 3 } } }
+    await act(async () => root.render(<WidgetCard view={view} t={t} labels={labels} answer={answer} />))
+    expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('10')
+    expect((document.querySelector('input[type=number]') as HTMLInputElement).value).toBe('2')
+    await act(async () => root.unmount())
+  })
   it('enforces closed on a directly rendered WidgetView form', async () => {
     const root = createRoot(document.getElementById('root')!)
     const onSubmit = vi.fn()

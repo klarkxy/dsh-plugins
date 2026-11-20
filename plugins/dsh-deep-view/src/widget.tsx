@@ -364,7 +364,7 @@ export function WidgetView({ view, onSubmit, onFillDraft, settled = false, close
     changeRef.current?.(next)
   }, [inputs])
   const sent = answer?.values?.inputs
-  const current = settled && sent !== null && typeof sent === 'object' ? { ...values, ...sent } : values
+  const current = (settled || closed) && sent !== null && typeof sent === 'object' ? { ...values, ...sent } : values
   const withInputs = (extra: Record<string, unknown>) => inputs.length > 0 ? { ...extra, inputs: current } : extra
   // Closed owns the rule in one place: the view answers nowhere, whatever the caller passed.
   const direct = closed ? undefined : onSubmit
