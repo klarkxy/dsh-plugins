@@ -58,10 +58,13 @@ function makeDirectory(state: Partial<ModelDirectoryState> = {}) {
 }
 
 /* Install the JSDOM globals for one test. Returns cleanup. */
-function jsdomEnv(options?: { viewMode?: 'cards' | 'list' }) {
+function jsdomEnv(options?: { viewMode?: 'cards' | 'list'; prefs?: Record<string, unknown> }) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' })
-  if (options?.viewMode) {
-    dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ viewMode: options.viewMode }))
+  if (options?.viewMode || options?.prefs) {
+    dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...options.prefs,
+      ...(options.viewMode ? { viewMode: options.viewMode } : {}),
+    }))
   }
   // Each test gets its own store singleton over this JSDOM's localStorage,
   // so no state leaks between tests through the module-level periodicStore().
@@ -381,7 +384,7 @@ describe('ModelPicker periodic card grid (default view)', () => {
       ))
       await env.click(env.dom.window.document.querySelector('button')!)
       const doc = env.dom.window.document
-      const filter = doc.querySelector<HTMLInputElement>('.dsh-model-picker-filter')!
+      const filter = doc.querySelector<HTMLInputElement>('.dsh-model-picker-filter input')!
       expect(filter).not.toBeNull()
 
       // A printable key pressed while a card body holds focus lands in the
@@ -424,6 +427,87 @@ describe('ModelPicker periodic card grid (default view)', () => {
       })
       expect(doc.querySelectorAll('.dsh-model-picker-card')).toHaveLength(0)
       expect(doc.querySelector('.dsh-model-picker-empty')!.textContent).toBe('No matching models')
+    } finally { await env.done(root) }
+  })
+
+  it('ignores Enter while an IME composition is active in the filter', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    const onPickWithEffort = vi.fn()
+    try {
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={choices}
+          selected={{ provider: 'google', model: 'gemini-4-neon' }}
+          onPick={() => {}}
+          onPickWithEffort={onPickWithEffort}
+          efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]}
+        />,
+      ))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const doc = env.dom.window.document
+      const filter = doc.querySelector<HTMLInputElement>('.dsh-model-picker-filter input')!
+      const cardBody = doc.querySelector<HTMLElement>('.dsh-model-picker-cardBody')!
+      cardBody.focus()
+      await act(async () => {
+        cardBody.dispatchEvent(new env.dom.window.KeyboardEvent('keydown', { key: 'g', bubbles: true, cancelable: true }))
+      })
+      expect(filter.value).toBe('g')
+
+      // A composing Enter commits the IME candidate; it must not pick a card.
+      await act(async () => filter.dispatchEvent(
+        new env.dom.window.KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true }),
+      ))
+      expect(onPickWithEffort).not.toHaveBeenCalled()
+
+      // The next, non-composing Enter still picks the first match.
+      await act(async () => filter.dispatchEvent(
+        new env.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      ))
+      expect(onPickWithEffort).toHaveBeenCalledTimes(1)
+      expect(onPickWithEffort).toHaveBeenCalledWith(expect.objectContaining({ model: 'gemini-4-neon' }), undefined)
+    } finally { await env.done(root) }
+  })
+
+  it('does not drop a card across the favorites partition', async () => {
+    const env = jsdomEnv({ prefs: { favorites: ['grok-4.6'] } })
+    const root = mount(env.dom)
+    try {
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={choices}
+          selected={{ provider: 'google', model: 'gemini-4-neon' }}
+          onPick={() => {}}
+          efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]}
+        />,
+      ))
+      const doc = env.dom.window.document
+      await env.click(doc.querySelector('button')!)
+      const cardsNow = () => [...doc.querySelectorAll<HTMLElement>('.dsh-model-picker-card')]
+      expect(cardsNow().map(card => card.getAttribute('data-card-key'))).toEqual([
+        'grok-4.6', 'gemini-4-neon', 'grok-4.7',
+      ])
+      const before = env.dom.window.localStorage.getItem(STORAGE_KEY)
+
+      // Favorite → non-favorite center drop: no drop cue, no reorder, no write.
+      const src = cardsNow()[0]!
+      const dst = cardsNow()[2]!
+      const dataTransfer = { effectAllowed: '', setData: () => {}, getData: () => '' }
+      await act(async () => {
+        Simulate.dragStart(src, { dataTransfer })
+        Simulate.dragOver(dst, { dataTransfer })
+      })
+      expect(dst.getAttribute('data-drop')).toBeNull()
+      await act(async () => {
+        Simulate.drop(dst, { dataTransfer })
+        Simulate.dragEnd(src, { dataTransfer })
+      })
+      expect(cardsNow().map(card => card.getAttribute('data-card-key'))).toEqual([
+        'grok-4.6', 'gemini-4-neon', 'grok-4.7',
+      ])
+      expect(env.dom.window.localStorage.getItem(STORAGE_KEY)).toBe(before)
     } finally { await env.done(root) }
   })
 

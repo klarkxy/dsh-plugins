@@ -280,6 +280,32 @@ describe('list helpers: moveCardKey, toggleKey, mergeSubsetOrder', () => {
     expect(mergeSubsetOrder(['a', 'b', 'c', 'd'], ['d', 'b'])).toEqual(['a', 'd', 'c', 'b'])
     expect(mergeSubsetOrder(['a', 'b'], [])).toEqual(['a', 'b'])
   })
+
+  it('keeps a hidden favorite in its slot when a same-partition drop merges back', () => {
+    // Full arranged order A,B,C,D with favorites A,B and B hidden: the visible
+    // list is A,C,D, and a swap inside it must not displace hidden favorite B.
+    const prefs = {
+      ...DEFAULT_PERIODIC_PREFS,
+      favorites: ['grok-4.6', 'deepseek-v4.1'],
+      hidden: ['deepseek-v4.1'],
+    }
+    const fullKeys = buildPeriodicCards(CHOICES, prefs, undefined, { showHidden: true })
+      .map(card => card.canonicalKey)
+    expect(fullKeys).toEqual(['grok-4.6', 'deepseek-v4.1', 'gemini-4-neon', 'grok-4.7'])
+    const visibleKeys = buildPeriodicCards(CHOICES, prefs).map(card => card.canonicalKey)
+    expect(visibleKeys).toEqual(['grok-4.6', 'gemini-4-neon', 'grok-4.7'])
+
+    const nextVisible = applyCardDrop(visibleKeys, 1, 2, 'swap')
+    expect(nextVisible).toEqual(['grok-4.6', 'grok-4.7', 'gemini-4-neon'])
+    const nextOrder = mergeSubsetOrder(fullKeys, nextVisible)
+    expect(nextOrder).toEqual(['grok-4.6', 'deepseek-v4.1', 'grok-4.7', 'gemini-4-neon'])
+
+    const rebuilt = buildPeriodicCards(CHOICES, { ...prefs, order: nextOrder }, undefined, { showHidden: true })
+    expect(rebuilt.map(card => card.canonicalKey)).toEqual(nextOrder)
+    expect(rebuilt[0]!.canonicalKey).toBe('grok-4.6')
+    expect(rebuilt[1]!.canonicalKey).toBe('deepseek-v4.1')
+    expect(rebuilt[1]!.hidden).toBe(true)
+  })
 })
 
 describe('filterPeriodicCards', () => {

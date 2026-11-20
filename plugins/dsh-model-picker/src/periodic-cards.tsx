@@ -29,7 +29,7 @@ import {
   type CSSProperties, type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { MenuSurface } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, MenuItemButton, MenuSurface } from '@deepseek-ai/dsh-client-ui-primitives'
 import { modelMenuEffortLabel, type ModelMenuChoice } from '@klarkxy/dsh-model-route'
 import type { ModelPickerLeadingItem } from '@klarkxy/dsh-model-route/model-picker'
 import { compactEffortLabel, type ModelFamily } from './model-presets.ts'
@@ -519,7 +519,7 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
               </button>
             </div>
             <span className="dsh-model-picker-filterWrap">
-              <input
+              <Input
                 ref={filterInputRef}
                 type="search"
                 className="dsh-model-picker-filter"
@@ -528,6 +528,7 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                 value={query}
                 onChange={event => setQuery(event.target.value)}
                 onKeyDown={event => {
+                  if (event.nativeEvent.isComposing || event.keyCode === 229) return
                   if (event.key === 'Enter') {
                     event.preventDefault()
                     const first = visibleCards[0]
@@ -545,8 +546,9 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                 }}
               />
               {query !== '' ? (
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="dsh-model-picker-filterClear"
                   aria-label={copy.filterClear}
                   onClick={() => {
@@ -555,7 +557,7 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                   }}
                 >
                   ×
-                </button>
+                </Button>
               ) : null}
             </span>
             <label className="dsh-model-picker-widthControl">
@@ -578,15 +580,16 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
               <span>{copy.widthWide}</span>
             </label>
             {hiddenCount > 0 ? (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 className="dsh-model-picker-hiddenToggle"
                 aria-pressed={showHidden}
                 disabled={gated}
                 onClick={() => { if (!gated) setShowHidden(prev => !prev) }}
               >
                 {copy.hiddenToggle.replace('{n}', String(hiddenCount))}
-              </button>
+              </Button>
             ) : null}
             {hasCustomOrder ? (
               <button
@@ -689,6 +692,10 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                     }}
                     onDragOver={event => {
                       if (gated || dragSrcIndex === null || dragSrcIndex === index) return
+                      // Favorites always partition to the front, so a drop into
+                      // the other partition cannot be honored: stay a
+                      // non-target (no preventDefault, no drop cue).
+                      if (visibleCards[dragSrcIndex]?.favorite !== card.favorite) return
                       event.preventDefault()
                       const rect = event.currentTarget.getBoundingClientRect()
                       const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0.5
@@ -703,6 +710,7 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                     onDrop={event => {
                       event.preventDefault()
                       if (gated || dragSrcIndex === null || dragSrcIndex === index) return
+                      if (visibleCards[dragSrcIndex]?.favorite !== card.favorite) return
                       cancelPendingPick()
                       const rect = event.currentTarget.getBoundingClientRect()
                       const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0.5
@@ -918,92 +926,71 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                 const canCopyId = typeof navigator !== 'undefined'
                   && typeof navigator.clipboard?.writeText === 'function'
                 return <>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="dsh-model-picker-cardMenuItem"
-                    onClick={run(() => onPrefsChange(prev => ({
+                  <MenuItemButton
+                    onSelect={run(() => onPrefsChange(prev => ({
                       ...prev,
                       favorites: toggleKey(prev.favorites, card.canonicalKey),
                     })))}
                   >
                     {card.favorite ? copy.menuUnfavorite : copy.menuFavorite}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="dsh-model-picker-cardMenuItem"
+                  </MenuItemButton>
+                  <MenuItemButton
                     disabled={isFirst}
-                    onClick={run(() => onPrefsChange(prev => ({
+                    onSelect={run(() => onPrefsChange(prev => ({
                       ...prev,
                       order: moveCardKey(fullArrangedKeys, card.canonicalKey, 'first'),
                     })))}
                   >
                     {copy.menuMoveFirst}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="dsh-model-picker-cardMenuItem"
+                  </MenuItemButton>
+                  <MenuItemButton
                     disabled={isLast}
-                    onClick={run(() => onPrefsChange(prev => ({
+                    onSelect={run(() => onPrefsChange(prev => ({
                       ...prev,
                       order: moveCardKey(fullArrangedKeys, card.canonicalKey, 'last'),
                     })))}
                   >
                     {copy.menuMoveLast}
-                  </button>
-                  <div role="separator" className="dsh-model-picker-cardMenuSep" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="dsh-model-picker-cardMenuItem"
-                    onClick={run(() => {
+                  </MenuItemButton>
+                  <MenuItemButton
+                    separatorBefore
+                    onSelect={run(() => {
                       editingCancelledRef.current = false
                       setEditingKey(card.canonicalKey)
                       setEditingDraft(card.short)
                     })}
                   >
                     {copy.menuRename}
-                  </button>
+                  </MenuItemButton>
                   {card.customShort ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="dsh-model-picker-cardMenuItem"
-                      onClick={run(() => onPrefsChange(prev => {
+                    <MenuItemButton
+                      onSelect={run(() => onPrefsChange(prev => {
                         const aliases = { ...prev.aliases }
                         delete aliases[card.canonicalKey]
                         return { ...prev, aliases }
                       }))}
                     >
                       {copy.menuResetShort}
-                    </button>
+                    </MenuItemButton>
                   ) : null}
                   {canCopyId ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="dsh-model-picker-cardMenuItem"
-                      onClick={run(() => {
+                    <MenuItemButton
+                      onSelect={run(() => {
                         void navigator.clipboard.writeText(card.activeRoute.model).catch(() => {})
                       })}
                     >
                       {copy.menuCopyId}
-                    </button>
+                    </MenuItemButton>
                   ) : null}
-                  <div role="separator" className="dsh-model-picker-cardMenuSep" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="dsh-model-picker-cardMenuItem"
-                    onClick={run(() => onPrefsChange(prev => ({
+                  <MenuItemButton
+                    separatorBefore
+                    onSelect={run(() => onPrefsChange(prev => ({
                       ...prev,
                       hidden: toggleKey(prev.hidden, card.canonicalKey),
                     })))}
                   >
                     {card.hidden ? copy.menuUnhide : copy.menuHide}
-                  </button>
+                  </MenuItemButton>
                 </>
               })()}
             </div>

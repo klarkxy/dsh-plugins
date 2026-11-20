@@ -204,64 +204,30 @@ export const modelPickerCss = `${modelMenuCss}
   display: inline-flex;
   align-items: center;
 }
+/* The filter field is the host Input atom: our class lands on its wrapper
+ * span, the native input inside is styled by the host. */
 .dsh-model-picker-filter {
   flex: 1;
   min-width: 0;
-  font: inherit;
-  font-size: 12px;
-  line-height: 18px;
-  padding: 3px 24px 3px 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
+  height: 24px;
+  padding-right: 24px;
 }
-.dsh-model-picker-filter::placeholder { color: var(--dsw-alias-label-tertiary); }
-.dsh-model-picker-filter:focus {
-  outline: none;
-  border-color: var(--dsw-alias-state-business-primary);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-business-primary) 30%, transparent);
-}
-.dsh-model-picker-filter::-webkit-search-cancel-button { display: none; }
+.dsh-model-picker-filter input { font-size: 12px; }
+.dsh-model-picker-filter input::-webkit-search-cancel-button { display: none; }
 .dsh-model-picker-filterClear {
   position: absolute;
   right: 3px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 18px;
   height: 18px;
-  border: 0;
-  border-radius: var(--dsw-radius-sm);
   padding: 0;
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary);
-  font: inherit;
   font-size: 12px;
   line-height: 1;
-  cursor: pointer;
-}
-.dsh-model-picker-filterClear:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
 }
 .dsh-model-picker-hiddenToggle {
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-sm);
-  padding: 2px 7px;
-  font: inherit;
+  height: 24px;
   font-size: 11px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
-  background: transparent;
-  cursor: pointer;
-}
-.dsh-model-picker-hiddenToggle:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
 }
 .dsh-model-picker-hiddenToggle[aria-pressed='true'] {
-  border-color: var(--dsw-alias-state-business-primary);
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent);
   color: var(--dsw-alias-state-business-primary);
 }
@@ -538,36 +504,6 @@ export const modelPickerCss = `${modelMenuCss}
   transform-origin: top left;
   animation: dshModelPickerPopIn 120ms cubic-bezier(.2,.8,.2,1);
 }
-.dsh-model-picker-cardMenuItem {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  padding: 5px 8px;
-  border: 0;
-  border-radius: var(--dsw-radius-sm);
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  line-height: 16px;
-  text-align: left;
-  cursor: pointer;
-}
-.dsh-model-picker-cardMenuItem:hover:not(:disabled),
-.dsh-model-picker-cardMenuItem:focus-visible {
-  outline: none;
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-.dsh-model-picker-cardMenuItem:disabled { opacity: 0.45; cursor: default; }
-.dsh-model-picker-cardMenuSep {
-  height: 0;
-  border: 0;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
-  margin: 3px 4px;
-}
 .dsh-model-picker-provMenuLabel {
   padding: 2px 6px;
   font-size: 10px;
@@ -708,14 +644,15 @@ export const modelPickerCss = `${modelMenuCss}
 }
 @media (prefers-reduced-motion: reduce) {
   .dsh-model-picker-viewBtn, .dsh-model-picker-card, .dsh-model-picker-effortCell,
-  .dsh-model-picker-provBtn, .dsh-model-picker-cardMenuItem {
+  .dsh-model-picker-provBtn {
     transition: none;
   }
   .dsh-model-picker-periodicSurface, .dsh-model-picker-card, .dsh-model-picker-provMenu,
   .dsh-model-picker-cardMenu, .dsh-model-picker-fav {
     animation: none;
   }
-  .dsh-model-picker-card:hover, .dsh-model-picker-card:active {
+  .dsh-model-picker-card:hover:not(.dsh-model-picker-cardDragging),
+  .dsh-model-picker-card:active:not(.dsh-model-picker-cardDragging) {
     transform: none;
   }
 }
