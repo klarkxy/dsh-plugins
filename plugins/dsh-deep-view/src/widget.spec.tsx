@@ -1,7 +1,7 @@
 import { act } from 'react'
 import { JSDOM } from 'jsdom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { WidgetCard } from './widget.tsx'
+import { WidgetCard, WidgetView } from './widget.tsx'
 import { viewStyles } from './styles.ts'
 
 const dom = new JSDOM('<div id="root"></div>', { url: 'https://local.test' })
@@ -153,6 +153,44 @@ describe('widget interactions without a browser', () => {
     await act(async () => root.render(<WidgetCard view={{ type: 'confirm', id: 'go' }} t={t} labels={labels} embedded />))
     expect(document.querySelector('.dvui-view.dvui-embedded')).toBeTruthy()
     expect(viewStyles).toContain('.dvui-view.dvui-embedded')
+    await act(async () => root.unmount())
+  })
+  it('enforces closed on a directly rendered WidgetView confirm', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const onSubmit = vi.fn()
+    const onFillDraft = vi.fn()
+    await act(async () => root.render(<WidgetView view={{ type: 'confirm', id: 'go' }} t={t} labels={labels} onSubmit={onSubmit} onFillDraft={onFillDraft} closed registerChart={() => {}} refreshCharts={() => {}} />))
+    expect(document.querySelectorAll('button').length).toBe(0)
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onFillDraft).not.toHaveBeenCalled()
+    await act(async () => root.unmount())
+  })
+  it('enforces closed on directly rendered WidgetView options', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const onSubmit = vi.fn()
+    const onFillDraft = vi.fn()
+    const view = { type: 'options' as const, id: 'pick', options: [{ label: 'One' }, { label: 'Two' }] }
+    await act(async () => root.render(<WidgetView view={view} t={t} labels={labels} onSubmit={onSubmit} onFillDraft={onFillDraft} closed registerChart={() => {}} refreshCharts={() => {}} />))
+    expect(document.querySelectorAll('.dvui-actions button').length).toBe(0)
+    for (const option of document.querySelectorAll<HTMLElement>('.dvui-option')) {
+      await act(async () => option.click())
+    }
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onFillDraft).not.toHaveBeenCalled()
+    await act(async () => root.unmount())
+  })
+  it('enforces closed on a directly rendered WidgetView form', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const onSubmit = vi.fn()
+    const onFillDraft = vi.fn()
+    const view = { type: 'form' as const, id: 'ask', fields: [{ id: 'name', label: 'Name' }] }
+    await act(async () => root.render(<WidgetView view={view} t={t} labels={labels} onSubmit={onSubmit} onFillDraft={onFillDraft} closed registerChart={() => {}} refreshCharts={() => {}} />))
+    expect(document.querySelectorAll('.dvui-actions button').length).toBe(0)
+    for (const field of document.querySelectorAll<HTMLElement>('.dvui-field')) {
+      await act(async () => field.click())
+    }
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onFillDraft).not.toHaveBeenCalled()
     await act(async () => root.unmount())
   })
 })

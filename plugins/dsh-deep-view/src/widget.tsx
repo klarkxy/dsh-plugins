@@ -366,12 +366,15 @@ export function WidgetView({ view, onSubmit, onFillDraft, settled = false, close
   const sent = answer?.values?.inputs
   const current = settled && sent !== null && typeof sent === 'object' ? { ...values, ...sent } : values
   const withInputs = (extra: Record<string, unknown>) => inputs.length > 0 ? { ...extra, inputs: current } : extra
-  const submit = onSubmit === undefined ? undefined : (action: string, extra: Record<string, unknown>) => onSubmit(action, withInputs(extra))
-  const fill = onFillDraft === undefined ? undefined : (action: string, extra: Record<string, unknown>) => onFillDraft(action, withInputs(extra))
-  const editable = !settled && !closed && !busy && (onSubmit !== undefined || fill !== undefined || hasInputs(view))
+  // Closed owns the rule in one place: the view answers nowhere, whatever the caller passed.
+  const direct = closed ? undefined : onSubmit
+  const draft = closed ? undefined : onFillDraft
+  const submit = direct === undefined ? undefined : (action: string, extra: Record<string, unknown>) => direct(action, withInputs(extra))
+  const fill = draft === undefined ? undefined : (action: string, extra: Record<string, unknown>) => draft(action, withInputs(extra))
+  const editable = !settled && !closed && !busy && (submit !== undefined || fill !== undefined || hasInputs(view))
   const ctx: Ctx = {
     onSubmit: submit, onFillDraft: fill, settled, closed, answer, busy, editable, lookup: viewScope(view, current), values: current, ButtonComponent,
-    locked: settled || closed || busy, answerLocked: settled || busy || onSubmit === undefined, fillLocked: settled || busy || fill === undefined,
+    locked: settled || closed || busy, answerLocked: settled || busy || submit === undefined, fillLocked: settled || busy || fill === undefined,
     setInput, registerChart, refreshCharts,
   }
   return <WidgetNode node={view} ctx={ctx} Markdown={Markdown} labels={labels} t={t} />
@@ -411,7 +414,7 @@ export function WidgetCard({ title = '', view, onSubmit, onFillDraft, onDismiss,
   const toolsOnlyHead = !title && !onDismiss && charts.length > 0
   return <div className={`dvui-view ${framed ? 'dvui-framed' : 'dvui-bare'}${selfFramed ? ' dvui-bare-inline' : ''}${settled ? ' dvui-settled' : ''}${closed ? ' dvui-closed' : ''}${embedded ? ' dvui-embedded' : ''}`} role="group" aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : t('View')} aria-busy={busy || undefined}>
     {showHead ? <div className={`dvui-head${toolsOnlyHead ? ' dvui-head-tools-only' : ''}`}>{title ? <p className="dvui-title" id={titleId}>{title}</p> : null}{charts.length > 0 ? <ViewMenu charts={charts} t={t} /> : null}{onDismiss ? <button type="button" className="dvui-dismiss" aria-label={t('Dismiss view')} onClick={onDismiss} disabled={busy}>×</button> : null}</div> : null}
-    <div className="dvui-body"><WidgetView view={view} onSubmit={closed ? undefined : onSubmit} onFillDraft={closed ? undefined : onFillDraft} settled={settled} closed={closed} answer={answer} busy={busy} ButtonComponent={ButtonComponent} registerChart={registerChart} refreshCharts={refreshCharts} t={t} labels={labels} Markdown={Markdown} values={values} onValuesChange={onValuesChange} /></div>
+    <div className="dvui-body"><WidgetView view={view} onSubmit={onSubmit} onFillDraft={onFillDraft} settled={settled} closed={closed} answer={answer} busy={busy} ButtonComponent={ButtonComponent} registerChart={registerChart} refreshCharts={refreshCharts} t={t} labels={labels} Markdown={Markdown} values={values} onValuesChange={onValuesChange} /></div>
     {(localOnly || closed) && hasType(view, new Set(['options', 'confirm', 'form', 'submit'])) ? <p className="dvui-local-note" role="note">{localNote ?? t('Local preview only; this card does not send an answer.')}</p> : null}
   </div>
 }
