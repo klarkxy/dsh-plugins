@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Quick Review",
+    "description": "Start a read-only review session over the current session's changes; its verdict is sent back automatically."
+  }
+}

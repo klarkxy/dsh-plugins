@@ -2,6 +2,14 @@
   "schemaVersion": 2,
   "packages": [
     {
+      "name": "@klarkxy/dsh-quick-review",
+      "state": "testing",
+      "reason": {
+        "zh": "只读评审会话与侧边栏标签页已完成首次发布验收；首次 npm 发布走手动 first_release 流程。",
+        "en": "Read-only review session and sidebar tab passed first-release acceptance; the first npm release goes through the manual first_release workflow."
+      }
+    },
+    {
       "name": "@klarkxy/dsh-workspace-folders",
       "state": "published",
       "reason": {

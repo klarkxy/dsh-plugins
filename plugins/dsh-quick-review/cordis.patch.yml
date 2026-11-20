@@ -1,0 +1,6 @@
+# Enabled when installed. Adds a conversation-header quick review action and a
+# right-sidebar review tab.
+- insert:
+    - id: quick-review
+      name: '@klarkxy/dsh-quick-review'
+      disabled: false
