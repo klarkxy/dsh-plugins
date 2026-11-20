@@ -37,6 +37,10 @@ export type WidgetCardProps = {
   onValuesChange?: (values: Record<string, unknown>) => void
   /** Optional explanation for an interactive preview answered in another surface. */
   localNote?: string
+  /** The card can no longer be answered here (expired or superseded). Controls render read-only with no action row; `localNote` explains why. */
+  closed?: boolean
+  /** Host draws the card shell; the view drops its own margin, padding and frame. */
+  embedded?: boolean
   /** Browser hosts inject their native button without coupling the shared widget to DSH. */
   ButtonComponent?: ButtonHost
 }
@@ -50,6 +54,7 @@ type Ctx = {
   editable: boolean
   busy: boolean
   settled: boolean
+  closed: boolean
   answer?: Answer | null
   onSubmit?: (action: string, values: Record<string, unknown>) => void
   onFillDraft?: (action: string, values: Record<string, unknown>) => void
@@ -130,9 +135,9 @@ function ConfirmInput({ node, ctx, t }: { node: ViewNode; ctx: Ctx; t: ViewT }) 
     {directAnswer(ctx) ? <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, { confirmed: true })}>{node.confirmLabel ?? t('Confirm')}</ActionButton> : null}
   </div>
 }
-function SettledConfirm({ node, answer, t }: { node: ViewNode; answer?: Answer | null; t: ViewT }) {
+function SettledConfirm({ node, answer, t, closed }: { node: ViewNode; answer?: Answer | null; t: ViewT; closed: boolean }) {
   const confirmed = answerValues(answer, node)?.confirmed
-  if (typeof confirmed !== 'boolean') return <ConfirmInput node={node} ctx={{ answerLocked: true } as Ctx} t={t} />
+  if (typeof confirmed !== 'boolean') return closed ? null : <ConfirmInput node={node} ctx={{ answerLocked: true } as Ctx} t={t} />
   return <span className="dvui-badge">{confirmed ? node.confirmLabel ?? t('Confirm') : node.cancelLabel ?? t('Cancel')}</span>
 }
 function FormInput({ node, ctx, t }: { node: ViewNode; ctx: Ctx; t: ViewT }) {
@@ -320,18 +325,18 @@ function WidgetNode({ node, ctx, Markdown, labels, t }: { node: ViewNode; ctx: C
     case 'number': return <NumberInput node={node} ctx={ctx} />
     case 'choice': return <ChoiceInput node={node} ctx={ctx} />
     case 'toggle': return <ToggleInput node={node} ctx={ctx} />
-    case 'submit': return ctx.settled ? null : <div className="dvui-actions">
+    case 'submit': return ctx.settled || ctx.closed ? null : <div className="dvui-actions">
       {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} primary={!directAnswer(ctx)} disabled={ctx.fillLocked} onClick={() => ctx.onFillDraft?.(node.id!, {})}>{directAnswer(ctx) ? t('Fill composer') : node.label || t('Fill composer')}</ActionButton> : null}
       {directAnswer(ctx) ? <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked} onClick={() => ctx.onSubmit?.(node.id!, {})}>{node.label || t('Send')}</ActionButton> : null}
     </div>
     case 'options': return ctx.settled || !ctx.onSubmit && !ctx.onFillDraft ? <SettledOptions node={node} answer={ctx.answer} t={t} /> : <OptionsInput node={node} ctx={ctx} t={t} />
-    case 'confirm': return ctx.settled || !ctx.onSubmit && !ctx.onFillDraft ? <SettledConfirm node={node} answer={ctx.answer} t={t} /> : <ConfirmInput node={node} ctx={ctx} t={t} />
+    case 'confirm': return ctx.settled || !ctx.onSubmit && !ctx.onFillDraft ? <SettledConfirm node={node} answer={ctx.answer} t={t} closed={ctx.closed} /> : <ConfirmInput node={node} ctx={ctx} t={t} />
     case 'form': return ctx.settled || !ctx.onSubmit && !ctx.onFillDraft ? <SettledForm node={node} answer={ctx.answer} t={t} /> : <FormInput node={node} ctx={ctx} t={t} />
     case 'math': case 'flow': case 'explore': case 'map': return <RichNode node={node} lookup={lookup} setInput={ctx.setInput} editable={ctx.editable} t={t} />
     default: return null
   }
 }
-export function WidgetView({ view, onSubmit, onFillDraft, settled = false, answer = null, busy = false, ButtonComponent, registerChart, refreshCharts, t = english, labels = { code: { copyLabel: 'Copy', copiedLabel: 'Copied' }, footnotes: 'Footnotes' }, Markdown = FallbackMarkdown, values: controlled, onValuesChange }: Omit<WidgetCardProps, 'title'> & { registerChart: Ctx['registerChart']; refreshCharts: () => void }) {
+export function WidgetView({ view, onSubmit, onFillDraft, settled = false, closed = false, answer = null, busy = false, ButtonComponent, registerChart, refreshCharts, t = english, labels = { code: { copyLabel: 'Copy', copiedLabel: 'Copied' }, footnotes: 'Footnotes' }, Markdown = FallbackMarkdown, values: controlled, onValuesChange }: Omit<WidgetCardProps, 'title'> & { registerChart: Ctx['registerChart']; refreshCharts: () => void }) {
   const inputs = useMemo(() => viewInputs(view) as ViewNode[], [view])
   const [localValues, setLocalValues] = useState<Record<string, unknown>>(() => Object.fromEntries(inputs.map(node => [node.id, inputDefault(node)])))
   const supplied = controlled ?? localValues
@@ -359,14 +364,17 @@ export function WidgetView({ view, onSubmit, onFillDraft, settled = false, answe
     changeRef.current?.(next)
   }, [inputs])
   const sent = answer?.values?.inputs
-  const current = settled && sent !== null && typeof sent === 'object' ? { ...values, ...sent } : values
+  const current = (settled || closed) && sent !== null && typeof sent === 'object' ? { ...values, ...sent } : values
   const withInputs = (extra: Record<string, unknown>) => inputs.length > 0 ? { ...extra, inputs: current } : extra
-  const submit = onSubmit === undefined ? undefined : (action: string, extra: Record<string, unknown>) => onSubmit(action, withInputs(extra))
-  const fill = onFillDraft === undefined ? undefined : (action: string, extra: Record<string, unknown>) => onFillDraft(action, withInputs(extra))
-  const editable = !settled && !busy && (onSubmit !== undefined || fill !== undefined || hasInputs(view))
+  // Closed owns the rule in one place: the view answers nowhere, whatever the caller passed.
+  const direct = closed ? undefined : onSubmit
+  const draft = closed ? undefined : onFillDraft
+  const submit = direct === undefined ? undefined : (action: string, extra: Record<string, unknown>) => direct(action, withInputs(extra))
+  const fill = draft === undefined ? undefined : (action: string, extra: Record<string, unknown>) => draft(action, withInputs(extra))
+  const editable = !settled && !closed && !busy && (submit !== undefined || fill !== undefined || hasInputs(view))
   const ctx: Ctx = {
-    onSubmit: submit, onFillDraft: fill, settled, answer, busy, editable, lookup: viewScope(view, current), values: current, ButtonComponent,
-    locked: settled || busy, answerLocked: settled || busy || onSubmit === undefined, fillLocked: settled || busy || fill === undefined,
+    onSubmit: submit, onFillDraft: fill, settled, closed, answer, busy, editable, lookup: viewScope(view, current), values: current, ButtonComponent,
+    locked: settled || closed || busy, answerLocked: settled || busy || submit === undefined, fillLocked: settled || busy || fill === undefined,
     setInput, registerChart, refreshCharts,
   }
   return <WidgetNode node={view} ctx={ctx} Markdown={Markdown} labels={labels} t={t} />
@@ -395,7 +403,7 @@ function ViewMenu({ charts, t }: { charts: ChartHandle[]; t: ViewT }) {
   }, [open])
   return <div ref={root} className="dvui-tools" data-open={open ? '' : undefined}><button type="button" className="dvui-more" aria-label={t('Chart options')} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)}><DotsIcon /></button>{open ? <div className="dvui-menu" role="menu">{charts.map((chart, index) => <Fragment key={`${chart.label}-${index}`}>{charts.length > 1 ? <div className="dvui-menu-label">{chart.label ?? t('Chart {n}', { n: index + 1 })}</div> : null}<button type="button" role="menuitem" onClick={() => { setOpen(false); chart.toggleTable() }}><TableIcon />{chart.asTable ? t('View as chart') : t('View as table')}</button><button type="button" role="menuitem" onClick={() => { setOpen(false); chart.copy() }}><CopyIcon />{t('Copy data')}</button></Fragment>)}</div> : null}</div>
 }
-export function WidgetCard({ title = '', view, onSubmit, onFillDraft, onDismiss, busy = false, settled = false, answer = null, t = english, labels = { code: { copyLabel: 'Copy', copiedLabel: 'Copied' }, footnotes: 'Footnotes' }, Markdown = FallbackMarkdown, localOnly = false, localNote, ButtonComponent, values, onValuesChange }: WidgetCardProps) {
+export function WidgetCard({ title = '', view, onSubmit, onFillDraft, onDismiss, busy = false, settled = false, closed = false, embedded = false, answer = null, t = english, labels = { code: { copyLabel: 'Copy', copiedLabel: 'Copied' }, footnotes: 'Footnotes' }, Markdown = FallbackMarkdown, localOnly = false, localNote, ButtonComponent, values, onValuesChange }: WidgetCardProps) {
   const titleId = useId()
   const { charts, registerChart, refreshCharts } = useChartHandles()
   const framed = hasType(view, new Set(['slider', 'number', 'choice', 'toggle', 'options', 'confirm', 'form', 'submit', 'math']))
@@ -404,9 +412,9 @@ export function WidgetCard({ title = '', view, onSubmit, onFillDraft, onDismiss,
   const selfFramed = !title && !onDismiss && (view.type === 'callout' || view.type === 'sources')
   const showHead = Boolean(title || onDismiss || charts.length > 0)
   const toolsOnlyHead = !title && !onDismiss && charts.length > 0
-  return <div className={`dvui-view ${framed ? 'dvui-framed' : 'dvui-bare'}${selfFramed ? ' dvui-bare-inline' : ''}${settled ? ' dvui-settled' : ''}`} role="group" aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : t('View')} aria-busy={busy || undefined}>
+  return <div className={`dvui-view ${framed ? 'dvui-framed' : 'dvui-bare'}${selfFramed ? ' dvui-bare-inline' : ''}${settled ? ' dvui-settled' : ''}${closed ? ' dvui-closed' : ''}${embedded ? ' dvui-embedded' : ''}`} role="group" aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : t('View')} aria-busy={busy || undefined}>
     {showHead ? <div className={`dvui-head${toolsOnlyHead ? ' dvui-head-tools-only' : ''}`}>{title ? <p className="dvui-title" id={titleId}>{title}</p> : null}{charts.length > 0 ? <ViewMenu charts={charts} t={t} /> : null}{onDismiss ? <button type="button" className="dvui-dismiss" aria-label={t('Dismiss view')} onClick={onDismiss} disabled={busy}>×</button> : null}</div> : null}
-    <div className="dvui-body"><WidgetView view={view} onSubmit={onSubmit} onFillDraft={onFillDraft} settled={settled} answer={answer} busy={busy} ButtonComponent={ButtonComponent} registerChart={registerChart} refreshCharts={refreshCharts} t={t} labels={labels} Markdown={Markdown} values={values} onValuesChange={onValuesChange} /></div>
-    {localOnly && hasType(view, new Set(['options', 'confirm', 'form', 'submit'])) ? <p className="dvui-local-note" role="note">{localNote ?? t('Local preview only; this card does not send an answer.')}</p> : null}
+    <div className="dvui-body"><WidgetView view={view} onSubmit={onSubmit} onFillDraft={onFillDraft} settled={settled} closed={closed} answer={answer} busy={busy} ButtonComponent={ButtonComponent} registerChart={registerChart} refreshCharts={refreshCharts} t={t} labels={labels} Markdown={Markdown} values={values} onValuesChange={onValuesChange} /></div>
+    {(localOnly || closed) && hasType(view, new Set(['options', 'confirm', 'form', 'submit'])) ? <p className="dvui-local-note" role="note">{localNote ?? t('Local preview only; this card does not send an answer.')}</p> : null}
   </div>
 }
