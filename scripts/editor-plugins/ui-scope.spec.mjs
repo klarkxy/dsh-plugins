@@ -18,6 +18,7 @@ const roots = {
   'dsh-model-hub': ['.dsh-model-hub', '.dsh-model-hub-subagent'],
   'dsh-model-picker': ['.dsh-model-picker', '.dsh-model-picker-'],
   'dsh-model-route': ['.dsh-model-menu-'],
+  'dsh-quick-review': ['.qrv-root'],
   'dsh-safe-auto': ['.dsh-safe-auto'],
   'dsh-secret-manager': ['.sm-root'],
   'dsh-session-manager': ['.dsh-free-chat'],
