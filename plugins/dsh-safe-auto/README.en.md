@@ -18,7 +18,7 @@ Replace `web` with your profile name and restart the profile after installing.
 
 ### Enable and configure the reviewer
 
-- **Enable per session**: pick **Safe Auto** from the permission menu next to the chat input. It applies only to that session, and choosing another level turns it off. When the most recently opened or selected top-level session uses Safe Auto, new top-level sessions inherit it automatically (or keep native permissions without escalating if Safe Auto is unavailable).
+- **Enable per session**: choose **Safe Auto** from the permission menu next to the chat input. New top-level sessions then inherit automatic review when they already allow workspace writes and ask for approvals. Choosing another permission level turns off automatic review for the current session and stops future inheritance. Browsing old chats leaves this preference alone. After upgrading from an older version, choose **Safe Auto** once to enable inheritance.
 - **Reviewer settings**: open **Settings → Session Management → Safe Auto** and use the **Reviewer** tab to configure the **Reviewer model**, **Reasoning effort**, and **Additional reviewer prompt** (up to 4096 characters; may add constraints only, never expand authorization or override safety rules). The **Limits** tab shows the profile-configured timeout and size caps.
 - **Model following and retry**: leaving the reviewer model empty follows the shared **Default auxiliary model** under **Settings → Session Management** (or the current conversation model when no default is set); changes made elsewhere sync automatically. If the model list fails to load or some providers are unavailable, click **Retry**; your saved configuration and unsaved draft stay intact.
 

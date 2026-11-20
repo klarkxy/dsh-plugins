@@ -6,6 +6,9 @@ packages:
 # (std-env from vitest and ansis from tsdown).
 nodeLinker: hoisted
 
+# Require an explicit install when dependencies are out of sync before running scripts.
+verifyDepsBeforeRun: error
+
 # Keep the existing build policy: only esbuild may run dependency scripts.
 allowBuilds:
   esbuild: true

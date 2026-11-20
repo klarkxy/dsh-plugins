@@ -282,8 +282,10 @@ test('permission menu checks the current preset and disables an unavailable Safe
   const dom = new JSDOM('<div id="root"></div>'); const previous = new Map();
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true })) { previous.set(key, globalThis[key]); Object.defineProperty(globalThis, key, { configurable: true, writable: true, value }); }
   const root = createRoot(dom.window.document.getElementById('root'));
+  const choices = [];
   const openMenu = async (session, key) => {
-    const api = { getSession: async () => session };
+    const api = { getSession: async () => session, openSession: async () => session,
+      selectSession: async choice => { choices.push(choice); return session; } };
     await act(async () => root.render(React.createElement(client.PermissionMenu, { key, sessionId: 's', locked: false, api })));
     await act(async () => dom.window.document.querySelector('button[aria-haspopup="menu"]').click());
     return [...dom.window.document.querySelectorAll('[role="menuitem"]')];
@@ -294,6 +296,10 @@ test('permission menu checks the current preset and disables an unavailable Safe
     const safeAuto = items.find(item => item.textContent.includes('Safe Auto'));
     assert.equal(safeAuto.getAttribute('aria-checked'), 'true');
     for (const item of items.filter(item => item !== safeAuto)) assert.equal(item.getAttribute('aria-checked'), 'false');
+
+    assert.deepEqual(choices, []);
+    await act(async () => safeAuto.click());
+    assert.deepEqual(choices, [{ sessionId: 's', expectedRevision: '1:0', value: 'safe-auto' }]);
 
     const unavailableItems = await openMenu(snapshot({ available: false, options: snapshot().options.filter(o => o.value !== 'safe-auto') }), 'unavailable');
     const unavailable = unavailableItems.find(item => item.textContent.includes('Safe Auto · unavailable'));

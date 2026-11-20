@@ -319,7 +319,7 @@ export function PermissionMenu({ sessionId, locked, api, locale, initialSnapshot
   const choose = value => {
     const scope = scopeRef.current;
     if (!snapshot || scope?.writing) return;
-    if (value === snapshot.current) { setOpen(false); return; }
+    // Selecting the checked entry also remembers it for future chats.
     if (value === 'safe-auto' && !snapshot.available) return;
     setBusy(true); setError('');
     scope?.run(() => api.selectSession({ sessionId, expectedRevision: snapshot.revision, value }), {

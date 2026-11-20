@@ -75,11 +75,11 @@ test('UI host mounts an authenticated route and disposes control without model c
 
 test('the UI host inherits Safe Auto on agent startup from persisted state', async () => {
   const disposers = []; const listeners = new Map(); const rows = new Map();
-  rows.set('recent:lastSelection', { value: 'safe-auto' });
+  rows.set('recent:explicitSelection', { value: 'safe-auto' });
   const events = [];
   const session = { id: 'new', header: { id: 'new', isSeeded: false }, get seq() { return events.length; }, snapshotEvents: () => events };
   const spec = { sandbox: 'workspace-write', approval: 'ask' };
-  let attachedControl;
+  let attachedControl; let presetSets = 0;
   const ctx = new Context();
   Object.assign(ctx, {
     on(event, callback) { listeners.set(event, callback); return () => listeners.delete(event); },
@@ -87,7 +87,7 @@ test('the UI host inherits Safe Auto on agent startup from persisted state', asy
     storageDomain: { async open() { return { table: name => ({
       get: key => rows.get(`${name}:${key}`), put: async (key, value) => rows.set(`${name}:${key}`, structuredClone(value)),
     }), close: async () => {} }; } },
-    permissionPresets: { catalog: () => ({ options: [{ value: 'workspace-write' }] }), current: () => 'workspace-write', resolve: () => spec, set: () => {} },
+    permissionPresets: { catalog: () => ({ options: [{ value: 'workspace-write' }] }), current: () => 'workspace-write', resolve: () => spec, set: () => { presetSets++; } },
     sandboxPolicy: { resolve: () => ({ mode: 'workspace-write' }) }, sessions: { get: id => id === 'new' ? session : undefined },
     connection: { requestRejection: () => undefined }, webServer: { register: () => () => {} },
     effect(fn) { disposers.push(fn()); },
@@ -96,7 +96,8 @@ test('the UI host inherits Safe Auto on agent startup from persisted state', asy
   await apply(ctx);
   await listeners.get('agent/created')({ agent: { session }, source: 'startup' });
   assert.equal(attachedControl.config(session).enabled, true);
-  assert.equal(rows.get('recent:lastSelection').value, 'safe-auto');
+  assert.equal(rows.get('recent:explicitSelection').value, 'safe-auto');
+  assert.equal(presetSets, 0);
   // The host owns resume behavior; a resumed session is never opted back in.
   const resumed = { ...session, id: 'resumed', header: { ...session.header, id: 'resumed' } };
   ctx.sessions.get = id => id === resumed.id ? resumed : undefined;

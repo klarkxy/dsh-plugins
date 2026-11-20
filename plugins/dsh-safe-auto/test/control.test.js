@@ -149,7 +149,7 @@ test('request cancellation rejects queued permissions without cancelling another
 test('a new top-level session inherits Safe Auto, including after a control restart', async () => {
   const f = fixture();
   await f.select('safe-auto');
-  assert.equal(f.remembered.get('lastSelection').value, 'safe-auto');
+  assert.equal(f.remembered.get('explicitSelection').value, 'safe-auto');
   const next = f.fresh('next');
   assert.equal(await f.control.seedSession({ session: next }, 'startup'), true);
   assert.equal(f.control.config(next).enabled, true);
@@ -160,21 +160,22 @@ test('a new top-level session inherits Safe Auto, including after a control rest
   await f.control.dispose(); await restored.dispose();
 });
 
-test('the most recently opened native session stops inheritance without an extra click', async () => {
+test('session.open is read-only and does not clear an explicit Safe Auto choice', async () => {
   const f = fixture();
   await f.select('safe-auto');
+  const before = structuredClone(f.remembered.get('explicitSelection'));
   const other = f.fresh('other');
   await f.control.call('session.open', { sessionId: 'other' });
-  assert.equal(f.remembered.get('lastSelection').value, 'native');
+  assert.deepEqual(f.remembered.get('explicitSelection'), before);
   const next = f.fresh('next');
-  assert.equal(await f.control.seedSession({ session: next }, 'startup'), false);
-  assert.equal(f.control.config(next).enabled, false);
+  assert.equal(await f.control.seedSession({ session: next }, 'startup'), true);
+  assert.equal(f.control.config(next).enabled, true);
   await f.control.dispose();
 });
 
 test('inheritance fails closed for unavailable, resumed, forked and child sessions', async () => {
   for (const unavailable of [fixture({ enabled: false }), fixture()]) {
-    unavailable.remembered.set('lastSelection', { value: 'safe-auto' });
+    unavailable.remembered.set('explicitSelection', { value: 'safe-auto' });
     const restored = createControl(unavailable.base, unavailable.options);
     if (unavailable.base.enabled) unavailable.options.presets.catalog = () => ({ options: [{ value: 'read-only' }] });
     const next = unavailable.fresh('next');
@@ -194,36 +195,6 @@ test('inheritance fails closed for unavailable, resumed, forked and child sessio
   await f.control.dispose();
 });
 
-test('returning to a Safe Auto session after a native session restores inheritance; background refresh does not', async () => {
-  const f = fixture(); await f.select('safe-auto');
-  f.fresh('other');
-  await f.control.call('session.open', { sessionId: 'other' });
-  await f.control.call('session.get', { sessionId: 's' });
-  assert.equal(f.remembered.get('lastSelection').value, 'native');
-  await f.control.call('session.open', { sessionId: 's' });
-  const next = f.fresh('next');
-  assert.equal(await f.control.seedSession({ session: next }, 'startup'), true);
-  assert.equal(f.control.config(next).enabled, true);
-  await f.control.dispose();
-});
-
-test('inheritance waits for an earlier session-open memory write and preserves its result', async () => {
-  const f = fixture();
-  const write = Promise.withResolvers();
-  f.recentTable.put = () => write.promise;
-  const opened = f.control.call('session.open', { sessionId: 's' });
-  const next = f.fresh('next');
-  const seeding = f.control.seedSession({ session: next }, 'startup');
-  let settled = false; void seeding.then(() => { settled = true; });
-  await new Promise(setImmediate);
-  assert.equal(settled, false);
-  write.resolve();
-  await opened;
-  assert.equal(await seeding, false);
-  assert.equal(f.control.config(next).enabled, false);
-  await f.control.dispose();
-});
-
 test('a queued explicit Safe Auto choice enables the next creation before inheritance runs', async () => {
   const f = fixture(); const next = f.fresh('next');
   const selecting = f.control.call('session.select', { sessionId: 's', expectedRevision: '0:0', value: 'safe-auto' });
@@ -234,9 +205,61 @@ test('a queued explicit Safe Auto choice enables the next creation before inheri
   await f.control.dispose();
 });
 
+test('legacy lastSelection never grants inheritance, while explicitSelection does', async () => {
+  const f = fixture();
+  await f.control.dispose();
+  f.remembered.set('lastSelection', { value: 'safe-auto' });
+  let control = createControl(f.base, f.options);
+  const legacy = f.fresh('legacy');
+  assert.equal(await control.seedSession({ session: legacy }, 'startup'), false);
+  assert.equal(control.config(legacy).enabled, false);
+  await control.dispose();
+  f.remembered.delete('lastSelection'); f.remembered.set('explicitSelection', { value: 'safe-auto' });
+  control = createControl(f.base, f.options);
+  const current = f.fresh('current');
+  assert.equal(await control.seedSession({ session: current }, 'startup'), true);
+  assert.equal(control.config(current).enabled, true);
+  await control.dispose();
+});
+
+test('inheritance requires workspace-write sandbox and ask approval on the current preset', async () => {
+  for (const variant of [
+    { name: 'read-only sandbox', current: 'workspace-write', sandbox: 'read-only', approval: 'ask', expected: false },
+    { name: 'full-access preset', current: 'danger-full-access', sandbox: 'danger-full-access', approval: 'never', expected: false },
+    { name: 'never approval', current: 'never-ask', sandbox: 'workspace-write', approval: 'never', expected: false },
+    { name: 'compatible workspace write', current: 'workspace-write', sandbox: 'workspace-write', approval: 'ask', expected: true },
+  ]) {
+    const f = fixture();
+    await f.control.dispose();
+    f.remembered.set('explicitSelection', { value: 'safe-auto' });
+    f.specs['never-ask'] = { sandbox: variant.sandbox, approval: variant.approval };
+    f.options.presets.current = () => variant.current;
+    const control = createControl(f.base, { ...f.options,
+      sandboxPolicy: { resolve: () => ({ mode: variant.sandbox, workspaceRoot: f.root }) } });
+    const next = f.fresh(variant.name);
+    assert.equal(await control.seedSession({ session: next }, 'startup'), variant.expected, variant.name);
+    assert.equal(control.config(next).enabled, variant.expected, variant.name);
+    await control.dispose();
+  }
+});
+
+test('compatible inheritance enables Safe Auto without calling presets.set', async () => {
+  const f = fixture();
+  await f.control.dispose();
+  f.remembered.set('explicitSelection', { value: 'safe-auto' });
+  let sets = 0;
+  f.options.presets.set = () => { sets++; };
+  const control = createControl(f.base, f.options);
+  const next = f.fresh('next');
+  assert.equal(await control.seedSession({ session: next }, 'startup'), true);
+  assert.equal(control.config(next).enabled, true);
+  assert.equal(sets, 0);
+  await control.dispose();
+});
+
 test('native preset selection clears the remembered Safe Auto choice', async () => {
   const f = fixture(); await f.select('safe-auto'); await f.select('read-only');
-  assert.equal(f.remembered.get('lastSelection').value, 'native');
+  assert.equal(f.remembered.get('explicitSelection').value, 'native');
   assert.equal(await f.control.seedSession({ session: f.fresh('next') }, 'startup'), false);
   await f.control.dispose();
 });
