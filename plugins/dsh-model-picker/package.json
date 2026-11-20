@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-picker",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Pick a model and reasoning effort in the composer from periodic-table style cards or a searchable list; other plugins can reuse it.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -112,6 +112,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "bb90acc63d16d1f38e3f4808f3bd379143dcfaae2d840e48cf3d8d67b37cdf75"
+    "contentHash": "fdeee0921da87f8f3e71cd0e8f31f2efc17ca97f328770e73306c86621ecaad6"
   }
 }
