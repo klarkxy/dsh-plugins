@@ -363,6 +363,165 @@ describe('ModelPicker periodic card grid (default view)', () => {
       expect(env.dom.window.localStorage.getItem(STORAGE_KEY)).toBe(before)
     } finally { await env.done(root) }
   })
+
+  it('routes printable keys to the filter, Enter picks the first match, and Escape unwinds query then panel', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    const onPickWithEffort = vi.fn()
+    try {
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={choices}
+          selected={{ provider: 'google', model: 'gemini-4-neon' }}
+          onPick={() => {}}
+          onPickWithEffort={onPickWithEffort}
+          efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]}
+        />,
+      ))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const doc = env.dom.window.document
+      const filter = doc.querySelector<HTMLInputElement>('.dsh-model-picker-filter')!
+      expect(filter).not.toBeNull()
+
+      // A printable key pressed while a card body holds focus lands in the
+      // filter input and narrows the grid.
+      const cardBody = doc.querySelector<HTMLElement>('.dsh-model-picker-cardBody')!
+      cardBody.focus()
+      await act(async () => {
+        for (const key of ['g', 'r', 'o', 'k']) {
+          cardBody.dispatchEvent(new env.dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+        }
+      })
+      expect(filter.value).toBe('grok')
+      const visible = [...doc.querySelectorAll<HTMLElement>('.dsh-model-picker-card')]
+      expect(visible).toHaveLength(2)
+      expect(visible.map(card => card.getAttribute('data-card-key'))).toEqual(['grok-4.6', 'grok-4.7'])
+      expect(visible[0]!.hasAttribute('data-first-match')).toBe(true)
+      expect(doc.activeElement).toBe(filter)
+
+      // Enter picks the first visible card with an explicit no-effort pick.
+      await act(async () => Simulate.keyDown(filter, { key: 'Enter' }))
+      expect(onPickWithEffort).toHaveBeenCalledWith({ provider: 'xai', model: 'grok-4.6' }, undefined)
+
+      // First Escape clears the query but keeps the panel; the second closes it.
+      await act(async () => filter.dispatchEvent(
+        new env.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      ))
+      expect(filter.value).toBe('')
+      expect(doc.querySelector('.dsh-model-picker-periodicSurface')).not.toBeNull()
+      expect(doc.querySelectorAll('.dsh-model-picker-card')).toHaveLength(3)
+      await act(async () => filter.dispatchEvent(
+        new env.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      ))
+      expect(doc.querySelector('.dsh-model-picker-periodicSurface')).toBeNull()
+
+      // Reopen and filter to nothing: the filter-empty state shows.
+      await env.click(doc.querySelector('button')!)
+      const body = doc.querySelector<HTMLElement>('.dsh-model-picker-cardBody')!
+      await act(async () => {
+        body.dispatchEvent(new env.dom.window.KeyboardEvent('keydown', { key: 'z', bubbles: true, cancelable: true }))
+      })
+      expect(doc.querySelectorAll('.dsh-model-picker-card')).toHaveLength(0)
+      expect(doc.querySelector('.dsh-model-picker-empty')!.textContent).toBe('No matching models')
+    } finally { await env.done(root) }
+  })
+
+  it('context menu favorites, reorders, hides/reveals, and renames cards', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    try {
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={choices}
+          selected={{ provider: 'google', model: 'gemini-4-neon' }}
+          onPick={() => {}}
+          efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]}
+          selectedEffort="high"
+          onPickEffort={() => {}}
+        />,
+      ))
+      const doc = env.dom.window.document
+      await env.click(doc.querySelector('button')!)
+      const cardsNow = () => [...doc.querySelectorAll<HTMLElement>('.dsh-model-picker-card')]
+      const openMenuOn = async (index: number) => {
+        await act(async () => Simulate.contextMenu(cardsNow()[index]!, { clientX: 40, clientY: 50 }))
+        return doc.querySelector<HTMLElement>('.dsh-model-picker-cardMenu')!
+      }
+      const menuItem = (menu: HTMLElement, text: string) =>
+        [...menu.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')].find(btn => btn.textContent === text)!
+      const stored = () => JSON.parse(env.dom.window.localStorage.getItem(STORAGE_KEY) ?? '{}')
+
+      // Right-click Grok 4.7 and favorite it: it jumps to the front with a star.
+      let menu = await openMenuOn(2)
+      expect(menu.getAttribute('role')).toBe('menu')
+      await env.click(menuItem(menu, 'Favorite'))
+      expect(doc.querySelector('.dsh-model-picker-cardMenu')).toBeNull()
+      expect(cardsNow()[0]!.getAttribute('data-card-key')).toBe('grok-4.7')
+      expect(cardsNow()[0]!.querySelector('.dsh-model-picker-fav')).not.toBeNull()
+      expect(stored().favorites).toEqual(['grok-4.7'])
+
+      // Move the Gemini card to the end through the same menu.
+      menu = await openMenuOn(1)
+      expect(cardsNow()[1]!.getAttribute('data-card-key')).toBe('gemini-4-neon')
+      await env.click(menuItem(menu, 'Move to end'))
+      expect(cardsNow().map(card => card.getAttribute('data-card-key'))).toEqual([
+        'grok-4.7', 'grok-4.6', 'gemini-4-neon',
+      ])
+      expect(stored().order).toEqual(['grok-4.7', 'grok-4.6', 'gemini-4-neon'])
+
+      // Hide Grok 4.6: it leaves the grid and the toolbar toggle appears.
+      menu = await openMenuOn(1)
+      expect(cardsNow()[1]!.getAttribute('data-card-key')).toBe('grok-4.6')
+      await env.click(menuItem(menu, 'Hide'))
+      expect(cardsNow().map(card => card.getAttribute('data-card-key'))).toEqual(['grok-4.7', 'gemini-4-neon'])
+      const toggle = doc.querySelector<HTMLButtonElement>('.dsh-model-picker-hiddenToggle')!
+      expect(toggle).not.toBeNull()
+      expect(toggle.textContent).toBe('Hidden (1)')
+      expect(toggle.getAttribute('aria-pressed')).toBe('false')
+
+      // The toggle reveals it dimmed; its menu offers Unhide which restores it.
+      await env.click(toggle)
+      const revealed = cardsNow().find(card => card.getAttribute('data-card-key') === 'grok-4.6')!
+      expect(revealed.hasAttribute('data-hidden')).toBe(true)
+      menu = await openMenuOn(cardsNow().indexOf(revealed))
+      await env.click(menuItem(menu, 'Unhide'))
+      expect(cardsNow().find(card => card.getAttribute('data-card-key') === 'grok-4.6')!.hasAttribute('data-hidden')).toBe(false)
+      expect(doc.querySelector('.dsh-model-picker-hiddenToggle')).toBeNull()
+
+      // Rename enters the same inline edit mode as the double-click path.
+      menu = await openMenuOn(0)
+      await env.click(menuItem(menu, 'Rename symbol'))
+      expect(cardsNow()[0]!.querySelector('.dsh-model-picker-shortInput')).not.toBeNull()
+    } finally { await env.done(root) }
+  })
+
+  it('does not open the card context menu while disabled', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    const Probe = (props: { disabled?: boolean }): React.ReactElement => (
+      <ModelPicker
+        {...kit}
+        disabled={props.disabled}
+        choices={choices}
+        selected={{ provider: 'google', model: 'gemini-4-neon' }}
+        onPick={() => {}}
+        efforts={[{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]}
+        selectedEffort="high"
+        onPickEffort={() => {}}
+      />
+    )
+    try {
+      await act(async () => root.render(<Probe disabled={false} />))
+      const doc = env.dom.window.document
+      await env.click(doc.querySelector('button')!)
+      await act(async () => root.render(<Probe disabled={true} />))
+      const card = doc.querySelector<HTMLElement>('.dsh-model-picker-card')!
+      await act(async () => Simulate.contextMenu(card, { clientX: 40, clientY: 50 }))
+      expect(doc.querySelector('.dsh-model-picker-cardMenu')).toBeNull()
+    } finally { await env.done(root) }
+  })
 })
 
 describe('ModelPicker factory component (list view)', () => {
@@ -572,7 +731,7 @@ describe('ComposerModelSeat', () => {
     try {
       await act(async () => root.render(<ComposerModelSeat {...props} />))
       const trigger = env.dom.window.document.querySelector('button')!
-      expect(trigger.textContent).toContain('跟随模型默认')
+      expect(trigger.textContent).toContain('模型默认')
       await env.click(trigger)
       const slider = env.dom.window.document.querySelector<HTMLInputElement>('input[type="range"]')!
       expect(slider.value).toBe('0')

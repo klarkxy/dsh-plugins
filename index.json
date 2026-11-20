@@ -636,8 +636,8 @@
         "en": "Model picker"
       },
       "description": {
-        "zh": "输入框里的模型搜索与推理档位滑杆；其他插件可复用同一选择器。",
-        "en": "Searchable model selection with a reasoning-effort slider in the composer; other plugins can reuse the same picker."
+        "zh": "在输入框用元素周期表式卡片或可搜索列表选择模型和思考强度；其他插件可复用。",
+        "en": "Pick a model and reasoning effort in the composer from periodic-table style cards or a searchable list; other plugins can reuse it."
       },
       "author": "klarkxy",
       "homepage": "https://klarkxy.github.io/dsh-plugins/plugins/model-picker/",

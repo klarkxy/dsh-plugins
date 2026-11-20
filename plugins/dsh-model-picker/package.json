@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-model-picker",
   "version": "0.1.4",
-  "description": "Model picker: searchable model selection with a reasoning-effort slider in the composer, plus a shared picker other plugins can reuse.",
+  "description": "Pick a model and reasoning effort in the composer from periodic-table style cards or a searchable list; other plugins can reuse it.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",

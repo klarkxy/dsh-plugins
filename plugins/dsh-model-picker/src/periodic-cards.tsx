@@ -9,11 +9,20 @@
  *
  * Interactions:
  * - Click card center: pick model with NO explicit reasoning effort (`undefined`).
+ * - Type anywhere (or in the toolbar filter): live-filter cards. Enter picks the
+ *   first match, ArrowDown focuses the grid, Escape clears the query first.
+ * - Right-click a card: context menu (favorite, move to front/end, rename,
+ *   restore symbol, copy model ID, hide). Favorites pin to the front; hidden
+ *   cards reappear dimmed via the toolbar toggle.
  * - Click a bottom effort cell: pick model + effort in one click (click again to clear).
  * - Click top-right provider trigger: open channel menu to switch provider for this model.
  * - Double-click short symbol: inline rename (clear to restore preset).
  * - Drag & drop: left/right 28% inserts before/after; center 44% swaps in place.
+ *   Drops run on the visible keys and merge back into the full arranged order
+ *   slot-for-slot, so filtering or hiding never strands non-visible cards.
  * - Width slider adjusts `--_card-w` live and persists locally.
+ * - Entrance, hover, pop-in and reorder motion is CSS/WAAPI FLIP; all of it
+ *   shuts off under `prefers-reduced-motion`.
  */
 import {
   cloneElement, isValidElement, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
@@ -26,6 +35,7 @@ import type { ModelPickerLeadingItem } from '@klarkxy/dsh-model-route/model-pick
 import { compactEffortLabel, type ModelFamily } from './model-presets.ts'
 import {
   applyCardDrop, buildPeriodicCards, CARD_WIDTH_MAX, CARD_WIDTH_MIN, dropModeFromRatio,
+  filterPeriodicCards, mergeSubsetOrder, moveCardKey, toggleKey,
   type CardDropMode, type PeriodicCardEntry, type PeriodicPrefs,
 } from './periodic-store.ts'
 
@@ -42,7 +52,21 @@ export interface PeriodicCopy {
   readonly cardBodyTitle: string
   readonly shortEditTitle: string
   readonly effortCellTitle: string
-  readonly effortNone: string
+  readonly filterPlaceholder: string
+  readonly filterClear: string
+  readonly filterEmpty: string
+  readonly contextMenuLabel: string
+  readonly menuFavorite: string
+  readonly menuUnfavorite: string
+  readonly menuMoveFirst: string
+  readonly menuMoveLast: string
+  readonly menuRename: string
+  readonly menuResetShort: string
+  readonly menuCopyId: string
+  readonly menuHide: string
+  readonly menuUnhide: string
+  readonly hiddenToggle: string
+  readonly favoriteMark: string
   readonly hint: string
 }
 
@@ -60,32 +84,60 @@ export function periodicCopy(locale: string | undefined): PeriodicCopy {
         viewList: '列表',
         widthNarrow: '窄',
         widthWide: '宽',
-        widthAria: '调整卡片宽度',
-        resetOrder: '重置顺序',
-        providerMenuTitle: '选择供应商渠道',
+        widthAria: '卡片宽度',
+        resetOrder: '恢复默认布局',
+        providerMenuTitle: '供应商',
         providerTriggerTitle: '切换供应商',
         swapBadge: '交换',
-        cardBodyTitle: '点击选中模型（不传思考强度）',
+        cardBodyTitle: '选择模型，不指定思考强度',
         shortEditTitle: '双击修改简称',
-        effortCellTitle: '点击选定思考强度（再点取消）',
-        effortNone: '不传思考强度',
-        hint: '拖到边缘插入 · 拖到中间交换 · 双击简称改名',
+        effortCellTitle: '再点一次取消',
+        filterPlaceholder: '输入以筛选',
+        filterClear: '清除筛选',
+        filterEmpty: '没有匹配的模型',
+        contextMenuLabel: '卡片操作',
+        menuFavorite: '收藏',
+        menuUnfavorite: '取消收藏',
+        menuMoveFirst: '移到最前',
+        menuMoveLast: '移到最后',
+        menuRename: '修改简称',
+        menuResetShort: '恢复默认简称',
+        menuCopyId: '复制模型 ID',
+        menuHide: '隐藏',
+        menuUnhide: '取消隐藏',
+        hiddenToggle: '已隐藏 {n}',
+        favoriteMark: '已收藏',
+        hint: '输入即可筛选 · 右键卡片管理 · 拖动调整顺序',
       }
     : {
         viewCards: 'Cards',
         viewList: 'List',
         widthNarrow: 'Narrow',
         widthWide: 'Wide',
-        widthAria: 'Adjust card width',
-        resetOrder: 'Reset order',
-        providerMenuTitle: 'Select provider',
+        widthAria: 'Card width',
+        resetOrder: 'Reset layout',
+        providerMenuTitle: 'Provider',
         providerTriggerTitle: 'Switch provider',
         swapBadge: 'Swap',
-        cardBodyTitle: 'Select model without reasoning effort',
+        cardBodyTitle: 'Select model without setting reasoning effort',
         shortEditTitle: 'Double-click to rename',
-        effortCellTitle: 'Select reasoning effort (click again to clear)',
-        effortNone: 'No effort',
-        hint: 'Drag edges to insert · center to swap · double-click to rename',
+        effortCellTitle: 'Click again to clear',
+        filterPlaceholder: 'Type to filter',
+        filterClear: 'Clear filter',
+        filterEmpty: 'No matching models',
+        contextMenuLabel: 'Card actions',
+        menuFavorite: 'Favorite',
+        menuUnfavorite: 'Unfavorite',
+        menuMoveFirst: 'Move to front',
+        menuMoveLast: 'Move to end',
+        menuRename: 'Rename symbol',
+        menuResetShort: 'Restore default symbol',
+        menuCopyId: 'Copy model ID',
+        menuHide: 'Hide',
+        menuUnhide: 'Unhide',
+        hiddenToggle: 'Hidden ({n})',
+        favoriteMark: 'Favorited',
+        hint: 'Type to filter · Right-click a card for more · Drag to reorder',
       }
 }
 
@@ -138,16 +190,28 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
   const copy = useMemo(() => periodicCopy(locale), [locale])
   const rootRef = useRef<HTMLSpanElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const gridRef = useRef<HTMLDivElement | null>(null)
+  const filterInputRef = useRef<HTMLInputElement | null>(null)
+  const contextMenuRef = useRef<HTMLDivElement | null>(null)
+  const cardElsRef = useRef(new Map<string, HTMLElement>())
+  /* Last committed grid layout (key order + grid-relative rects) for FLIP. */
+  const layoutRef = useRef<{ keys: readonly string[]; rects: Map<string, { x: number; y: number }> }>(
+    { keys: [], rects: new Map() },
+  )
   const openRef = useRef(open)
   openRef.current = open
   const id = useId()
 
-  const [panelPos, setPanelPos] = useState<CSSProperties | null>(null)
+  const [panelPos, setPanelPos] = useState<{ left: number; top: number; placement: 'above' | 'below' } | null>(null)
   const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [editingDraft, setEditingDraft] = useState('')
   const [dragSrcIndex, setDragSrcIndex] = useState<number | null>(null)
   const [dropState, setDropState] = useState<{ index: number; mode: CardDropMode } | null>(null)
+  const [query, setQuery] = useState('')
+  const [showHidden, setShowHidden] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ key: string; x: number; y: number } | null>(null)
+  const [contextMenuPos, setContextMenuPos] = useState<{ left: number; top: number } | null>(null)
   /* Rename-cancel flag: a ref (not state) so the flag is visible to the blur
    * commit even when Escape and the unmount-triggered blur share one batch. */
   const editingCancelledRef = useRef(false)
@@ -155,10 +219,25 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
    * selection is held for the double-click window and cancelled on rename. */
   const pendingPickRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const cards = useMemo(
-    () => buildPeriodicCards(choices, prefs, selected),
+  /* The full arranged list (hidden included) is the key space drag drops and
+   * front/back moves merge back into; `cards`/`visibleCards` are its views. */
+  const allCards = useMemo(
+    () => buildPeriodicCards(choices, prefs, selected, { showHidden: true }),
     [choices, prefs, selected],
   )
+  const cards = useMemo(
+    () => (showHidden ? allCards : buildPeriodicCards(choices, prefs, selected)),
+    [allCards, showHidden, choices, prefs, selected],
+  )
+  const visibleCards = useMemo(() => filterPeriodicCards(cards, query), [cards, query])
+  const fullArrangedKeys = useMemo(() => allCards.map(card => card.canonicalKey), [allCards])
+  const hiddenCount = useMemo(
+    () => allCards.reduce((count, card) => count + (card.hidden ? 1 : 0), 0),
+    [allCards],
+  )
+  const contextCard = contextMenu !== null
+    ? allCards.find(card => card.canonicalKey === contextMenu.key) ?? null
+    : null
 
   const gated = disabled || busy
 
@@ -186,6 +265,9 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
       cancelPendingPick()
       setDragSrcIndex(null)
       setDropState(null)
+      setQuery('')
+      setShowHidden(false)
+      setContextMenu(null)
     }
   }, [open])
 
@@ -199,13 +281,23 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
       cancelPendingPick()
       setDragSrcIndex(null)
       setDropState(null)
+      setContextMenu(null)
     }
   }, [gated])
+
+  // The filter grabs focus on open: typing anywhere already routes there, and
+  // keyboard users land on the most common next action.
+  useEffect(() => {
+    if (open) filterInputRef.current?.focus({ preventScroll: true })
+  }, [open])
 
   useEffect(() => {
     if (!open) return
     const onOutside = (event: MouseEvent): void => {
       const target = event.target as Node
+      // A mousedown outside the open context menu closes just the menu; only a
+      // mousedown fully outside the panel closes the panel itself.
+      if (contextMenu !== null && !contextMenuRef.current?.contains(target)) setContextMenu(null)
       if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) return
       onOpenChange(false)
     }
@@ -213,17 +305,45 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
       if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
       if (!openRef.current) return
       event.preventDefault()
+      if (contextMenu !== null) { setContextMenu(null); return }
       if (editingKey !== null) { setEditingKey(null); return }
       if (openMenuKey !== null) { setOpenMenuKey(null); return }
+      if (query !== '') { setQuery(''); return }
       onOpenChange(false)
+    }
+    // Type-to-filter: printable keys from a non-editable target append to the
+    // query and focus the input (the composer textarea is editable, so its
+    // keystrokes never reach this path). Backspace trims the query.
+    const onTypeKey = (event: KeyboardEvent): void => {
+      if (!openRef.current || event.defaultPrevented || event.isComposing) return
+      if (gated || editingKey !== null || contextMenu !== null) return
+      if (event.ctrlKey || event.metaKey || event.altKey) return
+      const target = event.target
+      // Space keeps activating focused buttons and cards; it only extends a
+      // query that is already being typed.
+      if (event.key === ' ' && (query === '' || (target instanceof Element && target.closest('button, [role]') !== null))) return
+      const editable = target instanceof Element
+        && (target.closest('input, textarea, select') !== null
+          || (target instanceof HTMLElement && target.isContentEditable))
+      if (editable) return
+      if (event.key.length === 1) {
+        event.preventDefault()
+        setQuery(prev => prev + event.key)
+        filterInputRef.current?.focus({ preventScroll: true })
+      } else if (event.key === 'Backspace' && query !== '') {
+        event.preventDefault()
+        setQuery(prev => prev.slice(0, -1))
+      }
     }
     document.addEventListener('mousedown', onOutside)
     document.addEventListener('keydown', onEscape)
+    document.addEventListener('keydown', onTypeKey)
     return () => {
       document.removeEventListener('mousedown', onOutside)
       document.removeEventListener('keydown', onEscape)
+      document.removeEventListener('keydown', onTypeKey)
     }
-  }, [open, onOpenChange, editingKey, openMenuKey])
+  }, [open, onOpenChange, editingKey, openMenuKey, contextMenu, query, gated])
 
   useLayoutEffect(() => {
     if (!open) { setPanelPos(null); return }
@@ -237,14 +357,18 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
       const margin = 12
       let left = rect.right - pw
       let top = rect.top - 8 - ph
+      let placement: 'above' | 'below' = 'above'
       if (pw > 0) left = Math.min(Math.max(left, margin), Math.max(margin, window.innerWidth - pw - margin))
       if (ph > 0) {
         if (top < margin && rect.bottom + 8 + ph <= window.innerHeight - margin) {
           top = rect.bottom + 8
+          placement = 'below'
         }
         top = Math.min(Math.max(top, margin), Math.max(margin, window.innerHeight - ph - margin))
       }
-      setPanelPos(prev => (prev && prev.left === left && prev.top === top ? prev : { left, top }))
+      setPanelPos(prev => (prev && prev.left === left && prev.top === top && prev.placement === placement
+        ? prev
+        : { left, top, placement }))
     }
     place()
     window.addEventListener('scroll', place, true)
@@ -254,6 +378,64 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
       window.removeEventListener('resize', place)
     }
   }, [open, cards.length, prefs.cardWidth])
+
+  // Measure the freshly mounted context menu, clamp it inside the panel, and
+  // hand focus to its first enabled item for keyboard users.
+  useLayoutEffect(() => {
+    if (!contextMenu) { setContextMenuPos(null); return }
+    const menu = contextMenuRef.current
+    const panel = panelRef.current
+    if (menu && panel) {
+      const left = Math.min(Math.max(contextMenu.x, 0), Math.max(0, panel.clientWidth - menu.offsetWidth))
+      const top = Math.min(Math.max(contextMenu.y, 0), Math.max(0, panel.clientHeight - menu.offsetHeight))
+      setContextMenuPos({ left, top })
+    } else {
+      setContextMenuPos({ left: contextMenu.x, top: contextMenu.y })
+    }
+    menu?.querySelector<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)')?.focus()
+  }, [contextMenu])
+
+  // FLIP: record every card's grid-relative rect after each commit; when the
+  // visible key sequence changed, play cards that existed before from their
+  // old spot to their new one. Pure width changes keep the same sequence and
+  // never animate; jsdom has no `animate`/`matchMedia` and skips everything.
+  useLayoutEffect(() => {
+    const grid = gridRef.current
+    const keys = visibleCards.map(card => card.canonicalKey)
+    const rects = new Map<string, { x: number; y: number }>()
+    if (grid) {
+      const gridRect = grid.getBoundingClientRect()
+      for (const key of keys) {
+        const el = cardElsRef.current.get(key)
+        if (!el) continue
+        const rect = el.getBoundingClientRect()
+        rects.set(key, {
+          x: rect.left - gridRect.left + grid.scrollLeft,
+          y: rect.top - gridRect.top + grid.scrollTop,
+        })
+      }
+    }
+    const prev = layoutRef.current
+    const sequenceChanged = prev.keys.length !== keys.length || prev.keys.some((key, i) => key !== keys[i])
+    const reduced = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+    if (grid && sequenceChanged && prev.keys.length > 0 && !reduced) {
+      for (const key of keys) {
+        const before = prev.rects.get(key)
+        const after = rects.get(key)
+        const el = cardElsRef.current.get(key)
+        if (!before || !after || !el || typeof el.animate !== 'function') continue
+        const dx = before.x - after.x
+        const dy = before.y - after.y
+        if (dx === 0 && dy === 0) continue
+        el.animate(
+          [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }],
+          { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' },
+        )
+      }
+    }
+    layoutRef.current = { keys: grid ? keys : [], rects }
+  })
 
   const commitAlias = (card: PeriodicCardEntry): void => {
     if (gated || editingCancelledRef.current) {
@@ -307,7 +489,12 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
           role="menu"
           aria-label={modelLabel}
           className={`dsh-model-picker dsh-model-picker-periodicSurface${listClassName ? ` ${listClassName}` : ''}`}
-          style={{ ...panelPos, '--_card-w': `${prefs.cardWidth}px` } as CSSProperties}
+          style={{
+            left: panelPos?.left,
+            top: panelPos?.top,
+            '--_card-w': `${prefs.cardWidth}px`,
+          } as CSSProperties}
+          data-placement={panelPos?.placement}
           onClick={() => { if (openMenuKey !== null) setOpenMenuKey(null) }}
         >
           <div className="dsh-model-picker-toolbar">
@@ -331,6 +518,46 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                 {copy.viewList}
               </button>
             </div>
+            <span className="dsh-model-picker-filterWrap">
+              <input
+                ref={filterInputRef}
+                type="search"
+                className="dsh-model-picker-filter"
+                placeholder={copy.filterPlaceholder}
+                aria-label={copy.filterPlaceholder}
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    const first = visibleCards[0]
+                    if (!gated && first) {
+                      cancelPendingPick()
+                      onPickCard({ provider: first.activeRoute.provider, model: first.activeRoute.model }, undefined)
+                    }
+                  } else if (event.key === 'ArrowDown') {
+                    event.preventDefault()
+                    gridRef.current?.querySelector<HTMLElement>('.dsh-model-picker-cardBody')?.focus()
+                  } else if (event.key === 'Escape' && query !== '') {
+                    event.preventDefault()
+                    setQuery('')
+                  }
+                }}
+              />
+              {query !== '' ? (
+                <button
+                  type="button"
+                  className="dsh-model-picker-filterClear"
+                  aria-label={copy.filterClear}
+                  onClick={() => {
+                    setQuery('')
+                    filterInputRef.current?.focus({ preventScroll: true })
+                  }}
+                >
+                  ×
+                </button>
+              ) : null}
+            </span>
             <label className="dsh-model-picker-widthControl">
               <span>{copy.widthNarrow}</span>
               <input
@@ -350,6 +577,17 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
               />
               <span>{copy.widthWide}</span>
             </label>
+            {hiddenCount > 0 ? (
+              <button
+                type="button"
+                className="dsh-model-picker-hiddenToggle"
+                aria-pressed={showHidden}
+                disabled={gated}
+                onClick={() => { if (!gated) setShowHidden(prev => !prev) }}
+              >
+                {copy.hiddenToggle.replace('{n}', String(hiddenCount))}
+              </button>
+            ) : null}
             {hasCustomOrder ? (
               <button
                 type="button"
@@ -384,27 +622,60 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
 
           {cards.length === 0 ? (
             <div className="dsh-model-picker-empty" role="status">{emptyLabel}</div>
+          ) : visibleCards.length === 0 ? (
+            <div className="dsh-model-picker-empty" role="status">{copy.filterEmpty}</div>
           ) : (
-            <div className="dsh-model-picker-grid" data-testid="periodic-card-grid">
-              {cards.map((card, index) => {
+            <div
+              ref={gridRef}
+              className="dsh-model-picker-grid"
+              data-testid="periodic-card-grid"
+              onScroll={() => { if (contextMenu !== null) setContextMenu(null) }}
+            >
+              {visibleCards.map((card, index) => {
                 const route = card.activeRoute
                 const isActive = Boolean(
                   selected && selected.provider === route.provider && selected.model === route.model,
                 )
                 const isMenuOpen = openMenuKey === card.canonicalKey
                 const isEditing = editingKey === card.canonicalKey
-                const seq = String(index + 1).padStart(2, '0')
+                const seq = String(card.position).padStart(2, '0')
                 const dropMode = dropState?.index === index ? dropState.mode : undefined
                 const activeEffort = isActive ? (selectedEffort || '') : ''
 
                 return (
                   <div
                     key={card.canonicalKey}
+                    ref={el => {
+                      if (el) cardElsRef.current.set(card.canonicalKey, el)
+                      else cardElsRef.current.delete(card.canonicalKey)
+                    }}
                     className={`dsh-model-picker-card${isActive ? ' dsh-model-picker-cardActive' : ''}${isMenuOpen ? ' dsh-model-picker-cardMenuOpen' : ''}${dragSrcIndex === index ? ' dsh-model-picker-cardDragging' : ''}`}
                     data-card-key={card.canonicalKey}
                     data-drop={dropMode}
                     data-swap-label={copy.swapBadge}
+                    data-hidden={card.hidden ? '' : undefined}
+                    data-first-match={query !== '' && index === 0 ? '' : undefined}
+                    style={{ '--_i': index } as CSSProperties}
                     draggable={!gated && !isEditing && !isMenuOpen}
+                    onContextMenu={event => {
+                      event.preventDefault()
+                      if (gated || editingKey !== null) return
+                      cancelPendingPick()
+                      setOpenMenuKey(null)
+                      const panel = panelRef.current
+                      if (!panel) return
+                      const panelRect = panel.getBoundingClientRect()
+                      let x = event.clientX - panelRect.left
+                      let y = event.clientY - panelRect.top
+                      // Keyboard-triggered contextmenu reports 0,0: anchor at
+                      // the card's bottom-left instead of the panel corner.
+                      if (event.clientX === 0 && event.clientY === 0) {
+                        const cardRect = event.currentTarget.getBoundingClientRect()
+                        x = cardRect.left - panelRect.left
+                        y = cardRect.bottom - panelRect.top
+                      }
+                      setContextMenu({ key: card.canonicalKey, x, y })
+                    }}
                     onDragStart={event => {
                       if (gated || isEditing || isMenuOpen) { event.preventDefault(); return }
                       setDragSrcIndex(index)
@@ -436,9 +707,12 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                       const rect = event.currentTarget.getBoundingClientRect()
                       const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0.5
                       const mode = dropModeFromRatio(ratio)
-                      const currentKeys = cards.map(item => item.canonicalKey)
-                      const nextOrder = applyCardDrop(currentKeys, dragSrcIndex, index, mode)
-                      onPrefsChange(prev => ({ ...prev, order: nextOrder }))
+                      // Reorder the visible keys, then merge them back into the
+                      // full arrangement's slots so hidden/filtered-out cards
+                      // never lose their place.
+                      const visibleKeys = visibleCards.map(item => item.canonicalKey)
+                      const nextVisible = applyCardDrop(visibleKeys, dragSrcIndex, index, mode)
+                      onPrefsChange(prev => ({ ...prev, order: mergeSubsetOrder(fullArrangedKeys, nextVisible) }))
                       setDragSrcIndex(null)
                       setDropState(null)
                     }}
@@ -447,6 +721,9 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                       <span className="dsh-model-picker-seqWrap">
                         <span className="dsh-model-picker-seq">{seq}</span>
                         <span className="dsh-model-picker-dot" data-tone={familyTone(card.family)} aria-hidden="true" />
+                        {card.favorite
+                          ? <span className="dsh-model-picker-fav" aria-label={copy.favoriteMark}>★</span>
+                          : null}
                       </span>
                       <button
                         type="button"
@@ -599,6 +876,138 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
               })}
             </div>
           )}
+
+          {contextMenu !== null && contextCard !== null ? (
+            <div
+              ref={contextMenuRef}
+              className="dsh-model-picker-cardMenu"
+              role="menu"
+              aria-label={copy.contextMenuLabel}
+              style={{ left: contextMenuPos?.left ?? contextMenu.x, top: contextMenuPos?.top ?? contextMenu.y }}
+              onClick={event => event.stopPropagation()}
+              onContextMenu={event => event.preventDefault()}
+              onKeyDown={event => {
+                const menu = contextMenuRef.current
+                if (!menu) return
+                const items = [...menu.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)')]
+                if (items.length === 0) return
+                const current = items.indexOf(document.activeElement as HTMLButtonElement)
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault()
+                  items[(current + 1) % items.length]?.focus()
+                } else if (event.key === 'ArrowUp') {
+                  event.preventDefault()
+                  items[(current - 1 + items.length) % items.length]?.focus()
+                } else if (event.key === 'Home') {
+                  event.preventDefault()
+                  items[0]?.focus()
+                } else if (event.key === 'End') {
+                  event.preventDefault()
+                  items[items.length - 1]?.focus()
+                }
+              }}
+            >
+              {(() => {
+                const card = contextCard
+                const run = (action: () => void) => (): void => {
+                  setContextMenu(null)
+                  if (!gated) action()
+                }
+                const isFirst = fullArrangedKeys[0] === card.canonicalKey
+                const isLast = fullArrangedKeys[fullArrangedKeys.length - 1] === card.canonicalKey
+                const canCopyId = typeof navigator !== 'undefined'
+                  && typeof navigator.clipboard?.writeText === 'function'
+                return <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="dsh-model-picker-cardMenuItem"
+                    onClick={run(() => onPrefsChange(prev => ({
+                      ...prev,
+                      favorites: toggleKey(prev.favorites, card.canonicalKey),
+                    })))}
+                  >
+                    {card.favorite ? copy.menuUnfavorite : copy.menuFavorite}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="dsh-model-picker-cardMenuItem"
+                    disabled={isFirst}
+                    onClick={run(() => onPrefsChange(prev => ({
+                      ...prev,
+                      order: moveCardKey(fullArrangedKeys, card.canonicalKey, 'first'),
+                    })))}
+                  >
+                    {copy.menuMoveFirst}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="dsh-model-picker-cardMenuItem"
+                    disabled={isLast}
+                    onClick={run(() => onPrefsChange(prev => ({
+                      ...prev,
+                      order: moveCardKey(fullArrangedKeys, card.canonicalKey, 'last'),
+                    })))}
+                  >
+                    {copy.menuMoveLast}
+                  </button>
+                  <div role="separator" className="dsh-model-picker-cardMenuSep" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="dsh-model-picker-cardMenuItem"
+                    onClick={run(() => {
+                      editingCancelledRef.current = false
+                      setEditingKey(card.canonicalKey)
+                      setEditingDraft(card.short)
+                    })}
+                  >
+                    {copy.menuRename}
+                  </button>
+                  {card.customShort ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="dsh-model-picker-cardMenuItem"
+                      onClick={run(() => onPrefsChange(prev => {
+                        const aliases = { ...prev.aliases }
+                        delete aliases[card.canonicalKey]
+                        return { ...prev, aliases }
+                      }))}
+                    >
+                      {copy.menuResetShort}
+                    </button>
+                  ) : null}
+                  {canCopyId ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="dsh-model-picker-cardMenuItem"
+                      onClick={run(() => {
+                        void navigator.clipboard.writeText(card.activeRoute.model).catch(() => {})
+                      })}
+                    >
+                      {copy.menuCopyId}
+                    </button>
+                  ) : null}
+                  <div role="separator" className="dsh-model-picker-cardMenuSep" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="dsh-model-picker-cardMenuItem"
+                    onClick={run(() => onPrefsChange(prev => ({
+                      ...prev,
+                      hidden: toggleKey(prev.hidden, card.canonicalKey),
+                    })))}
+                  >
+                    {card.hidden ? copy.menuUnhide : copy.menuHide}
+                  </button>
+                </>
+              })()}
+            </div>
+          ) : null}
 
           <div className="dsh-model-picker-foot">
             <span>{copy.hint}</span>

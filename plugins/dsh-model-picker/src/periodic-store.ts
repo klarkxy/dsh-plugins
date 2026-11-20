@@ -26,6 +26,10 @@ export interface PeriodicPrefs {
   readonly aliases: Readonly<Record<string, string>>
   /** Preferred provider id per canonical model key. */
   readonly providers: Readonly<Record<string, string>>
+  /** Canonical keys pinned to the front of the grid. */
+  readonly favorites: readonly string[]
+  /** Canonical keys hidden from the grid until the toolbar toggle reveals them. */
+  readonly hidden: readonly string[]
 }
 
 export const DEFAULT_PERIODIC_PREFS: PeriodicPrefs = {
@@ -34,6 +38,8 @@ export const DEFAULT_PERIODIC_PREFS: PeriodicPrefs = {
   order: [],
   aliases: {},
   providers: {},
+  favorites: [],
+  hidden: [],
 }
 
 export interface PeriodicCardEntry {
@@ -51,6 +57,12 @@ export interface PeriodicCardEntry {
   readonly routes: readonly ModelMenuChoice[]
   /** Active route shown in the card's provider dropdown and effort strip. */
   readonly activeRoute: ModelMenuChoice
+  /** Pinned to the front of the grid via the context menu. */
+  readonly favorite: boolean
+  /** Hidden via the context menu; rendered only when revealed or selected. */
+  readonly hidden: boolean
+  /** 1-based index in the arranged visible list — the stable sequence number. */
+  readonly position: number
 }
 
 export function clampCardWidth(value: unknown): number {
@@ -78,12 +90,15 @@ export function parsePeriodicPrefs(raw: unknown): PeriodicPrefs {
   if (!isRecord(raw)) return DEFAULT_PERIODIC_PREFS
   const viewMode: PickerViewMode = raw.viewMode === 'list' ? 'list' : 'cards'
   const cardWidth = clampCardWidth(raw.cardWidth)
-  const order = Array.isArray(raw.order)
-    ? [...new Set(raw.order.filter((item): item is string => typeof item === 'string' && item.trim() !== ''))]
+  const sanitizeKeys = (value: unknown): string[] => Array.isArray(value)
+    ? [...new Set(value.filter((item): item is string => typeof item === 'string' && item.trim() !== ''))]
     : []
+  const order = sanitizeKeys(raw.order)
   const aliases = sanitizeStringRecord(raw.aliases, 12)
   const providers = sanitizeStringRecord(raw.providers, 200)
-  return { viewMode, cardWidth, order, aliases, providers }
+  const favorites = sanitizeKeys(raw.favorites)
+  const hidden = sanitizeKeys(raw.hidden)
+  return { viewMode, cardWidth, order, aliases, providers, favorites, hidden }
 }
 
 export interface StorageLike {
@@ -194,12 +209,16 @@ export function setPeriodicStoreForTests(store: PeriodicPrefsStore | undefined):
  * - Multiple providers exposing the same canonical model merge into one card.
  * - Distinct model versions stay separate cards.
  * - Card order follows `prefs.order`, appending any new catalog models in
- *   their original catalog order.
+ *   their original catalog order; favorites then stable-partition to the front.
+ * - Hidden cards drop out unless `options.showHidden` or the card serves the
+ *   currently selected route. `position` numbers the returned visible list so
+ *   it stays stable while a query filter hides cards.
  */
 export function buildPeriodicCards(
   choices: readonly ModelMenuChoice[],
   prefs: PeriodicPrefs,
   selected?: { readonly provider: string; readonly model: string },
+  options?: { readonly showHidden?: boolean },
 ): PeriodicCardEntry[] {
   const buckets = new Map<string, ModelMenuChoice[]>()
   for (const choice of choices) {
@@ -221,7 +240,13 @@ export function buildPeriodicCards(
     return 0
   })
 
-  return orderedKeys.map(canonicalKey => {
+  // Favorites keep their relative order and lead the grid (stable sort).
+  const favoriteSet = new Set(prefs.favorites)
+  orderedKeys.sort((a, b) => Number(favoriteSet.has(b)) - Number(favoriteSet.has(a)))
+  const hiddenSet = new Set(prefs.hidden)
+  const showHidden = options?.showHidden === true
+
+  const entries = orderedKeys.map(canonicalKey => {
     const routes = buckets.get(canonicalKey)!
     const selectedMatch = selected
       ? routes.find(route => route.provider === selected.provider && route.model === selected.model)
@@ -243,8 +268,19 @@ export function buildPeriodicCards(
       family: preset.family,
       routes,
       activeRoute,
+      favorite: favoriteSet.has(canonicalKey),
+      hidden: hiddenSet.has(canonicalKey),
+      position: 0,
     }
   })
+
+  const servesSelected = (entry: { routes: readonly ModelMenuChoice[] }): boolean =>
+    selected !== undefined
+    && entry.routes.some(route => route.provider === selected.provider && route.model === selected.model)
+
+  return entries
+    .filter(entry => !entry.hidden || showHidden || servesSelected(entry))
+    .map((entry, index) => ({ ...entry, position: index + 1 }))
 }
 
 /**
@@ -281,4 +317,61 @@ export function dropModeFromRatio(ratio: number): CardDropMode {
   if (ratio < 0.28) return 'before'
   if (ratio > 0.72) return 'after'
   return 'swap'
+}
+
+/** Move `key` to the first or last slot; a no-op copy when the key is absent. */
+export function moveCardKey(keys: readonly string[], key: string, mode: 'first' | 'last'): string[] {
+  const index = keys.indexOf(key)
+  if (index < 0) return [...keys]
+  const next = [...keys]
+  next.splice(index, 1)
+  if (mode === 'first') next.unshift(key)
+  else next.push(key)
+  return next
+}
+
+/** Toggle membership of `key` in a key list (favorites, hidden). */
+export function toggleKey(list: readonly string[], key: string): string[] {
+  return list.includes(key) ? list.filter(item => item !== key) : [...list, key]
+}
+
+/**
+ * Fold a reordered subset back into the full arrangement: subset keys keep
+ * the slots they occupied in `fullKeys`, filled in the new subset order, so
+ * drag-dropping while filtered or with hidden cards never strands the
+ * non-visible cards.
+ */
+export function mergeSubsetOrder(fullKeys: readonly string[], reorderedSubset: readonly string[]): string[] {
+  const queue = [...reorderedSubset]
+  const inSubset = new Set(reorderedSubset)
+  return fullKeys.map(key => (inSubset.has(key) && queue.length > 0 ? queue.shift()! : key))
+}
+
+const FILTER_SEPARATOR = /[\s\-_./:]/g
+
+function normalizeFilterText(text: string): string {
+  return text.normalize('NFKC').toLowerCase()
+}
+
+/**
+ * Multi-token AND filter over a card's symbol, version, full name, canonical
+ * key, and every route's model/label/provider fields. Each token matches the
+ * NFKC-lowercased haystack either verbatim or against a "compact" form with
+ * `[\s\-_./:]` stripped, so `gpt5` finds `gpt-5`.
+ * An empty or whitespace query passes the list through.
+ */
+export function filterPeriodicCards(cards: readonly PeriodicCardEntry[], query: string): PeriodicCardEntry[] {
+  const trimmed = query.trim()
+  if (!trimmed) return [...cards]
+  const tokens = normalizeFilterText(trimmed).split(/\s+/)
+    .map(token => ({ plain: token, compact: token.replace(FILTER_SEPARATOR, '') }))
+  return cards.filter(card => {
+    const raw = [
+      card.short, card.version, card.fullName, card.canonicalKey,
+      ...card.routes.flatMap(route => [route.model, route.label, route.providerLabel ?? '', route.provider]),
+    ].join(' ')
+    const plain = normalizeFilterText(raw)
+    const compact = plain.replace(FILTER_SEPARATOR, '')
+    return tokens.every(token => plain.includes(token.plain) || compact.includes(token.compact))
+  })
 }
