@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-deep-view",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Intelligent reply interfaces with native visuals, interactive math, node graphs, data exploration, maps and validated answers.",
   "icon": "./icon.svg",
   "license": "Apache-2.0",
@@ -166,6 +166,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "d428f601038c4c87d0dfa3074dc366151601a33d173e1abb3bf5492fb0b7a603"
+    "contentHash": "a42a47573e4eccf6070175965a6a417d58d6adc170c8160716a8285ac7482bf7"
   }
 }
