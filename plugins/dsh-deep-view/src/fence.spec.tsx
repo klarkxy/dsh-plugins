@@ -54,12 +54,24 @@ describe('deepui fence layer', () => {
     expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('42')
     await act(async () => root.unmount())
   })
+  it('repairs a malformed body only once streaming ends', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const broken = '{"title":"T","type":"flow","id":"g","nodes":[{"id":"a","label":"A","x":0,y":10},{"id":"b","label":"B"}],"edges":[{"id":"e1","source":"a","target":"b"}]}'
+    await act(async () => root.render(<DeepViewFence code={broken} streaming t={t} children={<pre data-raw />}/>))
+    expect(document.querySelector('.dvui-fence-pending')).toBeTruthy()
+    expect(document.querySelector('.dvui-view')).toBeNull()
+    await act(async () => root.render(<DeepViewFence code={broken} streaming={false} t={t} children={<pre data-raw />}/>))
+    expect(document.querySelector('.dvui-view')).toBeTruthy()
+    await act(async () => root.unmount())
+  })
   it('falls back to the raw code block on final invalid input', async () => {
     const root = createRoot(document.getElementById('root')!)
     const raw = <pre data-raw>broken</pre>
     await act(async () => root.render(<DeepViewFence code='{broken' streaming={false} t={t} children={raw}/>))
     expect(document.querySelector('.dvui-view')).toBeNull()
     expect(document.body.textContent).toContain('invalid')
+    // A repaired-but-rejected body still names a concrete reason after the dash.
+    expect(document.querySelector('[role=status]')!.textContent).toContain(' — ')
     const details = document.querySelector('details')!
     expect(details.open).toBe(false)
     expect(document.querySelector('[data-raw]')).toBeTruthy()

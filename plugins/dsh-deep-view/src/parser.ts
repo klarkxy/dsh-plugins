@@ -1,11 +1,13 @@
-import { checkShownView } from './core/index.js'
+import { jsonrepair } from 'jsonrepair'
+import { checkShownView, VIEW_BYTE_LIMIT } from './core/index.js'
 import type { ShownView } from './contracts.ts'
 
 export type TextPart = { kind: 'markdown' | 'view'; key: string; text: string; shown?: ShownView }
 /**
- * Single-fence-body compile result. 'partial' means JSON parsing failed, which a
- * streaming caller may keep waiting on; 'invalid' means the JSON parsed and
- * checkShownView rejected it, a definitive failure for the same text.
+ * Single-fence-body compile result. 'partial' means strict JSON parsing failed
+ * on a non-final body, which a streaming caller may keep waiting on; 'invalid'
+ * means a final body could not be recovered or checkShownView rejected the
+ * parsed payload, a definitive failure for the same text.
  */
 export type DeepUiCompile =
   | { state: 'complete'; shown: ShownView }
@@ -13,101 +15,28 @@ export type DeepUiCompile =
   | { state: 'partial' }
 
 /**
- * String-aware cleanup for closed model fences: strips `//` and block comments,
- * escapes raw literal control newlines/tabs inside JSON strings, and drops
- * trailing commas before `}` or `]`. Incomplete streaming prefixes keep their
- * unclosed brackets and still fail `JSON.parse`, preserving 'partial' state.
+ * Compile one deepui/deep-view fence body: JSON.parse, then checkShownView on
+ * either {title, view} or a bare ViewNode. The default `final = false` never
+ * repairs — use it for streaming bodies (jsonrepair auto-closes truncated JSON
+ * and would mount half-written cards) and for callers that require strict JSON
+ * (prompt examples). Only a final body is repaired before giving up.
  */
-export function sanitizeLenientJson(source: string): string {
-  let out = ''
-  let inString = false
-  let index = 0
-  while (index < source.length) {
-    const ch = source[index]
-    if (inString) {
-      if (ch === '\\' && index + 1 < source.length) {
-        out += ch + source[index + 1]
-        index += 2
-        continue
-      }
-      if (ch === '"') {
-        inString = false
-        out += ch
-        index += 1
-        continue
-      }
-      if (ch === '\n') { out += '\\n'; index += 1; continue }
-      if (ch === '\r') { out += '\\r'; index += 1; continue }
-      if (ch === '\t') { out += '\\t'; index += 1; continue }
-      out += ch
-      index += 1
-      continue
-    }
-    if (ch === '"') {
-      inString = true
-      out += ch
-      index += 1
-      continue
-    }
-    if (ch === '/' && source[index + 1] === '/') {
-      index += 2
-      while (index < source.length && source[index] !== '\n') index += 1
-      continue
-    }
-    if (ch === '/' && source[index + 1] === '*') {
-      const end = source.indexOf('*/', index + 2)
-      if (end === -1) return source
-      index = end + 2
-      continue
-    }
-    out += ch
-    index += 1
-  }
-  if (inString) return source
-  // Remove trailing commas outside string literals without disturbing strings.
-  let cleaned = ''
-  let quoted = false
-  for (let i = 0; i < out.length; i += 1) {
-    const c = out[i]
-    if (quoted) {
-      if (c === '\\' && i + 1 < out.length) { cleaned += c + out[i + 1]; i += 1; continue }
-      if (c === '"') quoted = false
-      cleaned += c
-      continue
-    }
-    if (c === '"') { quoted = true; cleaned += c; continue }
-    if (c === ',') {
-      let lookahead = i + 1
-      while (lookahead < out.length && /\s/.test(out[lookahead]!)) lookahead += 1
-      if (out[lookahead] === '}' || out[lookahead] === ']') continue
-    }
-    cleaned += c
-  }
-  return cleaned
-}
-
-function parseJsonBody(body: string): { ok: true; value: unknown } | { ok: false } {
+export function compileDeepUi(body: string, final = false): DeepUiCompile {
+  let payload: unknown
   try {
-    return { ok: true, value: JSON.parse(body) }
-  } catch {
+    payload = JSON.parse(body)
+  } catch (error) {
+    if (!final) return { state: 'partial' }
+    if (body.length > 4 * VIEW_BYTE_LIMIT) return { state: 'invalid', error: 'JSON: the body is too large to repair' }
     try {
-      return { ok: true, value: JSON.parse(sanitizeLenientJson(body)) }
+      payload = JSON.parse(jsonrepair(body))
     } catch {
-      return { ok: false }
+      // Discard the repair error on purpose: the original JSON.parse position
+      // is the one the user can act on.
+      const message = error instanceof Error ? error.message : String(error)
+      return { state: 'invalid', error: `JSON: ${message}` }
     }
   }
-}
-
-/**
- * Compile one deepui/deep-view fence body: JSON.parse (with lenient fallback for
- * trailing commas/comments), then checkShownView on either {title, view} or a
- * bare ViewNode. Callers decide how to present 'partial' while streaming versus
- * after the fence is final.
- */
-export function compileDeepUi(body: string): DeepUiCompile {
-  const parsed = parseJsonBody(body)
-  if (!parsed.ok) return { state: 'partial' }
-  const payload = parsed.value
   const record = payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : undefined
   const sent = record && Object.hasOwn(record, 'view') ? record.view : payload
   const title = record && Object.hasOwn(record, 'view') ? record.title : undefined
@@ -165,7 +94,7 @@ export function parseDeepUi(source: string): TextPart[] {
     const body = source.slice(start.contentStart, close.at)
     // A closed fence's compile result is final here: 'partial' and 'invalid'
     // alike fall back to verbatim Markdown, only 'complete' becomes a view.
-    const compiled = compileDeepUi(body)
+    const compiled = compileDeepUi(body, true)
     parts.push(compiled.state === 'complete'
       ? { kind: 'view', key: `v-${start.at}`, text: body, shown: compiled.shown }
       : { kind: 'markdown', key: `m-${start.at}`, text: source.slice(start.at, close.next) })

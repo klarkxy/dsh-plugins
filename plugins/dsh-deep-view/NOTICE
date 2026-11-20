@@ -29,6 +29,7 @@ Bundled third-party components retain their original license notices and metadat
   Copyright React Flow contributors.
 - MapLibre GL JS and its bundled worker: BSD 3-Clause.
   Copyright MapLibre contributors.
+- jsonrepair: ISC License. Copyright (c) 2020-2026 by Jos de Jong.
 
 These notices supplement, and do not replace, the licenses distributed with the
 corresponding pinned npm dependencies.

@@ -70,7 +70,7 @@ export function streamTitle(code: string): string | undefined {
 }
 
 export function DeepViewFence(props: DeepViewFenceProps) {
-  const compiled = useMemo(() => compileDeepUi(props.code), [props.code])
+  const compiled = useMemo(() => compileDeepUi(props.code, !props.streaming), [props.code, props.streaming])
   const shown: ShownView | undefined = compiled.state === 'complete' ? compiled.shown : undefined
   const t = props.t
   const viewT = useMemo(() => fenceViewT(t), [t])
