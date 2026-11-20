@@ -1,7 +1,8 @@
 import { act } from 'react'
 import { JSDOM } from 'jsdom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { WidgetCard } from './widget.tsx'
+import { WidgetCard, WidgetView } from './widget.tsx'
+import { viewStyles } from './styles.ts'
 
 const dom = new JSDOM('<div id="root"></div>', { url: 'https://local.test' })
 vi.stubGlobal('window', dom.window)
@@ -122,6 +123,102 @@ describe('widget interactions without a browser', () => {
     await act(async () => (document.querySelector('.dvui-more') as HTMLButtonElement).click())
     await act(async () => [...document.querySelectorAll('[role=menuitem]')].find(button => button.textContent === 'View as chart')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })))
     expect(document.querySelector('svg')).toBeTruthy()
+    await act(async () => root.unmount())
+  })
+  it('renders a closed confirm read-only with no action row and one local note', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const onSubmit = vi.fn()
+    await act(async () => root.render(<WidgetCard view={{ type: 'confirm', id: 'go', confirmLabel: 'Confirm', cancelLabel: 'Cancel' }} t={t} labels={labels} onSubmit={onSubmit} closed localNote="This card expired." />))
+    expect(document.querySelectorAll('button').length).toBe(0)
+    expect(document.querySelector('.dvui-view.dvui-closed')).toBeTruthy()
+    expect(document.body.textContent!.split('This card expired.').length - 1).toBe(1)
+    expect(onSubmit).not.toHaveBeenCalled()
+    await act(async () => root.unmount())
+  })
+  it('keeps the recorded answer badge on a closed confirm', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<WidgetCard view={{ type: 'confirm', id: 'go', confirmLabel: 'Confirm' }} t={t} labels={labels} closed answer={{ id: 'go', action: 'go', values: { confirmed: true } }} />))
+    expect(document.querySelector('.dvui-badge')!.textContent).toBe('Confirm')
+    expect(document.querySelectorAll('button').length).toBe(0)
+    await act(async () => root.unmount())
+  })
+  it('renders no action row for a closed submit node', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<WidgetCard view={{ type: 'submit', id: 'plan', label: 'Send' }} t={t} labels={labels} onSubmit={vi.fn()} closed />))
+    expect(document.querySelector('.dvui-actions')).toBeNull()
+    await act(async () => root.unmount())
+  })
+  it('marks an embedded card and exports the embedded shell rule', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<WidgetCard view={{ type: 'confirm', id: 'go' }} t={t} labels={labels} embedded />))
+    expect(document.querySelector('.dvui-view.dvui-embedded')).toBeTruthy()
+    expect(viewStyles).toContain('.dvui-view.dvui-embedded')
+    await act(async () => root.unmount())
+  })
+  it('enforces closed on a directly rendered WidgetView confirm', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const onSubmit = vi.fn()
+    const onFillDraft = vi.fn()
+    await act(async () => root.render(<WidgetView view={{ type: 'confirm', id: 'go' }} t={t} labels={labels} onSubmit={onSubmit} onFillDraft={onFillDraft} closed registerChart={() => {}} refreshCharts={() => {}} />))
+    expect(document.querySelectorAll('button').length).toBe(0)
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onFillDraft).not.toHaveBeenCalled()
+    await act(async () => root.unmount())
+  })
+  it('enforces closed on directly rendered WidgetView options', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const onSubmit = vi.fn()
+    const onFillDraft = vi.fn()
+    const view = { type: 'options' as const, id: 'pick', options: [{ label: 'One' }, { label: 'Two' }] }
+    await act(async () => root.render(<WidgetView view={view} t={t} labels={labels} onSubmit={onSubmit} onFillDraft={onFillDraft} closed registerChart={() => {}} refreshCharts={() => {}} />))
+    expect(document.querySelectorAll('.dvui-actions button').length).toBe(0)
+    for (const option of document.querySelectorAll<HTMLElement>('.dvui-option')) {
+      await act(async () => option.click())
+    }
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onFillDraft).not.toHaveBeenCalled()
+    await act(async () => root.unmount())
+  })
+  it('restores the answer inputs on a closed card', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const view = { type: 'stack' as const, children: [
+      { type: 'number' as const, id: 'price', label: 'Price', value: 2 },
+      { type: 'metric' as const, label: 'Total', value: { '=': 'price * 5' } },
+      { type: 'confirm' as const, id: 'go', confirmLabel: 'Confirm' },
+    ] }
+    const answer = { id: 'v', action: 'go', values: { confirmed: true, inputs: { price: 3 } } }
+    await act(async () => root.render(<WidgetCard view={view} t={t} labels={labels} closed answer={answer} />))
+    expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('15')
+    expect((document.querySelector('input[type=number]') as HTMLInputElement).value).toBe('3')
+    expect(document.querySelector('.dvui-badge')!.textContent).toBe('Confirm')
+    expect(document.querySelectorAll('button').length).toBe(0)
+    await act(async () => root.unmount())
+  })
+  it('keeps default inputs on the same view without closed or settled', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const view = { type: 'stack' as const, children: [
+      { type: 'number' as const, id: 'price', label: 'Price', value: 2 },
+      { type: 'metric' as const, label: 'Total', value: { '=': 'price * 5' } },
+      { type: 'confirm' as const, id: 'go', confirmLabel: 'Confirm' },
+    ] }
+    const answer = { id: 'v', action: 'go', values: { confirmed: true, inputs: { price: 3 } } }
+    await act(async () => root.render(<WidgetCard view={view} t={t} labels={labels} answer={answer} />))
+    expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('10')
+    expect((document.querySelector('input[type=number]') as HTMLInputElement).value).toBe('2')
+    await act(async () => root.unmount())
+  })
+  it('enforces closed on a directly rendered WidgetView form', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const onSubmit = vi.fn()
+    const onFillDraft = vi.fn()
+    const view = { type: 'form' as const, id: 'ask', fields: [{ id: 'name', label: 'Name' }] }
+    await act(async () => root.render(<WidgetView view={view} t={t} labels={labels} onSubmit={onSubmit} onFillDraft={onFillDraft} closed registerChart={() => {}} refreshCharts={() => {}} />))
+    expect(document.querySelectorAll('.dvui-actions button').length).toBe(0)
+    for (const field of document.querySelectorAll<HTMLElement>('.dvui-field')) {
+      await act(async () => field.click())
+    }
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onFillDraft).not.toHaveBeenCalled()
     await act(async () => root.unmount())
   })
 })

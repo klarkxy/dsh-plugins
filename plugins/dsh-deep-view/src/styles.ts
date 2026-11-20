@@ -145,7 +145,7 @@ export const viewStyles = `
 .dvui-root .dvui-unknown { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .dvui-root .dvui-tool-loading, .dvui-root.dvui-tool-loading { padding: 6px 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; }
 .dvui-root.dvui-dock { width: 100%; padding: 12px 14px; box-sizing: border-box; border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-1); box-shadow: var(--dsw-elevation-stroke); }
-.dvui-root.dvui-dock .dvui-view { margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; border-radius: 0; }
+.dvui-root.dvui-dock .dvui-view, .dvui-root .dvui-view.dvui-embedded { margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; border-radius: 0; }
 .dvui-root.dvui-activity .dvui-steps .dvui-step[data-status=pending] { display: none; }
 .dvui-root.dvui-activity .dvui-steps .dvui-step[data-status=done] { display: none; }
 .dvui-root.dvui-activity .dvui-title { font-size: 12px; color: var(--dsw-alias-label-tertiary); }
