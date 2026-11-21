@@ -153,6 +153,12 @@ describe('resolveModelPreset', () => {
     expect(resolveModelPreset('acme/aurora-1.0-pro')).toEqual({
       short: 'Aurora', version: '1.0', suffix: 'Pro', family: 'other',
     })
+    expect(resolveModelPreset('meganova-ai/manta-mini-1.0')).toEqual({
+      short: 'Manta', version: '1.0', suffix: 'Mini', family: 'other',
+    })
+    expect(resolveModelPreset('inclusionAI/Ling-flash-2.0')).toEqual({
+      short: 'Ling', version: '2.0', suffix: 'Flash', family: 'other',
+    })
   })
 
   it('ignores Mistral build numbers while retaining actual catalog versions', () => {
@@ -161,6 +167,33 @@ describe('resolveModelPreset', () => {
     })
     expect(resolveModelPreset('mistralai/mistral-small-2506', 'Mistral Small 3.2')).toEqual({
       short: 'Mistral', version: '3.2', suffix: 'Small', family: 'other',
+    })
+    expect(resolveModelPreset('mistral-small-3-2-24b-instruct', 'Mistral Small 3.2 24B Instruct')).toEqual({
+      short: 'Mistral', version: '3.2', suffix: 'Small', family: 'other',
+    })
+    expect(resolveModelPreset('mistralai/mistral-small-3-1-24b-instruct-2503')).toEqual({
+      short: 'Mistral', version: '3.1', suffix: 'Small', family: 'other',
+    })
+    expect(resolveModelPreset('mistral-large2')).toEqual({
+      short: 'Mistral', version: '2', suffix: 'Large', family: 'other',
+    })
+    expect(resolveModelPreset('mistral-large-4-119b')).toEqual({
+      short: 'Mistral', version: '4', suffix: 'Large', family: 'other',
+    })
+    expect(resolveModelPreset('mistral-medium-3-5')).toEqual({
+      short: 'Mistral', version: '3.5', suffix: 'Medium', family: 'other',
+    })
+  })
+
+  it('keeps DeepSeek build numbers out of versions while preserving real minors', () => {
+    expect(resolveModelPreset('deepseek/deepseek-chat-v3-0324', 'DeepSeek V3 0324')).toEqual({
+      short: 'DeepSeek', version: '3', suffix: 'Chat', family: 'deepseek',
+    })
+    expect(resolveModelPreset('deepseek-v3.1')).toEqual({
+      short: 'DeepSeek', version: '3.1', family: 'deepseek',
+    })
+    expect(resolveModelPreset('deepseek-v3-1')).toEqual({
+      short: 'DeepSeek', version: '3.1', family: 'deepseek',
     })
   })
 

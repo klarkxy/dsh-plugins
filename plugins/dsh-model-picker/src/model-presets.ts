@@ -159,17 +159,18 @@ const PRESET_RULES: readonly PresetRule[] = [
     resolve: m => ({ short: 'Haiku', version: compactVersion(m[1]), family: 'claude' }),
   },
 
-  // DeepSeek
+  // DeepSeek V series. Hyphenated minors are valid, but four-digit build
+  // tokens and capacity units are not minor versions.
   {
-    pattern: /deepseek[-_.]?v(\d+(?:[.-]\d+)?)[-_.]?flash/i,
+    pattern: /deepseek[-_.]?v(\d{1,3}(?:\.\d+|-(?!(?:\d{4}|\d+[kmgb])(?:$|[-_.]))\d+)?)(?!\d)[-_.]?flash/i,
     resolve: m => ({ short: 'DeepSeek', version: compactVersion(m[1]), suffix: 'Flash', family: 'deepseek' }),
   },
   {
-    pattern: /deepseek[-_.]?v(\d+(?:[.-]\d+)?)[-_.]?pro/i,
+    pattern: /deepseek[-_.]?v(\d{1,3}(?:\.\d+|-(?!(?:\d{4}|\d+[kmgb])(?:$|[-_.]))\d+)?)(?!\d)[-_.]?pro/i,
     resolve: m => ({ short: 'DeepSeek', version: compactVersion(m[1]), suffix: 'Pro', family: 'deepseek' }),
   },
   {
-    pattern: /deepseek[-_.]?v(\d+(?:[.-]\d+)?)/i,
+    pattern: /deepseek[-_.]?v(\d{1,3}(?:\.\d+|-(?!(?:\d{4}|\d+[kmgb])(?:$|[-_.]))\d+)?)(?!\d)/i,
     resolve: m => ({ short: 'DeepSeek', version: compactVersion(m[1]), family: 'deepseek' }),
   },
   {
@@ -545,16 +546,16 @@ const PRESET_RULES: readonly PresetRule[] = [
     resolve: m => ({ short: 'Ministral', version: compactVersion(m[1]), family: 'other' }),
   },
   {
-    pattern: /mistral[-_.]?medium(?:[-_.](\d{1,3}(?:\.\d+)?)(?!\d))?/i,
-    resolve: m => ({ short: 'Mistral', version: m[1] ?? '', suffix: 'Medium', family: 'other' }),
+    pattern: /mistral[-_.]?medium(?:[-_.]?(\d{1,3}(?:\.\d+|-(?!(?:\d{4}|\d+[kmgb])(?:$|[-_.]))\d+)?)(?!\d))?/i,
+    resolve: m => ({ short: 'Mistral', version: compactVersion(m[1]), suffix: 'Medium', family: 'other' }),
   },
   {
-    pattern: /mistral[-_.]?large(?:[-_.](\d{1,3}(?:\.\d+)?)(?!\d))?/i,
-    resolve: m => ({ short: 'Mistral', version: m[1] ?? '', suffix: 'Large', family: 'other' }),
+    pattern: /mistral[-_.]?large(?:[-_.]?(\d{1,3}(?:\.\d+|-(?!(?:\d{4}|\d+[kmgb])(?:$|[-_.]))\d+)?)(?!\d))?/i,
+    resolve: m => ({ short: 'Mistral', version: compactVersion(m[1]), suffix: 'Large', family: 'other' }),
   },
   {
-    pattern: /mistral[-_.]?small(?:[-_.](\d{1,3}(?:\.\d+)?)(?!\d))?/i,
-    resolve: m => ({ short: 'Mistral', version: m[1] ?? '', suffix: 'Small', family: 'other' }),
+    pattern: /mistral[-_.]?small(?:[-_.]?(\d{1,3}(?:\.\d+|-(?!(?:\d{4}|\d+[kmgb])(?:$|[-_.]))\d+)?)(?!\d))?/i,
+    resolve: m => ({ short: 'Mistral', version: compactVersion(m[1]), suffix: 'Small', family: 'other' }),
   },
   {
     pattern: /mistral/i,
@@ -741,8 +742,9 @@ export function resolveModelPreset(modelId: string, displayName?: string): Model
   // Remove the extracted version token before looking for qualifiers so its
   // digits cannot be rendered a second time in the suffix.
   const versionIndex = verMatch?.index ?? -1
+  const versionEnd = verMatch && versionIndex >= 0 ? versionIndex + verMatch[0].length : -1
   const suffixSource = verMatch && versionIndex >= 0
-    ? `${source.slice(0, versionIndex)}-${source.slice(versionIndex + verMatch[0].length)}`
+    ? `${source.slice(0, versionIndex)}${versionEnd < source.length ? '-' : ''}${source.slice(versionEnd)}`
     : source
   // Trailing well-known tier words become a suffix; anything else stays in the name.
   const suffixMatch = suffixSource.match(
