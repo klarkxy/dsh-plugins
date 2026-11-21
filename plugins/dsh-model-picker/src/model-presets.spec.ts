@@ -183,6 +183,9 @@ describe('resolveModelPreset', () => {
     expect(resolveModelPreset('mistral-medium-3-5')).toEqual({
       short: 'Mistral', version: '3.5', suffix: 'Medium', family: 'other',
     })
+    expect(resolveModelPreset('mistralai/mistral-large-4-0-8', 'Mistral Large 4.0.8')).toEqual({
+      short: 'Mistral', version: '4.0.8', suffix: 'Large', family: 'other',
+    })
   })
 
   it('keeps DeepSeek build numbers out of versions while preserving real minors', () => {

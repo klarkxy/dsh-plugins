@@ -546,15 +546,15 @@ const PRESET_RULES: readonly PresetRule[] = [
     resolve: m => ({ short: 'Ministral', version: compactVersion(m[1]), family: 'other' }),
   },
   {
-    pattern: /mistral[-_.]?medium(?:[-_.]?(\d{1,3}(?:\.\d+|-(?!(?:\d{4}|\d+[kmgb])(?:$|[-_.]))\d+)?)(?!\d))?/i,
+    pattern: /mistral[-_.]?medium(?:[-_.]?(\d{1,3}(?:[.-](?!(?:\d{4}|\d+[kmgb])(?:$|[-_.]))\d+){0,2})(?!\d))?/i,
     resolve: m => ({ short: 'Mistral', version: compactVersion(m[1]), suffix: 'Medium', family: 'other' }),
   },
   {
-    pattern: /mistral[-_.]?large(?:[-_.]?(\d{1,3}(?:\.\d+|-(?!(?:\d{4}|\d+[kmgb])(?:$|[-_.]))\d+)?)(?!\d))?/i,
+    pattern: /mistral[-_.]?large(?:[-_.]?(\d{1,3}(?:[.-](?!(?:\d{4}|\d+[kmgb])(?:$|[-_.]))\d+){0,2})(?!\d))?/i,
     resolve: m => ({ short: 'Mistral', version: compactVersion(m[1]), suffix: 'Large', family: 'other' }),
   },
   {
-    pattern: /mistral[-_.]?small(?:[-_.]?(\d{1,3}(?:\.\d+|-(?!(?:\d{4}|\d+[kmgb])(?:$|[-_.]))\d+)?)(?!\d))?/i,
+    pattern: /mistral[-_.]?small(?:[-_.]?(\d{1,3}(?:[.-](?!(?:\d{4}|\d+[kmgb])(?:$|[-_.]))\d+){0,2})(?!\d))?/i,
     resolve: m => ({ short: 'Mistral', version: compactVersion(m[1]), suffix: 'Small', family: 'other' }),
   },
   {
