@@ -29,7 +29,7 @@ const CHOICES: ModelMenuChoice[] = [
   { provider: 'vertex', model: 'google/gemini-4-neon', label: 'Vertex / Gemini 4 Neon', providerLabel: 'Vertex', efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }] },
   { provider: 'xai', model: 'grok-4.6', label: 'xAI / Grok 4.6', providerLabel: 'xAI', efforts: [{ id: 'medium', name: 'Medium' }] },
   { provider: 'xai', model: 'grok-4.7', label: 'xAI / Grok 4.7', providerLabel: 'xAI', efforts: [{ id: 'high', name: 'High' }] },
-  { provider: 'deepseek', model: 'deepseek-v4.1', label: 'DeepSeek / DeepSeek V4.1', providerLabel: 'DeepSeek', efforts: [] },
+  { provider: 'deepseek', model: 'deepseek-v4.1-flash', label: 'DeepSeek / DeepSeek V4.1 Flash', providerLabel: 'DeepSeek', efforts: [] },
 ]
 
 describe('buildPeriodicCards', () => {
@@ -39,14 +39,15 @@ describe('buildPeriodicCards', () => {
       'gemini-4-neon',
       'grok-4.6',
       'grok-4.7',
-      'deepseek-v4.1',
+      'deepseek-v4.1-flash',
     ])
     expect(cards[0]!.routes).toHaveLength(2)
-    expect(cards[0]!.short).toBe('Ne')
-    expect(cards[1]!.short).toBe('Gr')
+    expect(cards[0]!.short).toBe('Neon')
+    expect(cards[1]!.short).toBe('Grok')
     expect(cards[1]!.version).toBe('4.6')
-    expect(cards[2]!.short).toBe('Gr')
+    expect(cards[2]!.short).toBe('Grok')
     expect(cards[2]!.version).toBe('4.7')
+    expect(cards[3]).toMatchObject({ short: 'DeepSeek', version: '4.1', suffix: 'Flash' })
   })
 
   it('respects user order, provider preference, active selection priority, and custom alias overrides', () => {
@@ -61,11 +62,12 @@ describe('buildPeriodicCards', () => {
       'grok-4.7',
       'gemini-4-neon',
       'grok-4.6',
-      'deepseek-v4.1',
+      'deepseek-v4.1-flash',
     ])
     expect(cards[0]!.short).toBe('G47')
     expect(cards[0]!.customShort).toBe(true)
     expect(cards[0]!.version).toBe('')
+    expect(cards[0]!.suffix).toBe('')
     expect(cards[1]!.activeRoute.provider).toBe('vertex')
 
     // Active session selection takes precedence over stored provider preference.
@@ -149,7 +151,7 @@ describe('prefs persistence & clamping', () => {
       aliases: { 'grok-4.7': 'G7' },
       providers: { 'gemini-4-neon': 'vertex' },
       favorites: ['grok-4.7'],
-      hidden: ['deepseek-v4.1'],
+      hidden: ['deepseek-v4.1-flash'],
     }
     savePeriodicPrefs(next, storage)
     expect(loadPeriodicPrefs(storage)).toEqual(next)
@@ -211,13 +213,13 @@ describe('createPeriodicPrefsStore', () => {
 
 describe('favorites & hidden arrangement', () => {
   it('partitions favorites first while preserving their arranged relative order', () => {
-    const prefs = { ...DEFAULT_PERIODIC_PREFS, favorites: ['deepseek-v4.1', 'grok-4.6'] }
+    const prefs = { ...DEFAULT_PERIODIC_PREFS, favorites: ['deepseek-v4.1-flash', 'grok-4.6'] }
     const cards = buildPeriodicCards(CHOICES, prefs)
     // Both favorited cards lead, keeping catalog order between them regardless
     // of the order they were favorited in.
     expect(cards.map(card => card.canonicalKey)).toEqual([
       'grok-4.6',
-      'deepseek-v4.1',
+      'deepseek-v4.1-flash',
       'gemini-4-neon',
       'grok-4.7',
     ])
@@ -225,11 +227,11 @@ describe('favorites & hidden arrangement', () => {
     // A stored user order still applies inside each partition.
     const ordered = buildPeriodicCards(CHOICES, {
       ...DEFAULT_PERIODIC_PREFS,
-      favorites: ['deepseek-v4.1'],
+      favorites: ['deepseek-v4.1-flash'],
       order: ['grok-4.7', 'gemini-4-neon'],
     })
     expect(ordered.map(card => card.canonicalKey)).toEqual([
-      'deepseek-v4.1',
+      'deepseek-v4.1-flash',
       'grok-4.7',
       'gemini-4-neon',
       'grok-4.6',
@@ -237,7 +239,7 @@ describe('favorites & hidden arrangement', () => {
   })
 
   it('excludes hidden cards unless showHidden or they serve the selected route, numbering positions over the visible list', () => {
-    const prefs = { ...DEFAULT_PERIODIC_PREFS, hidden: ['grok-4.6', 'deepseek-v4.1'] }
+    const prefs = { ...DEFAULT_PERIODIC_PREFS, hidden: ['grok-4.6', 'deepseek-v4.1-flash'] }
 
     const hiddenOff = buildPeriodicCards(CHOICES, prefs)
     expect(hiddenOff.map(card => card.canonicalKey)).toEqual(['gemini-4-neon', 'grok-4.7'])
@@ -248,14 +250,14 @@ describe('favorites & hidden arrangement', () => {
       'gemini-4-neon',
       'grok-4.6',
       'grok-4.7',
-      'deepseek-v4.1',
+      'deepseek-v4.1-flash',
     ])
     expect(shown.map(card => card.hidden)).toEqual([false, true, false, true])
     expect(shown.map(card => card.position)).toEqual([1, 2, 3, 4])
 
     // The card serving the active selection stays visible even while hidden.
-    const withSelected = buildPeriodicCards(CHOICES, prefs, { provider: 'deepseek', model: 'deepseek-v4.1' })
-    expect(withSelected.map(card => card.canonicalKey)).toEqual(['gemini-4-neon', 'grok-4.7', 'deepseek-v4.1'])
+    const withSelected = buildPeriodicCards(CHOICES, prefs, { provider: 'deepseek', model: 'deepseek-v4.1-flash' })
+    expect(withSelected.map(card => card.canonicalKey)).toEqual(['gemini-4-neon', 'grok-4.7', 'deepseek-v4.1-flash'])
     expect(withSelected.at(-1)!.position).toBe(3)
   })
 })
@@ -286,24 +288,24 @@ describe('list helpers: moveCardKey, toggleKey, mergeSubsetOrder', () => {
     // list is A,C,D, and a swap inside it must not displace hidden favorite B.
     const prefs = {
       ...DEFAULT_PERIODIC_PREFS,
-      favorites: ['grok-4.6', 'deepseek-v4.1'],
-      hidden: ['deepseek-v4.1'],
+      favorites: ['grok-4.6', 'deepseek-v4.1-flash'],
+      hidden: ['deepseek-v4.1-flash'],
     }
     const fullKeys = buildPeriodicCards(CHOICES, prefs, undefined, { showHidden: true })
       .map(card => card.canonicalKey)
-    expect(fullKeys).toEqual(['grok-4.6', 'deepseek-v4.1', 'gemini-4-neon', 'grok-4.7'])
+    expect(fullKeys).toEqual(['grok-4.6', 'deepseek-v4.1-flash', 'gemini-4-neon', 'grok-4.7'])
     const visibleKeys = buildPeriodicCards(CHOICES, prefs).map(card => card.canonicalKey)
     expect(visibleKeys).toEqual(['grok-4.6', 'gemini-4-neon', 'grok-4.7'])
 
     const nextVisible = applyCardDrop(visibleKeys, 1, 2, 'swap')
     expect(nextVisible).toEqual(['grok-4.6', 'grok-4.7', 'gemini-4-neon'])
     const nextOrder = mergeSubsetOrder(fullKeys, nextVisible)
-    expect(nextOrder).toEqual(['grok-4.6', 'deepseek-v4.1', 'grok-4.7', 'gemini-4-neon'])
+    expect(nextOrder).toEqual(['grok-4.6', 'deepseek-v4.1-flash', 'grok-4.7', 'gemini-4-neon'])
 
     const rebuilt = buildPeriodicCards(CHOICES, { ...prefs, order: nextOrder }, undefined, { showHidden: true })
     expect(rebuilt.map(card => card.canonicalKey)).toEqual(nextOrder)
     expect(rebuilt[0]!.canonicalKey).toBe('grok-4.6')
-    expect(rebuilt[1]!.canonicalKey).toBe('deepseek-v4.1')
+    expect(rebuilt[1]!.canonicalKey).toBe('deepseek-v4.1-flash')
     expect(rebuilt[1]!.hidden).toBe(true)
   })
 })
@@ -321,17 +323,18 @@ describe('filterPeriodicCards', () => {
     expect(filterPeriodicCards(cards, '   ')).toEqual(cards)
   })
 
-  it('matches symbol, full name, and provider labels', () => {
+  it('matches short names, full names, suffixes, and provider labels', () => {
     expect(keys('ne')).toEqual(['gemini-4-neon'])
     expect(keys('neon')).toEqual(['gemini-4-neon'])
     expect(keys('vertex')).toEqual(['gemini-4-neon'])
-    expect(keys('ds')).toEqual(['deepseek-v4.1'])
+    expect(keys('deepseek')).toEqual(['deepseek-v4.1-flash'])
+    expect(keys('flash')).toEqual(['deepseek-v4.1-flash'])
   })
 
   it('matches the compact form so separator-free queries find dashed models', () => {
     expect(keys('gpt5')).toEqual(['gpt-5'])
     expect(keys('grok46')).toEqual(['grok-4.6'])
-    expect(keys('ds v4')).toEqual(['deepseek-v4.1'])
+    expect(keys('deepseek v4')).toEqual(['deepseek-v4.1-flash'])
   })
 
   it('ANDs multiple tokens across the haystack', () => {

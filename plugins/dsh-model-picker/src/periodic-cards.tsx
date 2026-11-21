@@ -3,7 +3,7 @@
  *
  * Layout per card:
  *   [01 · dot]          [Provider ▾]
- *          Ne  (or Gr 4.6)
+ *        Neon  (or Grok 4.6)
  *         Gemini 4 Neon
  *   [  L  |  M  |  H  |  xH  ]
  *
@@ -12,11 +12,11 @@
  * - Type anywhere (or in the toolbar filter): live-filter cards. Enter picks the
  *   first match, ArrowDown focuses the grid, Escape clears the query first.
  * - Right-click a card: context menu (favorite, move to front/end, rename,
- *   restore symbol, copy model ID, hide). Favorites pin to the front; hidden
+ *   restore short name, copy model ID, hide). Favorites pin to the front; hidden
  *   cards reappear dimmed via the toolbar toggle.
  * - Click a bottom effort cell: pick model + effort in one click (click again to clear).
  * - Click top-right provider trigger: open channel menu to switch provider for this model.
- * - Double-click short symbol: inline rename (clear to restore preset).
+ * - Double-click short name: inline rename (clear to restore preset).
  * - Drag & drop: left/right 28% inserts before/after; center 44% swaps in place.
  *   Drops run on the visible keys and merge back into the full arranged order
  *   slot-for-slot, so filtering or hiding never strands non-visible cards.
@@ -130,8 +130,8 @@ export function periodicCopy(locale: string | undefined): PeriodicCopy {
         menuUnfavorite: 'Unfavorite',
         menuMoveFirst: 'Move to front',
         menuMoveLast: 'Move to end',
-        menuRename: 'Rename symbol',
-        menuResetShort: 'Restore default symbol',
+        menuRename: 'Rename short name',
+        menuResetShort: 'Restore default short name',
         menuCopyId: 'Copy model ID',
         menuHide: 'Hide',
         menuUnhide: 'Unhide',
@@ -444,6 +444,12 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
       return
     }
     const trimmed = editingDraft.trim()
+    // Opening a long preset name must not persist its 12-character truncation
+    // when the user commits without changing the draft.
+    if (editingDraft === card.short) {
+      setEditingKey(null)
+      return
+    }
     onPrefsChange(prev => {
       const nextAliases = { ...prev.aliases }
       if (trimmed) nextAliases[card.canonicalKey] = trimmed.slice(0, 12)
@@ -841,8 +847,12 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
                             setEditingDraft(card.short)
                           }}
                         >
-                          <span className="dsh-model-picker-short">{card.short}</span>
+                          <span
+                            className="dsh-model-picker-short"
+                            data-long={card.short.length > 7 || card.short.length + card.suffix.length > 11 ? '' : undefined}
+                          >{card.short}</span>
                           {card.version ? <span className="dsh-model-picker-ver">{card.version}</span> : null}
+                          {card.suffix ? <span className="dsh-model-picker-suffix">{card.suffix}</span> : null}
                         </div>
                       )}
                       <div className="dsh-model-picker-full" title={route.label}>{card.fullName}</div>

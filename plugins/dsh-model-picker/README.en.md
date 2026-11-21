@@ -10,15 +10,15 @@ Replaces the model button in the DeepSeek Harness composer: pick a model and rea
 
 ### Card view (default)
 
-One card per model: a sequence number at the top left, the provider at the top right, a large short symbol with the full model name in the middle, and reasoning-effort cells along the bottom.
+One card per model: a sequence number at the top left, the provider at the top right, a large short name with a numeric superscript, full qualifier text and the full model name in the middle, and reasoning-effort cells along the bottom.
 
-- **Filter**: just start typing once the panel is open. Matches model names, symbols and providers (`gpt5` also finds `gpt-5`). Enter picks the first result; Escape clears the filter first, then closes.
+- **Filter**: just start typing once the panel is open. Matches model names, short names and providers (`gpt5` also finds `gpt-5`). Enter picks the first result; Escape clears the filter first, then closes.
 - **Pick a model**: click the middle of a card. This selects the model without setting reasoning effort.
 - **Pick a model and effort**: click an effort cell at the bottom. Click the selected cell again to clear the effort.
 - **Switch providers**: when several providers serve the same model, they share one card; switch with the button at the top right. The current effort is kept if the new provider supports it.
-- **Symbols**: common models come with built-in symbols (Gemini element symbols, Claude `Op` / `Sn` / `Hk`, DeepSeek `Ds`, and so on). Versions in the same family are told apart by a superscript; other models get two letters automatically. Double-click a symbol to rename it: Enter saves, Escape discards, and an empty name restores the default.
-- **Layout**: drop a card on either edge of another card to insert it there, or on the center to swap the two. The slider at the top sets card width, and **Reset layout** clears the custom order and symbols.
-- **Right-click menu**: right-click a card to favorite it (favorites come first and show a ★), move it to the front or end, rename or restore its symbol, copy the model ID, or hide it. Hidden models can be shown again with the **Hidden** button at the top and unhidden from there.
+- **Short names**: common models show a recognizable vendor or model name (such as `Kimi`, `Terra`, `DeepSeek`, or `Opus`). Numeric versions appear as superscripts, while qualifiers such as `Flash`, `Pro`, and `Lightning` are spelled out in small text; other models use their complete first name word. Double-click a short name to rename it: Enter saves, Escape discards, and an empty name restores the default.
+- **Layout**: drop a card on either edge of another card to insert it there, or on the center to swap the two. The slider at the top sets card width, and **Reset layout** clears the custom order and short names.
+- **Right-click menu**: right-click a card to favorite it (favorites come first and show a ★), move it to the front or end, rename or restore its short name, copy the model ID, or hide it. Hidden models can be shown again with the **Hidden** button at the top and unhidden from there.
 - **Motion**: the panel, cards and menus fade and slide in, and cards glide into place when reordered. All motion turns off when your system's reduced-motion setting is on.
 
 ### List view
@@ -49,7 +49,7 @@ Feature plugins can mount this picker in their own settings pages or cards. With
 ## Limitations
 
 - Only the composer model button and the shared picker are replaced; the Settings → Models page is unchanged.
-- View, card width, order, favorites, hidden models, custom symbols, and preferred providers are stored in the current browser only and do not sync across devices.
+- View, card width, order, favorites, hidden models, custom short names, and preferred providers are stored in the current browser only and do not sync across devices.
 
 ## License
 
