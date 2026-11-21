@@ -158,10 +158,10 @@ describe('ModelPicker periodic card grid (default view)', () => {
       const cards = [...env.dom.window.document.querySelectorAll('.dsh-model-picker-card')]
       // Gemini 4 Neon (merged from Google + Vertex), Grok 4.6, Grok 4.7 => 3 cards.
       expect(cards).toHaveLength(3)
-      expect(cards[0]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Ne')
-      expect(cards[1]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Gr')
+      expect(cards[0]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Neon')
+      expect(cards[1]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Grok')
       expect(cards[1]!.querySelector('.dsh-model-picker-ver')!.textContent).toBe('4.6')
-      expect(cards[2]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Gr')
+      expect(cards[2]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Grok')
       expect(cards[2]!.querySelector('.dsh-model-picker-ver')!.textContent).toBe('4.7')
 
       // Open provider dropdown on the Neon card and pick Vertex.
@@ -172,6 +172,33 @@ describe('ModelPicker periodic card grid (default view)', () => {
       const vertexOption = options.find(opt => opt.textContent?.includes('Vertex'))!
       await env.click(vertexOption)
       expect(onPick).toHaveBeenCalledWith({ provider: 'vertex', model: 'google/gemini-4-neon' })
+    } finally { await env.done(root) }
+  })
+
+  it('renders readable names with numeric superscripts and full qualifier text', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    try {
+      const withSuffix = [
+        ...choices,
+        { provider: 'deepseek', model: 'deepseek-v4.1-flash', label: 'DeepSeek / DeepSeek V4.1 Flash', providerLabel: 'DeepSeek', efforts: [] },
+      ]
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={withSuffix}
+          onPick={() => {}}
+          efforts={[]}
+          onPickEffort={() => {}}
+        />,
+      ))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const card = env.dom.window.document.querySelector('[data-card-key="deepseek-v4.1-flash"]')!
+      const short = card.querySelector('.dsh-model-picker-short')!
+      expect(short.textContent).toBe('DeepSeek')
+      expect(short.hasAttribute('data-long')).toBe(true)
+      expect(card.querySelector('.dsh-model-picker-ver')!.textContent).toBe('4.1')
+      expect(card.querySelector('.dsh-model-picker-suffix')!.textContent).toBe('Flash')
     } finally { await env.done(root) }
   })
 
@@ -576,7 +603,7 @@ describe('ModelPicker periodic card grid (default view)', () => {
 
       // Rename enters the same inline edit mode as the double-click path.
       menu = await openMenuOn(0)
-      await env.click(menuItem(menu, 'Rename symbol'))
+      await env.click(menuItem(menu, 'Rename short name'))
       expect(cardsNow()[0]!.querySelector('.dsh-model-picker-shortInput')).not.toBeNull()
     } finally { await env.done(root) }
   })
