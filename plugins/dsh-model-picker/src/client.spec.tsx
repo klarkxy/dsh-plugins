@@ -158,10 +158,10 @@ describe('ModelPicker periodic card grid (default view)', () => {
       const cards = [...env.dom.window.document.querySelectorAll('.dsh-model-picker-card')]
       // Gemini 4 Neon (merged from Google + Vertex), Grok 4.6, Grok 4.7 => 3 cards.
       expect(cards).toHaveLength(3)
-      expect(cards[0]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Ne')
-      expect(cards[1]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Gr')
+      expect(cards[0]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Neon')
+      expect(cards[1]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Grok')
       expect(cards[1]!.querySelector('.dsh-model-picker-ver')!.textContent).toBe('4.6')
-      expect(cards[2]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Gr')
+      expect(cards[2]!.querySelector('.dsh-model-picker-short')!.textContent).toBe('Grok')
       expect(cards[2]!.querySelector('.dsh-model-picker-ver')!.textContent).toBe('4.7')
 
       // Open provider dropdown on the Neon card and pick Vertex.
@@ -172,6 +172,33 @@ describe('ModelPicker periodic card grid (default view)', () => {
       const vertexOption = options.find(opt => opt.textContent?.includes('Vertex'))!
       await env.click(vertexOption)
       expect(onPick).toHaveBeenCalledWith({ provider: 'vertex', model: 'google/gemini-4-neon' })
+    } finally { await env.done(root) }
+  })
+
+  it('renders readable names with numeric superscripts and full qualifier text', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    try {
+      const withSuffix = [
+        ...choices,
+        { provider: 'deepseek', model: 'deepseek-v4.1-flash', label: 'DeepSeek / DeepSeek V4.1 Flash', providerLabel: 'DeepSeek', efforts: [] },
+      ]
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={withSuffix}
+          onPick={() => {}}
+          efforts={[]}
+          onPickEffort={() => {}}
+        />,
+      ))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const card = env.dom.window.document.querySelector('[data-card-key="deepseek-v4.1-flash"]')!
+      const short = card.querySelector('.dsh-model-picker-short')!
+      expect(short.textContent).toBe('DeepSeek')
+      expect(short.hasAttribute('data-long')).toBe(true)
+      expect(card.querySelector('.dsh-model-picker-ver')!.textContent).toBe('4.1')
+      expect(card.querySelector('.dsh-model-picker-suffix')!.textContent).toBe('Flash')
     } finally { await env.done(root) }
   })
 
@@ -276,6 +303,49 @@ describe('ModelPicker periodic card grid (default view)', () => {
       delete (globalThis as { __dshModelPickerPickDelay?: number }).__dshModelPickerPickDelay
       await env.done(root)
     }
+  })
+
+  it('does not save or truncate an unchanged long default short name', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    const longNameChoices = directoryChoices([{
+      id: 'nvidia', name: 'NVIDIA', models: [{ id: 'google/diffusiongemma', name: 'Diffusiongemma' }],
+    }])
+    try {
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={longNameChoices}
+          onPick={() => {}}
+          onPickWithEffort={() => {}}
+          efforts={[]}
+        />,
+      ))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const card = env.dom.window.document.querySelector('.dsh-model-picker-card')!
+      await act(async () => Simulate.doubleClick(card.querySelector('.dsh-model-picker-symbolLine')!))
+      let input = card.querySelector<HTMLInputElement>('.dsh-model-picker-shortInput')!
+      expect(input.value).toBe('Diffusiongemma')
+      await act(async () => Simulate.keyDown(input, { key: 'Enter' }))
+      expect(card.querySelector('.dsh-model-picker-short')!.textContent).toBe('Diffusiongemma')
+      expect(JSON.parse(env.dom.window.localStorage.getItem(STORAGE_KEY) ?? '{}').aliases ?? {}).toEqual({})
+
+      // Real edits still use the 12-character persistence limit.
+      await act(async () => Simulate.doubleClick(card.querySelector('.dsh-model-picker-symbolLine')!))
+      input = card.querySelector<HTMLInputElement>('.dsh-model-picker-shortInput')!
+      await act(async () => { input.value = 'RenamedLongAlias'; Simulate.change(input, { target: { value: 'RenamedLongAlias' } } as never) })
+      await act(async () => Simulate.keyDown(input, { key: 'Enter' }))
+      expect(JSON.parse(env.dom.window.localStorage.getItem(STORAGE_KEY) ?? '{}').aliases)
+        .toMatchObject({ diffusiongemma: 'RenamedLongA' })
+
+      // Clearing an actual edit restores the complete default, not its truncation.
+      await act(async () => Simulate.doubleClick(card.querySelector('.dsh-model-picker-symbolLine')!))
+      input = card.querySelector<HTMLInputElement>('.dsh-model-picker-shortInput')!
+      await act(async () => { input.value = ''; Simulate.change(input, { target: { value: '' } } as never) })
+      await act(async () => Simulate.keyDown(input, { key: 'Enter' }))
+      expect(card.querySelector('.dsh-model-picker-short')!.textContent).toBe('Diffusiongemma')
+      expect(JSON.parse(env.dom.window.localStorage.getItem(STORAGE_KEY) ?? '{}').aliases ?? {}).toEqual({})
+    } finally { await env.done(root) }
   })
 
   it('double-click rename commits on Enter and persists the alias', async () => {
@@ -576,7 +646,7 @@ describe('ModelPicker periodic card grid (default view)', () => {
 
       // Rename enters the same inline edit mode as the double-click path.
       menu = await openMenuOn(0)
-      await env.click(menuItem(menu, 'Rename symbol'))
+      await env.click(menuItem(menu, 'Rename short name'))
       expect(cardsNow()[0]!.querySelector('.dsh-model-picker-shortInput')).not.toBeNull()
     } finally { await env.done(root) }
   })
