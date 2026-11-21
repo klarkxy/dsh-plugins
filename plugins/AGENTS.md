@@ -39,6 +39,7 @@
 
 | 席位 | id / order |
 | --- | --- |
+| `settings.general.item` | `sidebar-layout`/40 |
 | `settings.models.footer` | `magpie`/100 |
 | `settings.section` | `font`/5 |
 | 共享栏目「会话管理」 | `auxiliary-model`/55、`session-manager.composer`/60、`session-manager.auto-continue`/62、`session-manager.return`/64、`session-manager.handoff`/66、`session-manager.agent-actions`/68、`current-title`/70、`safe-auto`/80 |
