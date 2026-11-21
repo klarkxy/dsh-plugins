@@ -132,8 +132,12 @@ describe('sidebar layout frame locator', () => {
     const { dom } = mountClient()
     const root = dom.window.document.getElementById('root')!
     const old = dom.window.document.getElementById('frame')!
-    const next = old.cloneNode(true) as Element
+    const next = dom.window.document.createElement('div')
     next.id = 'frame-2'
+    next.setAttribute('data-rightbar-collapsed', '')
+    next.innerHTML = '<div class="sidebar"></div><div class="centre"></div><div data-rightbar-col></div>'
+    expect(next.hasAttribute(FRAME_ATTRIBUTE)).toBe(false)
+    expect(next.querySelector('.centre')!.hasAttribute(CENTER_ATTRIBUTE)).toBe(false)
     old.replaceWith(next)
     // The MutationObserver delivery is asynchronous.
     await new Promise(resolve => setTimeout(resolve, 0))

@@ -114,7 +114,7 @@ const layoutCss = `
   /* macOS: the panel's first dock strip takes over the leading clearance the
    * conversation column held (traffic lights / shell.leading seat). */
   html[data-platform='darwin'] & [data-dockkit-host='dock'][data-dockkit-column='0'] {
-    --dsh-dockkit-strip-inline-start: var(--dsh-frame-leading-clearance, 10px);
+    --dsh-dockkit-strip-inline-start: var(--dsh-frame-leading-clearance);
   }
   html[data-platform='darwin'] & [data-dsh-sidebar-layout-center] {
     --dsh-frame-leading-clearance: 0px;
