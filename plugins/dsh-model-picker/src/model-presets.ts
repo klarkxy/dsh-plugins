@@ -29,16 +29,32 @@ interface PresetRule {
 }
 
 /**
+ * Exact aliases mapping one provider's model id onto the canonical id another
+ * provider serves for the same underlying model. Matching is exact on the
+ * lowercased leaf, never pattern-based: a generic version-stripping rule would
+ * also merge genuinely parallel versions (`grok-4.6` / `grok-4.7`), which the
+ * grouping contract keeps apart. Add an entry only when the two ids really are
+ * the same model; the alias is an internal card key and never rewrites the
+ * routed model id.
+ */
+const CANONICAL_MODEL_ALIASES: Readonly<Record<string, string>> = {
+  // Official DeepSeek's stable alias vs the vendor-prefixed id Magpie serves.
+  'deepseek-flash': 'deepseek-v4.1-flash',
+}
+
+/**
  * Strip provider/gateway path prefixes (`google/`, `anthropic/`, `openai/`, etc.)
  * and normalize casing so identical models exposed by multiple providers group
- * into one card while preserving distinct version numbers.
+ * into one card while preserving distinct version numbers. Exact aliases above
+ * additionally unify ids that name the same model differently.
  */
 export function canonicalModelKey(modelId: string): string {
   const trimmed = modelId.trim()
   if (!trimmed) return ''
   const slash = trimmed.lastIndexOf('/')
   const leaf = slash >= 0 ? trimmed.slice(slash + 1) : trimmed
-  return leaf.toLowerCase()
+  const key = leaf.toLowerCase()
+  return CANONICAL_MODEL_ALIASES[key] ?? key
 }
 
 const GEMINI_ELEMENTS: ReadonlyArray<readonly [name: string, symbol: string]> = [

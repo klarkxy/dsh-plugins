@@ -32,6 +32,13 @@ const CHOICES: ModelMenuChoice[] = [
   { provider: 'deepseek', model: 'deepseek-v4.1', label: 'DeepSeek / DeepSeek V4.1', providerLabel: 'DeepSeek', efforts: [] },
 ]
 
+/* One model served under two ids: official DeepSeek's stable alias and the
+ * vendor-prefixed id Magpie exposes. */
+const ALIASED_CHOICES: ModelMenuChoice[] = [
+  { provider: 'deepseek-official', model: 'deepseek-flash', label: 'DeepSeek / DeepSeek-V4.1-Flash', providerLabel: 'DeepSeek', efforts: [{ id: 'high', name: 'High' }] },
+  { provider: 'magpie', model: 'klarkxy/deepseek-v4.1-flash', label: 'Magpie / DeepSeek V4.1 Flash · KLARKXY', providerLabel: 'Magpie', efforts: [{ id: 'max', name: 'Maximum' }] },
+]
+
 describe('buildPeriodicCards', () => {
   it('merges identical canonical models from multiple providers into one card while keeping distinct versions separate', () => {
     const cards = buildPeriodicCards(CHOICES, DEFAULT_PERIODIC_PREFS)
@@ -47,6 +54,18 @@ describe('buildPeriodicCards', () => {
     expect(cards[1]!.version).toBe('4.6')
     expect(cards[2]!.short).toBe('Gr')
     expect(cards[2]!.version).toBe('4.7')
+  })
+
+  it('merges exactly aliased ids into one card while keeping the routed model ids verbatim', () => {
+    const cards = buildPeriodicCards(ALIASED_CHOICES, DEFAULT_PERIODIC_PREFS)
+    expect(cards).toHaveLength(1)
+    expect(cards[0]!.canonicalKey).toBe('deepseek-v4.1-flash')
+    expect(cards[0]!.routes.map(route => route.provider)).toEqual(['deepseek-official', 'magpie'])
+    // The alias is a card key only: every route still submits its own model id.
+    expect(cards[0]!.routes.map(route => route.model)).toEqual(['deepseek-flash', 'klarkxy/deepseek-v4.1-flash'])
+    const selected = buildPeriodicCards(ALIASED_CHOICES, DEFAULT_PERIODIC_PREFS, { provider: 'deepseek-official', model: 'deepseek-flash' })
+    expect(selected[0]!.routes).toHaveLength(2)
+    expect(selected[0]!.activeRoute).toEqual(ALIASED_CHOICES[0])
   })
 
   it('respects user order, provider preference, active selection priority, and custom alias overrides', () => {
