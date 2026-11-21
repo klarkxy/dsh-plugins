@@ -305,6 +305,49 @@ describe('ModelPicker periodic card grid (default view)', () => {
     }
   })
 
+  it('does not save or truncate an unchanged long default short name', async () => {
+    const env = jsdomEnv()
+    const root = mount(env.dom)
+    const longNameChoices = directoryChoices([{
+      id: 'nvidia', name: 'NVIDIA', models: [{ id: 'google/diffusiongemma', name: 'Diffusiongemma' }],
+    }])
+    try {
+      await act(async () => root.render(
+        <ModelPicker
+          {...kit}
+          choices={longNameChoices}
+          onPick={() => {}}
+          onPickWithEffort={() => {}}
+          efforts={[]}
+        />,
+      ))
+      await env.click(env.dom.window.document.querySelector('button')!)
+      const card = env.dom.window.document.querySelector('.dsh-model-picker-card')!
+      await act(async () => Simulate.doubleClick(card.querySelector('.dsh-model-picker-symbolLine')!))
+      let input = card.querySelector<HTMLInputElement>('.dsh-model-picker-shortInput')!
+      expect(input.value).toBe('Diffusiongemma')
+      await act(async () => Simulate.keyDown(input, { key: 'Enter' }))
+      expect(card.querySelector('.dsh-model-picker-short')!.textContent).toBe('Diffusiongemma')
+      expect(JSON.parse(env.dom.window.localStorage.getItem(STORAGE_KEY) ?? '{}').aliases ?? {}).toEqual({})
+
+      // Real edits still use the 12-character persistence limit.
+      await act(async () => Simulate.doubleClick(card.querySelector('.dsh-model-picker-symbolLine')!))
+      input = card.querySelector<HTMLInputElement>('.dsh-model-picker-shortInput')!
+      await act(async () => { input.value = 'RenamedLongAlias'; Simulate.change(input, { target: { value: 'RenamedLongAlias' } } as never) })
+      await act(async () => Simulate.keyDown(input, { key: 'Enter' }))
+      expect(JSON.parse(env.dom.window.localStorage.getItem(STORAGE_KEY) ?? '{}').aliases)
+        .toMatchObject({ diffusiongemma: 'RenamedLongA' })
+
+      // Clearing an actual edit restores the complete default, not its truncation.
+      await act(async () => Simulate.doubleClick(card.querySelector('.dsh-model-picker-symbolLine')!))
+      input = card.querySelector<HTMLInputElement>('.dsh-model-picker-shortInput')!
+      await act(async () => { input.value = ''; Simulate.change(input, { target: { value: '' } } as never) })
+      await act(async () => Simulate.keyDown(input, { key: 'Enter' }))
+      expect(card.querySelector('.dsh-model-picker-short')!.textContent).toBe('Diffusiongemma')
+      expect(JSON.parse(env.dom.window.localStorage.getItem(STORAGE_KEY) ?? '{}').aliases ?? {}).toEqual({})
+    } finally { await env.done(root) }
+  })
+
   it('double-click rename commits on Enter and persists the alias', async () => {
     const env = jsdomEnv()
     const root = mount(env.dom)

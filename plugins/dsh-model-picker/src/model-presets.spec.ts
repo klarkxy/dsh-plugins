@@ -141,6 +141,35 @@ describe('resolveModelPreset', () => {
     expect(resolveModelPreset('upstage/solar-mini4')).toEqual({ short: 'Solar', version: '4', suffix: 'Mini', family: 'other' })
   })
 
+  it('keeps Kimi context capacities out of the numeric version', () => {
+    expect(resolveModelPreset('k3-256k', 'Kimi K3-256K')).toEqual({ short: 'Kimi', version: '3', family: 'cn' })
+    expect(resolveModelPreset('moonshotai/kimi-k3.1', 'Kimi K3.1-256K')).toEqual({ short: 'Kimi', version: '3.1', family: 'cn' })
+  })
+
+  it('removes an extracted fallback version before deriving qualifier suffixes', () => {
+    expect(resolveModelPreset('google/gemini-omni-1.2-flash')).toEqual({
+      short: 'Gemini', version: '1.2', suffix: 'Omni Flash', family: 'other',
+    })
+    expect(resolveModelPreset('acme/aurora-1.0-pro')).toEqual({
+      short: 'Aurora', version: '1.0', suffix: 'Pro', family: 'other',
+    })
+  })
+
+  it('ignores Mistral build numbers while retaining actual catalog versions', () => {
+    expect(resolveModelPreset('mistralai/mistral-large', 'Mistral Large 2411')).toEqual({
+      short: 'Mistral', version: '', suffix: 'Large', family: 'other',
+    })
+    expect(resolveModelPreset('mistralai/mistral-small-2506', 'Mistral Small 3.2')).toEqual({
+      short: 'Mistral', version: '3.2', suffix: 'Small', family: 'other',
+    })
+  })
+
+  it('combines complementary Devstral version and tier details', () => {
+    expect(resolveModelPreset('devstral-medium-latest', 'Devstral 2 (latest)')).toEqual({
+      short: 'Devstral', version: '2', suffix: 'Medium', family: 'other',
+    })
+  })
+
   it('derives a readable name, version, and suffix fallback for unrecognized models', () => {
     expect(resolveModelPreset('acme/zephyr-2.5')).toEqual({ short: 'Zephyr', version: '2.5', family: 'other' })
     expect(resolveModelPreset('custom-model')).toEqual({ short: 'Custom', version: '', family: 'other' })

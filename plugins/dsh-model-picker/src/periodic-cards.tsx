@@ -444,6 +444,12 @@ export function PeriodicCardMenu(props: PeriodicCardMenuProps): ReactNode {
       return
     }
     const trimmed = editingDraft.trim()
+    // Opening a long preset name must not persist its 12-character truncation
+    // when the user commits without changing the draft.
+    if (editingDraft === card.short) {
+      setEditingKey(null)
+      return
+    }
     onPrefsChange(prev => {
       const nextAliases = { ...prev.aliases }
       if (trimmed) nextAliases[card.canonicalKey] = trimmed.slice(0, 12)

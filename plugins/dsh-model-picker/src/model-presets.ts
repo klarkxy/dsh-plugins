@@ -330,17 +330,18 @@ const PRESET_RULES: readonly PresetRule[] = [
     resolve: () => ({ short: 'MiniMax', version: '', family: 'cn' }),
   },
 
-  // Moonshot AI Kimi
+  // Moonshot AI Kimi. Keep hyphenated minor versions, but do not capture a
+  // context-capacity token such as `-256K` as part of the version.
   {
-    pattern: /kimi[-_.]?k(\d+(?:[.-]\d+)?)[-_.]?pro/i,
+    pattern: /kimi[-_.]?k(\d+(?:\.\d+|-(?!\d+[kmg](?:$|[-_.]))\d+)?)[-_.]?pro/i,
     resolve: m => ({ short: 'Kimi', version: compactVersion(m[1]), suffix: 'Pro', family: 'cn' }),
   },
   {
-    pattern: /kimi[-_.]?k(\d+(?:[.-]\d+)?)[-_.]?code/i,
+    pattern: /kimi[-_.]?k(\d+(?:\.\d+|-(?!\d+[kmg](?:$|[-_.]))\d+)?)[-_.]?code/i,
     resolve: m => ({ short: 'Kimi', version: compactVersion(m[1]), suffix: 'Code', family: 'cn' }),
   },
   {
-    pattern: /kimi[-_.]?k(\d+(?:[.-]\d+)?)/i,
+    pattern: /kimi[-_.]?k(\d+(?:\.\d+|-(?!\d+[kmg](?:$|[-_.]))\d+)?)/i,
     resolve: m => ({ short: 'Kimi', version: compactVersion(m[1]), family: 'cn' }),
   },
   {
@@ -548,12 +549,12 @@ const PRESET_RULES: readonly PresetRule[] = [
     resolve: m => ({ short: 'Mistral', version: m[1] ?? '', suffix: 'Medium', family: 'other' }),
   },
   {
-    pattern: /mistral[-_.]?large[-_.]?(\d+(?:[.-]\d+)?)?/i,
-    resolve: m => ({ short: 'Mistral', version: compactVersion(m[1]), suffix: 'Large', family: 'other' }),
+    pattern: /mistral[-_.]?large(?:[-_.](\d{1,3}(?:\.\d+)?)(?!\d))?/i,
+    resolve: m => ({ short: 'Mistral', version: m[1] ?? '', suffix: 'Large', family: 'other' }),
   },
   {
-    pattern: /mistral[-_.]?small[-_.]?(\d+(?:[.-]\d+)?)?/i,
-    resolve: m => ({ short: 'Mistral', version: compactVersion(m[1]), suffix: 'Small', family: 'other' }),
+    pattern: /mistral[-_.]?small(?:[-_.](\d{1,3}(?:\.\d+)?)(?!\d))?/i,
+    resolve: m => ({ short: 'Mistral', version: m[1] ?? '', suffix: 'Small', family: 'other' }),
   },
   {
     pattern: /mistral/i,
@@ -717,7 +718,17 @@ export function resolveModelPreset(modelId: string, displayName?: string): Model
     const detail = (preset: ModelSymbolPreset): number => Number(Boolean(preset.version)) + Number(Boolean(preset.suffix))
     // Stable router ids such as `deepseek-flash` can be less descriptive than
     // their catalog names. Prefer the catalog only when it adds version/tier data.
-    return detail(displayPreset) > detail(canonicalPreset) ? displayPreset : canonicalPreset
+    if (detail(displayPreset) > detail(canonicalPreset)) return displayPreset
+    // Equal-detail candidates can carry complementary fields: the id in
+    // `devstral-medium-latest` supplies Medium while `Devstral 2` supplies 2.
+    if (detail(displayPreset) === detail(canonicalPreset) && canonicalPreset.short === displayPreset.short) {
+      return {
+        ...canonicalPreset,
+        version: canonicalPreset.version || displayPreset.version,
+        suffix: canonicalPreset.suffix ?? displayPreset.suffix,
+      }
+    }
+    return canonicalPreset
   }
   const preset = canonicalPreset ?? displayPreset
   if (preset) return preset
@@ -727,10 +738,16 @@ export function resolveModelPreset(modelId: string, displayName?: string): Model
   const short = titleWord(firstAlpha)
   const verMatch = source.match(/(?:^|[-_.\s])v?(\d+(?:\.\d+)?)(?:$|[-_.\s])/i)
   const version = verMatch?.[1] ?? ''
+  // Remove the extracted version token before looking for qualifiers so its
+  // digits cannot be rendered a second time in the suffix.
+  const versionIndex = verMatch?.index ?? -1
+  const suffixSource = verMatch && versionIndex >= 0
+    ? `${source.slice(0, versionIndex)}-${source.slice(versionIndex + verMatch[0].length)}`
+    : source
   // Trailing well-known tier words become a suffix; anything else stays in the name.
-  const suffixMatch = source.match(
+  const suffixMatch = suffixSource.match(
     new RegExp(`[-_.\\s]((?!${FALLBACK_SUFFIX_WORDS.source})[a-z]+(?:[-_.\\s][a-z0-9]+)*[-_.\\s](?:${FALLBACK_SUFFIX_WORDS.source})(?:[-_.\\s][a-z0-9]+)*)$`, 'i')
-  ) ?? source.match(new RegExp(`[-_.\\s]((?:${FALLBACK_SUFFIX_WORDS.source})(?:[-_.\\s][a-z0-9]+)*)$`, 'i'))
+  ) ?? suffixSource.match(new RegExp(`[-_.\\s]((?:${FALLBACK_SUFFIX_WORDS.source})(?:[-_.\\s][a-z0-9]+)*)$`, 'i'))
   const suffix = suffixMatch ? titleSuffix(suffixMatch[1]!) : undefined
   return { short, version, suffix, family: 'other' }
 }
