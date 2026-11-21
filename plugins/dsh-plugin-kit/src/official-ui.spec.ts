@@ -13,10 +13,15 @@ const pluginsRoot = join(repoRoot, 'plugins')
  * without the theme ever declaring them.
  */
 const STRUCTURAL_TOKENS = new Set([
+  '--ds-transition-duration-slow',
+  '--dsh-dockkit-strip-inline-start',
+  '--dsh-frame-leading-clearance',
   '--dsh-menu-anchor',
   '--dsh-segment-count',
   '--dsh-segment-index',
+  '--dsh-sidebar-width',
   '--dsh-toast-hold',
+  '--dsh-windows-content-radius',
 ])
 
 const ALLOWED = new Set([...OFFICIAL_THEME_TOKEN_NAMES, ...STRUCTURAL_TOKENS])
