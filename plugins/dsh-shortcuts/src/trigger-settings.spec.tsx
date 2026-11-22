@@ -50,7 +50,9 @@ describe('web palette shortcut recording', () => {
     /></div>))
     const change = Array.from(container.querySelectorAll('button')).find(item => item.textContent === 'Change')!
     await act(async () => change.click())
-    const input = document.querySelector<HTMLInputElement>('input[aria-describedby="shortcut-record-hint"]')!
+    const input = document.querySelector<HTMLInputElement>('input[aria-describedby]')!
+    const hint = document.getElementById(input.getAttribute('aria-describedby')!)
+    expect(hint?.className).toContain('dsh-ui-hint')
     const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
     await act(async () => { input.dispatchEvent(event) })
     expect(event.defaultPrevented).toBe(true)

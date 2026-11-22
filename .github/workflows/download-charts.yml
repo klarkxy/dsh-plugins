@@ -1,0 +1,48 @@
+name: Download charts
+
+# Refreshes the npm download-trend SVGs on the docs/demo-assets media branch
+# every day, and whenever the generator or the catalog changes on main.
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - scripts/npm-download-charts.mjs
+      - site/catalog.json
+      - .github/workflows/download-charts.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: download-charts
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/demo-assets
+          path: media
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - run: node scripts/npm-download-charts.mjs --out media
+      - name: Commit updated charts
+        working-directory: media
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "charts unchanged"
+          else
+            git commit -m "chore: refresh npm download charts"
+            git push origin HEAD:docs/demo-assets
+          fi

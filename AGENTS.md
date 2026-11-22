@@ -59,8 +59,8 @@ pnpm check               # 较大改动时全仓检查
 
 ## 参考源码（只读镜像）
 
-- `H:\Refernece\ZCode`：ZCode 完整源码（写本节时 v3.14.3），与 DSH 同族，回答「DSH 实际怎么做」。查会话与子代理生命周期、插件与 hook 派发、RPC 与存储、客户端 UI 与主题 token。入口：`apps/zcode-cli/`（Agent CLI 与运行时）、`packages/{server,services,client,rpc,shared}`（宿主核心）、`packages/ui`、`packages/web`。
-- `H:\Refernece\codex`：OpenAI Codex CLI 源码（写本节时 `c0c230e673`），异族同类，回答「同类产品怎么设计」；设计 hook、沙箱、子代理、记忆等机制时对照取舍，DSH 自身语义仍以 DSH / ZCode 为准。入口：`codex-rs/core`（Agent 主循环）、`cli`/`tui`、`app-server` + `app-server-protocol`、`hooks`/`plugin`/`core-plugins`、`sandboxing`/`windows-sandbox-rs`/`execpolicy`、`protocol`/`rollout`/`thread-store`、`skills`、`codex-cli/`、`sdk/`、`docs/`。
+- `H:\Reference\ZCode`：ZCode 完整源码（写本节时 v3.14.3），与 DSH 同族，回答「DSH 实际怎么做」。查会话与子代理生命周期、插件与 hook 派发、RPC 与存储、客户端 UI 与主题 token。入口：`apps/zcode-cli/`（Agent CLI 与运行时）、`packages/{server,services,client,rpc,shared}`（宿主核心）、`packages/ui`、`packages/web`。
+- `H:\Reference\codex`：OpenAI Codex CLI 源码（写本节时 `c0c230e673`），异族同类，回答「同类产品怎么设计」；设计 hook、沙箱、子代理、记忆等机制时对照取舍，DSH 自身语义仍以 DSH / ZCode 为准。入口：`codex-rs/core`（Agent 主循环）、`cli`/`tui`、`app-server` + `app-server-protocol`、`hooks`/`plugin`/`core-plugins`、`sandboxing`/`windows-sandbox-rs`/`execpolicy`、`protocol`/`rollout`/`thread-store`、`skills`、`codex-cli/`、`sdk/`、`docs/`。
 
 共用规则：**只读访问**（保持源码、格式和目录原样，仅做查阅）；先读源码再下结论，结论给具体路径（如 `packages/services/...ts`）；镜像与 DSH 运行时有差异时以运行时为准（Codex 结论以引用 commit 为准，跨版本先看 `git log`）；参考实现时自行编写，引用片段保留 Apache-2.0 署名与 `NOTICE`。
 
