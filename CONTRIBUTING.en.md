@@ -42,6 +42,24 @@ When the interface is unchanged, say why — documentation, server behavior, or 
 
 The GIF does not replace automated tests or an independent review.
 
+## Plugin READMEs and the site
+
+This rule covers each plugin's bilingual README and its page on the plugin site. New plugins meet it before merging; maintainers backfill older ones.
+
+**Every README carries a demo image.** A plugin with a user-visible interface places at least one real screenshot or GIF that shows what it does right after the overview, in both the Chinese and English README. Sources follow the same standard as the previous section: interface-acceptance captures recorded from the plugin's own code in an isolated `dsh web`. Generated animations, static mocks, claims without artifacts, and stale recordings do not count. Replace the image after a major interface change. Pure shared libraries with no interface may state that in the README instead.
+
+**Images stay out of the npm package.** GIFs and large images live on the `docs/demo-assets` branch (file names carry the plugin name or PR number), and READMEs reference them by absolute URL:
+
+```text
+https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/<file>
+```
+
+Small static screenshots may live in the plugin's `screenshots/` or `docs/` directory (make sure `files` in `package.json` does not ship them) and be referenced by relative path.
+
+**The README stays an overview**: one positioning paragraph, the demo image, install, core usage, and key limitations. Full feature lists, per-option configuration docs, and extra captures belong to the plugin's site page.
+
+**The site carries the detailed introduction.** Plugins listed in `site/catalog.json` fill in `details.zh` / `details.en` (Markdown, images allowed), which the site renders as a "Details" section ahead of the README extract. New plugins must not leave this section empty for long.
+
 ## Acceptance tooling stays out of npm packs
 
 `.agents/` is developer tooling. Plugin `files` lists do not ship it, and the root `.npmignore` excludes it. Do not put acceptance artifacts in a plugin package.
