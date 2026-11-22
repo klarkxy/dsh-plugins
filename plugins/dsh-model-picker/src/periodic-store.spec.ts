@@ -32,6 +32,13 @@ const CHOICES: ModelMenuChoice[] = [
   { provider: 'deepseek', model: 'deepseek-v4.1-flash', label: 'DeepSeek / DeepSeek V4.1 Flash', providerLabel: 'DeepSeek', efforts: [] },
 ]
 
+/* One model served under two ids: official DeepSeek's stable alias and the
+ * vendor-prefixed id Magpie exposes. */
+const ALIASED_CHOICES: ModelMenuChoice[] = [
+  { provider: 'deepseek-official', model: 'deepseek-flash', label: 'DeepSeek / DeepSeek-V4.1-Flash', providerLabel: 'DeepSeek', efforts: [{ id: 'high', name: 'High' }] },
+  { provider: 'magpie', model: 'klarkxy/deepseek-v4.1-flash', label: 'Magpie / DeepSeek V4.1 Flash · KLARKXY', providerLabel: 'Magpie', efforts: [{ id: 'max', name: 'Maximum' }] },
+]
+
 describe('buildPeriodicCards', () => {
   it('merges identical canonical models from multiple providers into one card while keeping distinct versions separate', () => {
     const cards = buildPeriodicCards(CHOICES, DEFAULT_PERIODIC_PREFS)
@@ -48,6 +55,28 @@ describe('buildPeriodicCards', () => {
     expect(cards[2]!.short).toBe('Grok')
     expect(cards[2]!.version).toBe('4.7')
     expect(cards[3]).toMatchObject({ short: 'DeepSeek', version: '4.1', suffix: 'Flash' })
+  })
+
+  it('merges exactly aliased ids into one card while keeping the routed model ids verbatim', () => {
+    const cards = buildPeriodicCards(ALIASED_CHOICES, DEFAULT_PERIODIC_PREFS)
+    expect(cards).toHaveLength(1)
+    expect(cards[0]!.canonicalKey).toBe('deepseek-v4.1-flash')
+    expect(cards[0]!.routes.map(route => route.provider)).toEqual(['deepseek-official', 'magpie'])
+    // The alias is a card key only: every route still submits its own model id.
+    expect(cards[0]!.routes.map(route => route.model)).toEqual(['deepseek-flash', 'klarkxy/deepseek-v4.1-flash'])
+    const selected = buildPeriodicCards(ALIASED_CHOICES, DEFAULT_PERIODIC_PREFS, { provider: 'deepseek-official', model: 'deepseek-flash' })
+    expect(selected[0]!.routes).toHaveLength(2)
+    expect(selected[0]!.activeRoute).toEqual(ALIASED_CHOICES[0])
+  })
+
+  it('builds an ordinary card for inherited object-property model ids', () => {
+    const choices: ModelMenuChoice[] = [{
+      provider: 'gateway', model: 'constructor', label: 'Gateway / Constructor', providerLabel: 'Gateway', efforts: [],
+    }]
+    expect(() => buildPeriodicCards(choices, DEFAULT_PERIODIC_PREFS)).not.toThrow()
+    expect(buildPeriodicCards(choices, DEFAULT_PERIODIC_PREFS)[0]).toMatchObject({
+      canonicalKey: 'constructor', short: 'Constructor', version: '', family: 'other',
+    })
   })
 
   it('respects user order, provider preference, active selection priority, and custom alias overrides', () => {

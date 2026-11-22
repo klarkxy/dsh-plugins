@@ -10,6 +10,24 @@ describe('canonicalModelKey', () => {
     expect(canonicalModelKey('grok-4.6')).not.toBe(canonicalModelKey('grok-4.7'))
     expect(canonicalModelKey('  ')).toBe('')
   })
+
+  it('unifies exact id aliases for one model without merging distinct versions', () => {
+    // Official DeepSeek `deepseek-flash` and Magpie `klarkxy/deepseek-v4.1-flash`
+    // are the same model, so they must share one card key.
+    expect(canonicalModelKey('deepseek-flash')).toBe('deepseek-v4.1-flash')
+    expect(canonicalModelKey('klarkxy/deepseek-v4.1-flash')).toBe('deepseek-v4.1-flash')
+    expect(canonicalModelKey('DeepSeek-Flash')).toBe(canonicalModelKey('klarkxy/deepseek-v4.1-flash'))
+    // Aliases stay exact: unrelated DeepSeek ids keep their own keys.
+    expect(canonicalModelKey('deepseek-v4-pro')).toBe('deepseek-v4-pro')
+    expect(canonicalModelKey('deepseek-flash')).not.toBe(canonicalModelKey('deepseek-v4-pro'))
+    // The model id alone must resolve correctly, without a richer display name.
+    expect(resolveModelPreset('deepseek-flash')).toEqual({ short: 'DeepSeek', version: '4.1', suffix: 'Flash', family: 'deepseek' })
+  })
+
+  it('treats inherited object-property names as ordinary model ids', () => {
+    expect(canonicalModelKey('gateway/constructor')).toBe('constructor')
+    expect(canonicalModelKey('gateway/__proto__')).toBe('__proto__')
+  })
 })
 
 describe('resolveModelPreset', () => {
