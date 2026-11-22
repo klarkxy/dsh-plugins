@@ -223,6 +223,10 @@ function parseArgs(argv) {
   return args;
 }
 
+export function hasCompleteSeries(perPlugin, plugins) {
+  return plugins.every(plugin => perPlugin.has(plugin.slug));
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const catalog = JSON.parse(await readFile(args.catalog ?? path.join(REPO_ROOT, "site", "catalog.json"), "utf8"));
@@ -273,16 +277,20 @@ async function main() {
     written.push(file);
   }
 
-  const aggregateSvg = renderChart({
-    title: "klarkxy DSH plugins — npm downloads",
-    subtitle: `${fmtInt(windowTotals.reduce((a, b) => a + b, 0))} downloads · ${rangeLabel}`,
-    days: windowDays,
-    values: windowTotals,
-    color: "#0f1115",
-  });
-  const aggregateFile = path.join(outDir, `downloads-${AGGREGATE_SLUG}.svg`);
-  await writeFile(aggregateFile, aggregateSvg);
-  written.push(aggregateFile);
+  if (hasCompleteSeries(perPlugin, catalog.plugins)) {
+    const aggregateSvg = renderChart({
+      title: "klarkxy DSH plugins — npm downloads",
+      subtitle: `${fmtInt(windowTotals.reduce((a, b) => a + b, 0))} downloads · ${rangeLabel}`,
+      days: windowDays,
+      values: windowTotals,
+      color: "#657bd6",
+    });
+    const aggregateFile = path.join(outDir, `downloads-${AGGREGATE_SLUG}.svg`);
+    await writeFile(aggregateFile, aggregateSvg);
+    written.push(aggregateFile);
+  } else {
+    console.warn(`warning: keeping the previous aggregate chart because ${failures.length} package(s) have incomplete data`);
+  }
 
   console.log(`wrote ${written.length} charts to ${path.relative(REPO_ROOT, outDir)} (${rangeLabel})`);
 }

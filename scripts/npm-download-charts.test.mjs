@@ -8,6 +8,7 @@ import {
   fetchDailySeries,
   fmtCompact,
   fmtInt,
+  hasCompleteSeries,
   niceTicks,
   rangeUrl,
   renderChart,
@@ -120,4 +121,10 @@ test("fetchDailySeries stitches chunked windows through the injected fetcher", a
 
 test("escapeXml neutralizes markup", () => {
   assert.equal(escapeXml(`<img src=x onerror="a('b')&c">`), "&lt;img src=x onerror=&quot;a(&#39;b&#39;)&amp;c&quot;&gt;");
+});
+
+test("aggregate charts require complete data from every plugin", () => {
+  const plugins = [{ slug: "one" }, { slug: "two" }];
+  assert.equal(hasCompleteSeries(new Map([["one", [1]], ["two", [2]]]), plugins), true);
+  assert.equal(hasCompleteSeries(new Map([["one", [1]]]), plugins), false);
 });
