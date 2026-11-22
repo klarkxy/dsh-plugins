@@ -36,20 +36,22 @@ describe('web palette shortcut recording', () => {
     const container = document.createElement('div')
     document.body.append(container)
     const root = createRoot(container)
-    await act(async () => root.render(<TriggerSettings
+    const outerKeyDown = vi.fn()
+    await act(async () => root.render(<div onKeyDown={outerKeyDown}><TriggerSettings
       locale="en"
       runtime="web"
       useTrigger={selector => selector({ binding: null, error: null })}
       saveTrigger={() => true}
       conflicts={() => []}
       claim={vi.fn(async () => null)}
-    />))
+    /></div>))
     const change = Array.from(container.querySelectorAll('button')).find(item => item.textContent === 'Change')!
     await act(async () => change.click())
     const input = document.querySelector<HTMLInputElement>('input[aria-describedby="shortcut-record-hint"]')!
     const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
     await act(async () => { input.dispatchEvent(event) })
     expect(event.defaultPrevented).toBe(true)
+    expect(outerKeyDown).not.toHaveBeenCalled()
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(container.querySelector('.shortcuts-root')).not.toBeNull()
     await act(async () => root.unmount())
