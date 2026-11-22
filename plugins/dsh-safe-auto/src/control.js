@@ -124,6 +124,14 @@ export function createControl(base, { table, recentTable, presets, sandboxPolicy
     // Auto selection may be the operation that enables this inheritance.
     return api.call('session.inherit', { sessionId: session.id }, signal);
   }
+  /** Pin the workspace+ask preset on `session` and mark it Safe Auto from the next snapshot position; shared by session.select and api.select. */
+  function enableSafeAuto(session) {
+    if (!base.enabled) throw new Error('Safe Auto is disabled in the profile');
+    const option = workspaceOption();
+    if (!option) throw new Error('Workspace Write with native approval is unavailable');
+    presets.set(session, option.value);
+    selections.set(session, { fromSeq: session.snapshotEvents().length, generation: ++generation });
+  }
   async function dispatch(endpoint, payload, signal) {
     signal?.throwIfAborted();
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Invalid request');
@@ -163,11 +171,7 @@ export function createControl(base, { table, recentTable, presets, sandboxPolicy
       return sessionView(session);
     }
     if (payload.value === 'safe-auto') {
-      if (!base.enabled) throw new Error('Safe Auto is disabled in the profile');
-      const option = workspaceOption();
-      if (!option) throw new Error('Workspace Write with native approval is unavailable');
-      presets.set(session, option.value);
-      selections.set(session, { fromSeq: session.snapshotEvents().length, generation: ++generation });
+      enableSafeAuto(session);
     } else {
       const option = presets.catalog().options.find(o => o.value === payload.value);
       if (!option || !modes.has(presets.resolve(option.value).sandbox)) throw new Error('Unknown permission preset');
@@ -179,17 +183,41 @@ export function createControl(base, { table, recentTable, presets, sandboxPolicy
     onChange();
     return sessionView(session);
   }
+  const enqueue = (job, signal) => {
+    if (lifetime.signal.aborted) return Promise.reject(lifetime.signal.reason);
+    const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
+    const work = tail.then(() => job(combined));
+    tail = work.catch(() => {});
+    return work;
+  };
   const api = { state, config, settingsView, getSession, seedSession, signal: lifetime.signal,
+    /** Whether Safe Auto can be enabled on a session right now. */
+    available: () => policyView().available,
+    /** Sync read of one session's Safe Auto state; false for unknown or invalid ids. */
+    sessionActive(sessionId) {
+      if (typeof sessionId !== 'string' || !sessionId) return false;
+      const session = sessions.get(sessionId);
+      return session ? active(session) : false;
+    },
+    /**
+     * Enable Safe Auto on an owned session without memoizing it for future
+     * chats: unlike session.select this never touches the lastSelection memo.
+     */
+    select(sessionId, signal) {
+      return enqueue(combined => {
+        combined.throwIfAborted();
+        const session = getSession(sessionId);
+        enableSafeAuto(session);
+        onChange();
+        return sessionView(session).safeAuto;
+      }, signal);
+    },
     async dispose() {
       lifetime.abort(new Error('Safe Auto control unloaded'));
       await tail;
     },
     call(endpoint, payload, signal) {
-      if (lifetime.signal.aborted) return Promise.reject(lifetime.signal.reason);
-      const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
-      const work = tail.then(() => dispatch(endpoint, payload, combined));
-      tail = work.catch(() => {});
-      return work;
+      return enqueue(combined => dispatch(endpoint, payload, combined), signal);
     },
   };
   return api;
