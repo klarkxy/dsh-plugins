@@ -107,6 +107,9 @@ export function createControl(base, { table, recentTable, presets, sandboxPolicy
   function observeSession(session) {
     // Each session.open is a composer navigation, including a return to a
     // previously viewed session. List reads and focus refreshes stay read-only.
+    // Runtime-owned activation is task-local: merely inspecting that task must
+    // not overwrite the user's last explicit preference for future chats.
+    if (selections.get(session)?.source === 'runtime' && sessionView(session).safeAuto) return Promise.resolve();
     return rememberSelection(sessionView(session).safeAuto ? 'safe-auto' : 'native');
   }
   /**
@@ -125,12 +128,12 @@ export function createControl(base, { table, recentTable, presets, sandboxPolicy
     return api.call('session.inherit', { sessionId: session.id }, signal);
   }
   /** Pin the workspace+ask preset on `session` and mark it Safe Auto from the next snapshot position; shared by session.select and api.select. */
-  function enableSafeAuto(session) {
+  function enableSafeAuto(session, source = 'user') {
     if (!base.enabled) throw new Error('Safe Auto is disabled in the profile');
     const option = workspaceOption();
     if (!option) throw new Error('Workspace Write with native approval is unavailable');
     presets.set(session, option.value);
-    selections.set(session, { fromSeq: session.snapshotEvents().length, generation: ++generation });
+    selections.set(session, { fromSeq: session.snapshotEvents().length, generation: ++generation, source });
   }
   async function dispatch(endpoint, payload, signal) {
     signal?.throwIfAborted();
@@ -207,7 +210,7 @@ export function createControl(base, { table, recentTable, presets, sandboxPolicy
       return enqueue(combined => {
         combined.throwIfAborted();
         const session = getSession(sessionId);
-        enableSafeAuto(session);
+        enableSafeAuto(session, 'runtime');
         onChange();
         return sessionView(session).safeAuto;
       }, signal);
