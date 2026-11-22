@@ -136,12 +136,22 @@ export function apply(ctx, raw = {}) {
   const auxiliary = { failure: undefined };
   let settleAuxiliary;
   const auxiliaryGate = new Promise(resolve => { settleAuxiliary = resolve; });
+  // selectSession/sessionActive let other plugins (e.g. ds-dot) enable and
+  // check Safe Auto on top-level sessions they own, without touching the
+  // lastSelection memo that steers the user's future chats.
   ctx.provide?.('safeAutoRuntime', { base, history, auxiliary, attach(next) {
     if (control) throw new Error('Safe Auto controls already attached');
     control = next; attachedOnce = true;
     const epoch = ++controlEpoch;
     return () => { if (control === next && controlEpoch === epoch) { control = undefined; ++controlEpoch; } };
-  } });
+  },
+    available() { return control ? control.available() : false; },
+    selectSession(sessionId, signal) {
+      if (!control) return Promise.reject(new Error('Safe Auto controls are not loaded'));
+      return control.select(sessionId, signal);
+    },
+    sessionActive(sessionId) { return control ? control.sessionActive(sessionId) : false; },
+  });
   // The shared auxiliary default is global infrastructure: the reviewer
   // follows it when no explicit reviewer model is set. The review side
   // retains the store, so the default exists before the first review and the

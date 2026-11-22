@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-safe-auto",
-  "version": "0.5.11",
+  "version": "0.5.12",
   "description": "Safe Auto: a reviewer model answers approval requests one call at a time; includes review history with full audit trails.",
   "icon": "./icon.svg",
   "type": "module",
@@ -98,6 +98,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "e47615c5450a5c31706be4e84b0fc6aa5837ed9d37fcb8be21a5958d805cba75"
+    "contentHash": "4558c00f119b4bf864d13f2ee73b2dae94c4242ce8040d3a3fc55bb26b8d61e6"
   }
 }
