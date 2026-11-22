@@ -1,13 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { Button, IconPanelLeftOutlineRegular, Menu, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
+import { MenuGroup, MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
-import { useId, useState } from 'react'
+import { useId } from 'react'
 import {
-  CENTER_ATTRIBUTE, FRAME_ATTRIBUTE, PLUGIN_NAME, STORAGE_KEY,
+  CENTER_ATTRIBUTE, FRAME_ATTRIBUTE, PLUGIN_NAME, SIDEBAR_LAYOUT_MODES, STORAGE_KEY,
   createSidebarLayoutStore, nextMode,
-  type SidebarLayoutMode, type SidebarLayoutStorage, type SidebarLayoutStore,
+  type SidebarLayoutMode, type SidebarLayoutStorage,
 } from './contracts.ts'
 
 export const name = 'dsh-sidebar-layout-client'
@@ -17,7 +16,7 @@ const NS = 'dsh-sidebar-layout'
 const ROOT_CLASS = 'sl-root'
 
 const zh = {
-  'trigger.label': '侧栏布局',
+  'menu.label': '侧栏布局',
   'mode.push': '常规',
   'mode.drawer': '抽屉',
   'mode.swap': '正文',
@@ -26,7 +25,7 @@ const zh = {
   'command.cycle': '切换侧栏布局',
 } as const
 const en: Record<keyof typeof zh, string> = {
-  'trigger.label': 'Sidebar layout',
+  'menu.label': 'Sidebar layout',
   'mode.push': 'Push',
   'mode.drawer': 'Drawer',
   'mode.swap': 'Body',
@@ -222,44 +221,33 @@ interface InjectedProps {
   t(key: string): string
 }
 
-/** The session-header utility: an icon button that opens the three-mode
- * primitives Menu, current mode checked. The shortcut catalog hook feeds the
- * tooltip's keycap and the menu row's visible binding. */
-export function SidebarLayoutAction(props: InjectedProps & {
-  useShortcuts?: <T>(selector: (entries: readonly ShortcutCatalogEntryLike[]) => T) => T
+/** A labelled group appended to every right-panel tab's actions menu: one
+ * `menuitem` row per mode, the active one carrying `aria-current`. Picking a
+ * row applies the mode and calls the owner's `dismiss`, as an acting menu
+ * item must. */
+export function SidebarLayoutMenu(props: InjectedProps & {
+  /** The tab whose menu is open; layout is global, so the row ignores it. */
+  tab?: unknown
+  /** The kit menu closes only on its own actions — acting rows must call it. */
+  dismiss?: () => void
 }) {
   const mode = props.useMode ? props.useMode(value => value) : 'push'
-  const shortcut = props.useShortcuts?.(entries => entries.find(entry => entry.id === 'sidebar.layout.cycle'))
-  const [open, setOpen] = useState(false)
   const { t } = props
-  const items: MenuEntry[] = ['push', 'drawer', 'swap'].map(id => ({ id, label: t(`mode.${id}`) }))
   return (
-    <Menu
-      open={open}
-      onClose={() => setOpen(false)}
-      anchor={
-        <Tooltip label={t('trigger.label')} shortcutKeys={shortcut?.keys} side="bottom" delayMs={500}>
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<IconPanelLeftOutlineRegular />}
-            aria-label={t('trigger.label')}
-            aria-keyshortcuts={shortcut?.aria}
-            aria-haspopup="menu"
-            aria-expanded={open}
-            className={ROOT_CLASS}
-            onClick={() => setOpen(value => !value)}
-          />
-        </Tooltip>
-      }
-      items={items}
-      selectedId={mode}
-      onSelect={id => { setOpen(false); props.selectMode?.(id as SidebarLayoutMode) }}
-      align="end"
-      side="bottom"
-      portal
-      listClassName={ROOT_CLASS}
-    />
+    <MenuGroup label={t('menu.label')}>
+      {SIDEBAR_LAYOUT_MODES.map(id => (
+        <MenuItemButton
+          key={id}
+          current={id === mode}
+          onSelect={() => {
+            props.selectMode?.(id)
+            props.dismiss?.()
+          }}
+        >
+          {t(`mode.${id}`)}
+        </MenuItemButton>
+      ))}
+    </MenuGroup>
   )
 }
 
@@ -398,22 +386,22 @@ export function apply(ctx: Context): void {
     }
   }, 'sidebar-layout.frame')
 
-  // The session-scoped utilities strip: the panel's own tab chrome has no
-  // extension seat, so the header is where the switcher lives. Session inject
-  // args are unused — the mode is global, not per session.
-  ctx.effect(() => client.slots.inject('conversation.session.header.utilities', () => client.slots.register(
+  // The switcher lives inside the panel itself: appended at the end of every
+  // tab's context menu (right-click a tab chip). Session inject args are
+  // unused — the mode is global.
+  ctx.effect(() => client.slots.inject('sidebar.right.tab.menu.item', () => client.slots.register(
     {
-      name: 'conversation.session.header.utilities',
+      name: 'sidebar.right.tab.menu.item',
       id: 'sidebar-layout',
       order: 10,
       locale: NS,
       inject: () => ({
-        hooks: { mode: store, shortcuts: client.shortcuts.catalog },
+        hooks: { mode: store },
         selectMode,
       }),
     },
-    SidebarLayoutAction,
-  )), 'sidebar-layout.header')
+    SidebarLayoutMenu,
+  )), 'sidebar-layout.tab-menu')
 
   // A merged-group General row: no own page, the component renders its own
   // title and description inside the native column's geometry.

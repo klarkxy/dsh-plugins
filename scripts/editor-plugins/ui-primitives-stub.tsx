@@ -361,14 +361,16 @@ function menuEntries(entries: readonly MenuEntry[], onSelect?: (id: string) => v
 
 /** Component-row double: the real MenuItemButton is one `role="menuitem"` button
  * sharing the data-row markup; `separatorBefore` draws the same hairline a
- * `{ type: 'separator' }` data entry draws, and activation fires `onSelect`. */
-export function MenuItemButton({ children, shortcut, icon, disabled, danger, separatorBefore, onSelect }: {
+ * `{ type: 'separator' }` data entry draws, `current` maps to `aria-current`,
+ * and activation fires `onSelect`. */
+export function MenuItemButton({ children, shortcut, icon, disabled, danger, separatorBefore, current, onSelect }: {
   children?: React.ReactNode
   shortcut?: { aria?: string; keys: readonly string[] }
   icon?: React.ReactNode
   disabled?: boolean
   danger?: boolean
   separatorBefore?: boolean
+  current?: boolean
   onSelect: () => void
 }) {
   return h(React.Fragment, null,
@@ -378,6 +380,7 @@ export function MenuItemButton({ children, shortcut, icon, disabled, danger, sep
       role: 'menuitem',
       disabled,
       'data-danger': danger === true ? 'true' : undefined,
+      'aria-current': current === true ? 'page' : undefined,
       'aria-keyshortcuts': shortcut?.aria,
       onClick: () => onSelect(),
     }, icon, children, shortcut ? h('span', { 'aria-hidden': 'true' }, shortcut.keys.join(' ')) : null))

@@ -84,7 +84,7 @@ The code is the developer documentation. Releases follow the [release guide](REL
 | [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.en.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-shortcuts](plugins/dsh-shortcuts/README.en.md) | Draft (`draft`) | New shortcut manager and extensible command palette; awaiting first-release acceptance. |
-| [@klarkxy/dsh-sidebar-layout](plugins/dsh-sidebar-layout/README.en.md) | Draft (`draft`) | New right-sidebar layout switcher (push, drawer, body); awaiting first-release acceptance. |
+| [@klarkxy/dsh-sidebar-layout](plugins/dsh-sidebar-layout/README.en.md) | Testing (`testing`) | Entered the first-release process; first publication requires explicit selection. |
 | [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-update](plugins/dsh-update/README.en.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |

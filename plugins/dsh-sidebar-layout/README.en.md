@@ -12,7 +12,7 @@ Switch the DeepSeek Harness right Sidebar between three presentations:
 
 ## Demo
 
-![Switching from the session header menu: push → drawer (click the mask to close) → body (drag to resize)](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr31-sidebar-layout.gif)
+![Switching from the tab's context menu: push → drawer (click the mask to close) → body (drag to resize)](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr38-sidebar-layout-tab-menu.gif)
 
 ## Install
 
@@ -26,7 +26,7 @@ Replace `web` with your profile name and restart the profile when DSH asks. The 
 
 The layout is a global setting; all three entry points drive the same state:
 
-- **Session header button**: the “Sidebar layout” icon in the session header's utility strip opens a menu with Push / Drawer / Body; the active mode is checked. Choosing Drawer or Body while the panel is collapsed expands it.
+- **Tab menu**: right-click any right-panel tab to open its menu; a “Sidebar layout” group is appended at the end, with one row each for Push / Drawer / Body. The active mode is the current item. Choosing Drawer or Body while the panel is collapsed expands it.
 - **Settings row**: the “Sidebar layout” row under Settings → General offers the same three options in a select.
 - **Shortcut**: `Ctrl/Cmd + Alt + Shift + B` cycles Push → Drawer → Body → Push (the web build on Linux ships no default binding — assign one in the Shortcuts settings).
 

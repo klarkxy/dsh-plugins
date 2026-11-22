@@ -84,7 +84,7 @@ pnpm check
 | [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-shortcuts](plugins/dsh-shortcuts/README.md) | 草稿 (`draft`) | 新增快捷键管理与可扩展命令面板，待完成首次发布验收。 |
-| [@klarkxy/dsh-sidebar-layout](plugins/dsh-sidebar-layout/README.md) | 草稿 (`draft`) | 新增右侧边栏布局切换（常规、抽屉、正文），待完成首次发布验收。 |
+| [@klarkxy/dsh-sidebar-layout](plugins/dsh-sidebar-layout/README.md) | 测试中 (`testing`) | 已进入首次发布流程；首次发布需显式选择。 |
 | [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-update](plugins/dsh-update/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
