@@ -12,6 +12,10 @@
 
 ![桌面端更新：变更日志确认后交给宿主下载](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/desktop-update-handoff.gif)
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-update.svg)](https://www.npmjs.com/package/@klarkxy/dsh-update)
+
 ## 功能简介
 
 - **拦截桌面端「新版本」直接下载**：点击侧栏底部「新版本」按钮时不再立即后台下载安装包，而是先打开变更弹窗，列出当前 DSH 版本到目标最新版本之间的全部 Release 日志。

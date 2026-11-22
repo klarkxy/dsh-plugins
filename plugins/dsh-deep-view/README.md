@@ -10,6 +10,10 @@
 
 ![节点关系图声明：格式错误在围栏闭合后自动修复渲染，无法修复时给出原因](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr28-deep-view-repair.gif)
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-deep-view.svg)](https://www.npmjs.com/package/@klarkxy/dsh-deep-view)
+
 ## 安装
 
 ```sh

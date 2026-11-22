@@ -10,6 +10,10 @@
 
 ![在插件页浏览 DSH 开发文档](screenshots/docs-zh.png)
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-dev-index.svg)](https://www.npmjs.com/package/@klarkxy/dsh-dev-index)
+
 ## 安装
 
 ```sh
