@@ -4,7 +4,9 @@ import { Button, MarkdownText, type MarkdownLabels } from '@deepseek-ai/dsh-clie
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { checkShownView, validateViewAnswer } from './core/index.js'
 import { createClientPluginLogger, installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
-import { PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation } from './contracts.ts'
+import { CANVAS_OWNER, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation } from './contracts.ts'
+import { sessionFileAddress } from './file-address.ts'
+import { registerCanvasPreview, type CanvasScope } from './canvas/index.ts'
 import type { ToolViewProps, ToolArgsView, ReplyViewProps, ReplySnapshot } from './runtime.ts'
 import { WidgetCard, type Answer } from './widget.tsx'
 import { viewStyles } from './styles.ts'
@@ -415,19 +417,121 @@ export function DeepViewFenceSlot(props: DeepViewFenceProps) {
   return <div className="dvui-root" data-deep-view-inline><DeepViewFence {...props} /></div>
 }
 
+/** Read a show_canvas call: persisted meta on a settled result, live args otherwise. */
+export function readCanvasCall(props: Pick<ToolViewProps, 'phase' | 'block'>): { path?: string; title?: string; address?: string; failure?: string; shown: boolean; phase: string } {
+  const phase = props.phase ?? (props.block.kind === 'tool-result' ? 'result' : 'start')
+  const meta = phase === 'result' || props.block.kind === 'tool-result' ? props.block.meta : undefined
+  if (isRecord(meta) && meta.owner === CANVAS_OWNER && typeof meta.address === 'string') {
+    return {
+      shown: true, phase, address: meta.address,
+      path: typeof meta.path === 'string' ? meta.path : undefined,
+      title: typeof meta.title === 'string' ? meta.title : undefined,
+    }
+  }
+  const path = argField(props.block.args, 'path')
+  const title = argField(props.block.args, 'title')
+  const failure = phase === 'result'
+    ? props.block.content?.map(item => isRecord(item) && item.type === 'text' && typeof item.text === 'string' ? item.text : '').filter(Boolean).join('\n') || props.block.error?.reason
+    : undefined
+  return {
+    shown: false, phase,
+    path: typeof path === 'string' ? path : undefined,
+    title: typeof title === 'string' ? title : undefined,
+    ...(failure ? { failure } : {}),
+  }
+}
+
+/** Call ids whose live result already auto-opened once; survives virtual-scroll remounts. */
+export const openedCanvasCalls = new Set<string>()
+
+export type CanvasToolViewProps = ToolViewProps & {
+  /** Present only while the sidebar service is injected; hides the open affordance. */
+  openCanvas?: (address: string) => void
+}
+
+export function CanvasToolCall(props: CanvasToolViewProps) {
+  const t = props.t
+  const read = useMemo(() => readCanvasCall(props), [props.block, props.phase])
+  const path = read.path
+  const title = read.title
+  const address = read.address ?? (read.phase !== 'result' && read.shown === false && typeof path === 'string' ? sessionFileAddress(props.sessionId, path) : undefined)
+  const name = title ?? (path ? path.split('/').filter(Boolean).at(-1) : undefined) ?? 'canvas'
+  const openCanvas = props.openCanvas
+  // Auto-open only on a live transition to a shown result; replayed history and
+  // remounts arrive with phase 'result' on the first frame and never open.
+  const firstPhase = useRef(props.phase)
+  useEffect(() => {
+    if (firstPhase.current === 'result' || props.phase !== 'result') return
+    if (!read.shown || address === undefined || openCanvas === undefined) return
+    if (openedCanvasCalls.has(props.callId)) return
+    openedCanvasCalls.add(props.callId)
+    openCanvas(address)
+  }, [props.phase, read.shown, address, openCanvas, props.callId])
+  if (read.phase === 'preparing') return <div className="dvui-root dvui-tool-loading" role="status">{t('preparing')}</div>
+  return <div className="dvui-root">
+    <div className="dvui-canvas-card">
+      <span className="dvui-canvas-card-title">{name}</span>
+      {path ? <span className="dvui-canvas-card-path">{path}</span> : null}
+      {read.failure ? <p className="dvui-tool-error" role="alert">{read.failure}</p> : null}
+      {address !== undefined && openCanvas !== undefined
+        ? <div className="dvui-actions"><Button onClick={() => openCanvas(address)}>{t('canvasOpen')}</Button></div>
+        : null}
+    </div>
+  </div>
+}
+
 type Client = Context & {
   connection: { rpc: { call(channel: string, endpoint: string, payload: unknown): Promise<unknown> } }
   slots: {
     inject(key: string, callback: () => unknown): () => void
     register(spec: Record<string, unknown>, render: unknown): () => void
   }
-  locale: { register(namespace: string, dictionaries: { zh: Record<string, string>; en: Record<string, string> }): () => void; getSnapshot?(): { active?: string }; subscribe?(listener: () => void): () => void }
+  locale: { register(namespace: string, dictionaries: { zh: Record<string, string>; en: Record<string, string> }): () => void; getSnapshot?(): { active?: string }; subscribe?(listener: () => void): () => void; bind?(namespace: string): (key: string, params?: Record<string, unknown>) => string }
   provide(name: string, value: unknown): void
+  sidebarRight?: { openResource(address: string, options?: { preferNewPane?: boolean }): void }
+}
+
+/** The developer-tools preference the canvas renderer follows, structurally. */
+type DeveloperToolsEnabled = { getSnapshot(): boolean; subscribe(listener: () => void): () => void }
+type CanvasClientScope = CanvasScope & {
+  configForms: { developerTools: { enabled: DeveloperToolsEnabled } }
+  remote: { workspaceFiles?: CanvasScope['remote']['workspaceFiles'] }
+}
+
+/**
+ * Follow the host's developer-tools switch: only while it is on does the canvas
+ * renderer take precedence over the builtin static HTML preview. The Remote
+ * face for workspace bytes must also exist; without it packing cannot run.
+ */
+export function mountCanvasPreview(scope: CanvasClientScope, locale: string): () => void {
+  const enabled = scope.configForms?.developerTools?.enabled
+  if (!enabled || typeof enabled.getSnapshot !== 'function' || typeof enabled.subscribe !== 'function') return () => {}
+  let dispose: (() => void) | undefined
+  const sync = () => {
+    const active = enabled.getSnapshot() === true && typeof scope.remote?.workspaceFiles?.readBytes === 'function'
+    if (active && dispose === undefined) dispose = registerCanvasPreview(scope, locale)
+    else if (!active && dispose !== undefined) { dispose(); dispose = undefined }
+  }
+  sync()
+  const unsubscribe = enabled.subscribe(sync)
+  return () => { unsubscribe(); dispose?.() }
 }
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
   installClientPluginLogger(ctx, PLUGIN_NAME)
   const call = (endpoint: string, payload: unknown) => client.connection.rpc.call(RPC_CHANNEL, endpoint, payload)
+  // New canvas services arrive through their own inject scopes so a missing
+  // sidebar or preview stack only disables that feature, never the bundle.
+  const canvasRuntime: { sidebarRight?: Client['sidebarRight'] } = {}
+  ctx.inject?.(['sidebarRight'], injected => {
+    const scope = injected as unknown as Client
+    canvasRuntime.sidebarRight = scope.sidebarRight
+    scope.effect(() => () => { canvasRuntime.sidebarRight = undefined })
+  })
+  ctx.inject?.(['documentPreviews', 'configForms', 'remote', 'remote.workspaceFiles'], injected => {
+    const scope = injected as unknown as Client & CanvasClientScope
+    scope.effect(() => mountCanvasPreview(scope, LOCALE))
+  })
   const cards = createCards(call, client.locale)
   client.provide(CARDS_SERVICE, cards)
   const store = cards.store
@@ -444,6 +548,14 @@ export function apply(ctx: Context): void {
     name: 'tool.call.toolview', key: 'show_view', locale: LOCALE,
     inject: () => ({ call, store }),
   }, ToolCallStatus)), 'deep-view.tool')
+  ctx.effect(() => client.slots.inject('tool.call.toolview', () => client.slots.register({
+    name: 'tool.call.toolview', key: 'show_canvas', locale: LOCALE,
+    inject: () => ({
+      openCanvas: canvasRuntime.sidebarRight === undefined ? undefined : (address: string) => {
+        canvasRuntime.sidebarRight?.openResource(address, { preferNewPane: true })
+      },
+    }),
+  }, CanvasToolCall)), 'deep-view.canvas-tool')
   for (const language of ['deepui', 'deep-view']) ctx.effect(() => client.slots.inject('conversation.chat.markdown.fence', () => client.slots.register({
     name: 'conversation.chat.markdown.fence', id: 'deep-view', key: language, locale: LOCALE,
   }, DeepViewFenceSlot)), `deep-view.fence.${language}`)

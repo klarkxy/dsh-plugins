@@ -3,6 +3,7 @@ export type RpcResult<T = unknown> = SharedRpcResult<T>
 export const PLUGIN_NAME = '@klarkxy/dsh-deep-view'
 export const RPC_CHANNEL = '/dsh-deep-view'
 export const VIEW_OWNER = 'dsh-deep-view'
+export const CANVAS_OWNER = 'deep-view/canvas'
 export const HOST_SERVICE = 'dshDeepView'
 export type DeepViewHost = {
   /** Move an open card and route stale session lookups to a replacement root session. */
@@ -99,6 +100,13 @@ export type ViewPresentation = {
   interactive: boolean
   awaitReply: boolean
   revision?: number
+}
+/** Persisted `show_canvas` result metadata the client tool card renders. */
+export type CanvasPresentation = {
+  owner: typeof CANVAS_OWNER
+  path: string
+  address: string
+  title?: string
 }
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)

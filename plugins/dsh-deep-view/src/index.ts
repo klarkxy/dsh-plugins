@@ -9,7 +9,8 @@ import { checkShownView, validateViewAnswer, viewSummary } from './core/index.js
 import { answerText } from './answer-text.ts'
 import { DEEP_VIEW_POLICY, DEEP_VIEW_PROMPT } from './prompt.ts'
 import { DEEP_VIEW_SKILL, DEEP_VIEW_SKILL_DESCRIPTION } from './skill.ts'
-import { HOST_SERVICE, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type DeepViewHost, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation, type ViewAnswerMetadata, type ViewSnapshot } from './contracts.ts'
+import { HOST_SERVICE, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, CANVAS_OWNER, isRecord, type CanvasPresentation, type DeepViewHost, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation, type ViewAnswerMetadata, type ViewSnapshot } from './contracts.ts'
+import { fileAddressFor } from './file-address.ts'
 
 export const name = 'deep-view'
 export const inject = ['tools', 'systemPrompt', 'skills', 'sessionController', 'sessions', 'agents', 'connection', 'webServer'] as const
@@ -65,7 +66,7 @@ type AgentLike = {
 // list() includes delegated agents in rc.3; it cannot replace roots(). Older
 // hosts can explicitly attest plugin-owned roots. Without that API, use the
 // shared persisted-header guard, which admits ordinary human forks too.
-const isLiveRoot = (host: Host, agent: AgentLike | undefined): boolean => {
+const isLiveRoot = (host: Host, agent: AgentLike | undefined): agent is AgentLike => {
   if (!agent || host.agents.get(agent.id) !== agent) return false
   if (typeof host.agents.roots === 'function') return host.agents.roots().some(root => root === agent)
   return isRecord(agent.session) && isRecord(agent.session.header) && !isSubagentSession(agent.session)
@@ -242,6 +243,86 @@ export function createShowViewTool(
   }
 }
 
+/** Host workspace-file service reached through optional injection; absent keeps the tool working. */
+export type CanvasServices = {
+  workspaceFiles?: {
+    stat(scope: { sessionId: string; workspaceRoot: string }, path: string, signal: AbortSignal): Promise<{ absolutePath?: string }>
+  }
+  sandboxPolicy?: { workspaceRoot?: string }
+}
+
+/** presentationMeta only for a shown canvas: the client card keys on `owner`. */
+function canvasPresentation(_args: unknown, value: unknown): CanvasPresentation | null {
+  if (!isRecord(value) || value.owner !== CANVAS_OWNER || value.status !== 'shown') return null
+  if (!short(value.path, 1024) || !short(value.address, 4096)) return null
+  return {
+    owner: CANVAS_OWNER, path: value.path, address: value.address,
+    ...(short(value.title, 120) ? { title: value.title } : {}),
+  }
+}
+
+export function createShowCanvasTool(
+  host: Host,
+  services: { current: CanvasServices },
+  logger?: PluginLogger,
+): Record<string, unknown> {
+  return {
+    name: 'show_canvas',
+    description: 'Open a runnable preview of an HTML file in the right Sidebar. Write the .html file with the write tool first, then call this once; later edit tool changes refresh the preview automatically.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Workspace path of the .html/.htm file to preview.' },
+        title: { type: 'string', description: 'Optional short label for the preview card.' },
+      },
+      required: ['path'],
+    } satisfies ObjectJsonSchema,
+    output: {
+      schema: { type: 'object', properties: { owner: { type: 'string', const: CANVAS_OWNER }, status: { type: 'string' }, path: { type: 'string' }, address: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' } }, required: ['owner', 'status', 'summary'], additionalProperties: false },
+      render: (_args: unknown, value: { summary?: string }) => [{ type: 'text', text: String(value.summary ?? '') }],
+      presentationMeta: canvasPresentation,
+    },
+    async execute(args: unknown, exec: { agent?: AgentLike; callId?: string; signal?: AbortSignal; concludeTurn(): void }) {
+      const input = isRecord(args) ? args : {}
+      if (!short(input.path, 1024)) return { owner: CANVAS_OWNER, status: 'invalid', summary: 'path: expected a file path of at most 1024 characters' }
+      if (input.title !== undefined && !short(input.title, 120)) return { owner: CANVAS_OWNER, status: 'invalid', summary: 'title: expected a string of at most 120 characters' }
+      const path = input.path
+      if (!/\.html?$/iu.test(path.trim())) return { owner: CANVAS_OWNER, status: 'invalid', summary: 'path: expected an .html or .htm file' }
+      const id = exec.agent?.id
+      const agent = id === undefined ? undefined : host.agents.get(id)
+      if (!isLiveRoot(host, agent)) {
+        logger?.debug('canvas.non-root-rejected', 'Rejected show_canvas outside a live root session.', { sessionId: id ?? null })
+        return { owner: CANVAS_OWNER, status: 'invalid', summary: 'Canvas preview only works in a live root session. Give the user the file path in your response instead.' }
+      }
+      const header = isRecord(agent.session) && isRecord(agent.session.header) ? agent.session.header : undefined
+      const cwd = typeof header?.cwd === 'string' && header.cwd !== '' ? header.cwd : undefined
+      const { workspaceFiles, sandboxPolicy } = services.current
+      const workspaceRoot = cwd ?? (typeof sandboxPolicy?.workspaceRoot === 'string' && sandboxPolicy.workspaceRoot !== '' ? sandboxPolicy.workspaceRoot : undefined)
+      let absolutePath: string | undefined
+      // stat is advisory: no workspaceFiles service, or no resolvable workspace
+      // root, skips existence checking; a stat failure tells the model to write first.
+      if (workspaceFiles && workspaceRoot !== undefined) {
+        const signal = exec.signal ? AbortSignal.any([exec.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000)
+        try {
+          const stat = await workspaceFiles.stat({ sessionId: agent.id, workspaceRoot }, path, signal)
+          absolutePath = typeof stat?.absolutePath === 'string' ? stat.absolutePath : undefined
+        } catch (error) {
+          logger?.debug('canvas.missing', 'show_canvas stat failed.', { sessionId: agent.id, path, reason: error instanceof Error ? error.message : String(error) })
+          return { owner: CANVAS_OWNER, status: 'missing', path, summary: `No readable file at "${path}". Write the file with the write tool first, then call show_canvas again.` }
+        }
+      }
+      const address = fileAddressFor(agent.id, workspaceRoot, absolutePath ?? path)
+      logger?.info('canvas.shown', 'Opened Deep View canvas preview.', { sessionId: agent.id, path })
+      return {
+        owner: CANVAS_OWNER, status: 'shown', path, address,
+        ...(typeof input.title === 'string' ? { title: input.title } : {}),
+        summary: `Canvas preview opened in the right Sidebar for ${path}. Later changes with the edit tool refresh the preview automatically; do not call show_canvas again unless the user asks to reopen it. Finish with a short final answer.`,
+      }
+    },
+    isConcurrencySafe: () => false,
+  }
+}
+
 export function createRpc(
   host: Host,
   pending: Map<string, PendingView>,
@@ -335,6 +416,19 @@ export async function apply(ctx: Context): Promise<void> {
   const pending = new Map<string, PendingView>()
   const redirects = new Map<string, string>()
   const latest = new Map<string, ViewSnapshot>()
+  const canvasServices: { current: CanvasServices } = { current: {} }
+  // Optional host services arrive through their own inject scopes so a missing
+  // workspace file service or sandbox policy never blocks this bundle loading.
+  ctx.inject?.(['workspaceFiles'], injected => {
+    const scope = injected as Context & CanvasServices
+    canvasServices.current.workspaceFiles = scope.workspaceFiles
+    scope.effect(() => () => { canvasServices.current.workspaceFiles = undefined })
+  })
+  ctx.inject?.(['sandboxPolicy'], injected => {
+    const scope = injected as Context & CanvasServices
+    canvasServices.current.sandboxPolicy = scope.sandboxPolicy
+    scope.effect(() => () => { canvasServices.current.sandboxPolicy = undefined })
+  })
   ctx.effect(() => host.skills.register({
     name: 'deep-view',
     description: DEEP_VIEW_SKILL_DESCRIPTION,
@@ -402,6 +496,21 @@ export async function apply(ctx: Context): Promise<void> {
       disposeTool()
     }
   }, 'deep-view.tool')
+  ctx.effect(() => {
+    if (host.tools.get('show_canvas')) {
+      logger.warn('tool.already-registered', 'show_canvas is already registered by another plugin; skipping registration.')
+      host.logger?.warn('deep-view: show_canvas is already registered by another plugin; this bundle stays disabled for the canvas tool')
+      return () => {}
+    }
+    try {
+      return host.tools.register(createShowCanvasTool(host, canvasServices, logger))
+    }
+    catch (error) {
+      logger.warn('tool.register-failed', 'show_canvas tool registration failed.', error)
+      host.logger?.warn('deep-view: show_canvas registration skipped: %s', error instanceof Error ? error.message : String(error))
+      return () => {}
+    }
+  }, 'deep-view.canvas')
   // Only admission events are observed, never scanned. A new human message closes a stale card.
   ctx.effect(() => ctx.on('session/event', (session: { id: string }, event: { type: string; data?: unknown }) => {
     if (event.type !== 'user/message' || !isRecord(event.data) || !isRecord(event.data.source) || event.data.source.kind !== 'user') return
