@@ -448,7 +448,7 @@ describe('study plan and fixed window', () => {
     await expect(writeZhihuStudyReport({ mode: 'deep' }, { workspaceRoot: directory, readOnly: true })).rejects.toThrow(/只读/)
     expect(await readdir(directory)).toEqual([])
     const link = join(directory, 'linked')
-    await symlink(outside, link)
+    await symlink(outside, link, process.platform === 'win32' ? 'junction' : 'dir')
     await expect(writeZhihuStudyReport({ mode: 'deep' }, { workspaceRoot: link })).rejects.toThrow(/符号链接/)
     expect(await readdir(outside)).toEqual([])
     const signal = new AbortController().signal

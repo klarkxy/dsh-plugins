@@ -196,7 +196,8 @@ linked too. Registry specs are refused.
   --gif-fps <fps>           GIF frame rate, default 12
   --settle-ms <ms>          Hold on the last frame, default 1200
   --patch <yml>             Extra Cordis patch (repeatable)
-  --dsh-cmd <cmd>           Override the dsh command. Empty uses the workspace binary
+  --dsh-cmd <cmd>           Override the dsh command. Empty uses the workspace binary.
+                            Quote paths that contain spaces: --dsh-cmd '"C:\\Program Files\\nodejs\\node.exe" bin.js'
   --cwd <dir>               Working directory (default: workspace root)
   --allow-env <VAR>         Reintroduce one scrubbed non-isolation variable
   --boot-timeout-ms <ms>    Wait for the loopback launch URL
@@ -238,7 +239,7 @@ export function findWorkspaceDshBin(start) {
 }
 
 function splitCommand(cmdString) {
-  const parts = String(cmdString).trim().split(/\s+/).filter(Boolean)
+  const parts = [...String(cmdString).matchAll(/"([^"]*)"|(\S+)/g)].map(m => m[1] ?? m[2])
   if (!parts[0]) throw new Error('Invalid --dsh-cmd value.')
   return { bin: parts[0], prefixArgs: parts.slice(1) }
 }
