@@ -6,6 +6,10 @@
 
 新增「安全自动」审批档位：常规操作仍在工作区沙箱内运行，需要审批的请求会先交由审核模型逐次判定，通过后仅放行这一次调用，拒绝则把原因反馈给智能体，并保留完整的本地审核记录。
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-safe-auto.svg)](https://www.npmjs.com/package/@klarkxy/dsh-safe-auto)
+
 ## 安装
 
 ```sh

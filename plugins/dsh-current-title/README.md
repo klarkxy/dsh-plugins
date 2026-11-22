@@ -6,6 +6,10 @@
 
 让 DeepSeek Harness 的会话标题紧跟当前处理的任务，同时保留你手动修改过的标题不被覆盖。
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-current-title.svg)](https://www.npmjs.com/package/@klarkxy/dsh-current-title)
+
 ## 安装
 
 ```sh

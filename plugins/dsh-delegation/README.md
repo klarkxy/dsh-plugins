@@ -6,6 +6,10 @@
 
 按会话开启的委派开关：开启后主代理负责拆解任务、委派子代理并验收结果，子代理会话会同步获得对应的执行指引。也可安装 `@klarkxy/dsh-model-hub` 获取子代理模型配置与委派模式的一体化入口；本包继续作为独立兼容安装方式。
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-delegation.svg)](https://www.npmjs.com/package/@klarkxy/dsh-delegation)
+
 ## 安装
 
 ```sh

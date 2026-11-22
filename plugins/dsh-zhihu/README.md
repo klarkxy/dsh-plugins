@@ -6,6 +6,10 @@
 
 把知乎接入 DeepSeek Harness 作为调研信源与草稿工具：支持站内/全网搜索、热榜、知乎直答、知识库、问题推荐与创作统计，并支持保存、校验草稿与上传配图。每次请求仅使用你自己的知乎凭据，返回内容仅供调研参考。
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-zhihu.svg)](https://www.npmjs.com/package/@klarkxy/dsh-zhihu)
+
 ## 安装
 
 ```sh
