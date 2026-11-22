@@ -2,7 +2,7 @@
 // (MIT License). Copyright (c) 2026 DeepSeek.
 // A fixed bootstrap runs inside the opaque iframe; no Host callbacks enter its
 // document. Deep View adds one payload field: `capture`, the error-reporting
-// script written ahead of the author document so it runs before any user code.
+// script inserted into the author document's head before any author script.
 import { decodeText, encodeText } from './bytes.ts'
 
 /** One statically declared local script or stylesheet, already read under the source file's authority. */
@@ -22,10 +22,10 @@ export interface HtmlBundle {
 /**
  * Build the outer iframe document. Its resource URLs are created inside the sandbox,
  * because that opaque origin cannot load resource URLs created by the parent.
- * The capture script is written first, so it installs its error hooks before the
- * author's own scripts run.
+ * The author document is parsed before writing so its doctype and head attributes
+ * survive; the capture script is inserted first in head and runs before user code.
  * @param bundle - complete HTML bytes and optional static dependencies.
- * @param capture - `<script>` element text prepended to the written document.
+ * @param capture - `<script>` element text inserted at the start of the author head.
  * @returns bootstrap HTML; invalid UTF-8 throws before navigation.
  */
 export function createHtmlDocument(bundle: HtmlBundle, capture: string): string {
@@ -40,7 +40,7 @@ export function createHtmlDocument(bundle: HtmlBundle, capture: string): string 
     "const text=data=>new TextDecoder('utf-8',{fatal:true}).decode(bytes(data));",
     'const bundle=JSON.parse(text("', payload, '"));',
     'let html=bundle.html;',
-    'if(bundle.assets.length){',
+    "const doctype=/^\\s*<!doctype[^>]*>/i.exec(html)?.[0]??'';",
     "const parsed=new DOMParser().parseFromString(html,'text/html');",
     'for(const asset of bundle.assets){',
     "const script=asset.kind==='script';",
@@ -50,9 +50,9 @@ export function createHtmlDocument(bundle: HtmlBundle, capture: string): string 
     'if(element.getAttribute(attribute)===asset.reference)element.setAttribute(attribute,url);',
     '}',
     '}',
-    "html='<!doctype html>'+parsed.documentElement.outerHTML;",
-    '}',
-    'document.open();document.write(bundle.capture+html);document.close();',
+    "parsed.head.insertAdjacentHTML('afterbegin',bundle.capture);",
+    'html=doctype+parsed.documentElement.outerHTML;',
+    'document.open();document.write(html);document.close();',
     '})()</script>',
   ].join('')
 }

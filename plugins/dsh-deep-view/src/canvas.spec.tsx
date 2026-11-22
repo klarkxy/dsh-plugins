@@ -90,6 +90,18 @@ describe('show_canvas tool card', () => {
     expect(readCanvasCall({ phase: 'result', block: metaBlock('c', shownMeta) })).toMatchObject({ shown: true, address: shownMeta.address })
     await act(async () => root.unmount())
   })
+  it('shows the host failure without offering a broken preview address', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const summary = 'No readable file at "dmeo.html". Write the file first.'
+    const block = { callId: 'call-missing', kind: 'tool-result' as const, args: argsView({ path: 'dmeo.html' }), content: [{ type: 'text', text: summary }] }
+    const read = readCanvasCall({ phase: 'result', block })
+    expect(read).toMatchObject({ shown: false, path: 'dmeo.html', failure: summary })
+    expect(read.address).toBeUndefined()
+    await act(async () => root.render(<CanvasToolCall sessionId="s1" callId="call-missing" t={t} openCanvas={() => {}} phase="result" block={block} />))
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(summary)
+    expect(document.querySelector('button')).toBeNull()
+    await act(async () => root.unmount())
+  })
 })
 
 describe('canvas error capture', () => {
@@ -137,11 +149,29 @@ describe('canvas HTML packing and bootstrap', () => {
     expect(seen).toEqual(['a.css', 'b.js?v=1'])
     expect(bundle.assets.map(asset => asset.reference)).toEqual(['a.css', 'b.js?v=1'])
     const doc = createHtmlDocument(bundle, '<script>capture()</script>')
-    expect(doc).toContain('document.write(bundle.capture+html)')
+    expect(doc).toContain('document.write(html)')
     const inner = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(/JSON\.parse\(text\("([^"]+)"\)/.exec(doc)![1]!), c => c.charCodeAt(0))))
     expect(inner.capture).toBe('<script>capture()</script>')
     expect(inner.html).toBe(html)
     expect(inner.assets).toHaveLength(2)
+  })
+  it('preserves standards mode and head attributes while capturing before author scripts', async () => {
+    const doc = createHtmlDocument({ data: bytes('<!doctype html><html><head data-author="yes"><script>author()</script></head><body></body></html>'), assets: [] }, '<script>capture()</script>')
+    const source = /<script>\(\(\)=>\{([\s\S]*)\}\)\(\)<\/script>/.exec(doc)![1]
+    let written = ''
+    const { runInNewContext } = await import('node:vm')
+    runInNewContext(`(()=>{${source}})()`, {
+      document: { open() {}, write(value: string) { written = value }, close() {} },
+      DOMParser: dom.window.DOMParser,
+      TextDecoder,
+      Uint8Array,
+      atob,
+      JSON,
+    })
+    const parsed = new JSDOM(written)
+    expect(parsed.window.document.compatMode).toBe('CSS1Compat')
+    expect(parsed.window.document.head.getAttribute('data-author')).toBe('yes')
+    expect(written.indexOf('capture()')).toBeLessThan(written.indexOf('author()'))
   })
   it('enforces the per-asset, total and count limits', async () => {
     const big = 'a'.repeat(5 * 1024 * 1024)

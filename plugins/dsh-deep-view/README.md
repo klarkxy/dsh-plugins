@@ -8,7 +8,7 @@
 
 ## 演示
 
-![节点关系图声明：格式错误在围栏闭合后自动修复渲染，无法修复时给出原因](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr28-deep-view-repair.gif)
+![模型写出 HTML 并打开 Deep View 画布，预览报错后填入输入框并修复](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/deep-view-canvas-live.gif)
 
 ## 安装
 
@@ -64,7 +64,7 @@ dsh plugin --profile web add @klarkxy/dsh-deep-view
 - **工具调用边界更新**：`show_view` 的活动更新以工具调用为边界，不会从其他长耗时工具内部流式推送进度，也不会改写历史工具结果。
 - **会话与生命周期边界**：仅真人顶层会话或普通会话分叉中有效的 `show_view` 可直接通过 Host 提交回答（委派子代理不能收集直接回答）。插件重启会清除内存中未决的待答状态，但已保存内容仍可在会话中查看。
 - **卡片有效期与隐私**：待答卡片在提交回答或收到新的普通用户消息后关闭，已回答卡片变为只读，未提交的本地调节不会自动持久化。请勿使用界面收集密码、密钥或 token。
-- **画布预览边界**：卡片入口依旧不支持任意 JavaScript 与 HTML。画布依赖宿主文件预览管线：仅打包直接相对引用的经典 `<script src>` 与 `<link rel="stylesheet">`，不支持本地 ES module 导入、CSS `url()`/`@import` 引用本地文件或 `fetch` 本地文件；预览在隔离沙箱中运行脚本。关闭「显示代码工作视图」时回落为原生静态预览；`show_canvas` 仅面向用户的顶层会话可用。
+- **画布预览边界**：卡片入口依旧不支持任意 JavaScript 与 HTML。画布依赖宿主文件预览管线：仅打包直接相对引用的经典 `<script src>` 与 `<link rel="stylesheet">`，不支持本地 ES module 导入、CSS `url()`/`@import` 引用本地文件或 `fetch` 本地文件；声明 `<base href>` 的页面不会打包本地依赖，请避免该元素。预览在隔离沙箱中运行脚本。关闭「显示代码工作视图」时回落为原生静态预览；`show_canvas` 仅面向用户的顶层会话可用。
 - **地图环境依赖**：地图加载固定的公开远程示例底图，不接受其他样式源；离线、无 WebGL 或底图加载失败时，卡片会显示提示，下方的地点列表仍可正常选择。
 - **体积与数量上限**：卡片载荷大小、组件数量与层级、曲线数、节点与连线数、数据行数及地点数均受上限限制，超限会被直接拒绝而不会静默截断。
 - **外观随宿主适配**：主题配色与实际渲染取决于当前安装的 DSH Web Client。

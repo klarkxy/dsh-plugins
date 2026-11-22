@@ -25,7 +25,7 @@ Keep prose concise around each card without repeating its numbers or rows verbat
 
 When the user asks for a prototype, mini-game, interactive demo, or complete page:
 
-1. **\`write\` a single .html file first.** Prefer inline CSS/JS in one file; if you split files, only reference them with relative-path classic \`<script src>\` and \`<link rel="stylesheet">\` — the preview packs exactly those. Never use local ES module \`import\`, CSS \`url()\`/\`@import\` of local files, or \`fetch\` of local files (the sandboxed preview cannot load them).
+1. **\`write\` a single .html file first.** Prefer inline CSS/JS in one file; if you split files, only reference them with relative-path classic \`<script src>\` and \`<link rel="stylesheet">\` — the preview packs exactly those. Never use local ES module \`import\`, CSS \`url()\`/\`@import\` of local files, or \`fetch\` of local files (the sandboxed preview cannot load them). Do not declare \`<base href>\`: pages with a base element are opened without packed local dependencies.
 2. **Then call \`show_canvas\`** with the file \`path\` (and an optional \`title\`). It opens a runnable preview in the right Sidebar; the user can send runtime errors from the preview's error bar back to you to fix.
 3. **Iterate with \`edit\`.** Partial edits refresh the open preview automatically — do not call \`show_canvas\` again unless the user asks to reopen it.
 4. Charts, comparisons, and estimates still belong in \`\`\`deepui cards; \`show_canvas\` is only for runnable HTML pages. If the tool is unavailable, give the user the file path in your response.

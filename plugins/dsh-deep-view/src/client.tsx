@@ -418,7 +418,7 @@ export function DeepViewFenceSlot(props: DeepViewFenceProps) {
 }
 
 /** Read a show_canvas call: persisted meta on a settled result, live args otherwise. */
-export function readCanvasCall(props: Pick<ToolViewProps, 'phase' | 'block'>): { path?: string; title?: string; address?: string; shown: boolean; phase: string } {
+export function readCanvasCall(props: Pick<ToolViewProps, 'phase' | 'block'>): { path?: string; title?: string; address?: string; failure?: string; shown: boolean; phase: string } {
   const phase = props.phase ?? (props.block.kind === 'tool-result' ? 'result' : 'start')
   const meta = phase === 'result' || props.block.kind === 'tool-result' ? props.block.meta : undefined
   if (isRecord(meta) && meta.owner === CANVAS_OWNER && typeof meta.address === 'string') {
@@ -430,10 +430,14 @@ export function readCanvasCall(props: Pick<ToolViewProps, 'phase' | 'block'>): {
   }
   const path = argField(props.block.args, 'path')
   const title = argField(props.block.args, 'title')
+  const failure = phase === 'result'
+    ? props.block.content?.map(item => isRecord(item) && item.type === 'text' && typeof item.text === 'string' ? item.text : '').filter(Boolean).join('\n') || props.block.error?.reason
+    : undefined
   return {
     shown: false, phase,
     path: typeof path === 'string' ? path : undefined,
     title: typeof title === 'string' ? title : undefined,
+    ...(failure ? { failure } : {}),
   }
 }
 
@@ -450,7 +454,7 @@ export function CanvasToolCall(props: CanvasToolViewProps) {
   const read = useMemo(() => readCanvasCall(props), [props.block, props.phase])
   const path = read.path
   const title = read.title
-  const address = read.address ?? (read.shown === false && typeof path === 'string' ? sessionFileAddress(props.sessionId, path) : undefined)
+  const address = read.address ?? (read.phase !== 'result' && read.shown === false && typeof path === 'string' ? sessionFileAddress(props.sessionId, path) : undefined)
   const name = title ?? (path ? path.split('/').filter(Boolean).at(-1) : undefined) ?? 'canvas'
   const openCanvas = props.openCanvas
   // Auto-open only on a live transition to a shown result; replayed history and
@@ -468,6 +472,7 @@ export function CanvasToolCall(props: CanvasToolViewProps) {
     <div className="dvui-canvas-card">
       <span className="dvui-canvas-card-title">{name}</span>
       {path ? <span className="dvui-canvas-card-path">{path}</span> : null}
+      {read.failure ? <p className="dvui-tool-error" role="alert">{read.failure}</p> : null}
       {address !== undefined && openCanvas !== undefined
         ? <div className="dvui-actions"><Button onClick={() => openCanvas(address)}>{t('canvasOpen')}</Button></div>
         : null}
