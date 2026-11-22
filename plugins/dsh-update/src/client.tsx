@@ -9,7 +9,6 @@ import {
   type MarkdownLabels,
   Modal,
   SegmentedTabs,
-  StateDot,
   Tag,
   Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -146,14 +145,14 @@ const copy = {
     recheck: '重新检查',
     checkUpdate: '检查更新',
     viewChangelogAndUpdate: '查看更新',
-    viewCurrentChangelog: '查看当前版本日志',
+    viewCurrentChangelog: '版本日志',
     checkAllUpdates: '检查全部更新',
     checkingChangelog: '正在读取 Release 变更日志…',
     checkingPlugins: '正在检查已安装插件版本与 Release 日志…',
     currentVersion: '当前版本',
     latestVersion: '目标最新版本',
     unknownVersion: '未知版本',
-    upToDate: '当前已是最新版本',
+    upToDate: '已是最新',
     updateAvailable: '可更新',
     releaseCount: (n: number) => `共 ${n} 个版本的 Release 日志`,
     noReleaseLogsInRange: '未在 GitHub Releases 中检索到该版本区间的发布说明，可点击右上角前往仓库核对提交记录，确认无误后再执行更新。',
@@ -165,23 +164,20 @@ const copy = {
     prereleaseTag: '预发布',
     sourceRegistry: 'npm 注册表',
     sourceGit: 'Git 仓库',
-    sourceLocal: '本地开发链接',
+    sourceLocal: '本地',
     sourceUnknown: '其他来源',
     localCannotUpdate: '本地 link/file 插件请在源码目录构建',
     incompatibleDsh: '新版本要求更高版本的 DSH',
     unpinnedGitHint: '未能解析目标提交 SHA，建议重新以固定版本安装',
-    dshCoreCardTitle: 'DeepSeek Harness 本体',
-    dshCoreCardHint: '点击侧栏「新版本」时将自动弹出变更预览，仅在确认后才开始下载更新。',
+    dshCoreCardTitle: 'DeepSeek Harness',
     pluginsSectionTitle: '已安装第三方插件',
-    filterAll: '全部插件',
+    filterAll: '全部',
     filterUpdatable: '可更新',
-    searchPlaceholder: '搜索插件名称或包名…',
+    searchPlaceholder: '搜索插件…',
     emptyPlugins: '当前 profile 暂无已安装的第三方插件。',
     emptyFilteredPlugins: '没有匹配的插件。',
-    openPluginDetail: '插件详情',
+    openPluginDetail: '详情',
     desktopDownloadTriggered: '已确认更新，正在启动桌面端下载流程。下载完成后将由桌面端提示重启安装。',
-    summaryUpdatable: (n: number) => `${n} 个插件可更新`,
-    summaryAllLatest: '已检查插件均为最新',
     emptyReleaseBody: '（该版本 Release 未填写正文说明）',
     markdownCopy: '复制',
     markdownCopied: '已复制',
@@ -227,23 +223,20 @@ const copy = {
     prereleaseTag: 'Pre-release',
     sourceRegistry: 'npm registry',
     sourceGit: 'Git repository',
-    sourceLocal: 'Local link',
+    sourceLocal: 'Local',
     sourceUnknown: 'Other source',
     localCannotUpdate: 'Local link/file plugins are updated by rebuilding locally',
     incompatibleDsh: 'Newer plugin release requires a newer DSH runtime',
     unpinnedGitHint: 'Target commit SHA could not be resolved automatically',
-    dshCoreCardTitle: 'DeepSeek Harness Core',
-    dshCoreCardHint: 'Clicking "New version" previews the Release changelog first and downloads only after confirmation.',
+    dshCoreCardTitle: 'DeepSeek Harness',
     pluginsSectionTitle: 'Installed Third-Party Plugins',
-    filterAll: 'All plugins',
-    filterUpdatable: 'Updates available',
-    searchPlaceholder: 'Filter plugins by title or package…',
+    filterAll: 'All',
+    filterUpdatable: 'Updates',
+    searchPlaceholder: 'Search plugins…',
     emptyPlugins: 'No third-party plugins are installed in this profile.',
     emptyFilteredPlugins: 'No plugins match the current filter.',
     openPluginDetail: 'Details',
     desktopDownloadTriggered: 'Confirmed: starting the Desktop update download. Desktop will prompt before restarting to install.',
-    summaryUpdatable: (n: number) => `${n} update${n === 1 ? '' : 's'} available`,
-    summaryAllLatest: 'All checked plugins are up to date',
     emptyReleaseBody: '(No release notes body provided for this tag)',
     markdownCopy: 'Copy',
     markdownCopied: 'Copied',
@@ -1030,24 +1023,25 @@ export function PluginUpdatesTab({
 
   return (
     <section className={`${PLUGIN_ROOT_CLASS} dsh-ui-page`} data-testid="dsh-upd-plugins-tab">
-      <article className="dsh-upd-plugin-row" data-testid="dsh-upd-core-card">
-        <div className="dsh-upd-plugin-main">
-          <div className="dsh-upd-plugin-head">
-            <strong className="dsh-ui-heading">{text.dshCoreCardTitle}</strong>
-            {snap.dshStatus?.currentVersion ? (
-              <code className="dsh-upd-version-code">{snap.dshStatus.currentVersion}</code>
-            ) : null}
-            {snap.dshStatus?.hasUpdate && snap.dshStatus.targetVersion ? (
-              <>
-                <span className="dsh-upd-arrow" aria-hidden="true">→</span>
-                <code className="dsh-upd-version-code dsh-upd-version-code--target">{snap.dshStatus.targetVersion}</code>
-                <Tag tone="info">{text.updateAvailable}</Tag>
-              </>
-            ) : snap.dshStatus ? (
-              <Tag tone="success">{text.upToDate}</Tag>
-            ) : null}
-          </div>
-          <p className="dsh-ui-hint">{text.dshCoreCardHint}</p>
+      <article className="dsh-upd-core-row" data-testid="dsh-upd-core-card">
+        <div className="dsh-upd-core-main">
+          <strong className="dsh-upd-core-title">{text.dshCoreCardTitle}</strong>
+          {snap.dshStatus ? (
+            <span className={`dsh-upd-status${snap.dshStatus.hasUpdate ? ' dsh-upd-status--update' : ''}`}>
+              {snap.dshStatus.hasUpdate ? text.updateAvailable : text.upToDate}
+            </span>
+          ) : null}
+        </div>
+        <div className="dsh-upd-plugin-release">
+          {snap.dshStatus?.currentVersion ? (
+            <code className="dsh-upd-row-version">{snap.dshStatus.currentVersion}</code>
+          ) : null}
+          {snap.dshStatus?.hasUpdate && snap.dshStatus.targetVersion ? (
+            <>
+              <span className="dsh-upd-arrow" aria-hidden="true">→</span>
+              <code className="dsh-upd-row-version dsh-upd-row-version--target">{snap.dshStatus.targetVersion}</code>
+            </>
+          ) : null}
         </div>
         <div className="dsh-upd-plugin-actions">
           <Button
@@ -1061,35 +1055,36 @@ export function PluginUpdatesTab({
       </article>
 
       <div className="dsh-upd-tab-toolbar">
-        <div className="dsh-ui-row-wrap">
-          <SegmentedTabs<'all' | 'updatable'>
-            size="sm"
-            label={text.pluginsSectionTitle}
-            value={filter}
-            onChange={setFilter}
-            items={[
-              { value: 'all', label: text.filterAll, id: `${filterTabsId}-all`, panelId: `${filterTabsId}-panel` },
-              {
-                value: 'updatable',
-                label: `${text.filterUpdatable} (${updatableCount})`,
-                id: `${filterTabsId}-upd`,
-                panelId: `${filterTabsId}-panel`,
-              },
-            ]}
-          />
-          <span className="dsh-ui-meta">
-            <StateDot state={updatableCount > 0 ? 'ongoing' : 'done'} />{' '}
-            {updatableCount > 0 ? text.summaryUpdatable(updatableCount) : text.summaryAllLatest}
-          </span>
-        </div>
-        <div className="dsh-ui-row-wrap">
-          <Input
-            icon={<IconSearchOutlineRegular size={14} />}
-            value={query}
-            aria-label={text.searchPlaceholder}
-            placeholder={text.searchPlaceholder}
-            onChange={event => setQuery(event.target.value)}
-          />
+        <SegmentedTabs<'all' | 'updatable'>
+          size="sm"
+          label={text.pluginsSectionTitle}
+          value={filter}
+          onChange={setFilter}
+          items={[
+            {
+              value: 'all',
+              label: `${text.filterAll} (${allPlugins.length})`,
+              id: `${filterTabsId}-all`,
+              panelId: `${filterTabsId}-panel`,
+            },
+            {
+              value: 'updatable',
+              label: `${text.filterUpdatable} (${updatableCount})`,
+              id: `${filterTabsId}-upd`,
+              panelId: `${filterTabsId}-panel`,
+            },
+          ]}
+        />
+        <div className="dsh-upd-toolbar-actions">
+          <div className="dsh-upd-search">
+            <Input
+              icon={<IconSearchOutlineRegular size={14} />}
+              value={query}
+              aria-label={text.searchPlaceholder}
+              placeholder={text.searchPlaceholder}
+              onChange={event => setQuery(event.target.value)}
+            />
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -1111,52 +1106,64 @@ export function PluginUpdatesTab({
       ) : null}
 
       <div id={`${filterTabsId}-panel`} className="dsh-upd-plugin-list">
-        {allPlugins.length === 0 && !snap.pluginsLoading ? (
-          <p className="dsh-ui-empty">{text.emptyPlugins}</p>
-        ) : visiblePlugins.length === 0 && !snap.pluginsLoading ? (
-          <p className="dsh-ui-empty">{text.emptyFilteredPlugins}</p>
-        ) : (
-          visiblePlugins.map(item => (
-            <article key={item.name} className="dsh-upd-plugin-row" data-testid={`dsh-upd-row-${item.name}`}>
-              <div className="dsh-upd-plugin-main">
-                <div className="dsh-upd-plugin-head">
-                  <strong className="dsh-ui-heading">{item.title}</strong>
-                  <span className="dsh-upd-plugin-pkg">{item.name}</span>
-                  <Tag tone="quiet">{sourceLabel(item.sourceKind)}</Tag>
+        {allPlugins.length > 0 && (snap.pluginsLoading || visiblePlugins.length > 0) ? (
+          visiblePlugins.map(item => {
+            const showPackageName = item.title.trim().toLowerCase() !== item.name.trim().toLowerCase()
+            return (
+              <article
+                key={item.name}
+                className={`dsh-upd-plugin-row${item.hasUpdate ? ' dsh-upd-plugin-row--update' : ''}`}
+                data-testid={`dsh-upd-row-${item.name}`}
+              >
+                <div className="dsh-upd-plugin-main">
+                  <div className="dsh-upd-plugin-head">
+                    <strong className="dsh-upd-plugin-title dsh-ui-compact">{item.title}</strong>
+                    {showPackageName ? <span className="dsh-upd-plugin-pkg">{item.name}</span> : null}
+                    {item.sourceKind !== 'registry' ? (
+                      <Tag tone="quiet">{sourceLabel(item.sourceKind)}</Tag>
+                    ) : null}
+                  </div>
+                  {item.description ? (
+                    <p className="dsh-upd-plugin-description dsh-ui-meta" title={item.description}>{item.description}</p>
+                  ) : null}
+                  {item.error ? <p className="dsh-ui-error">{item.error}</p> : null}
+                </div>
+                <div className="dsh-upd-plugin-release">
                   {item.installedVersion ? (
-                    <code className="dsh-upd-version-code">{item.installedVersion}</code>
+                    <code className="dsh-upd-row-version">{item.installedVersion}</code>
                   ) : null}
                   {item.hasUpdate && item.latestVersion ? (
                     <>
                       <span className="dsh-upd-arrow" aria-hidden="true">→</span>
-                      <code className="dsh-upd-version-code dsh-upd-version-code--target">{item.latestVersion}</code>
-                      <Tag tone="info">{text.updateAvailable}</Tag>
+                      <code className="dsh-upd-row-version dsh-upd-row-version--target">{item.latestVersion}</code>
                     </>
-                  ) : (
-                    <Tag tone="outline">{text.upToDate}</Tag>
-                  )}
+                  ) : null}
+                  <span className={`dsh-upd-status${item.hasUpdate ? ' dsh-upd-status--update' : ''}`}>
+                    {item.hasUpdate ? text.updateAvailable : text.upToDate}
+                  </span>
                 </div>
-                {item.description ? <p className="dsh-ui-meta">{item.description}</p> : null}
-                {item.error ? <p className="dsh-ui-error">{item.error}</p> : null}
-              </div>
-              <div className="dsh-upd-plugin-actions">
-                {ownerProps?.openPackage ? (
-                  <Button variant="ghost" size="sm" onClick={() => ownerProps.openPackage?.(item.name)}>
-                    {text.openPluginDetail}
+                <div className="dsh-upd-plugin-actions">
+                  {ownerProps?.openPackage ? (
+                    <Button variant="ghost" size="sm" onClick={() => ownerProps.openPackage?.(item.name)}>
+                      {text.openPluginDetail}
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant={item.hasUpdate ? 'primary' : 'ghost'}
+                    size="sm"
+                    data-testid={`dsh-upd-open-${item.name}`}
+                    onClick={() => controller.openPluginModal(item.name)}
+                  >
+                    {item.hasUpdate ? text.viewChangelogAndUpdate : text.viewCurrentChangelog}
                   </Button>
-                ) : null}
-                <Button
-                  variant={item.hasUpdate ? 'primary' : 'outline'}
-                  size="sm"
-                  data-testid={`dsh-upd-open-${item.name}`}
-                  onClick={() => controller.openPluginModal(item.name)}
-                >
-                  {item.hasUpdate ? `${text.viewChangelogAndUpdate} (${item.latestVersion})` : text.viewCurrentChangelog}
-                </Button>
-              </div>
-            </article>
-          ))
-        )}
+                </div>
+              </article>
+            )
+          })
+        ) : null}
+        {!snap.pluginsLoading && visiblePlugins.length === 0 ? (
+          <p className="dsh-ui-empty">{allPlugins.length === 0 ? text.emptyPlugins : text.emptyFilteredPlugins}</p>
+        ) : null}
       </div>
     </section>
   )
@@ -1220,7 +1227,7 @@ export function PluginDetailUpdateAction({
         data-testid={`dsh-upd-detail-action-${pkg.name}`}
         onClick={() => controller.openPluginModal(pkg.name, { forceRefresh: !cached })}
       >
-        {hasUpdate ? `${text.viewChangelogAndUpdate} (${cached!.latestVersion})` : text.checkUpdate}
+        {hasUpdate ? text.viewChangelogAndUpdate : text.checkUpdate}
       </Button>
     </span>
   )
