@@ -1117,14 +1117,14 @@ export function PluginUpdatesTab({
               >
                 <div className="dsh-upd-plugin-main">
                   <div className="dsh-upd-plugin-head">
-                    <strong className="dsh-upd-plugin-title">{item.title}</strong>
+                    <strong className="dsh-upd-plugin-title dsh-ui-compact">{item.title}</strong>
                     {showPackageName ? <span className="dsh-upd-plugin-pkg">{item.name}</span> : null}
                     {item.sourceKind !== 'registry' ? (
                       <Tag tone="quiet">{sourceLabel(item.sourceKind)}</Tag>
                     ) : null}
                   </div>
                   {item.description ? (
-                    <p className="dsh-upd-plugin-description" title={item.description}>{item.description}</p>
+                    <p className="dsh-upd-plugin-description dsh-ui-meta" title={item.description}>{item.description}</p>
                   ) : null}
                   {item.error ? <p className="dsh-ui-error">{item.error}</p> : null}
                 </div>
@@ -1161,10 +1161,10 @@ export function PluginUpdatesTab({
             )
           })
         ) : null}
+        {!snap.pluginsLoading && visiblePlugins.length === 0 ? (
+          <p className="dsh-ui-empty">{allPlugins.length === 0 ? text.emptyPlugins : text.emptyFilteredPlugins}</p>
+        ) : null}
       </div>
-      {!snap.pluginsLoading && visiblePlugins.length === 0 ? (
-        <p className="dsh-ui-empty">{allPlugins.length === 0 ? text.emptyPlugins : text.emptyFilteredPlugins}</p>
-      ) : null}
     </section>
   )
 }

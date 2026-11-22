@@ -1,7 +1,7 @@
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 
 export const dshUpdateClientStyles = `
-${officialUiCss('.dsh-upd-root')}
+${officialUiCss('dsh-upd-root')}
 
 .dsh-upd-root {
   & .dsh-upd-modal-body {
@@ -209,6 +209,7 @@ ${officialUiCss('.dsh-upd-root')}
   & .dsh-upd-plugin-list {
     display: flex;
     flex-direction: column;
+    container-type: inline-size;
     border-top: 0.5px solid var(--dsw-alias-border-l2);
     border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   }
@@ -257,9 +258,6 @@ ${officialUiCss('.dsh-upd-root')}
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 13px;
-    line-height: 20px;
-    color: var(--dsw-alias-label-primary);
   }
 
   & .dsh-upd-plugin-pkg {
@@ -277,9 +275,6 @@ ${officialUiCss('.dsh-upd-root')}
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
-    line-height: 18px;
-    color: var(--dsw-alias-label-secondary);
   }
 
   & .dsh-upd-plugin-release {
@@ -330,7 +325,8 @@ ${officialUiCss('.dsh-upd-root')}
     gap: 6px;
   }
 
-  @media (width < 960px) {
+  /* The host can narrow the list independently of the viewport. */
+  @container (width < 960px) {
     & .dsh-upd-plugin-row {
       grid-template-columns: minmax(180px, 1fr) auto;
       gap: 6px 12px;

@@ -210,6 +210,11 @@ describe('dsh-update client button interception & confirmation flow', () => {
     const controller = createUpdateClientController(client)
     const tabHtml = renderToStaticMarkup(createElement(PluginUpdatesTab, { client, controller }))
     expect(tabHtml).toContain('DeepSeek Harness')
+    const page = document.createElement('div')
+    page.innerHTML = tabHtml
+    const list = page.querySelector('.dsh-upd-plugin-list')
+    expect(list?.querySelector('.dsh-ui-empty')).not.toBeNull()
+    expect(page.querySelector(`[aria-controls="${list?.id}"]`)).not.toBeNull()
     expect(renderToStaticMarkup(createElement(DshUpdateOverlay, { client, controller }))).toBe('')
     expect((client.connection.rpc.call as ReturnType<typeof vi.fn>).mock.calls).toEqual([])
     expect(RPC_CHANNEL).toBe('/dsh-update')
