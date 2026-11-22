@@ -311,12 +311,14 @@ function normalizeComponent(out, depth, state) {
   if (type === 'toggle' && out.value !== undefined) setOwn(out, 'value', boolean(out.value))
 
   if (type === 'table') {
-    if (out.columns === undefined && Array.isArray(out.rows)) {
-      // Union every object row's keys in first-seen order: a later row may add
+    // Infer columns only when every row is a plain object: a single array or
+    // scalar row would silently lose its cells under the inferred columns, so
+    // mixed shapes keep `columns` undefined and let the validator complain.
+    if (out.columns === undefined && Array.isArray(out.rows) && out.rows.every(row => isRecord(row) && !isFormula(row))) {
+      // Union every row's keys in first-seen order: a later row may add
       // a column the first one lacks (an empty first row is no evidence at all).
       const keys = []
       for (const row of out.rows) {
-        if (!isRecord(row) || isFormula(row)) continue
         for (const key of Object.keys(row)) if (!FORBIDDEN_PROPS.has(key) && !keys.includes(key)) keys.push(key)
       }
       if (keys.length > 0) setOwn(out, 'columns', keys.map(key => ({ key, label: key })))
@@ -574,6 +576,12 @@ export function checkShownView(title, sent) {
     throw error
   }
   if (!checked.ok) return { error: checked.error }
+  // Normalization can grow the wire form — inferred columns add empty cells,
+  // shorthand options expand to { label, value }, ids and labels are filled —
+  // and presentation re-shows the normalized snapshot, so an accepted card
+  // must still fit the limit after normalization or the replay would reject it.
+  const normalizedBytes = viewBytes(title, view)
+  if (normalizedBytes > VIEW_BYTE_LIMIT) return { error: `After normalization the view is ${normalizedBytes} bytes; the limit is ${VIEW_BYTE_LIMIT}.` }
   return { title: named, view, interactive: checked.interactive }
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   checkShownView, inputDefault, mathDefaults, normalizeView, resolve, validateView,
-  validateViewAnswer, viewBindings, viewScope,
+  validateViewAnswer, viewBindings, viewBytes, viewScope,
 } from './core/index.js'
 import type { ViewNode } from './contracts.ts'
 
@@ -130,6 +130,26 @@ describe('normalizeView', () => {
     if ('view' in sparse) expect(sparse.view).toMatchObject({ rows: [['', ''], ['a', 1]] })
     const tooWide = checkShownView('', { type: 'table', rows: [{ a: 1 }, { b: 2 }, { c: 3 }, { d: 4 }, { e: 5 }, { f: 6 }, { g: 7 }, { h: 8 }, { i: 9 }] }) as { error?: string }
     expect(tooWide.error).toContain('columns exceeds the limit')
+  })
+  it('refuses to infer table columns for mixed array and object rows', () => {
+    const mixed = checkShownView('', { type: 'table', rows: [['A', 50, 10], { name: 'B', price: 75 }] }) as { error?: string }
+    expect(mixed.error).toContain('columns')
+  })
+  it('rejects a card that only overflows the byte limit after normalization', () => {
+    // Shorthand options expand to { label, value } objects, roughly doubling
+    // their bytes: the wire form fits, the shown snapshot does not.
+    const long = (i: number) => `opt_${i}_${'x'.repeat(500)}`
+    const options = Array.from({ length: 8 }, (_, i) => long(i))
+    const sent = { type: 'choice', id: 'c', label: 'C', options, value: options[0] }
+    expect(viewBytes('', sent)).toBeLessThan(8192)
+    expect(viewBytes('', normalizeView(sent))).toBeGreaterThan(8192)
+    const shown = checkShownView('', sent) as { error?: string }
+    expect(shown.error).toContain('After normalization')
+  })
+  it('accepts a normalized snapshot returned to checkShownView unchanged', () => {
+    const shown = checkShownView('', { type: 'Stack', children: { type: 'slider', label: 'Count', min: '1', max: '10', value: '3' } })
+    expect(shown).not.toHaveProperty('error')
+    if ('view' in shown) expect(checkShownView(shown.title, shown.view)).not.toHaveProperty('error')
   })
   it('normalizes choice shorthand options like their object form and is idempotent', () => {
     const choice = checkShownView('', { type: 'choice', id: 'c', label: 'C', options: ['1', '2'], value: '2' })
