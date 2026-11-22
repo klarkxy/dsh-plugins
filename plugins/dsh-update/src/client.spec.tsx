@@ -85,11 +85,12 @@ describe('dsh-update client button interception & confirmation flow', () => {
       expect(nativeDownloadsStarted).toBe(0)
       expect(controller.getSnapshot().modal).toBeNull()
 
-      // 3. Clicking [↓ 新版本] again and confirming starts the native download ONCE.
+      // 3. Confirming hands the click back to the native updater exactly once.
       newVersionBtn.click()
       expect(nativeDownloadsStarted).toBe(0)
       await controller.confirmDshUpdate('zh')
       expect(nativeDownloadsStarted).toBe(1)
+      expect(controller.getSnapshot().toastMessage).toEqual({ tone: 'success', text: '已交给桌面端更新；请按桌面端提示继续。' })
     } finally {
       dispose()
       sidebar.remove()

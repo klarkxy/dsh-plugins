@@ -6,6 +6,10 @@
 
 跨工作目录搜索和阅读 DeepSeek Harness 会话，使用临时工作区，提供空输入续写建议、自动继续与久离回来摘要/压缩建议，并支持消息编辑重发与可控的智能体跨会话协作。
 
+## 演示
+
+![新建会话的工作区选择器：临时工作区入口](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr23-session-manager-picker.gif)
+
 ## 安装
 
 ```sh

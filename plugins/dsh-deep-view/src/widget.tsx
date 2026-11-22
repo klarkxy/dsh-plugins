@@ -222,7 +222,8 @@ function WidgetMetric({ node, lookup }: { node: ViewNode; lookup: (name: string)
   const tone = resolve(node.tone, lookup)
   const caption = node.caption === undefined ? '' : asText(resolve(node.caption, lookup, ''))
   const resolved = resolve(node.value, lookup, '—')
-  const display = typeof resolved === 'number' && Number.isFinite(resolved) ? grouped(resolved) : asText(resolved)
+  const unit = node.unit === undefined ? '' : asText(resolve(node.unit, lookup, ''))
+  const display = `${typeof resolved === 'number' && Number.isFinite(resolved) ? grouped(resolved) : asText(resolved)}${unit ? ` ${unit}` : ''}`
   return <div className="dvui-metric" data-tone={TONES.includes(String(tone)) ? String(tone) : undefined}><span className="dvui-metric-label">{node.label}</span><span className="dvui-metric-value">{display}</span>{caption !== '' ? <span className="dvui-caption">{caption}</span> : null}</div>
 }
 function WidgetCallout({ node, lookup, Markdown, labels }: { node: ViewNode; lookup: (name: string) => unknown; Markdown: ComponentType<MarkdownProps>; labels: ViewLabels }) {

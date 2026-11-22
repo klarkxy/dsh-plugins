@@ -10,6 +10,10 @@ Switch the DeepSeek Harness right Sidebar between three presentations:
 - **Drawer**: the panel floats over the conversation, which keeps its full width; a dim mask covers the conversation while the panel is open, and clicking the mask closes the panel.
 - **Body**: the panel moves into the centre column as the main body and the conversation moves to the right (IDE style); the host's right-edge drag handle then resizes the conversation column.
 
+## Demo
+
+![Switching from the session header menu: push → drawer (click the mask to close) → body (drag to resize)](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr31-sidebar-layout.gif)
+
 ## Install
 
 ```sh

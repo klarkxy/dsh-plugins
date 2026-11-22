@@ -100,6 +100,7 @@ describe('dsh-update contracts & release range logic', () => {
 describe('PluginUpdateService & Host RPC safety', () => {
   it('checks DSH and plugin updates in read-only mode and preserves Git bundle selection on confirmed update (#13609)', async () => {
     const resolver = new ReleaseMetadataResolver({
+      env: {},
       ghApiFn: async endpoint => {
         if (endpoint.includes('deepseek-ai/deepseek-harness/releases')) {
           return [
@@ -241,6 +242,7 @@ describe('PluginUpdateService & Host RPC safety', () => {
 
   it('reads pluginManager.updateBundle results from the envelope the Host actually answers with', async () => {
     const resolver = new ReleaseMetadataResolver({
+      env: {},
       ghApiFn: async () => undefined,
       fetchFn: (async () => new Response('not found', { status: 404 })) as typeof fetch,
     })
@@ -320,6 +322,7 @@ describe('PluginUpdateService & Host RPC safety', () => {
 
   it('does not treat a mirror packument as the install registry', async () => {
     const resolver = new ReleaseMetadataResolver({
+      env: {},
       ghApiFn: async () => [],
       fetchFn: (async (url: string | URL) => {
         const href = String(url)
@@ -385,7 +388,7 @@ describe('PluginUpdateService & Host RPC safety', () => {
       },
     }
     const service = new PluginUpdateService({
-      resolver: new ReleaseMetadataResolver({ ghApiFn: async () => undefined, fetchFn: (async () => new Response('no', { status: 404 })) as typeof fetch }),
+      resolver: new ReleaseMetadataResolver({ env: {}, ghApiFn: async () => undefined, fetchFn: (async () => new Response('no', { status: 404 })) as typeof fetch }),
       getPluginManager: () => manager,
       getProfileDir: () => null,
       getDshVersion: () => '0.2.2-rc.1',
@@ -425,7 +428,7 @@ describe('PluginUpdateService & Host RPC safety', () => {
       },
     }
     const service = new PluginUpdateService({
-      resolver: new ReleaseMetadataResolver({ ghApiFn: async () => undefined, fetchFn: (async () => new Response('no', { status: 404 })) as typeof fetch }),
+      resolver: new ReleaseMetadataResolver({ env: {}, ghApiFn: async () => undefined, fetchFn: (async () => new Response('no', { status: 404 })) as typeof fetch }),
       getPluginManager: () => manager,
       getProfileDir: () => null,
       getDshVersion: () => '0.2.2-rc.1',
@@ -470,7 +473,7 @@ describe('PluginUpdateService & Host RPC safety', () => {
       },
     }
     const service = new PluginUpdateService({
-      resolver: new ReleaseMetadataResolver({ ghApiFn: async () => undefined, fetchFn: (async () => new Response('no', { status: 404 })) as typeof fetch }),
+      resolver: new ReleaseMetadataResolver({ env: {}, ghApiFn: async () => undefined, fetchFn: (async () => new Response('no', { status: 404 })) as typeof fetch }),
       getPluginManager: () => manager,
       getProfileDir: () => null,
       getDshVersion: () => '0.2.2-rc.1',

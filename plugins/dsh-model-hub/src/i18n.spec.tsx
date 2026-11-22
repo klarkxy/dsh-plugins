@@ -39,7 +39,7 @@ describe('subagent settings locale', () => {
     await act(async () => Simulate.change(input, { target: { value: 'Local draft' } }))
     await act(async () => { active = 'zh-CN'; listeners.forEach(fn => fn()) })
     expect(input.value).toBe('Local draft')
-    expect(dom.window.document.body.textContent).toContain('思考强度')
+    expect(dom.window.document.body.textContent).toContain('思考强度用于新建子代理')
     await act(async () => changed())
     expect(input.value).toBe('Local draft')
     expect(api.getCast).toHaveBeenCalledTimes(2)

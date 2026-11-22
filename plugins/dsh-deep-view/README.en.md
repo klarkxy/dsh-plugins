@@ -6,6 +6,10 @@
 
 Compose native charts, comparisons, workflow steps, metrics, adjustable estimates, and explorable views directly inside assistant replies, then turn interactions into answers. Ordinary Markdown prose flows naturally around each interface.
 
+## Demo
+
+![A malformed node-graph declaration repairs itself once the fence closes; an unrepairable one names the reason](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr28-deep-view-repair.gif)
+
 ## Install
 
 ```sh
@@ -48,7 +52,7 @@ Both surfaces share the same component set and reactive card state:
 
 ## Limitations
 
-- **Selection and fence timing**: Guidance encourages proactive interface selection but does not guarantee a card on every request, force visual layouts, or alter ordinary Markdown rendering. A `deepui` fence renders only once its JSON is complete; malformed declarations surface their validation reason while keeping the raw code viewable.
+- **Selection and fence timing**: Guidance encourages proactive interface selection but does not guarantee a card on every request, force visual layouts, or alter ordinary Markdown rendering. A `deepui` fence renders only once its JSON is complete. Common field aliases, numeric strings, omitted input IDs, and extra decorative fields are normalized automatically; declarations that still cannot be identified safely surface their validation reason while keeping the raw code viewable.
 - **Closed native widgets**: No arbitrary JavaScript, HTML, or `html` component, and no PNG export. `explore` accepts inline scalar rows only (no arbitrary Vega-Lite specs or remote data sources); `map` accepts coordinates and routes only (no custom style URLs, tile servers, or API keys); `flow` renders declared nodes and edges only (no custom node components).
 - **Tool-call boundary updates**: Activity updates from `show_view` happen at tool-call boundaries; the plugin does not stream progress from inside other long-running tools or rewrite historical tool results.
 - **Session and lifecycle boundaries**: Only a live `show_view` card in a human-driven top-level session or ordinary conversation fork can submit directly through the Host (delegated subagents cannot collect direct answers). Restarting the plugin clears in-memory pending state, though saved content remains visible in the session.

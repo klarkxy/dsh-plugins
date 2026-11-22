@@ -116,6 +116,18 @@ describe('widget rendering for steps and forms', () => {
     expect(items[3].querySelectorAll('span[aria-hidden] > span')).toHaveLength(1)
     await act(async () => root.unmount())
   })
+  it('renders a metric unit beside its resolved value', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<WidgetCard view={{ type: 'metric', label: 'Total', value: 1152, unit: '元' }} t={t} labels={labels} />))
+    expect(document.querySelector('.dvui-metric-value')?.textContent).toBe('1,152 元')
+    await act(async () => root.unmount())
+  })
+  it('renders a metric unit resolved from a formula', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<WidgetCard view={{ type: 'metric', label: 'Total', value: 1152, unit: { '=': '"元"' } }} t={t} labels={labels} />))
+    expect(document.querySelector('.dvui-metric-value')?.textContent).toBe('1,152 元')
+    await act(async () => root.unmount())
+  })
   it('fills initial values, renders multiline and readOnly fields, and cancels', async () => {
     const root = createRoot(document.getElementById('root')!)
     const onSubmit = vi.fn()

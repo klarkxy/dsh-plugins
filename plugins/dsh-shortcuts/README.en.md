@@ -6,6 +6,10 @@
 
 Customize DeepSeek Harness application shortcuts and recognized local actions, and run participating plugins' commands from a command palette.
 
+## Demo
+
+![Desktop shortcuts: rebinding confirmation and the conditional Ctrl+K unbind](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/desktop-shortcuts-confirmation.gif)
+
 ## Install
 
 This plugin is currently in local development and has not yet been published to npm. Build the complete package with its client bundle from the repository root, then install from the local path:

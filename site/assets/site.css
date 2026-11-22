@@ -285,6 +285,7 @@ img { max-width: 100%; }
 
 /* Rendered README */
 .readme-note { font-size: 13px; color: var(--ink-3); margin: 0 0 1.5rem; }
+.plugin-details { margin-bottom: 2.2rem; padding-bottom: 0.6rem; border-bottom: 0.5px solid var(--line); }
 .readme { max-width: 46rem; }
 .readme h2 { font-size: 21px; margin: 2.2rem 0 0.8rem; }
 .readme h3 { font-size: 17px; margin: 1.8rem 0 0.6rem; }

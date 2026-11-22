@@ -67,7 +67,7 @@ export function CommandPalettePanel(props: PaletteProps) {
           </Button>
         </div>)}
       </div>
-      {!rows.length && <p className="dsh-ui-empty">{zh ? '没有匹配的插件命令。其他插件注册后会自动出现在这里。' : 'No matching plugin commands. Commands appear here when another plugin registers them.'}</p>}
+      {!rows.length && <p className="dsh-ui-empty">{zh ? '没有匹配的插件命令。' : 'No matching plugin commands.'}</p>}
     </Modal>
     {!state.open && state.error && <Toast key={state.error} text={state.error} holdMs={5000}
       actions={[{ label: zh ? '关闭' : 'Dismiss', onClick: props.clearError }]}

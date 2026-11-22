@@ -6,6 +6,10 @@
 
 在一个设置页里集中编排多源联网搜索与网页读取服务、管理 API Key 与请求限制，并通过 `ctx.web` 为模型的 `web_search` 与 `web_fetch` 工具提供多源并发融合与链式回退能力。
 
+## 演示
+
+![网页搜索设置：多源融合 / 主备降级 / 单源切换、读取链式回退与计费授权](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr23-web-search-manager.gif)
+
 ## 安装
 
 ```sh

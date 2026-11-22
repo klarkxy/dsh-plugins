@@ -6,6 +6,12 @@
 
 为 DeepSeek Harness 输入框替换模型按钮：用元素周期表式的卡片选模型和思考强度，也可以切回可搜索的列表。其他插件可以复用同一个选择器。
 
+## 演示
+
+![卡片视图：可读模型名、版本角标与思考强度格](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr32-model-picker-final.gif)
+
+![跨供应商合并的 DeepSeek Flash 卡片与供应商切换](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr33-model-picker-review.gif)
+
 ## 功能
 
 ### 卡片视图（默认）

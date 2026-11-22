@@ -42,6 +42,24 @@ GIF 要盖住改动的操作和屏幕上的结果，并写明：
 
 GIF 不代替自动测试，也不代替独立审查。
 
+## 插件 README 与站点介绍
+
+这条规则约束插件的双语 README 和站点插件页。新插件合入时就要满足；旧插件由维护者逐步补齐。
+
+**README 必须有演示图**。有用户可见界面的插件，README（中文与英文）在概述之后放至少一张能说明插件在干什么的真实截图或 GIF。图片来源与上一节同一套标准：用该插件代码在隔离 `dsh web` 里录制的界面验收产物；生成动画、静态 mock、口头声明和过时的旧录屏都不算。界面大改后要换上演示图。纯共享库等没有界面的包在 README 里写明原因即可豁免。
+
+**图片不进 npm 包**。GIF 与大尺寸图片统一提交到 `docs/demo-assets` 分支（文件名带插件名或 PR 号），README 用绝对地址引用：
+
+```text
+https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/<文件名>
+```
+
+小尺寸静态截图也可以放在插件目录下的 `screenshots/` 或 `docs/`（确认 `package.json` 的 `files` 不收录它们），README 里用相对路径引用。
+
+**README 只写概述**：一段定位、演示图、安装、核心用法和主要限制。完整的功能清单、逐项配置说明和更多截图放进站点插件页。
+
+**站点放详细介绍**。收录进 `site/catalog.json` 的插件要填 `details.zh` / `details.en`（Markdown，可带图），站点插件页会把它渲染为「详细介绍」一节，位于 README 摘录之前。新增插件不允许长期空着这一节。
+
 ## 验收脚本不进 npm 包
 
 `.agents/` 是仓库里的开发工具。各插件的 `files` 不收录它，根目录的 `.npmignore` 也排除它。不要把验收产物放进插件包。

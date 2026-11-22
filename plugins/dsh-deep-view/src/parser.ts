@@ -57,7 +57,7 @@ function nextFence(source: string, from: number): Fence | undefined {
   const match = OPEN.exec(source)
   if (!match) return undefined
   const at = match.index + match[1].length
-  return { at, marker: match[2], language: match[3].trim().split(/[ \t]/, 1)[0], contentStart: at + match[0].length - match[1].length }
+  return { at, marker: match[2], language: match[3].trim(), contentStart: at + match[0].length - match[1].length }
 }
 function plainFence(source: string, start: Fence): Fence {
   const closed = closeFence(source, start.contentStart, start.marker)
@@ -79,7 +79,8 @@ export function parseDeepUi(source: string): TextPart[] {
   while (offset < source.length) {
     const start = nextFence(source, offset)
     if (!start || start.at >= source.length) break
-    if (start.language !== 'deepui' && start.language !== 'deep-view') {
+    const language = start.language.trim().toLowerCase()
+    if (!/^deep[-_\s]*(?:ui|view)(?:\s|$)/.test(language)) {
       const next = plainFence(source, start)
       if (next.at >= source.length) break
       offset = next.at
