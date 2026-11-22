@@ -520,7 +520,7 @@ test('startup timeout kills the child and removes the temporary home', async () 
       '--cwd', out,
       '--out-dir', out,
       '--boot-timeout-ms', '500',
-      '--dsh-cmd', `${process.execPath} ${script}`,
+      '--dsh-cmd', `"${process.execPath}" "${script}"`,
     ], out)
     await assert.rejects(() => runIsolatedAcceptance(opts), err => {
       assert.match(err.message, /timed out|launch URL/i)
@@ -532,6 +532,21 @@ test('startup timeout kills the child and removes the temporary home', async () 
   } finally {
     await fs.rm(out, { recursive: true, force: true })
   }
+})
+
+test('resolveDshInvocation keeps quoted paths with spaces together', () => {
+  assert.deepEqual(
+    resolveDshInvocation({ dshCmd: '"C:\\Program Files\\nodejs\\node.exe" "D:\\a b\\x.mjs" --flag' }),
+    { bin: 'C:\\Program Files\\nodejs\\node.exe', prefixArgs: ['D:\\a b\\x.mjs', '--flag'] })
+  assert.deepEqual(
+    resolveDshInvocation({ dshCmd: 'node x.mjs' }),
+    { bin: 'node', prefixArgs: ['x.mjs'] })
+  assert.deepEqual(
+    resolveDshInvocation({ dshCmd: 'node --require="D:\\a b\\preload.cjs" bin.js' }),
+    { bin: 'node', prefixArgs: ['--require=D:\\a b\\preload.cjs', 'bin.js'] })
+  assert.throws(
+    () => resolveDshInvocation({ dshCmd: '"C:\\x y\\node.exe' }),
+    /unbalanced/)
 })
 
 test('refuses an in-checkout output directory before starting dsh', async () => {
@@ -715,6 +730,7 @@ test('acceptance tooling stays out of npm packs', { timeout: 180_000 }, async ()
         encoding: 'utf8',
         timeout: 60_000,
         env,
+        shell: process.platform === 'win32',
       })
       assert.equal(res.status, 0, `${cwd}\n${redactForLog(res.stderr)}`)
       const packed = parsePackOutput(res.stdout)

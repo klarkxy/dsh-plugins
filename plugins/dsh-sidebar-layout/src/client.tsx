@@ -124,8 +124,7 @@ const layoutCss = `
 
 /* The settings row mirrors the native Settings → General item geometry (16px
  * padding, 0.5px l2 hairline, 14/22 title over a 12/18 description, a 240px
- * trailing control); the header trigger keeps the utilities strip's 28px
- * ghost-button shape. */
+ * trailing control). */
 const rowCss = `
 .sl-root.sl-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 16px 0; border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
 .sl-root .sl-row-text { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-right: 40px; }
@@ -133,7 +132,6 @@ const rowCss = `
 .sl-root .sl-row-desc { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
 .sl-root .sl-row-control { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .sl-root .sl-select { flex: 0 1 240px; width: auto; }
-.sl-root.sl-trigger { display: inline-flex; align-items: center; justify-content: center; padding: 0; line-height: 0; }
 @media (max-width: 767px) {
   .sl-root .sl-row-text { padding-right: 16px; }
   .sl-root .sl-select { flex: 0 1 auto; width: 240px; max-width: 100%; }
