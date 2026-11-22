@@ -295,7 +295,7 @@ function normalizeComponent(out, depth, state) {
   if (type === 'choice' || type === 'options') {
     if (Array.isArray(out.options)) {
       setOwn(out, 'options', out.options.map(option => {
-        if (isScalar(option)) return { label: String(option), ...(type === 'choice' ? { value: option } : {}) }
+        if (isScalar(option)) return { label: String(option), ...(type === 'choice' ? { value: numeric(option) } : {}) }
         if (!isRecord(option) || Object.hasOwn(option, '__proto__')) return option
         const next = {}
         for (const key of Object.keys(option)) {
@@ -311,8 +311,15 @@ function normalizeComponent(out, depth, state) {
   if (type === 'toggle' && out.value !== undefined) setOwn(out, 'value', boolean(out.value))
 
   if (type === 'table') {
-    if (out.columns === undefined && Array.isArray(out.rows) && isRecord(out.rows[0]) && !isFormula(out.rows[0])) {
-      setOwn(out, 'columns', Object.keys(out.rows[0]).filter(key => !FORBIDDEN_PROPS.has(key)).map(key => ({ key, label: key })))
+    if (out.columns === undefined && Array.isArray(out.rows)) {
+      // Union every object row's keys in first-seen order: a later row may add
+      // a column the first one lacks (an empty first row is no evidence at all).
+      const keys = []
+      for (const row of out.rows) {
+        if (!isRecord(row) || isFormula(row)) continue
+        for (const key of Object.keys(row)) if (!FORBIDDEN_PROPS.has(key) && !keys.includes(key)) keys.push(key)
+      }
+      if (keys.length > 0) setOwn(out, 'columns', keys.map(key => ({ key, label: key })))
     }
     if (Array.isArray(out.columns)) {
       const cols = out.columns.map((col, idx) => {
@@ -494,30 +501,39 @@ function normalizeComponent(out, depth, state) {
 // `fields` array keeps its type: "42" must stay text, not become a number.
 // Returns a new object; the input is not mutated.
 export function normalizeView(value, inFormFields = false, depth = 0, state = { seq: 0, ids: new Set(), nesting: 0 }) {
+  return normalizeNode(value, inFormFields, depth, state, true)
+}
+
+// Component normalization (type casing, auto ids, decorative-field drops)
+// applies only where the validator reads components: the root and layout
+// `children` elements. Everywhere else — table/explore data rows, form fields,
+// choice options — a `type` key is payload data, not a component marker, so
+// only the structural fixes (unwrapping, numeric coercion) still apply.
+function normalizeNode(value, inFormFields, depth, state, asComponent) {
   // `depth` is layout nesting for normalizeComponent. `state.nesting` counts
   // every array element and object, which is what overflows the stack.
   if (state.nesting > MAX_NORMALIZE_DEPTH) return value
   state.nesting += 1
   try {
-    if (Array.isArray(value)) return value.map(item => normalizeView(item, inFormFields, depth, state))
+    if (Array.isArray(value)) return value.map(item => normalizeNode(item, inFormFields, depth, state, asComponent))
     if (!isRecord(value)) return value
     const keys = Object.keys(value)
     // Unwrap recursively: a provider may nest the wrapper, as { item: { item: [...] } }.
     if (keys.length === 1 && keys[0] === 'item') {
-      const inner = normalizeView(value.item, inFormFields, depth, state)
+      const inner = normalizeNode(value.item, inFormFields, depth, state, asComponent)
       if (Array.isArray(inner)) return inner
     }
     // Define own properties: an incoming "__proto__" key must become data the
     // validator can reject, not hit the prototype setter and vanish from the JSON.
     const out = {}
-    const isLayout = typeof value.type === 'string' && LAYOUT.includes(value.type.trim().toLowerCase())
+    const isLayout = asComponent && typeof value.type === 'string' && LAYOUT.includes(value.type.trim().toLowerCase())
     for (const key of keys) {
       const nextDepth = isLayout && key === 'children' ? depth + 1 : depth
-      setOwn(out, key, normalizeView(value[key], inFormFields || key === 'fields', nextDepth, state))
+      setOwn(out, key, normalizeNode(value[key], inFormFields || key === 'fields', nextDepth, state, isLayout && key === 'children'))
     }
     for (const field of NUMERIC) if ((field !== 'value' || !inFormFields) && Object.hasOwn(out, field)) out[field] = numeric(out[field])
     if (Array.isArray(out.values)) out.values = out.values.map(numeric)
-    return normalizeComponent(out, depth, state)
+    return asComponent ? normalizeComponent(out, depth, state) : out
   } finally {
     state.nesting -= 1
   }

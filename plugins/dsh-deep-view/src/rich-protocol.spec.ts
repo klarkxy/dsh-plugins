@@ -101,6 +101,57 @@ describe('normalizeView', () => {
     expect(protectedTable).not.toHaveProperty('error')
     if ('view' in protectedTable) expect(protectedTable.view).toMatchObject({ columns: [{ key: 'name' }], rows: [['safe']] })
   })
+  it('leaves component-named keys in data rows and form fields alone', () => {
+    const table = checkShownView('', { type: 'table', rows: [{ name: 'Text API', type: 'text', price: 5 }] })
+    expect(table).not.toHaveProperty('error')
+    if ('view' in table) {
+      expect(table.view).toMatchObject({ columns: [{ key: 'name' }, { key: 'type' }, { key: 'price' }], rows: [['Text API', 'text', 5]] })
+    }
+    const explore = checkShownView('', { type: 'explore', data: [{ x: '1', y: '2', type: 'text' }], xKey: 'x', yKey: 'y' })
+    expect(explore).not.toHaveProperty('error')
+    if ('view' in explore) expect(explore.view.data?.[0]).toEqual({ x: 1, y: 2, type: 'text' })
+    // A field's `type` is the model's own annotation: keep it and let the
+    // validator reject it as an unknown property, rather than dropping data or
+    // minting an input id for a row that is not a component.
+    const form = normalizeView({ type: 'form', id: 'f', fields: [{ label: '数量', type: 'number', value: '5' }] }) as { fields: Record<string, unknown>[] }
+    expect(form.fields[0]).toEqual({ label: '数量', type: 'number', value: '5' })
+  })
+  it('infers table columns from the union of all rows', () => {
+    const table = checkShownView('', { type: 'table', rows: [{ name: '基础版', price: 5 }, { name: '专业版', price: 10, support: '24/7' }] })
+    expect(table).not.toHaveProperty('error')
+    if ('view' in table) {
+      expect(table.view).toMatchObject({
+        columns: [{ key: 'name' }, { key: 'price' }, { key: 'support' }],
+        rows: [['基础版', 5, ''], ['专业版', 10, '24/7']],
+      })
+    }
+    const sparse = checkShownView('', { type: 'table', rows: [{}, { name: 'a', price: 1 }] })
+    expect(sparse).not.toHaveProperty('error')
+    if ('view' in sparse) expect(sparse.view).toMatchObject({ rows: [['', ''], ['a', 1]] })
+    const tooWide = checkShownView('', { type: 'table', rows: [{ a: 1 }, { b: 2 }, { c: 3 }, { d: 4 }, { e: 5 }, { f: 6 }, { g: 7 }, { h: 8 }, { i: 9 }] }) as { error?: string }
+    expect(tooWide.error).toContain('columns exceeds the limit')
+  })
+  it('normalizes choice shorthand options like their object form and is idempotent', () => {
+    const choice = checkShownView('', { type: 'choice', id: 'c', label: 'C', options: ['1', '2'], value: '2' })
+    expect(choice).not.toHaveProperty('error')
+    if ('view' in choice) {
+      expect(choice.view.options).toEqual([{ label: '1', value: 1 }, { label: '2', value: 2 }])
+      expect(choice.view.value).toBe(2)
+    }
+    const fixtures = [
+      { type: 'choice', id: 'c', label: 'C', options: ['1', '2'], value: '2' },
+      { type: 'Stack', children: { type: 'slider', label: 'Count', min: '1', max: '10', value: '3' } },
+      { type: 'table', rows: [{ name: 'a', price: 1 }, { name: 'b', extra: 'x' }] },
+      { type: 'map', locations: { label: 'Shanghai', coordinates: ['121.47', '31.23'] }, center: ['121.47', '31.23'], zoom: '10' },
+      { type: 'options', options: ['One', { title: 'Two' }] },
+    ]
+    for (const fixture of fixtures) {
+      const once = normalizeView(fixture)
+      const twice = normalizeView(once)
+      expect(twice).toEqual(once)
+      expect(validateView(twice)).toEqual(validateView(once))
+    }
+  })
   it('accepts scalar options and boolean strings without relaxing input properties', () => {
     const options = checkShownView('', { type: 'options', options: ['One', { title: 'Two', description: 'Second' }], multi: 'true' })
     expect(options).not.toHaveProperty('error')
