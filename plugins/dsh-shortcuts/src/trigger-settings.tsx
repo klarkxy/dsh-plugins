@@ -36,7 +36,7 @@ export function TriggerSettings(props: TriggerSettingsProps) {
       </div>
     </div>
     {props.runtime === 'desktop' ? <>
-      <p className="dsh-ui-hint">{zh ? '默认 Ctrl+Shift+P。Ctrl+K 已用于会话搜索；下方操作会解除它的占用并绑定命令面板。其他组合可在下方快捷键列表修改。' : 'The default is Ctrl+Shift+P. Ctrl+K belongs to session search; this action unbinds it and assigns the palette. Use the list below for other combinations.'}</p>
+      <p className="dsh-ui-hint">{zh ? '默认 Ctrl+Shift+P；可改用 Ctrl+K。' : 'Default: Ctrl+Shift+P. You can use Ctrl+K instead.'}</p>
       <div className="shortcuts-trigger-bar">
         <Keycaps keys={['Ctrl', '+', 'Shift', '+', 'P']} unbound={unbound} />
         <div className="dsh-ui-actions">
@@ -44,7 +44,7 @@ export function TriggerSettings(props: TriggerSettingsProps) {
         </div>
       </div>
     </> : <>
-      <p className="dsh-ui-hint">{zh ? '浏览器页面内的额外入口；仅当浏览器将按键送达页面时生效。按 Control、Alt 或 Meta 加字母/数字录入。' : 'An extra page shortcut, available when the browser delivers the keys. Record Control, Alt, or Meta plus a letter or digit.'}</p>
+      <p className="dsh-ui-hint">{zh ? '页面快捷键；浏览器拦截时不可用。' : 'Page shortcut; unavailable if the browser intercepts it.'}</p>
       <div className="shortcuts-trigger-bar">
         <Keycaps keys={parts(current.binding)} unbound={unbound} />
         <div className="dsh-ui-actions">
@@ -62,7 +62,7 @@ export function TriggerSettings(props: TriggerSettingsProps) {
       footer={<div className="dsh-ui-actions dsh-ui-actions-end">
         <Button variant="primary" disabled={busy} onClick={async () => { setBusy(true); try { setError(await props.claim()); setConfirm(false) } catch (failure) { setError(String(failure)) } finally { setBusy(false) } }}>{zh ? '确认改用 Ctrl+K' : 'Confirm Ctrl+K'}</Button>
       </div>}>
-      <p>{zh ? '会话搜索仍可通过界面使用，也可以在列表中另设快捷键。宿主需要分两次保存，失败时会显示实际状态。' : 'Session search remains available in the interface, and you can assign another key in the list. The host saves this in two steps; failures report the resulting state.'}</p>
+      <p>{zh ? '若会话搜索仍占用 Ctrl+K，将先解绑再绑定面板；分步保存失败时请核对两项设置。搜索仍可点击使用。' : 'If session search still uses Ctrl+K, it is unbound before the palette is saved. If either step fails, review both settings. Session search remains clickable.'}</p>
     </Modal>
     <Modal open={recording} closeLabel={zh ? '取消' : 'Cancel'} title={zh ? '录制面板快捷键' : 'Record palette shortcut'} onClose={() => setRecording(false)}
       className="shortcuts-root" contentClassName="dsh-ui-stack"
@@ -70,14 +70,15 @@ export function TriggerSettings(props: TriggerSettingsProps) {
         <Button variant="primary" disabled={!candidate || !isLegalTrigger(candidate) || candidateConflicts.length > 0} onClick={() => { if (candidate && isLegalTrigger(candidate) && props.saveTrigger(candidate)) setRecording(false) }}>{zh ? '保存' : 'Save'}</Button>
       </div>}>
       <div className="dsh-ui-field">
-        <Input data-modal-autofocus readOnly value={label(candidate)} aria-label={zh ? '按下新快捷键' : 'Press new shortcut'} className="dsh-ui-control" onKeyDown={event => {
+        <Input data-modal-autofocus readOnly value={label(candidate)} aria-label={zh ? '按下新快捷键' : 'Press new shortcut'} aria-describedby="shortcut-record-hint" className="dsh-ui-control" onKeyDown={event => {
           if (event.nativeEvent.isComposing || event.keyCode === 229 || event.repeat || event.getModifierState('AltGraph')) return
-          if (event.key === 'Escape') { setRecording(false); return }
+          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setRecording(false); return }
           // Unmodified Tab must reach the Save button. Recording it would also store an illegal binding.
           if (event.key === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) return
           event.preventDefault(); event.stopPropagation(); setCandidate(bindingFromKey(event))
         }} />
       </div>
+      <p className="dsh-ui-hint" id="shortcut-record-hint">{zh ? '按 Control、Alt 或 Meta 加字母/数字；Esc 取消。' : 'Press Control, Alt, or Meta plus a letter or number; Esc cancels.'}</p>
       {candidate && candidateConflicts.length > 0 && <p role="alert" className="dsh-ui-error">{candidateConflicts.join(', ')}</p>}
       {current.error && <p role="alert" className="dsh-ui-error">{current.error}</p>}
     </Modal>

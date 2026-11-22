@@ -127,7 +127,7 @@ it('loads system fonts through the browser API and degrades cleanly without it',
 
     vi.stubGlobal('queryLocalFonts', undefined)
     await act(async () => buttonByText('重新读取系统字体').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })))
-    expect(document.body.textContent).toContain('系统字体读取被拒绝')
+    expect(document.body.textContent).toContain('无法读取系统字体')
     expect(document.querySelector('option[value="sys:Test Sans"]')).toBeNull()
   } finally {
     await act(async () => root.unmount()); vi.unstubAllGlobals(); dom.window.close()
