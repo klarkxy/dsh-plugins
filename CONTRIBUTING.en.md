@@ -60,6 +60,8 @@ Small static screenshots may live in the plugin's `screenshots/` or `docs/` dire
 
 **The site carries the detailed introduction.** Plugins listed in `site/catalog.json` fill in `details.zh` / `details.en` (Markdown, images allowed), which the site renders as a "Details" section ahead of the README extract. New plugins must not leave this section empty for long.
 
+**Download charts maintain themselves.** Published plugins carry a Downloads section after the demo image, and the root README shows the aggregate trend. `scripts/npm-download-charts.mjs` renders the SVGs from the official npm downloads API, and a workflow refreshes `downloads-*.svg` on the `docs/demo-assets` branch every day; READMEs only link the images and never hard-code numbers.
+
 ## Acceptance tooling stays out of npm packs
 
 `.agents/` is developer tooling. Plugin `files` lists do not ship it, and the root `.npmignore` excludes it. Do not put acceptance artifacts in a plugin package.
