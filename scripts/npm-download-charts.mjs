@@ -223,6 +223,12 @@ function parseArgs(argv) {
   return args;
 }
 
+export function valuesForDays(series, days) {
+  const byDay = new Map(series.map(entry => [entry.day, entry.downloads]));
+  const values = days.map(day => byDay.get(day));
+  return values.every(value => Number.isFinite(value)) ? values : undefined;
+}
+
 export function hasCompleteSeries(perPlugin, plugins) {
   return plugins.every(plugin => perPlugin.has(plugin.slug));
 }
@@ -242,8 +248,9 @@ async function main() {
   for (const plugin of catalog.plugins) {
     try {
       const series = await fetchDailySeries(plugin.package, startDay, endDay);
-      const byDay = new Map(series.map((entry) => [entry.day, entry.downloads]));
-      perPlugin.set(plugin.slug, days.map((day) => byDay.get(day) ?? 0));
+      const values = valuesForDays(series, days);
+      if (values === undefined) throw new Error("the npm response is missing one or more dates");
+      perPlugin.set(plugin.slug, values);
       console.log(`${plugin.package}: ${fmtInt(series.reduce((sum, entry) => sum + entry.downloads, 0))} downloads in window`);
     } catch (error) {
       failures.push(plugin.package);

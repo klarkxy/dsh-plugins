@@ -15,6 +15,7 @@ import {
   rollingAverage,
   stitchSeries,
   trimWindow,
+  valuesForDays,
 } from "./npm-download-charts.mjs";
 
 test("chunkRanges splits long windows into inclusive ≤ maxDays chunks", () => {
@@ -127,4 +128,17 @@ test("aggregate charts require complete data from every plugin", () => {
   const plugins = [{ slug: "one" }, { slug: "two" }];
   assert.equal(hasCompleteSeries(new Map([["one", [1]], ["two", [2]]]), plugins), true);
   assert.equal(hasCompleteSeries(new Map([["one", [1]]]), plugins), false);
+});
+
+test("daily values distinguish missing dates from real zero-download days", () => {
+  const days = ["2026-11-01", "2026-11-02", "2026-11-03"];
+  assert.deepEqual(valuesForDays([
+    { day: "2026-11-01", downloads: 0 },
+    { day: "2026-11-02", downloads: 2 },
+    { day: "2026-11-03", downloads: 0 },
+  ], days), [0, 2, 0]);
+  assert.equal(valuesForDays([
+    { day: "2026-11-01", downloads: 0 },
+    { day: "2026-11-03", downloads: 2 },
+  ], days), undefined);
 });
