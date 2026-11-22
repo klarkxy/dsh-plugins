@@ -6,6 +6,10 @@
 
 在助手回复中组合原生图表、对比、流程步骤、指标、可调估算与可探索互动视图，并将操作转化为回答。普通 Markdown 正文可与互动界面自然穿插。
 
+## 演示
+
+![节点关系图声明：格式错误在围栏闭合后自动修复渲染，无法修复时给出原因](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr28-deep-view-repair.gif)
+
 ## 安装
 
 ```sh

@@ -6,6 +6,10 @@
 
 修改 DeepSeek Harness 应用快捷键与已识别的局部操作按键，并通过命令面板快速运行已接入插件的命令。
 
+## 演示
+
+![桌面端快捷键：改键确认与 Ctrl+K 条件化解绑](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/desktop-shortcuts-confirmation.gif)
+
 ## 安装
 
 本插件目前处于本地开发阶段，尚未发布至 npm。请先在仓库根目录构建含客户端产物的完整包，再通过本地路径安装：
