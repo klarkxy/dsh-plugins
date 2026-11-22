@@ -8,9 +8,9 @@ afterEach(() => { document.body.innerHTML = ''; vi.unstubAllGlobals() })
 
 describe('desktop palette shortcut confirmation', () => {
   it.each([
-    ['en', 'Use Ctrl+K', 'Saves in two steps: unbind session search, then bind the palette. If it fails, review both settings. Session search remains clickable.'],
-    ['zh', '使用 Ctrl+K', '将分两次保存：先解绑会话搜索，再绑定命令面板；失败时请核对两项设置。会话搜索仍可点击使用。'],
-  ] as const)('retains the two-step save warning in %s', async (locale, action, warning) => {
+    ['en', 'Use Ctrl+K', 'If session search still uses Ctrl+K, it is unbound before the palette is saved. If either step fails, review both settings. Session search remains clickable.'],
+    ['zh', '使用 Ctrl+K', '若会话搜索仍占用 Ctrl+K，将先解绑再绑定面板；分步保存失败时请核对两项设置。搜索仍可点击使用。'],
+  ] as const)('retains the conditional two-step save warning in %s', async (locale, action, warning) => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     const container = document.createElement('div')
     document.body.append(container)
