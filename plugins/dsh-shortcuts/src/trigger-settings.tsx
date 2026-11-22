@@ -62,7 +62,7 @@ export function TriggerSettings(props: TriggerSettingsProps) {
       footer={<div className="dsh-ui-actions dsh-ui-actions-end">
         <Button variant="primary" disabled={busy} onClick={async () => { setBusy(true); try { setError(await props.claim()); setConfirm(false) } catch (failure) { setError(String(failure)) } finally { setBusy(false) } }}>{zh ? '确认改用 Ctrl+K' : 'Confirm Ctrl+K'}</Button>
       </div>}>
-      <p>{zh ? '会话搜索仍可点击使用，也可在列表中另设快捷键。' : 'Session search remains clickable, and you can assign another shortcut.'}</p>
+      <p>{zh ? '将分两次保存：先解绑会话搜索，再绑定命令面板；失败时请核对两项设置。会话搜索仍可点击使用。' : 'Saves in two steps: unbind session search, then bind the palette. If it fails, review both settings. Session search remains clickable.'}</p>
     </Modal>
     <Modal open={recording} closeLabel={zh ? '取消' : 'Cancel'} title={zh ? '录制面板快捷键' : 'Record palette shortcut'} onClose={() => setRecording(false)}
       className="shortcuts-root" contentClassName="dsh-ui-stack"

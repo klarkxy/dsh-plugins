@@ -150,8 +150,7 @@ describe('subagent configuration page', () => {
     await render(root, api())
     expect(castSwitch(dom).getAttribute('aria-checked')).toBe('true')
     expect(castSwitch(dom).getAttribute('aria-label')).toBe('Enable subagent model selection')
-    expect(dom.window.document.body.textContent).toContain('Applies to new subagents; existing conversations keep their list.')
-    expect(dom.window.document.body.textContent).toContain('existing conversations keep their list.')
+    expect(dom.window.document.body.textContent).toContain('Model lists apply to new sessions; reasoning applies to new subagents.')
     expect(triggers(dom)).toHaveLength(3)
     expect(triggers(dom)[0]!.textContent).toContain('One')
     expect(triggers(dom)[0]!.textContent).not.toContain('Provider')
@@ -167,7 +166,7 @@ describe('subagent configuration page', () => {
     // The full route stays in the accessible name and the tooltip.
     expect(triggers(dom)[0]!.getAttribute('aria-label')).toBe('p / one')
     expect(triggers(dom)[0]!.getAttribute('title')).toBe('p / one')
-    expect(dom.window.document.body.textContent).toContain('用于新建子代理；已有会话保持原名单。')
+    expect(dom.window.document.body.textContent).toContain('名单用于新建会话；思考强度用于新建子代理。')
   }))
 
   it('can add the same model again after its previous row was removed', async () => mounted(async (dom, root) => {
@@ -199,7 +198,7 @@ describe('subagent configuration page', () => {
     await render(root, api({ getCast: vi.fn(async () => ({ enabled: false, revision: 1, routes: [] })) }), 'zh-CN')
     expect(castSwitch(dom).getAttribute('aria-checked')).toBe('false')
     expect(castSwitch(dom).getAttribute('aria-label')).toBe('启用子代理选模')
-    expect(dom.window.document.body.textContent).toContain('已有会话保持原名单。')
+    expect(dom.window.document.body.textContent).toContain('名单用于新建会话；思考强度用于新建子代理。')
     expect(dom.window.document.body.textContent).toContain('先添加模型，再启用显式模型选择。移除最后一个模型会关闭开关。')
     expect(triggers(dom)).toHaveLength(1)
     expect(triggers(dom)[0]!.textContent).toContain('添加模型…')
