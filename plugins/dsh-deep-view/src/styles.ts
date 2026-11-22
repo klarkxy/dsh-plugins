@@ -162,6 +162,16 @@ export const viewStyles = `
 .dvui-root .dvui-fence-source > summary { cursor: pointer; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; }
 .dvui-root .dvui-fence-code { margin-top: 8px; }
 .dvui-root .dvui-tool-error, .dvui-root.dvui-tool-error { margin: 4px 0; color: var(--dsw-alias-label-error); font-size: 12px; line-height: 18px; }
+.dvui-root .dvui-canvas-card { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; padding: 10px 12px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); }
+.dvui-root .dvui-canvas-card-title { color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 500; line-height: 20px; overflow-wrap: anywhere; }
+.dvui-root .dvui-canvas-card-path { color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.dvui-root.dvui-canvas { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 240px; }
+.dvui-root .dvui-canvas-frame { flex: 1 1 auto; display: block; width: 100%; min-height: 240px; border: none; background: var(--dsw-alias-bg-base); }
+.dvui-root .dvui-canvas-status { flex: 1 1 auto; margin: 0; padding: 10px; color: var(--dsw-alias-label-secondary); white-space: normal; }
+.dvui-root .dvui-canvas-errors { flex: none; max-height: 45%; overflow-y: auto; padding: 8px 10px; border-top: .5px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); }
+.dvui-root .dvui-canvas-errors-list { margin: 0; padding: 0 0 0 18px; color: var(--dsw-alias-label-error); font-size: 12px; line-height: 18px; }
+.dvui-root .dvui-canvas-errors-list li { overflow-wrap: anywhere; white-space: pre-wrap; }
+.dvui-root .dvui-canvas-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .dvui-root button:focus-visible,.dvui-root a:focus-visible,.dvui-root input:focus-visible,.dvui-root textarea:focus-visible,.dvui-root summary:focus-visible,.dvui-root .dvui-chart-svg:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 2px; }
 @media (hover: hover) { .dvui-root .dvui-tools:not(:focus-within):not([data-open]) { opacity: 0; } .dvui-root .dvui-view:hover .dvui-tools { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .dvui-root * { transition: none !important; } }
