@@ -22,6 +22,12 @@ describe('deepui fenced parser', () => {
     expect(parts.every(part => part.kind === 'markdown')).toBe(true)
     expect(parts.map(part => part.text).join('')).toBe(source)
   })
+  it('recognizes common casing and spelling variants of the fence language', () => {
+    for (const language of ['DeepUI', 'deepview', 'deep-view', 'deep view', 'deep_ui', 'deepui 演示标题', 'deep view 演示标题']) {
+      const parts = parseDeepUi(`\`\`\`${language}\n${card}\n\`\`\``)
+      expect(parts.map(part => part.kind)).toEqual(['view'])
+    }
+  })
   it('falls back for malformed JSON and invalid views including html', () => {
     for (const body of ['{broken', JSON.stringify({ type: 'html', html: '<script>1</script>', summary: 'bad' }), JSON.stringify({ view: { type: 'unknown' } })]) {
       const parts = parseDeepUi(`\`\`\`deep-view\n${body}\n\`\`\``)

@@ -1,5 +1,5 @@
 import { Button, Input, Modal, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { ShortcutBinding } from '@deepseek-ai/dsh-client-shortcuts/protocol'
 import { Keycaps, type SelectorHook } from './settings.tsx'
 import { bindingFromKey, DEFAULT_WEB_TRIGGER, isLegalTrigger, type TriggerSnapshot } from './web-trigger.ts'
@@ -20,6 +20,7 @@ export function TriggerSettings(props: TriggerSettingsProps) {
   const [confirm, setConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const hintId = useId()
   const zh = props.locale === 'zh'
   const unbound = zh ? '未绑定' : 'Unbound'
   const parts = (binding: ShortcutBinding | null) => binding ? [...binding.modifiers, binding.code.replace(/^Key|^Digit/, '')] : []
@@ -70,7 +71,7 @@ export function TriggerSettings(props: TriggerSettingsProps) {
         <Button variant="primary" disabled={!candidate || !isLegalTrigger(candidate) || candidateConflicts.length > 0} onClick={() => { if (candidate && isLegalTrigger(candidate) && props.saveTrigger(candidate)) setRecording(false) }}>{zh ? '保存' : 'Save'}</Button>
       </div>}>
       <div className="dsh-ui-field">
-        <Input data-modal-autofocus readOnly value={label(candidate)} aria-label={zh ? '按下新快捷键' : 'Press new shortcut'} aria-describedby="shortcut-record-hint" className="dsh-ui-control" onKeyDown={event => {
+        <Input data-modal-autofocus readOnly value={label(candidate)} aria-label={zh ? '按下新快捷键' : 'Press new shortcut'} aria-describedby={hintId} className="dsh-ui-control" onKeyDown={event => {
           if (event.nativeEvent.isComposing || event.keyCode === 229 || event.repeat || event.getModifierState('AltGraph')) return
           if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setRecording(false); return }
           // Unmodified Tab must reach the Save button. Recording it would also store an illegal binding.
@@ -78,7 +79,7 @@ export function TriggerSettings(props: TriggerSettingsProps) {
           event.preventDefault(); event.stopPropagation(); setCandidate(bindingFromKey(event))
         }} />
       </div>
-      <p className="dsh-ui-hint" id="shortcut-record-hint">{zh ? '按 Control、Alt 或 Meta 加字母/数字；Esc 取消。' : 'Press Control, Alt, or Meta plus a letter or number; Esc cancels.'}</p>
+      <p className="dsh-ui-hint" id={hintId}>{zh ? '按 Control、Alt 或 Meta 加字母/数字；Esc 取消。' : 'Press Control, Alt, or Meta plus a letter or number; Esc cancels.'}</p>
       {candidate && candidateConflicts.length > 0 && <p role="alert" className="dsh-ui-error">{candidateConflicts.join(', ')}</p>}
       {current.error && <p role="alert" className="dsh-ui-error">{current.error}</p>}
     </Modal>
