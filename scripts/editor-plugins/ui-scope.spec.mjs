@@ -23,6 +23,7 @@ const roots = {
   'dsh-secret-manager': ['.sm-root'],
   'dsh-session-manager': ['.dsh-free-chat'],
   'dsh-shortcuts': ['.shortcuts-root', '.shortcuts-fixed-root'],
+  'dsh-sidebar-layout': ['.sl-root', '[data-dsh-sidebar-layout'],
   'dsh-unrestricted': ['[data-dsh-unrestricted-warning]'],
   'dsh-update': ['.dsh-upd-root'],
   'dsh-web-search-manager': ['.ws-root'],

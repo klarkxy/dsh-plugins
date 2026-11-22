@@ -292,6 +292,14 @@
       }
     },
     {
+      "name": "@klarkxy/dsh-sidebar-layout",
+      "state": "draft",
+      "reason": {
+        "zh": "新增右侧边栏布局切换（常规、抽屉、正文），待完成首次发布验收。",
+        "en": "New right-sidebar layout switcher (push, drawer, body); awaiting first-release acceptance."
+      }
+    },
+    {
       "name": "@klarkxy/dsh-update",
       "state": "published",
       "reason": {
