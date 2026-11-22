@@ -29,3 +29,29 @@ describe('desktop palette shortcut confirmation', () => {
     await act(async () => root.unmount())
   })
 })
+
+describe('web palette shortcut recording', () => {
+  it('Escape cancels only the recording modal without bubbling to the settings page', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    await act(async () => root.render(<TriggerSettings
+      locale="en"
+      runtime="web"
+      useTrigger={selector => selector({ binding: null, error: null })}
+      saveTrigger={() => true}
+      conflicts={() => []}
+      claim={vi.fn(async () => null)}
+    />))
+    const change = Array.from(container.querySelectorAll('button')).find(item => item.textContent === 'Change')!
+    await act(async () => change.click())
+    const input = document.querySelector<HTMLInputElement>('input[aria-describedby="shortcut-record-hint"]')!
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    await act(async () => { input.dispatchEvent(event) })
+    expect(event.defaultPrevented).toBe(true)
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(container.querySelector('.shortcuts-root')).not.toBeNull()
+    await act(async () => root.unmount())
+  })
+})

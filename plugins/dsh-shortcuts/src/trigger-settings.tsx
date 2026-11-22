@@ -72,7 +72,7 @@ export function TriggerSettings(props: TriggerSettingsProps) {
       <div className="dsh-ui-field">
         <Input data-modal-autofocus readOnly value={label(candidate)} aria-label={zh ? '按下新快捷键' : 'Press new shortcut'} aria-describedby="shortcut-record-hint" className="dsh-ui-control" onKeyDown={event => {
           if (event.nativeEvent.isComposing || event.keyCode === 229 || event.repeat || event.getModifierState('AltGraph')) return
-          if (event.key === 'Escape') { setRecording(false); return }
+          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setRecording(false); return }
           // Unmodified Tab must reach the Save button. Recording it would also store an illegal binding.
           if (event.key === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) return
           event.preventDefault(); event.stopPropagation(); setCandidate(bindingFromKey(event))
