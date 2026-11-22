@@ -286,3 +286,32 @@ test("detail pages strip language switchers for both post-flip and pre-flip tarb
     assert.doesNotMatch(enBody, /简体中文|English|README\./);
   }
 });
+
+test("detail pages render catalog details above the README extract", () => {
+  const data = fixture();
+  const detailed = catalog.plugins.filter((p) => p.details);
+  assert.ok(detailed.length > 0, "catalog carries at least one details entry");
+  const files = renderSite(catalog, data, { generatedAt: "2026-03-01T00:00:00.000Z" });
+  let sawPrefixedHeading = false;
+  for (const p of detailed) {
+    for (const page of [files.get(`plugins/${p.slug}/index.html`), files.get(`en/plugins/${p.slug}/index.html`)]) {
+      assert.ok(page.includes('<section class="plugin-details"'), `${p.slug} details section`);
+      assert.ok(
+        page.indexOf('<section class="plugin-details"') < page.indexOf('<p class="readme-note">'),
+        `${p.slug} details precede the README extract`,
+      );
+      sawPrefixedHeading ||= page.includes('id="d-');
+    }
+  }
+  assert.ok(sawPrefixedHeading, "details headings keep their d- id prefix");
+  const plain = catalog.plugins.find((p) => !p.details);
+  if (plain) assert.ok(!files.get(`plugins/${plain.slug}/index.html`).includes('<section class="plugin-details"'));
+});
+
+test("catalog validation requires both languages for details", () => {
+  validateCatalog(catalog);
+  const broken = structuredClone(catalog);
+  const target = broken.plugins.find((p) => p.details) ?? broken.plugins[0];
+  target.details = { zh: "只有中文。" };
+  assert.throws(() => validateCatalog(broken), /missing details\.en/);
+});
