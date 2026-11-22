@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 240" role="img" aria-label="@klarkxy/dsh-prompt-override — 353 downloads · 2026-09-21 → 2026-11-21">
+<title>@klarkxy/dsh-prompt-override — 353 downloads · 2026-09-21 → 2026-11-21</title>
+<style>
+  .bg { fill: #ffffff; }
+  .title { fill: #0f1115; font: 600 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  .sub { fill: #61666b; font: 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  .tick { fill: #81858c; font: 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  .grid { stroke: #00000014; stroke-width: 1; }
+  .axis { stroke: #00000029; stroke-width: 1; }
+  .daily { stroke: #3c63e8; stroke-width: 1.2; fill: none; opacity: 0.28; }
+  .smooth { stroke: #3c63e8; stroke-width: 2.5; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+  .area { fill: #3c63e8; opacity: 0.08; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #151517; }
+    .title { fill: #f9fafb; }
+    .sub { fill: #cfd3d6; }
+    .tick { fill: #adb2b8; }
+    .grid { stroke: #ffffff1a; }
+    .axis { stroke: #ffffff2e; }
+  }
+</style>
+<rect class="bg" width="720" height="240" rx="12"/>
+<text x="48" y="24" class="title">@klarkxy/dsh-prompt-override</text>
+<text x="704" y="24" text-anchor="end" class="sub">353 downloads · 2026-09-21 → 2026-11-21</text>
+<line x1="48" y1="210" x2="704" y2="210" class="axis"/>
+  <line x1="48" y1="210.0" x2="704" y2="210.0" class="grid"/><text x="40" y="213.5" text-anchor="end" class="tick">0</text>
+  <line x1="48" y1="154.0" x2="704" y2="154.0" class="grid"/><text x="40" y="157.5" text-anchor="end" class="tick">100</text>
+  <line x1="48" y1="98.0" x2="704" y2="98.0" class="grid"/><text x="40" y="101.5" text-anchor="end" class="tick">200</text>
+  <line x1="48" y1="42.0" x2="704" y2="42.0" class="grid"/><text x="40" y="45.5" text-anchor="end" class="tick">300</text>
+  <text x="48.0" y="230" text-anchor="start" class="tick">09-21</text>
+  <text x="263.1" y="230" text-anchor="middle" class="tick">10-11</text>
+  <text x="478.2" y="230" text-anchor="middle" class="tick">10-31</text>
+  <text x="704.0" y="230" text-anchor="end" class="tick">11-21</text>
+<path d="M48.0,210.0 L48.0,210.0 L58.8,210.0 L69.5,210.0 L80.3,210.0 L91.0,210.0 L101.8,210.0 L112.5,210.0 L123.3,210.0 L134.0,210.0 L144.8,210.0 L155.5,210.0 L166.3,210.0 L177.0,210.0 L187.8,210.0 L198.6,210.0 L209.3,210.0 L220.1,210.0 L230.8,210.0 L241.6,210.0 L252.3,210.0 L263.1,210.0 L273.8,210.0 L284.6,210.0 L295.3,210.0 L306.1,210.0 L316.9,210.0 L327.6,210.0 L338.4,210.0 L349.1,210.0 L359.9,210.0 L370.6,210.0 L381.4,210.0 L392.1,210.0 L402.9,210.0 L413.6,210.0 L424.4,210.0 L435.1,210.0 L445.9,210.0 L456.7,210.0 L467.4,210.0 L478.2,210.0 L488.9,210.0 L499.7,210.0 L510.4,210.0 L521.2,210.0 L531.9,210.0 L542.7,210.0 L553.4,210.0 L564.2,210.0 L575.0,210.0 L585.7,210.0 L596.5,210.0 L607.2,210.0 L618.0,210.0 L628.7,210.0 L639.5,210.0 L650.2,210.0 L661.0,210.0 L671.7,210.0 L682.5,191.7 L693.2,184.5 L704.0,181.8 L704.0,210.0 Z" class="area"/>
+<polyline points="48.0,210.0 58.8,210.0 69.5,210.0 80.3,210.0 91.0,210.0 101.8,210.0 112.5,210.0 123.3,210.0 134.0,210.0 144.8,210.0 155.5,210.0 166.3,210.0 177.0,210.0 187.8,210.0 198.6,210.0 209.3,210.0 220.1,210.0 230.8,210.0 241.6,210.0 252.3,210.0 263.1,210.0 273.8,210.0 284.6,210.0 295.3,210.0 306.1,210.0 316.9,210.0 327.6,210.0 338.4,210.0 349.1,210.0 359.9,210.0 370.6,210.0 381.4,210.0 392.1,210.0 402.9,210.0 413.6,210.0 424.4,210.0 435.1,210.0 445.9,210.0 456.7,210.0 467.4,210.0 478.2,210.0 488.9,210.0 499.7,210.0 510.4,210.0 521.2,210.0 531.9,210.0 542.7,210.0 553.4,210.0 564.2,210.0 575.0,210.0 585.7,210.0 596.5,210.0 607.2,210.0 618.0,210.0 628.7,210.0 639.5,210.0 650.2,210.0 661.0,210.0 671.7,210.0 682.5,81.8 693.2,159.6 704.0,191.0" class="daily"/>
+<polyline points="48.0,210.0 58.8,210.0 69.5,210.0 80.3,210.0 91.0,210.0 101.8,210.0 112.5,210.0 123.3,210.0 134.0,210.0 144.8,210.0 155.5,210.0 166.3,210.0 177.0,210.0 187.8,210.0 198.6,210.0 209.3,210.0 220.1,210.0 230.8,210.0 241.6,210.0 252.3,210.0 263.1,210.0 273.8,210.0 284.6,210.0 295.3,210.0 306.1,210.0 316.9,210.0 327.6,210.0 338.4,210.0 349.1,210.0 359.9,210.0 370.6,210.0 381.4,210.0 392.1,210.0 402.9,210.0 413.6,210.0 424.4,210.0 435.1,210.0 445.9,210.0 456.7,210.0 467.4,210.0 478.2,210.0 488.9,210.0 499.7,210.0 510.4,210.0 521.2,210.0 531.9,210.0 542.7,210.0 553.4,210.0 564.2,210.0 575.0,210.0 585.7,210.0 596.5,210.0 607.2,210.0 618.0,210.0 628.7,210.0 639.5,210.0 650.2,210.0 661.0,210.0 671.7,210.0 682.5,191.7 693.2,184.5 704.0,181.8" class="smooth"/>
+</svg>
