@@ -18,6 +18,7 @@ let canvasErrorReportOf: typeof import('./canvas/capture.ts').canvasErrorReportO
 let createCaptureScript: typeof import('./canvas/capture.ts').createCaptureScript
 let packCanvasHtml: typeof import('./canvas/pack.ts').packCanvasHtml
 let createHtmlDocument: typeof import('./canvas/bootstrap.ts').createHtmlDocument
+let insertCaptureScript: typeof import('./canvas/bootstrap.ts').insertCaptureScript
 let createReadCanvasRelative: typeof import('./canvas/read-relative.ts').createReadCanvasRelative
 let mountCanvasPreview: typeof import('./client.tsx').mountCanvasPreview
 let CANVAS_RENDERER_ID: typeof import('./canvas/definition.ts').CANVAS_RENDERER_ID
@@ -27,7 +28,7 @@ beforeAll(async () => {
   ;({ CanvasToolCall, readCanvasCall, apply, mountCanvasPreview } = await import('./client.tsx'))
   ;({ recordCanvasError, canvasErrorReportOf, createCaptureScript } = await import('./canvas/capture.ts'))
   ;({ packCanvasHtml } = await import('./canvas/pack.ts'))
-  ;({ createHtmlDocument } = await import('./canvas/bootstrap.ts'))
+  ;({ createHtmlDocument, insertCaptureScript } = await import('./canvas/bootstrap.ts'))
   ;({ createReadCanvasRelative } = await import('./canvas/read-relative.ts'))
   ;({ CANVAS_RENDERER_ID } = await import('./canvas/index.ts'))
   const w = dom.window as { URL: typeof URL }
@@ -151,27 +152,54 @@ describe('canvas HTML packing and bootstrap', () => {
     const doc = createHtmlDocument(bundle, '<script>capture()</script>')
     expect(doc).toContain('document.write(html)')
     const inner = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(/JSON\.parse\(text\("([^"]+)"\)/.exec(doc)![1]!), c => c.charCodeAt(0))))
-    expect(inner.capture).toBe('<script>capture()</script>')
-    expect(inner.html).toBe(html)
+    expect(inner.capture).toBeUndefined()
+    expect(inner.html.startsWith('<html><head><script>capture()</script>')).toBe(true)
+    expect(inner.html).toContain('href="a.css"')
+    expect(inner.html).toContain('src="b.js?v=1"')
     expect(inner.assets).toHaveLength(2)
   })
-  it('preserves standards mode and head attributes while capturing before author scripts', async () => {
-    const doc = createHtmlDocument({ data: bytes('<!doctype html><html><head data-author="yes"><script>author()</script></head><body></body></html>'), assets: [] }, '<script>capture()</script>')
-    const source = /<script>\(\(\)=>\{([\s\S]*)\}\)\(\)<\/script>/.exec(doc)![1]
-    let written = ''
-    const { runInNewContext } = await import('node:vm')
-    runInNewContext(`(()=>{${source}})()`, {
-      document: { open() {}, write(value: string) { written = value }, close() {} },
-      DOMParser: dom.window.DOMParser,
-      TextDecoder,
-      Uint8Array,
-      atob,
-      JSON,
+  it('inserts capture into source HTML without dropping a textarea leading newline', () => {
+    const source = '<!doctype html><html><head data-author="yes"></head><body><textarea>\n\nhello</textarea><pre>\n\npre</pre></body></html>'
+    const next = insertCaptureScript(source, '<script id="capture"></script>')
+    expect(next).toContain('<head data-author="yes"><script id="capture"></script>')
+    expect(next).toContain('<textarea>\n\nhello</textarea>')
+    expect(next).toContain('<pre>\n\npre</pre>')
+  })
+  async function documentAfterBootstrap(bootstrap: string) {
+    let blobs = 0
+    const page = new JSDOM(bootstrap, {
+      url: 'https://canvas.test/preview',
+      runScripts: 'dangerously',
+      resources: 'usable',
+      pretendToBeVisual: true,
+      beforeParse(window) {
+        window.URL.createObjectURL = () => `blob:canvas-asset-${blobs++}`
+        window.URL.revokeObjectURL = () => {}
+      },
     })
-    const parsed = new JSDOM(written)
-    expect(parsed.window.document.compatMode).toBe('CSS1Compat')
-    expect(parsed.window.document.head.getAttribute('data-author')).toBe('yes')
-    expect(written.indexOf('capture()')).toBeLessThan(written.indexOf('author()'))
+    await new Promise<void>(resolve => { page.window.setTimeout(resolve, 0) })
+    return page.window.document
+  }
+  it('preserves standards mode, head attributes and leading preformatted newlines in the written document', async () => {
+    const source = '<!doctype html><html><head data-author="yes"><script id="author"></script></head><body><textarea>\n\nhello</textarea><pre>\n\npre</pre></body></html>'
+    const live = await documentAfterBootstrap(createHtmlDocument({ data: bytes(source), assets: [] }, '<script id="capture"></script>'))
+    expect(live.compatMode).toBe('CSS1Compat')
+    expect(live.head.getAttribute('data-author')).toBe('yes')
+    expect(live.querySelector('textarea')?.value).toBe('\nhello')
+    expect(live.querySelector('pre')?.textContent).toBe('\npre')
+    expect(live.getElementById('capture')).not.toBeNull()
+    expect(live.getElementById('author')).not.toBeNull()
+    expect(live.documentElement.innerHTML.indexOf('id="capture"')).toBeLessThan(live.documentElement.innerHTML.indexOf('id="author"'))
+  })
+  it('rewrites packed assets in source HTML without dropping a textarea leading newline', async () => {
+    const source = '<!doctype html><html><head><link rel="stylesheet" href="a.css"></head><body><textarea>\n\nhello</textarea></body></html>'
+    const live = await documentAfterBootstrap(createHtmlDocument({
+      data: bytes(source),
+      assets: [{ kind: 'stylesheet', reference: 'a.css', data: bytes('body{}') }],
+    }, '<script id="capture"></script>'))
+    expect(live.querySelector('textarea')?.value).toBe('\nhello')
+    expect(live.querySelector('link')?.getAttribute('href')).toMatch(/^blob:/)
+    expect(live.getElementById('capture')).not.toBeNull()
   })
   it('enforces the per-asset, total and count limits', async () => {
     const big = 'a'.repeat(5 * 1024 * 1024)

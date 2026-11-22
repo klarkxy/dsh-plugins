@@ -31,8 +31,8 @@ export type CanvasError = {
 }
 
 /**
- * Build the capture script prepended to the canvas document. It runs before
- * every author script because it opens the written document's first element.
+ * Build the capture script inserted at the start of the canvas document head.
+ * It runs before every author script.
  * String lines keep `{name:` patterns out of template literals (stylesheet
  * scope guard) — the assembled text is HTML, not CSS.
  * @param nonce - per-load token the parent checks before accepting a report.
