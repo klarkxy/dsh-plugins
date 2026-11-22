@@ -78,7 +78,7 @@ export function TriggerSettings(props: TriggerSettingsProps) {
           event.preventDefault(); event.stopPropagation(); setCandidate(bindingFromKey(event))
         }} />
       </div>
-      <p className="dsh-ui-hint" id="shortcut-record-hint">{zh ? '按 Control、Alt 或 Meta 加字母/数字；Tab 切换到保存。' : 'Press Control, Alt, or Meta plus a letter or number; Tab moves to Save.'}</p>
+      <p className="dsh-ui-hint" id="shortcut-record-hint">{zh ? '按 Control、Alt 或 Meta 加字母/数字；Esc 取消。' : 'Press Control, Alt, or Meta plus a letter or number; Esc cancels.'}</p>
       {candidate && candidateConflicts.length > 0 && <p role="alert" className="dsh-ui-error">{candidateConflicts.join(', ')}</p>}
       {current.error && <p role="alert" className="dsh-ui-error">{current.error}</p>}
     </Modal>
