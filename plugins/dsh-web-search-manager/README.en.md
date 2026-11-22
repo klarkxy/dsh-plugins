@@ -10,6 +10,10 @@ Orchestrate multi-source web search and page-reading providers, manage API keys 
 
 ![Web search settings: fusion / failover / single modes, fetch waterfall, and billing opt-ins](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr23-web-search-manager.gif)
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-web-search-manager.svg)](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager)
+
 ## Install
 
 ```sh

@@ -12,6 +12,10 @@ Replaces the model button in the DeepSeek Harness composer: pick a model and rea
 
 ![DeepSeek Flash merged across providers into one card, with provider switching](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr33-model-picker-review.gif)
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-model-picker.svg)](https://www.npmjs.com/package/@klarkxy/dsh-model-picker)
+
 ## What it does
 
 ### Card view (default)

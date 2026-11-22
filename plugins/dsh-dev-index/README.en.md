@@ -10,6 +10,10 @@ Browse the official DeepSeek Harness developer documentation inside DSH; in Crea
 
 ![Browsing the DSH developer docs on the Plugins page](screenshots/docs-en.png)
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-dev-index.svg)](https://www.npmjs.com/package/@klarkxy/dsh-dev-index)
+
 ## Install
 
 ```sh

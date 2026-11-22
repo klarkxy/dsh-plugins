@@ -10,6 +10,10 @@ Compose native charts, comparisons, workflow steps, metrics, adjustable estimate
 
 ![A malformed node-graph declaration repairs itself once the fence closes; an unrepairable one names the reason](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr28-deep-view-repair.gif)
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-deep-view.svg)](https://www.npmjs.com/package/@klarkxy/dsh-deep-view)
+
 ## Install
 
 ```sh
