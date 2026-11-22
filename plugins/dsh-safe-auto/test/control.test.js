@@ -290,3 +290,35 @@ test('activation excludes official Auto even when it appears first in catalog', 
   f.options.presets.set = (session, value) => { assert.equal(value, 'workspace-write'); set(session, value); };
   await f.select('safe-auto'); assert.equal(f.options.presets.current(), 'workspace-write');
 });
+
+test('runtime select enables Safe Auto without writing the lastSelection memo', async () => {
+  const f = fixture();
+  assert.equal(await f.control.select('s'), true);
+  assert.equal(f.control.sessionActive('s'), true);
+  assert.equal(f.options.presets.current(), 'workspace-write');
+  assert.equal(f.remembered.has('lastSelection'), false);
+});
+test('runtime select rejects on child sessions and unknown ids', async () => {
+  const f = fixture();
+  f.session.header.origin = 'subagent';
+  await assert.rejects(f.control.select('s'), /Child/);
+  await assert.rejects(f.control.select('missing'), /not active/);
+  assert.equal(f.control.sessionActive('missing'), false);
+  assert.equal(f.control.sessionActive(42), false);
+});
+test('runtime select rejects when the profile disables Safe Auto', async () => {
+  const f = fixture({ enabled: false });
+  await assert.rejects(f.control.select('s'), /disabled/);
+  assert.equal(f.control.available(), false);
+});
+test('sessionActive follows a later native preset switch', async () => {
+  const f = fixture();
+  await f.control.select('s');
+  assert.equal(f.control.sessionActive('s'), true);
+  await f.select('read-only');
+  assert.equal(f.control.sessionActive('s'), false);
+});
+test('available mirrors the policy gate', async () => {
+  const f = fixture();
+  assert.equal(f.control.available(), true);
+});
