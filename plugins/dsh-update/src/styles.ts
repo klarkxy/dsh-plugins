@@ -325,8 +325,9 @@ ${officialUiCss('dsh-upd-root')}
     gap: 6px;
   }
 
-  /* The host can narrow the list independently of the viewport. */
-  @container (width < 960px) {
+  /* The shared page tops out at 760px, so this breakpoint preserves the
+   * three-column layout on wide lists and wraps genuinely narrow ones. */
+  @container (width < 720px) {
     & .dsh-upd-plugin-row {
       grid-template-columns: minmax(180px, 1fr) auto;
       gap: 6px 12px;
