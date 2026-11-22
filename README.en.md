@@ -29,6 +29,12 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse the [plugin site](https://klar
 
 [`@klarkxy/dsh-plugin-kit`](plugins/dsh-plugin-kit/README.en.md) (runtime, UI and diagnostic logging helpers) and [`@klarkxy/dsh-model-route`](plugins/dsh-model-route/README.en.md) (model-route field contract) are shared libraries that other plugins install automatically.
 
+## Downloads
+
+Daily npm downloads across all plugins (from the official npm statistics, refreshed every day; counts include CI and mirror traffic and are best read relatively):
+
+[![Daily npm downloads across all klarkxy DSH plugins](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-all.svg)](https://www.npmjs.com/~klarkxy)
+
 ## Install
 
 ```sh
@@ -72,17 +78,17 @@ The code is the developer documentation. Releases follow the [release guide](REL
 | [@klarkxy/dsh-model-picker](plugins/dsh-model-picker/README.en.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-prompt-override](plugins/dsh-prompt-override/README.en.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
+| [@klarkxy/dsh-prompt-override](plugins/dsh-prompt-override/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-quick-review](plugins/dsh-quick-review/README.en.md) | Testing (`testing`) | Read-only review session and sidebar tab passed first-release acceptance; the first npm release goes through the manual first_release workflow. |
 | [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.en.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
+| [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-session-manager](plugins/dsh-session-manager/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-shortcuts](plugins/dsh-shortcuts/README.en.md) | Draft (`draft`) | New shortcut manager and extensible command palette; awaiting first-release acceptance. |
 | [@klarkxy/dsh-sidebar-layout](plugins/dsh-sidebar-layout/README.en.md) | Draft (`draft`) | New right-sidebar layout switcher (push, drawer, body); awaiting first-release acceptance. |
 | [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-update](plugins/dsh-update/README.en.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
 | [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
-| [@klarkxy/dsh-workspace-folders](plugins/dsh-workspace-folders/README.en.md) | Published (`published`) | Published on npm; subsequent versions follow the normal update workflow. |
+| [@klarkxy/dsh-workspace-folders](plugins/dsh-workspace-folders/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 | [@klarkxy/dsh-zhihu](plugins/dsh-zhihu/README.en.md) | Published (`published`) | Published on npm; fixes, testing and version updates keep the Published lifecycle. |
 <!-- plugin-release-states:end -->
 

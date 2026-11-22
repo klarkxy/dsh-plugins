@@ -29,6 +29,12 @@ klarkxy 的 DeepSeek Harness（DSH）插件集合。可前往[插件站点](http
 
 [`@klarkxy/dsh-plugin-kit`](plugins/dsh-plugin-kit/README.md)（运行时、界面与诊断日志辅助）和 [`@klarkxy/dsh-model-route`](plugins/dsh-model-route/README.md)（模型路由与选择契约）是共享库，其他插件会自动安装它们。
 
+## 下载量
+
+全部插件的 npm 每日下载量趋势（来自 npm 官方统计，每天自动更新；数字含 CI 与镜像下载，只作相对参考）：
+
+[![全部插件 npm 每日下载量](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-all.svg)](https://www.npmjs.com/~klarkxy)
+
 ## 安装
 
 ```sh
@@ -72,7 +78,7 @@ pnpm check
 | [@klarkxy/dsh-model-picker](plugins/dsh-model-picker/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-model-route](plugins/dsh-model-route/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-plugin-kit](plugins/dsh-plugin-kit/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
-| [@klarkxy/dsh-prompt-override](plugins/dsh-prompt-override/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
+| [@klarkxy/dsh-prompt-override](plugins/dsh-prompt-override/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-quick-review](plugins/dsh-quick-review/README.md) | 测试中 (`testing`) | 只读评审会话与侧边栏标签页已完成首次发布验收；首次 npm 发布走手动 first_release 流程。 |
 | [@klarkxy/dsh-safe-auto](plugins/dsh-safe-auto/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-secret-manager](plugins/dsh-secret-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
@@ -82,7 +88,7 @@ pnpm check
 | [@klarkxy/dsh-unrestricted](plugins/dsh-unrestricted/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-update](plugins/dsh-update/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
 | [@klarkxy/dsh-web-search-manager](plugins/dsh-web-search-manager/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
-| [@klarkxy/dsh-workspace-folders](plugins/dsh-workspace-folders/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续版本按正常更新流程维护。 |
+| [@klarkxy/dsh-workspace-folders](plugins/dsh-workspace-folders/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 | [@klarkxy/dsh-zhihu](plugins/dsh-zhihu/README.md) | 已发布 (`published`) | 已有 npm 发布记录；后续修复、测试和版本更新保持已发布。 |
 <!-- plugin-release-states:end -->
 
