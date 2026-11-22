@@ -199,7 +199,9 @@ linked too. Registry specs are refused.
   --dsh-cmd <cmd>           Override the dsh command. Empty uses the workspace binary.
                             Inside the value, wrap any path that contains spaces in double
                             quotes, e.g. "C:\\Program Files\\nodejs\\node.exe" bin.js; quote or
-                            escape the whole value as your shell requires.
+                            escape the whole value as your shell requires. Double quotes only group
+                            and are never passed through; put arguments that need literal
+                            quotes in a wrapper script.
   --cwd <dir>               Working directory (default: workspace root)
   --allow-env <VAR>         Reintroduce one scrubbed non-isolation variable
   --boot-timeout-ms <ms>    Wait for the loopback launch URL
