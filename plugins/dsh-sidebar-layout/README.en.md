@@ -26,7 +26,7 @@ Replace `web` with your profile name and restart the profile when DSH asks. The 
 
 The layout is a global setting; all three entry points drive the same state:
 
-- **Tab menu**: a “Sidebar layout” group is appended at the end of every right-panel tab's “⋯” menu, with one row each for Push / Drawer / Body and the active mode marked. Choosing Drawer or Body while the panel is collapsed expands it.
+- **Tab menu**: right-click any right-panel tab to open its menu; a “Sidebar layout” group is appended at the end, with one row each for Push / Drawer / Body. The active mode is the current item. Choosing Drawer or Body while the panel is collapsed expands it.
 - **Settings row**: the “Sidebar layout” row under Settings → General offers the same three options in a select.
 - **Shortcut**: `Ctrl/Cmd + Alt + Shift + B` cycles Push → Drawer → Body → Push (the web build on Linux ships no default binding — assign one in the Shortcuts settings).
 

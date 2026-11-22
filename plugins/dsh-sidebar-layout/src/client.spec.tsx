@@ -342,6 +342,19 @@ describe('sidebar layout components', () => {
     expect(html.match(/role="menuitem"/g)).toHaveLength(3)
   })
 
+  it('marks the active mode as the current menuitem', () => {
+    const html = renderToStaticMarkup(
+      <SidebarLayoutMenu t={t} useMode={selector => selector('drawer')} selectMode={() => {}} dismiss={() => {}} />,
+    )
+    const menu = new JSDOM(html).window.document
+    const rows = [...menu.querySelectorAll('button[role="menuitem"]')]
+    expect(rows.map(row => [row.textContent, row.getAttribute('aria-current')])).toEqual([
+      ['常规', null],
+      ['抽屉', 'page'],
+      ['正文', null],
+    ])
+  })
+
   it('selects the mode and dismisses the menu on row activation', async () => {
     const dom = new JSDOM('<div id="root"></div>', { pretendToBeVisual: true })
     vi.stubGlobal('window', dom.window)

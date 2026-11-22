@@ -387,8 +387,8 @@ export function apply(ctx: Context): void {
   }, 'sidebar-layout.frame')
 
   // The switcher lives inside the panel itself: appended at the end of every
-  // tab's actions menu (the `⋯` on a tab's chip), so no extra session-header
-  // button is needed. Session inject args are unused — the mode is global.
+  // tab's context menu (right-click a tab chip). Session inject args are
+  // unused — the mode is global.
   ctx.effect(() => client.slots.inject('sidebar.right.tab.menu.item', () => client.slots.register(
     {
       name: 'sidebar.right.tab.menu.item',
