@@ -32,7 +32,7 @@ Every node is an object with \`"type"\`. Optional fields below carry \`?\` for d
 
 - **Layout**: \`{"type":"stack"|"row","let"?:{"varName":"expr"},"children":[ViewNode,...]}\` (\`let\` is allowed on the outermost layout).
 - **Display**:
-  - \`{"type":"metric","label":string,"value":scalar|formula,"tone"?:"good"|"warn"|"bad"|"accent","caption"?:string|formula}\`
+  - \`{"type":"metric","label":string,"value":scalar|formula,"unit"?:string,"tone"?:"good"|"warn"|"bad"|"accent","caption"?:string|formula}\`
   - \`{"type":"text"|"callout","text":string|formula,"tone"?:"info"|"good"|"warn"|"bad"|"muted"}\`
   - \`{"type":"progress","label"?:string,"percent":0..100|formula,"tone"?:"good"|"warn"|"bad"|"accent"}\` (or \`"value"\` + \`"max"\`)
   - \`{"type":"steps","items":[{"label":string,"detail"?:scalar|formula,"status"?:"done"|"active"|"pending"|"blocked"},...]}\` (1–8 items)
@@ -40,7 +40,7 @@ Every node is an object with \`"type"\`. Optional fields below carry \`?\` for d
 - **Table**: \`{"type":"table","columns":[{"key":string,"label":string},...],"rows":[[cell,...],...],"caption"?:string}\` (up to 8 columns, 50 rows; cells accept strings with inline Markdown, numbers, booleans, or formulas).
 - **Chart**: \`{"type":"chart","kind":"bar"|"hbar"|"line"|"area"|"donut","categories":[string,...],"series":[{"name"?:string,"values":[number|formula,...]},...],"unit"?:string,"caption"?:string}\` (\`donut\` takes 1 series; \`values.length\` must match \`categories.length\`).
 - **Flow graph**: \`{"type":"flow","id"?:string,"nodes":[{"id":string,"label":string,"detail"?:string,"tone"?:"neutral"|"accent"|"success"|"warn"|"bad","x"?:number,"y"?:number},...],"edges":[{"source":string,"target":string,"label"?:string,"id"?:string},...],"caption"?:string}\` (omit \`x\`/\`y\` to use automatic topological layout).
-- **Local inputs** (recompute formulas live on the card; \`id\` must be \`[A-Za-z_][A-Za-z0-9_]*\`):
+- **Local inputs** (recompute formulas live on the card; give every input a stable \`id\` matching \`[A-Za-z_][A-Za-z0-9_]*\` when formulas read it):
   - \`{"type":"slider","id":string,"label":string,"min":number,"max":number,"step"?:number,"value":number,"unit"?:string}\`
   - \`{"type":"number","id":string,"label":string,"min"?:number,"max"?:number,"step"?:number,"value":number,"unit"?:string}\`
   - \`{"type":"choice","id":string,"label":string,"options":[{"label":string,"value"?:scalar},...],"value"?:scalar}\`
