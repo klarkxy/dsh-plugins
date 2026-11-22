@@ -6,6 +6,12 @@
 
 Replaces the model button in the DeepSeek Harness composer: pick a model and reasoning effort from a periodic-table style card grid, or switch back to a searchable list. Other plugins can reuse the same picker.
 
+## Demo
+
+![Card view: readable model names, version badges, and effort cells](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr32-model-picker-final.gif)
+
+![DeepSeek Flash merged across providers into one card, with provider switching](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr33-model-picker-review.gif)
+
 ## What it does
 
 ### Card view (default)

@@ -6,6 +6,10 @@
 
 在 DeepSeek Harness 内直接浏览官方开发文档；Creator 模式下，智能体还会获得两个只读工具，用于检索文档与安装前核对插件信息。
 
+## 演示
+
+![在插件页浏览 DSH 开发文档](screenshots/docs-zh.png)
+
 ## 安装
 
 ```sh

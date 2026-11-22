@@ -6,6 +6,12 @@
 
 Preview GitHub Release changelogs between your installed version and the latest target version before updating DeepSeek Harness or any installed third-party plugin, starting and applying updates only after explicit confirmation.
 
+## Demo
+
+![Plugins → Updates: compact list, filters, and narrow layouts](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr34-update-list-final.gif)
+
+![Desktop update: confirm the changelog, then hand the download off to the host](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/desktop-update-handoff.gif)
+
 ## Overview
 
 - **Intercept immediate Desktop "New version" downloads**: Clicking the sidebar "New version" pill opens a changelog modal showing every Release log between the running DSH build and the target release instead of starting an immediate download.

@@ -6,6 +6,10 @@
 
 一键从当前对话派出一个只读评审会话：它在右侧面板里实时展开，只评审本会话产生的改动，首轮评审结论自动发回当前对话。
 
+## 演示
+
+![对话头部「评审」→ 弹窗选模型与关注点 → 右侧标签页实时评审](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr29-quick-review.gif)
+
 ## 安装
 
 ```sh

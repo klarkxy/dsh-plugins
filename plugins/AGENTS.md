@@ -63,3 +63,7 @@
 插件业务设置**不注册到** `plugins.bundle.config` / `plugins.row.config`，也不注册遗留 `dsh-editor.settings.*` 席位；本约束针对设置归属，不是全仓席位禁止名单——合法的非设置贡献与上表之外的新官方席位按其自身归属继续使用。例外：插件页上的**非设置**功能不受影响——`dsh-dev-index` 的 `plugins.bundle.config` 注册的是纯文档浏览器（DocumentationBrowser），保留在插件页并在守卫中豁免。
 
 新增或迁移时运行 `node --test scripts/plugin-settings.test.mjs`、`pnpm test:editor-build` 及相关插件测试；网络搜索另有 `pnpm test:e2e:web-search` 浏览器回归。
+
+## README 与站点介绍
+
+有用户可见界面的插件，双语 README 在概述之后必须带真实演示图（与 PR 界面验收同一录制标准）：GIF 与大图提交到 `docs/demo-assets` 分支并用 `https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/<文件名>` 绝对地址引用，小尺寸静态截图可放插件目录 `screenshots/` 或 `docs/` 并用相对路径引用；图片均不收录进 npm `files`。README 只写概述（定位、演示图、安装、核心用法、主要限制）；收录进站点时在 `site/catalog.json` 填 `details.zh` / `details.en` 写详细介绍。完整规则见根目录 `CONTRIBUTING.md`。

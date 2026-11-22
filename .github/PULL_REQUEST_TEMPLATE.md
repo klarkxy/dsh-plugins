@@ -18,6 +18,11 @@
 
 GIF 不代替自动测试和独立审查。录制 commit 之后如果又改了相关界面，需要重录。
 
+## 文档
+
+- [ ] 有界面的插件：双语 README 在概述后带真实演示图（`docs/demo-assets` 分支绝对地址，或包外 `screenshots/`、`docs/` 相对路径；图片不进 npm 包）
+- [ ] 收录进站点目录的插件：`site/catalog.json` 填了 `details.zh` / `details.en` 详细介绍
+
 ## 发布
 
 - [ ] 未改插件版本，未手动发布
@@ -43,6 +48,11 @@ Does this PR change what a person sees or does in DeepSeek Harness?
   - Difference from the current head (or "matches head"):
 
 The GIF does not replace automated tests or independent review. Re-record after any later interface change.
+
+## Documentation
+
+- [ ] Plugins with an interface: both READMEs show a real demo image after the overview (absolute `docs/demo-assets` URL, or a relative `screenshots/` / `docs/` path kept out of the npm package)
+- [ ] Plugins listed on the site: `site/catalog.json` carries the `details.zh` / `details.en` introduction
 
 ## Release
 

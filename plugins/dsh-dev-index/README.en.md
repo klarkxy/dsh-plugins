@@ -6,6 +6,10 @@
 
 Browse the official DeepSeek Harness developer documentation inside DSH; in Creator mode the agent also gets two read-only tools to search docs and inspect plugins before installing them.
 
+## Demo
+
+![Browsing the DSH developer docs on the Plugins page](screenshots/docs-en.png)
+
 ## Install
 
 ```sh

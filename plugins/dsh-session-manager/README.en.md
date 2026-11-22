@@ -6,6 +6,10 @@
 
 Search and read DeepSeek Harness sessions across working directories, use temporary workspaces, continue replies with composer suggestions or auto-continue, show welcome-back recaps and compaction hints after time away, edit and resend messages, and optionally let the agent fork or message sessions.
 
+## Demo
+
+![The new-session workspace picker with the temporary workspace entry](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr23-session-manager-picker.gif)
+
 ## Install
 
 ```sh

@@ -6,6 +6,12 @@
 
 在执行 DeepSeek Harness 本体升级或任意已安装第三方插件更新前，先弹窗展示从当前版本到目标最新版本之间的 GitHub Release 变更日志，仅在用户确认后才开始更新并生效。
 
+## 演示
+
+![「插件 → 更新」：紧凑列表、筛选与宽窄布局](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr34-update-list-final.gif)
+
+![桌面端更新：变更日志确认后交给宿主下载](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/desktop-update-handoff.gif)
+
 ## 功能简介
 
 - **拦截桌面端「新版本」直接下载**：点击侧栏底部「新版本」按钮时不再立即后台下载安装包，而是先打开变更弹窗，列出当前 DSH 版本到目标最新版本之间的全部 Release 日志。
