@@ -541,6 +541,12 @@ test('resolveDshInvocation keeps quoted paths with spaces together', () => {
   assert.deepEqual(
     resolveDshInvocation({ dshCmd: 'node x.mjs' }),
     { bin: 'node', prefixArgs: ['x.mjs'] })
+  assert.deepEqual(
+    resolveDshInvocation({ dshCmd: 'node --require="D:\\a b\\preload.cjs" bin.js' }),
+    { bin: 'node', prefixArgs: ['--require=D:\\a b\\preload.cjs', 'bin.js'] })
+  assert.throws(
+    () => resolveDshInvocation({ dshCmd: '"C:\\x y\\node.exe' }),
+    /unbalanced/)
 })
 
 test('refuses an in-checkout output directory before starting dsh', async () => {

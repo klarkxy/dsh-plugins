@@ -197,7 +197,9 @@ linked too. Registry specs are refused.
   --settle-ms <ms>          Hold on the last frame, default 1200
   --patch <yml>             Extra Cordis patch (repeatable)
   --dsh-cmd <cmd>           Override the dsh command. Empty uses the workspace binary.
-                            Quote paths that contain spaces: --dsh-cmd '"C:\\Program Files\\nodejs\\node.exe" bin.js'
+                            Inside the value, wrap any path that contains spaces in double
+                            quotes, e.g. "C:\\Program Files\\nodejs\\node.exe" bin.js; quote or
+                            escape the whole value as your shell requires.
   --cwd <dir>               Working directory (default: workspace root)
   --allow-env <VAR>         Reintroduce one scrubbed non-isolation variable
   --boot-timeout-ms <ms>    Wait for the loopback launch URL
@@ -239,7 +241,19 @@ export function findWorkspaceDshBin(start) {
 }
 
 function splitCommand(cmdString) {
-  const parts = [...String(cmdString).matchAll(/"([^"]*)"|(\S+)/g)].map(m => m[1] ?? m[2])
+  // Whitespace separates arguments outside double quotes; a quoted segment
+  // joins adjacent unquoted text in the same argument, and backslashes stay
+  // literal so Windows paths need no escaping.
+  const parts = []
+  let current = null
+  let quoted = false
+  for (const ch of String(cmdString)) {
+    if (ch === '"') { quoted = !quoted; current ??= ''; continue }
+    if (!quoted && /\s/.test(ch)) { if (current !== null) { parts.push(current); current = null } continue }
+    current = (current ?? '') + ch
+  }
+  if (quoted) throw new Error('Invalid --dsh-cmd value: unbalanced double quote.')
+  if (current !== null) parts.push(current)
   if (!parts[0]) throw new Error('Invalid --dsh-cmd value.')
   return { bin: parts[0], prefixArgs: parts.slice(1) }
 }
