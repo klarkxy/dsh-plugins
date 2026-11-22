@@ -21,6 +21,11 @@ describe('canonicalModelKey', () => {
     expect(canonicalModelKey('deepseek-v4-pro')).toBe('deepseek-v4-pro')
     expect(canonicalModelKey('deepseek-flash')).not.toBe(canonicalModelKey('deepseek-v4-pro'))
   })
+
+  it('treats inherited object-property names as ordinary model ids', () => {
+    expect(canonicalModelKey('gateway/constructor')).toBe('constructor')
+    expect(canonicalModelKey('gateway/__proto__')).toBe('__proto__')
+  })
 })
 
 describe('resolveModelPreset', () => {

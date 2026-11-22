@@ -56,7 +56,7 @@ export function canonicalModelKey(modelId: string): string {
   const slash = trimmed.lastIndexOf('/')
   const leaf = slash >= 0 ? trimmed.slice(slash + 1) : trimmed
   const key = leaf.toLowerCase()
-  return CANONICAL_MODEL_ALIASES[key] ?? key
+  return Object.hasOwn(CANONICAL_MODEL_ALIASES, key) ? CANONICAL_MODEL_ALIASES[key]! : key
 }
 
 const GEMINI_ELEMENTS: readonly string[] = [

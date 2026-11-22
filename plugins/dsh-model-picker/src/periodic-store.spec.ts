@@ -69,6 +69,16 @@ describe('buildPeriodicCards', () => {
     expect(selected[0]!.activeRoute).toEqual(ALIASED_CHOICES[0])
   })
 
+  it('builds an ordinary card for inherited object-property model ids', () => {
+    const choices: ModelMenuChoice[] = [{
+      provider: 'gateway', model: 'constructor', label: 'Gateway / Constructor', providerLabel: 'Gateway', efforts: [],
+    }]
+    expect(() => buildPeriodicCards(choices, DEFAULT_PERIODIC_PREFS)).not.toThrow()
+    expect(buildPeriodicCards(choices, DEFAULT_PERIODIC_PREFS)[0]).toMatchObject({
+      canonicalKey: 'constructor', short: 'Constructor', version: '', family: 'other',
+    })
+  })
+
   it('respects user order, provider preference, active selection priority, and custom alias overrides', () => {
     const prefs = {
       ...DEFAULT_PERIODIC_PREFS,

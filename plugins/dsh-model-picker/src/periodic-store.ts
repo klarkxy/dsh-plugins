@@ -253,14 +253,16 @@ export function buildPeriodicCards(
     const selectedMatch = selected
       ? routes.find(route => route.provider === selected.provider && route.model === selected.model)
       : undefined
-    const preferredProvider = prefs.providers[canonicalKey]
+    const preferredProvider = Object.hasOwn(prefs.providers, canonicalKey) ? prefs.providers[canonicalKey] : undefined
     const preferredMatch = preferredProvider
       ? routes.find(route => route.provider === preferredProvider)
       : undefined
     const activeRoute = selectedMatch ?? preferredMatch ?? routes[0]!
     const fullName = modelMenuShortName(activeRoute)
     const preset = resolveModelPreset(activeRoute.model, fullName)
-    const alias = prefs.aliases[canonicalKey]
+    // Model ids are untrusted catalog keys: do not read inherited Object
+    // properties such as `constructor` as saved preferences.
+    const alias = Object.hasOwn(prefs.aliases, canonicalKey) ? prefs.aliases[canonicalKey] : undefined
     return {
       canonicalKey,
       short: alias || preset.short,

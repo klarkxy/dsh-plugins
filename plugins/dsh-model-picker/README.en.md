@@ -50,6 +50,7 @@ Feature plugins can mount this picker in their own settings pages or cards. With
 
 - Only the composer model button and the shared picker are replaced; the Settings → Models page is unchanged.
 - View, card width, order, favorites, hidden models, custom short names, and preferred providers are stored in the current browser only and do not sync across devices.
+- After DeepSeek Flash cards are merged across providers, preferences saved under the old card key—order, favorites, hidden state, custom short names, and preferred provider—are not migrated; set them again after upgrading.
 
 ## License
 
