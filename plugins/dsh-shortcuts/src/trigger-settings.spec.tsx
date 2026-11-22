@@ -23,6 +23,9 @@ describe('desktop palette shortcut confirmation', () => {
       conflicts={() => []}
       claim={vi.fn(async () => null)}
     />))
+    expect(container.textContent).toContain(locale === 'zh'
+      ? '默认 Ctrl+Shift+P；可改用 Ctrl+K。'
+      : 'Default: Ctrl+Shift+P. You can use Ctrl+K instead.')
     const button = Array.from(container.querySelectorAll('button')).find(item => item.textContent === action)!
     await act(async () => button.click())
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(warning)
