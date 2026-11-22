@@ -76,7 +76,7 @@ const TEXT = {
   zh: {
     title: '子代理配置',
     enabledLabel: '启用子代理选模',
-    enabledHint: '配置新建子代理的模型与思考强度。名单修改对新建会话生效，已有会话沿用原名单。',
+    enabledHint: '用于新建子代理；已有会话保持原名单。',
     loading: '正在读取…',
     failed: (message: string) => `读取失败：${message}`,
     syncFailed: (message: string) => `自动同步不可用：${message}`,
@@ -107,7 +107,7 @@ const TEXT = {
   en: {
     title: 'Subagent configuration',
     enabledLabel: 'Enable subagent model selection',
-    enabledHint: 'Configure the model and reasoning effort for new subagents. List changes apply to new conversations; existing conversations keep their saved list.',
+    enabledHint: 'Applies to new subagents; existing conversations keep their list.',
     loading: 'Loading…',
     failed: (message: string) => `Load failed: ${message}`,
     syncFailed: (message: string) => `Live sync unavailable: ${message}`,
