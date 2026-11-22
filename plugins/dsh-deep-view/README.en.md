@@ -6,6 +6,10 @@
 
 Compose native charts, comparisons, workflow steps, metrics, adjustable estimates, and explorable views directly inside assistant replies, then turn interactions into answers. Ordinary Markdown prose flows naturally around each interface.
 
+## Demo
+
+![A malformed node-graph declaration repairs itself once the fence closes; an unrepairable one names the reason](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr28-deep-view-repair.gif)
+
 ## Install
 
 ```sh

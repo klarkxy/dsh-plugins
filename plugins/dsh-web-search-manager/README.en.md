@@ -6,6 +6,10 @@
 
 Orchestrate multi-source web search and page-reading providers, manage API keys and request limits, and power `web_search` and `web_fetch` over `ctx.web` with parallel RRF fusion and waterfall fallback from one settings page.
 
+## Demo
+
+![Web search settings: fusion / failover / single modes, fetch waterfall, and billing opt-ins](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr23-web-search-manager.gif)
+
 ## Install
 
 ```sh

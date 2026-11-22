@@ -6,6 +6,10 @@
 
 Start a read-only review session from the current conversation with one click. It streams live in a right-sidebar tab, reviews only this session's own changes, and its first-turn verdict is sent back to the conversation automatically.
 
+## Demo
+
+![Header Review → pick a model and focus → the live review streams in a sidebar tab](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr29-quick-review.gif)
+
 ## Install
 
 ```sh
