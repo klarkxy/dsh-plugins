@@ -8,6 +8,10 @@
 
 ![使用自定义对话字体的会话界面](docs/preview.png)
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-font.svg)](https://www.npmjs.com/package/@klarkxy/dsh-font)
+
 ## 安装
 
 ```sh

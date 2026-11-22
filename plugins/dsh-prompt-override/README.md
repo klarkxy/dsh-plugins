@@ -8,6 +8,10 @@
 
 DSH 原生系统提示词只有一句身份说明，后面是零散的单条工具规则，缺少工作方式、验证、安全操作和回复要求等通用约定。本插件在不改动工具、权限和沙箱的前提下补全这些内容。
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-prompt-override.svg)](https://www.npmjs.com/package/@klarkxy/dsh-prompt-override)
+
 ## 安装
 
 ```sh

@@ -6,6 +6,10 @@
 
 在对话之外安全收集与管理密钥。智能体需要 API Key 或令牌时，通过专用弹窗向你请求：输入值直接发送到本机宿主保存而不进入对话，模型与工具只拿到 `secret://<slot>` 引用，使用权限按当前会话分别限定为 shell 环境变量或精确的 HTTPS 来源。
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-secret-manager.svg)](https://www.npmjs.com/package/@klarkxy/dsh-secret-manager)
+
 ## 安装
 
 本插件通过宿主凭据存储保存密钥；智能体需要密钥时会向你弹出请求窗口，由你确认后才写入。

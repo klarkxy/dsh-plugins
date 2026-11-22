@@ -6,6 +6,10 @@
 
 一个 DeepSeek Harness 会话 Preset：解除模型对回答内容的限制，交付完整成果；仅作用于选用它的会话，其他 Preset 保持原有设置。
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-unrestricted.svg)](https://www.npmjs.com/package/@klarkxy/dsh-unrestricted)
+
 ## 安装
 
 ```sh

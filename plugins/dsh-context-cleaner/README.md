@@ -6,6 +6,10 @@
 
 隐藏 `dsh-context` 仪表盘右上角的插件信息卡和推广推荐卡，让统计卡片铺满顶部一行。
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-context-cleaner.svg)](https://www.npmjs.com/package/@klarkxy/dsh-context-cleaner)
+
 ## 安装
 
 请先安装并启用 `dsh-context`——本插件仅负责清理面板样式，不提供上下文面板本身。
