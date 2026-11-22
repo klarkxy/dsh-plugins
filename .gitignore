@@ -8,6 +8,7 @@ coverage/
 .scratch/
 .artifacts/
 _site/
+_charts/
 
 # Migrated browser test output
 e2e/out/
