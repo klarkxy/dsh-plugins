@@ -44,6 +44,7 @@ const T = {
     installFirst: (list) => `这个插件需要先装 ${list}，命令会按顺序一起装上。`,
     installAuto: (list) => `这个插件依赖 ${list}，安装时会自动一起装上。`,
     about: "说明",
+    details: "详细介绍",
     readmeFrom: (path, version) => `以下内容来自 ${path}（${version}）。`,
     readmeFallback: "这个包没有中文 README，下面是英文原文。",
     readmeMissing: "这个包没有附带 README。",
@@ -105,6 +106,7 @@ const T = {
     installFirst: (list) => `This plugin needs ${list} installed first; the commands install them in order.`,
     installAuto: (list) => `This plugin depends on ${list}; they are installed with it automatically.`,
     about: "About",
+    details: "Details",
     readmeFrom: (path, version) => `From ${path} in ${version}.`,
     readmeFallback: "This package has no English README; the Chinese original follows.",
     readmeMissing: "This package ships no README.",
@@ -165,6 +167,15 @@ export function validateCatalog(catalog) {
       if (!p.summary?.[lang]) errors.push(`${p.slug}: missing summary.${lang}`);
       if (!p.readme?.[lang]) errors.push(`${p.slug}: missing readme.${lang}`);
     }
+    if (p.details !== undefined) {
+      if (typeof p.details !== "object" || p.details === null) {
+        errors.push(`${p.slug}: details must be an object`);
+      } else {
+        for (const lang of LANGS) {
+          if (typeof p.details[lang] !== "string" || !p.details[lang].trim()) errors.push(`${p.slug}: missing details.${lang}`);
+        }
+      }
+    }
   }
   for (const c of catalog.categories) {
     for (const lang of LANGS) if (!c.title?.[lang] || !c.summary?.[lang]) errors.push(`category ${c.id}: missing ${lang} copy`);
@@ -209,7 +220,8 @@ const isSafeUrl = (url) => /^(https?:|mailto:|#)/i.test(url) || !/^[^/?#]*:/.tes
  * ctx: {
  *   repository: "https://github.com/o/r", directory: "packages/x", readmePath: "docs/README.zh-CN.md",
  *   assetPages: { [packagePath]: href },
- *   readmePages: { [repoPath]: href }, packagePages: { [npmName]: href }
+ *   readmePages: { [repoPath]: href }, packagePages: { [npmName]: href },
+ *   idPrefix: "d-" (optional; prefixes generated heading ids, e.g. for the catalog details block)
  * }
  * Returns { html, toc: [{ id, text }] }.
  */
@@ -281,7 +293,7 @@ export function renderReadme(markdown, ctx) {
       heading({ tokens, depth }) {
         const inner = this.parser.parseInline(tokens);
         const text = plainText(inner).trim();
-        const id = slug(text);
+        const id = `${ctx.idPrefix ?? ""}${slug(text)}`;
         const level = Math.min(Math.max(depth, 2), 6);
         if (level === 2) toc.push({ id, text });
         return `<h${level} id="${esc(id)}">${inner}</h${level}>\n`;
@@ -636,6 +648,20 @@ function detailPage(ctx, plugin, lang) {
     : { html: `<p>${t.readmeMissing}</p>`, toc: [] };
   const readmeNote = !readme ? "" : own ? t.readmeFrom(readme.path, npm.version) : t.readmeFallback;
 
+  // Curated long-form introduction from the catalog, rendered above the README extract.
+  const detailsMarkdown = plugin.details?.[lang] ?? plugin.details?.[lang === "zh" ? "en" : "zh"];
+  const detailsRendered = detailsMarkdown
+    ? renderReadme(detailsMarkdown, {
+        repository: plugin.repository,
+        directory: plugin.directory,
+        readmePath: plugin.readme[lang],
+        assetPages,
+        readmePages,
+        packagePages,
+        idPrefix: "d-",
+      })
+    : null;
+
   const list = (items) => items.map((p) => `<a href="${pageFor(p)}">${esc(p.title[lang])}</a>`).join("、");
   const manualDeps = plugin.installPackages.filter((p) => p.slug !== plugin.slug);
   const dependencyNames = new Set(Object.keys(plugin.npm.manifest.dependencies ?? {}));
@@ -666,9 +692,10 @@ function detailPage(ctx, plugin, lang) {
 
   const issues = npm.manifest.bugs?.url ?? `${plugin.repository}/issues`;
   const sourceUrl = plugin.directory ? `${plugin.repository}/tree/HEAD/${plugin.directory}` : plugin.repository;
+  const tocEntries = [...(detailsRendered?.toc ?? []), ...rendered.toc];
   const toc =
-    rendered.toc.length >= 3
-      ? `<nav class="toc" aria-labelledby="toc-title"><h2 id="toc-title">${t.toc}</h2><ol>${rendered.toc
+    tocEntries.length >= 3
+      ? `<nav class="toc" aria-labelledby="toc-title"><h2 id="toc-title">${t.toc}</h2><ol>${tocEntries
           .map((h) => `<li><a href="#${esc(h.id)}">${esc(h.text)}</a></li>`)
           .join("")}</ol></nav>`
       : "";
@@ -734,7 +761,11 @@ ${history}
 </aside>
 <article class="readme" aria-labelledby="about-title">
 <h2 id="about-title" class="sr-only">${t.about}</h2>
-${readmeNote ? `<p class="readme-note">${esc(readmeNote)}</p>` : ""}
+${detailsRendered ? `<section class="plugin-details" aria-labelledby="details-title">
+<h2 id="details-title">${esc(t.details)}</h2>
+${detailsRendered.html}
+</section>
+` : ""}${readmeNote ? `<p class="readme-note">${esc(readmeNote)}</p>` : ""}
 ${rendered.html}
 </article>
 </div>
