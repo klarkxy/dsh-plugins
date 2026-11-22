@@ -46,9 +46,6 @@ describe('normalizeView', () => {
   it('coerces number-typed fields from strings but leaves other props untouched', () => {
     const out = normalizeView({ type: 'slider', id: 's', label: 'S', min: '0', max: '10', step: '0.5', value: '4', unit: 'px' }) as Record<string, unknown>
     expect(out).toMatchObject({ min: 0, max: 10, step: 0.5, value: 4, unit: 'px' })
-    // x/y inside mathPoints are not NUMERIC fields: providers must send real numbers.
-    const math = normalizeView({ type: 'math', id: 'm', mathPoints: [{ id: 'p', x: '1', y: '2' }] })
-    expect(validateView(math).ok).toBe(false)
   })
   it('keeps a formula inside series values and numeric-looking strings in form fields', () => {
     const chart = normalizeView({ type: 'chart', categories: ['A', 'B'], series: [{ values: ['3', { '=': '1 + 1' }] }] }) as { series: { values: unknown[] }[] }
@@ -81,6 +78,40 @@ describe('normalizeView', () => {
     const shownConfirm = checkShownView('', { type: 'confirm', label: 'Proceed with deployment?' })
     expect(shownConfirm).not.toHaveProperty('error')
     if ('view' in shownConfirm) expect(shownConfirm.view.type).toBe('stack')
+  })
+  it('coerces math coordinates from strings without changing explore category fields', () => {
+    const math = checkShownView('', { type: 'math', mathPoints: [{ id: 'p', x: '1', y: '2' }], domain: ['-5', '5'] })
+    expect(math).not.toHaveProperty('error')
+    if ('view' in math) expect(math.view.mathPoints?.[0]).toMatchObject({ x: 1, y: 2 })
+    const explore = checkShownView('', { type: 'explore', data: [{ x: '1', y: '2', category: 'keep' }], xKey: 'x', yKey: 'y', colorKey: 'category' })
+    expect(explore).not.toHaveProperty('error')
+    if ('view' in explore) expect(explore.view.data?.[0]).toEqual({ x: 1, y: 2, category: 'keep' })
+  })
+  it('drops decorative display fields and supports metric units, singleton children and inferred table columns', () => {
+    const metric = checkShownView('', { type: 'metric', label: 'Total', value: 42, unit: '元', icon: 'money', align: 'right' })
+    expect(metric).not.toHaveProperty('error')
+    if ('view' in metric) expect(metric.view).toEqual({ type: 'metric', label: 'Total', value: 42, unit: '元' })
+    const layout = checkShownView('', { type: 'Stack', children: { type: 'slider', label: 'Count', min: '0', max: '10', value: '4' } })
+    expect(layout).not.toHaveProperty('error')
+    if ('view' in layout) expect(layout.view.children?.[0]).toMatchObject({ type: 'slider', id: 'slider_1', min: 0, max: 10, value: 4 })
+    const table = checkShownView('', { type: 'table', rows: { Option: 'Local', Latency: '12ms' } })
+    expect(table).not.toHaveProperty('error')
+    if ('view' in table) expect(table.view).toMatchObject({ columns: [{ key: 'Option' }, { key: 'Latency' }], rows: [['Local', '12ms']] })
+    const protectedTable = checkShownView('', JSON.parse('{"type":"table","rows":[{"name":"safe","__proto__":{"polluted":true}}]}'))
+    expect(protectedTable).not.toHaveProperty('error')
+    if ('view' in protectedTable) expect(protectedTable.view).toMatchObject({ columns: [{ key: 'name' }], rows: [['safe']] })
+  })
+  it('accepts scalar options and boolean strings without relaxing input properties', () => {
+    const options = checkShownView('', { type: 'options', options: ['One', { title: 'Two', description: 'Second' }], multi: 'true' })
+    expect(options).not.toHaveProperty('error')
+    if ('view' in options) expect(options.view.options).toEqual([{ label: 'One' }, { label: 'Two', description: 'Second' }])
+    expect(checkShownView('', { type: 'toggle', label: 'Enabled', value: 'true' })).not.toHaveProperty('error')
+    expect(checkShownView('', { type: 'slider', id: 's', label: 'S', min: 0, max: 10, value: 4, default: 4 }).error).toContain('unknown property')
+  })
+  it('normalizes numeric map coordinates and zoom', () => {
+    const shown = checkShownView('', { type: 'map', locations: { label: 'Shanghai', coordinates: ['121.47', '31.23'] }, center: ['121.47', '31.23'], zoom: '10', routes: { coordinates: [['121.47', '31.23'], ['120.16', '30.29']] } })
+    expect(shown).not.toHaveProperty('error')
+    if ('view' in shown) expect(shown.view).toMatchObject({ zoom: 10, center: [121.47, 31.23], locations: [{ id: 'loc_1', coordinates: [121.47, 31.23] }] })
   })
   it('keeps __proto__ as an own data property instead of mutating the prototype', () => {
     const out = normalizeView(JSON.parse('{"__proto__":{"polluted":true}}')) as Record<string, unknown>

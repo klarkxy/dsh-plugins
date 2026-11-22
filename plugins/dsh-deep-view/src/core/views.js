@@ -21,7 +21,7 @@ const PROPS = {
   stack: ['id', 'children', 'let'],
   row: ['id', 'children', 'let'],
   text: ['id', 'text', 'tone'],
-  metric: ['id', 'label', 'value', 'tone', 'caption'],
+  metric: ['id', 'label', 'value', 'unit', 'tone', 'caption'],
   table: ['id', 'columns', 'rows', 'caption'],
   chart: ['id', 'kind', 'categories', 'series', 'unit', 'caption'],
   progress: ['id', 'label', 'percent', 'value', 'max', 'valueLabel', 'tone'],
@@ -114,7 +114,12 @@ const STEP_STATUS_ALIASES = {
   todo: 'pending', waiting: 'pending', queued: 'pending',
   error: 'blocked', failed: 'blocked',
 }
-const NEEDS_AUTO_ID = new Set(['flow', 'map', 'explore', 'math', 'options', 'confirm', 'form', 'submit'])
+const NEEDS_AUTO_ID = new Set(['slider', 'number', 'choice', 'toggle', 'flow', 'map', 'explore', 'math', 'options', 'confirm', 'form', 'submit'])
+const DISPLAY_TYPES = new Set([...LAYOUT, ...DISPLAY])
+const FORBIDDEN_PROPS = new Set(['__proto__', 'constructor', 'prototype'])
+const asArray = value => isRecord(value) ? [value] : value
+const boolean = value => typeof value === 'string' && /^(true|false)$/i.test(value.trim()) ? value.trim().toLowerCase() === 'true' : value
+const coordinatePair = value => Array.isArray(value) && value.length === 2 ? value.map(numeric) : value
 
 function safeIdentifier(raw, fallbackPrefix, used) {
   const cleaned = typeof raw === 'string'
@@ -223,8 +228,21 @@ function autoLayoutFlowNodes(nodes, edges) {
 
 function normalizeComponent(out, depth, state) {
   if (Object.hasOwn(out, '__proto__')) return out
-  const type = out.type
+  const type = typeof out.type === 'string' ? out.type.trim().toLowerCase() : out.type
+  if (type !== out.type) setOwn(out, 'type', type)
   if (typeof type !== 'string' || !COMPONENTS.includes(type)) return out
+
+  // Providers and models often omit brackets around a one-item collection.
+  const collections = type === 'stack' || type === 'row' ? ['children']
+    : type === 'table' ? ['columns', 'rows']
+      : type === 'chart' ? ['categories', 'series']
+        : type === 'steps' || type === 'sources' ? ['items']
+          : type === 'flow' ? ['nodes', 'edges']
+            : type === 'math' ? ['mathPoints', 'curves']
+            : type === 'map' ? ['locations', 'routes']
+              : type === 'form' ? ['fields']
+                : type === 'choice' || type === 'options' ? ['options'] : []
+  for (const key of collections) if (Object.hasOwn(out, key)) setOwn(out, key, asArray(out[key]))
 
   // Models frequently attach `title` directly on a ViewNode instead of the outer
   // { title, view } envelope, or on nested chart/table/flow blocks.
@@ -266,7 +284,36 @@ function normalizeComponent(out, depth, state) {
     setOwn(out, 'id', safeIdentifier(out.id, `${type}_${++state.seq}`, state.ids))
   }
 
+  if ((type === 'text' || type === 'callout') && isScalar(out.text) && typeof out.text !== 'string') {
+    setOwn(out, 'text', String(out.text))
+  }
+  for (const key of ['label', 'caption', 'unit']) {
+    if (isScalar(out[key]) && typeof out[key] !== 'string') setOwn(out, key, String(out[key]))
+  }
+  if (['slider', 'number', 'choice', 'toggle'].includes(type) && out.label === undefined && typeof out.id === 'string') setOwn(out, 'label', out.id)
+
+  if (type === 'choice' || type === 'options') {
+    if (Array.isArray(out.options)) {
+      setOwn(out, 'options', out.options.map(option => {
+        if (isScalar(option)) return { label: String(option), ...(type === 'choice' ? { value: option } : {}) }
+        if (!isRecord(option) || Object.hasOwn(option, '__proto__')) return option
+        const next = {}
+        for (const key of Object.keys(option)) {
+          if (['title', 'name', 'text'].includes(key) && option.label === undefined) setOwn(next, 'label', option[key])
+          else setOwn(next, key, option[key])
+        }
+        if (isScalar(next.label) && typeof next.label !== 'string') setOwn(next, 'label', String(next.label))
+        return next
+      }))
+    }
+  }
+  if (type === 'options' && out.multi !== undefined) setOwn(out, 'multi', boolean(out.multi))
+  if (type === 'toggle' && out.value !== undefined) setOwn(out, 'value', boolean(out.value))
+
   if (type === 'table') {
+    if (out.columns === undefined && Array.isArray(out.rows) && isRecord(out.rows[0]) && !isFormula(out.rows[0])) {
+      setOwn(out, 'columns', Object.keys(out.rows[0]).filter(key => !FORBIDDEN_PROPS.has(key)).map(key => ({ key, label: key })))
+    }
     if (Array.isArray(out.columns)) {
       const cols = out.columns.map((col, idx) => {
         if (typeof col === 'string') return { key: `col_${idx}`, label: col }
@@ -295,6 +342,7 @@ function normalizeComponent(out, depth, state) {
       }
     }
   } else if (type === 'chart') {
+    if (typeof out.kind === 'string') setOwn(out, 'kind', out.kind.trim().toLowerCase())
     if (typeof out.kind === 'string' && Object.hasOwn(CHART_KIND_ALIASES, out.kind)) setOwn(out, 'kind', CHART_KIND_ALIASES[out.kind])
     if (out.categories === undefined && Array.isArray(out.labels)) {
       setOwn(out, 'categories', out.labels)
@@ -323,6 +371,23 @@ function normalizeComponent(out, depth, state) {
         else setOwn(nextStep, k, item[k])
       }
       return nextStep
+    }))
+  } else if (type === 'math') {
+    for (const key of ['domain', 'range']) if (Object.hasOwn(out, key)) setOwn(out, key, coordinatePair(out[key]))
+    if (Array.isArray(out.mathPoints)) {
+      setOwn(out, 'mathPoints', out.mathPoints.map(point => {
+        if (!isRecord(point) || Object.hasOwn(point, '__proto__')) return point
+        const next = {}
+        for (const key of Object.keys(point)) setOwn(next, key, key === 'x' || key === 'y' ? numeric(point[key]) : point[key])
+        return next
+      }))
+    }
+  } else if (type === 'explore' && Array.isArray(out.data)) {
+    setOwn(out, 'data', out.data.map(row => {
+      if (!isRecord(row) || Object.hasOwn(row, '__proto__')) return row
+      const next = {}
+      for (const key of Object.keys(row)) setOwn(next, key, key === out.xKey || key === out.yKey ? numeric(row[key]) : row[key])
+      return next
     }))
   } else if (type === 'flow') {
     const nodeIds = new Set()
@@ -374,25 +439,34 @@ function normalizeComponent(out, depth, state) {
       if (normalizedEdges !== undefined) setOwn(out, 'edges', normalizedEdges)
       setOwn(out, 'nodes', autoLayoutFlowNodes(normalizedNodes, normalizedEdges))
     }
-  } else if (type === 'map' && Array.isArray(out.locations)) {
-    const locIds = new Set()
-    setOwn(out, 'locations', out.locations.map((loc, idx) => {
-      if (!isRecord(loc) || Object.hasOwn(loc, '__proto__')) return loc
-      const nextLoc = {}
-      for (const k of Object.keys(loc)) {
-        if (k === 'name' && loc.label === undefined) setOwn(nextLoc, 'label', loc.name)
-        else if (k === 'description' && loc.detail === undefined) setOwn(nextLoc, 'detail', loc.description)
-        else if ((k === 'lat' || k === 'lng' || k === 'lon') && loc.coordinates === undefined) continue
-        else setOwn(nextLoc, k, loc[k])
-      }
-      if (nextLoc.coordinates === undefined && isNumber(numeric(loc.lat)) && isNumber(numeric(loc.lng ?? loc.lon))) {
-        setOwn(nextLoc, 'coordinates', [numeric(loc.lng ?? loc.lon), numeric(loc.lat)])
-      }
-      if (nextLoc.id === undefined || (typeof nextLoc.id === 'string' && nextLoc.id.trim() !== '' && (!isName(nextLoc.id) || RESERVED.has(nextLoc.id)))) {
-        setOwn(nextLoc, 'id', safeIdentifier(typeof nextLoc.id === 'string' ? nextLoc.id : '', `loc_${idx + 1}`, locIds))
-      } else if (typeof nextLoc.id === 'string') locIds.add(nextLoc.id)
-      return nextLoc
-    }))
+  } else if (type === 'map') {
+    if (out.center !== undefined) setOwn(out, 'center', coordinatePair(out.center))
+    if (out.zoom !== undefined) setOwn(out, 'zoom', numeric(out.zoom))
+    if (Array.isArray(out.routes)) {
+      setOwn(out, 'routes', out.routes.map(route => isRecord(route) && Array.isArray(route.coordinates)
+        ? { ...route, coordinates: route.coordinates.map(coordinatePair) } : route))
+    }
+    if (Array.isArray(out.locations)) {
+      const locIds = new Set()
+      setOwn(out, 'locations', out.locations.map((loc, idx) => {
+        if (!isRecord(loc) || Object.hasOwn(loc, '__proto__')) return loc
+        const nextLoc = {}
+        for (const k of Object.keys(loc)) {
+          if (k === 'name' && loc.label === undefined) setOwn(nextLoc, 'label', loc.name)
+          else if (k === 'description' && loc.detail === undefined) setOwn(nextLoc, 'detail', loc.description)
+          else if ((k === 'lat' || k === 'lng' || k === 'lon') && loc.coordinates === undefined) continue
+          else setOwn(nextLoc, k, loc[k])
+        }
+        if (nextLoc.coordinates !== undefined) setOwn(nextLoc, 'coordinates', coordinatePair(nextLoc.coordinates))
+        if (nextLoc.coordinates === undefined && isNumber(numeric(loc.lat)) && isNumber(numeric(loc.lng ?? loc.lon))) {
+          setOwn(nextLoc, 'coordinates', [numeric(loc.lng ?? loc.lon), numeric(loc.lat)])
+        }
+        if (nextLoc.id === undefined || (typeof nextLoc.id === 'string' && nextLoc.id.trim() !== '' && (!isName(nextLoc.id) || RESERVED.has(nextLoc.id)))) {
+          setOwn(nextLoc, 'id', safeIdentifier(typeof nextLoc.id === 'string' ? nextLoc.id : '', `loc_${idx + 1}`, locIds))
+        } else if (typeof nextLoc.id === 'string') locIds.add(nextLoc.id)
+        return nextLoc
+      }))
+    }
   } else if (type === 'confirm' && depth < MAX_DEPTH && (typeof out.label === 'string' || typeof out.text === 'string')) {
     // Models routinely pass `label` or `text` to `confirm`; lift it into a
     // sibling text node instead of failing the card.
@@ -400,6 +474,14 @@ function normalizeComponent(out, depth, state) {
     delete out.label
     delete out.text
     if (promptText !== '') return { type: 'stack', children: [{ type: 'text', text: promptText }, out] }
+  }
+  // Keep dangerous keys visible to the validator. Unknown decorative fields on
+  // inputs and answers stay strict because silently dropping one could change
+  // a formula binding or the meaning of the user's reply.
+  if (DISPLAY_TYPES.has(type)) {
+    for (const key of Object.keys(out)) {
+      if (key !== 'type' && !PROPS[type].includes(key) && !FORBIDDEN_PROPS.has(key)) delete out[key]
+    }
   }
   return out
 }
@@ -428,7 +510,7 @@ export function normalizeView(value, inFormFields = false, depth = 0, state = { 
     // Define own properties: an incoming "__proto__" key must become data the
     // validator can reject, not hit the prototype setter and vanish from the JSON.
     const out = {}
-    const isLayout = typeof value.type === 'string' && LAYOUT.includes(value.type)
+    const isLayout = typeof value.type === 'string' && LAYOUT.includes(value.type.trim().toLowerCase())
     for (const key of keys) {
       const nextDepth = isLayout && key === 'children' ? depth + 1 : depth
       setOwn(out, key, normalizeView(value[key], inFormFields || key === 'fields', nextDepth, state))
@@ -567,6 +649,7 @@ function checkMetric(node, path, ctx) {
   if (node.value === undefined) return `${path}.value: expected a string or a number`
   if (typeof node.value === 'number' && !Number.isFinite(node.value)) return `${path}.value: expected a finite number`
   return checkValue(node, 'value', path, ctx, 'scalar')
+    ?? checkValue(node, 'unit', path, ctx, 'string')
     ?? checkValue(node, 'tone', path, ctx, TONES)
     ?? checkValue(node, 'caption', path, ctx, 'string')
 }
