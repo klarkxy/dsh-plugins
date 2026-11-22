@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-update",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Preview GitHub Release changelogs before updating DeepSeek Harness or any installed third-party plugin, and apply updates only after explicit confirmation.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -115,6 +115,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "fae61fd58a0e2d1c8a27265725db62fc700b5ae23858fd54981b41dee7b5c315"
+    "contentHash": "6dd637ed4be1a6d3b2f534a450e6cce30e7eec3265634238178fc1a43a46cff3"
   }
 }
