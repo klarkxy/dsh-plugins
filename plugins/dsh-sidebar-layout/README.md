@@ -12,7 +12,7 @@
 
 ## 演示
 
-![会话头部菜单切换：常规 → 抽屉（遮罩点击收起）→ 正文（拖拽手柄调宽）](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr31-sidebar-layout.gif)
+![标签页右键菜单切换：常规 → 抽屉（遮罩点击收起）→ 正文（拖拽手柄调宽）](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr38-sidebar-layout-tab-menu.gif)
 
 ## 安装
 
@@ -26,7 +26,7 @@ dsh plugin --profile web add @klarkxy/dsh-sidebar-layout
 
 布局是全局设置，三处入口改的是同一份状态：
 
-- **会话头部按钮**：会话头部右侧工具条上的「侧栏布局」图标按钮，点击弹出菜单选择常规 / 抽屉 / 正文，当前方式有勾选标记。选择抽屉或正文时若面板处于收起状态会自动展开。
+- **标签页菜单**：右侧面板任一标签页头部的「⋯」菜单底部追加「侧栏布局」组，三行分别对应常规 / 抽屉 / 正文，当前方式有标记。选择抽屉或正文时若面板处于收起状态会自动展开。
 - **设置项**：「设置 → 通用」中的「侧栏布局」一行，下拉选择同一种方式。
 - **快捷键**：`Ctrl/Cmd + Alt + Shift + B` 按「常规 → 抽屉 → 正文 → 常规」循环切换（网页版 Linux 不预置该快捷键，可在快捷键设置中自行绑定）。
 
