@@ -6,6 +6,10 @@
 
 Collect and manage secrets outside chat. When the agent needs an API key or token, it asks through a dedicated dialog: your input goes straight to the local Host without entering the conversation, the model only sees a `secret://<slot>` reference, and usage is granted per session for shell environment variables or exact HTTPS origins.
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-secret-manager.svg)](https://www.npmjs.com/package/@klarkxy/dsh-secret-manager)
+
 ## Install
 
 This plugin stores secrets in the Host credential store. When the agent needs a secret, it asks you through a dedicated dialog; nothing is saved until you confirm.

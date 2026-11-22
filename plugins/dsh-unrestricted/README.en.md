@@ -6,6 +6,10 @@
 
 A DeepSeek Harness session preset that removes limits on what the model answers and delivers complete results. It affects only sessions that select it, leaving every other preset as configured.
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-unrestricted.svg)](https://www.npmjs.com/package/@klarkxy/dsh-unrestricted)
+
 ## Install
 
 ```sh
