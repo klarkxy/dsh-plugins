@@ -36,7 +36,7 @@ export function TriggerSettings(props: TriggerSettingsProps) {
       </div>
     </div>
     {props.runtime === 'desktop' ? <>
-      <p className="dsh-ui-hint">{zh ? '默认 Ctrl+Shift+P；改用 Ctrl+K 会解除会话搜索占用。' : 'Default: Ctrl+Shift+P. Using Ctrl+K unbinds session search.'}</p>
+      <p className="dsh-ui-hint">{zh ? '默认 Ctrl+Shift+P；可改用 Ctrl+K。' : 'Default: Ctrl+Shift+P. You can use Ctrl+K instead.'}</p>
       <div className="shortcuts-trigger-bar">
         <Keycaps keys={['Ctrl', '+', 'Shift', '+', 'P']} unbound={unbound} />
         <div className="dsh-ui-actions">
