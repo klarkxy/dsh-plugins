@@ -6,6 +6,10 @@
 
 Commit workspace changes directly from the conversation, with a model grouping changes and writing commit messages.
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-git-commit.svg)](https://www.npmjs.com/package/@klarkxy/dsh-git-commit)
+
 ## Install
 
 ```sh

@@ -6,6 +6,10 @@
 
 Shared library that lets DeepSeek Harness plugins declare provider, model, and reasoning-effort settings consistently (supporting Zod and Schemastery) and share model lists and picker menus with loading, error, and retry feedback. Dependent plugins install it automatically; plugin developers should inspect the source code and type declarations directly.
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-model-route.svg)](https://www.npmjs.com/package/@klarkxy/dsh-model-route)
+
 ## License
 
 [SATA License 2.1](LICENSE)

@@ -6,6 +6,10 @@
 
 Use Zhihu as a research source and draft assistant in DeepSeek Harness: site and web search, hot list, Zhida answers, knowledge bases, question discovery, creator stats, and draft saving/validation with image uploads. Every request uses your own Zhihu credentials, and retrieved items serve as reference material.
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-zhihu.svg)](https://www.npmjs.com/package/@klarkxy/dsh-zhihu)
+
 ## Install
 
 ```sh
