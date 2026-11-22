@@ -580,7 +580,7 @@ export function checkShownView(title, sent) {
   // shorthand options expand to { label, value }, ids and labels are filled —
   // and presentation re-shows the normalized snapshot, so an accepted card
   // must still fit the limit after normalization or the replay would reject it.
-  const normalizedBytes = viewBytes(title, view)
+  const normalizedBytes = viewBytes(named, view)
   if (normalizedBytes > VIEW_BYTE_LIMIT) return { error: `After normalization the view is ${normalizedBytes} bytes; the limit is ${VIEW_BYTE_LIMIT}.` }
   return { title: named, view, interactive: checked.interactive }
 }
