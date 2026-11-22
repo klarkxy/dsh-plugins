@@ -44,13 +44,15 @@ export const DEFAULT_PERIODIC_PREFS: PeriodicPrefs = {
 
 export interface PeriodicCardEntry {
   readonly canonicalKey: string
-  /** Display short symbol (user alias if set, else preset/derived symbol). */
+  /** Display short name (user alias if set, else preset/derived name). */
   readonly short: string
-  /** Whether `short` came from a user override (hides auto version superscript). */
+  /** Whether `short` came from a user override (hides auto version and suffix). */
   readonly customShort: boolean
-  /** Auto-derived version superscript (e.g. `4.6`, `4.7`). */
+  /** Auto-derived numeric version superscript (e.g. `4.6`, `4.7`). */
   readonly version: string
-  /** Full readable model name shown in small text beneath the symbol. */
+  /** Full model qualifier shown in small text (e.g. `Flash`, `Pro`). */
+  readonly suffix: string
+  /** Full readable model name shown in small text beneath the short name. */
   readonly fullName: string
   readonly family: ModelFamily
   /** All provider routes offering this canonical model. */
@@ -264,6 +266,7 @@ export function buildPeriodicCards(
       short: alias || preset.short,
       customShort: Boolean(alias),
       version: alias ? '' : preset.version,
+      suffix: alias ? '' : (preset.suffix ?? ''),
       fullName,
       family: preset.family,
       routes,
@@ -354,8 +357,8 @@ function normalizeFilterText(text: string): string {
 }
 
 /**
- * Multi-token AND filter over a card's symbol, version, full name, canonical
- * key, and every route's model/label/provider fields. Each token matches the
+ * Multi-token AND filter over a card's short name, version, suffix, full name,
+ * canonical key, and every route's model/label/provider fields. Each token matches the
  * NFKC-lowercased haystack either verbatim or against a "compact" form with
  * `[\s\-_./:]` stripped, so `gpt5` finds `gpt-5`.
  * An empty or whitespace query passes the list through.
@@ -367,7 +370,7 @@ export function filterPeriodicCards(cards: readonly PeriodicCardEntry[], query: 
     .map(token => ({ plain: token, compact: token.replace(FILTER_SEPARATOR, '') }))
   return cards.filter(card => {
     const raw = [
-      card.short, card.version, card.fullName, card.canonicalKey,
+      card.short, card.version, card.suffix, card.fullName, card.canonicalKey,
       ...card.routes.flatMap(route => [route.model, route.label, route.providerLabel ?? '', route.provider]),
     ].join(' ')
     const plain = normalizeFilterText(raw)

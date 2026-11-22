@@ -469,6 +469,7 @@ export const IconGlobeOutlineRegular = icon('globe')
 export const IconQuestionOutlineRegular = icon('question')
 export const IconDataOutlineRegular = icon('data')
 export const IconDataOutlineMedium = icon('data-medium')
+export const IconPanelLeftOutlineRegular = icon('panel-left')
 export const IconWarningOutlineRegular = icon('warning')
 
 /* --- Hooks. The real ones measure and listen; under test there is no viewport
@@ -524,7 +525,7 @@ const known = new Set([
   'IconUserOutlineRegular', 'IconUsersOutlineRegular',
   'PermissionIconFullAccessRegular', 'PermissionIconReadOnlyRegular', 'PermissionIconWorkspaceWriteRegular',
   'IconGlobeOutlineRegular', 'IconQuestionOutlineRegular',
-  'IconDataOutlineRegular', 'IconDataOutlineMedium', 'IconWarningOutlineRegular',
+  'IconDataOutlineRegular', 'IconDataOutlineMedium', 'IconPanelLeftOutlineRegular', 'IconWarningOutlineRegular',
   'useAnchoredMaxHeight',
   'useDismissOnOutsidePointer', 'useModalLayer', 'modalSelector', 'closeTopModal', 'isBehindModal',
   'observeStickyMenuGroups', 'rankByName', 'Toast', 'FileTypeIcon',

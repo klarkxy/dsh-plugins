@@ -560,8 +560,14 @@ export const modelPickerCss = `${modelMenuCss}
   align-items: flex-start;
   justify-content: center;
   gap: 2px;
+  min-width: 0;
+  max-width: 100%;
 }
 .dsh-model-picker-short {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--ds-font-family-code);
   font-size: 20px;
   line-height: 24px;
@@ -569,7 +575,12 @@ export const modelPickerCss = `${modelMenuCss}
   color: var(--dsw-alias-label-primary);
   letter-spacing: -0.02em;
 }
-.dsh-model-picker-ver {
+.dsh-model-picker-short[data-long] {
+  font-size: 16px;
+}
+.dsh-model-picker-ver,
+.dsh-model-picker-suffix {
+  flex: none;
   font-family: var(--ds-font-family-code);
   font-size: 10px;
   line-height: 12px;
@@ -577,11 +588,19 @@ export const modelPickerCss = `${modelMenuCss}
   color: var(--dsw-alias-label-secondary);
   padding-top: 2px;
 }
-.dsh-model-picker-cardActive .dsh-model-picker-ver {
+.dsh-model-picker-suffix {
+  margin-left: 2px;
+  font-size: 9px;
+  font-weight: 500;
+  padding-top: 3px;
+}
+.dsh-model-picker-cardActive .dsh-model-picker-ver,
+.dsh-model-picker-cardActive .dsh-model-picker-suffix {
   color: var(--dsw-alias-state-business-primary);
 }
 .dsh-model-picker-shortInput {
-  width: 78px;
+  width: 112px;
+  max-width: 100%;
   padding: 1px 4px;
   border: 1px solid var(--dsw-alias-state-business-primary);
   border-radius: var(--dsw-radius-sm);
