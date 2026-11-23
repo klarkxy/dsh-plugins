@@ -125,5 +125,8 @@
     "@deepseek-ai/dsh-client-ui-slots": {
       "optional": true
     }
+  },
+  "dshRelease": {
+    "contentHash": "ef710d0268ee61d6ba38c97d51c2157634761dbd1b26bac7d1b0094c3815786f"
   }
 }

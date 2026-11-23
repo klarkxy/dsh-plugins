@@ -293,10 +293,15 @@
     },
     {
       "name": "@klarkxy/dsh-sidebar-layout",
-      "state": "testing",
+      "state": "published",
       "reason": {
-        "zh": "已进入首次发布流程；首次发布需显式选择。",
-        "en": "Entered the first-release process; first publication requires explicit selection."
+        "zh": "已有 npm 发布记录；后续版本按正常更新流程维护。",
+        "en": "Published on npm; subsequent versions follow the normal update workflow."
+      },
+      "publication": {
+        "version": "0.1.0",
+        "publishedAt": "2026-11-23T10:31:45.326Z",
+        "integrity": "sha512-K1ICbINUl29qXnqnpp4gb1YloTGNIz4NNGCnQeIBtE37nATzEtXnIusDieSCy9KRnW+kbQFQ59I0XcOhEsSXIg=="
       }
     },
     {
