@@ -1,4 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
+import { createRoot } from 'react-dom/client'
+import { act } from 'react'
 import { JSDOM } from 'jsdom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OFFICIAL_THEME_TOKEN_NAMES } from '@klarkxy/dsh-plugin-kit/official-ui'
@@ -7,7 +9,7 @@ import {
   type SidebarLayoutMode,
 } from './contracts.ts'
 import {
-  SidebarLayoutAction, SidebarLayoutRow, apply, inject, sidebarLayoutStyles,
+  SidebarLayoutMenu, SidebarLayoutRow, apply, inject, sidebarLayoutStyles,
 } from './client.tsx'
 
 /* Host-published variables the layout rules legitimately consume: the mask's
@@ -279,11 +281,11 @@ describe('sidebar layout cycle command', () => {
 describe('sidebar layout slot registrations', () => {
   it('waits on the two seats and registers both entries', () => {
     const mounted = mountClient()
-    expect(mounted.injected).toEqual(['conversation.session.header.utilities', 'settings.general.item'])
+    expect(mounted.injected).toEqual(['sidebar.right.tab.menu.item', 'settings.general.item'])
     expect(mounted.registrations).toHaveLength(2)
-    const header = mounted.registrations[0]
-    expect(header.spec).toMatchObject({
-      name: 'conversation.session.header.utilities',
+    const tabMenu = mounted.registrations[0]
+    expect(tabMenu.spec).toMatchObject({
+      name: 'sidebar.right.tab.menu.item',
       id: 'sidebar-layout',
       order: 10,
       locale: 'dsh-sidebar-layout',
@@ -306,7 +308,7 @@ describe('sidebar layout slot registrations', () => {
 
 describe('sidebar layout components', () => {
   const dict: Record<string, string> = {
-    'trigger.label': '侧栏布局',
+    'menu.label': '侧栏布局',
     'mode.push': '常规',
     'mode.drawer': '抽屉',
     'mode.swap': '正文',
@@ -328,11 +330,46 @@ describe('sidebar layout components', () => {
     expect(html).toContain('value="drawer"')
   })
 
-  it('renders the header trigger with the mode menu', () => {
+  it('renders the tab-menu group with one row per mode', () => {
     const html = renderToStaticMarkup(
-      <SidebarLayoutAction t={t} useMode={selector => selector('push')} selectMode={() => {}} />,
+      <SidebarLayoutMenu t={t} useMode={selector => selector('push')} selectMode={() => {}} dismiss={() => {}} />,
     )
-    expect(html).toContain('aria-label="侧栏布局"')
-    expect(html).toContain('aria-haspopup="menu"')
+    expect(html).toContain('dsh-stub-menu-heading')
+    expect(html).toContain('侧栏布局')
+    for (const label of ['常规', '抽屉', '正文']) {
+      expect(html).toContain(label)
+    }
+    expect(html.match(/role="menuitem"/g)).toHaveLength(3)
+  })
+
+  it('marks the active mode as the current menuitem', () => {
+    const html = renderToStaticMarkup(
+      <SidebarLayoutMenu t={t} useMode={selector => selector('drawer')} selectMode={() => {}} dismiss={() => {}} />,
+    )
+    const menu = new JSDOM(html).window.document
+    const rows = [...menu.querySelectorAll('button[role="menuitem"]')]
+    expect(rows.map(row => [row.textContent, row.getAttribute('aria-current')])).toEqual([
+      ['常规', null],
+      ['抽屉', 'page'],
+      ['正文', null],
+    ])
+  })
+
+  it('selects the mode and dismisses the menu on row activation', async () => {
+    const dom = new JSDOM('<div id="root"></div>', { pretendToBeVisual: true })
+    vi.stubGlobal('window', dom.window)
+    vi.stubGlobal('document', dom.window.document)
+    const onSelect = vi.fn()
+    const onDismiss = vi.fn()
+    const root = createRoot(dom.window.document.getElementById('root')!)
+    await act(async () => {
+      root.render(<SidebarLayoutMenu t={t} useMode={selector => selector('push')} selectMode={onSelect} dismiss={onDismiss} />)
+    })
+    const rows = [...dom.window.document.querySelectorAll('button[role="menuitem"]')]
+    const drawer = rows.find(row => row.textContent === '抽屉')!
+    await act(async () => { drawer.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    expect(onSelect).toHaveBeenCalledWith('drawer')
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+    await act(async () => { root.unmount() })
   })
 })
