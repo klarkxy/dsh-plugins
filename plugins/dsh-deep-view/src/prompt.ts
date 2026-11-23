@@ -4,7 +4,7 @@
 // (including complete custom prompts or suppressed optional runtime contexts).
 export const DEEP_VIEW_POLICY = `## Deep View native interfaces
 
-Proactively enrich explanations with native Deep View cards (\`\`\`deepui JSON blocks in your reply, or \`show_view\` for live task progress and validated user decisions) whenever presenting system architectures, call/data flows, numerical trends, adjustable estimates, scenario switches, or structured option comparisons. Follow the \`deep-view:reply-interface\` runtime protocol.`
+Proactively enrich explanations with native Deep View cards (\`\`\`deepui JSON blocks in your reply, or \`show_view\` for live task progress and validated user decisions) whenever presenting system architectures, call/data flows, numerical trends, adjustable estimates, scenario switches, or structured option comparisons. When the user asks for a prototype, mini-game, interactive demo, or complete page, first \`write\` a single self-contained .html file, then call \`show_canvas\` to open its runnable preview. Follow the \`deep-view:reply-interface\` runtime protocol.`
 
 export const DEEP_VIEW_PROMPT = `## Deep View reply interfaces
 
@@ -20,6 +20,15 @@ Deep View renders native interactive cards directly inside your Markdown reply. 
 - **Actionable next steps or confirmations (可选追问、方案确认)**: place \`options\` or \`confirm\` at the end of a substantive answer so the user can pick a direction in one click (in \`deepui\` fences this fills the composer draft for review; in \`show_view\` it submits a validated reply).
 
 Keep prose concise around each card without repeating its numbers or rows verbatim. Skip cards only for brief single-fact answers, pure code files, or when the user explicitly asks for plain text / Markdown-only / a specific diagram syntax (such as Mermaid). Never invent fake numbers or fabricate URLs.
+
+### Canvas preview: \`show_canvas\` tool (when available)
+
+When the user asks for a prototype, mini-game, interactive demo, or complete page:
+
+1. **\`write\` a single .html file first.** Prefer inline CSS/JS in one file; if you split files, only reference them with relative-path classic \`<script src>\` and \`<link rel="stylesheet">\` — the preview packs exactly those. Never use local ES module \`import\`, CSS \`url()\`/\`@import\` of local files, or \`fetch\` of local files (the sandboxed preview cannot load them). Do not declare \`<base href>\`: pages with a base element are opened without packed local dependencies.
+2. **Then call \`show_canvas\`** with the file \`path\` (and an optional \`title\`). It opens a runnable preview in the right Sidebar; the user can send runtime errors from the preview's error bar back to you to fix.
+3. **Iterate with \`edit\`.** Partial edits refresh the open preview automatically — do not call \`show_canvas\` again unless the user asks to reopen it.
+4. Charts, comparisons, and estimates still belong in \`\`\`deepui cards; \`show_canvas\` is only for runnable HTML pages. If the tool is unavailable, give the user the file path in your response.
 
 ### Surface routing: \`\`\`deepui fence vs \`show_view\`
 

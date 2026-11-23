@@ -8,7 +8,7 @@ Compose native charts, comparisons, workflow steps, metrics, adjustable estimate
 
 ## Demo
 
-![A malformed node-graph declaration repairs itself once the fence closes; an unrepairable one names the reason](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr28-deep-view-repair.gif)
+![The model writes HTML and opens a Deep View canvas, then fills the composer with a preview error and fixes it](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/deep-view-canvas-live.gif)
 
 ## Install
 
@@ -30,6 +30,13 @@ Common node graphs, charts, comparison tables, steps, adjustable estimates (incl
 
 - **Reply interfaces (`deepui` fence)**: The model embeds a `deepui` declaration between paragraphs. Once its JSON finishes streaming, Deep View replaces it in place with a native card so charts, tables, metrics, and calculators remain in reading order. Answer actions fill the composer via **Fill composer** so you can review before sending.
 - **Task interfaces (`show_view` tool)**: Used to display progress before a reply exists, or to show an interactive card whose answer is validated and submitted directly by the Host. Progress views update a single replaceable activity slot above the composer during the turn; pending answer cards can appear in the composer dock while the turn runs and remain in the reply afterwards, with only one editable pending card per session at a time.
+- **Canvas preview (`show_canvas` tool)**: After the model writes an `.html` file for a prototype, mini-game, interactive demo, or complete page, it can call `show_canvas` to open a runnable preview in the right Sidebar; the **Open preview** button on the tool result card reopens it at any time. The canvas becomes the default renderer for `.html` / `.htm` files, while the builtin HTML preview remains selectable in the renderer dropdown.
+
+### Canvas Preview
+
+- **Requires "Show coding view"**: The canvas only registers and runs scripts while the host's "Show coding view" switch is on; when it is off, the renderer disappears and files fall back to the builtin static HTML preview.
+- **Error bar and Fill composer**: Script exceptions, unhandled rejections, and `console.error` calls collect in an error bar below the preview (identical reports merge into a count). **Fill composer** writes the error list into the composer for the model to fix — asking whether to replace or append when a draft exists — and never sends silently; errors can also be copied.
+- **Automatic refresh**: Later `edit` changes to the file (including relatively referenced local scripts and styles) reload the preview and clear the error bar automatically, without calling the tool again.
 
 ### Components, Interactive Views, and Formulas
 
@@ -57,6 +64,7 @@ Both surfaces share the same component set and reactive card state:
 - **Tool-call boundary updates**: Activity updates from `show_view` happen at tool-call boundaries; the plugin does not stream progress from inside other long-running tools or rewrite historical tool results.
 - **Session and lifecycle boundaries**: Only a live `show_view` card in a human-driven top-level session or ordinary conversation fork can submit directly through the Host (delegated subagents cannot collect direct answers). Restarting the plugin clears in-memory pending state, though saved content remains visible in the session.
 - **Card lifetime and privacy**: A pending card closes after an answer or a new ordinary user message, answered cards become read-only, and unsubmitted local input changes do not persist. Do not use interfaces to collect passwords, keys, or tokens.
+- **Canvas preview boundaries**: Card surfaces still allow no arbitrary JavaScript or HTML. The canvas relies on the host file-preview pipeline: it packs only classic `<script src>` and `<link rel="stylesheet">` tags with direct relative references — no local ES module imports, CSS `url()`/`@import` of local files, or `fetch` of local files. Pages declaring `<base href>` are opened without packed local dependencies, so avoid that element. Scripts run inside an isolated sandbox. Turning "Show coding view" off falls back to the builtin static preview, and `show_canvas` is available only in user-facing top-level sessions.
 - **Map environment**: The map loads a fixed public demo basemap and accepts no custom style source. Without network access or WebGL, or if the basemap fails to load, the card displays a notice and the location list remains usable.
 - **Size and count bounds**: Card payload size, component count and depth, curves, graph nodes/edges, data rows, and locations are all bounded; exceeding a limit rejects the card rather than truncating silently.
 - **Host appearance**: Theme colors and rendering depend on the installed DSH Web Client.
