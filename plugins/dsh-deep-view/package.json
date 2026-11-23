@@ -97,6 +97,7 @@
     "jsonrepair": "3.15.0",
     "mafs": "0.21.0",
     "maplibre-gl": "6.18.0",
+    "parse5": "8.1.1",
     "vega": "6.4.0",
     "vega-embed": "7.3.0",
     "vega-lite": "6.5.0"

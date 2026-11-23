@@ -60,6 +60,9 @@ Bundled third-party components retain their original license notices and metadat
 - MapLibre GL JS and its bundled worker: BSD 3-Clause.
   Copyright MapLibre contributors.
 - jsonrepair: ISC License. Copyright (c) 2020-2026 by Jos de Jong.
+- parse5: MIT License. Copyright (c) 2013-2019 Ivan Nikulin
+  (ifaaan@gmail.com, https://github.com/inikulin); its transitive browser
+  component entities: BSD-2-Clause. Copyright (c) Felix Böhm.
 
 These notices supplement, and do not replace, the licenses distributed with the
 corresponding pinned npm dependencies.

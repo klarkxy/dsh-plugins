@@ -1,5 +1,5 @@
 import { act } from 'react'
-import { JSDOM } from 'jsdom'
+import { JSDOM, VirtualConsole } from 'jsdom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 const dom = new JSDOM('<div id="root"></div>', { url: 'https://local.test' })
@@ -19,6 +19,7 @@ let createCaptureScript: typeof import('./canvas/capture.ts').createCaptureScrip
 let packCanvasHtml: typeof import('./canvas/pack.ts').packCanvasHtml
 let createHtmlDocument: typeof import('./canvas/bootstrap.ts').createHtmlDocument
 let insertCaptureScript: typeof import('./canvas/bootstrap.ts').insertCaptureScript
+let prepareCanvasSource: typeof import('./canvas/bootstrap.ts').prepareCanvasSource
 let createReadCanvasRelative: typeof import('./canvas/read-relative.ts').createReadCanvasRelative
 let mountCanvasPreview: typeof import('./client.tsx').mountCanvasPreview
 let CANVAS_RENDERER_ID: typeof import('./canvas/definition.ts').CANVAS_RENDERER_ID
@@ -28,7 +29,7 @@ beforeAll(async () => {
   ;({ CanvasToolCall, readCanvasCall, apply, mountCanvasPreview } = await import('./client.tsx'))
   ;({ recordCanvasError, canvasErrorReportOf, createCaptureScript } = await import('./canvas/capture.ts'))
   ;({ packCanvasHtml } = await import('./canvas/pack.ts'))
-  ;({ createHtmlDocument, insertCaptureScript } = await import('./canvas/bootstrap.ts'))
+  ;({ createHtmlDocument, insertCaptureScript, prepareCanvasSource } = await import('./canvas/bootstrap.ts'))
   ;({ createReadCanvasRelative } = await import('./canvas/read-relative.ts'))
   ;({ CANVAS_RENDERER_ID } = await import('./canvas/index.ts'))
   const w = dom.window as { URL: typeof URL }
@@ -154,9 +155,12 @@ describe('canvas HTML packing and bootstrap', () => {
     const inner = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(/JSON\.parse\(text\("([^"]+)"\)/.exec(doc)![1]!), c => c.charCodeAt(0))))
     expect(inner.capture).toBeUndefined()
     expect(inner.html.startsWith('<html><head><script>capture()</script>')).toBe(true)
-    expect(inner.html).toContain('href="a.css"')
-    expect(inner.html).toContain('src="b.js?v=1"')
+    // Packed attributes carry markers, not the author reference; the iframe substitutes them verbatim.
+    expect(inner.html).not.toContain('a.css')
     expect(inner.assets).toHaveLength(2)
+    const written = inner.assets.reduce((html: string, asset: { marker: string }, index: number) => html.split(asset.marker).join(`blob:a-${index}`), inner.html)
+    expect(written).toContain('href="blob:a-0"')
+    expect(written).toContain('src="blob:a-1"')
   })
   it('inserts capture into source HTML without dropping a textarea leading newline', () => {
     const source = '<!doctype html><html><head data-author="yes"></head><body><textarea>\n\nhello</textarea><pre>\n\npre</pre></body></html>'
@@ -193,13 +197,108 @@ describe('canvas HTML packing and bootstrap', () => {
   })
   it('rewrites packed assets in source HTML without dropping a textarea leading newline', async () => {
     const source = '<!doctype html><html><head><link rel="stylesheet" href="a.css"></head><body><textarea>\n\nhello</textarea></body></html>'
-    const live = await documentAfterBootstrap(createHtmlDocument({
-      data: bytes(source),
-      assets: [{ kind: 'stylesheet', reference: 'a.css', data: bytes('body{}') }],
-    }, '<script id="capture"></script>'))
+    const bundle = await packCanvasHtml(bytes(source), read({ 'a.css': 'body{}' }), signal())
+    const live = await documentAfterBootstrap(createHtmlDocument(bundle, '<script id="capture"></script>'))
     expect(live.querySelector('textarea')?.value).toBe('\nhello')
     expect(live.querySelector('link')?.getAttribute('href')).toMatch(/^blob:/)
     expect(live.getElementById('capture')).not.toBeNull()
+  })
+  const substituted = (prepared: ReturnType<typeof prepareCanvasSource>, url: (index: number) => string = index => `blob:asset-${index}`) =>
+    prepared.assets.reduce((html, asset, index) => html.split(asset.marker).join(url(index)), prepared.html)
+  it('rewrites every packed attribute form by source range, entity-decoded and tag-scoped', async () => {
+    const source = [
+      '<!doctype html><html><head>',
+      '<link rel="stylesheet" href="style.css">',
+      '<script src="app.js?v=1&amp;lang=zh"></script>',
+      '</head><body>',
+      '<script src=a.js></script>',
+      '<script src = "sp.js"></script>',
+      "<script src='q.js'></script>",
+      '<a href="style.css">page</a>',
+      '<div id="app.js">app.js</div>',
+      '<script src="data.js"></script>',
+      '</body></html>',
+    ].join('')
+    const files = { 'style.css': 's{}', 'app.js?v=1&lang=zh': 'a()', 'a.js': 'b()', 'sp.js': 'c()', 'q.js': 'd()', 'data.js': 'e()' }
+    const bundle = await packCanvasHtml(bytes(source), read(files), signal())
+    // Reads follow the entity-decoded attribute values, in document order.
+    expect(bundle.assets.map(asset => asset.reference)).toEqual(['style.css', 'app.js?v=1&lang=zh', 'a.js', 'sp.js', 'q.js', 'data.js'])
+    const prepared = prepareCanvasSource(bundle, '<script>capture()</script>')
+    const written = substituted(prepared)
+    // Every qualifying attribute — encoded, unquoted, spaced or single-quoted —
+    // is replaced in place; nothing else carrying the same text is touched.
+    expect(written).toContain('href="blob:asset-0"')
+    expect(written).toContain('src="blob:asset-1"')
+    expect(written).toContain('src="blob:asset-2"')
+    expect(written).toContain('src="blob:asset-3"')
+    expect(written).toContain('src="blob:asset-4"')
+    expect(written).toContain('src="blob:asset-5"')
+    expect(written).toContain('<a href="style.css">page</a>')
+    expect(written).toContain('<div id="app.js">app.js</div>')
+    expect(written).not.toContain('src=ablob:')
+  })
+  it('marks every quote form of a repeated reference under one asset', async () => {
+    const source = '<html><body><script src="s.js"></script><script src=\'s.js\'></script></body></html>'
+    let reads = 0
+    const bundle = await packCanvasHtml(bytes(source), async () => { reads += 1; return { data: bytes('x()') } }, signal())
+    expect(reads).toBe(1)
+    expect(bundle.assets).toHaveLength(1)
+    expect(bundle.assets[0]!.ranges).toHaveLength(2)
+    const written = substituted(prepareCanvasSource(bundle, '<script>capture()</script>'))
+    expect(written.match(/src="blob:asset-0"/g)).toHaveLength(2)
+  })
+  it('inserts capture into the real head, never a comment or a quoted attribute', () => {
+    const commented = '<!doctype html><!-- Template inserts <head> here --><html><head><script>a</script></head></html>'
+    const next = insertCaptureScript(commented, '<script id="c"></script>')
+    expect(next).toContain('--><html><head><script id="c"></script><script>a</script>')
+    const quoted = '<html><head data-x="a>b"><script>a</script></head></html>'
+    expect(insertCaptureScript(quoted, '<script id="c"></script>')).toContain('<head data-x="a>b"><script id="c"></script><script>a</script>')
+  })
+  it('falls back through the explicit html tag, the doctype and the document start', () => {
+    expect(insertCaptureScript('<html><body>x</body></html>', '<script id="c"></script>'))
+      .toBe('<html><head><script id="c"></script></head><body>x</body></html>')
+    expect(insertCaptureScript('<!doctype html><p>x', '<script id="c"></script>'))
+      .toBe('<!doctype html><script id="c"></script><p>x')
+    expect(insertCaptureScript('<p>x', '<script id="c"></script>')).toBe('<script id="c"></script><p>x')
+  })
+  async function runPreparedDocument(html: string) {
+    const page = new JSDOM(html, {
+      url: 'https://canvas.test/doc',
+      runScripts: 'dangerously',
+      resources: 'usable',
+      virtualConsole: new VirtualConsole(),
+    })
+    const messages: unknown[] = []
+    page.window.addEventListener('message', event => messages.push(event.data))
+    await new Promise<void>(resolve => {
+      if (page.window.document.readyState === 'complete') { resolve(); return }
+      page.window.addEventListener('load', () => resolve())
+    })
+    // postMessage delivery is a queued task after the last script.
+    await new Promise<void>(resolve => { page.window.setTimeout(resolve, 0) })
+    return { page, messages }
+  }
+  it('runs the capture script before author code and reports console errors and throws', async () => {
+    const source = '<!doctype html><html><head></head><body><script>console.error("boom");throw new Error("bang")</script></body></html>'
+    const prepared = prepareCanvasSource({ data: bytes(source), assets: [] }, createCaptureScript('nonce-live'))
+    const { page, messages } = await runPreparedDocument(prepared.html)
+    const reports = messages.map(data => canvasErrorReportOf(data, 'nonce-live'))
+    expect(reports.some(report => report?.kind === 'console' && report.message === 'boom')).toBe(true)
+    expect(reports.some(report => report?.kind === 'error' && report.message.includes('bang'))).toBe(true)
+    page.window.close()
+  })
+  it('executes packed scripts under their marker URLs and still reports, head comment or not', async () => {
+    for (const prefix of ['<!doctype html><html>', '<!doctype html><!-- Template inserts <head> here --><html>']) {
+      const source = `${prefix}<head><script src="e.js"></script></head><body><script>console.error("boom")</script></body></html>`
+      const bundle = await packCanvasHtml(bytes(source), read({ 'e.js': 'console.error("packed-boom")' }), signal())
+      const prepared = prepareCanvasSource(bundle, createCaptureScript('nonce-marked'))
+      const doc = substituted(prepared, index => `data:text/javascript;base64,${btoa(prepared.assets[index]!.text)}`)
+      const { page, messages } = await runPreparedDocument(doc)
+      const reports = messages.map(data => canvasErrorReportOf(data, 'nonce-marked'))
+      expect(reports.some(report => report?.kind === 'console' && report.message === 'packed-boom')).toBe(true)
+      expect(reports.some(report => report?.kind === 'console' && report.message === 'boom')).toBe(true)
+      page.window.close()
+    }
   })
   it('enforces the per-asset, total and count limits', async () => {
     const big = 'a'.repeat(5 * 1024 * 1024)
