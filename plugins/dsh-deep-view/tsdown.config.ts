@@ -39,7 +39,7 @@ export default defineConfig([
     } }],
     deps: {
       neverBundle: ['react', 'react/jsx-runtime', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
-      alwaysBundle: ['@klarkxy/dsh-plugin-kit/official-ui', '@klarkxy/dsh-plugin-kit/client-logger', '@klarkxy/dsh-plugin-kit/log-shared', '@xyflow/react', 'jsonrepair', 'mafs', 'maplibre-gl', 'vega', 'vega-embed', 'vega-lite'],
+      alwaysBundle: ['@klarkxy/dsh-plugin-kit/official-ui', '@klarkxy/dsh-plugin-kit/client-logger', '@klarkxy/dsh-plugin-kit/log-shared', '@xyflow/react', 'jsonrepair', 'mafs', 'maplibre-gl', 'parse5', 'vega', 'vega-embed', 'vega-lite'],
     },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },

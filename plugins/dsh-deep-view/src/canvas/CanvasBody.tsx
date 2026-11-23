@@ -31,7 +31,6 @@ export type CanvasBodyProps = {
 }
 
 type CanvasFrame = {
-  readonly gen: number
   readonly data: Uint8Array<ArrayBuffer>
   readonly url: string | undefined
   readonly nonce: string
@@ -52,7 +51,6 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
   const { resourceAddress, readRelated, addResource, setResources, t } = props
   const data = props.content.kind === 'bytes' && props.content.data !== undefined ? props.content.data : undefined
   const signal = props.useTabInfo?.().tab.signal ?? NEVER
-  const [reload, setReload] = useState(0)
   const [frame, setFrame] = useState<CanvasFrame>()
   const [errors, setErrors] = useState<readonly CanvasError[]>([])
   const [copied, setCopied] = useState(false)
@@ -61,8 +59,8 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const input = props.useInput?.(value => value) ?? { draft: '', phase: 'plain' as const }
 
-  // Build the bootstrap document and its Blob URL; each content revision or
-  // manual reload owns one opaque browsing context and one nonce.
+  // Build the bootstrap document and its Blob URL; each content revision
+  // owns one opaque browsing context and one nonce.
   useEffect(() => {
     if (data === undefined) return
     setErrors([])
@@ -76,7 +74,6 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
       addResource(address)
     })
     const nonce = makeNonce()
-    const gen = reload
     let url: string | undefined
     void (async () => {
       try {
@@ -84,9 +81,9 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
         controller.signal.throwIfAborted()
         const html = createHtmlDocument(bundle, createCaptureScript(nonce))
         url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
-        setFrame({ gen, data, url, nonce })
+        setFrame({ data, url, nonce })
       } catch {
-        if (!controller.signal.aborted) setFrame({ gen, data, url: undefined, nonce })
+        if (!controller.signal.aborted) setFrame({ data, url: undefined, nonce })
       } finally {
         if (!controller.signal.aborted && !signal.aborted) setResources([...resources])
       }
@@ -95,9 +92,9 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
       controller.abort()
       if (url !== undefined) URL.revokeObjectURL(url)
     }
-  }, [data, resourceAddress, readRelated, addResource, setResources, signal, reload])
+  }, [data, resourceAddress, readRelated, addResource, setResources, signal])
 
-  const live = frame !== undefined && frame.gen === reload && frame.data === data
+  const live = frame !== undefined && frame.data === data
   useEffect(() => {
     if (!live) return
     const nonce = frame.nonce
@@ -139,7 +136,6 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
       <div className="dvui-canvas-actions dvui-actions">
         {props.inputActions ? <Button variant="primary" onClick={() => input.draft.trim() === '' ? fill(false) : setDraftChoice(true)}>{t('fillDraft')}</Button> : null}
         <Button onClick={copy}>{copied ? t('copied') : t('copy')}</Button>
-        <Button onClick={() => setReload(value => value + 1)}>{t('canvasReload')}</Button>
       </div>
       {filled === true ? <p className="dvui-status" role="status">{t('filled')}</p> : null}
       {filled === false ? <p className="dvui-tool-error" role="alert">{t('fillFailed')}</p> : null}

@@ -15,7 +15,7 @@ export const uiZh = {
   exploreFailed: '图表未能绘制。', dataRows: '数据：{n} 行', dataTruncated: '显示 {shown} / {n} 行',
   map: '地图', mapMarker: '地图标记', zoomIn: '放大', zoomOut: '缩小', resetBearing: '恢复朝北',
   mapUnavailable: '当前环境无法显示地图。', mapFailed: '地图加载失败。', mapFallback: '仍可在下方选择地点。', locations: '地点',
-  canvasTitle: 'Deep View 画布', canvasOpen: '打开预览', canvasReload: '重新载入', canvasErrors: '运行错误',
+  canvasTitle: 'Deep View 画布', canvasOpen: '打开预览', canvasErrors: '运行错误',
   canvasFrame: '画布预览', canvasLoading: '正在加载画布…', canvasFailed: '画布未能显示',
   canvasReport: '预览 `{path}` 运行时报错：\n{list}\n请修复这些问题。',
 }
@@ -37,7 +37,7 @@ export const uiEn: Record<keyof typeof uiZh, string> = {
   exploreFailed: 'The chart could not be drawn.', dataRows: 'Data: {n} rows', dataTruncated: 'Showing {shown} of {n} rows',
   map: 'Map', mapMarker: 'Map marker', zoomIn: 'Zoom in', zoomOut: 'Zoom out', resetBearing: 'Reset bearing to north',
   mapUnavailable: 'Map is unavailable in this environment.', mapFailed: 'Map failed to load.', mapFallback: 'You can still pick a location below.', locations: 'Locations',
-  canvasTitle: 'Deep View Canvas', canvasOpen: 'Open preview', canvasReload: 'Reload', canvasErrors: 'Runtime errors',
+  canvasTitle: 'Deep View Canvas', canvasOpen: 'Open preview', canvasErrors: 'Runtime errors',
   canvasFrame: 'Canvas preview', canvasLoading: 'Loading canvas…', canvasFailed: 'The canvas could not be shown',
   canvasReport: 'Preview `{path}` failed at runtime:\n{list}\nPlease fix these errors.',
 }
