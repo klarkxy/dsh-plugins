@@ -29,6 +29,12 @@ DeepSeek Harness (DSH) plugins by klarkxy. Browse the [plugin site](https://klar
 
 [`@klarkxy/dsh-plugin-kit`](plugins/dsh-plugin-kit/README.en.md) (runtime, UI and diagnostic logging helpers) and [`@klarkxy/dsh-model-route`](plugins/dsh-model-route/README.en.md) (model-route field contract) are shared libraries that other plugins install automatically.
 
+## Downloads
+
+Daily npm downloads across all plugins (from the official npm statistics, refreshed every day; counts include CI and mirror traffic and are best read relatively):
+
+[![Daily npm downloads across all klarkxy DSH plugins](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-all.svg)](https://www.npmjs.com/~klarkxy)
+
 ## Install
 
 ```sh

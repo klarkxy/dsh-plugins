@@ -6,6 +6,10 @@
 
 配置新建 DeepSeek Harness 子代理可用的模型与思考强度，在子代理弹层查看最后使用的模型，并在创建会话时开启委派模式。安装本插件也会启用委派模式功能；原 `@klarkxy/dsh-delegation` 包继续作为独立兼容入口。
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-model-hub.svg)](https://www.npmjs.com/package/@klarkxy/dsh-model-hub)
+
 ## 安装
 
 ```sh

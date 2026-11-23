@@ -6,6 +6,10 @@
 
 Adds a **Safe Auto** approval level: ordinary actions run inside the workspace sandbox as usual, while requests requiring approval are judged one call at a time by a reviewer model, with complete local audit trails.
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-safe-auto.svg)](https://www.npmjs.com/package/@klarkxy/dsh-safe-auto)
+
 ## Install
 
 ```sh

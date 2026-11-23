@@ -10,6 +10,10 @@
 
 ![模型写出 HTML 并打开 Deep View 画布，预览报错后填入输入框并修复](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/deep-view-canvas-live.gif)
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-deep-view.svg)](https://www.npmjs.com/package/@klarkxy/dsh-deep-view)
+
 ## 安装
 
 ```sh

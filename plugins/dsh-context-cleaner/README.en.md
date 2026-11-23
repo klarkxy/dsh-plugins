@@ -6,6 +6,10 @@
 
 Hides the plugin-info and promotion cards at the top right of the `dsh-context` dashboard so the stats card fills the header row.
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-context-cleaner.svg)](https://www.npmjs.com/package/@klarkxy/dsh-context-cleaner)
+
 ## Install
 
 Install and enable `dsh-context` first — this plugin only styles the panel and does not provide the context dashboard itself.

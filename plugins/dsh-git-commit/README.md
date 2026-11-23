@@ -6,6 +6,10 @@
 
 在对话中直接提交工作区改动，由模型按逻辑分组并生成提交信息。
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-git-commit.svg)](https://www.npmjs.com/package/@klarkxy/dsh-git-commit)
+
 ## 安装
 
 ```sh

@@ -10,6 +10,10 @@
 
 ![新建会话的工作区选择器：临时工作区入口](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr23-session-manager-picker.gif)
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-session-manager.svg)](https://www.npmjs.com/package/@klarkxy/dsh-session-manager)
+
 ## 安装
 
 ```sh

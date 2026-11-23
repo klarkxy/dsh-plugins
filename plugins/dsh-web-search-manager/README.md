@@ -10,6 +10,10 @@
 
 ![网页搜索设置：多源融合 / 主备降级 / 单源切换、读取链式回退与计费授权](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr23-web-search-manager.gif)
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-web-search-manager.svg)](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager)
+
 ## 安装
 
 ```sh

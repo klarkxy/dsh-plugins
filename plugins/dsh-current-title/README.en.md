@@ -6,6 +6,10 @@
 
 Keeps each DeepSeek Harness session title aligned with the task you are working on, while leaving titles you rename by hand untouched.
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-current-title.svg)](https://www.npmjs.com/package/@klarkxy/dsh-current-title)
+
 ## Install
 
 ```sh

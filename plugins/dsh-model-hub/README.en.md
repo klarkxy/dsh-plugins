@@ -6,6 +6,10 @@
 
 Configure models and reasoning effort for new DeepSeek Harness subagents, inspect each subagent's last-used model in the read-only popup, and enable Delegation Mode per session. Installing this plugin also enables Delegation Mode; `@klarkxy/dsh-delegation` remains available as a standalone compatibility entry.
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-model-hub.svg)](https://www.npmjs.com/package/@klarkxy/dsh-model-hub)
+
 ## Install
 
 ```sh

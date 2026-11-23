@@ -8,6 +8,10 @@ Customize the interface, conversation, code and terminal fonts and font sizes of
 
 ![A conversation shown in a custom conversation font](docs/preview.png)
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-font.svg)](https://www.npmjs.com/package/@klarkxy/dsh-font)
+
 ## Install
 
 ```sh

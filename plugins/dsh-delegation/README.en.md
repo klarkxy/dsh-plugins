@@ -6,6 +6,10 @@
 
 A per-session switch where the main agent plans, delegates to subagents, and reviews results, while subagent sessions automatically receive matching execution guidance. Install `@klarkxy/dsh-model-hub` for a combined entry to subagent model configuration and Delegation Mode; this package remains available as a standalone compatibility option.
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-delegation.svg)](https://www.npmjs.com/package/@klarkxy/dsh-delegation)
+
 ## Install
 
 ```sh

@@ -10,6 +10,10 @@ Search and read DeepSeek Harness sessions across working directories, use tempor
 
 ![The new-session workspace picker with the temporary workspace entry](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr23-session-manager-picker.gif)
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-session-manager.svg)](https://www.npmjs.com/package/@klarkxy/dsh-session-manager)
+
 ## Install
 
 ```sh

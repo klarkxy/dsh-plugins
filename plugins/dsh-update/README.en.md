@@ -12,6 +12,10 @@ Preview GitHub Release changelogs between your installed version and the latest 
 
 ![Desktop update: confirm the changelog, then hand the download off to the host](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/desktop-update-handoff.gif)
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-update.svg)](https://www.npmjs.com/package/@klarkxy/dsh-update)
+
 ## Overview
 
 - **Intercept immediate Desktop "New version" downloads**: Clicking the sidebar "New version" pill opens a changelog modal showing every Release log between the running DSH build and the target release instead of starting an immediate download.

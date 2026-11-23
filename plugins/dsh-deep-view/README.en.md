@@ -10,6 +10,10 @@ Compose native charts, comparisons, workflow steps, metrics, adjustable estimate
 
 ![The model writes HTML and opens a Deep View canvas, then fills the composer with a preview error and fixes it](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/deep-view-canvas-live.gif)
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-deep-view.svg)](https://www.npmjs.com/package/@klarkxy/dsh-deep-view)
+
 ## Install
 
 ```sh

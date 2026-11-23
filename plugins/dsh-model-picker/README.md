@@ -12,6 +12,10 @@
 
 ![跨供应商合并的 DeepSeek Flash 卡片与供应商切换](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr33-model-picker-review.gif)
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-model-picker.svg)](https://www.npmjs.com/package/@klarkxy/dsh-model-picker)
+
 ## 功能
 
 ### 卡片视图（默认）

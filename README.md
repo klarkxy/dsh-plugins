@@ -29,6 +29,12 @@ klarkxy 的 DeepSeek Harness（DSH）插件集合。可前往[插件站点](http
 
 [`@klarkxy/dsh-plugin-kit`](plugins/dsh-plugin-kit/README.md)（运行时、界面与诊断日志辅助）和 [`@klarkxy/dsh-model-route`](plugins/dsh-model-route/README.md)（模型路由与选择契约）是共享库，其他插件会自动安装它们。
 
+## 下载量
+
+全部插件的 npm 每日下载量趋势（来自 npm 官方统计，每天自动更新；数字含 CI 与镜像下载，只作相对参考）：
+
+[![全部插件 npm 每日下载量](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-all.svg)](https://www.npmjs.com/~klarkxy)
+
 ## 安装
 
 ```sh

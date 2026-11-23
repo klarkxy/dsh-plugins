@@ -8,6 +8,10 @@ Adds a working contract to DSH's native system prompt and rewrites its terse bui
 
 DSH's native system prompt has a one-line identity followed by isolated per-tool rules; it lacks general conventions for how to work, verify, handle risky operations and reply. This plugin fills those in without changing tools, permissions or the sandbox.
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-prompt-override.svg)](https://www.npmjs.com/package/@klarkxy/dsh-prompt-override)
+
 ## Install
 
 ```sh

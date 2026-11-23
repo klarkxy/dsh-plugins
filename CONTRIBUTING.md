@@ -60,6 +60,8 @@ https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/<文件�
 
 **站点放详细介绍**。收录进 `site/catalog.json` 的插件要填 `details.zh` / `details.en`（Markdown，可带图），站点插件页会把它渲染为「详细介绍」一节，位于 README 摘录之前。新增插件不允许长期空着这一节。
 
+**下载量图表自动维护**。已发布插件的 README 在「演示」之后带「下载量」一节，根 README 放全体趋势图。图表由 `scripts/npm-download-charts.mjs` 从 npm 官方下载量 API 生成，workflow 每天刷新 `docs/demo-assets` 分支上的 `downloads-*.svg`；README 只引用图片地址，不在正文手写下载量数字。
+
 ## 验收脚本不进 npm 包
 
 `.agents/` 是仓库里的开发工具。各插件的 `files` 不收录它，根目录的 `.npmignore` 也排除它。不要把验收产物放进插件包。

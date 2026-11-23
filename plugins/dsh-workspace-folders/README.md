@@ -6,6 +6,10 @@
 
 为每个 DeepSeek Harness 工作区添加多个附加文件夹，并在同一工作区的智能体对话中共同访问。
 
+## 下载量
+
+[![npm 每日下载量趋势](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-workspace-folders.svg)](https://www.npmjs.com/package/@klarkxy/dsh-workspace-folders)
+
 ## 安装
 
 ```sh

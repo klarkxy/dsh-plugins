@@ -6,6 +6,10 @@
 
 Add multiple additional folders to each DeepSeek Harness workspace and access them together in its Agent conversations.
 
+## Downloads
+
+[![Daily npm downloads trend](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/downloads-workspace-folders.svg)](https://www.npmjs.com/package/@klarkxy/dsh-workspace-folders)
+
 ## Install
 
 ```sh
