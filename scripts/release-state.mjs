@@ -127,15 +127,81 @@ export function releaseEligibility(root, firstReleases = []) {
   return { inventory, states, graph, blockers };
 }
 
-export function renderStateTable(packages, states, language) {
+export function renderStateTable(packages, states, language, catalog = null) {
   const lines = language === 'zh'
     ? ['| 包 | 生命周期 | 说明 |', '| --- | --- | --- |']
     : ['| Package | Lifecycle | Notes |', '| --- | --- | --- |'];
   const escape = value => value.replace(/\|/g, '&#124;').replace(/[\r\n]+/g, ' ');
   const readme = language === 'zh' ? 'README.md' : 'README.en.md';
-  for (const pkg of [...packages].sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
-    const entry = states.get(pkg.name);
-    lines.push(`| [${pkg.name}](${pkg.directory}/${readme}) | ${stateLabels[language][entry.state]} (\`${entry.state}\`)${pkg.private ? (language === 'zh' ? '；私有包' : '; private') : ''} | ${escape(entry.reason[language])} |`);
+  if (!catalog) {
+    for (const pkg of [...packages].sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
+      const entry = states.get(pkg.name);
+      lines.push(`| [${pkg.name}](${pkg.directory}/${readme}) | ${stateLabels[language][entry.state]} (\`${entry.state}\`)${pkg.private ? (language === 'zh' ? '；私有包' : '; private') : ''} | ${escape(entry.reason[language])} |`);
+    }
+    return lines.join('\n');
   }
-  return lines.join('\n');
+
+  const byName = new Map(packages.map(p => [p.name, p]));
+  const catalogPublished = (catalog.plugins ?? []).filter(p => {
+    const pkg = byName.get(p.package);
+    return pkg && !pkg.private && states.get(p.package)?.state === 'published';
+  });
+  const covered = new Set(catalogPublished.map(p => p.package));
+
+  const out = [language === 'zh' ? '## 插件' : '## Plugins', ''];
+  const bundles = catalogPublished.filter(p => p.kind !== 'service');
+  if (bundles.length > 0) {
+    out.push(...(language === 'zh'
+      ? ['| 分类 | 包 | 说明 |', '| --- | --- | --- |']
+      : ['| Category | Package | What it does |', '| --- | --- | --- |']));
+    const sep = language === 'zh' ? '：' : ': ';
+    for (const category of catalog.categories ?? []) {
+      for (const p of bundles.filter(entry => entry.category === category.id)) {
+        const pkg = byName.get(p.package);
+        out.push(`| ${escape(category.title[language])} | [\`${p.package}\`](${pkg.directory}/${readme}) | **${escape(p.title[language])}**${sep}${escape(p.summary[language])} |`);
+      }
+    }
+  }
+
+  const services = catalogPublished.filter(p => p.kind === 'service');
+  if (services.length > 0) {
+    if (language === 'zh') {
+      const parts = services.map(s => {
+        const pkg = byName.get(s.package);
+        return `[\`${s.package}\`](${pkg.directory}/${readme})（${escape(s.title[language])}）`;
+      });
+      out.push('', `共享库：${parts.join('、')}，由依赖它们的插件自动安装。`);
+    } else {
+      const parts = services.map(s => {
+        const pkg = byName.get(s.package);
+        return `[\`${s.package}\`](${pkg.directory}/${readme}) (${escape(s.title[language])})`;
+      });
+      const list = parts.length === 1 ? parts[0] : parts.length === 2 ? `${parts[0]} and ${parts[1]}` : `${parts.slice(0, -1).join(', ')}, and ${parts.at(-1)}`;
+      out.push('', `Shared libraries: ${list}, installed automatically by dependent plugins.`);
+    }
+  }
+
+  const remaining = [...packages]
+    .filter(pkg => !covered.has(pkg.name))
+    .sort((a, b) => a.name.localeCompare(b.name, 'en'));
+  out.push('', language === 'zh' ? '## 插件生命周期' : '## Plugin lifecycle', '');
+  out.push(
+    language === 'zh'
+      ? (covered.size > 0
+          ? `上表已列出的站点目录包均处于已发布（\`published\`）状态，后续版本按正常更新流程维护；` +
+            (remaining.length > 0 ? '下表仅列出尚未纳入站点目录的包：' : '当前仓库内没有其他未纳入站点目录的包。')
+          : '下表列出当前尚未纳入站点目录的包：')
+      : (covered.size > 0
+          ? `Published cataloged packages listed above follow the normal update workflow; ` +
+            (remaining.length > 0 ? 'the table below lists only packages outside that catalog:' : 'there are no remaining workspace packages outside that catalog.')
+          : 'The table below lists workspace packages outside the catalog:'),
+  );
+  if (remaining.length > 0) {
+    out.push('', ...lines);
+    for (const pkg of remaining) {
+      const entry = states.get(pkg.name);
+      out.push(`| [${pkg.name}](${pkg.directory}/${readme}) | ${stateLabels[language][entry.state]} (\`${entry.state}\`)${pkg.private ? (language === 'zh' ? '；私有包' : '; private') : ''} | ${escape(entry.reason[language])} |`);
+    }
+  }
+  return out.join('\n');
 }

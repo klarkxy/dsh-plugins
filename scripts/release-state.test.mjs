@@ -321,3 +321,68 @@ test('docs sync exactly while preserving ordinary prose and repository registry 
     assert.match(readFileSync(join(repo,pkg.directory,'README.en.md'),'utf8'),/<!-- release-state-note -->/);
   }
 });
+
+test('catalog-aware docs sync renders categorized published plugins and limits lifecycle table to uncovered packages', t => {
+  const root = fixture(t, { 'dsh-other': { private: true } });
+  const extraDir = join(root, 'plugins', 'dsh-extra');
+  mkdirSync(extraDir, { recursive: true });
+  writeFileSync(join(extraDir, 'package.json'), JSON.stringify({
+    name: '@klarkxy/dsh-extra', version: '1.0.0', files: ['index.js'],
+    publishConfig: { access: 'public', registry: 'https://registry.npmjs.org/' },
+  }));
+  writeFileSync(join(extraDir, 'index.js'), 'export const extra = 1;\n');
+  const kitDir = join(root, 'plugins', 'dsh-kit');
+  mkdirSync(kitDir, { recursive: true });
+  writeFileSync(join(kitDir, 'package.json'), JSON.stringify({
+    name: '@klarkxy/dsh-kit', version: '1.0.0', files: ['index.js'],
+    publishConfig: { access: 'public', registry: 'https://registry.npmjs.org/' },
+  }));
+  writeFileSync(join(kitDir, 'index.js'), 'export const kit = 1;\n');
+
+  update(root, d => {
+    stage(d.packages.find(p => p.name === '@klarkxy/dsh-feature'), 'testing');
+    d.packages.push({ name: '@klarkxy/dsh-extra', state: 'published', reason, publication });
+    d.packages.push({ name: '@klarkxy/dsh-kit', state: 'published', reason, publication });
+  });
+
+  mkdirSync(join(root, 'site'), { recursive: true });
+  writeFileSync(join(root, 'site', 'catalog.json'), JSON.stringify({
+    categories: [{ id: 'workflow', title: { zh: '工作方式', en: 'How it works' } }],
+    plugins: [
+      {
+        package: '@klarkxy/dsh-base',
+        category: 'workflow',
+        kind: 'plugin',
+        title: { zh: '基础插件', en: 'Base Plugin' },
+        summary: { zh: '基础能力。', en: 'Core feature.' },
+      },
+      {
+        package: '@klarkxy/dsh-kit',
+        category: 'workflow',
+        kind: 'service',
+        title: { zh: '共享库', en: 'Shared Kit' },
+        summary: { zh: '共享辅助。', en: 'Shared helpers.' },
+      },
+    ],
+  }));
+
+  syncStateDocs(root, workspace(root), true);
+  syncStateDocs(root, workspace(root));
+
+  const zh = readFileSync(join(root, 'README.md'), 'utf8');
+  const en = readFileSync(join(root, 'README.en.md'), 'utf8');
+  for (const [doc, pluginsHeading, lifecycleHeading, sharedLabel] of [
+    [zh, '## 插件', '## 插件生命周期', '共享库：[`@klarkxy/dsh-kit`](plugins/dsh-kit/README.md)（共享库）'],
+    [en, '## Plugins', '## Plugin lifecycle', 'Shared libraries: [`@klarkxy/dsh-kit`](plugins/dsh-kit/README.en.md) (Shared Kit)'],
+  ]) {
+    const pluginSection = doc.slice(doc.indexOf(pluginsHeading), doc.indexOf(lifecycleHeading));
+    const lifecycleSection = doc.slice(doc.indexOf(lifecycleHeading));
+    assert.match(pluginSection, /`@klarkxy\/dsh-base`/);
+    assert.ok(pluginSection.includes(sharedLabel));
+    assert.doesNotMatch(pluginSection, /dsh-feature|dsh-other|dsh-extra/);
+    assert.match(lifecycleSection, /dsh-feature/);
+    assert.match(lifecycleSection, /dsh-other/);
+    assert.match(lifecycleSection, /dsh-extra/);
+    assert.doesNotMatch(lifecycleSection, /dsh-base|dsh-kit/);
+  }
+});

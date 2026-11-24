@@ -26,6 +26,7 @@ async function fixture(extra = [], published = { name: plugin.package, version, 
     ["package/package.json", JSON.stringify(published)], ["package/README.md", "# New package\n\nLatest English README"],
     ["package/docs/README.zh-CN.md", "# 新插件\n\n最新中文说明"],
     ["package/icon.svg", '<svg xmlns="http://www.w3.org/2000/svg"/>'], ["package/LICENSE", "License text"],
+    ["package/NOTICE", "Notice text"], ["package/NOTICE.md", "Notice MD"],
     ["package/docs/a b.png", Buffer.from([0, 255, 127])], ...extra,
   ]);
   const metadata = { "dist-tags": { latest: version }, time: { created: "2026-01-01", [version]: "2026-10-01" },
@@ -49,6 +50,8 @@ test("a newly published version builds from its registry archive without any CDN
   assert.ok(result.files.includes("/docs/a b.png"));
   assert.deepEqual(Buffer.from(result.assets["docs/a b.png"], "base64"), Buffer.from([0, 255, 127]));
   assert.equal(Buffer.from(result.assets.LICENSE, "base64").toString(), "License text");
+  assert.equal(Buffer.from(result.assets.NOTICE, "base64").toString(), "Notice text");
+  assert.equal(Buffer.from(result.assets["NOTICE.md"], "base64").toString(), "Notice MD");
   assert.equal(input.calls.length, 2);
   assert.ok(input.calls.every(url => new URL(url).hostname === "registry.npmjs.org"));
 });

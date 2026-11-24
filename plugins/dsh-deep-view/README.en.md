@@ -73,6 +73,10 @@ Both surfaces share the same component set and reactive card state:
 - **Size and count bounds**: Card payload size, component count and depth, curves, graph nodes/edges, data rows, and locations are all bounded; exceeding a limit rejects the card rather than truncating silently.
 - **Host appearance**: Theme colors and rendering depend on the installed DSH Web Client.
 
+## Attribution
+
+See [NOTICE](NOTICE) for upstream attribution and bundled third-party component notices.
+
 ## License
 
-Licensed under [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for upstream attribution and bundled third-party component notices.
+[Apache License 2.0](LICENSE)

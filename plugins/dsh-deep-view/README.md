@@ -73,6 +73,10 @@ dsh plugin --profile web add @klarkxy/dsh-deep-view
 - **体积与数量上限**：卡片载荷大小、组件数量与层级、曲线数、节点与连线数、数据行数及地点数均受上限限制，超限会被直接拒绝而不会静默截断。
 - **外观随宿主适配**：主题配色与实际渲染取决于当前安装的 DSH Web Client。
 
+## 署名
+
+上游来源与第三方组件声明见 [NOTICE](NOTICE)。
+
 ## 许可证
 
-基于 [Apache License 2.0](LICENSE) 开源；上游来源与第三方组件声明见 [NOTICE](NOTICE)。
+[Apache License 2.0](LICENSE)

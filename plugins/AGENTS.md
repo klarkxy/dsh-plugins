@@ -66,4 +66,4 @@
 
 ## README 与站点介绍
 
-有用户可见界面的插件，双语 README 在概述之后必须带真实演示图（与 PR 界面验收同一录制标准）：GIF 与大图提交到 `docs/demo-assets` 分支并用 `https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/<文件名>` 绝对地址引用，小尺寸静态截图可放插件目录 `screenshots/` 或 `docs/` 并用相对路径引用；图片均不收录进 npm `files`。README 只写概述（定位、演示图、安装、核心用法、主要限制）；收录进站点时在 `site/catalog.json` 填 `details.zh` / `details.en` 写详细介绍。已发布插件（npm 有 `latest`）的双语 README 还需带「下载量 / Downloads」一节：链接 `docs/demo-assets` 分支的 `downloads-<slug>.svg`，由 `scripts/npm-download-charts.mjs` 与每日 workflow 自动刷新，正文不手写数字；未发布插件先不加。完整规则见根目录 `CONTRIBUTING.md`。
+有用户可见界面的插件，双语 README 在概述之后必须带真实演示图（与 PR 界面验收同一录制标准）：GIF 与大图提交到 `docs/demo-assets` 分支并用 `https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/<文件名>` 绝对地址引用，小尺寸静态截图可放插件目录 `screenshots/` 或 `docs/` 并用相对路径引用；图片均不收录进 npm `files`。双语 `README.md` / `README.en.md` 是面向用户的唯一文档正本（包含定位、演示图、安装、使用与主要限制）；站点构建时会优先读取仓库最新 README 并自动剥离与页面重复的开篇定位段、标准安装段、纯图「演示」标题与标准许可证段，不再在 `site/catalog.json` 重复维护 `details`。已发布插件（npm 有 `latest`）的双语 README 还需带「下载量 / Downloads」一节：链接 `docs/demo-assets` 分支的 `downloads-<slug>.svg`，由 `scripts/npm-download-charts.mjs` 与每日 workflow 自动刷新，正文不手写数字；未发布插件先不加。完整规则见根目录 `CONTRIBUTING.md`。

@@ -66,3 +66,7 @@ Common section names: `tool:read`, `tool:write`, `tool:edit`, `tool:glob`, `tool
 - Sessions on the `minimal` preset have a host-locked complete prompt, so the plugin does not apply there.
 - The replacement text is English; the contract still tells the model to reply in the user's language.
 - Rewrites match prompt section names: if a future host renames or reworks a section, that rewrite silently falls back to the native text instead of mis-splicing.
+
+## License
+
+[SATA License 2.1](LICENSE)

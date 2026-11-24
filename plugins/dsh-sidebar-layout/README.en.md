@@ -38,3 +38,7 @@ The choice is stored in the current browser and restored on the next visit.
 - The host still auto-collapses the panel when there is not enough room for a normal-width track — in drawer mode too.
 - The plugin works alongside `dsh-better-sidebar`; neither affects the other.
 - Disabling or uninstalling the plugin returns the sidebar to the native Push behaviour.
+
+## License
+
+[SATA License 2.1](LICENSE)

@@ -105,6 +105,7 @@ Capabilities without confirmed upstream pricing remain restricted to verified fr
 - Draft and image operations use publishing credentials, separate from search quota and `allowPaid` settings; the tool can save, validate, and upload images, but cannot publish directly.
 - Each request runs once without automatic retries.
 - Requests use the configured `Access Secret` only; OAuth account switching, top-ups, wallet queries, and publishing drafts stay on Zhihu.
+- Always specify the full scoped package name `@klarkxy/dsh-zhihu`; the unscoped `dsh-zhihu` package is maintained by another author.
 
 ## License
 

@@ -41,6 +41,7 @@ Click **List** at the top for a searchable list grouped by provider, with a slid
 - In list view, switching back to a model you used since opening the page restores its last effort.
 - If the model list fails to load, you can retry. A saved model that is no longer in the catalog is marked and cannot be picked again.
 - Subagent sessions do not offer model selection, matching the native button.
+- If `reasoning-slider` is also installed, this plugin takes precedence. Disabling or removing it brings back `reasoning-slider` or the native button.
 
 ## Install
 
@@ -49,8 +50,6 @@ dsh plugin --profile web add @klarkxy/dsh-model-picker
 ```
 
 Replace `web` with your profile name and restart the profile. No configuration is needed.
-
-If `reasoning-slider` is also installed, this plugin takes precedence. Disabling or removing it brings back `reasoning-slider` or the native button.
 
 ## Other plugins
 

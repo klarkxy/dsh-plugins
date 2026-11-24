@@ -66,3 +66,7 @@ dsh plugin --profile web add @klarkxy/dsh-prompt-override
 - 使用 `minimal` Preset 的会话由宿主锁定完整提示词，本插件对其不生效。
 - 替换文本为英文，模型仍按规范使用用户的语言回复。
 - 改写按提示词段名进行：宿主未来改名或重排提示词段时，对应改写会整段失效并保留原生文本，不会错切。
+
+## 许可证
+
+[SATA License 2.1](LICENSE)

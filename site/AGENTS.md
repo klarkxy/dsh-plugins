@@ -7,8 +7,9 @@
 | 文件 | 职责 |
 | --- | --- |
 | `site/catalog.json` | 唯一手工维护的数据 |
-| `site/render.mjs` | 纯渲染：catalog + npm 数据 → 页面、`plugins.json`、`index.json`、`llms.txt`，保持纯函数 |
-| `site/build.mjs` | 拉 npm 数据，校验发布包并写 `_site/` |
+| `site/render.mjs` | 纯渲染：catalog + 包数据 → 页面、`plugins.json`、`index.json`、`llms.txt`，保持纯函数 |
+| `site/local.mjs` | 从本地仓库叠加最新的双语 README、引用图片及 `LICENSE`/`NOTICE`（不改变版本与依赖等 npm 元数据） |
+| `site/build.mjs` | 拉 npm 数据，校验发布包、叠加本地文档并写 `_site/` |
 | `site/market.mjs` | 用同一份渲染逻辑更新或核对 Git 根目录的 `index.json` |
 | `site/npm.mjs` | 在内存中校验读取 npm 包 |
 | `site/assets/` | 样式与脚本；脚本做渐进增强，纯 HTML 页面直接可用 |
@@ -18,11 +19,11 @@
 
 ## 增改/下线插件
 
-只改 `catalog.json` 并同步根 README 插件表格。规则：只收录 npm 上有 `latest` 的 DSH 插件；`slug` 用小写字母数字连字符、通常去掉作用域和 `dsh-` 前缀，已发布 slug 保持稳定；`category` 用 `categories` 里的 id，`kind` 只取 `preset`/`plugin`/`service`；`title`/`summary` 双语，一句话说清用户价值；`details.zh`/`details.en` 是插件页「详细介绍」一节的 Markdown（可带演示图，图片用 `docs/demo-assets` 分支或仓库内截图的绝对地址，标题 id 自动加 `d-` 前缀），新插件收录时必须填写，缺语言时构建回退另一语言；`readme.zh`/`readme.en` 固定填 `README.md`/`README.en.md`（下一次代码发布前，`site/npm.mjs` 会兼容读取旧版 npm 压缩包中的 `docs/README.zh-CN.md` / `README.zh-CN.md` 与英文 `README.md`；缺语言时构建仍告警并回退另一语言）；`repository` 填 GitHub URL，`directory` 是子目录（根即包填 `""`）；版本、日期、依赖、图标由构建时从 npm 自动读取，依赖按 catalog 内同名依赖自动推导（安装命令只列插件本身和未标 `optional` 的必需 peer——`dsh plugin add` 转发 pnpm 且 profile `autoInstallPeers: false`，其余依赖自动安装）。
+只改 `catalog.json` 并运行 `pnpm release:docs` 同步根 README。规则：只收录 npm 上有 `latest` 的 DSH 插件；`slug` 用小写字母数字连字符、通常去掉作用域和 `dsh-` 前缀，已发布 slug 保持稳定；`category` 用 `categories` 里的 id，`kind` 只取 `preset`/`plugin`/`service`；`title`/`summary` 双语，一句话说清用户价值；包内 `README.md` / `README.en.md` 是唯一详情正文正本，`readme.zh`/`readme.en` 固定填 `README.md`/`README.en.md`（外部仓库或未叠加本地文档时，`site/npm.mjs` 会兼容读取旧版 npm 压缩包中的 `docs/README.zh-CN.md` / `README.zh-CN.md` 与英文 `README.md`；缺语言时构建仍告警并回退另一语言）；`repository` 填 GitHub URL，`directory` 是子目录（根即包填 `""`）；版本、日期、依赖、图标由构建时从 npm 自动读取，依赖按 catalog 内同名依赖自动推导（安装命令只列插件本身和未标 `optional` 的必需 peer——`dsh plugin add` 转发 pnpm 且 profile `autoInstallPeers: false`，其余依赖自动安装）。
 
 ## 修改渲染
 
-README 原始 HTML 只保留 `<img>`、`<br>`，链接/图片地址只允许 http(s)、mailto、锚点、相对路径；改链接改写、依赖推导或页面结构时在 `site.test.mjs` 补离线测试；中文在根路径、英文在 `en/`，结构一致，新文案同步 `render.mjs` 的 `T.zh`/`T.en`；视觉采用蓝墨配冷色纸底，重点突出安装命令行，静态资源全部本地自包含。
+README 原始 HTML 只保留 `<img>`、`<br>`，链接/图片地址只允许 http(s)、mailto、锚点、相对路径；详情页启用 `stripSiteChrome`，自动剥离与页头/安装卡片/基本信息栏重复的开篇定位段、标准安装段、纯图 `## 演示`/`## Demo` 标题与不含 `NOTICE` 引用的标准许可证段（保留 `## 从 GitHub 安装`、`## 署名`、唯一简介段与列表导语段）。改链接改写、去重规则、依赖推导或页面结构时在 `site.test.mjs` 补离线测试；中文在根路径、英文在 `en/`，结构一致，新文案同步 `render.mjs` 的 `T.zh`/`T.en`；视觉采用蓝墨配冷色纸底，重点突出安装命令行，静态资源全部本地自包含。
 
 ## 验证与部署
 

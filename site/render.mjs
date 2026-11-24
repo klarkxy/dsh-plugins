@@ -4,6 +4,7 @@ import { Marked } from "marked";
 
 export const LANGS = ["zh", "en"];
 const OFFICIAL_DOCS = "https://deepseek-harness.github.io/deepseek-harness/";
+const MARKET_INDEX_URL = "https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/index.json";
 const CATEGORY_COLORS = { workflow: "#3c63e8", sessions: "#16877f", models: "#5b54d6", dev: "#2d6fa8" };
 
 const T = {
@@ -16,9 +17,11 @@ const T = {
     heroTitleA: "klarkxy 的 ",
     heroTitleGrad: "DSH",
     heroTitleB: " 插件",
-    heroLead: (n) => `${n} 个 DeepSeek Harness 插件，都已发布到 npm。挑一个，在终端里装上。`,
+    heroLead: () => "已发布到 npm 的 DeepSeek Harness 插件与预设。可在终端直接安装，或把索引源加入「插件 → 发现」。",
     heroArg: "<包名>",
     heroNote: "把 web 换成你在用的 profile。装完重启 profile，插件会出现在「设置 → 插件」里。",
+    marketLabel: "DSH 发现索引源",
+    copyMarket: "复制索引地址",
     statPlugins: (n) => `${n} 个插件`,
     statCategories: (n) => `${n} 个分类`,
     statUpdated: (date) => `更新于 ${date}`,
@@ -35,7 +38,7 @@ const T = {
     changelog: "版本动态",
     changelogLead: "所有插件的完整版本时间线，数据来自 npm。",
     allReleases: "查看全部版本动态",
-    footerData: (date) => `版本和 README 取自 npm，生成于 ${date}。`,
+    footerData: (date) => `版本与包信息取自 npm，生成于 ${date}。`,
     source: "源码",
     npmProfile: "npm 主页",
     officialDocs: "DSH 官方文档",
@@ -44,8 +47,6 @@ const T = {
     installFirst: (list) => `这个插件需要先装 ${list}，命令会按顺序一起装上。`,
     installAuto: (list) => `这个插件依赖 ${list}，安装时会自动一起装上。`,
     about: "说明",
-    details: "详细介绍",
-    readmeFrom: (path, version) => `以下内容来自 ${path}（${version}）。`,
     readmeFallback: "这个包没有中文 README，下面是英文原文。",
     readmeMissing: "这个包没有附带 README。",
     facts: "基本信息",
@@ -78,9 +79,11 @@ const T = {
     heroTitleA: "klarkxy's ",
     heroTitleGrad: "DSH",
     heroTitleB: " plugins",
-    heroLead: (n) => `${n} DeepSeek Harness plugins, all published on npm. Pick one and install it from a terminal.`,
+    heroLead: () => "DeepSeek Harness plugins and presets on npm. Install from a terminal, or add the index source under Plugins → Discover.",
     heroArg: "<package>",
     heroNote: "Replace web with your profile name. Restart the profile after installing; the plugin then shows up under Settings → Plugins.",
+    marketLabel: "DSH Discover index",
+    copyMarket: "Copy index URL",
     statPlugins: (n) => `${n} plugin${n === 1 ? "" : "s"}`,
     statCategories: (n) => `${n} categories`,
     statUpdated: (date) => `Updated ${date}`,
@@ -97,7 +100,7 @@ const T = {
     changelog: "Release timeline",
     changelogLead: "The complete version timeline across all plugins, straight from npm.",
     allReleases: "See the full release timeline",
-    footerData: (date) => `Versions and READMEs come from npm. Generated ${date}.`,
+    footerData: (date) => `Versions and package metadata come from npm. Generated ${date}.`,
     source: "Source",
     npmProfile: "npm profile",
     officialDocs: "Official DSH docs",
@@ -106,8 +109,6 @@ const T = {
     installFirst: (list) => `This plugin needs ${list} installed first; the commands install them in order.`,
     installAuto: (list) => `This plugin depends on ${list}; they are installed with it automatically.`,
     about: "About",
-    details: "Details",
-    readmeFrom: (path, version) => `From ${path} in ${version}.`,
     readmeFallback: "This package has no English README; the Chinese original follows.",
     readmeMissing: "This package ships no README.",
     facts: "Details",
@@ -166,15 +167,6 @@ export function validateCatalog(catalog) {
       if (!p.title?.[lang]) errors.push(`${p.slug}: missing title.${lang}`);
       if (!p.summary?.[lang]) errors.push(`${p.slug}: missing summary.${lang}`);
       if (!p.readme?.[lang]) errors.push(`${p.slug}: missing readme.${lang}`);
-    }
-    if (p.details !== undefined) {
-      if (typeof p.details !== "object" || p.details === null) {
-        errors.push(`${p.slug}: details must be an object`);
-      } else {
-        for (const lang of LANGS) {
-          if (typeof p.details[lang] !== "string" || !p.details[lang].trim()) errors.push(`${p.slug}: missing details.${lang}`);
-        }
-      }
     }
   }
   for (const c of catalog.categories) {
@@ -326,10 +318,104 @@ export function renderReadme(markdown, ctx) {
     },
   });
 
+  const isIgnorableSpace = (t) =>
+    t.type === "space" ||
+    (t.type === "html" && t.text.replace(/<!--[\s\S]*?-->/g, "").trim() === "");
+
+  const tokenText = (token) =>
+    Array.isArray(token?.tokens) && token.tokens.length
+      ? token.tokens.map(tokenText).join("")
+      : String(token?.text ?? "");
+
+  const hasImageToken = (token) =>
+    token?.type === "image" ||
+    (token?.type === "html" && /<img\b/i.test(token.text ?? "")) ||
+    (Array.isArray(token?.tokens) && token.tokens.some(hasImageToken));
+
+  const isImageOnlyToken = (token) => {
+    if (token.type === "html") {
+      const stripped = token.text.replace(/<!--[\s\S]*?-->/g, "").trim();
+      return /<img\b/i.test(stripped) && stripped.replace(/<[^>]*>/g, "").trim() === "";
+    }
+    if (token.type === "paragraph") {
+      const inline = token.tokens ?? [];
+      return (
+        inline.some((c) => c.type === "image" || (c.type === "html" && /<img\b/i.test(c.text ?? ""))) &&
+        inline.every((c) => c.type === "image" || c.type === "br" || (c.type === "text" && !c.text.trim()) || (c.type === "html" && /^<\/?(?:br|img)\b[^>]*>$/i.test(c.text.trim())))
+      );
+    }
+    return false;
+  };
+
+  const isImageOrLinkedImageParagraph = (token) => {
+    if (token.type !== "paragraph") return false;
+    const inline = token.tokens ?? [];
+    const isMedia = (c) =>
+      c.type === "image" ||
+      (c.type === "html" && /<img\b/i.test(c.text ?? "")) ||
+      (c.type === "link" && Array.isArray(c.tokens) && c.tokens.length > 0 && c.tokens.every(isMedia));
+    return (
+      inline.some(isMedia) &&
+      inline.every((c) => isMedia(c) || c.type === "br" || (c.type === "text" && !c.text.trim()) || (c.type === "html" && /^<\/?(?:br|img)\b[^>]*>$/i.test(c.text.trim())))
+    );
+  };
+
   const tokens = marked.lexer(markdown);
-  const firstContent = tokens.findIndex((t) => t.type !== "space");
+  const firstContent = tokens.findIndex((t) => !isIgnorableSpace(t));
   if (firstContent >= 0 && tokens[firstContent].type === "heading" && tokens[firstContent].depth === 1) tokens.splice(firstContent, 1);
   for (let i = tokens.length - 1; i >= 0; i--) if (isLangSwitch(tokens[i])) tokens.splice(i, 1);
+
+  if (ctx.stripSiteChrome) {
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const tok = tokens[i];
+      if (tok.type !== "heading" || tok.depth !== 2) continue;
+      let end = tokens.length;
+      for (let j = i + 1; j < tokens.length; j++) {
+        if (tokens[j].type === "heading" && tokens[j].depth <= 2) {
+          end = j;
+          break;
+        }
+      }
+      const heading = tokenText(tok).trim();
+      if (/^(?:安装(?:方式|说明)?|install(?:ation)?)$/i.test(heading)) {
+        tokens.splice(i, end - i);
+        continue;
+      }
+      if (/^(?:许可证|license)$/i.test(heading)) {
+        const sectionRaw = tokens.slice(i + 1, end).map((t) => t.raw ?? "").join("\n");
+        if (!/\bNOTICE(?:\.md)?\b/.test(sectionRaw)) tokens.splice(i, end - i);
+        continue;
+      }
+      if (/^(?:演示|示例|demo|preview|screenshots?)$/i.test(heading)) {
+        const body = tokens.slice(i + 1, end).filter((t) => !isIgnorableSpace(t));
+        if (body.length > 0 && body.every(isImageOnlyToken)) tokens.splice(i, 1);
+      }
+    }
+    const firstIdx = tokens.findIndex((t) => !isIgnorableSpace(t));
+    const nextIdx = firstIdx >= 0 ? tokens.findIndex((t, idx) => idx > firstIdx && !isIgnorableSpace(t)) : -1;
+    const hasSubstantiveBody =
+      firstIdx >= 0 &&
+      tokens.slice(firstIdx + 1).some(
+        (t) =>
+          t.type === "list" ||
+          t.type === "table" ||
+          t.type === "code" ||
+          t.type === "blockquote" ||
+          (t.type === "paragraph" && !isImageOrLinkedImageParagraph(t)),
+      );
+    if (
+      firstIdx >= 0 &&
+      nextIdx >= 0 &&
+      hasSubstantiveBody &&
+      tokens[firstIdx].type === "paragraph" &&
+      !hasImageToken(tokens[firstIdx]) &&
+      !/<img\b/i.test(tokens[firstIdx].raw ?? "") &&
+      tokens[nextIdx].type !== "list" &&
+      !/[:：]\s*$/.test(tokens[firstIdx].text.trim())
+    ) {
+      tokens.splice(firstIdx, 1);
+    }
+  }
 
   const html = marked
     .parser(tokens)
@@ -540,6 +626,7 @@ ${categories.map((c) => `<li><a href="#cat-${c.id}" data-category="${esc(c.id)}"
 <p class="lede">${esc(t.heroLead(plugins.length))}</p>
 <pre class="terminal hero-terminal" aria-label="${esc(t.install)}"><span class="prompt" aria-hidden="true">$</span> dsh plugin --profile web add <span class="arg">${esc(t.heroArg)}</span></pre>
 <p class="hero-note">${esc(t.heroNote)}</p>
+<div class="hero-market"><span>${esc(t.marketLabel)}</span><code>${esc(MARKET_INDEX_URL)}</code>${copyButton(lang, [MARKET_INDEX_URL], t.copyMarket)}</div>
 <ul class="hero-stats">
 <li><strong>${plugins.length}</strong> ${esc(t.statPlugins(plugins.length).replace(String(plugins.length), "").trim())}</li>
 <li><strong>${categories.length}</strong> ${esc(t.statCategories(categories.length).replace(String(categories.length), "").trim())}</li>
@@ -644,23 +731,10 @@ function detailPage(ctx, plugin, lang) {
         assetPages,
         readmePages,
         packagePages,
+        stripSiteChrome: true,
       })
     : { html: `<p>${t.readmeMissing}</p>`, toc: [] };
-  const readmeNote = !readme ? "" : own ? t.readmeFrom(readme.path, npm.version) : t.readmeFallback;
-
-  // Curated long-form introduction from the catalog, rendered above the README extract.
-  const detailsMarkdown = plugin.details?.[lang] ?? plugin.details?.[lang === "zh" ? "en" : "zh"];
-  const detailsRendered = detailsMarkdown
-    ? renderReadme(detailsMarkdown, {
-        repository: plugin.repository,
-        directory: plugin.directory,
-        readmePath: plugin.readme[lang],
-        assetPages,
-        readmePages,
-        packagePages,
-        idPrefix: "d-",
-      })
-    : null;
+  const readmeNote = readme && !own ? t.readmeFallback : "";
 
   const list = (items) => items.map((p) => `<a href="${pageFor(p)}">${esc(p.title[lang])}</a>`).join("、");
   const manualDeps = plugin.installPackages.filter((p) => p.slug !== plugin.slug);
@@ -692,7 +766,7 @@ function detailPage(ctx, plugin, lang) {
 
   const issues = npm.manifest.bugs?.url ?? `${plugin.repository}/issues`;
   const sourceUrl = plugin.directory ? `${plugin.repository}/tree/HEAD/${plugin.directory}` : plugin.repository;
-  const tocEntries = [...(detailsRendered?.toc ?? []), ...rendered.toc];
+  const tocEntries = rendered.toc;
   const toc =
     tocEntries.length >= 3
       ? `<nav class="toc" aria-labelledby="toc-title"><h2 id="toc-title">${t.toc}</h2><ol>${tocEntries
@@ -761,12 +835,8 @@ ${history}
 </aside>
 <article class="readme" aria-labelledby="about-title">
 <h2 id="about-title" class="sr-only">${t.about}</h2>
-${detailsRendered ? `<section class="plugin-details" aria-labelledby="details-title">
-<h2 id="details-title">${esc(t.details)}</h2>
-${detailsRendered.html}
-</section>
-` : ""}${readmeNote ? `<p class="readme-note">${esc(readmeNote)}</p>` : ""}
-${rendered.html}
+${readmeNote ? `<p class="readme-note">${esc(readmeNote)}</p>
+` : ""}${rendered.html}
 </article>
 </div>
 </div>

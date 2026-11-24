@@ -4,7 +4,7 @@
 
 [简体中文](README.md) / English
 
-Configure models and reasoning effort for new DeepSeek Harness subagents, inspect each subagent's last-used model in the read-only popup, and enable Delegation Mode per session. Installing this plugin also enables Delegation Mode; `@klarkxy/dsh-delegation` remains available as a standalone compatibility entry.
+Configure models and reasoning effort for new DeepSeek Harness subagents, inspect each subagent's last-used model in the read-only popup, and enable Delegation Mode per session.
 
 ## Downloads
 
@@ -23,7 +23,7 @@ Replace `web` with your profile name and restart the profile after installation.
 - **Configure subagent models**: Open **Settings → Subagents** to add, replace, or remove allowed models, choose a reasoning effort for each route, and enter optional task tendencies (saved on blur). Add at least one model before turning on **Enable subagent model selection**; these settings guide delegation while the agent makes the final choice.
 - **Optional picker upgrade**: When the optional **Model Picker** (`@klarkxy/dsh-model-picker`) plugin is installed, model menus here upgrade to the shared searchable picker with a reasoning-effort slider; without it, the built-in menus keep working as-is.
 - **Inspect last-used models**: In a conversation, open the subagent count or breadcrumb switcher to view each child's last-used model and reasoning effort in read-only mode.
-- **Delegation Mode**: Select **Delegate** when creating a session so the main agent decomposes and reviews work while subagents execute it. The prompts require a self-contained task brief (goal, boundaries, contracts, dependencies, acceptance checks, and report format) and evidence-based executor reports; the host still controls tools and approvals.
+- **Delegation Mode**: Select **Delegate** when creating a session so the main agent decomposes and reviews work while subagents execute it. The prompts require a self-contained task brief (goal, boundaries, contracts, dependencies, acceptance checks, and report format) and evidence-based executor reports; the host still controls tools and approvals. Installing this plugin also enables Delegation Mode; `@klarkxy/dsh-delegation` remains available as a standalone compatibility entry.
 
 ## Limitations
 
