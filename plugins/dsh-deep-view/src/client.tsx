@@ -303,7 +303,7 @@ export function ActivityDock(props: ToolViewProps & { call(endpoint: string, pay
     void props.call('defer', { sessionId: props.sessionId, viewId: pending.id }).then(result => {
       const envelope = result as RpcResult<{ deferred?: boolean; value?: PendingView }> | undefined
       if (envelope?.ok) {
-        props.store.setPending(envelope.value ?? { ...pending, blocking: false })
+        props.store.setPending(envelope.value?.value ?? { ...pending, blocking: false })
       } else if (pending.callId) {
         props.store.setStatus(pending.callId, { state: 'failed', text: t('deferFailed'), copyKey: 'deferFailed' })
       }
