@@ -7,7 +7,7 @@ import type { ZhihuJsonValue } from './open-platform.ts'
 export function createZhihuSyncTool(service: ZhihuService) {
   return defineTool({
     name: 'zhihu_sync',
-    description: '管理知乎文章、提问与想法的本地草稿，支持校验格式预览及上传配图至知乎；正式发布由用户在预览界面手动确认。',
+    description: '管理知乎文章、提问与想法的本地草稿，支持草稿校验和上传配图至知乎；正式发布请在知乎端完成。',
     parameters: {
       action: { type: 'string', enum: ['list', 'get', 'save', 'prepare', 'upload_image'], required: true },
       offset: { type: 'integer', description: 'list 分页位置；后续用返回的 nextOffset。' },

@@ -584,11 +584,11 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
   if (request.querySource === 'question_only') limitations.push('本次仅直接检索原问题（未拆解多角度子问题）。')
   if (request.querySource === 'question_only' && request.question.length > 200) limitations.push('原问题超过 200 字，单次检索词截取前 200 字。')
   if (request.mode === 'briefing') limitations.push('全网 publish_time 与知乎 EditTime 均按条目发布或编辑时间筛选；已确认事件时间线仅收录摘录中写明日期的条目。')
-  if (!request.sources.includes('knowledge')) limitations.push('本次默认检索站内与全网；如需检索已有知识库请显式加入 sources。')
+  if (!request.sources.includes('knowledge')) limitations.push('本次未检索知识库（如需纳入已有知识库，请在 sources 中显式加入 knowledge）。')
   if (hasMore) limitations.push('上游返回 HasMore 为真（公开接口仅提供首页召回结果）。')
   if (failures.length > 0) limitations.push('部分检索请求失败（单次请求未自动重试，详见失败记录）。')
   if (budgetExhausted) limitations.push('本次单次调用预算已用尽，其余计划项已跳过并标记为 skipped。')
-  if (request.since === undefined && request.mode === 'briefing') limitations.push('本次未传入 since 参数，仅按近 30 天窗口归类。')
+  if (request.since === undefined && request.mode === 'briefing') limitations.push(`本次未传入 since 参数，仅按近 ${request.windowDays} 天窗口归类，无法区分相对上次阅读的新增内容。`)
   const zhihu = evidence.filter(item => item.sources.includes('zhihu')).length
   const web = evidence.filter(item => item.sources.includes('web')).length
   const knowledge = evidence.filter(item => item.sources.includes('knowledge')).length

@@ -193,6 +193,14 @@ describe('zhihu study evidence', () => {
     expect(result.groups?.undated).toHaveLength(1)
     expect(renderZhihuStudy(result)).toContain('窗口内缺少可核实时间')
     expect(renderZhihuStudy(result)).not.toContain('上游没有返回条目')
+    const sevenDay = await executeZhihuStudy({ mode: 'briefing', question: '减肥药进展', sources: ['zhihu'], windowDays: 7 }, client(() => ({
+      Items: [item()],
+    })))
+    const notes = sevenDay.limitations.join('\n')
+    expect(notes).toContain('本次未检索知识库')
+    expect(notes).not.toContain('默认检索站内与全网')
+    expect(notes).toContain('近 7 天窗口归类')
+    expect(notes).toContain('无法区分相对上次阅读的新增内容')
   })
 })
 
