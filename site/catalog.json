@@ -66,10 +66,6 @@
         "zh": "在对话里提交工作区改动，由模型分组并生成 Git 提交信息。",
         "en": "Commit workspace changes from the conversation, with the model grouping commits and generating commit messages."
       },
-      "details": {
-        "zh": "在对话里就能把当前工作区的改动提交掉：模型先把全部未提交改动按逻辑分组、为每组生成提交信息，确认后逐组创建本地提交。\n\n- **入口**：对话右上角的「提交」按钮，会话空闲且工作区有未提交改动时可用。\n- **规划模型**：可单独指定并记住选择；留空时跟随共享「默认辅助模型」，再依次回落到当前会话模型与宿主默认模型。安装「模型选择器」后菜单升级为带搜索与思考强度滑杆的共享选择器。\n- **模型不可用**：默认取消提交、保持工作区不变；开启回退后把全部改动合并为一个提交并自动生成信息。\n- **边界**：只在本地创建提交，不推送远程；每次规划按当前改动重新组织输入；中途停止时已创建的提交保留，剩余分组在面板中列出。",
-        "en": "Commit workspace changes without leaving the conversation: the model groups all uncommitted changes logically, writes a commit message per group, and creates the local commits after you confirm.\n\n- **Entry point**: the **Commit** button in the conversation header, available while the session is idle with uncommitted changes.\n- **Planning model**: pick one and it is remembered; empty follows the shared **Default auxiliary model**, then the current session model and the host default. With Model Picker installed, the menu upgrades to the shared picker with search and a reasoning-effort slider.\n- **Model unavailable**: the commit is cancelled by default, leaving the workspace untouched; an opt-in fallback squashes everything into one commit with a generated message.\n- **Boundaries**: commits are local only and never pushed; every run plans from the current workspace state; on abort, created commits stay and the panel lists the remaining groups."
-      },
       "readme": {
         "zh": "README.md",
         "en": "README.en.md"
@@ -89,10 +85,6 @@
       "summary": {
         "zh": "按会话开启委派模式：主代理负责拆解、委派和验收，子代理执行具体任务，支持多智能体协作。",
         "en": "Per-session Delegation Mode: the main agent plans, delegates, and reviews while subagents carry out the work, enabling multi-agent orchestration."
-      },
-      "details": {
-        "zh": "按会话开启的多智能体协作：开启后主代理负责拆解任务、委派子代理并验收结果，子代理自动获得执行者指引。\n\n- **入口**：创建会话页与预设选择器同一行的「委派」按钮，发送第一条消息前切换，会话开始后锁定。\n- **记忆与继承**：记住最近一次选择并沿用到之后的新会话（含重启后）；分叉会话继承父会话状态。\n- **协同方式**：简单任务主代理直接回答；复杂任务先拆成自包含任务单委派给子代理，再检查产出。\n- **边界**：仅提示词引导，不改变工具、审批与权限；仅带子代理工具的预设（如 Standard、PTC）可用。需要子代理模型配置时可用「子代理」（dsh-model-hub）获得一体化入口。",
-        "en": "Per-session multi-agent orchestration: once enabled, the main agent plans, delegates to subagents, and reviews their output, while subagents automatically receive executor guidance.\n\n- **Entry point**: the **Delegation** button on the new-session page, next to the preset pickers; toggle before the first message, locked once the session starts.\n- **Memory and inheritance**: your last choice carries over to later new sessions (across restarts); forked sessions inherit the parent's state.\n- **How it works**: simple tasks are answered directly; complex ones are split into self-contained briefs delegated to subagents whose output is then reviewed.\n- **Boundaries**: prompt guidance only — tools, approvals, and permissions are unchanged; presets without subagent tools (e.g. Minimal) disable the button. For subagent model configuration, use Subagents (dsh-model-hub) as the integrated entry."
       },
       "readme": {
         "zh": "README.md",
@@ -114,10 +106,6 @@
         "zh": "会话标题跟随最新任务自动更新，手动改过的名字不会被覆盖；自动重命名与人工命名两不误。",
         "en": "Session titles follow the latest task automatically; names you set by hand stay put. Auto-rename and manual naming coexist."
       },
-      "details": {
-        "zh": "让会话标题紧跟当前任务，格式为「月日 | 类型 | 摘要」，手动改过的名字不会被覆盖。\n\n- **更新节奏**：「跟随当前任务（每条消息）」或「仅首条消息」。\n- **自定义**：支持自定义标题提示词与独立标题模型；留空跟随共享「默认辅助模型」。\n- **入口**：「设置 → 会话管理 → 自动标题」，可查看当前标题状态、手动重新生成。\n- **边界**：每次生成调用一次模型（最低思考强度），失败保留原标题；子代理会话跳过；停用后交还宿主原生标题功能。",
-        "en": "Session titles follow the task at hand — `date | type | summary` — while names you set by hand stay untouched.\n\n- **Cadence**: follow every message or only the first one.\n- **Customization**: override the title prompt and pick a dedicated title model, or leave it on the shared **Default auxiliary model**.\n- **Entry point**: Settings → Session Management → Auto Title, with current-title status and a manual regenerate action.\n- **Boundaries**: one model call per rename at the lowest reasoning effort, keeping the old title on failure; subagent sessions are skipped; disabling restores the host's native titling."
-      },
       "readme": {
         "zh": "README.md",
         "en": "README.en.md"
@@ -137,10 +125,6 @@
       "summary": {
         "zh": "在一个设置页编排多源联网搜索（RRF 并发融合、主备降级、单源）与网页读取链式回退，内置 DuckDuckGo、Jina Reader、Exa、Tavily、Linkup、智谱等并整合插件搜索源，为模型提供 web_search 与 web_fetch。",
         "en": "Orchestrate multi-source web search (parallel RRF fusion, failover, single; DuckDuckGo, Exa, Tavily, Brave, Bocha, Serper, Linkup, Zhipu, and plugin sources) and waterfall page reading (Jina Reader and plugin sources) in one settings page for web_search and web_fetch."
-      },
-      "details": {
-        "zh": "![网页搜索设置：搜索模式、读取模式、后备标签与计费授权](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr23-web-search-manager.gif)\n\n把「模型怎么联网」集中到一个设置页：搜索侧支持多源融合 / 主备降级 / 单源三种调度，读取侧支持链式回退 / 单源两种模式，内置 DuckDuckGo 与 Jina Reader 等开箱即用的免费源。\n\n## 搜索编排\n\n- **多源融合（默认）**：并发调用排序靠前的免费源，加权 RRF 去重重排，合并更完整的摘要与发布时间；同类 DeepSeek 源自动去重。\n- **主备降级 / 单源**：按顺位依次请求，或只用首选源。\n- **计费护栏**：按次计费的源与未声明计费的插件源必须逐条勾选授权才参与并发或回退；未勾选的付费源排第一时只单独调用它。\n- **后端**：DuckDuckGo 开箱即用；DeepSeek 搜索、Exa、Brave、博查、Serper、Firecrawl、Tavily、Perplexity、You.com、Linkup、智谱填 Key 即用；宿主与其他插件的搜索源出现在同一列表。\n\n## 网页读取\n\n- 默认链式回退：Jina Reader 失败或正文为空时回退本机 HTTP 直连；Firecrawl 可勾选加入链条。\n- 内网与本机地址自动跳过云端抓取，只走本机直连。\n\n## 使用要点\n\n- 「设置 → 网页搜索」集中管理 API Key、源排序与请求限制（结果数、查询数、并发、超时、正文长度）。\n- 模型经 `web_search` / `web_fetch` 使用编排结果；未挂 `tool-web` 的自定义预设需在 `agent.cordis.yml` 加入 `@klarkxy/dsh-web-search-manager/tools`。",
-        "en": "![Web search settings: search modes, fetch modes, fallback tags, and billing opt-ins](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr23-web-search-manager.gif)\n\nOne settings page for how the model goes online: three search orchestration modes (parallel fusion, failover, single) and two page-reading modes (waterfall, single), with free DuckDuckGo and Jina Reader backends that work out of the box.\n\n## Search orchestration\n\n- **Parallel fusion (default)**: queries top-ranked free sources concurrently, deduplicates and reranks with weighted RRF, and merges richer summaries and dates; equivalent DeepSeek backends are grouped automatically.\n- **Failover / single**: try sources in rank order, or use only the primary.\n- **Billing guardrails**: per-call and undeclared-billing sources join fan-out or fallback only after an explicit per-row opt-in; an un-opted paid source ranked first runs alone.\n- **Backends**: DuckDuckGo needs no key; DeepSeek search, Exa, Brave, Bocha, Serper, Firecrawl, Tavily, Perplexity, You.com, Linkup, and Zhipu work once their keys are saved; host and plugin search providers appear in the same list.\n\n## Page reading\n\n- Waterfall by default: anonymous Jina Reader first, direct local HTTP on failure or empty bodies; Firecrawl can opt into the chain.\n- Local and intranet URLs automatically bypass cloud fetchers and use direct local HTTP only.\n\n## Usage notes\n\n- Settings → Web Search centralizes API keys, source order, and request limits (results, queries, parallelism, timeout, body size).\n- The model consumes the orchestration through `web_search` / `web_fetch`; custom presets without `tool-web` add `@klarkxy/dsh-web-search-manager/tools` in `agent.cordis.yml`."
       },
       "readme": {
         "zh": "README.md",
@@ -162,10 +146,6 @@
         "zh": "知乎站内与全网搜索、热榜、直答、知识库、问题与创作数据、草稿配图，以及深度研究、知乎观察和近 30 天速览的取证与本地报告。",
         "en": "Search Zhihu and the web, browse hot lists, Zhida, knowledge bases, Q&A, creator data, and drafts, and export local reports for deep research, opinion comparison, and rolling 30-day briefings."
       },
-      "details": {
-        "zh": "把知乎接入 DSH 作为调研信源与草稿工具：站内/全网搜索、热榜、直答、知识库、问题与创作数据，以及草稿保存、校验与配图上传，全程只使用你自己的知乎凭据。\n\n- **设置页五个页签**：设置（检索与发布助手凭据）、统计（本机每日调用记录）、官方用量（接口免费额度）、知识库（上传参考资料，单文件 20 MB 上限）、测试（手动跑通各接口）。\n- **模型工具**：`zhihu_research` 单次检索；`zhihu_study` 有预算的取证（深度研究 / 知乎观察 / 近况速览，返回证据而非成品）；`zhihu_study_report` 导出 report.md / report.json / report.html；`zhihu_account` 账号与创作数据；`zhihu_sync` 草稿与配图。\n- **费用保护**：每次请求先查官方免费额度，付费调用默认关闭，需显式 `allowPaid`；不自动重试。\n- **联动**：安装「网页搜索」后，知乎全网搜索可作为其搜索后端参与编排。\n- **边界**：工具只准备、校验草稿并上传配图，正式发布在知乎端完成；仅使用当前凭据对应账号，不支持 OAuth 切换。",
-        "en": "Zhihu as a research source and draft toolkit inside DSH: on-site and web-wide search, hot lists, Zhida answers, knowledge bases, question and creator stats, plus draft saving, validation, and image uploads — always with your own Zhihu credentials.\n\n- **Five settings tabs**: Settings (search and publisher credentials), Stats (local daily call records), Official quota (per-API free allowance), Knowledge base (reference uploads up to 20 MB each), and Test (run every endpoint by hand).\n- **Agent tools**: `zhihu_research` single-shot retrieval; `zhihu_study` budgeted evidence gathering (deep research, observation, 30-day briefing — evidence, not finished reports); `zhihu_study_report` exporting report.md / report.json / report.html; `zhihu_account` for account and creator data; `zhihu_sync` for drafts and images.\n- **Cost protection**: every request checks the official free quota first; paid calls stay off unless you explicitly set `allowPaid`; no automatic retries.\n- **Integration**: with Web Search installed, Zhihu web search joins its backend list.\n- **Boundaries**: tools only prepare, validate, and illustrate drafts — publishing happens on Zhihu; only the current credential's account is used, no OAuth switching."
-      },
       "readme": {
         "zh": "README.md",
         "en": "README.en.md"
@@ -185,10 +165,6 @@
       "summary": {
         "zh": "在插件页浏览 DSH 官方开发文档；Creator 模式下智能体另获两个只读工具检索文档与核对插件（dsh_docs、dsh_plugins）。",
         "en": "Browse official DSH developer documentation in the Plugins page; in Creator mode the agent also gets two read-only tools to search docs and inspect plugins across the catalog, npm, and GitHub (dsh_docs, dsh_plugins)."
-      },
-      "details": {
-        "zh": "![在插件页浏览 DSH 开发文档](https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/plugins/dsh-dev-index/screenshots/docs-zh.png)\n\n把 DSH 官方开发文档搬进「插件 → DSH 文档」：中英切换、返回首页、浏览器打开，不用离开宿主。\n\n- **文档浏览器**：直接在插件页阅读官方文档站，内容跟随最新发布版本。\n- **Creator 模式工具**：`dsh_docs` 按标题/分类/路径检索官方文档并分段读取；`dsh_plugins` 在安装前核对 klarkxy 目录、npm 元数据与 GitHub 仓库，可把分支解析为可锁定的 commit spec。\n- **凭据边界**：GitHub 查询优先复用本机 `gh` CLI，未登录回退匿名 API（有速率限制）；插件不保存任何凭据，`github-code` 代码搜索必须先登录 `gh`。",
-        "en": "![Browsing DSH developer docs on the Plugins page](https://raw.githubusercontent.com/klarkxy/dsh-plugins/main/plugins/dsh-dev-index/screenshots/docs-en.png)\n\nBrings the official DSH developer documentation into Plugins → DSH Docs: Chinese/English switch, docs home, and open-in-browser, all without leaving the host.\n\n- **Docs browser**: read the official documentation site on the plugin page, tracking the latest release.\n- **Creator-mode tools**: `dsh_docs` searches the official docs by title, category, or path and fetches sections; `dsh_plugins` checks the klarkxy catalog, npm metadata, and GitHub repos before installing, resolving branches to pinnable commit specs.\n- **Credential boundaries**: GitHub queries reuse your signed-in `gh` CLI, falling back to the anonymous API (rate-limited); the plugin stores no credentials, and `github-code` search requires a signed-in `gh`."
       },
       "readme": {
         "zh": "README.md",
@@ -210,10 +186,6 @@
         "zh": "新增「Safe Auto」审批档位：需要审批的请求交给审核模型判断，通过才放行，并记录完整的审核历史。",
         "en": "Adds a Safe Auto approval level: a reviewer model answers approval requests one call at a time, with full review history and audit trails."
       },
-      "details": {
-        "zh": "在原生审批档位之外新增「Safe Auto」：需要审批的请求先交给审核模型逐次判定，通过才放行这一次调用，拒绝原因直接反馈给智能体。\n\n- **按会话开启**：输入框旁的权限菜单选择「安全自动」，仅对当前会话生效；最近顶层会话处于该档位时，新建顶层会话自动沿用（不可用时保留原生权限，不提权）。\n- **送审范围**：沙箱提权（write/edit/bash/pwsh）、其他工具的审批请求，以及少量危险命令（强制删除、打开网址）；普通读取、搜索、构建直接放行。\n- **审核配置**：「设置 → 会话管理 → 安全自动」选审核模型、思考强度与额外审核提示词（只能加约束，不能放宽）；留空跟随默认辅助模型。\n- **熔断**：同一轮连续拒绝 3 次或最近 50 次中拒绝 10 次即暂停自动审批，直到你发下一条消息。\n- **审核历史**：按关键词、会话、工具、结果、风险与时间筛选分页，查看判定依据与 token 用量，可导出 JSON；模型另有只读工具 `safe_auto_history` 查询当前会话记录。\n- **注意**：审核方是语言模型，可能误判——这是减速带，不是安全边界；沙箱、隔离与备份措施请保留。",
-        "en": "A new **Safe Auto** approval level: requests that need approval are judged one call at a time by a reviewer model — approved calls go through once, rejections feed the reason back to the agent.\n\n- **Per-session**: pick Safe Auto in the permission menu beside the composer; new top-level sessions inherit it from the most recent one (falling back to native permissions without escalating when unavailable).\n- **What gets reviewed**: sandbox escalations (write/edit/bash/pwsh), approval requests from other tools, and a small set of dangerous commands (force deletes, opening URLs); ordinary reads, searches, and builds run directly.\n- **Reviewer setup**: Settings → Session Management → Safe Auto picks the reviewer model, reasoning effort, and extra review prompts (constraints only, never relaxations); empty follows the default auxiliary model.\n- **Circuit breaker**: 3 rejections in a row within one turn, or 10 in the last 50, pauses auto-approval until your next message.\n- **Review history**: filter and page by keyword, session, tool, verdict, risk, and time; inspect rationale and token usage; export JSON. A read-only `safe_auto_history` tool lets the model query the current session's records.\n- **Caveat**: the reviewer is a language model and can misjudge — this is a speed bump, not a security boundary; keep your sandbox, isolation, and backups."
-      },
       "readme": {
         "zh": "README.md",
         "en": "README.en.md"
@@ -233,10 +205,6 @@
       "summary": {
         "zh": "跨工作目录搜索和阅读 DeepSeek Harness 会话，使用临时工作区；空输入一键续写或自动继续，久离回来给出摘要与上下文压缩建议；可选择让 agent 分叉当前会话或向其他会话发送消息。",
         "en": "Search and read DeepSeek Harness sessions across working directories, use temporary workspaces, continue with one tap or automatically when a reply stops early, recap on return with context-compaction hints, and optionally let the agent fork the current session or message other sessions."
-      },
-      "details": {
-        "zh": "![会话管理：工作区选择器里的临时工作区入口](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr23-session-manager-picker.gif)\n\n跨工作目录找回任何会话，并让每段对话自己往前走：续写建议、自动继续、久离摘要与压缩建议、消息编辑重发，全部在「设置 → 会话管理」即时保存。\n\n## 会话找回与交接\n\n- **会话右键菜单**：不离开当前对话即可操作其他会话；支持删除聊天（自由聊天连同其文件清理）。\n- **编辑并重发**：在原位置修改已发送的消息（含附件增删），确认后从该消息分叉继续，原版移入归档。\n- **临时工作区**：新建会话时选择一个独立新文件夹开工。\n\n## 让对话自己继续\n\n- **输入框建议**：上一轮结束且无草稿时浮现灰色续写提示，`Tab` 填入；文本可固定或由模型生成。\n- **自动继续**：回复提前结束时由判定模型决定是否续跑（每条用户消息 1–10 次上限）；中止、报错、待审批、无进展或需要人工时自动停止。\n- **欢迎回来**：闲置超阈值显示摘要卡片；超压缩阈值附「压缩上下文」与「在新会话中继续」按钮。\n\n## 智能体工具\n\n`list_sessions` / `search_sessions` / `read_session` 始终只读可用；`fork_session` 与 `send_session_message` 默认关闭，需在「代理操作」中显式开启，且依赖宿主能力。",
-        "en": "![Session management: the temporary workspace entry in the workspace picker](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr23-session-manager-picker.gif)\n\nFind any session across working directories and keep conversations moving on their own: composer suggestions, auto-continue, welcome-back recaps with compaction hints, and edit-and-resend — all saved instantly under Settings → Session Management.\n\n## Finding and handing off sessions\n\n- **Session context menu**: act on other sessions without leaving the current one; chat deletion is supported (free chats are removed together with their files).\n- **Edit and resend**: modify a sent message in place (attachments included), then continue from a fork at that message while the original moves to the archive.\n- **Temporary workspace**: start a session in a freshly allocated folder from the workspace picker.\n\n## Keeping conversations going\n\n- **Composer suggestion**: a grey continuation hint appears after a turn with no draft; `Tab` fills it. Use fixed text or a model-generated line.\n- **Auto-continue**: when a reply stops early, a judge model decides whether to send a follow-up (1–10 per user message); it stops on abort, error, pending approval, no progress, or when human input is needed.\n- **Welcome back**: idle past the threshold, a recap card appears; past the compaction threshold it adds **Compact context** and **Continue in a new session** actions.\n\n## Agent tools\n\n`list_sessions` / `search_sessions` / `read_session` are always available read-only; `fork_session` and `send_session_message` are off by default, enabled explicitly under **Agent actions**, and require host capabilities."
       },
       "readme": {
         "zh": "README.md",
@@ -258,10 +226,6 @@
         "zh": "DSH 插件共用的运行时与界面支撑库（默认辅助模型、共享设置页、诊断日志、存储与通信、官方 UI 样式、可选共享模型选择器及子代理会话识别），由依赖它的插件自动安装。",
         "en": "Shared runtime and UI support library for DSH plugins (default auxiliary model, shared settings, diagnostic logging, storage, RPC, official UI styling, optional shared model picker integration, and subagent session helpers), installed automatically by dependent plugins."
       },
-      "details": {
-        "zh": "本仓库插件共用的运行时与界面支撑库，由依赖它的插件自动安装，一般不需要单独安装。\n\n- 共享「默认辅助模型」与「会话管理」设置页基础设施。\n- 诊断日志、存储与宿主 RPC 辅助。\n- 官方 UI 样式（`official-ui`）与主题 token 守卫。\n- 可选共享模型选择器接入与子代理会话识别。\n\n插件开发者请直接参考源码与类型声明。",
-        "en": "The shared runtime and UI support library for the plugins in this repository, installed automatically by anything that depends on it — you rarely install it directly.\n\n- Shared **Default auxiliary model** and Session Management settings-page infrastructure.\n- Diagnostic logging, storage, and host RPC helpers.\n- Official UI styling (`official-ui`) with theme-token guards.\n- Optional shared model-picker integration and subagent session detection.\n\nPlugin developers: read the source and type declarations directly."
-      },
       "readme": {
         "zh": "README.md",
         "en": "README.en.md"
@@ -281,10 +245,6 @@
       "summary": {
         "zh": "供 DSH 插件统一声明供应商、模型与思考强度设置，并共享模型列表与选择菜单，由依赖它的插件自动安装。",
         "en": "Shared library for DSH plugins to define provider, model, and reasoning-effort settings consistently and share model lists and picker menus; installed automatically by dependent plugins."
-      },
-      "details": {
-        "zh": "让各插件用同一套契约声明「供应商 / 模型 / 思考强度」设置，并共享模型列表与选择菜单；由依赖它的插件自动安装。\n\n- 同时支持 Zod 与 Schemastery 两种 schema 声明方式。\n- 模型菜单自带加载、错误与重试反馈；安装「模型选择器」后自动升级为共享选择器。\n- 「Git 提交」「自动标题」「Safe Auto」「会话管理」等插件经它复用同一套路由字段。\n\n插件开发者请直接参考源码与类型声明。",
-        "en": "One contract for declaring provider / model / reasoning-effort settings across plugins, plus shared model lists and picker menus — installed automatically by its dependents.\n\n- Works with both Zod and Schemastery schemas.\n- Model menus ship with loading, error, and retry feedback; with Model Picker installed they upgrade to the shared picker.\n- Git Commit, Auto Title, Safe Auto, Session Manager, and others reuse the same routing fields through it.\n\nPlugin developers: read the source and type declarations directly."
       },
       "readme": {
         "zh": "README.md",
@@ -306,10 +266,6 @@
         "zh": "配置子代理模型与思考强度、查看最后使用的模型，并按会话开启委派模式。",
         "en": "Configure subagent models and reasoning effort, review their last-used models, and enable Delegation Mode per session."
       },
-      "details": {
-        "zh": "子代理的一体化入口：配置子代理可用模型与思考强度、查看每个子代理最后使用的模型，并在创建会话时开启委派模式。\n\n- **模型名单**：「设置 → 子代理」维护可用模型、逐模型思考强度与任务倾向（失焦自动保存）；仅对新建会话生效。\n- **已用模型查看**：会话顶部的子代理弹层只读显示各子代理的最后路由与思考强度。\n- **委派模式**：主代理拆解验收、子代理执行；提示词要求自包含任务单与验证证据，工具和审批仍由宿主控制。\n- **联动**：安装「模型选择器」后，此处模型菜单升级为共享选择器。",
-        "en": "The integrated home for subagents: configure which models and reasoning efforts subagents may use, see what each subagent last ran on, and turn on Delegation Mode when creating a session.\n\n- **Model roster**: Settings → Subagents manages allowed models, per-model effort, and task preferences (saved on blur); changes apply to new sessions only.\n- **Last-used models**: the subagent popover at the top of a session read-only shows each subagent's last route and effort.\n- **Delegation Mode**: the main agent plans and reviews while subagents execute; prompts demand self-contained briefs and verification evidence, while tools and approvals stay with the host.\n- **Integration**: with Model Picker installed, the menus here upgrade to the shared picker."
-      },
       "readme": {
         "zh": "README.md",
         "en": "README.en.md"
@@ -329,10 +285,6 @@
       "summary": {
         "zh": "自定义 Web GUI 的界面、对话、代码与终端字体及字号，支持更换字体族与调整排版。",
         "en": "Customize the interface, conversation, code and terminal fonts and font sizes of the Web GUI; change font families and adjust typography."
-      },
-      "details": {
-        "zh": "把 Web GUI 的四类字体分开调教：界面、对话、代码与终端各自可选字体族与字号。\n\n- **系统字体直读**：Chromium 系浏览器授权后从本机字体列表挑选，也可手动输入完整 `font-family` 字体栈。\n- **即时生效**：改动立即应用并与 DSH 设置同步，包括桌面端 `Ctrl/⌘±` 字号快捷键。\n- **界面集成**：安装期间「设置 → 通用」的原生「字号大小」行收进本页，停用后自动恢复。\n- **注意**：插件不附带字体文件，使用本机已安装字体；对话字体仅保存在当前浏览器。",
-        "en": "Tune four font roles of the Web GUI independently: interface, conversation, code, and terminal — each with its own family and size.\n\n- **Local system fonts**: with Chromium permission, pick from the fonts installed on this machine, or type a full `font-family` stack by hand.\n- **Instant effect**: changes apply immediately and sync with DSH settings, including the desktop `Ctrl/⌘±` size shortcuts.\n- **Integration**: while installed, the native font-size row under Settings → General folds into this page and returns when the plugin is disabled.\n- **Note**: the plugin bundles no font files and uses locally installed fonts; the conversation font is stored per browser only."
       },
       "readme": {
         "zh": "README.md",
@@ -354,10 +306,6 @@
         "zh": "解除模型回答限制并交付完整成果的会话预设（Preset），只作用于选用它的会话；可能导致账号被封禁。",
         "en": "A session preset that removes the model's answer limits and delivers complete results, only in sessions that pick it; may get your account banned."
       },
-      "details": {
-        "zh": "一个只作用于选用会话的 Preset：解除模型对回答内容的限制，要求单轮端到端交付完整成果。⚠ 可能导致账号被封禁，Preset 卡片已红字标出，请自行评估。\n\n- **运行时强化**：系统提示词尾部提醒防长上下文冲淡、拒绝开头自动纠正重试（默认每轮 1 次）、流式请求边界拦截重试（默认最多 3 次，最后一次始终透传）。\n- **提示词档位**：`default` / `stealth`（精简过程先给产物）/ `max`（强化完整交付）。\n- **本地调优**：`$DSH_HOME/unrestricted/tuning.json` 覆盖默认值，重启 profile 生效，格式错误自动回落默认。\n- **工具预算**：仅在本 Preset 会话内提高 `read` 行数/字节、工具结果保留与子代理递归深度上限，不影响宿主默认与其他 Preset。\n- **边界**：不改变工具范围与权限；审批、沙箱、计划模式照常生效。",
-        "en": "A preset that only affects the sessions that pick it: lifts the model's answer limits and demands complete, end-to-end deliverables in one turn. ⚠ It may get your account banned — the preset card says so in red; use at your own risk.\n\n- **Runtime reinforcement**: a tail reminder against long-context dilution, automatic correction retries on refusal openings (1 per turn by default), and transport-level interception retries (up to 3 by default, with the last always passed through).\n- **Prompt profiles**: `default` / `stealth` (terse process, deliverable first) / `max` (harder end-to-end delivery).\n- **Local tuning**: `$DSH_HOME/unrestricted/tuning.json` overrides defaults after a profile restart; malformed entries fall back to defaults.\n- **Tool budgets**: raises `read` line/byte caps, tool-result retention, and subagent recursion depth only inside this preset's sessions, leaving the host default and other presets untouched.\n- **Boundaries**: tools and permissions are unchanged; approvals, sandbox, and plan mode still apply."
-      },
       "readme": {
         "zh": "README.md",
         "en": "README.en.md"
@@ -377,10 +325,6 @@
       "summary": {
         "zh": "隐藏 dsh-context 仪表盘顶部的插件信息与推广卡片。",
         "en": "Hides the plugin-info and promotion cards at the top of the dsh-context dashboard."
-      },
-      "details": {
-        "zh": "一键隐藏 `dsh-context` 仪表盘右上角的插件信息卡与推广推荐卡，让统计卡片铺满顶部一行。\n\n- 启用即生效，无需配置；停用或卸载后立即恢复显示。\n- 仅做界面视觉隐藏，`dsh-context` 后台请求照常发起。\n- 依赖 `dsh-context` 当前的界面结构，上游改版后可能需要同步更新本插件。",
-        "en": "Hides the plugin-info and promotion cards at the top of the `dsh-context` dashboard so the stat cards span the full row.\n\n- Works the moment it is enabled, no configuration; cards return as soon as it is disabled or uninstalled.\n- Visual hiding only — `dsh-context` keeps making its background requests.\n- Depends on the current `dsh-context` markup and may need an update when upstream changes."
       },
       "readme": {
         "zh": "README.md",
@@ -402,10 +346,6 @@
         "zh": "在正文中组合图表、交互数学、节点图、数据探索、地图与可调估算，让模型用合适的界面表达并接收你的操作。",
         "en": "Compose native visuals, interactive math, node graphs, data exploration, maps and adjustable estimates inside replies, then turn interactions into answers."
       },
-      "details": {
-        "zh": "![Deep View 修复格式错误的节点图声明，并为无法修复的声明给出原因](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr28-deep-view-repair.gif)\n\n让模型在回复里直接画出可操作的界面：图表、节点关系图、互动数学、数据探索、地图与可调估算，你的每项操作都会变成回答的一部分。\n\n## 两种界面入口\n\n- **正文界面**：模型输出 `deepui` 声明块，JSON 完整后在原位置渲染为原生卡片，与正文自然穿插；回答经「填入输入框」由你确认。\n- **任务界面**：`show_view` 工具渲染进度槽位与待答卡片，回答由宿主校验后直接提交；支持按 `revision` 原地更新。\n\n## 组件与联动\n\n- 全套封闭组件：`chart`（bar / hbar / line / area / donut）、`table`、`metric`、`steps`、`callout`、`slider`、`number`、`choice`、`toggle` 等。\n- 四类可探索视图：`math`（可拖点坐标系与曲线）、`flow`（自动分层节点图）、`explore`（联动散点与数据表）、`map`（地点与路线）。\n- 同卡片公式即时重算，无需再次请求模型；选中结果一并写入回答。\n\n## 安全边界\n\n卡片不执行任意 JavaScript、不支持自定义 HTML；载荷大小、组件数量、节点与数据行数都有上限，超限直接拒绝而非静默截断。\n\n## 画布预览\n\n模型为原型、小游戏或可交互演示写出 `.html` 文件后，`show_canvas` 会在右侧 Sidebar 打开可运行预览（需开启「显示代码工作视图」）；脚本错误汇总在预览下方，可一键填入输入框交给模型修复，文件修改自动刷新。",
-        "en": "![Deep View repairs a malformed graph declaration and names the reason for the one it cannot](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr28-deep-view-repair.gif)\n\nLets the model draw operable interfaces right inside its replies: charts, node graphs, interactive math, data exploration, maps, and adjustable estimates — every interaction you make becomes part of the answer.\n\n## Two surfaces\n\n- **Reply interfaces**: the model emits a `deepui` fence that renders in place once its JSON is complete, flowing with the prose; answers go through **Fill composer** for your confirmation.\n- **Task interfaces**: the `show_view` tool renders progress slots and pending cards whose answers are host-validated and submitted directly, with in-place updates by `revision`.\n\n## Components and linkage\n\n- A closed component set: `chart` (bar / hbar / line / area / donut), `table`, `metric`, `steps`, `callout`, `slider`, `number`, `choice`, `toggle`, and more.\n- Four explorable views: `math` (draggable points and curves), `flow` (auto-layered node graphs), `explore` (linked scatter and data table), `map` (locations and routes).\n- Same-card formulas recompute instantly without another model call, and selections are written into the answer.\n\n## Safety boundaries\n\nCards run no arbitrary JavaScript and no custom HTML; payload size, component counts, nodes, and data rows are all capped — over-limit cards are rejected, never silently truncated.\n\n## Canvas preview\n\nAfter the model writes an `.html` file for a prototype, mini-game, or interactive demo, `show_canvas` opens a runnable preview in the right Sidebar (requires the \"Show coding view\" setting); runtime errors collect below the preview and can be filled into the composer for the model to fix, and file edits refresh it automatically."
-      },
       "readme": {
         "zh": "README.md",
         "en": "README.en.md"
@@ -425,10 +365,6 @@
       "summary": {
         "zh": "在输入框用元素周期表式卡片或可搜索列表选择模型和思考强度；其他插件可复用。",
         "en": "Pick a model and reasoning effort in the composer from periodic-table style cards or a searchable list; other plugins can reuse it."
-      },
-      "details": {
-        "zh": "![卡片视图：可读模型名、版本角标与思考强度格](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr32-model-picker-final.gif)\n\n把输入框的模型按钮换成一眼可比的卡片墙：每个模型一张卡，大号简称、数字版本角标、完整后缀与供应商一目了然，底部直接点选思考强度。\n\n- **输入即筛选**：按模型名、简称或供应商匹配，`gpt5` 也能命中 `gpt-5`；回车选中第一个结果，Esc 先清空再关闭。\n- **右键菜单**：收藏置前（★）、移到最前 / 最后、修改或恢复简称、复制模型 ID、隐藏。\n- **供应商合并**：同一模型多渠道合并为一张卡，右上角切换供应商并尽量保留当前强度；DeepSeek Flash 等稳定别名跨供应商聚合。\n- **布局**：拖拽插入或互换、滑杆调卡片宽度、双击改名；「恢复默认布局」一键还原。\n- **列表视图**：随时切回按供应商分组的可搜索列表与强度滑杆。\n- **复用**：其他插件可经 `@klarkxy/dsh-model-route` 在自己的设置里挂载同一选择器。",
-        "en": "![Card view: readable model names, version badges, and effort cells](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr32-model-picker-final.gif)\n\nReplaces the composer model button with a wall of comparable cards: one card per model with a large short name, numeric version badge, full qualifier, and provider, plus reasoning-effort cells along the bottom.\n\n- **Type to filter**: matches names, short names, and providers — `gpt5` finds `gpt-5`; Enter picks the first result, Esc clears first, then closes.\n- **Right-click menu**: favorite to the front (★), move to front/end, rename or restore the short name, copy the model ID, hide.\n- **Provider merging**: channels serving the same model share one card — switch at the top right while keeping the current effort when supported; stable aliases like DeepSeek Flash merge across providers.\n- **Layout**: drag to insert or swap, a slider for card width, double-click to rename; **Reset layout** restores everything.\n- **List view**: switch back any time to a searchable provider-grouped list with an effort slider.\n- **Reuse**: other plugins can mount the same picker through `@klarkxy/dsh-model-route`."
       },
       "readme": {
         "zh": "README.md",
@@ -450,10 +386,6 @@
         "zh": "在对话之外安全收集与管理密钥，工具只拿到引用，权限按会话限定。",
         "en": "Collect and manage secrets securely outside chat with per-session usage limits."
       },
-      "details": {
-        "zh": "在对话之外安全收集密钥：模型需要 Key 时弹出授权窗口，输入值直达本机宿主保存，模型与工具只拿到 `secret://<slot>` 引用。\n\n- **按会话授权**：shell 环境变量（`DSH_SECRET_*`）与精确 HTTPS 来源两种权限彼此独立，只作用于当前会话，约 1 小时自动过期，不继承给子代理。\n- **永不明文回显**：已保存值不回显、不显示尾号或长度；替换或删除立即撤销所有会话授权。\n- **模型工具**：`request_secret`（弹窗收集与授权）、`secret_status`（查询已配置引用）、`secret_http`（向授权来源发带认证头的请求，正文脱敏）。\n- **管理页**：「设置 → 密钥管理器」新增、替换、删除密钥，查看并撤销各会话授权。\n- **注意**：密钥以明文存于本机 DSH 数据目录——本插件是引用管理器，不是加密保险箱；获授 shell 权限的会话可直接读取对应变量，请谨慎授权。",
-        "en": "Collect secrets outside the conversation: when the model needs a key, an authorization popover sends your input straight to the host for storage, and the model and tools only ever see a `secret://<slot>` reference.\n\n- **Per-session grants**: shell environment variables (`DSH_SECRET_*`) and exact-HTTPS-origin grants are independent, apply to the current session only, expire in about an hour, and never inherit into subagents.\n- **Never echoed**: saved values are never displayed, not even a tail or length; replacing or deleting a secret revokes every session grant immediately.\n- **Agent tools**: `request_secret` (collect and authorize via popover), `secret_status` (list configured references), `secret_http` (call an authorized origin with auth headers, redacting the body).\n- **Management page**: Settings → Secret Manager adds, replaces, and deletes secrets, and shows or revokes per-session grants.\n- **Note**: secrets are stored in plaintext in the local DSH data directory — this is a reference manager, not an encrypted vault; sessions with shell grants can read the variables directly, so grant carefully."
-      },
       "readme": {
         "zh": "README.md",
         "en": "README.en.md"
@@ -473,10 +405,6 @@
       "summary": {
         "zh": "为每个工作区添加多个文件夹，在 Agent 对话中一起使用。",
         "en": "Add multiple folders to each workspace and use them together in Agent conversations."
-      },
-      "details": {
-        "zh": "让一个工作区挂上多个文件夹：主目录不变，附加文件夹作为上下文与可写范围加入该工作区的所有对话。\n\n- **入口**：侧边栏工作区「⋯ → 文件夹…」，浏览（支持原生选择器）或直接输入宿主机器上的绝对路径。\n- **生效方式**：保存后从下一轮对话开始生效，对该工作区全部会话（含委派子代理）共用；单个工作区最多 64 个附加文件夹。\n- **边界**：只读会话保持只读；项目配置、技能与指令文件的自动发现仍以主目录为准；移除文件夹不会删除磁盘文件。",
-        "en": "Attach extra folders to a workspace: the primary directory stays put while additional folders join the context and writable scope of every conversation in that workspace.\n\n- **Entry point**: the workspace's **⋯ → Folders…** menu in the sidebar — browse (with native picker support) or type an absolute path on the host machine.\n- **When it applies**: saved changes take effect from the next turn and are shared by all sessions in the workspace (including delegated subagents); up to 64 extra folders per workspace.\n- **Boundaries**: read-only sessions stay read-only; project configuration, skills, and instruction discovery still follow the primary directory; removing a folder never deletes files on disk."
       },
       "readme": {
         "zh": "README.md",
@@ -498,10 +426,6 @@
         "zh": "为 DSH 原生系统提示词补上通用工作规范，并改写过于简略的内置工具指引，对所有会话生效。",
         "en": "Adds a working contract to DSH's native system prompt and rewrites its terse built-in tool guidance, in every session."
       },
-      "details": {
-        "zh": "给 DSH 原生系统提示词补上它缺的部分：通用工作规范、更清晰的内置工具指引，并默认移除每轮附带的 DSH 自身开发说明。安装即生效，作用于所有会话（含子代理）。\n\n- **通用工作规范**：先理解再改动、最小改动、改完验证、不虚报结果、危险操作先确认、独立工具并行调用、用用户的语言简洁回复。\n- **工具指引改写**：read / write / edit / glob / grep 补要点（唯一匹配、行号前缀、并行搜索等）；bash / pwsh 追加 shell 纪律；未启用的工具不出现对应指引。\n- **DSH 开发说明**：`auto` 模式按会话 Preset 识别——定制 DSH 开发（官方 `cordis`）时保留，日常会话移除。\n- **本地覆盖**：`$DSH_HOME/prompt-override/overrides.json` 按段名替换或删除任意提示词段（如 `tool:edit`、`ui:deliverable-file-references`）。\n- **边界**：只改写系统提示词，工具说明与参数保持原生；`minimal` Preset 由宿主锁定完整提示词，本插件对其不生效。",
-        "en": "Fills the gaps in DSH's native system prompt: a general working contract, clearer built-in tool guidance, and the per-turn DSH self-development notes removed by default. Effective on install for every session, including subagents.\n\n- **Working contract**: understand before changing, minimal diffs, verify after changes, never fake results, confirm dangerous actions, call independent tools in parallel, and reply concisely in the user's language.\n- **Tool guidance**: read / write / edit / glob / grep gain the key points (unique match, line-number prefixes, parallel searches); bash / pwsh get appended shell discipline; disabled tools keep their guidance hidden.\n- **DSH dev notes**: in `auto` mode the session preset decides — kept for DSH customization work (official `cordis`), dropped elsewhere.\n- **Local overrides**: `$DSH_HOME/prompt-override/overrides.json` replaces or deletes any prompt section by name (e.g. `tool:edit`, `ui:deliverable-file-references`).\n- **Boundaries**: only the system prompt is rewritten — tool descriptions and parameters stay native; the `minimal` preset is locked by the host and unaffected."
-      },
       "readme": {
         "zh": "README.md",
         "en": "README.en.md"
@@ -521,10 +445,6 @@
       "summary": {
         "zh": "拦截「新版本」自动下载并提供插件级更新能力，先展示版本区间的 Release 变更日志，用户确认后再更新生效。",
         "en": "Intercepts automatic version downloads and adds plugin-level updates: preview the release changelog across the version range first, then apply after confirmation."
-      },
-      "details": {
-        "zh": "![「插件 → 更新」紧凑列表、筛选与窄屏布局](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr34-update-list-final.gif)\n\n把「要不要更新」变成「先看清楚再更新」：DSH 本体与第三方插件升级前，先展示当前版本到目标版本之间的 GitHub Release 日志，确认后才动手。\n\n- **本体更新**：桌面端「新版本」按钮不再直接后台下载，先打开变更弹窗；双语发布说明可切换当前语言摘要与完整原文。\n- **插件更新**：「插件 → 更新」集中检查全部第三方插件，每个详情页也有「检查更新 / 查看更新」入口；npm 与 Git 安装的插件都覆盖。\n- **宿主批准**：页面确认只是向宿主请求批准；宿主拒绝或未提供确认时不安装、不升级。\n- **边界**：变更内容依赖各项目声明的 GitHub Releases；`link:` / `file:` 本地插件不做在线覆盖；未登录 `gh` 且未配置 `GITHUB_TOKEN` 时受匿名 GitHub API 速率限制。",
-        "en": "![Plugins → Updates: compact list, filters, and narrow layouts](https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/pr34-update-list-final.gif)\n\nTurns \"update now?\" into \"read first, then update\": before DSH itself or any third-party plugin is upgraded, you see the GitHub Release logs between the installed and target versions, and only then confirm.\n\n- **Core updates**: the desktop **New version** button no longer downloads in the background — it opens a changelog modal first, with a toggle between localized excerpts and full notes.\n- **Plugin updates**: Plugins → Updates checks all third-party plugins at once, and each detail page has its own **Check updates / View update** action; both npm and Git installs are covered.\n- **Host approval**: confirming in the page only asks the host to approve — nothing installs or upgrades when the host rejects or provides no confirmation.\n- **Boundaries**: changelogs depend on the repositories each project declares; `link:` / `file:` plugins are never overwritten online; without `gh` or `GITHUB_TOKEN`, anonymous GitHub API rate limits apply."
       },
       "readme": {
         "zh": "README.md",

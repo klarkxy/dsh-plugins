@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { posix } from "node:path";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, posix } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
+import { overlayLocalDocs } from "./local.mjs";
 import { derive, marketIndex, renderReadme, renderSite, validateCatalog } from "./render.mjs";
 
 const catalog = JSON.parse(readFileSync(new URL("./catalog.json", import.meta.url), "utf8"));
@@ -206,9 +209,12 @@ test("install commands cover the plugin and its required peers; dependencies com
   assert.match(files.get("404.html"), /areas/);
   assert.match(files.get("llms.txt"), /index\.json/);
 
-  // Home chrome: category nav with counts, stats, and a link to the timeline.
+  // Home chrome: category nav with counts, stats, market URL, prerequisite note, and a link to the timeline.
   const home = files.get("index.html");
   assert.match(home, /class="catnav"/);
+  assert.match(home, /class="hero-market"/);
+  assert.match(home, /自定义插件市场/);
+  assert.match(files.get("en/index.html"), /Custom Plugin Market/);
   assert.match(home, /data-category="workflow"/);
   assert.match(home, /hero-stats/);
   assert.match(home, /href="changelog\/"/);
@@ -252,6 +258,15 @@ test("both languages serve package images and licenses from relative local asset
   }
   assert.deepEqual(files.get("assets/packages/zhihu/docs/a b.png"), Buffer.from([0, 255, 127]));
   assert.equal(files.get("assets/packages/zhihu/LICENSE").toString(), "Published license");
+  // Standard SPDX license IDs (e.g. Apache-2.0) also link to assetPages.LICENSE when shipped.
+  const deepViewPkg = data["@klarkxy/dsh-deep-view"];
+  deepViewPkg.manifest = { ...deepViewPkg.manifest, license: "Apache-2.0" };
+  deepViewPkg.assets = { LICENSE: Buffer.from("Apache License 2.0").toString("base64") };
+  const spdxFiles = renderSite(catalog, data, options);
+  assert.ok(spdxFiles.get("plugins/deep-view/index.html").includes('<a href="../../assets/packages/deep-view/LICENSE">Apache-2.0</a>'));
+  assert.ok(spdxFiles.get("en/plugins/deep-view/index.html").includes('<a href="../../../assets/packages/deep-view/LICENSE">Apache-2.0</a>'));
+  assert.equal(spdxFiles.get("assets/packages/deep-view/LICENSE").toString(), "Apache License 2.0");
+
   pkg.assets["../escape.png"] = "AA==";
   assert.throws(() => renderSite(catalog, data, options), /Unsafe package asset path/);
 });
@@ -260,23 +275,22 @@ test("detail pages strip language switchers for both post-flip and pre-flip tarb
   const data = fixture();
   const gitCommit = data["@klarkxy/dsh-git-commit"];
   gitCommit.readme = {
-    zh: { path: "README.md", text: "# Git 提交\n\n<!-- release-state-note -->\n\n简体中文 / [English](README.en.md)\n\n## 安装\n\n中文安装说明。" },
-    en: { path: "README.en.md", text: "# Git Commit\n\n<!-- release-state-note -->\n\n[简体中文](README.md) / English\n\n## Install\n\nInstall guide body." },
+    zh: { path: "README.md", text: "# Git 提交\n\n<!-- release-state-note -->\n\n简体中文 / [English](README.en.md)\n\n## 用法\n\n中文用法说明。" },
+    en: { path: "README.en.md", text: "# Git Commit\n\n<!-- release-state-note -->\n\n[简体中文](README.md) / English\n\n## Usage\n\nUsage guide body." },
   };
   const zhihu = data["@klarkxy/dsh-zhihu"];
   zhihu.readme = {
-    zh: { path: "docs/README.zh-CN.md", text: "# 知乎\n\n[English](../README.md)\n\n## 安装\n\n旧版中文说明。" },
-    en: { path: "README.md", text: "# Zhihu\n\n[简体中文](docs/README.zh-CN.md)\n\n## Install\n\nLegacy install body." },
+    zh: { path: "docs/README.zh-CN.md", text: "# 知乎\n\n[English](../README.md)\n\n## 用法\n\n旧版中文用法。" },
+    en: { path: "README.md", text: "# Zhihu\n\n[简体中文](docs/README.zh-CN.md)\n\n## Usage\n\nLegacy usage body." },
   };
   const files = renderSite(catalog, data, { generatedAt: "2026-03-01T00:00:00.000Z" });
   const body = (html) => {
-    const start = html.indexOf('<p class="readme-note">');
-    const afterNote = html.indexOf("</p>", start);
-    return html.slice(afterNote + 4, html.indexOf("</article>", afterNote));
+    const start = html.indexOf('<article class="readme"');
+    return html.slice(start, html.indexOf("</article>", start));
   };
   for (const [slug, zhNeedle, enNeedle] of [
-    ["git-commit", "中文安装说明", "Install guide body"],
-    ["zhihu", "旧版中文说明", "Legacy install body"],
+    ["git-commit", "中文用法说明", "Usage guide body"],
+    ["zhihu", "旧版中文用法", "Legacy usage body"],
   ]) {
     const zhBody = body(files.get(`plugins/${slug}/index.html`));
     const enBody = body(files.get(`en/plugins/${slug}/index.html`));
@@ -287,31 +301,198 @@ test("detail pages strip language switchers for both post-flip and pre-flip tarb
   }
 });
 
-test("detail pages render catalog details above the README extract", () => {
-  const data = fixture();
-  const detailed = catalog.plugins.filter((p) => p.details);
-  assert.ok(detailed.length > 0, "catalog carries at least one details entry");
-  const files = renderSite(catalog, data, { generatedAt: "2026-03-01T00:00:00.000Z" });
-  let sawPrefixedHeading = false;
-  for (const p of detailed) {
-    for (const page of [files.get(`plugins/${p.slug}/index.html`), files.get(`en/plugins/${p.slug}/index.html`)]) {
-      assert.ok(page.includes('<section class="plugin-details"'), `${p.slug} details section`);
-      assert.ok(
-        page.indexOf('<section class="plugin-details"') < page.indexOf('<p class="readme-note">'),
-        `${p.slug} details precede the README extract`,
-      );
-      sawPrefixedHeading ||= page.includes('id="d-');
-    }
-  }
-  assert.ok(sawPrefixedHeading, "details headings keep their d- id prefix");
-  const plain = catalog.plugins.find((p) => !p.details);
-  if (plain) assert.ok(!files.get(`plugins/${plain.slug}/index.html`).includes('<section class="plugin-details"'));
+test("stripSiteChrome strips redundant chrome blocks while keeping special cases", () => {
+  const stripCtx = {
+    ...ctx,
+    readmePages: {
+      ...ctx.readmePages,
+      "packages/dsh-memory/README.en.md": "../../en/plugins/memory/",
+    },
+  };
+  const full = renderReadme(
+    [
+      "# 插件",
+      "",
+      "<!-- release-state-note -->",
+      "",
+      "简体中文 / [English](README.en.md)",
+      "",
+      "定位简介。",
+      "",
+      "## 演示",
+      "",
+      "![demo](docs/shot.png)",
+      "",
+      "## 安装",
+      "",
+      "```sh\ndsh plugin --profile web add @klarkxy/dsh-sample\n```",
+      "",
+      "## 从 GitHub 安装",
+      "",
+      "特殊安装步骤。",
+      "",
+      "## 使用",
+      "",
+      "使用说明。",
+      "",
+      "## 署名",
+      "",
+      "致谢 [NOTICE](NOTICE)。",
+      "",
+      "## 许可证",
+      "",
+      "[SATA License 2.1](LICENSE)",
+    ].join("\n"),
+    { ...stripCtx, stripSiteChrome: true },
+  );
+  assert.doesNotMatch(full.html, /定位简介|dsh-sample|SATA License/);
+  assert.match(full.html, /<img[^>]+docs\/shot\.png/);
+  assert.doesNotMatch(full.html, /id="演示"/);
+  assert.match(full.html, /从 GitHub 安装/);
+  assert.match(full.html, /使用说明/);
+  assert.match(full.html, /署名/);
+  assert.deepEqual(full.toc.map((h) => h.text), ["从 GitHub 安装", "使用", "署名"]);
+
+  // Sole paragraph (shared library style) is kept, even with a Downloads chart section.
+  const sole = renderReadme("# Kit\n\n<!-- release-state-note -->\n\nShared runtime helpers.\n\n## License\n\n[SATA](LICENSE)", { ...ctx, stripSiteChrome: true });
+  assert.match(sole.html, /Shared runtime helpers/);
+  assert.doesNotMatch(sole.html, /License/);
+
+  const soleWithChart = renderReadme(
+    "# Kit\n\nShared runtime helpers.\n\n## Downloads\n\n[![chart](https://example.com/a.svg)](https://www.npmjs.com/package/@klarkxy/dsh-kit)\n\n## License\n\n[SATA](LICENSE)",
+    { ...ctx, stripSiteChrome: true },
+  );
+  assert.match(soleWithChart.html, /Shared runtime helpers/);
+  assert.match(soleWithChart.html, /Downloads/);
+  assert.doesNotMatch(soleWithChart.html, /License/);
+
+  // Lead ending in colon / introducing a list is kept.
+  const listIntro = renderReadme("# Sidebar\n\nSwitch between modes:\n\n- Push\n- Drawer\n\n## Install\n\nSkip.", { ...ctx, stripSiteChrome: true });
+  assert.match(listIntro.html, /Switch between modes/);
+  assert.match(listIntro.html, /Drawer/);
+  assert.doesNotMatch(listIntro.html, /Skip/);
+
+  // Second background paragraph is kept after lead summary is stripped; License mentioning NOTICE is kept.
+  const multi = renderReadme("# Prompt\n\nSummary.\n\nBackground context.\n\n## Usage\n\nBody.\n\n## License\n\nApache 2.0. See [NOTICE](NOTICE).", { ...ctx, stripSiteChrome: true });
+  assert.doesNotMatch(multi.html, /Summary/);
+  assert.match(multi.html, /Background context/);
+  assert.match(multi.html, /Apache 2\.0/);
+
+  // Leading image paragraph without a heading is preserved.
+  const leadImg = renderReadme("# Font\n\nSummary.\n\n![preview](docs/shot.png)\n\n## Usage\n\nPick fonts.", { ...ctx, stripSiteChrome: true });
+  assert.doesNotMatch(leadImg.html, /Summary/);
+  assert.match(leadImg.html, /docs\/shot\.png/);
 });
 
-test("catalog validation requires both languages for details", () => {
-  validateCatalog(catalog);
-  const broken = structuredClone(catalog);
-  const target = broken.plugins.find((p) => p.details) ?? broken.plugins[0];
-  target.details = { zh: "只有中文。" };
-  assert.throws(() => validateCatalog(broken), /missing details\.en/);
+test("overlayLocalDocs overlays in-repo READMEs, referenced assets, and legal files safely", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "dsh-site-local-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const outside = join(root, "outside");
+  mkdirSync(join(outside), { recursive: true });
+  writeFileSync(join(outside, "secret.png"), "secret");
+
+  const repo = join(root, "repo");
+  const pkgDir = join(repo, "plugins", "dsh-alpha");
+  mkdirSync(join(pkgDir, "screenshots"), { recursive: true });
+  mkdirSync(join(pkgDir, "docs"), { recursive: true });
+  writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "@klarkxy/dsh-alpha" }));
+  writeFileSync(join(pkgDir, "LICENSE"), "Local license");
+  writeFileSync(join(pkgDir, "NOTICE.md"), "Local notice");
+  writeFileSync(join(pkgDir, "screenshots", "zh.png"), Buffer.from([1, 2, 3]));
+  writeFileSync(join(pkgDir, "screenshots", "unused.mp4"), Buffer.from([4, 5, 6]));
+  writeFileSync(join(pkgDir, "docs", "en.png"), Buffer.from([7, 8, 9]));
+  writeFileSync(
+    join(pkgDir, "README.md"),
+    "# Alpha\n\nLocal zh.\n\n![zh](screenshots/zh.png)\n\n![escape](../../../outside/secret.png)\n\n[Notice](NOTICE.md)\n",
+  );
+  writeFileSync(join(pkgDir, "README.en.md"), "# Alpha\n\nLocal en.\n\n![en](docs/en.png)\n");
+
+  const miniCatalog = {
+    source: "https://github.com/klarkxy/dsh-plugins",
+    plugins: [
+      {
+        slug: "alpha",
+        package: "@klarkxy/dsh-alpha",
+        readme: { zh: "README.md", en: "README.en.md" },
+        repository: "https://github.com/klarkxy/dsh-plugins",
+        directory: "plugins/dsh-alpha",
+      },
+      {
+        slug: "external",
+        package: "@other/dsh-external",
+        readme: { zh: "README.md", en: "README.en.md" },
+        repository: "https://github.com/other/repo",
+        directory: "plugins/dsh-alpha",
+      },
+    ],
+  };
+  const pkgData = {
+    "@klarkxy/dsh-alpha": { readme: { zh: { path: "README.md", text: "Old" } }, files: [], assets: {} },
+    "@other/dsh-external": { readme: { zh: { path: "README.md", text: "Remote" } }, files: [], assets: {} },
+  };
+  overlayLocalDocs(miniCatalog, pkgData, repo);
+
+  const alpha = pkgData["@klarkxy/dsh-alpha"];
+  assert.match(alpha.readme.zh.text, /Local zh/);
+  assert.match(alpha.readme.en.text, /Local en/);
+  assert.deepEqual(Buffer.from(alpha.assets["screenshots/zh.png"], "base64"), Buffer.from([1, 2, 3]));
+  assert.deepEqual(Buffer.from(alpha.assets["docs/en.png"], "base64"), Buffer.from([7, 8, 9]));
+  assert.equal(Buffer.from(alpha.assets.LICENSE, "base64").toString(), "Local license");
+  assert.equal(Buffer.from(alpha.assets["NOTICE.md"], "base64").toString(), "Local notice");
+  assert.equal(alpha.assets["screenshots/unused.mp4"], undefined);
+  assert.ok(!Object.keys(alpha.assets).some((k) => k.includes("secret.png")));
+  assert.ok(alpha.files.includes("/screenshots/zh.png"));
+  assert.equal(pkgData["@other/dsh-external"].readme.zh.text, "Remote");
+});
+
+test("real workspace READMEs render cleanly with local overlay and stripSiteChrome", () => {
+  const repoRoot = fileURLToPath(new URL("../", import.meta.url));
+  const data = fixture();
+  overlayLocalDocs(catalog, data, repoRoot);
+  const files = renderSite(catalog, data, { generatedAt: "2026-03-01T00:00:00.000Z" });
+  const known = new Set([...files.keys(), "assets/site.css", "assets/site.js"]);
+  const missing = [];
+
+  for (const p of catalog.plugins) {
+    for (const langPrefix of ["", "en/"]) {
+      const pagePath = `${langPrefix}plugins/${p.slug}/index.html`;
+      const html = files.get(pagePath);
+      assert.ok(html, pagePath);
+      assert.doesNotMatch(html, /class="readme-note"/, `${pagePath} has local translation`);
+      const articleStart = html.indexOf('<article class="readme"');
+      const article = html.slice(articleStart, html.indexOf("</article>", articleStart));
+      assert.match(article, /<(?:p|ul|ol|table|img)\b/, `${pagePath} renders non-empty README body`);
+      assert.ok(!article.includes(`dsh plugin --profile web add ${p.package}`), `${pagePath} strips standard install command`);
+    }
+  }
+  for (const [path, content] of files) {
+    if (!path.endsWith(".html") || path === "404.html") continue;
+    for (const [, url] of content.matchAll(/(?:href|src)="([^"#?]*)[^"]*"/g)) {
+      if (!url || /^[a-z]+:/i.test(url)) continue;
+      let target = posix.normalize(posix.join(posix.dirname(path), url));
+      if (url.endsWith("/") || target === ".") target = posix.join(target, "index.html");
+      if (!known.has(target)) missing.push(`${path} -> ${url}`);
+    }
+  }
+  assert.match(files.get("plugins/plugin-kit/index.html"), /共享能力|支撑库/);
+  assert.match(files.get("en/plugins/model-route/index.html"), /provider, model, and reasoning-effort settings/);
+  // Plugin-specific update, reload, and activation notes survive stripSiteChrome on real READMEs.
+  const articleHtml = (page) => {
+    const html = files.get(page);
+    const start = html.indexOf('<article class="readme"');
+    return html.slice(start, html.indexOf("</article>", start));
+  };
+  assert.match(articleHtml("plugins/web-search-manager/index.html"), /更新插件后需重启 profile.*设置 → 网页搜索/);
+  assert.match(articleHtml("en/plugins/web-search-manager/index.html"), /updating the plugin.*Settings → Web Search/);
+  assert.match(articleHtml("plugins/deep-view/index.html"), /刷新页面.*Host 与 Web Client/);
+  assert.match(articleHtml("en/plugins/deep-view/index.html"), /reload the page.*Host and Web Client/);
+  assert.match(articleHtml("plugins/delegation/index.html"), /启用插件.*刷新页面或重启 profile/);
+  assert.match(articleHtml("en/plugins/delegation/index.html"), /enabling the plugin.*reloading the page or restarting the profile/);
+  assert.deepEqual(missing, []);
+
+  // Verify real dsh-deep-view LICENSE overlay with its published Apache-2.0 SPDX license.
+  data["@klarkxy/dsh-deep-view"].manifest = { ...data["@klarkxy/dsh-deep-view"].manifest, license: "Apache-2.0" };
+  const spdxRendered = renderSite(catalog, data, { generatedAt: "2026-03-01T00:00:00.000Z" });
+  assert.ok(spdxRendered.get("plugins/deep-view/index.html").includes('<a href="../../assets/packages/deep-view/LICENSE">Apache-2.0</a>'));
+  assert.ok(spdxRendered.get("en/plugins/deep-view/index.html").includes('<a href="../../../assets/packages/deep-view/LICENSE">Apache-2.0</a>'));
 });

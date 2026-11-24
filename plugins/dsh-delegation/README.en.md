@@ -4,7 +4,7 @@
 
 [简体中文](README.md) / English
 
-A per-session switch where the main agent plans, delegates to subagents, and reviews results, while subagent sessions automatically receive matching execution guidance. Install `@klarkxy/dsh-model-hub` for a combined entry to subagent model configuration and Delegation Mode; this package remains available as a standalone compatibility option.
+A per-session switch where the main agent plans, delegates to subagents, and reviews results, while subagent sessions automatically receive matching execution guidance.
 
 ## Downloads
 
@@ -16,9 +16,11 @@ A per-session switch where the main agent plans, delegates to subagents, and rev
 dsh plugin --profile web add @klarkxy/dsh-delegation
 ```
 
-Replace `web` with your profile name, enable the plugin in the profile, and reload the page or restart the profile as the plugin manager asks.
+Replace `web` with your profile name and restart the profile after installing.
 
 ## Usage
+
+After enabling the plugin in the profile and reloading the page or restarting the profile as the plugin manager asks:
 
 1. On the new-session page, find the **Delegate** chip on the same row as the workspace and preset selectors.
 2. Toggle it before sending the first message; when enabled, the chip highlights in the theme color.
@@ -29,6 +31,7 @@ Behavior details:
 - **Remembered choice**: the chip remembers your latest successful toggle on the new-session page and applies it to subsequent new sessions (including after restarts). If no choice has been remembered yet, new sessions use any previously saved global default.
 - **Fork inheritance**: a session forked from an existing one inherits its parent's delegation state without changing the remembered choice for new sessions.
 - **Coordinator & executor flow**: when on, the main agent may still answer simple tasks directly, while larger or multi-part tasks are scoped, delegated to subagents, and verified before reporting; spawned subagents automatically receive executor guidance.
+- **Combined entry**: install `@klarkxy/dsh-model-hub` for a combined entry to subagent model configuration and Delegation Mode; this package remains available as a standalone compatibility option.
 
 ## Limitations
 

@@ -68,7 +68,7 @@ export async function readArchive(archive, wanted) {
       if (header.type !== "file") { stream.resume(); stream.on("end", next); return; }
       const relative = path.slice("package/".length);
       files.push("/" + relative);
-      const selected = wanted.has(relative) || IMAGE.test(relative) || relative === "LICENSE";
+      const selected = wanted.has(relative) || IMAGE.test(relative) || relative === "LICENSE" || relative === "NOTICE" || relative === "NOTICE.md";
       const limit = IMAGE.test(relative) ? MAX_ASSET : MAX_TEXT;
       if (selected && header.size > limit) throw new Error(`npm file is too large: ${relative}`);
       const chunks = [];
@@ -99,7 +99,7 @@ export async function fetchPackage(plugin, {
   const archive = await get(url.href, "archive", options);
   verifyArchive(archive, full.dist);
   const iconPath = typeof full.icon === "string" ? full.icon.replace(/^\.\//, "") : "icon.svg";
-  const wanted = new Set(["package.json", ...Object.values(plugin.readme), "README.md", "README.en.md", "README.zh-CN.md", "docs/README.zh-CN.md", iconPath]);
+  const wanted = new Set(["package.json", ...Object.values(plugin.readme), "README.md", "README.en.md", "README.zh-CN.md", "docs/README.zh-CN.md", "LICENSE", "NOTICE", "NOTICE.md", iconPath]);
   const { files, contents } = await readArchive(archive, wanted);
   const published = JSON.parse(contents.get("package.json")?.toString("utf8") ?? "null");
   if (published?.name !== name || published.version !== version) throw new Error(`${name}: archive package identity mismatch`);
@@ -125,7 +125,7 @@ export async function fetchPackage(plugin, {
     if (/^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/.test(svg) && svg.length < 100_000) icon = svg;
     else warn(`warn: ${name} icon is not a small SVG; using a monogram`);
   }
-  const assets = Object.fromEntries([...contents].filter(([path]) => IMAGE.test(path) || path === "LICENSE")
+  const assets = Object.fromEntries([...contents].filter(([path]) => IMAGE.test(path) || path === "LICENSE" || path === "NOTICE" || path === "NOTICE.md")
     .map(([path, content]) => [path, content.toString("base64")]));
   const times = packument.time ?? {};
   const versions = Object.keys(packument.versions).filter(value => times[value])

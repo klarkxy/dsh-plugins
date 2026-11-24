@@ -20,9 +20,11 @@ Orchestrate multi-source web search and page-reading providers, manage API keys 
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-Replace `web` with your profile name, restart DSH Web, and open **Settings → Web Search**. Restart the profile after plugin updates as well so the latest search code loads.
+Replace `web` with your profile name and restart the profile after installing.
 
 ## Usage
+
+Restart the profile after installing or updating the plugin so the latest search code loads, then open **Settings → Web Search**.
 
 ### Search (`web-search` tab)
 

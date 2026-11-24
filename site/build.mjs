@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 
 import { renderSite, validateCatalog } from "./render.mjs";
 import { fetchPackage } from "./npm.mjs";
+import { overlayLocalDocs } from "./local.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -48,6 +49,7 @@ function prepareOutDir() {
 
 const data = await loadData();
 if (snapshotOut) writeFileSync(snapshotOut, JSON.stringify(data, null, 2));
+overlayLocalDocs(catalog, data.packages, resolve(here, ".."));
 
 const css = readFileSync(join(here, "assets", "site.css"), "utf8");
 const js = readFileSync(join(here, "assets", "site.js"), "utf8");

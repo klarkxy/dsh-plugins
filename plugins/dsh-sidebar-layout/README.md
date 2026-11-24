@@ -38,3 +38,7 @@ dsh plugin --profile web add @klarkxy/dsh-sidebar-layout
 - 宿主在空间不足以容纳正常宽度的面板轨道时仍会自动收起面板，抽屉模式下同样如此。
 - 本插件与 `dsh-better-sidebar` 可以同时使用，互不影响。
 - 停用或卸载本插件后，侧栏恢复宿主默认的「常规」行为。
+
+## 许可证
+
+[SATA License 2.1](LICENSE)

@@ -12,8 +12,6 @@ Hides the plugin-info and promotion cards at the top right of the `dsh-context` 
 
 ## Install
 
-Install and enable `dsh-context` first — this plugin only styles the panel and does not provide the context dashboard itself.
-
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-context-cleaner
 ```
@@ -22,7 +20,7 @@ Replace `web` with your profile name, restart the profile if prompted, and ensur
 
 ## Usage
 
-Works automatically while enabled with no manual steps. Both the context tab and the sidebar entry of `dsh-context` keep the plugin-info and promotion cards hidden and collapse that column cleanly. Disabling or uninstalling the plugin removes the stylesheet and restores the cards.
+Install and enable `dsh-context` first — this plugin only styles the panel and does not provide the context dashboard itself. Works automatically while enabled with no manual steps. Both the context tab and the sidebar entry of `dsh-context` keep the plugin-info and promotion cards hidden and collapse that column cleanly. Disabling or uninstalling the plugin removes the stylesheet and restores the cards.
 
 ## Limitations
 

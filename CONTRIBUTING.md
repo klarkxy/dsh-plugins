@@ -56,9 +56,9 @@ https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/<文件�
 
 小尺寸静态截图也可以放在插件目录下的 `screenshots/` 或 `docs/`（确认 `package.json` 的 `files` 不收录它们），README 里用相对路径引用。
 
-**README 只写概述**：一段定位、演示图、安装、核心用法和主要限制。完整的功能清单、逐项配置说明和更多截图放进站点插件页。
+**README 是唯一面向用户的文档正本**：双语 `README.md` / `README.en.md` 写明定位、演示图、安装、用法与主要限制；完整的使用说明和配置细节直接维护在包内 README 中。站点构建时会读取本仓库的最新 README，并自动去掉与站点页头、安装卡片、侧边信息栏重复的开篇定位段、标准安装段、纯图「演示」标题与标准许可证段。
 
-**站点放详细介绍**。收录进 `site/catalog.json` 的插件要填 `details.zh` / `details.en`（Markdown，可带图），站点插件页会把它渲染为「详细介绍」一节，位于 README 摘录之前。新增插件不允许长期空着这一节。
+**目录登记与同步**。收录进 `site/catalog.json` 的插件填写 `title`、`summary`、`category` 等目录字段后，运行 `pnpm release:docs` 同步根 README 表格；不要在两处重复维护简介或详情文本。
 
 **下载量图表自动维护**。已发布插件的 README 在「演示」之后带「下载量」一节，根 README 放全体趋势图。图表由 `scripts/npm-download-charts.mjs` 从 npm 官方下载量 API 生成，workflow 每天刷新 `docs/demo-assets` 分支上的 `downloads-*.svg`；README 只引用图片地址，不在正文手写下载量数字。
 

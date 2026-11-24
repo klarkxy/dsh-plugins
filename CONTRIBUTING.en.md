@@ -56,9 +56,9 @@ https://raw.githubusercontent.com/klarkxy/dsh-plugins/docs/demo-assets/<file>
 
 Small static screenshots may live in the plugin's `screenshots/` or `docs/` directory (make sure `files` in `package.json` does not ship them) and be referenced by relative path.
 
-**The README stays an overview**: one positioning paragraph, the demo image, install, core usage, and key limitations. Full feature lists, per-option configuration docs, and extra captures belong to the plugin's site page.
+**The README is the single source of user docs**: maintain positioning, the demo image, install, usage, and key limitations—including full configuration details—directly in each plugin's bilingual `README.md` / `README.en.md`. When building the site, the latest repo README is rendered directly and duplicate chrome blocks (the opening summary paragraph, standard Install section, image-only Demo heading, and standard License section) are stripped automatically.
 
-**The site carries the detailed introduction.** Plugins listed in `site/catalog.json` fill in `details.zh` / `details.en` (Markdown, images allowed), which the site renders as a "Details" section ahead of the README extract. New plugins must not leave this section empty for long.
+**Catalog and root README sync.** Register published plugins in `site/catalog.json` (`title`, `summary`, category, and metadata), then run `pnpm release:docs` to sync the root README tables rather than duplicating copy in multiple places.
 
 **Download charts maintain themselves.** Published plugins carry a Downloads section after the demo image, and the root README shows the aggregate trend. `scripts/npm-download-charts.mjs` renders the SVGs from the official npm downloads API, and a workflow refreshes `downloads-*.svg` on the `docs/demo-assets` branch every day; READMEs only link the images and never hard-code numbers.
 

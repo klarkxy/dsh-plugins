@@ -41,6 +41,7 @@
 - 列表视图中切回本次打开页面后用过的模型，会恢复它上次的思考强度。
 - 模型列表加载失败时可重试；已保存但不在可用目录中的模型会标出，不能再选。
 - 子代理会话不提供模型选择，与原生按钮一致。
+- 与 `reasoning-slider` 同时安装时以本插件为准；禁用或卸载本插件后，恢复为 `reasoning-slider` 或原生按钮。
 
 ## 安装
 
@@ -49,8 +50,6 @@ dsh plugin --profile web add @klarkxy/dsh-model-picker
 ```
 
 把 `web` 换成你的 profile 名，重启 profile 后生效，无需配置。
-
-与 `reasoning-slider` 同时安装时以本插件为准；禁用或卸载本插件后，恢复为 `reasoning-slider` 或原生按钮。
 
 ## 其他插件接入
 
