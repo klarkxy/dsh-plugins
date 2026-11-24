@@ -33,7 +33,7 @@ describe('widget interactions without a browser', () => {
       { type: 'metric' as const, label: 'Total', value: { '=': 'price * count' } },
     ] }
     await act(async () => root.render(<Card sessionId="s" callId="c" presentation={{ owner: 'dsh-deep-view', title: 'Budget', view, interactive: false, awaitReply: false }} />))
-    const input = document.querySelector('input[type=number]')!
+    const input = document.querySelector('input[type=number]')! as HTMLInputElement
     expect(input.disabled).toBe(false)
     expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('10')
     const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!
@@ -50,13 +50,13 @@ describe('widget interactions without a browser', () => {
     ] }
     await act(async () => root.render(<WidgetCard view={view} t={t} labels={labels} localOnly />))
     expect(document.body.textContent).toContain('6')
-    const range = document.querySelector('input[type=range]')!
+    const range = document.querySelector('input[type=range]')! as HTMLInputElement
     // React intercepts the native setter's change tracker; direct assignment
     // alone is ignored, so go through the prototype setter before dispatching.
     const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!
     await act(async () => { setter.call(range, '4'); range.dispatchEvent(new dom.window.Event('input', { bubbles: true })) })
     expect(document.body.textContent).toContain('12')
-    expect(document.querySelector('input[type=range]')!.disabled).toBe(false)
+    expect((document.querySelector('input[type=range]')! as HTMLInputElement).disabled).toBe(false)
     expect(document.querySelector('button.dvui-option')).toBeNull()
     expect(document.querySelector('.dvui-option')!.getAttribute('role')).not.toBe('button')
     expect(document.body.textContent).toContain('Local preview only; this card does not send an answer.')
@@ -66,7 +66,7 @@ describe('widget interactions without a browser', () => {
     const root = createRoot(document.getElementById('root')!)
     await act(async () => root.render(<WidgetCard view={{ type: 'confirm', id: 'answer' }} localOnly t={t} labels={labels} />))
     expect(document.body.textContent).toContain('Local preview only; this card does not send an answer.')
-    expect([...document.querySelectorAll('button')].every(button => button.disabled)).toBe(true)
+    expect([...document.querySelectorAll('button')].every(button => (button as HTMLButtonElement).disabled)).toBe(true)
     await act(async () => root.unmount())
   })
   it('shows only the real fill action in fill-only mode', async () => {
@@ -100,7 +100,7 @@ describe('widget interactions without a browser', () => {
     const root = createRoot(document.getElementById('root')!)
     const onFillDraft = vi.fn()
     await act(async () => root.render(<WidgetCard view={{ type: 'submit', id: 'plan', label: 'Use these assumptions' }} t={t} labels={labels} onFillDraft={onFillDraft} />))
-    const button = [...document.querySelectorAll('button')].find(button => button.textContent === 'Use these assumptions')!
+    const button = [...document.querySelectorAll('button')].find(button => button.textContent === 'Use these assumptions')! as HTMLButtonElement
     await act(async () => button.click())
     expect(onFillDraft).toHaveBeenCalledWith('plan', {})
     await act(async () => root.unmount())
@@ -109,7 +109,7 @@ describe('widget interactions without a browser', () => {
     const root = createRoot(document.getElementById('root')!)
     const onSubmit = vi.fn()
     await act(async () => root.render(<WidgetCard view={{ type: 'confirm', id: 'go' }} t={t} labels={labels} onSubmit={onSubmit} />))
-    const confirm = [...document.querySelectorAll('button')].find(button => button.textContent === 'Confirm')!
+    const confirm = [...document.querySelectorAll('button')].find(button => button.textContent === 'Confirm')! as HTMLButtonElement
     await act(async () => confirm.click())
     expect(onSubmit).toHaveBeenCalledWith('go', { confirmed: true })
     await act(async () => root.unmount())
@@ -219,6 +219,39 @@ describe('widget interactions without a browser', () => {
     }
     expect(onSubmit).not.toHaveBeenCalled()
     expect(onFillDraft).not.toHaveBeenCalled()
+    await act(async () => root.unmount())
+  })
+  it('supports multi-select choice checkboxes with custom input and collapses settled cards by default', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const onSubmit = vi.fn()
+    const view = { type: 'stack' as const, children: [
+      { type: 'choice' as const, id: 'mods', label: 'Modules', multi: true, allowCustom: true, customPlaceholder: 'Other module', options: [{ label: 'Cache', value: 'cache' }, { label: 'Audit', value: 'audit' }], value: ['cache'] },
+      { type: 'metric' as const, label: 'Count', value: { '=': 'count(mods)' } },
+      { type: 'submit' as const, id: 'go', label: 'Apply' },
+    ] }
+    await act(async () => root.render(<WidgetCard title="Setup" view={view} t={t} labels={labels} onSubmit={onSubmit} />))
+    expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('1')
+    const checkboxes = [...document.querySelectorAll('button[role=checkbox]')] as HTMLButtonElement[]
+    await act(async () => checkboxes[1]!.click())
+    expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('2')
+    const customInput = document.querySelector('input.dvui-custom-input') as HTMLInputElement
+    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!
+    await act(async () => { setter.call(customInput, 'Tracing'); customInput.dispatchEvent(new dom.window.Event('input', { bubbles: true })) })
+    expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('3')
+    await act(async () => (document.querySelector('button.dvui-submit') as HTMLButtonElement).click())
+    expect(onSubmit).toHaveBeenCalledWith('go', { inputs: { mods: ['cache', 'audit', 'Tracing'] } })
+
+    const answer = { id: 'v1', action: 'go', values: { inputs: { mods: ['cache', 'Tracing'] } } }
+    await act(async () => root.render(<WidgetCard title="Setup" view={view} t={t} labels={labels} settled answer={answer} />))
+    const bar = document.querySelector('button.dvui-settled-bar') as HTMLButtonElement
+    expect(bar).toBeTruthy()
+    expect(bar.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('.dvui-view.dvui-collapsed')).toBeTruthy()
+    expect(bar.textContent).toContain('Setup')
+    expect(bar.textContent).toContain('Cache, Tracing')
+    await act(async () => bar.click())
+    expect(bar.getAttribute('aria-expanded')).toBe('true')
+    expect(document.querySelector('.dvui-view.dvui-collapsed')).toBeNull()
     await act(async () => root.unmount())
   })
 })

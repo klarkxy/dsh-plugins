@@ -158,4 +158,21 @@ describe('durable card answers', () => {
       expect(legacyAnswer(card, answerText(card, item.action, item.values))).toEqual({ id: 'v', action: item.action, values: item.values })
     }
   })
+  it('restores synchronous ask_view answers from tool-result meta and multi-select legacy text', () => {
+    const multiView: ViewNode = { type: 'stack', children: [
+      { type: 'choice', id: 'mods', label: '模块', multi: true, allowCustom: true, options: [{ label: '缓存', value: 'cache' }, { label: '日志', value: 'log' }] },
+      { type: 'options', id: 'pick', multi: true, allowCustom: true, options: [{ label: '通过' }, { label: '复核' }] },
+    ] }
+    const directAnswer = { id: 'ask-1', action: 'pick', values: { selected: ['通过', '补测'], inputs: { mods: ['cache', '告警'] } }, revision: 1 }
+    const toolNode = { kind: 'tool-call', data: { root: { kind: 'tool-result', callId: 'c-ask', meta: {
+      owner: 'dsh-deep-view', viewId: 'ask-1', title: '评审', view: multiView, interactive: true, awaitReply: true, revision: 1, answer: directAnswer,
+    } } } }
+    const snap = { order: ['t'], locations: { getTurn: () => ['t'] }, nodes: { get: (key: string) => key === 't' ? toolNode : undefined } } as ReplySnapshot
+    expect(checkedAnswer(replyAnswers(snap).get('ask-1'), 'ask-1', multiView, 1)).toEqual(directAnswer)
+
+    const card = { id: 'ask-1', title: '评审', view: multiView }
+    const text = answerText(card, 'pick', directAnswer.values)
+    expect(text).toBe('评审\n通过, 补测\n模块=缓存, 告警')
+    expect(legacyAnswer(card, text)).toEqual({ id: 'ask-1', action: 'pick', values: directAnswer.values })
+  })
 })
