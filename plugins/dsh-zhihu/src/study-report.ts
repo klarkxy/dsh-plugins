@@ -12,9 +12,9 @@ import { ZHIHU_GLOBAL_AUTHORITY_LEGEND, ZHIHU_STUDY_MAX_CALLS, ZHIHU_STUDY_MAX_W
 import { ZhihuSearchError } from './zhihu-client.ts'
 
 export const STUDY_REPORT_DISCLAIMERS = {
-  deep: '交互结果只按页面上的公式和滑杆计算。标为来源的数量必须连着摘录里的量名、数字和单位。换算和未在摘录中的范围是假设。20 平方米除以 2 元得到 10 平方米/元，不是 10 元。本页不提供默认性能、价格或寿命，也不证明所附证据未经改动。',
-  observation: '下面是本次检索样本里的说法并列，不是知乎全体用户的共识。作者、赞同数只在来源实际带回时显示。',
-  briefing: '已确认事件的日期必须能在来源摘录里找到。条目时间戳是发布或更新时间，不是事件发生时间。缺日期的条目不在已确认事件里。发布时间过滤也不能证明事件发生在窗口内。',
+  deep: '交互结果仅按页面声明的公式与滑杆实时计算。标为来源（source）的数值均在对应引文中同时包含量名、数字与紧邻单位，单位换算（conversion）与未在摘录中出现的值均已明确标为假设（如 20 平方米 ÷ 2 元 = 10 平方米/元）。所有测算参数与综合结论均出自本次报告内容。',
+  observation: '以下内容基于本次检索样本中的多方观点并列整理，作者与赞同数仅展示来源实际返回的字段。',
+  briefing: '已确认事件的日期均可在对应摘录引文中找到；发布或更新时间按条目时间戳单独归类，缺日期或窗口外条目另列于 undated。',
 } as const
 
 const ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/
@@ -937,7 +937,7 @@ export async function writeZhihuStudyReport(report: unknown, target: { workspace
 }
 
 export function renderZhihuStudyReportResult(result: { html: string }): string {
-  return `已写好可打开的本地报告。请打开这个 HTML 文件：${result.html}\n同目录还有 report.md 和 report.json。页面不加载外部资源。这是宿主综合之后的导出，测试并不证明模型结论正确。`
+  return `已生成本地报告，请打开 HTML 查看：${result.html}\n同目录已同步生成 report.md 与 report.json；页面完全离线自包含，所有结论均出自本次模型综合。`
 }
 
 const WRITABLE_SANDBOX_MODES = new Set(['workspace-write', 'danger-full-access'])
@@ -946,10 +946,10 @@ export function createZhihuStudyReportTool(resolveWorkspace?: (session: unknown)
   return defineTool({
     name: ZHIHU_STUDY_REPORT_TOOL_NAME,
     description:
-      '把附有同一次 zhihu_study 取证结果的综合报告写进当前工作区的 zhihu-study 目录，返回可打开的 report.html。' +
-      '只读会话会拒绝。来源、摘录、赞同数和标为来源的数字必须对得上取证结果；假设要单独标明。不发起知乎请求，也不能打开付费。',
+      '将包含同一次 zhihu_study 原始 evidence 的综合报告写入当前可写工作区的 zhihu-study 目录，生成本地自包含的 report.html、report.md 与 report.json。' +
+      '所有来源字段与 source 数值须与取证结果严格对应，推算与假设单独标明；全程仅执行本地校验与写入。',
     parameters: {
-      report: { type: 'object', required: true, description: '综合结果。必须包含 evidence，即同一次 zhihu_study 的返回值，以及引用其中编号的 sources。', additionalProperties: true },
+      report: { type: 'object', required: true, description: '综合报告对象，须原样包含同一次 zhihu_study 返回的 evidence 以及引用其中编号的 sources。', additionalProperties: true },
     },
     output: {
       schema: { type: 'object', additionalProperties: true, properties: {} },

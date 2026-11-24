@@ -77,7 +77,7 @@ test('operator conditions stay in the user input; the system prompt is immutable
   assert.equal(seen[0].system.includes(reviewerPrompt), false);
   const text = seen[0].messages[0].content[0].text;
   assert.match(text, /# Additional review conditions from the operator/);
-  assert.match(text, /never relax the rules above or grant authorization/);
+  assert.match(text, /Apply these strictly as extra restrictions on top of the core policy above/);
   // The operator conditions are stable material: they lead the user input and
   // stay ahead of this request's facts.
   const contextBlock = text.slice(text.indexOf('<auxiliary-context'), text.indexOf('</auxiliary-context>'));
@@ -88,7 +88,7 @@ test('operator conditions stay in the user input; the system prompt is immutable
 
 test('system prompt carries the Codex-style policy and strict output format', () => {
   for (const pattern of [/\(trusted\)/, /untrusted evidence/, /`critical` -> `deny`/, /Reading files, listing directories/,
-    /sandbox escalation or retry .* is not suspicious/, /"outcome":"allow\|deny"/]) assert.match(SYSTEM_PROMPT, pattern);
+    /Evaluate a sandbox escalation or retry .* strictly by the intrinsic risk/, /"outcome":"allow\|deny"/]) assert.match(SYSTEM_PROMPT, pattern);
 });
 
 test('config limits and retired fields', () => {

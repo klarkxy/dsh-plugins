@@ -380,7 +380,7 @@ test('approval outcomes: allow grants once; deny and review failure reject with 
   assert.equal(await f.ask(denied), 'rejected');
   const replaced = await f.postExecute(denied);
   assert.deepEqual(replaced, { kind: 'accept', content: [{ type: 'text', text: MESSAGES.denied('Deletes unrelated data.') }] });
-  assert.match(replaced.content[0].text, /rejected due to unacceptable risk/);
+  assert.match(replaced.content[0].text, /rejected due to elevated risk/);
   // Feedback is consumed once.
   assert.deepEqual(await f.postExecute(denied), { kind: 'accept' });
 
@@ -390,7 +390,7 @@ test('approval outcomes: allow grants once; deny and review failure reject with 
   assert.equal(await f.ask(failed), 'rejected');
   const failure = await f.postExecute(failed);
   assert.equal(failure.content[0].text, MESSAGES.failed('the reviewer request failed'));
-  assert.match(failure.content[0].text, /review failure, not a determination that the action is unsafe/);
+  assert.match(failure.content[0].text, /Automatic approval review encountered a service error/);
   assert.equal(f.seen.length, 4, 'one review each, plus one retry for the transport failure');
 });
 

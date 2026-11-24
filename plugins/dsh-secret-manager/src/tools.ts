@@ -50,31 +50,31 @@ const requestSecretParameters: ObjectJsonSchema = {
   properties: {
     slot: {
       type: 'string',
-      description: 'Stable lowercase-hyphenated name for the credential: starts and ends with a letter or digit, at most 41 characters, e.g. "db-prod". Becomes the secret:// reference and the DSH_SECRET_* variable.',
+      description: 'Stable lowercase-hyphenated identifier (starts and ends with a letter or digit, up to 41 chars, e.g. "db-prod") used for the secret:// reference and DSH_SECRET_* env variable.',
     },
     purpose: {
       type: 'string',
-      description: 'One short sentence shown to the human explaining what this credential is for and why this call needs it.',
+      description: 'One short sentence shown to the user explaining why this task needs the credential.',
     },
     resource: {
       type: 'string',
-      description: 'Optional short user-facing target, e.g. the service host the credential is used against.',
+      description: 'Optional short target label shown to the user, such as the service hostname.',
     },
     request_env: {
       type: 'boolean',
-      description: 'Whether this call also wants the value injected into your own shell calls in this session. The human decides in the dialog; default false.',
+      description: 'Request session-scoped DSH_SECRET_* injection into your own shell calls (approved by the user in the dialog; default false).',
     },
     http_origin: {
       type: 'string',
-      description: 'Optional HTTPS origin, such as "https://api.example.com", that this call wants to call with the credential. The human approves it in the dialog.',
+      description: 'Optional HTTPS origin (e.g. "https://api.example.com") to authorize for secret_http calls in the dialog.',
     },
     auth_header: {
       type: 'string',
-      description: 'Header name for that HTTP scope; default Authorization. Transport control headers are refused.',
+      description: 'Authentication header name for http_origin (default "Authorization"; standard non-transport header names only).',
     },
     auth_prefix: {
       type: 'string',
-      description: 'Complete value prefix for that header, used verbatim; default "Bearer " (with the trailing space). Pass an empty string for a raw value.',
+      description: 'Exact header value prefix (default "Bearer " with trailing space; pass "" for a raw header value).',
     },
   },
   required: ['slot', 'purpose'],
@@ -92,13 +92,13 @@ const secretStatusParameters: ObjectJsonSchema = {
 const secretHttpParameters: ObjectJsonSchema = {
   type: 'object',
   properties: {
-    ref: { type: 'string', description: 'Reference to the stored credential, e.g. "secret://db-prod".' },
-    url: { type: 'string', description: 'Absolute HTTPS URL to call.' },
-    method: { type: 'string', description: 'HTTP method; default GET. GET/HEAD take no body.' },
+    ref: { type: 'string', description: 'Stored credential reference, e.g. "secret://db-prod".' },
+    url: { type: 'string', description: 'Final absolute HTTPS target URL (call the destination directly, as redirects are rejected).' },
+    method: { type: 'string', description: 'HTTP method (default GET; pass body only on methods that carry a request body).' },
     // The DSL admits only a boolean `additionalProperties`, so the header map is
     // declared open here and every entry is checked as text at runtime.
-    headers: { type: 'object', additionalProperties: true, description: 'Request headers as a flat object of string values, never the credential itself.' },
-    body: { type: 'string', description: 'Request body text.' },
+    headers: { type: 'object', additionalProperties: true, description: 'Additional plain-text request headers; authentication is attached automatically from ref.' },
+    body: { type: 'string', description: 'Optional plain-text request body.' },
   },
   required: ['ref', 'url'],
   additionalProperties: false,
@@ -178,7 +178,7 @@ function resultOf(slot: string, answer: PendingAnswer, configured: boolean): Sec
     return {
       owner: PLUGIN_ID, status: 'cancelled', slot, ref: secretRefOf(slot), envKey: envKeyOf(slot),
       configured, envGranted: false, httpGranted: false,
-      summary: `The human cancelled the request for ${secretRefOf(slot)}. Do not retry immediately; continue without the credential or ask them in your reply.`,
+      summary: `The user cancelled the dialog for ${secretRefOf(slot)}. Proceed with an alternative approach or ask how they prefer to continue in your reply.`,
     }
   }
   if (answer.kind === 'timeout') {
@@ -246,9 +246,9 @@ export function createRequestSecretTool(runtime: SecretRuntime) {
   return {
     name: 'request_secret',
     description: [
-      'Ask the human for a credential through a dedicated dialog. The value never enters this conversation: you receive only a secret:// reference and state flags.',
-      'Use it when a task needs a credential you do not have. Ask for the narrowest authorization: omit request_env unless you yourself must run a shell command that reads it, and pass http_origin only when a call must carry it.',
-      'The dialog is answered outside this turn; this tool waits for the answer. Never ask the human to paste a credential into chat.',
+      'Collect a credential or session authorization from the user via a dedicated secure dialog, returning only a secret:// reference and grant flags while keeping secret values out of chat.',
+      'Request minimal scope: enable request_env only when a shell command must read the env var, and pass http_origin only when calling an HTTPS API via secret_http.',
+      'Always use this dialog rather than asking the user to type credentials in chat.',
     ].join(' '),
     parameters: requestSecretParameters,
     output: {
@@ -322,7 +322,7 @@ export function createRequestSecretTool(runtime: SecretRuntime) {
 export function createSecretStatusTool(runtime: SecretRuntime) {
   return {
     name: 'secret_status',
-    description: 'Report which credential references are configured, without revealing any value. Use it to avoid asking the human for something already stored.',
+    description: 'Check which secret:// credential references are already stored (metadata only), so you can reuse existing slots before calling request_secret.',
     parameters: secretStatusParameters,
     output: {
       schema: statusResultSchema,
@@ -356,9 +356,8 @@ export function createSecretHttpTool(runtime: SecretRuntime) {
   return {
     name: 'secret_http',
     description: [
-      'Call an HTTPS endpoint with a stored credential attached as an authentication header. The credential never appears in the request arguments or the result.',
-      'This tool never prompts: the session must first be authorized through request_secret with http_origin for the exact origin. Without that approval it is refused and tells you which request_secret call is missing.',
-      'Redirects are refused, so call the final URL directly. An oversized or unreadable response is refused without returning a partial body.',
+      'Send an HTTPS request with a stored secret:// credential attached automatically as the approved authentication header, keeping the secret value hidden from arguments and output.',
+      'Requires prior session authorization via request_secret with the matching http_origin; call the final destination URL directly (single-hop only, bounded response size).',
     ].join(' '),
     parameters: secretHttpParameters,
     output: {

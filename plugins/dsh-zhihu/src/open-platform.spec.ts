@@ -319,7 +319,7 @@ describe('untrusted presentation and raw result preservation', () => {
       {}, { Body: '' }, { Body: '<script>only script</script>' },
     ]
     for (const data of samples) {
-      assert.match(renderZhihuOpenPlatform({ version: 1, operation: 'content.detail', data }), /不能视为全文/)
+      assert.match(renderZhihuOpenPlatform({ version: 1, operation: 'content.detail', data }), /仅包含元数据/)
     }
   })
   it('neutralizes encoded HTML and Markdown fence breakouts in display', () => {

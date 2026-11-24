@@ -174,7 +174,7 @@ type Hit = {
   passedPublishFilter: boolean
 }
 
-const FIGURE_POLICY = '检索不解析、不计算、也不补全性能、价格或寿命。交互数值必须由宿主在报告里逐项标来源或假设。'
+const FIGURE_POLICY = '检索阶段仅原样保留文本摘录；报告中的交互测算数值由宿主逐项标注摘录出处（source）、换算（conversion）或明确假设（assumption）。'
 const HOST_SYNTHESIS: ZhihuStudyResult['hostSynthesis'] = {
   nextTool: 'zhihu_study_report',
   mayClaimFinishedResearch: false,
@@ -346,7 +346,7 @@ function parseRequest(input: unknown, now: number): ParsedRequest {
     }
     budgetRequested = body.maxCalls
   } else if (plannedCalls > ZHIHU_STUDY_MAX_CALLS) {
-    invalid(`这次计划需要 ${plannedCalls} 次上游检索，单次上限是 ${ZHIHU_STUDY_MAX_CALLS}。请减少子问题或来源；不要拆成多次调用绕过上限。`)
+    invalid(`这次计划需要 ${plannedCalls} 次上游检索，超出单次上限 ${ZHIHU_STUDY_MAX_CALLS}；请缩减子问题或来源数量，在单次调用内完成。`)
   }
   if (body.windowDays !== undefined && mode !== 'briefing') invalid('windowDays 只适用于 briefing。')
   let windowDays = ZHIHU_STUDY_DEFAULT_WINDOW_DAYS
@@ -575,20 +575,20 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
   const completed = calls.filter(call => call.state === 'completed').length
   const status = statusOf({ mode: request.mode, cancelled, budgetExhausted, failures, completed, evidence, briefing: request.mode === 'briefing' })
   const limitations = [
-    '返回的是摘录，不是全文。需要准确理解时应打开原始链接。',
-    '本次检索不是该主题的完整样本，也不是知乎全体用户的共识。',
-    '知乎直答没有用作原始来源。',
-    '事件发生时间未被上游提供，不能把 EditTime 写成事件日期。',
-    '全网权威等级 1 到 4 的文字含义只标注在全网结果上；知乎站内等级只保留原文字段。',
+    '当前返回片段摘录；如需完整上下文请打开原始链接核对。',
+    '结果仅代表本次检索命中的有限样本。',
+    '原始证据仅来自站内、全网及可选知识库检索结果。',
+    'EditTime 仅记录页面发布或编辑时间；已确认事件日期须以摘录正文为准。',
+    '全网权威等级 1 到 4 附官方四档说明；知乎站内等级保留上游原值。',
   ]
-  if (request.querySource === 'question_only') limitations.push('宿主没有提供拆解后的子问题，本次只检索原问题，不能写成已经完成多角度拆解。')
-  if (request.querySource === 'question_only' && request.question.length > 200) limitations.push('原问题超过 200 字，单次检索词只使用前 200 字。')
-  if (request.mode === 'briefing') limitations.push('全网 publish_time 过滤和知乎 EditTime 过滤都不是事件发生证明。缺时间或无法核实的条目不能进入已确认时间线。')
-  if (!request.sources.includes('knowledge')) limitations.push('本次没有检索知识库。已有知识库需要宿主显式加入 sources。')
-  if (hasMore) limitations.push('上游 HasMore 为真，但公开文档没有翻页参数，不能把本次结果当成剩余全部。')
-  if (failures.length > 0) limitations.push('有检索失败。失败不是空结果，没有自动重试。')
-  if (budgetExhausted) limitations.push('调用预算已用尽，未执行的检索不能当成没有资料，也不能靠再调用一次把同一次研究补满。')
-  if (request.since === undefined && request.mode === 'briefing') limitations.push('没有提供 since，不能判断相对上一次阅读的新增。')
+  if (request.querySource === 'question_only') limitations.push('本次仅直接检索原问题（未拆解多角度子问题）。')
+  if (request.querySource === 'question_only' && request.question.length > 200) limitations.push('原问题超过 200 字，单次检索词截取前 200 字。')
+  if (request.mode === 'briefing') limitations.push('全网 publish_time 与知乎 EditTime 均按条目发布或编辑时间筛选；已确认事件时间线仅收录摘录中写明日期的条目。')
+  if (!request.sources.includes('knowledge')) limitations.push('本次未检索知识库（如需纳入已有知识库，请在 sources 中显式加入 knowledge）。')
+  if (hasMore) limitations.push('上游返回 HasMore 为真（公开接口仅提供首页召回结果）。')
+  if (failures.length > 0) limitations.push('部分检索请求失败（单次请求未自动重试，详见失败记录）。')
+  if (budgetExhausted) limitations.push('本次单次调用预算已用尽，其余计划项已跳过并标记为 skipped。')
+  if (request.since === undefined && request.mode === 'briefing') limitations.push(`本次未传入 since 参数，仅按近 ${request.windowDays} 天窗口归类，无法区分相对上次阅读的新增内容。`)
   const zhihu = evidence.filter(item => item.sources.includes('zhihu')).length
   const web = evidence.filter(item => item.sources.includes('web')).length
   const knowledge = evidence.filter(item => item.sources.includes('knowledge')).length
@@ -636,26 +636,26 @@ const STATUS_LABEL: Record<ZhihuStudyStatus, string> = {
 
 export function renderZhihuStudy(result: ZhihuStudyResult): string {
   const lines = [
-    '知乎研究证据（不是成品报告）',
+    '知乎研究取证结果（阶段：evidence；综合后请调用 zhihu_study_report 导出正式报告）',
     `模式：${result.mode}　状态：${STATUS_LABEL[result.status]}（${result.status}）`,
     `问题：${result.question}`,
     `调用：${result.stop.callsUsed}/${result.stop.callsPlanned}，预算 ${result.stop.budgetApplied}，停止原因 ${result.stop.reason}`,
-    'finishedReport：false。综合证据后再调用 zhihu_study_report。不要把本结果写成已完成研究。',
+    'finishedReport：false。请基于以下证据综合撰写分析，再调用 zhihu_study_report 导出报告。',
     '',
   ]
   if (result.failures.length > 0) {
-    lines.push('失败（不是空结果，没有重试）：')
+    lines.push('失败记录（单次请求，未自动重试）：')
     for (const failure of result.failures) lines.push(`- ${failure.source} / ${failure.query} / ${failure.code} / ${failure.message}`)
     lines.push('')
   }
-  if (result.status === 'empty') lines.push('检索已完成，上游没有返回匹配条目。这与检索失败不同。', '')
+  if (result.status === 'empty') lines.push('检索已完成，上游返回零条匹配结果。', '')
   if (result.evidence.length > 0) {
     lines.push('证据摘录：')
     for (const item of result.evidence) {
       lines.push(`- ${item.id} ${item.title}${item.url ? ` ${item.url}` : ''}`)
-      lines.push(`  来源：${item.sources.join(', ')}；全文：否；事件时间：未核实`)
-      if (item.authority) lines.push(`  权威原值：${item.authority}${item.authorityMeaning ? `（全网含义：${item.authorityMeaning}）` : '（未套用全网四档含义）'}`)
-      if (item.rankingScore !== undefined) lines.push(`  排序分：${item.rankingScore}（仅因上游返回而保留）`)
+      lines.push(`  来源：${item.sources.join(', ')}；内容形式：片段摘录；事件时间：待核实`)
+      if (item.authority) lines.push(`  权威原值：${item.authority}${item.authorityMeaning ? `（全网含义：${item.authorityMeaning}）` : '（保留上游原值）'}`)
+      if (item.rankingScore !== undefined) lines.push(`  排序分：${item.rankingScore}（上游返回原值）`)
       if (item.editTime) lines.push(`  条目时间：${item.editTime}，含义 ${item.editTimeMeaning}${item.inWindow === null ? '' : `，窗口内 ${item.inWindow}`}`)
       else lines.push(`  条目时间：${item.editTimeStatus}`)
       for (const excerpt of item.excerpts) lines.push(`  摘录：${excerpt}`)
@@ -663,9 +663,9 @@ export function renderZhihuStudy(result: ZhihuStudyResult): string {
     lines.push('')
   }
   if (result.groups) {
-    lines.push(`发布或更新（不是事件）：${result.groups.publicationOrUpdate.join(', ') || '无'}`)
+    lines.push(`发布或更新记录（按条目时间戳归类）：${result.groups.publicationOrUpdate.join(', ') || '无'}`)
     lines.push(`窗口外：${result.groups.outsideWindow.join(', ') || '无'}`)
-    lines.push(`缺日期或时间冲突，不能进入已确认时间线：${result.groups.undated.join(', ') || '无'}`)
+    lines.push(`缺日期或时间冲突（归入 undated）：${result.groups.undated.join(', ') || '无'}`)
     lines.push('')
   }
   lines.push('局限：')
@@ -678,19 +678,19 @@ export function createZhihuStudyTool(options: ZhihuClientOptions & { onExecuted?
   return defineTool({
     name: ZHIHU_STUDY_TOOL_NAME,
     description:
-      '有预算的知乎研究取证，不是成品报告，也没有单独的深度研究接口。' +
-      'mode：deep 拆开检索知乎和全网；observation 并列观点样本；briefing 默认滚动 30 天，全网用 realtime 和 publish_time 过滤，再看知乎。' +
-      '失败、预算用尽、缺日期和来源不足都会显式返回，不能当成空结果。不要用直答代替来源。综合后调用 zhihu_study_report。',
+      '按预算采集知乎与全网研究证据（阶段为 evidence，综合后通过 zhihu_study_report 导出报告）。' +
+      'mode：deep 多子问题拆解检索；observation 话题多方观点样本；briefing 近 30 天滚动动态（全网使用 realtime 与 publish_time 过滤，结合知乎条目时间）。' +
+      '请依据返回的 status 如实说明检索覆盖、失败或样本局限，原始证据仅使用检索来源。',
     parameters: {
       mode: { type: 'string', enum: [...ZHIHU_STUDY_MODES], required: true },
       question: { type: 'string', required: true, description: '用户的原问题，1 到 4000 字符。' },
-      queries: { type: 'array', items: { type: 'string' }, description: 'deep 应提供 2 到 4 条拆解后的子问题。省略时只检索原问题，并标明没有拆解。' },
-      sources: { type: 'array', items: { type: 'string', enum: [...ZHIHU_STUDY_SOURCES] }, description: '默认 zhihu 与 web。knowledge 只在要检索已有知识库时加入。未知来源会拒绝。' },
-      includeKnowledge: { type: 'boolean', description: '与 sources 同时使用时必须一致。' },
-      recallScopes: { type: 'array', items: { type: 'string', enum: ['personal', 'subscription', 'public'] }, description: '仅知识库检索可传。未知范围会拒绝。' },
-      maxCalls: { type: 'integer', description: `省略时按本次计划调用，但计划超过 ${ZHIHU_STUDY_MAX_CALLS} 会在请求前拒绝。显式填写时为 1 到 ${ZHIHU_STUDY_MAX_CALLS}，不能提高，也不能靠多次调用累加。` },
-      windowDays: { type: 'integer', description: `仅 briefing。1 到 ${ZHIHU_STUDY_MAX_WINDOW_DAYS}，默认 ${ZHIHU_STUDY_DEFAULT_WINDOW_DAYS}。` },
-      since: { type: 'string', description: '仅 briefing。可选 ISO 时间，只标记窗口内新旧，不扩大窗口。' },
+      queries: { type: 'array', items: { type: 'string' }, description: 'deep 模式建议传入 2 到 4 条拆解后的子问题；省略时直接检索原问题并在 coverage 中标注。' },
+      sources: { type: 'array', items: { type: 'string', enum: [...ZHIHU_STUDY_SOURCES] }, description: '默认 zhihu 与 web；需检索个人/订阅/公开知识库时显式加入 knowledge。' },
+      includeKnowledge: { type: 'boolean', description: '与 sources 同时传入时保持语义一致。' },
+      recallScopes: { type: 'array', items: { type: 'string', enum: ['personal', 'subscription', 'public'] }, description: '仅用于 knowledge 来源的召回范围。' },
+      maxCalls: { type: 'integer', description: `单次调用内的请求预算（1 到 ${ZHIHU_STUDY_MAX_CALLS}）；省略时按本次计划数执行且在 ${ZHIHU_STUDY_MAX_CALLS} 次内完成。` },
+      windowDays: { type: 'integer', description: `仅适用于 briefing；1 到 ${ZHIHU_STUDY_MAX_WINDOW_DAYS} 天，默认 ${ZHIHU_STUDY_DEFAULT_WINDOW_DAYS}。` },
+      since: { type: 'string', description: '仅适用于 briefing；可选 ISO 时间，用于标记窗口内新增条目。' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true, properties: {} },

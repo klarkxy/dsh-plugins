@@ -193,6 +193,14 @@ describe('zhihu study evidence', () => {
     expect(result.groups?.undated).toHaveLength(1)
     expect(renderZhihuStudy(result)).toContain('窗口内缺少可核实时间')
     expect(renderZhihuStudy(result)).not.toContain('上游没有返回条目')
+    const sevenDay = await executeZhihuStudy({ mode: 'briefing', question: '减肥药进展', sources: ['zhihu'], windowDays: 7 }, client(() => ({
+      Items: [item()],
+    })))
+    const notes = sevenDay.limitations.join('\n')
+    expect(notes).toContain('本次未检索知识库')
+    expect(notes).not.toContain('默认检索站内与全网')
+    expect(notes).toContain('近 7 天窗口归类')
+    expect(notes).toContain('无法区分相对上次阅读的新增内容')
   })
 })
 
@@ -402,7 +410,7 @@ describe('study plan and fixed window', () => {
     expect(done.status).not.toBe('budget_exhausted')
     expect(done.stop).toMatchObject({ callsPlanned: 6, callsUsed: 6, budgetApplied: 6, budgetRequested: null })
     const blocked: URL[] = []
-    await expect(executeZhihuStudy({ mode: 'deep', question: '怎么选', queries: ['甲', '乙', '丙', '丁'] }, client(blocked))).rejects.toThrow(/不要拆成多次调用/)
+    await expect(executeZhihuStudy({ mode: 'deep', question: '怎么选', queries: ['甲', '乙', '丙', '丁'] }, client(blocked))).rejects.toThrow(/超出单次上限/)
     expect(blocked).toHaveLength(0)
   })
 

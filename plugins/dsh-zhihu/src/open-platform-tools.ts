@@ -35,20 +35,20 @@ export function createZhihuAccountTool(options: ZhihuOpenPlatformToolOptions = {
   return defineTool({
     name: ZHIHU_ACCOUNT_TOOL_NAME,
     description:
-      '知乎账号数据（Access Secret 鉴权，拒绝 OAuth 切换；结果仅参考，不写入项目文件）。' +
-      'action：question_recommendations 问题推荐；question_answers 回答摘要；content_detail 创作全文；content_comments 评论；creator_account_stats 账号数据；creator_content_stats 单篇数据；quota 额度。',
+      '知乎账号与创作者数据查询（使用已配置的 Access Secret 鉴权，结果仅作对话内参考）。' +
+      'action：question_recommendations 问题推荐；question_answers 回答摘要；content_detail 本人创作正文；content_comments 内容评论；creator_account_stats 账号统计；creator_content_stats 单篇统计；quota 官方额度。',
     parameters: {
       action: { type: 'string', enum: Object.keys(ZHIHU_ACCOUNT_ACTIONS), required: true },
       query: { type: 'string', description: 'question_recommendations 主题；省略按画像推荐。' },
       count: { type: 'integer', description: 'question_recommendations 数量，1-20，默认 5。' },
       questionUrl: { type: 'string', description: 'question_answers 必填，https://www.zhihu.com/question/{id} 链接。' },
       contentUrl: { type: 'string', description: 'content_detail、content_comments、creator_content_stats 必填：本人已发布的 HTTPS 回答/专栏/想法/视频链接。' },
-      offset: { type: 'string', description: 'question_answers、content_comments 分页，非负 Int64 字符串，默认 "0"；翻页只用 paging.nextOffset。' },
+      offset: { type: 'string', description: 'question_answers、content_comments 分页游标（非负 Int64 字符串，默认 "0"，续读直接传入上页返回的 paging.nextOffset）。' },
       limit: { type: 'integer', description: 'question_answers、content_comments 每页条数，1-50，默认 20。' },
       order: { type: 'string', enum: ['score', 'reverse', 'ascending'], description: 'content_comments 排序，默认 score。' },
-      contentType: { type: 'string', enum: ['all', 'answer', 'article', 'pin', 'zvideo'], description: 'creator_account_stats 内容类型，默认 all，不支持 question。' },
+      contentType: { type: 'string', enum: ['all', 'answer', 'article', 'pin', 'zvideo'], description: 'creator_account_stats 内容类型，默认 all（可选 answer、article、pin、zvideo）。' },
       startDate: { type: 'string', description: 'stats action 可选，YYYY-MM-DD，与 endDate 成对；都省略用上游默认范围。' },
-      endDate: { type: 'string', description: 'YYYY-MM-DD，不得早于 startDate。' },
+      endDate: { type: 'string', description: '结束日期 YYYY-MM-DD（需等于或晚于 startDate）。' },
       apiIds: { type: 'array', items: { type: 'string', enum: [...ZHIHU_QUOTA_IDS, 'question_answers'] }, description: 'quota 可选额度项，默认全部。' },
     },
     output: {

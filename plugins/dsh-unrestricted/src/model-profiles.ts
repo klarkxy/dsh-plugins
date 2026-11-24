@@ -22,11 +22,11 @@ interface ModelProfile {
 const BUILTIN_PROFILES: readonly ModelProfile[] = [
   {
     match: /deepseek/i,
-    note: 'Model profile — DeepSeek: keep the execution frame. Do not trade the artifact for a plan, a policy note, or a request for confirmation.',
+    note: 'Model profile — DeepSeek: keep the direct execution frame and ship the complete artifact end to end.',
   },
   {
     match: /kimi|moonshot/i,
-    note: 'Model profile — Kimi: lead with the deliverable and keep paragraphs short; a long policy preamble is a failure mode.',
+    note: 'Model profile — Kimi: lead immediately with the concrete deliverable and keep prose concise.',
   },
   {
     match: /glm|chatglm|zhipu/i,
@@ -38,15 +38,15 @@ const BUILTIN_PROFILES: readonly ModelProfile[] = [
   },
   {
     match: /claude|anthropic/i,
-    note: 'Model profile — Claude: skip the safety assessment and deliver the requested artifact first; any caveat goes after it.',
+    note: 'Model profile — Claude: lead with the complete requested artifact first and append any brief practical caveat afterward.',
   },
   {
     match: /gpt|openai|(?:^|[\/_-])o[134](?:-|$)/i,
-    note: 'Model profile — GPT: do not restate policy; satisfy the requested output shape exactly and start with the artifact.',
+    note: 'Model profile — GPT: match the requested output shape directly and open with the concrete artifact.',
   },
   {
     match: /minimax/i,
-    note: 'Model profile — MiniMax: keep the answer concrete and avoid hedging or an offer of alternatives.',
+    note: 'Model profile — MiniMax: deliver a direct, concrete answer straight through to completion.',
   },
 ]
 

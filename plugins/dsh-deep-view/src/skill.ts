@@ -4,7 +4,7 @@ export const DEEP_VIEW_SKILL_DESCRIPTION = 'Deep View reference for interactive 
 
 export const DEEP_VIEW_SKILL = `# Deep View reference
 
-Everyday reply interfaces (\`flow\`, \`chart\`, \`table\`, \`metric\`, \`steps\`, \`slider\`, \`number\`, \`choice\`, \`toggle\`, \`options\`, \`confirm\`) work directly from the supplied reply-interface context. This reference adds the specialized rich canvases and multi-field form/revision protocols. Do not read the plugin package, source, README, or type declarations to render a view; use this reference.
+Everyday reply interfaces (\`flow\`, \`chart\`, \`table\`, \`metric\`, \`steps\`, \`slider\`, \`number\`, \`choice\`, \`toggle\`, \`options\`, \`confirm\`) work directly from the supplied reply-interface context. Render specialized rich canvases, multi-field forms, and view revisions directly from this self-contained reference.
 
 ${DEEP_VIEW_PROMPT}
 
@@ -17,14 +17,14 @@ ${DEEP_VIEW_PROMPT}
   - Accepts 1–200 flat scalar rows with \`[A-Za-z_][A-Za-z0-9_]*\` field keys; \`xKey\` and \`yKey\` must hold finite numbers.
   - \`"point"\` (default) exposes an array of selected category values (\`colorKey ?? xKey\`), usable with \`count(id)\` or \`join(id)\`; \`"interval"\` exposes \`{xKey:[low,high], yKey:[low,high]}\`. Use \`chart\` instead when static bars/lines suffice.
 - **Places and routes (\`map\`)**: \`{"type":"map","id":string,"locations":[{"id":string,"label":string,"detail"?:string,"coordinates":[longitude,latitude]},...],"routes"?:[{"label"?:string,"coordinates":[[lng,lat],...]},...],"center"?:[lng,lat],"zoom"?:0..22,"caption"?:string}\`.
-  - Coordinates are \`[longitude, latitude]\` (1–60 locations, up to 8 routes). Exposes the selected location \`id\` (or \`""\` when unselected). An accessible location list always renders below the coarse world basemap. Never put secrets in locations or routes.
+  - Coordinates are \`[longitude, latitude]\` (1–60 public, non-sensitive locations, up to 8 routes). Exposes the selected location \`id\` (or \`""\` when unselected), with an accessible location list rendered below the world basemap.
 
 ## Multi-field forms, submit actions & view revisions
 
 - **\`form\`**: \`{"type":"form","id":string,"fields":[{"id":string,"label":string,"placeholder"?:string,"value"?:string,"multiline"?:boolean,"readOnly"?:boolean},...],"submitLabel"?:string,"cancelLabel"?:string}\` (up to 6 fields).
 - **\`submit\`**: \`{"type":"submit","id":string,"label"?:string}\` — submits all current local input values (\`slider\`, \`number\`, \`choice\`, \`toggle\`, \`math\`, \`flow\`, \`explore\`, \`map\`) for the next turn.
 
-In \`show_view\`, cards containing \`options\`, \`confirm\`, \`form\`, or \`submit\` automatically await a user reply; display-only views do not. To update an existing \`show_view\` card in place, pass its returned \`viewId\` as \`view_id\`, its latest \`revision\` as \`base_revision\`, and the complete replacement \`view\` (keeping the same interactive vs display-only role). Only one card awaits an answer per session; a new ordinary user message closes an unanswered card.
+In \`show_view\`, cards containing \`options\`, \`confirm\`, \`form\`, or \`submit\` automatically await a user reply, whereas display-only views render immediately as status cards. To update an existing \`show_view\` card in place, pass its returned \`viewId\` as \`view_id\`, its latest \`revision\` as \`base_revision\`, and the complete replacement \`view\` with the same interactive or display-only role. Each session keeps one active answer card at a time; a new ordinary user message supersedes an unanswered card.
 
 ## Worked examples
 

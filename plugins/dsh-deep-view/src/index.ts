@@ -158,10 +158,10 @@ export function createShowViewTool(
     parameters: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'Optional short card heading; omit when the surrounding text already names the subject.' },
+        title: { type: 'string', description: 'Optional short card heading; include when the surrounding prose leaves the subject unnamed.' },
         view: { type: 'object', additionalProperties: true, description: 'One ViewNode object following the Deep View protocol (e.g. steps, progress, options, confirm, form, stack, flow, chart).' },
         await_reply: { type: 'boolean', description: 'Optional boolean; automatically inferred from whether the view contains answer controls (options, confirm, form, submit).' },
-        view_id: { type: 'string', description: 'Existing viewId to replace in place within this session. Omit when creating a new view.' },
+        view_id: { type: 'string', description: 'Existing viewId to update in place within this session; omit to create a new card.' },
         base_revision: { type: 'integer', description: 'Latest positive revision being replaced; required when view_id is set.' },
       },
       required: ['view'],
@@ -200,16 +200,16 @@ export function createShowViewTool(
       }
       if (!current && input.base_revision !== undefined) return { owner: VIEW_OWNER, status: 'invalid', awaitReply: false, summary: 'base_revision is only valid when updating an existing view' }
       if (current && current.interactive !== shown.interactive) {
-        return { owner: VIEW_OWNER, status: 'invalid', awaitReply: false, summary: 'Changing answer controls requires a new view, not an in-place update' }
+        return { owner: VIEW_OWNER, status: 'invalid', awaitReply: false, summary: 'Create a new view (omit view_id) when switching between display-only and interactive answer controls' }
       }
       if (current?.interactive && (!pending.has(id ?? '') || pending.get(id ?? '')?.id !== current.id)) {
-        return { owner: VIEW_OWNER, status: 'stale', awaitReply: false, summary: 'This answer has already closed; create a new view instead of updating it' }
+        return { owner: VIEW_OWNER, status: 'stale', awaitReply: false, summary: 'This answer card is already closed; omit view_id to create a new view' }
       }
       if (awaitReply && !isLiveRoot(host, agent)) {
         logger?.debug('view.non-root-rejected', 'Rejected interactive show_view outside a live root session.', {
           sessionId: id ?? null,
         })
-        return { owner: VIEW_OWNER, status: 'invalid', awaitReply: false, summary: 'An interactive view only works in a live root session. Put the question or decision in your response instead.' }
+        return { owner: VIEW_OWNER, status: 'invalid', awaitReply: false, summary: 'Interactive views require a live root session; state the question or options directly in your reply.' }
       }
       const revision = current ? current.revision + 1 : 1
       const snapshot: ViewSnapshot = {
@@ -236,7 +236,7 @@ export function createShowViewTool(
         owner: VIEW_OWNER, status: awaitReply ? 'pending' : 'shown', viewId, revision, snapshot, awaitReply,
         // A tool result is process data. The interface may already be visible
         // while the turn runs; the model must still produce its final answer.
-        summary: `${current ? `Updated interface revision ${revision}` : 'Interface shown to the user'}. viewId=${viewId}; revision=${revision}. Finish with a concise final answer; do not repeat its data or create a duplicate view. ${viewSummary(shown.view)}${awaitReply ? ' The user can answer this revision directly or fill the composer; do not wait or poll.' : ''}`,
+        summary: `${current ? `Updated interface revision ${revision}` : 'Interface shown to the user'}. viewId=${viewId}; revision=${revision}. Finish with a concise final answer that complements the card rather than repeating its data. ${viewSummary(shown.view)}${awaitReply ? ' End the turn normally so the user can answer on the card or in the composer.' : ''}`,
       }
     },
     isConcurrencySafe: () => false,
@@ -292,7 +292,7 @@ export function createShowCanvasTool(
       const agent = id === undefined ? undefined : host.agents.get(id)
       if (!isLiveRoot(host, agent)) {
         logger?.debug('canvas.non-root-rejected', 'Rejected show_canvas outside a live root session.', { sessionId: id ?? null })
-        return { owner: CANVAS_OWNER, status: 'invalid', summary: 'Canvas preview only works in a live root session. Give the user the file path in your response instead.' }
+        return { owner: CANVAS_OWNER, status: 'invalid', summary: 'Canvas preview requires a live root session; share the file path directly in your reply.' }
       }
       const header = isRecord(agent.session) && isRecord(agent.session.header) ? agent.session.header : undefined
       const cwd = typeof header?.cwd === 'string' && header.cwd !== '' ? header.cwd : undefined
@@ -308,7 +308,7 @@ export function createShowCanvasTool(
           absolutePath = typeof stat?.absolutePath === 'string' ? stat.absolutePath : undefined
         } catch (error) {
           logger?.debug('canvas.missing', 'show_canvas stat failed.', { sessionId: agent.id, path, reason: error instanceof Error ? error.message : String(error) })
-          return { owner: CANVAS_OWNER, status: 'missing', path, summary: `No readable file at "${path}". Write the file with the write tool first, then call show_canvas again.` }
+          return { owner: CANVAS_OWNER, status: 'missing', path, summary: `File "${path}" is missing or unreadable; create it with the write tool first, then call show_canvas.` }
         }
       }
       const address = fileAddressFor(agent.id, workspaceRoot, absolutePath ?? path)
@@ -316,7 +316,7 @@ export function createShowCanvasTool(
       return {
         owner: CANVAS_OWNER, status: 'shown', path, address,
         ...(typeof input.title === 'string' ? { title: input.title } : {}),
-        summary: `Canvas preview opened in the right Sidebar for ${path}. Later changes with the edit tool refresh the preview automatically; do not call show_canvas again unless the user asks to reopen it. Finish with a short final answer.`,
+        summary: `Canvas preview opened in the right Sidebar for ${path}. Subsequent edits with the edit tool refresh the preview automatically; call show_canvas again only if the user asks to reopen it. Finish with a concise final answer.`,
       }
     },
     isConcurrencySafe: () => false,

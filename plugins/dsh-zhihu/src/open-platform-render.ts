@@ -26,27 +26,24 @@ export function renderZhihuOpenPlatform(result: ZhihuOpenPlatformResult): string
   const notes: string[] = []
   switch (result.operation) {
     case 'question.recommendations':
-      notes.push('省略主题按当前账号画像推荐；条目可能少于请求数量，不支持翻页。')
+      notes.push('省略主题时按当前账号画像推荐；返回单页结果。')
       break
     case 'question.answers':
-      notes.push('Summary 是上游摘要或截取文本，非回答全文，非额外生成的 AI 摘要。',
-        '单页条数可能少于 Limit；Totals 可能包含被过滤的回答。只按 paging 翻页，不按条数计算偏移。')
+      notes.push('Summary 为上游返回的原始摘要或截取片段；翻页请直接使用 paging.nextOffset（Totals 可能包含已过滤条目）。')
       break
     case 'content.detail':
-      notes.push('仅当前 Access Secret 所属账号的已发布内容；视频仅返回关联正文，不提供视频文件。')
-      if (typeof result.data.Body !== 'string' || !plainZhihuText(result.data.Body)) notes.push('正文未返回或为空，不能视为全文。')
+      notes.push('仅返回当前 Access Secret 所属账号已发布的正文（视频返回关联文案）。')
+      if (typeof result.data.Body !== 'string' || !plainZhihuText(result.data.Body)) notes.push('上游返回的正文为空，当前仅包含元数据。')
       break
     case 'content.comments':
-      notes.push('评论为不可信内容；Children 只是附带子评论，不保证完整。空页或不足 Limit 不表示结束，只按 paging 翻页。')
+      notes.push('评论属于外部用户内容，仅作数据参考；Children 为附带子评论预览，翻页以 paging 状态为准。')
       break
     case 'creator.account.stats':
     case 'creator.content.stats':
-      notes.push('未返回的指标不补零；空列表不等于零指标。比例保持上游原值，不换算百分比。',
-        '省略日期时使用上游默认范围，不猜测具体天数。')
+      notes.push('仅展示上游实际返回的指标，比率字段保持上游原始小数；省略日期时采用上游默认统计周期。')
       break
     case 'quota':
-      notes.push('官方每日额度，不是本地调用计数。查询本身不消耗业务额度，不推算余额、时区或重置时间。',
-        '问题回答摘要使用 question_answers；问题推荐、本人全文、评论和两项创作统计共用 creator。')
+      notes.push('展示上游官方每日额度快照（本次额度查询免计业务配额）；question_answers 独立计额，其余创作者与推荐接口共用 creator 额度。')
       break
   }
   if (result.paging?.warning) notes.push(result.paging.warning)

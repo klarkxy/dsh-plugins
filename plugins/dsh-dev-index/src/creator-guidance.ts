@@ -2,10 +2,10 @@ export const OFFICIAL_LLMS_TXT = "https://deepseek-harness.github.io/deepseek-ha
 export const OFFICIAL_REPOSITORY = "https://github.com/deepseek-ai/deepseek-harness";
 
 export const CREATOR_GUIDANCE = [
-  "Before developing or debugging DSH plugins or agent presets:",
-  `- Verify APIs in official docs: dsh_docs action search on ${OFFICIAL_LLMS_TXT} (titles, categories and paths, not full text), then action fetch by id. No shell or web_fetch. Report retrieval errors; never invent APIs.`,
-  "- Verify runtime Service, Event, Slot and Tool contracts with cordis_inspect_list and focused cordis_inspect_query.",
-  "- dsh_plugins action search finds candidates (catalog, npm, or GitHub via the local gh CLI), action fetch_npm pins an exact npm version, and action fetch_github reads a GitHub repo's metadata and pins a commit for github:owner/repo#commit specs. None installs: installs and removals go through the official plugin manager with its approval flow.",
-  `- Match the running DSH version; when docs differ, use the matching dsh-v* tag at ${OFFICIAL_REPOSITORY}. Never mix versions.`,
-  "- Report the official pages and runtime contracts used, and anything unverified.",
+  "When developing or debugging DSH plugins or agent presets:",
+  `- Verify APIs in official docs via dsh_docs action search on ${OFFICIAL_LLMS_TXT} (indexes titles, categories, and paths), then action fetch by id. Use dsh_docs exclusively for official docs and report any retrieval errors rather than guessing APIs.`,
+  "- Verify live Service, Event, Slot, and Tool contracts with cordis_inspect_list and targeted cordis_inspect_query.",
+  "- Inspect candidate plugins (read-only) with dsh_plugins action search (catalog, npm, or GitHub via local gh CLI), action fetch_npm to pin an exact npm version, and action fetch_github to inspect a repo and pin a github:owner/repo#commit spec; perform all installs and removals through the official plugin manager and its approval flow.",
+  `- Align all APIs with the running DSH version; when website docs differ, check the matching dsh-v* tag at ${OFFICIAL_REPOSITORY}.`,
+  "- Cite the official doc URLs and runtime contracts consulted, and note any details that remain unverified.",
 ].join("\n");

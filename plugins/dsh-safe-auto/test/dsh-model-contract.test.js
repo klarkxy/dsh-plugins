@@ -217,9 +217,9 @@ test('escalated write: reviewer allow runs it once; deny returns the denial guid
     const denied = await h.escalatedWrite();
     assert.equal(denied.isError, true);
     assert.equal(readFileSync(h.target, 'utf8'), 'before');
-    assert.match(text(denied), /This action was rejected due to unacceptable risk\./);
+    assert.match(text(denied), /Action rejected due to elevated risk\./);
     assert.match(text(denied), /Reason: Overwrites an unrelated file\./);
-    assert.match(text(denied), /must not attempt to achieve the same outcome via workaround/);
+    assert.match(text(denied), /Switch to a materially safer alternative within policy/);
     assert.deepEqual(h.decided(), ['allowed-once', 'rejected']);
     assert.deepEqual(h.downstream, [], 'no downstream answerer participates');
   });
@@ -229,7 +229,7 @@ test('review failure (model service removed) is rejected as a review failure, no
   await h.modelFiber.dispose();
   const failed = await h.escalatedWrite();
   assert.equal(failed.isError, true);
-  assert.match(text(failed), /review failure, not a determination that the action is unsafe/);
+  assert.match(text(failed), /Automatic approval review encountered a service error/);
   assert.match(text(failed), /no reviewer model service/);
   assert.equal(readFileSync(h.target, 'utf8'), 'before');
   assert.deepEqual(h.decided(), ['rejected']);
@@ -285,7 +285,7 @@ test('a dangerous command without escalation goes through ask to the reviewer', 
   h.state.verdict = { risk_level: 'high', user_authorization: 'unknown', outcome: 'deny', rationale: 'Unrequested recursive deletion.' };
   const denied = await h.execute('pwsh', { command: 'Remove-Item -Recurse -Force dist', description: 'clean' });
   assert.equal(denied.isError, true);
-  assert.match(text(denied), /rejected due to unacceptable risk/);
+  assert.match(text(denied), /rejected due to elevated risk/);
   assert.match(text(denied), /Unrequested recursive deletion/);
   assert.deepEqual(h.bodies, ['bash:rm -rf node_modules'], 'a denied command never runs');
   assert.deepEqual(h.downstream, []);

@@ -16,15 +16,13 @@ export interface PlanInput {
 
 export function planSystemPrompt(): string {
   return [
-    'You split a git working-tree change set into a small number of coherent commits.',
-    'Return exactly one JSON object: {"groups":[{"message":"<commit message>","files":["<path>",...]}]}.',
+    'Split the git working-tree change set into 1 to 5 coherent commits.',
+    'Output raw JSON only: {"groups":[{"message":"<commit message>","files":["<path>",...]}]}.',
     'Rules:',
-    '- Every listed file must appear in exactly one group; do not invent paths.',
-    '- One to five groups. Group files that belong to the same logical change.',
-    '- Order groups so earlier commits do not depend on later ones.',
-    '- Each message is a single line of at most 72 characters, no trailing period.',
-    '- Match the language and style of the recent commit subjects when provided; otherwise use English conventional-commit style.',
-    '- Return no Markdown, code fence, or explanation.',
+    '- Assign every listed file path verbatim to its single logical group so all listed files are covered once.',
+    '- Order groups in dependency order so each commit stands on its own.',
+    '- Write each message as a single line up to 72 characters without trailing punctuation.',
+    '- Match the language and convention of recent commit subjects when supplied; default to English Conventional Commits.',
   ].join('\n')
 }
 
