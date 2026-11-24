@@ -1,10 +1,10 @@
 import { DEEP_VIEW_PROMPT } from './prompt.ts'
 
-export const DEEP_VIEW_SKILL_DESCRIPTION = 'Deep View reference for interactive math planes (math), linked scatter data exploration (explore), geographic maps (map), multi-field forms (form/submit) and view revisions. Everyday flows, charts, tables, estimates, choices and options are already covered in the reply-interface context. 中文：交互数学图、联动散点探索、地图与多字段表单参考。'
+export const DEEP_VIEW_SKILL_DESCRIPTION = 'Deep View reference for interactive math planes (math), linked scatter data exploration (explore), geographic maps (map), composite multi-select/multi-field forms (choice/form/submit), blocking ask_view vs non-blocking show_view, and view revisions. 中文：交互数学图、联动散点探索、地图与多选复合表单参考。'
 
 export const DEEP_VIEW_SKILL = `# Deep View reference
 
-Everyday reply interfaces (\`flow\`, \`chart\`, \`table\`, \`metric\`, \`steps\`, \`slider\`, \`number\`, \`choice\`, \`toggle\`, \`options\`, \`confirm\`) work directly from the supplied reply-interface context. Render specialized rich canvases, multi-field forms, and view revisions directly from this self-contained reference.
+Everyday reply interfaces (\`flow\`, \`chart\`, \`table\`, \`metric\`, \`steps\`, \`slider\`, \`number\`, \`choice\`, \`toggle\`, \`options\`, \`confirm\`, \`submit\`) work directly from the supplied reply-interface context. Render specialized rich canvases, multi-field composite forms, and view revisions directly from this self-contained reference.
 
 ${DEEP_VIEW_PROMPT}
 
@@ -19,12 +19,12 @@ ${DEEP_VIEW_PROMPT}
 - **Places and routes (\`map\`)**: \`{"type":"map","id":string,"locations":[{"id":string,"label":string,"detail"?:string,"coordinates":[longitude,latitude]},...],"routes"?:[{"label"?:string,"coordinates":[[lng,lat],...]},...],"center"?:[lng,lat],"zoom"?:0..22,"caption"?:string}\`.
   - Coordinates are \`[longitude, latitude]\` (1–60 public, non-sensitive locations, up to 8 routes). Exposes the selected location \`id\` (or \`""\` when unselected), with an accessible location list rendered below the world basemap.
 
-## Multi-field forms, submit actions & view revisions
+## Composite multi-select forms, \`ask_view\` vs \`show_view\` & view revisions
 
-- **\`form\`**: \`{"type":"form","id":string,"fields":[{"id":string,"label":string,"placeholder"?:string,"value"?:string,"multiline"?:boolean,"readOnly"?:boolean},...],"submitLabel"?:string,"cancelLabel"?:string}\` (up to 6 fields).
-- **\`submit\`**: \`{"type":"submit","id":string,"label"?:string}\` — submits all current local input values (\`slider\`, \`number\`, \`choice\`, \`toggle\`, \`math\`, \`flow\`, \`explore\`, \`map\`) for the next turn.
+- **\`form\`**: \`{"type":"form","id":string,"fields":[{"id":string,"label":string,"placeholder"?:string,"value"?:string,"multiline"?:boolean,"readOnly"?:boolean},...],"submitLabel"?:string,"cancelLabel"?:string}\` (up to 6 fields; can be stacked with \`choice\`, \`slider\`, \`number\`, and \`toggle\` inputs so all answers submit together).
+- **\`submit\`**: \`{"type":"submit","id":string,"label"?:string}\` — submits all current local input values (\`slider\`, \`number\`, \`choice\` including \`multi\`/\`allowCustom\`, \`toggle\`, \`math\`, \`flow\`, \`explore\`, \`map\`) in one validated action.
 
-In \`show_view\`, cards containing \`options\`, \`confirm\`, \`form\`, or \`submit\` automatically await a user reply, whereas display-only views render immediately as status cards. To update an existing \`show_view\` card in place, pass its returned \`viewId\` as \`view_id\`, its latest \`revision\` as \`base_revision\`, and the complete replacement \`view\` with the same interactive or display-only role. Each session keeps one active answer card at a time; a new ordinary user message supersedes an unanswered card.
+Choose \`ask_view\` when your current turn needs the user's answer before continuing (the card docks above the composer and resolves \`ask_view\` directly with \`status: "answered"\`, \`values\`, and \`answer\`; if the user clicks "Continue first", \`ask_view\` resolves immediately with \`status: "pending"\` while leaving the card open for an asynchronous reply). Choose \`show_view\` for live progress updates (\`view_id\` + \`base_revision\`) or optional non-blocking cards at the end of a turn. Each session keeps one active answer card at a time; a new ordinary user message supersedes an unanswered card.
 
 ## Worked examples
 
@@ -34,16 +34,22 @@ A multi-input budget calculator with \`let\` bindings and \`choice\`:
 {"title":"云资源月度预算","view":{"type":"stack","let":{"tierRate":"tier == 'pro' ? 1.6 : 1","total":"round(nodes * hours * 0.8 * tierRate, 0)"},"children":[{"type":"choice","id":"tier","label":"规格档位","options":[{"label":"标准版","value":"std"},{"label":"高性能版","value":"pro"}],"value":"std"},{"type":"slider","id":"nodes","label":"节点数","min":1,"max":16,"step":1,"value":4,"unit":"个"},{"type":"slider","id":"hours","label":"日均运行时长","min":1,"max":24,"step":1,"value":12,"unit":"小时"},{"type":"metric","label":"预计日成本","value":{"=":"format(total, 0) + ' 元'"},"tone":"accent"}]}}
 \`\`\`
 
+A composite multi-question form combining multi-select \`choice\` + custom option, single \`choice\`, and \`form\` notes:
+
+\`\`\`deepui
+{"title":"技术方案确认","view":{"type":"stack","children":[{"type":"choice","id":"features","label":"需要启用的模块（可多选）","multi":true,"allowCustom":true,"customPlaceholder":"补充其他模块","options":[{"label":"增量缓存","value":"cache"},{"label":"审计日志","value":"audit"},{"label":"自动回滚","value":"rollback"}],"value":["cache"]},{"type":"choice","id":"env","label":"目标部署环境","options":[{"label":"预发环境","value":"staging"},{"label":"生产环境","value":"prod"}],"value":"staging"},{"type":"text","tone":"muted","text":{"=":"'当前已选 ' + count(features) + ' 个模块'"}},{"type":"form","id":"confirm_spec","submitLabel":"提交配置","fields":[{"id":"note","label":"补充约束","placeholder":"可选填写窗口期或兼容要求"}]}]}}
+\`\`\`
+
 An interactive parabola whose curvature follows draggable point A and slider \`offset\`:
 
 \`\`\`deepui
 {"title":"二次函数探索","view":{"type":"stack","children":[{"type":"math","id":"plot","mathPoints":[{"id":"a","label":"A","x":1,"y":2}],"curves":[{"label":"f(x)","expression":"aX * x^2 + offset"}],"domain":[-5,5],"range":[-6,10]},{"type":"slider","id":"offset","label":"常数项截距","min":-4,"max":4,"step":0.5,"value":0},{"type":"row","children":[{"type":"metric","label":"二次项系数","value":{"=":"fixed(aX, 2)"}},{"type":"metric","label":"f(2) 当前值","value":{"=":"fixed(aX * 2^2 + offset, 2)"},"tone":"good"}]}]}}
 \`\`\`
 
-An optional next-step picker at the end of a reply (fills composer for review):
+An optional next-step picker with custom answer input at the end of a reply:
 
 \`\`\`deepui
-{"type":"options","id":"next","options":[{"label":"生成隔离验收脚本","description":"输出可直接运行的 Playwright 测试用例"},{"label":"查看完整配置项","description":"展开高级参数与默认值表"}]}
+{"type":"options","id":"next","multi":true,"allowCustom":true,"customPlaceholder":"或者输入其他关注点","options":[{"label":"生成隔离验收脚本","description":"输出可直接运行的 Playwright 测试用例"},{"label":"查看完整配置项","description":"展开高级参数与默认值表"}]}
 \`\`\`
 
 A confirmation prompt with explanatory text:
@@ -51,4 +57,3 @@ A confirmation prompt with explanatory text:
 \`\`\`deepui
 {"type":"stack","children":[{"type":"text","text":"是否按这组参数继续生成迁移计划？"},{"type":"confirm","id":"plan","confirmLabel":"继续生成","cancelLabel":"暂不继续"}]}
 \`\`\`
-`

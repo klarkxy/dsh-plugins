@@ -30,7 +30,7 @@ export function legacyAnswer(card: Card, text: string): ViewAnswer | null {
   if (text.startsWith('{')) {
     try {
       const data: unknown = JSON.parse(text)
-      if (!isRecord(data) || data.kind !== 'answer_to_pending_view' || data.tool !== 'show_view' || !Array.isArray(data.answers)) return null
+      if (!isRecord(data) || data.kind !== 'answer_to_pending_view' || (data.tool !== 'show_view' && data.tool !== 'ask_view') || !Array.isArray(data.answers)) return null
       const answer = data.answers.find(value => isRecord(value) && value.id === card.id)
       if (!isRecord(answer) || typeof answer.action !== 'string') return null
       const values = validateViewAnswer(card.view, answer.action, answer.values)
@@ -89,8 +89,28 @@ export function legacyAnswer(card: Card, text: string): ViewAnswer | null {
         const value = pairs[i].slice(prefix.length)
         if (input.type === 'toggle') sent[input.id!] = value === 'on' ? true : value === 'off' ? false : undefined
         else if (input.type === 'choice') {
-          const choices = input.options?.filter(option => option.label === value) ?? []
-          sent[input.id!] = choices.length === 1 ? choiceValue(choices[0]) : undefined
+          const declared = input.options ?? []
+          if (input.multi === true) {
+            if (value === 'None') {
+              sent[input.id!] = []
+            } else if (declared.some(option => option.label.includes(', '))) {
+              valid = false; break
+            } else {
+              const parts = value.split(', ')
+              const mapped: unknown[] = []
+              for (const part of parts) {
+                const matches = declared.filter(option => option.label === part)
+                if (matches.length === 1) mapped.push(choiceValue(matches[0]))
+                else if (matches.length === 0 && input.allowCustom === true) mapped.push(part)
+                else { valid = false; break }
+              }
+              if (!valid) break
+              sent[input.id!] = mapped
+            }
+          } else {
+            const choices = declared.filter(option => option.label === value)
+            sent[input.id!] = choices.length === 1 ? choiceValue(choices[0]) : input.allowCustom === true ? value : undefined
+          }
         } else {
           const unit = input.unit ? ` ${input.unit}` : ''
           sent[input.id!] = !unit || value.endsWith(unit) ? Number(unit ? value.slice(0, -unit.length) : value) : undefined

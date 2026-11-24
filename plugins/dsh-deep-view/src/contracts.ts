@@ -5,6 +5,10 @@ export const RPC_CHANNEL = '/dsh-deep-view'
 export const VIEW_OWNER = 'dsh-deep-view'
 export const CANVAS_OWNER = 'deep-view/canvas'
 export const HOST_SERVICE = 'dshDeepView'
+export type DeepViewConfig = {
+  /** Restrict native `ask_user_question` in user-facing sessions so questions route through Deep View. */
+  replaceNativeAskUser?: boolean
+}
 export type DeepViewHost = {
   /** Move an open card and route stale session lookups to a replacement root session. */
   handoffSession(fromSessionId: string, toSessionId: string): boolean
@@ -44,7 +48,7 @@ export type ViewNode = {
   let?: Record<string, string>
   text?: Value
   label?: string
-  value?: Value
+  value?: Value | Scalar[]
   tone?: Value
   caption?: Value
   columns?: { key: string; label: string }[]
@@ -61,6 +65,8 @@ export type ViewNode = {
   step?: number
   options?: ChoiceOption[] | { label: string; description?: string }[]
   multi?: boolean
+  allowCustom?: boolean
+  customPlaceholder?: string
   confirmLabel?: string
   cancelLabel?: string
   fields?: FormField[]
@@ -87,7 +93,7 @@ export type ViewNode = {
 }
 export type ShownView = { title: string; view: ViewNode; interactive: boolean; revision?: number }
 export type ViewFailure = { error: string }
-export type ViewSnapshot = ShownView & { id: string; sessionId: string; callId?: string; revision: number }
+export type ViewSnapshot = ShownView & { id: string; sessionId: string; callId?: string; revision: number; blocking?: boolean }
 export type PendingView = ViewSnapshot
 export type ViewAnswer = { id: string; action: string; values: Record<string, unknown>; revision?: number }
 /** Stored on the same user message as its readable answer, outside model text. */
@@ -100,6 +106,8 @@ export type ViewPresentation = {
   interactive: boolean
   awaitReply: boolean
   revision?: number
+  blocking?: boolean
+  answer?: ViewAnswer
 }
 /** Persisted `show_canvas` result metadata the client tool card renders. */
 export type CanvasPresentation = {

@@ -4,7 +4,7 @@
 // (including complete custom prompts or suppressed optional runtime contexts).
 export const DEEP_VIEW_POLICY = `## Deep View native interfaces
 
-Proactively enrich explanations with native Deep View cards (\`\`\`deepui JSON blocks in your reply, or \`show_view\` for live task progress and validated user decisions) whenever presenting system architectures, call/data flows, numerical trends, adjustable estimates, scenario switches, or structured option comparisons. When the user asks for a prototype, mini-game, interactive demo, or complete page, first \`write\` a single self-contained .html file, then call \`show_canvas\` to open its runnable preview. Follow the \`deep-view:reply-interface\` runtime protocol.`
+Proactively enrich explanations with native Deep View cards (\`\`\`deepui JSON blocks in your reply, \`ask_view\` when execution must wait for a user choice or multi-field/multi-select form, or \`show_view\` for live task progress and optional non-blocking follow-ups) whenever presenting system architectures, call/data flows, numerical trends, adjustable estimates, scenario switches, or structured option comparisons. Prefer \`ask_view\` over \`ask_user_question\` whenever \`ask_view\` is available so single-select, multi-select, custom-text, and composite multi-question forms share one native interface. When the user asks for a prototype, mini-game, interactive demo, or complete page, first \`write\` a single self-contained .html file, then call \`show_canvas\` to open its runnable preview. Follow the \`deep-view:reply-interface\` runtime protocol.`
 
 export const DEEP_VIEW_PROMPT = `## Deep View reply interfaces
 
@@ -17,7 +17,8 @@ Deep View renders native interactive cards directly inside your Markdown reply. 
 - **Estimates, budgets, sizing & what-if scenarios (估算、预算、容量测算、多档切换)**: combine \`slider\`, \`number\`, \`choice\`, or \`toggle\` inputs with formula-driven \`metric\`, \`progress\`, or \`table\` outputs so the user can adjust assumptions interactively on the card.
 - **Multi-criteria comparisons (方案选型、多维对比)**: use \`table\` when pairing with formulas, metrics, or interactive controls (cells render inline Markdown code, bold, and links), or standard Markdown pipe tables for quick static notes.
 - **Ordered workflows, checklists & execution stages (步骤、阶段进度)**: use \`steps\` (\`done\`, \`active\`, \`pending\`, \`blocked\`) or \`progress\`.
-- **Actionable next steps or confirmations (可选追问、方案确认)**: place \`options\` or \`confirm\` at the end of a substantive answer so the user can pick a direction in one click (in \`deepui\` fences this fills the composer draft for review; in \`show_view\` it submits a validated reply).
+- **Blocking questions & multi-question forms (关键提问、多选与复合问卷)**: call \`ask_view\` (preferring it over \`ask_user_question\`) when your next step depends on the user's answer — supports \`options\` (\`"multi":true\`, \`"allowCustom":true\`) and multi-question \`stack\` layouts combining \`choice\` (\`"multi":true\`, \`"allowCustom":true\`), \`slider\`, \`number\`, \`toggle\`, and \`form\`/\`submit\` in one submission.
+- **Optional next steps or confirmations (可选追问、方案确认)**: place \`options\` or \`confirm\` at the end of a substantive answer via \`show_view\` (non-blocking direct submit) or a \`\`\`deepui fence (fills the composer draft for review). Answered and filled cards automatically collapse into an expandable one-line receipt.
 
 Pair each card with concise surrounding prose that adds interpretation rather than repeating card values. Use plain prose or standard Markdown for brief single-fact replies, standalone code files, or when the user requests plain text or a specific syntax such as Mermaid. Ground every number and URL in real data or explicit assumptions.
 
@@ -30,10 +31,11 @@ When the user asks for a prototype, mini-game, interactive demo, or complete pag
 3. **Iterate with \`edit\`.** Partial edits refresh the open preview automatically — reuse that open preview unless the user asks to reopen it.
 4. Reserve \`show_canvas\` for runnable HTML pages and continue using \`\`\`deepui cards for charts, comparisons, and estimates; share the file path in your reply when \`show_canvas\` is unavailable.
 
-### Surface routing: \`\`\`deepui fence vs \`show_view\`
+### Surface routing: \`\`\`deepui fence vs \`ask_view\` vs \`show_view\`
 
-1. **In-reply \`\`\`deepui fence (default)**: place a standalone fenced block tagged \`deepui\` between paragraphs containing strict single-root JSON: either \`{"title":"Optional heading","view":ViewNode}\` or a bare \`ViewNode\`, letting the rendered card speak for itself.
-2. **\`show_view\` tool (when available)**: call \`show_view\` to surface live task progress during multi-step work (updating in place via \`view_id\` + \`base_revision\`) or to present an interactive card (\`options\`, \`confirm\`, \`form\`, \`submit\`) for a Host-validated user answer. Conclude your turn normally after showing an optional card, or use \`ask_user_question\` when execution requires user input before continuing.
+1. **In-reply \`\`\`deepui fence (default)**: place a standalone fenced block tagged \`deepui\` between paragraphs containing strict single-root JSON: either \`{"title":"Optional heading","view":ViewNode}\` or a bare \`ViewNode\`, letting the rendered card speak for itself. Interactive controls fill the composer draft without auto-sending.
+2. **\`ask_view\` tool (blocking synchronous question)**: call \`ask_view\` when execution requires user input before continuing. It suspends the tool call in the composer dock until the user submits a validated answer (or clicks "Continue first" to downgrade the card to non-blocking \`pending\` mode). Prefer \`ask_view\` over \`ask_user_question\` when \`ask_view\` is available.
+3. **\`show_view\` tool (live status & non-blocking card)**: call \`show_view\` to surface live task progress during multi-step work (updating in place via \`view_id\` + \`base_revision\`) or to leave an optional interactive card open at the end of a turn without blocking your reply.
 
 ### Core ViewNode JSON protocol
 
@@ -49,16 +51,17 @@ Every node is an object with \`"type"\` (trailing \`?\` below marks optional fie
 - **Table**: \`{"type":"table","columns":[{"key":string,"label":string},...],"rows":[[cell,...],...],"caption"?:string}\` (up to 8 columns, 50 rows; cells accept strings with inline Markdown, numbers, booleans, or formulas).
 - **Chart**: \`{"type":"chart","kind":"bar"|"hbar"|"line"|"area"|"donut","categories":[string,...],"series":[{"name"?:string,"values":[number|formula,...]},...],"unit"?:string,"caption"?:string}\` (\`donut\` takes 1 series; \`values.length\` must match \`categories.length\`).
 - **Flow graph**: \`{"type":"flow","id"?:string,"nodes":[{"id":string,"label":string,"detail"?:string,"tone"?:"neutral"|"accent"|"success"|"warn"|"bad","x"?:number,"y"?:number},...],"edges":[{"source":string,"target":string,"label"?:string,"id"?:string},...],"caption"?:string}\` (omit \`x\`/\`y\` to use automatic topological layout).
-- **Local inputs** (recompute formulas live on the card; give every input a stable \`id\` matching \`[A-Za-z_][A-Za-z0-9_]*\` when formulas read it):
+- **Local inputs** (recompute formulas live on the card and submit together with \`form\` or \`submit\`; give every input a stable \`id\` matching \`[A-Za-z_][A-Za-z0-9_]*\`):
   - \`{"type":"slider","id":string,"label":string,"min":number,"max":number,"step"?:number,"value":number,"unit"?:string}\`
   - \`{"type":"number","id":string,"label":string,"min"?:number,"max"?:number,"step"?:number,"value":number,"unit"?:string}\`
-  - \`{"type":"choice","id":string,"label":string,"options":[{"label":string,"value"?:scalar},...],"value"?:scalar}\`
+  - \`{"type":"choice","id":string,"label":string,"options":[{"label":string,"value"?:scalar},...],"multi"?:boolean,"allowCustom"?:boolean,"customPlaceholder"?:string,"value"?:scalar|scalar[]}\` (when \`"multi":true\`, \`id\` binds to an array usable with \`count(id)\`, \`join(id, ", ")\`, and \`contains(id, v)\`)
   - \`{"type":"toggle","id":string,"label":string,"value":boolean}\`
-- **Quick answer controls** (fill composer in \`deepui\`, submit directly in \`show_view\`):
-  - \`{"type":"options","id"?:string,"options":[{"label":string,"description"?:string},...],"multi"?:boolean}\`
+- **Answer controls** (submit directly in \`ask_view\`/\`show_view\`, fill composer in \`deepui\`):
+  - \`{"type":"options","id"?:string,"options":[{"label":string,"description"?:string},...],"multi"?:boolean,"allowCustom"?:boolean,"customPlaceholder"?:string}\`
   - \`{"type":"confirm","id"?:string,"confirmLabel"?:string,"cancelLabel"?:string}\` (place any prompt sentence in a sibling \`text\` node)
+  - \`{"type":"submit","id"?:string,"label"?:string}\` (submits all local input values on the card in one click)
 
-For interactive coordinate plots (\`math\`), linked scatter brushing (\`explore\`), geographic maps (\`map\`), or multi-field text forms (\`form\` / \`submit\`), load the \`deep-view\` skill first when available. Use Deep View forms strictly for non-sensitive inputs; collect credentials only through dedicated secret dialogs.
+For interactive coordinate plots (\`math\`), linked scatter brushing (\`explore\`), geographic maps (\`map\`), or multi-field text forms (\`form\`), load the \`deep-view\` skill first when available. Use Deep View forms strictly for non-sensitive inputs; collect credentials only through dedicated secret dialogs.
 
 Comparison example:
 \`\`\`deepui
@@ -74,4 +77,3 @@ Interactive estimate example:
 \`\`\`deepui
 {"title":"资源估算","view":{"type":"stack","children":[{"type":"row","children":[{"type":"slider","id":"quantity","label":"实例数量","min":1,"max":100,"step":1,"value":2,"unit":"台"},{"type":"number","id":"price","label":"单台月费","min":0,"max":10000,"step":1,"value":10,"unit":"元"}]},{"type":"metric","label":"预计月度总计","value":{"=":"quantity * price"},"tone":"accent"}]}}
 \`\`\`
-`
