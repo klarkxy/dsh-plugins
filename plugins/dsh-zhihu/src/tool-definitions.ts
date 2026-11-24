@@ -69,19 +69,19 @@ export function createZhihuResearchTool(options: ZhihuToolOptions = {}) {
   return defineTool({
     name: ZHIHU_RESEARCH_TOOL_NAME,
     description:
-      '知乎调研检索与问答，结果仅作社区参考，不构成 canon，不写入项目文件。' +
-      'action：search 站内；global_search 站外；hot_list 热榜；ask 直答；knowledge_search 知识库。',
+      '知乎检索与问答（结果仅作对话内的社区参考资料）。' +
+      'action：search 站内检索；global_search 全网检索；hot_list 热榜；ask 知乎直答；knowledge_search 知识库检索。',
     parameters: {
       action: { type: 'string', enum: ZHIHU_RESEARCH_ACTIONS, required: true },
       query: { type: 'string', description: '检索词，2-100 字符；除 hot_list 外必填。' },
       count: { type: 'integer', description: `search 1-${ZHIHU_SEARCH_MAX_COUNT}（默认 ${ZHIHU_SEARCH_DEFAULT_COUNT}）、global_search 1-${ZHIHU_GLOBAL_SEARCH_MAX_COUNT}（默认 ${ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT}）。` },
       limit: { type: 'integer', description: `hot_list 1-${ZHIHU_HOT_LIST_MAX_LIMIT}（默认 ${ZHIHU_HOT_LIST_DEFAULT_LIMIT}）、knowledge_search 1-${ZHIHU_KNOWLEDGE_SEARCH_MAX_LIMIT}（默认 ${ZHIHU_KNOWLEDGE_SEARCH_DEFAULT_LIMIT}）。` },
-      searchDb: { type: 'string', enum: ['all', 'realtime', 'static'], description: 'global_search 检索库，默认 all。近况检索用 realtime。' },
-      host: { type: 'string', description: 'global_search 的 Filter host。不能是 zhihu.com 及其子域，不能写原始表达式。' },
-      hostOperator: { type: 'string', enum: ['eq', 'ne'], description: 'host 比较，默认 eq。' },
-      publishTime: { type: 'integer', description: 'global_search 的 Filter publish_time，Unix 秒。这是发布时间过滤，不是事件发生时间。' },
-      publishTimeOperator: { type: 'string', enum: ['gte', 'gt', 'lte', 'lt', 'eq', 'ne'], description: 'publishTime 比较，默认 gte。' },
-      model: { type: 'string', description: 'ask 模型：zhida-thinking-1p5（默认，带思考）、zhida-fast-1p5（简单事实）、zhida-agent（最慢最强，仅明确要求时用）；免费额度不足被拒绝。' },
+      searchDb: { type: 'string', enum: ['all', 'realtime', 'static'], description: 'global_search 检索库，默认 all；近况检索使用 realtime。' },
+      host: { type: 'string', description: 'global_search 站点域名过滤（仅支持知乎站外独立域名，按字段值传入域名）。' },
+      hostOperator: { type: 'string', enum: ['eq', 'ne'], description: 'host 比较运算，默认 eq。' },
+      publishTime: { type: 'integer', description: 'global_search 条目发布时间过滤（Unix 秒级时间戳，按页面发布时间筛选）。' },
+      publishTimeOperator: { type: 'string', enum: ['gte', 'gt', 'lte', 'lt', 'eq', 'ne'], description: 'publishTime 比较运算，默认 gte。' },
+      model: { type: 'string', description: 'ask 模型：zhida-thinking-1p5（默认，带推理）、zhida-fast-1p5（快速问答）、zhida-agent（深度分析，仅在用户明确指定时选用）；仅在免费额度内调用。' },
       recallScopes: { type: 'array', description: 'knowledge_search 召回范围，默认 public；可加 personal/subscription。', items: { type: 'string', enum: [...ZHIHU_RECALL_SCOPES] } },
     },
     output: {

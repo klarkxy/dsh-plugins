@@ -9,15 +9,15 @@ export type ZhihuStudySkill = {
 }
 
 const SHARED = `
-这些流程没有单独的官方研究接口。先调用 zhihu_study 取证，再由你综合，最后调用 zhihu_study_report 写入 report.md、report.json 和可打开的 report.html。
+按三步完成研究与导出：
+1. 调用 zhihu_study 采集有预算的检索证据（phase 固定为 evidence，finishedReport 固定为 false）。单次研究在同一次调用内完成，上限 6 次上游检索；原始证据仅使用站内、全网及可选知识库来源，仅在免费额度内执行，并在 windowDays ≤ 30 的范围内请求。
+2. 基于返回的 evidence 综合分析，如实呈现检索 status：failed、budget_exhausted、insufficient_sources、insufficient_dates、cancelled 或 partial 需说明具体原因与未覆盖范围；empty 表示上游成功检索但命中为零。
+3. 在可写工作区下调用 zhihu_study_report，原样附带本次返回的 evidence，将 report.md、report.json 与可打开的 report.html 导出到会话工作区的 zhihu-study 目录。
 
-zhihu_study 的 phase 固定是 evidence，finishedReport 固定是 false。status 为 failed、budget_exhausted、insufficient_sources、insufficient_dates、cancelled 或 partial 时，必须说明失败、未执行的检索、缺日期或样本不足。不能把这些状态写成“没有资料”或已完成研究。empty 只表示上游成功返回了零条。
-
-不要调用 zhihu_research 的 ask 充当原始来源。不要传 allowPaid、token 或密钥。一次 zhihu_study 最多 6 次上游检索；省略 maxCalls 时按计划调用，计划超过 6 次会在请求前拒绝。不要把同一次研究拆成多次调用累加。windowDays 最大是 30。每次上游请求仍走原有免费额度预查、北京时间日记录、未知映射拒绝和不自动重试。
-
-导出时把同一次返回的 evidence 原样放进 zhihu_study_report。来源编号、链接、摘录、作者、赞同数和权威字段必须来自该结果。标为 source 的数量必须在引文里同时有量名、数字和紧挨着的单位；无关数字、序号和单位不符都要改成 assumption。换算要写明原文、系数和说明。20 平方米除以 2 元是 10 平方米/元，不是 10 元。finishedReport 只表示结构校验通过，不证明证据未经改动。只读或未知沙箱模式会拒绝写文件。报告写在会话工作区的 zhihu-study 目录。
-
-摘录不是全文。全网 AuthorityLevel 只有 1、2、3、4 才有低/中/高/超高的官方含义。知乎站内的 AuthorityLevel 和 RankingScore 只在上游实际返回时保留，不套用那四档说明。HasMore 为真也没有公开翻页参数。
+出处与数值规范：
+- 所有来源编号、链接、摘录、作者、赞同数及权威字段均逐字源自本次 evidence；摘录为片段预览。
+- 标为 source 的数值须在对应引文中同时包含量名、数字与紧邻单位；估算值与区间标为 assumption，单位换算标为 conversion 并写明原文数值、系数与量纲说明（例如 20 平方米 ÷ 2 元 = 10 平方米/元）。
+- 全网 AuthorityLevel 的 1–4 对应官方低/中/高/超高四档；知乎站内的 AuthorityLevel 与 RankingScore 仅在上游返回时原样保留。
 `.trim()
 
 export const ZHIHU_STUDY_SKILLS: readonly ZhihuStudySkill[] = [
@@ -31,25 +31,23 @@ export const ZHIHU_STUDY_SKILLS: readonly ZhihuStudySkill[] = [
 
 ${SHARED}
 
-调用 zhihu_study，mode 为 deep。默认来源是知乎和全网。2 条子问题是 4 次调用，3 条是 6 次，都在单次上限内。不要一次提交 4 条，除非只保留一个来源。加入知识库后，子问题和来源相乘不能超过 6。全网检索使用现有 global_search，不新增端点。
+调用 zhihu_study（mode 设为 deep），默认检索知乎与全网。传入 2 到 3 条子问题时，双来源合计 4 到 6 次请求，正好落在单次上限内；若同时加入知识库或扩展为 4 条子问题，保持子问题数 × 来源数不超过 6。全网检索沿用现有 global_search。
 
-你负责综合：发现和争议指向取证编号。没有 multiAngle 时，不要声称已经做过多角度研究。性能、价格、寿命要么能在摘录里找到对应数字，要么写成 assumption。插件不提供默认 CADR 或五年费用。
-
-然后调用 zhihu_study_report，带上这次 evidence。把返回的 html 路径交给用户。`,
+综合撰写时，将每条发现与争议关联到对应 evidence 编号；仅在 coverage.multiAngle 为 true 时表述为多角度研究。所有性能、价格、寿命等参数均须明确标注来自摘录引文（source）或作为 assumption 列出。随后调用 zhihu_study_report 原样附带本次 evidence，并将返回的 html 路径提供给用户。`,
   },
   {
     name: 'zhihu-observation',
     description: '整理一个话题的现状、进展和并列观点，每条观点追到原文，并标明这只是检索样本。',
-    whenToUse: '用户想知道各方怎么看一个话题，并要对照原文而不是一个全民结论时使用。',
+    whenToUse: '用户想了解某个话题的多方观点并逐条对照原文出处时使用。',
     source: 'runtime',
     invocation: { modelInvocable: true, userInvocable: true },
     content: `# 知乎观察
 
 ${SHARED}
 
-调用 zhihu_study，mode 为 observation。默认检索知乎和全网。知乎条目不足两条时 status 会是 insufficient_sources 或 empty，不要补写成共识。
+调用 zhihu_study（mode 设为 observation），默认检索知乎与全网。当知乎命中少于两条时，如实依据返回的 insufficient_sources 或 empty 说明样本有限。
 
-报告里的现状、进展和观点都要有 sourceIds。至少两个观点、至少两个不同来源。作者和赞同数只使用证据里实际出现的字段。导出的页面会固定写明这是样本而不是知乎全体用户的看法。`,
+报告中的现状、进展和观点须附带 sourceIds，至少包含两条观点及两个独立来源；作者与赞同数仅在证据返回时展示，并明确标注结论基于本次检索样本。`,
   },
   {
     name: 'zhihu-recent-briefing',
@@ -61,10 +59,8 @@ ${SHARED}
 
 ${SHARED}
 
-调用 zhihu_study，mode 为 briefing。默认窗口是从当前时间倒推的 30 个滚动日，不能加大。全网调用使用 SearchDB realtime 和 publish_time 过滤，然后用知乎 EditTime 做解释。这两处时间都不是事件发生时间。
+调用 zhihu_study（mode 设为 briefing），窗口为当前时间倒推的滚动近 30 天（windowDays ≤ 30）。全网检索使用 SearchDB realtime 与 publish_time 过滤，知乎站内结合 EditTime 辅助解释，两类时间戳均表示发布或编辑时间。
 
-groups.publicationOrUpdate 只是窗口内的条目时间。groups.undated 和 outsideWindow 不能写进已确认事件。没有 since 时不要声称哪些是相对上次阅读的新增。
-
-写入报告时，confirmedEvents 的日期必须能在来源摘录里逐字找到；对不上就放进 undated。相同标题和日期要合并后再提交。`,
+写入报告时，将重复标题与日期合并整理；confirmedEvents 仅收录摘录引文中逐字出现日期的事件，groups.publicationOrUpdate 归入 publicationUpdates，缺日期或窗口外条目归入 undated。仅在请求传入 since 时标注相对新增。`,
   },
 ]

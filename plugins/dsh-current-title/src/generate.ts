@@ -39,12 +39,11 @@ export function systemPrompt(config: GenerateConfig, customPrompt = ''): string 
   const instruction = customPrompt.trim()
   return [
     instruction || 'Name the current task in an AI coding-assistant session.',
-    'Prioritize the newest human messages. Older messages are context only and must not keep a completed task in the title.',
+    'Focus on the newest human messages so the title reflects the active task, using older messages only for background context.',
     'Allowed type values: feature, fix, optimize, refactor, test, docs, release, config, explore, discuss.',
-    'Return exactly one JSON object: {"type":"<type>","summary":"<summary>"}.',
-    'Return no Markdown, code fence, explanation, date, or extra key.',
-    'Keep the summary in the language of the recent messages.',
-    `Aim for at most ${config.targetWords} non-CJK words or ${config.targetCjkCharacters} CJK characters.`,
+    'Output raw JSON only with exact keys: {"type":"<type>","summary":"<summary>"}.',
+    'Write the summary in the language of the recent messages as a concise task phrase.',
+    `Keep the summary within ${config.targetWords} non-CJK words or ${config.targetCjkCharacters} CJK characters.`,
   ].join('\n')
 }
 

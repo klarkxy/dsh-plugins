@@ -170,7 +170,7 @@ describe("plugin registry", () => {
       const result = await client.search({ query });
       expect(result.total).toBe(1);
       expect(result.results[0].name).toBe(plugins[0].package);
-      expect(result.searchScope).toMatch(/not all npm/);
+      expect(result.searchScope).toMatch(/curated catalog/);
       expect((result as { catalogGeneratedAt: string | null }).catalogGeneratedAt).toBe("2026-09-27");
     }
     const exact = await client.search({ query: "@sample/dsh-theme", limit: 1 });

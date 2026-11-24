@@ -402,7 +402,7 @@ describe('study plan and fixed window', () => {
     expect(done.status).not.toBe('budget_exhausted')
     expect(done.stop).toMatchObject({ callsPlanned: 6, callsUsed: 6, budgetApplied: 6, budgetRequested: null })
     const blocked: URL[] = []
-    await expect(executeZhihuStudy({ mode: 'deep', question: '怎么选', queries: ['甲', '乙', '丙', '丁'] }, client(blocked))).rejects.toThrow(/不要拆成多次调用/)
+    await expect(executeZhihuStudy({ mode: 'deep', question: '怎么选', queries: ['甲', '乙', '丙', '丁'] }, client(blocked))).rejects.toThrow(/超出单次上限/)
     expect(blocked).toHaveLength(0)
   })
 

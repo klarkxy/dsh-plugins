@@ -31,19 +31,19 @@ describe('delegation prompt contracts', () => {
       record: () => ({ enabled: true }),
       toolVisible: name => name === 'subagent',
     }))
-    for (const heading of ['Goal:', 'Non-goals:', 'Working directory:', 'Allowed changes:', 'Do not:', 'Contracts:', 'Dependencies:', 'Done when:', 'Report:']) {
+    for (const heading of ['Goal:', 'Working directory:', 'Owned scope:', 'Boundaries:', 'Contracts:', 'Dependencies:', 'Done when:', 'Report:']) {
       expect(text).toContain(heading)
     }
-    expect(text).toContain('write sets disjoint')
-    expect(text).toContain('tool availability, permissions, approvals')
+    expect(text).toContain('disjoint write set')
+    expect(text).toContain('tool availability, sandbox boundaries, and approvals')
   })
 
   it('gives executors a fixed evidence-based closeout format', () => {
     for (const heading of ['Status:', 'Result:', 'Changed:', 'Verification:', 'Assumptions and open issues:']) {
       expect(EXECUTOR_PROMPT).toContain(heading)
     }
-    expect(EXECUTOR_PROMPT).toContain('Mark incomplete criteria partial or blocked')
-    expect(EXECUTOR_PROMPT).toContain('Prompt instructions do not grant or restrict actual tools')
+    expect(EXECUTOR_PROMPT).toContain('reserve `complete` for fully satisfied criteria')
+    expect(EXECUTOR_PROMPT).toContain("host's enforced tool, filesystem, and approval controls")
   })
 })
 

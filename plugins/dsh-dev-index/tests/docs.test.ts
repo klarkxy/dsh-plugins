@@ -47,7 +47,7 @@ describe("official docs", () => {
     expect(en.searchScope).toBe("directory");
     const empty = await client.search({ query: "unfindable" }, signal());
     expect(empty.results).toEqual([]);
-    expect(empty.note).toContain("not full text");
+    expect(empty.note).toContain("titles, categories, and paths only");
     await expect(client.search({ query: " " }, signal())).rejects.toThrow(/query/);
     await expect(client.search({ query: "plugin", limit: 21 }, signal())).rejects.toThrow(/limit/);
   });

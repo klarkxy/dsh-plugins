@@ -70,7 +70,7 @@ describe('open platform real RPC and optional tool registration', () => {
     assert.deepEqual(rpc.value, result)
     assert.deepEqual(paths, [ZHIHU_OPEN_PLATFORM_APIS[operation].path, ZHIHU_OPEN_PLATFORM_APIS[operation].path])
     assert.equal(tool.output.render(input, result)[0]?.type, 'text')
-    assert.match(tool.description, /Access Secret.*OAuth/)
+    assert.match(tool.description, /Access Secret 鉴权/)
     assert.equal(Object.keys((tool.parameters as { properties?: Record<string, unknown> }).properties ?? tool.parameters).some(key => /token|secret|oauth/i.test(key)), false)
     await service.dispose()
     assert.equal(stored.length, operation === 'quota' ? 0 : 2)

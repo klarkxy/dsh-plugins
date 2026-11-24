@@ -162,9 +162,9 @@ export class DocsClient {
     }).filter(r => r.score > 0).sort((a, b) => b.score - a.score || a.entry.id.localeCompare(b.entry.id));
     return {
       source: DOCS_INDEX, fetchedAt: page.fetchedAt, cached: page.cached, revision: page.revision,
-      searchScope: "directory", version: "Current official website; not pinned to your installed DSH version.",
+      searchScope: "directory", version: "Live official website docs; verify APIs against the installed DSH version.",
       totalMatches: ranked.length, results: ranked.slice(0, limit).map(r => r.entry),
-      note: "Searches titles, categories and paths, not full text. No matches does not mean a topic is absent from document bodies.",
+      note: "Indexes directory titles, categories, and paths only; topics absent from directory results may still appear inside document bodies.",
     };
   }
 
@@ -184,7 +184,7 @@ export class DocsClient {
     const end = Math.min(offset + length, page.text.length);
     return {
       ...entry, fetchedAt: page.fetchedAt, cached: page.cached, revision: page.revision,
-      version: "Current official website; verify APIs against the running DSH version.",
+      version: "Live official website docs; verify APIs against the running DSH version.",
       offset, totalCharacters: page.text.length, nextOffset: end < page.text.length ? end : null,
       content: page.text.slice(offset, end),
     };

@@ -39,8 +39,8 @@ describe('prompt fusion', () => {
     expect(fused.issues).toBeUndefined()
     const text = fused.sections!.map(section => section.text).join('\n\n')
     expect(text).toContain('## Max profile')
-    expect(text).toContain('Plan mode restricts delivery and mutation, not content')
-    expect(text).toContain('deliverable rules apply directly to code and results')
+    expect(text).toContain('Plan mode scopes presentation and read-only exploration')
+    expect(text).toContain('delivering complete code and logged results')
     expect(text).toContain('Report the same unrestricted content through `structured_output`')
     // The input must remain untouched: assemblies may be reused by the host.
     expect(sections[0]?.text).toBe(contractPersona)

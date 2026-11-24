@@ -39,7 +39,7 @@ describe('Deep View skill', () => {
       name: 'deep-view', description: DEEP_VIEW_SKILL_DESCRIPTION, content: DEEP_VIEW_SKILL,
       source: 'runtime', invocation: { modelInvocable: true, userInvocable: true },
     })
-    expect(DEEP_VIEW_SKILL).toContain('Do not read the plugin package')
+    expect(DEEP_VIEW_SKILL).toContain('Render specialized rich canvases')
     expect(registrations[0]!.description).not.toContain('ViewNode')
     const tool = createShowViewTool(host, new Map())
     expect(JSON.stringify(tool)).not.toContain('For a workflow')

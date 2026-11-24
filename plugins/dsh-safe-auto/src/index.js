@@ -36,16 +36,13 @@ const BREAKER_WINDOW = 50;
 const BREAKER_WINDOW_DENIALS = 10;
 
 export const MESSAGES = Object.freeze({
-  denied: rationale => 'safe-auto: This action was rejected due to unacceptable risk.\n'
-    + `Reason: ${rationale || 'The reviewer denied the action without a specific rationale.'}\n`
-    + 'The agent must not attempt to achieve the same outcome via workaround, indirect execution, or policy circumvention. '
-    + 'Proceed only with a materially safer alternative, or if the user explicitly approves the action after being informed of the risk. '
-    + 'Otherwise, stop and request user input.',
-  failed: detail => `safe-auto: Automatic approval review failed (${detail}). `
-    + 'This is a review failure, not a determination that the action is unsafe. '
-    + 'You may retry once, or ask the user for guidance or explicit approval. Do not bypass the approval boundary.',
-  breaker: 'safe-auto: Automatic approval is paused for this turn after repeated denials. '
-    + 'Stop and ask the user how to proceed; a new user message resumes automatic review.',
+  denied: rationale => 'safe-auto: Action rejected due to elevated risk.\n'
+    + `Reason: ${rationale || 'Denied by automatic safety review.'}\n`
+    + 'Switch to a materially safer alternative within policy, or pause and explain the concrete risk to the user so they can decide whether to approve it explicitly.',
+  failed: detail => `safe-auto: Automatic approval review encountered a service error (${detail}). `
+    + 'You may retry the tool call once, or pause and request explicit user approval within the approval flow.',
+  breaker: 'safe-auto: Automatic approval is paused for the rest of this turn after repeated denials. '
+    + 'Pause and ask the user how to proceed; automatic review resumes on their next message.',
 });
 
 function serializeAction(exec, req) {
