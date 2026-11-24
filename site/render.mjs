@@ -22,6 +22,7 @@ const T = {
     heroNote: "把 web 换成你在用的 profile。装完重启 profile，插件会出现在「设置 → 插件」里。",
     marketLabel: "DSH 发现索引源",
     copyMarket: "复制索引地址",
+    marketNote: "需先在 DSH 中启用实验性的「自定义插件市场」组合包，再通过「插件 → 发现 → 添加索引源」添加。",
     statPlugins: (n) => `${n} 个插件`,
     statCategories: (n) => `${n} 个分类`,
     statUpdated: (date) => `更新于 ${date}`,
@@ -84,6 +85,7 @@ const T = {
     heroNote: "Replace web with your profile name. Restart the profile after installing; the plugin then shows up under Settings → Plugins.",
     marketLabel: "DSH Discover index",
     copyMarket: "Copy index URL",
+    marketNote: "Enable the experimental Custom Plugin Market bundle in DSH first, then add it under Plugins → Discover → Add index source.",
     statPlugins: (n) => `${n} plugin${n === 1 ? "" : "s"}`,
     statCategories: (n) => `${n} categories`,
     statUpdated: (date) => `Updated ${date}`,
@@ -626,7 +628,7 @@ ${categories.map((c) => `<li><a href="#cat-${c.id}" data-category="${esc(c.id)}"
 <p class="lede">${esc(t.heroLead(plugins.length))}</p>
 <pre class="terminal hero-terminal" aria-label="${esc(t.install)}"><span class="prompt" aria-hidden="true">$</span> dsh plugin --profile web add <span class="arg">${esc(t.heroArg)}</span></pre>
 <p class="hero-note">${esc(t.heroNote)}</p>
-<div class="hero-market"><span>${esc(t.marketLabel)}</span><code>${esc(MARKET_INDEX_URL)}</code>${copyButton(lang, [MARKET_INDEX_URL], t.copyMarket)}</div>
+<div class="hero-market"><span>${esc(t.marketLabel)}</span><code>${esc(MARKET_INDEX_URL)}</code>${copyButton(lang, [MARKET_INDEX_URL], t.copyMarket)}<span class="small">${esc(t.marketNote)}</span></div>
 <ul class="hero-stats">
 <li><strong>${plugins.length}</strong> ${esc(t.statPlugins(plugins.length).replace(String(plugins.length), "").trim())}</li>
 <li><strong>${categories.length}</strong> ${esc(t.statCategories(categories.length).replace(String(categories.length), "").trim())}</li>
@@ -745,9 +747,14 @@ function detailPage(ctx, plugin, lang) {
     : autoDeps.length
       ? `<p class="small">${t.installAuto(list(autoDeps))}</p>`
       : "";
-  const license =
-    npm.manifest.license === "SEE LICENSE IN LICENSE" && npm.files.includes("/LICENSE")
-      ? `<a href="${assetPages.LICENSE ?? `${plugin.repository}/blob/HEAD/${dir}LICENSE`}">${t.licenseFile}</a>`
+  const licenseLabel =
+    npm.manifest.license === "SEE LICENSE IN LICENSE"
+      ? t.licenseFile
+      : esc(npm.manifest.license ?? (assetPages.LICENSE ? t.licenseFile : "—"));
+  const license = assetPages.LICENSE
+    ? `<a href="${esc(assetPages.LICENSE)}">${licenseLabel}</a>`
+    : npm.manifest.license === "SEE LICENSE IN LICENSE" && npm.files.includes("/LICENSE")
+      ? `<a href="${esc(`${plugin.repository}/blob/HEAD/${dir}LICENSE`)}">${t.licenseFile}</a>`
       : esc(npm.manifest.license ?? "—");
   const facts = [
     [t.version, `<span class="ver">${esc(npm.version)}</span>`],

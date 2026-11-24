@@ -20,9 +20,11 @@ Compose native charts, comparisons, workflow steps, metrics, adjustable estimate
 dsh plugin --profile web add @klarkxy/dsh-deep-view
 ```
 
-Replace `web` with your profile name, then restart the profile and reload the page after installing or updating. The package includes both the Host and Web Client halves; no account or API key is required.
+Replace `web` with your profile name and restart the profile after installing.
 
 ## Usage
+
+Restart the profile and reload the page after installing or updating so the frontend rendering components load. The package includes both the Host and Web Client halves; no account or API key is required.
 
 Ask naturally for an architecture breakdown, call path, trend, option comparison, adjustable budget, interactive math plot, data exploration, or map; you do not need to name Deep View. In user-facing conversations, the plugin supplies both system-prompt selection policy and runtime interface instructions, encouraging the model to explain architectures with node graphs, chart real trends, and attach live controls for estimates and follow-up choices while keeping prose and code alongside them.
 

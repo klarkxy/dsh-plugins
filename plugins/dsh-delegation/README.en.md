@@ -16,9 +16,11 @@ A per-session switch where the main agent plans, delegates to subagents, and rev
 dsh plugin --profile web add @klarkxy/dsh-delegation
 ```
 
-Replace `web` with your profile name, enable the plugin in the profile, and reload the page or restart the profile as the plugin manager asks.
+Replace `web` with your profile name and restart the profile after installing.
 
 ## Usage
+
+After enabling the plugin in the profile and reloading the page or restarting the profile as the plugin manager asks:
 
 1. On the new-session page, find the **Delegate** chip on the same row as the workspace and preset selectors.
 2. Toggle it before sending the first message; when enabled, the chip highlights in the theme color.

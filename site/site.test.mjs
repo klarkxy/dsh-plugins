@@ -209,10 +209,12 @@ test("install commands cover the plugin and its required peers; dependencies com
   assert.match(files.get("404.html"), /areas/);
   assert.match(files.get("llms.txt"), /index\.json/);
 
-  // Home chrome: category nav with counts, stats, market URL, and a link to the timeline.
+  // Home chrome: category nav with counts, stats, market URL, prerequisite note, and a link to the timeline.
   const home = files.get("index.html");
   assert.match(home, /class="catnav"/);
   assert.match(home, /class="hero-market"/);
+  assert.match(home, /自定义插件市场/);
+  assert.match(files.get("en/index.html"), /Custom Plugin Market/);
   assert.match(home, /data-category="workflow"/);
   assert.match(home, /hero-stats/);
   assert.match(home, /href="changelog\/"/);
@@ -256,6 +258,15 @@ test("both languages serve package images and licenses from relative local asset
   }
   assert.deepEqual(files.get("assets/packages/zhihu/docs/a b.png"), Buffer.from([0, 255, 127]));
   assert.equal(files.get("assets/packages/zhihu/LICENSE").toString(), "Published license");
+  // Standard SPDX license IDs (e.g. Apache-2.0) also link to assetPages.LICENSE when shipped.
+  const deepViewPkg = data["@klarkxy/dsh-deep-view"];
+  deepViewPkg.manifest = { ...deepViewPkg.manifest, license: "Apache-2.0" };
+  deepViewPkg.assets = { LICENSE: Buffer.from("Apache License 2.0").toString("base64") };
+  const spdxFiles = renderSite(catalog, data, options);
+  assert.ok(spdxFiles.get("plugins/deep-view/index.html").includes('<a href="../../assets/packages/deep-view/LICENSE">Apache-2.0</a>'));
+  assert.ok(spdxFiles.get("en/plugins/deep-view/index.html").includes('<a href="../../../assets/packages/deep-view/LICENSE">Apache-2.0</a>'));
+  assert.equal(spdxFiles.get("assets/packages/deep-view/LICENSE").toString(), "Apache License 2.0");
+
   pkg.assets["../escape.png"] = "AA==";
   assert.throws(() => renderSite(catalog, data, options), /Unsafe package asset path/);
 });
@@ -465,5 +476,23 @@ test("real workspace READMEs render cleanly with local overlay and stripSiteChro
   }
   assert.match(files.get("plugins/plugin-kit/index.html"), /共享能力|支撑库/);
   assert.match(files.get("en/plugins/model-route/index.html"), /provider, model, and reasoning-effort settings/);
+  // Plugin-specific update, reload, and activation notes survive stripSiteChrome on real READMEs.
+  const articleHtml = (page) => {
+    const html = files.get(page);
+    const start = html.indexOf('<article class="readme"');
+    return html.slice(start, html.indexOf("</article>", start));
+  };
+  assert.match(articleHtml("plugins/web-search-manager/index.html"), /更新插件后需重启 profile.*设置 → 网页搜索/);
+  assert.match(articleHtml("en/plugins/web-search-manager/index.html"), /updating the plugin.*Settings → Web Search/);
+  assert.match(articleHtml("plugins/deep-view/index.html"), /刷新页面.*Host 与 Web Client/);
+  assert.match(articleHtml("en/plugins/deep-view/index.html"), /reload the page.*Host and Web Client/);
+  assert.match(articleHtml("plugins/delegation/index.html"), /启用插件.*刷新页面或重启 profile/);
+  assert.match(articleHtml("en/plugins/delegation/index.html"), /enabling the plugin.*reloading the page or restarting the profile/);
   assert.deepEqual(missing, []);
+
+  // Verify real dsh-deep-view LICENSE overlay with its published Apache-2.0 SPDX license.
+  data["@klarkxy/dsh-deep-view"].manifest = { ...data["@klarkxy/dsh-deep-view"].manifest, license: "Apache-2.0" };
+  const spdxRendered = renderSite(catalog, data, { generatedAt: "2026-03-01T00:00:00.000Z" });
+  assert.ok(spdxRendered.get("plugins/deep-view/index.html").includes('<a href="../../assets/packages/deep-view/LICENSE">Apache-2.0</a>'));
+  assert.ok(spdxRendered.get("en/plugins/deep-view/index.html").includes('<a href="../../../assets/packages/deep-view/LICENSE">Apache-2.0</a>'));
 });

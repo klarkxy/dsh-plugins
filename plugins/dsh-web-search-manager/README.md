@@ -20,9 +20,11 @@
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-把 `web` 换成你的 profile 名，安装后重启 DSH Web，再打开「设置 → 网页搜索」。更新插件后同样需要重启 profile，以加载新版搜索代码。
+把 `web` 换成你的 profile 名，安装后重启 profile 生效。
 
 ## 使用
+
+安装或更新插件后需重启 profile（以加载新版搜索代码），再打开「设置 → 网页搜索」管理搜索与网页读取服务。
 
 ### 搜索（`web-search` 页签）
 

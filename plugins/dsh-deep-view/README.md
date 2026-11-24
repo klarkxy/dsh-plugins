@@ -20,9 +20,11 @@
 dsh plugin --profile web add @klarkxy/dsh-deep-view
 ```
 
-把 `web` 换成你的 profile 名，安装或更新后重启 profile 并刷新页面。包内同时包含 Host 与 Web Client 两部分，无需账号或 API 密钥。
+把 `web` 换成你的 profile 名，安装后重启 profile。
 
 ## 使用
+
+安装或更新后需重启 profile 并刷新页面以加载前端渲染组件；包内同时包含 Host 与 Web Client 两部分，无需账号或 API 密钥。
 
 直接提出架构原理、调用链、数据趋势、方案选型、可调预算、互动数学图、数据探索或地图等需求，无需点名 Deep View。插件会在面向用户的会话中同时提供系统提示词选用策略与运行时协议说明，让模型主动用节点关系图说明架构与调用链、用图表呈现数据趋势、用本地控件支持多档估算与追问确认；正文和代码仍可自然穿插。
 

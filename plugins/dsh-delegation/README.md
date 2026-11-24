@@ -16,9 +16,11 @@
 dsh plugin --profile web add @klarkxy/dsh-delegation
 ```
 
-将 `web` 替换为你的 profile 名称，在 profile 中启用插件后，按插件管理器提示刷新页面或重启 profile。
+将 `web` 替换为你的 profile 名称，安装后重启 profile。
 
 ## 使用
+
+在 profile 中启用插件并按插件管理器提示刷新页面或重启 profile 后，按以下步骤开启委派模式：
 
 1. 在创建会话页，找到工作区、预设选择器同一行的「委派」按钮。
 2. 在发送第一条消息前切换状态：开启时按钮高亮为主题色。
