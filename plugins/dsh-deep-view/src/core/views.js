@@ -29,14 +29,14 @@ const PROPS = {
   sources: ['id', 'items'],
   steps: ['id', 'items'],
   slider: ['id', 'label', 'min', 'max', 'step', 'value', 'unit'],
-  choice: ['id', 'label', 'options', 'value'],
+  choice: ['id', 'label', 'options', 'value', 'multi', 'allowCustom', 'customPlaceholder'],
   toggle: ['id', 'label', 'value'],
   number: ['id', 'label', 'min', 'max', 'step', 'value', 'unit'],
   math: ['id', 'mathPoints', 'curves', 'domain', 'range', 'caption'],
   flow: ['id', 'nodes', 'edges', 'caption'],
   explore: ['id', 'data', 'xKey', 'yKey', 'colorKey', 'select', 'caption'],
   map: ['id', 'center', 'zoom', 'locations', 'routes', 'caption'],
-  options: ['id', 'options', 'multi'],
+  options: ['id', 'options', 'multi', 'allowCustom', 'customPlaceholder'],
   confirm: ['id', 'confirmLabel', 'cancelLabel'],
   form: ['id', 'fields', 'submitLabel', 'cancelLabel'],
   submit: ['id', 'label'],
@@ -293,6 +293,9 @@ function normalizeComponent(out, depth, state) {
   if (['slider', 'number', 'choice', 'toggle'].includes(type) && out.label === undefined && typeof out.id === 'string') setOwn(out, 'label', out.id)
 
   if (type === 'choice' || type === 'options') {
+    if (out.multi !== undefined) setOwn(out, 'multi', boolean(out.multi))
+    if (out.allowCustom !== undefined) setOwn(out, 'allowCustom', boolean(out.allowCustom))
+    if (isScalar(out.customPlaceholder) && typeof out.customPlaceholder !== 'string') setOwn(out, 'customPlaceholder', String(out.customPlaceholder))
     if (Array.isArray(out.options)) {
       setOwn(out, 'options', out.options.map(option => {
         if (isScalar(option)) return { label: String(option), ...(type === 'choice' ? { value: numeric(option) } : {}) }
@@ -306,8 +309,8 @@ function normalizeComponent(out, depth, state) {
         return next
       }))
     }
+    if (type === 'choice' && out.multi === true && Array.isArray(out.value)) setOwn(out, 'value', out.value.map(numeric))
   }
-  if (type === 'options' && out.multi !== undefined) setOwn(out, 'multi', boolean(out.multi))
   if (type === 'toggle' && out.value !== undefined) setOwn(out, 'value', boolean(out.value))
 
   if (type === 'table') {
@@ -822,6 +825,12 @@ function checkNumberInput(node, path, ctx) {
 function checkChoice(node, path, ctx) {
   const idError = checkInputId(node, path, ctx)
   if (idError !== undefined) return idError
+  if (node.multi !== undefined && typeof node.multi !== 'boolean') return `${path}.multi: expected a boolean`
+  if (node.allowCustom !== undefined && typeof node.allowCustom !== 'boolean') return `${path}.allowCustom: expected a boolean`
+  if (node.customPlaceholder !== undefined) {
+    if (typeof node.customPlaceholder !== 'string') return `${path}.customPlaceholder: expected a string`
+    if (node.customPlaceholder.length > MAX_TEXT) return `${path}.customPlaceholder: ${node.customPlaceholder.length} characters exceeds the limit of ${MAX_TEXT}`
+  }
   if (!Array.isArray(node.options) || node.options.length === 0) return `${path}.options: expected a non-empty array of { label, value }`
   const labels = new Set()
   const values = new Set()
@@ -840,8 +849,28 @@ function checkChoice(node, path, ctx) {
     if (values.has(value)) return `${at}.value: duplicate value ${quoted(value)}`
     values.add(value)
   }
+  if (node.multi === true) {
+    if (node.value !== undefined) {
+      if (!Array.isArray(node.value)) return `${path}.value: expected an array of option values`
+      const seen = new Set()
+      let customCount = 0
+      for (let index = 0; index < node.value.length; index += 1) {
+        const item = node.value[index]
+        if (!isScalar(item)) return `${path}.value[${index}]: expected a string, a number or true/false`
+        if (seen.has(item)) return `${path}.value[${index}]: duplicate value ${quoted(item)}`
+        seen.add(item)
+        if (!values.has(item)) {
+          if (node.allowCustom === true && typeof item === 'string' && item.trim() !== '' && item.length <= MAX_TEXT && customCount < 1) customCount += 1
+          else return `${path}.value[${index}]: expected one of the options' values`
+        }
+      }
+    }
+    ctx.inputs.set(node.id, Array.isArray(node.value) ? [...node.value] : [])
+    return undefined
+  }
   const chosen = node.value ?? choiceValue(node.options[0])
-  if (!values.has(chosen)) return `${path}.value: expected one of the options' values`
+  const validCustom = node.allowCustom === true && typeof chosen === 'string' && chosen.trim() !== '' && chosen.length <= MAX_TEXT
+  if (!values.has(chosen) && !validCustom) return `${path}.value: expected one of the options' values`
   ctx.inputs.set(node.id, chosen)
   return undefined
 }
@@ -969,6 +998,11 @@ function checkOptions(node, path, ctx) {
   const idError = checkId(node, path, ctx)
   if (idError !== undefined) return idError
   if (node.multi !== undefined && typeof node.multi !== 'boolean') return `${path}.multi: expected a boolean`
+  if (node.allowCustom !== undefined && typeof node.allowCustom !== 'boolean') return `${path}.allowCustom: expected a boolean`
+  if (node.customPlaceholder !== undefined) {
+    if (typeof node.customPlaceholder !== 'string') return `${path}.customPlaceholder: expected a string`
+    if (node.customPlaceholder.length > MAX_TEXT) return `${path}.customPlaceholder: ${node.customPlaceholder.length} characters exceeds the limit of ${MAX_TEXT}`
+  }
   if (!Array.isArray(node.options)) return `${path}.options: expected an array of 1 to ${MAX_OPTIONS} options`
   if (node.options.length < 1 || node.options.length > MAX_OPTIONS) return `${path}.options: expected 1 to ${MAX_OPTIONS} options; got ${node.options.length}`
   const labels = new Set()
@@ -1124,7 +1158,7 @@ export function viewInputs(view) {
 
 export function inputDefault(node) {
   if (node.type === 'toggle') return node.value === true
-  if (node.type === 'choice') return node.value ?? choiceValue(Array.isArray(node.options) ? node.options[0] : undefined)
+  if (node.type === 'choice') return node.multi === true ? (Array.isArray(node.value) ? [...node.value] : []) : (node.value ?? choiceValue(Array.isArray(node.options) ? node.options[0] : undefined))
   if (node.type === 'math') return mathDefaults(node)
   if (node.type === 'explore') return node.select === 'interval' ? {} : []
   if (node.type === 'flow' || node.type === 'map') return ''
@@ -1202,7 +1236,7 @@ export function richSelectionSummary(node, value) {
 
 function inputText(node, value) {
   if (node.type === 'toggle') return value === true ? 'on' : 'off'
-  if (node.type === 'choice') return choiceLabel(node, value)
+  if (node.type === 'choice') return node.multi === true ? (Array.isArray(value) && value.length > 0 ? value.map(item => choiceLabel(node, item)).join(', ') : 'None') : choiceLabel(node, value)
   if (node.type === 'math') return (node.mathPoints ?? []).map(point => `${point.label || point.id}=(${Array.isArray(value?.[point.id]) ? value[point.id].map(asText).join(', ') : 'unset'})`).join(', ')
   if (node.type === 'flow') return (node.nodes ?? []).find(item => item.id === value)?.label || 'No selection'
   if (node.type === 'map') return (node.locations ?? []).find(item => item.id === value)?.label || 'No selection'
@@ -1349,7 +1383,12 @@ function validateInputs(view, sent) {
     const value = Object.hasOwn(given, node.id) ? given[node.id] : inputDefault(node)
     const at = `values.inputs.${node.id}`
     if (node.type === 'toggle' && typeof value !== 'boolean') return { error: `${at}: expected true or false` }
-    if (node.type === 'choice' && !(Array.isArray(node.options) ? node.options : []).some(option => choiceValue(option) === value)) return { error: `${at}: expected one of the options' values` }
+    if (node.type === 'choice') {
+      const checkedChoice = validateChoiceInput(node, value, at)
+      if (checkedChoice.error !== undefined) return { error: checkedChoice.error }
+      inputs[node.id] = checkedChoice.value
+      continue
+    }
     if (node.type === 'slider' || node.type === 'number') {
       if (!isNumber(value)) return { error: `${at}: expected a number` }
       if ((node.min !== undefined && value < node.min) || (node.max !== undefined && value > node.max)) return { error: `${at}: expected a number from ${node.min ?? '-∞'} to ${node.max ?? '∞'}` }
@@ -1361,10 +1400,73 @@ function validateInputs(view, sent) {
   return { inputs }
 }
 
+function validateChoiceInput(node, value, at) {
+  const declared = new Set((Array.isArray(node.options) ? node.options : []).map(choiceValue))
+  if (node.multi === true) {
+    if (!Array.isArray(value)) return { error: `${at}: expected an array of option values` }
+    const normalized = []
+    const seen = new Set()
+    let customCount = 0
+    for (const raw of value) {
+      if (!isScalar(raw)) return { error: `${at}: expected scalar option values` }
+      if (declared.has(raw)) {
+        if (seen.has(raw)) return { error: `${at}: duplicate selection ${quoted(raw)}` }
+        seen.add(raw)
+        normalized.push(raw)
+        continue
+      }
+      if (node.allowCustom === true && typeof raw === 'string') {
+        const trimmed = raw.trim()
+        if (trimmed === '') return { error: `${at}: custom value cannot be empty` }
+        if (trimmed.length > MAX_TEXT) return { error: `${at}: ${trimmed.length} characters exceeds the limit of ${MAX_TEXT}` }
+        if (declared.has(trimmed)) {
+          if (seen.has(trimmed)) return { error: `${at}: duplicate selection ${quoted(trimmed)}` }
+          seen.add(trimmed)
+          normalized.push(trimmed)
+          continue
+        }
+        customCount += 1
+        if (customCount > 1) return { error: `${at}: at most one custom value is allowed` }
+        seen.add(trimmed)
+        normalized.push(trimmed)
+        continue
+      }
+      return { error: `${at}: expected one of the options' values` }
+    }
+    return { value: normalized }
+  }
+  if (declared.has(value)) return { value }
+  if (node.allowCustom === true && typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed === '') return { error: `${at}: custom value cannot be empty` }
+    if (trimmed.length > MAX_TEXT) return { error: `${at}: ${trimmed.length} characters exceeds the limit of ${MAX_TEXT}` }
+    return { value: trimmed }
+  }
+  return { error: `${at}: expected one of the options' values` }
+}
+
 function validateOptions(node, values) {
   if (!Array.isArray(values.selected)) return { error: 'values.selected: expected an array of option labels' }
   const labels = new Set((node.options ?? []).map(option => option?.label))
-  const picked = values.selected.filter(label => typeof label === 'string' && labels.has(label))
+  const picked = []
+  let customCount = 0
+  for (const raw of values.selected) {
+    if (typeof raw !== 'string') continue
+    if (labels.has(raw)) {
+      picked.push(raw)
+    } else if (node.allowCustom === true) {
+      const trimmed = raw.trim()
+      if (trimmed === '') continue
+      if (trimmed.length > MAX_TEXT) return { error: `values.selected: ${trimmed.length} characters exceeds the limit of ${MAX_TEXT}` }
+      if (labels.has(trimmed)) {
+        picked.push(trimmed)
+      } else {
+        customCount += 1
+        if (customCount > 1) return { error: 'values.selected: at most one custom option is allowed' }
+        picked.push(trimmed)
+      }
+    }
+  }
   const selected = node.multi === true ? [...new Set(picked)] : picked.slice(0, 1)
   if (selected.length === 0) return { error: 'values.selected: select at least one option' }
   return { selected }
