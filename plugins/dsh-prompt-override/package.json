@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-prompt-override",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Prompt Override: adds a working contract to DSH's native system prompt and rewrites its terse built-in tool guidance, in every session.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -86,6 +86,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "d551c705ddc7a215232866c2cd6a798d9b7d589d3622549ee89a3719fd0ee935"
+    "contentHash": "d0b54ba4ef944311c64cf318d51f3603e4fddef5fad1ce8e69927074c2b69cd3"
   }
 }

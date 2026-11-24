@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-delegation",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Delegation Mode: a per-session switch where the main agent plans, delegates, and reviews while subagents carry out the work.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -152,6 +152,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "ddf377a86f5f32136a53eceaabf6447caf52e8a3f6b0737beba973d33419d402"
+    "contentHash": "9b682dd173fb672c089d7ad0ef2813aa8310e5edd7717e4d7871c4d79147ec47"
   }
 }
