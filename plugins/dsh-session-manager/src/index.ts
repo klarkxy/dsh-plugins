@@ -2,11 +2,16 @@ import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import {
   DEFAULT_COMPACT_MINUTES,
+  DEFAULT_PROGRESS_NOTE_MIN_STEPS,
+  DEFAULT_PROGRESS_NOTE_MINUTES,
   DEFAULT_RECAP_MINUTES,
+  DEFAULT_STREAM_FIRST_CONTENT_SECONDS,
+  DEFAULT_STREAM_STALL_SECONDS,
   PLUGIN_NAME,
   resolveConfig,
   type Config as PluginConfig,
 } from './contracts.ts'
+import { installRuntimeTuning } from './runtime-tuning.ts'
 import {
   AutoContinueError, AutoContinueService,
   type AutoContinueRecentTableLike, type AutoContinueTableLike,
@@ -47,6 +52,12 @@ export interface Config {
   autoContinueMax?: number
   allowSelfFork?: boolean
   allowSendMessage?: boolean
+  compactionInheritEffort?: boolean
+  compactionReasoningEffort?: string
+  progressNoteMinutes?: number
+  progressNoteMinSteps?: number
+  streamStallSeconds?: number
+  streamFirstContentSeconds?: number
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -61,6 +72,12 @@ export const Config: Schema<Config> = Schema.object({
   autoContinueMax: Schema.number().default(3),
   allowSelfFork: Schema.boolean().default(false),
   allowSendMessage: Schema.boolean().default(false),
+  compactionInheritEffort: Schema.boolean().default(true),
+  compactionReasoningEffort: Schema.string().required(false),
+  progressNoteMinutes: Schema.number().default(DEFAULT_PROGRESS_NOTE_MINUTES),
+  progressNoteMinSteps: Schema.number().default(DEFAULT_PROGRESS_NOTE_MIN_STEPS),
+  streamStallSeconds: Schema.number().default(DEFAULT_STREAM_STALL_SECONDS),
+  streamFirstContentSeconds: Schema.number().default(DEFAULT_STREAM_FIRST_CONTENT_SECONDS),
 }).i18n({
   zh: {
     pageChars: '明细与交接模式每页内容的输出上限（UTF-8 字节）；对话预览按轮数分页，不受此限',
@@ -74,6 +91,12 @@ export const Config: Schema<Config> = Schema.object({
     autoContinueMax: '自动继续会话中，你每发一条消息之后最多自动继续的次数（1–10）',
     allowSelfFork: '向 agent 开放 fork_session 工具：可由 agent 自行决定分叉当前会话为新会话分支，不再逐次确认',
     allowSendMessage: '向 agent 开放 send_session_message 工具：可由 agent 自行决定向任意未归档会话发送一条标记为 agent 转发的消息，不再逐次确认',
+    compactionInheritEffort: '上下文压缩时若摘要与主对话使用同一 provider/model 且目标模型支持该档位，自动继承当前有效思考强度以复用前缀缓存',
+    compactionReasoningEffort: '上下文压缩摘要调用显式指定的思考强度（可选，优先于自动继承；目标模型不支持时自动忽略）',
+    progressNoteMinutes: '顶层会话单轮持续运行超过该分钟数仍无可见正文（且达到最少工具步数）时，在工具结果后附带进展播报提醒；0 为关闭',
+    progressNoteMinSteps: '触发进展播报提醒前至少经过的无正文工具调用步数',
+    streamStallSeconds: '模型 Messages 事件流开始输出内容后，连续多少秒只有心跳而无新内容时主动断开交由宿主重试；0 为关闭',
+    streamFirstContentSeconds: '模型 Messages 事件流首个内容事件到达前最多等待的秒数；0 为保持宿主默认排队等待',
   },
   en: {
     pageChars: 'Maximum content per details/handoff page (UTF-8 bytes); conversation previews page by turn count instead',
@@ -87,6 +110,12 @@ export const Config: Schema<Config> = Schema.object({
     autoContinueMax: 'How many times it may continue automatically after each message you send (1-10)',
     allowSelfFork: 'Expose the fork_session tool: the agent may fork this session into a new branch at its own discretion, without per-call confirmation',
     allowSendMessage: 'Expose the send_session_message tool: the agent may send an agent-attributed message to any unarchived session at its own discretion, without per-call confirmation',
+    compactionInheritEffort: 'Inherit the active conversation reasoningEffort during same-model compaction summarization when supported by the model, preserving KV prefix cache hits',
+    compactionReasoningEffort: 'Optional explicit reasoningEffort override for compaction summarization calls (dropped if unsupported by the target model)',
+    progressNoteMinutes: 'Minutes without visible assistant text in an active top-level turn before queuing a progress-note reminder; 0 disables it',
+    progressNoteMinSteps: 'Minimum tool-only assistant steps before a progress-note reminder can fire',
+    streamStallSeconds: 'Abort POST .../messages SSE streams after this many seconds of heartbeat-only silence once content has started so host retry recovers; 0 disables it',
+    streamFirstContentSeconds: 'Optional maximum seconds before the first non-heartbeat SSE event arrives on POST .../messages streams; 0 keeps stock queue behavior',
   },
 })
 
@@ -335,6 +364,7 @@ export function apply(ctx: Context, config: PluginConfig = {}): void {
       return () => { off(); mirror.dispose() }
     }, 'session-manager.creation-defaults')
   })
+  installRuntimeTuning(ctx, resolved, logger)
   // CLI-only hosts still load the query tools; the browser RPC follows its own services.
   ctx.inject(['connection', 'webServer'], inner => {
     inner.effect(() => registerSessionManagerRpc(

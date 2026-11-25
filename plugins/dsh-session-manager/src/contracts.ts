@@ -70,6 +70,13 @@ export const CONTINUE_MODES: readonly ContinueMode[] = ['fixed', 'auto']
 export type AutoContinueMode = 'off' | 'cautious' | 'bold'
 export const AUTO_CONTINUE_MODES: readonly AutoContinueMode[] = ['off', 'cautious', 'bold']
 export const DEFAULT_AUTO_CONTINUE_MAX = 3
+export const DEFAULT_PROGRESS_NOTE_MINUTES = 3
+export const MAX_PROGRESS_NOTE_MINUTES = 1_440
+export const DEFAULT_PROGRESS_NOTE_MIN_STEPS = 3
+export const MAX_PROGRESS_NOTE_MIN_STEPS = 200
+export const DEFAULT_STREAM_STALL_SECONDS = 180
+export const MAX_STREAM_STALL_SECONDS = 3_600
+export const DEFAULT_STREAM_FIRST_CONTENT_SECONDS = 0
 export const MIN_AUTO_CONTINUE_MAX = 1
 export const MAX_AUTO_CONTINUE_MAX = 10
 
@@ -257,6 +264,18 @@ export interface Config {
   allowSelfFork?: boolean
   /** Register the send_session_message tool: agent-attributed messages to other unarchived sessions, approved once by the toggle. */
   allowSendMessage?: boolean
+  /** Inherit the conversation's effective reasoningEffort during same-model compaction summarization (default: true). */
+  compactionInheritEffort?: boolean
+  /** Optional explicit reasoningEffort override for compaction summarization calls. */
+  compactionReasoningEffort?: string
+  /** Minutes without visible assistant prose in an active top-level turn before queuing a progress-note reminder; 0 disables it. */
+  progressNoteMinutes?: number
+  /** Minimum tool-only assistant steps since the last visible prose before a progress-note reminder can fire. */
+  progressNoteMinSteps?: number
+  /** Seconds without non-heartbeat SSE progress after content starts on POST .../messages streams before aborting for retry; 0 disables it. */
+  streamStallSeconds?: number
+  /** Optional seconds before the first non-heartbeat SSE event arrives on POST .../messages streams; 0 leaves queue wait to the host. */
+  streamFirstContentSeconds?: number
 }
 
 export interface ResolvedConfig {
@@ -271,6 +290,12 @@ export interface ResolvedConfig {
   readonly autoContinueMax: number
   readonly allowSelfFork: boolean
   readonly allowSendMessage: boolean
+  readonly compactionInheritEffort: boolean
+  readonly compactionReasoningEffort?: string
+  readonly progressNoteMinutes: number
+  readonly progressNoteMinSteps: number
+  readonly streamStallSeconds: number
+  readonly streamFirstContentSeconds: number
 }
 
 export function resolveConfig(config: Config = {}): ResolvedConfig {
@@ -286,15 +311,36 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
     autoContinueMax: boundInteger(config.autoContinueMax, DEFAULT_AUTO_CONTINUE_MAX, MIN_AUTO_CONTINUE_MAX, MAX_AUTO_CONTINUE_MAX, 'autoContinueMax'),
     allowSelfFork: boundFlag(config.allowSelfFork, 'allowSelfFork'),
     allowSendMessage: boundFlag(config.allowSendMessage, 'allowSendMessage'),
+    compactionInheritEffort: boundFlagDefault(config.compactionInheritEffort, true, 'compactionInheritEffort'),
+    ...(boundOptionalEffort(config.compactionReasoningEffort, 'compactionReasoningEffort') === undefined
+      ? {}
+      : { compactionReasoningEffort: boundOptionalEffort(config.compactionReasoningEffort, 'compactionReasoningEffort') }),
+    progressNoteMinutes: boundInteger(config.progressNoteMinutes, DEFAULT_PROGRESS_NOTE_MINUTES, 0, MAX_PROGRESS_NOTE_MINUTES, 'progressNoteMinutes'),
+    progressNoteMinSteps: boundInteger(config.progressNoteMinSteps, DEFAULT_PROGRESS_NOTE_MIN_STEPS, 1, MAX_PROGRESS_NOTE_MIN_STEPS, 'progressNoteMinSteps'),
+    streamStallSeconds: boundInteger(config.streamStallSeconds, DEFAULT_STREAM_STALL_SECONDS, 0, MAX_STREAM_STALL_SECONDS, 'streamStallSeconds'),
+    streamFirstContentSeconds: boundInteger(config.streamFirstContentSeconds, DEFAULT_STREAM_FIRST_CONTENT_SECONDS, 0, MAX_STREAM_STALL_SECONDS, 'streamFirstContentSeconds'),
   }
 }
 
 function boundFlag(value: boolean | undefined, name: string): boolean {
-  const resolved = value ?? false
+  return boundFlagDefault(value, false, name)
+}
+
+function boundFlagDefault(value: boolean | undefined, fallback: boolean, name: string): boolean {
+  const resolved = value ?? fallback
   if (typeof resolved !== 'boolean') {
     throw new TypeError(`${PLUGIN_NAME}: ${name} must be a boolean`)
   }
   return resolved
+}
+
+function boundOptionalEffort(value: string | undefined, name: string): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') {
+    throw new TypeError(`${PLUGIN_NAME}: ${name} must be a string`)
+  }
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
 }
 
 function boundInteger(value: number | undefined, fallback: number, min: number, max: number, name: string): number {
