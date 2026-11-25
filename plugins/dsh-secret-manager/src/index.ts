@@ -36,6 +36,7 @@ import {
   type PendingSecretRequest,
   type RevokeOutcome,
   type RpcResult,
+  type SandboxGuardConfig,
   type SaveOutcome,
   type SecretEntry,
   type SecretScope,
@@ -44,6 +45,7 @@ import {
 import { GrantRegistry } from './grants.ts'
 import { PendingRegistry } from './pending.ts'
 import { Redactor, createRedactionListener } from './redact.ts'
+import { installSandboxAndSecretGuard } from './sandbox-guard.ts'
 import { ShellBridge, type ShellEnvRegistryLike } from './shell.ts'
 import { SecretStore, SlotLock, type StoredSecret } from './store.ts'
 import { createRequestSecretTool, createSecretHttpTool, createSecretStatusTool } from './tools.ts'
@@ -82,7 +84,7 @@ type Host = Context & HostRpcContext & {
   }
   credentials: CredentialProvider
   effect(target: () => void | (() => void), label?: string): void
-  on(event: string, listener: (...args: any[]) => unknown): () => void
+  on(event: string, listener: (...args: any[]) => unknown, options?: { prepend?: boolean }): () => void
   inject(deps: string[], callback: (ctx: Context) => void): unknown
 }
 
@@ -90,7 +92,7 @@ const ok = <T,>(value: T): RpcResult<T> => ({ ok: true, value })
 const fail = (code: string, message: string): RpcResult<never> => ({ ok: false, error: { code, message } })
 const reasonOf = (error: unknown): string => (error instanceof Error ? error.name : 'unknown')
 
-export async function apply(ctx: Context): Promise<void> {
+export async function apply(ctx: Context, config: SandboxGuardConfig = {}): Promise<void> {
   const host = ctx as unknown as Host
   const logger = installPluginLogger(ctx, PLUGIN_NAME, { forwardHostWarnError: false })
   const store = new SecretStore(host.credentials)
@@ -236,6 +238,7 @@ export async function apply(ctx: Context): Promise<void> {
   // committed decision (content, canonical value, block feedback, contexts) is
   // covered, not only what the chat renders.
   ctx.effect(() => ctx.on('tools/post-execute', createRedactionListener(redactor) as never), 'secret-manager.redact')
+  installSandboxAndSecretGuard(ctx, config, logger)
 
   ctx.effect(() => () => {
     pending.clear()
