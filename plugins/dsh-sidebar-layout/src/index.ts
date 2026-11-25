@@ -1,18 +1,17 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { installPluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import { PLUGIN_NAME } from './contracts.ts'
+import { installSidebarOpenHost } from './sidebar-open.ts'
 
 export const name = PLUGIN_NAME
 
 /**
- * The host half exists so the bundle has a loader row — the feature itself
- * lives entirely in the client half: the mode store persists browser-local,
- * the presentation is a tagged-attribute stylesheet over the host AppFrame,
- * and all three switch entry points (header utility, General settings row,
- * keyboard command) are client slots and services. Nothing here needs a host
- * service.
+ * The host entry installs structured plugin logging and, when `tools` + `fs`
+ * are present on the host context, registers the read-only `open_sidebar` tool
+ * and top-level agent prompt section so models can preview workspace files and
+ * HTTP(S) URLs directly in the right sidebar.
  */
 export function apply(ctx: Context): void {
-  /* no host services, no RPC, no model calls */
-  installPluginLogger(ctx, PLUGIN_NAME, { forwardHostWarnError: false })
+  const logger = installPluginLogger(ctx, PLUGIN_NAME, { forwardHostWarnError: false })
+  installSidebarOpenHost(ctx, logger)
 }

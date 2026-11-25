@@ -8,6 +8,7 @@ import {
   createSidebarLayoutStore, nextMode,
   type SidebarLayoutMode, type SidebarLayoutStorage,
 } from './contracts.ts'
+import { installSidebarOpenClient, type SidebarOpenClientHost } from './sidebar-open-client.tsx'
 
 export const name = 'dsh-sidebar-layout-client'
 export const inject = ['slots', 'locale', 'layout', 'sidebarRight', 'shortcuts'] as const
@@ -131,6 +132,17 @@ const rowCss = `
 .sl-root .sl-row-desc { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
 .sl-root .sl-row-control { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .sl-root .sl-select { flex: 0 1 240px; width: auto; }
+.sl-root.sl-open-card { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
+.sl-root .sl-open-header { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 4px 8px; border: 0; border-radius: var(--dsw-radius-lg); background: transparent; color: var(--dsw-alias-label-primary); font: inherit; text-align: left; cursor: pointer; }
+.sl-root .sl-open-header:disabled { cursor: default; }
+.sl-root .sl-open-title { flex-shrink: 0; font-weight: 500; }
+.sl-root .sl-open-summary { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; color: var(--dsw-alias-label-tertiary); }
+.sl-root .sl-open-status { flex-shrink: 0; }
+.sl-root .sl-open-target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-root .sl-open-body { display: flex; flex-direction: column; gap: 4px; padding: 0 8px; }
+.sl-root .sl-open-output { margin: 4px 0; padding: 12px; border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sl-root .sl-open-actions { display: flex; align-items: center; gap: 12px; }
+.sl-root .sl-open-btn { padding: 4px 0; border: 0; background: transparent; color: var(--dsw-alias-state-business-primary); font: inherit; font-size: 12px; cursor: pointer; }
 @media (max-width: 767px) {
   .sl-root .sl-row-text { padding-right: 16px; }
   .sl-root .sl-select { flex: 0 1 auto; width: 240px; max-width: 100%; }
@@ -282,8 +294,12 @@ export function SidebarLayoutRow(props: InjectedProps) {
 
 export function apply(ctx: Context): void {
   const logger = installClientPluginLogger(ctx, PLUGIN_NAME)
-  const client = ctx as unknown as Client & { effect: Context['effect'] }
-  const store = createSidebarLayoutStore(readStorage())
+  const client = ctx as unknown as Client & {
+    effect: Context['effect']
+    inject?: (deps: readonly string[], callback: (scoped: Context) => void) => void
+  }
+  const storage = readStorage()
+  const store = createSidebarLayoutStore(storage)
   /** Every entry point funnels here: store first, then the panel expansion
    * non-push modes need to be visible at all. */
   const selectMode = (mode: SidebarLayoutMode): void => {
@@ -446,4 +462,15 @@ export function apply(ctx: Context): void {
       return () => {}
     }
   }, 'sidebar-layout.shortcut')
+
+  // When `sessions` is available on the client context, watch live `open_sidebar`
+  // tool results and register the `.sl-root`-scoped `tool.call.toolview` row.
+  if (typeof client.inject === 'function') {
+    client.inject(['sessions'], scoped => {
+      scoped.effect(
+        () => installSidebarOpenClient(scoped as unknown as SidebarOpenClientHost, { storage }),
+        'sidebar-layout.open-resource',
+      )
+    })
+  }
 }
