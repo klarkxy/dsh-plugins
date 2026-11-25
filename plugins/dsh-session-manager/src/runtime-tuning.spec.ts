@@ -223,7 +223,10 @@ describe('SSE stream stall guard', () => {
 
   it('matches only POST .../messages event-stream requests and parses chunked SSE lines', () => {
     expect(isModelStream(URL_, POST)).toBe(true)
-    expect(isModelStream(new URL(URL_), { ...POST, headers: new Headers(POST.headers) })).toBe(true)
+    expect(isModelStream(new URL(URL_), {
+      method: 'POST',
+      headers: new Headers({ accept: 'text/event-stream', 'content-type': 'application/json' }),
+    })).toBe(true)
     expect(isModelStream(URL_, { ...POST, method: 'GET' })).toBe(false)
     expect(isModelStream('https://api.deepseek.com/v1/models', POST)).toBe(false)
     expect(isModelStream(URL_, { method: 'POST', headers: { accept: 'application/json' } })).toBe(false)

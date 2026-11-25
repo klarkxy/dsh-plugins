@@ -291,7 +291,7 @@ export interface ResolvedConfig {
   readonly allowSelfFork: boolean
   readonly allowSendMessage: boolean
   readonly compactionInheritEffort: boolean
-  readonly compactionReasoningEffort?: string
+  readonly compactionReasoningEffort?: string | undefined
   readonly progressNoteMinutes: number
   readonly progressNoteMinSteps: number
   readonly streamStallSeconds: number
@@ -299,6 +299,7 @@ export interface ResolvedConfig {
 }
 
 export function resolveConfig(config: Config = {}): ResolvedConfig {
+  const explicitEffort = boundOptionalEffort(config.compactionReasoningEffort, 'compactionReasoningEffort')
   return {
     pageChars: boundInteger(config.pageChars, DEFAULT_PAGE_CHARS, MIN_PAGE_CHARS, MAX_PAGE_CHARS, 'pageChars'),
     listLimit: boundInteger(config.listLimit, DEFAULT_LIST_LIMIT, 1, MAX_LIST_LIMIT, 'listLimit'),
@@ -312,9 +313,7 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
     allowSelfFork: boundFlag(config.allowSelfFork, 'allowSelfFork'),
     allowSendMessage: boundFlag(config.allowSendMessage, 'allowSendMessage'),
     compactionInheritEffort: boundFlagDefault(config.compactionInheritEffort, true, 'compactionInheritEffort'),
-    ...(boundOptionalEffort(config.compactionReasoningEffort, 'compactionReasoningEffort') === undefined
-      ? {}
-      : { compactionReasoningEffort: boundOptionalEffort(config.compactionReasoningEffort, 'compactionReasoningEffort') }),
+    ...(explicitEffort === undefined ? {} : { compactionReasoningEffort: explicitEffort }),
     progressNoteMinutes: boundInteger(config.progressNoteMinutes, DEFAULT_PROGRESS_NOTE_MINUTES, 0, MAX_PROGRESS_NOTE_MINUTES, 'progressNoteMinutes'),
     progressNoteMinSteps: boundInteger(config.progressNoteMinSteps, DEFAULT_PROGRESS_NOTE_MIN_STEPS, 1, MAX_PROGRESS_NOTE_MIN_STEPS, 'progressNoteMinSteps'),
     streamStallSeconds: boundInteger(config.streamStallSeconds, DEFAULT_STREAM_STALL_SECONDS, 0, MAX_STREAM_STALL_SECONDS, 'streamStallSeconds'),

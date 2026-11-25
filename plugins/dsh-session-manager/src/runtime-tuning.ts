@@ -29,7 +29,7 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { Context } from '@deepseek-ai/cordis'
-import { createUserMessage, type ContextFormed, type UserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import {
@@ -44,7 +44,11 @@ export const PROGRESS_NOTE_KIND = 'dsh-progress-note'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    'dsh-progress-note': { kind: 'dsh-progress-note' } & ContextFormed
+    'dsh-progress-note': {
+      kind: 'dsh-progress-note'
+      form: 'notice'
+      summary: string
+    }
   }
 }
 
@@ -54,20 +58,20 @@ export interface ModelTarget {
 }
 
 export interface CompactionPolicyRule {
-  readonly provider?: string
-  readonly model?: string
-  readonly summarizationProvider?: string
-  readonly summarizationModel?: string
-  readonly summarizationReasoningEffort?: string
-  readonly inheritReasoningEffort?: boolean
+  readonly provider?: string | undefined
+  readonly model?: string | undefined
+  readonly summarizationProvider?: string | undefined
+  readonly summarizationModel?: string | undefined
+  readonly summarizationReasoningEffort?: string | undefined
+  readonly inheritReasoningEffort?: boolean | undefined
 }
 
 export interface CompactionConfigLike {
-  readonly summarizationProvider?: string
-  readonly summarizationModel?: string
-  readonly summarizationReasoningEffort?: string
-  readonly inheritReasoningEffort?: boolean
-  readonly modelPolicies?: readonly CompactionPolicyRule[]
+  readonly summarizationProvider?: string | undefined
+  readonly summarizationModel?: string | undefined
+  readonly summarizationReasoningEffort?: string | undefined
+  readonly inheritReasoningEffort?: boolean | undefined
+  readonly modelPolicies?: readonly CompactionPolicyRule[] | undefined
 }
 
 export interface CompactionAgentLike {
@@ -77,27 +81,27 @@ export interface CompactionAgentLike {
         readonly provider?: unknown
         readonly model?: unknown
         readonly reasoningEffort?: unknown
-      }
+      } | undefined
     } | undefined
-  }
+  } | undefined
   readonly options?: {
     readonly provider?: unknown
     readonly model?: unknown
     readonly reasoningEffort?: unknown
-  }
+  } | undefined
   readonly model?: {
     current?(): {
       readonly provider?: unknown
       readonly model?: unknown
       readonly reasoningEffort?: unknown
     } | undefined
-  }
+  } | undefined
 }
 
 export interface LlmModelInfoLike {
   readonly reasoning?: {
-    readonly efforts?: readonly (string | { readonly id?: string })[]
-  } | null
+    readonly efforts?: readonly (string | { readonly id?: string | undefined })[] | undefined
+  } | null | undefined
 }
 
 export interface LlmServiceLike {
@@ -106,21 +110,21 @@ export interface LlmServiceLike {
 }
 
 export interface CompactionEngineLike {
-  ctx?: { llm?: LlmServiceLike }
-  config?: CompactionConfigLike
+  ctx?: { llm?: LlmServiceLike | undefined } | undefined
+  config?: CompactionConfigLike | undefined
   summarize(input: unknown, agent: CompactionAgentLike | undefined, signal?: AbortSignal): Promise<unknown>
 }
 
 export interface EffortResolution {
   readonly reasoningEffort: string | undefined
   readonly source: string
-  readonly summaryTarget?: ModelTarget
-  readonly conversationTarget?: ModelTarget
-  readonly candidate?: string
-  readonly requestedFrom?: string
-  readonly reasonDetail?: string
-  readonly supportedEfforts?: readonly string[]
-  readonly modelInfoUnavailable?: boolean
+  readonly summaryTarget?: ModelTarget | undefined
+  readonly conversationTarget?: ModelTarget | undefined
+  readonly candidate?: string | undefined
+  readonly requestedFrom?: string | undefined
+  readonly reasonDetail?: string | undefined
+  readonly supportedEfforts?: readonly string[] | undefined
+  readonly modelInfoUnavailable?: boolean | undefined
 }
 
 function nonEmptyString(value: unknown): string | undefined {
@@ -141,7 +145,7 @@ export function sameTarget(left: ModelTarget | undefined, right: ModelTarget | u
 export function resolvePolicySummaryTarget(
   config: CompactionConfigLike | undefined,
   conversationTarget: ModelTarget | undefined,
-): { summarizationProvider: string; summarizationModel: string; policyRule?: CompactionPolicyRule } {
+): { summarizationProvider: string; summarizationModel: string; policyRule?: CompactionPolicyRule | undefined } {
   const policyRule = conversationTarget && Array.isArray(config?.modelPolicies)
     ? config.modelPolicies.find(
       policy => policy.provider === conversationTarget.provider && policy.model === conversationTarget.model,
@@ -161,13 +165,21 @@ export function resolvePolicySummaryTarget(
  * `llm.resolveModelInfo` capability check.
  */
 export async function resolveSummaryEffort(params: {
-  readonly agent?: CompactionAgentLike
-  readonly llm?: Pick<LlmServiceLike, 'resolveModelInfo'>
-  readonly policy?: { readonly summarizationProvider?: string; readonly summarizationModel?: string; readonly policyRule?: CompactionPolicyRule }
-  readonly inheritReasoningEffort?: boolean
-  readonly explicitReasoningEffort?: string
-  readonly latestHeader?: { readonly provider?: unknown; readonly model?: unknown; readonly reasoningEffort?: unknown }
-  readonly signal?: AbortSignal
+  readonly agent?: CompactionAgentLike | undefined
+  readonly llm?: Pick<LlmServiceLike, 'resolveModelInfo'> | undefined
+  readonly policy?: {
+    readonly summarizationProvider?: string | undefined
+    readonly summarizationModel?: string | undefined
+    readonly policyRule?: CompactionPolicyRule | undefined
+  } | undefined
+  readonly inheritReasoningEffort?: boolean | undefined
+  readonly explicitReasoningEffort?: string | undefined
+  readonly latestHeader?: {
+    readonly provider?: unknown
+    readonly model?: unknown
+    readonly reasoningEffort?: unknown
+  } | undefined
+  readonly signal?: AbortSignal | undefined
 }): Promise<EffortResolution> {
   const latestConfig = params.latestHeader ?? params.agent?.session?.requestHeader?.()?.config
   const latest = normalizeTarget(latestConfig?.provider, latestConfig?.model)
@@ -320,7 +332,10 @@ export function createScopedSummarizeReceiver<T extends CompactionEngineLike>(en
 export function installCompactionEffortBridge(
   compaction: CompactionEngineLike,
   llm: LlmServiceLike,
-  getConfig: () => Pick<ResolvedConfig, 'compactionInheritEffort' | 'compactionReasoningEffort'>,
+  getConfig: () => {
+    readonly compactionInheritEffort: boolean
+    readonly compactionReasoningEffort?: string | undefined
+  },
   logger?: PluginLogger,
 ): () => void {
   const originalSummarize = compaction.summarize
@@ -451,8 +466,8 @@ interface SessionProgressState {
 }
 
 export interface ProgressTrackerOptions {
-  readonly now?: () => number
-  readonly onReplyAfterNote?: (sessionId: string, reply: 'text-with-tools' | 'text-only' | 'tools-only') => void
+  readonly now?: (() => number) | undefined
+  readonly onReplyAfterNote?: ((sessionId: string, reply: 'text-with-tools' | 'text-only' | 'tools-only') => void) | undefined
 }
 
 export function createProgressTracker(
@@ -576,15 +591,15 @@ export function createSseCounter(onEvent: (type: string) => void): (chunk: Uint8
 
 export interface StreamStallConfig {
   readonly stallSeconds: number
-  readonly firstContentSeconds?: number
+  readonly firstContentSeconds?: number | undefined
 }
 
 export function wrapStreamStallFetch(
   original: typeof fetch,
   config: StreamStallConfig,
   options: {
-    readonly active?: () => boolean
-    readonly onStall?: (detail: { path: string; phase: 'first-content' | 'stalled'; seconds: number; events: number }) => void
+    readonly active?: (() => boolean) | undefined
+    readonly onStall?: ((detail: { path: string; phase: 'first-content' | 'stalled'; seconds: number; events: number }) => void) | undefined
   } = {},
 ): typeof fetch {
   const isActive = options.active ?? (() => true)

@@ -73,7 +73,7 @@ export const Config: Schema<Config> = Schema.object({
   allowSelfFork: Schema.boolean().default(false),
   allowSendMessage: Schema.boolean().default(false),
   compactionInheritEffort: Schema.boolean().default(true),
-  compactionReasoningEffort: Schema.string().required(false),
+  compactionReasoningEffort: Schema.string().default(''),
   progressNoteMinutes: Schema.number().default(DEFAULT_PROGRESS_NOTE_MINUTES),
   progressNoteMinSteps: Schema.number().default(DEFAULT_PROGRESS_NOTE_MIN_STEPS),
   streamStallSeconds: Schema.number().default(DEFAULT_STREAM_STALL_SECONDS),
