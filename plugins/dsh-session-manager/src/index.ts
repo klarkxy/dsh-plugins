@@ -41,23 +41,23 @@ export const name = PLUGIN_NAME
 export const inject = ['tools', 'sessionQuery'] as const
 
 export interface Config {
-  pageChars?: number
-  listLimit?: number
-  searchLimit?: number
-  recapMinutes?: number
-  compactMinutes?: number
-  continueText?: string
+  pageChars?: number | undefined
+  listLimit?: number | undefined
+  searchLimit?: number | undefined
+  recapMinutes?: number | undefined
+  compactMinutes?: number | undefined
+  continueText?: string | undefined
   continueMode?: 'fixed' | 'auto'
   autoContinueMode?: 'off' | 'cautious' | 'bold'
-  autoContinueMax?: number
-  allowSelfFork?: boolean
-  allowSendMessage?: boolean
-  compactionInheritEffort?: boolean
-  compactionReasoningEffort?: string
-  progressNoteMinutes?: number
-  progressNoteMinSteps?: number
-  streamStallSeconds?: number
-  streamFirstContentSeconds?: number
+  autoContinueMax?: number | undefined
+  allowSelfFork?: boolean | undefined
+  allowSendMessage?: boolean | undefined
+  compactionInheritEffort?: boolean | undefined
+  compactionReasoningEffort?: string | undefined
+  progressNoteMinutes?: number | undefined
+  progressNoteMinSteps?: number | undefined
+  streamStallSeconds?: number | undefined
+  streamFirstContentSeconds?: number | undefined
 }
 
 export const Config: Schema<Config> = Schema.object({

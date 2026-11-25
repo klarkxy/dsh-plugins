@@ -29,7 +29,7 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { Context } from '@deepseek-ai/cordis'
-import { createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, type ContextFormed, type UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
 import {
@@ -44,11 +44,7 @@ export const PROGRESS_NOTE_KIND = 'dsh-progress-note'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    'dsh-progress-note': {
-      kind: 'dsh-progress-note'
-      form: 'notice'
-      summary: string
-    }
+    'dsh-progress-note': { kind: 'dsh-progress-note' } & ContextFormed
   }
 }
 
@@ -78,22 +74,22 @@ export interface CompactionAgentLike {
   readonly session?: {
     requestHeader?(): {
       readonly config?: {
-        readonly provider?: unknown
-        readonly model?: unknown
-        readonly reasoningEffort?: unknown
+        readonly provider?: unknown | undefined
+        readonly model?: unknown | undefined
+        readonly reasoningEffort?: unknown | undefined
       } | undefined
     } | undefined
   } | undefined
   readonly options?: {
-    readonly provider?: unknown
-    readonly model?: unknown
-    readonly reasoningEffort?: unknown
+    readonly provider?: unknown | undefined
+    readonly model?: unknown | undefined
+    readonly reasoningEffort?: unknown | undefined
   } | undefined
   readonly model?: {
     current?(): {
-      readonly provider?: unknown
-      readonly model?: unknown
-      readonly reasoningEffort?: unknown
+      readonly provider?: unknown | undefined
+      readonly model?: unknown | undefined
+      readonly reasoningEffort?: unknown | undefined
     } | undefined
   } | undefined
 }
@@ -106,13 +102,13 @@ export interface LlmModelInfoLike {
 
 export interface LlmServiceLike {
   stream(options: Record<string, unknown>): unknown
-  resolveModelInfo?(provider: string, model: string, signal?: AbortSignal): Promise<LlmModelInfoLike | undefined>
+  resolveModelInfo?(provider: string, model: string, signal?: AbortSignal | undefined): Promise<LlmModelInfoLike | undefined>
 }
 
 export interface CompactionEngineLike {
   ctx?: { llm?: LlmServiceLike | undefined } | undefined
   config?: CompactionConfigLike | undefined
-  summarize(input: unknown, agent: CompactionAgentLike | undefined, signal?: AbortSignal): Promise<unknown>
+  summarize(input: unknown, agent: CompactionAgentLike | undefined, signal?: AbortSignal | undefined): Promise<unknown>
 }
 
 export interface EffortResolution {
@@ -167,18 +163,10 @@ export function resolvePolicySummaryTarget(
 export async function resolveSummaryEffort(params: {
   readonly agent?: CompactionAgentLike | undefined
   readonly llm?: Pick<LlmServiceLike, 'resolveModelInfo'> | undefined
-  readonly policy?: {
-    readonly summarizationProvider?: string | undefined
-    readonly summarizationModel?: string | undefined
-    readonly policyRule?: CompactionPolicyRule | undefined
-  } | undefined
+  readonly policy?: { readonly summarizationProvider?: string | undefined; readonly summarizationModel?: string | undefined; readonly policyRule?: CompactionPolicyRule | undefined } | undefined
   readonly inheritReasoningEffort?: boolean | undefined
   readonly explicitReasoningEffort?: string | undefined
-  readonly latestHeader?: {
-    readonly provider?: unknown
-    readonly model?: unknown
-    readonly reasoningEffort?: unknown
-  } | undefined
+  readonly latestHeader?: { readonly provider?: unknown | undefined; readonly model?: unknown | undefined; readonly reasoningEffort?: unknown | undefined } | undefined
   readonly signal?: AbortSignal | undefined
 }): Promise<EffortResolution> {
   const latestConfig = params.latestHeader ?? params.agent?.session?.requestHeader?.()?.config
@@ -332,11 +320,8 @@ export function createScopedSummarizeReceiver<T extends CompactionEngineLike>(en
 export function installCompactionEffortBridge(
   compaction: CompactionEngineLike,
   llm: LlmServiceLike,
-  getConfig: () => {
-    readonly compactionInheritEffort: boolean
-    readonly compactionReasoningEffort?: string | undefined
-  },
-  logger?: PluginLogger,
+  getConfig: () => Pick<ResolvedConfig, 'compactionInheritEffort' | 'compactionReasoningEffort'>,
+  logger?: PluginLogger | undefined,
 ): () => void {
   const originalSummarize = compaction.summarize
   const originalStream = llm.stream
@@ -362,7 +347,7 @@ export function installCompactionEffortBridge(
     this: CompactionEngineLike,
     input: unknown,
     agent: CompactionAgentLike | undefined,
-    signal?: AbortSignal,
+    signal?: AbortSignal | undefined,
   ): Promise<unknown> {
     const receiver = this ?? compaction
     const cfg = getConfig()
@@ -439,7 +424,7 @@ export function buildProgressNoteMessage(minutes: number): UserMessage {
 }
 
 export function isTopLevelSession(session: unknown): boolean {
-  const header = (session as { header?: { delegationDepth?: unknown; origin?: unknown } } | undefined)?.header
+  const header = (session as { header?: { delegationDepth?: unknown | undefined; origin?: unknown | undefined } | undefined } | undefined)?.header
   if (header?.origin === 'subagent') return false
   const depth = header?.delegationDepth
   return depth === undefined || depth === 0
@@ -448,14 +433,14 @@ export function isTopLevelSession(session: unknown): boolean {
 function hasVisibleText(content: unknown): boolean {
   if (!Array.isArray(content)) return false
   return content.some(block => {
-    const rec = block as { type?: unknown; text?: unknown } | undefined
+    const rec = block as { type?: unknown | undefined; text?: unknown | undefined } | undefined
     return rec?.type === 'text' && typeof rec.text === 'string' && rec.text.trim() !== ''
   })
 }
 
 function hasToolCalls(content: unknown): boolean {
   if (!Array.isArray(content)) return false
-  return content.some(block => (block as { type?: unknown } | undefined)?.type === 'tool-call')
+  return content.some(block => (block as { type?: unknown | undefined } | undefined)?.type === 'tool-call')
 }
 
 interface SessionProgressState {
@@ -478,7 +463,7 @@ export function createProgressTracker(
   const sessions = new Map<string, SessionProgressState>()
 
   return {
-    onEvent(sessionId: string | undefined, event: Pick<SessionEvent, 'type'> & { time?: unknown; data?: unknown }): void {
+    onEvent(sessionId: string | undefined, event: Pick<SessionEvent, 'type'> & { time?: unknown | undefined; data?: unknown | undefined }): void {
       if (typeof sessionId !== 'string' || sessionId === '') return
       const time = typeof event.time === 'number' ? event.time : now()
       if (event.type === 'turn/start') {
@@ -492,7 +477,7 @@ export function createProgressTracker(
         return
       }
       if (event.type !== 'assistant/message') return
-      const content = (event.data as { message?: { content?: unknown } } | undefined)?.message?.content
+      const content = (event.data as { message?: { content?: unknown | undefined } | undefined } | undefined)?.message?.content
       const tools = hasToolCalls(content)
       const text = hasVisibleText(content)
       if (state.awaiting) {
@@ -563,7 +548,7 @@ function headerOf(headers: HeadersInit | undefined, key: string): string {
   return ''
 }
 
-export function isModelStream(input: RequestInfo | URL, init?: RequestInit): boolean {
+export function isModelStream(input: RequestInfo | URL, init?: RequestInit | undefined): boolean {
   if (typeof input !== 'string' && !(input instanceof URL)) return false
   if (String(init?.method ?? 'GET').toUpperCase() !== 'POST') return false
   let pathname: string
@@ -605,7 +590,9 @@ export function wrapStreamStallFetch(
   const isActive = options.active ?? (() => true)
   const firstContentSeconds = config.firstContentSeconds ?? DEFAULT_STREAM_FIRST_CONTENT_SECONDS
   return async function fetchWithStallGuard(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    if (!isActive() || !isModelStream(input, init)) return original(input, init)
+    if (!isActive() || !isModelStream(input, init)) {
+      return init === undefined ? original(input) : original(input, init)
+    }
     const stop = new AbortController()
     const signal = init?.signal ? AbortSignal.any([init.signal, stop.signal]) : stop.signal
     const response = await original(input, { ...init, signal })
@@ -672,10 +659,10 @@ export function installRuntimeTuning(
     | 'streamStallSeconds'
     | 'streamFirstContentSeconds'
   >>,
-  logger?: PluginLogger,
+  logger?: PluginLogger | undefined,
 ): void {
   const compactionInheritEffort = resolved.compactionInheritEffort ?? true
-  const compactionReasoningEffort = resolved.compactionReasoningEffort
+  const compactionReasoningEffort = nonEmptyString(resolved.compactionReasoningEffort)
   const progressNoteMinutes = resolved.progressNoteMinutes ?? DEFAULT_PROGRESS_NOTE_MINUTES
   const progressNoteMinSteps = resolved.progressNoteMinSteps ?? DEFAULT_PROGRESS_NOTE_MIN_STEPS
   const streamStallSeconds = resolved.streamStallSeconds ?? DEFAULT_STREAM_STALL_SECONDS
@@ -683,7 +670,7 @@ export function installRuntimeTuning(
 
   if (compactionInheritEffort || compactionReasoningEffort !== undefined) {
     ctx.inject(['compaction', 'llm'], inner => {
-      const scoped = inner as unknown as { compaction?: CompactionEngineLike; llm?: LlmServiceLike }
+      const scoped = inner as unknown as { compaction?: CompactionEngineLike | undefined; llm?: LlmServiceLike | undefined }
       if (typeof scoped.compaction?.summarize !== 'function' || typeof scoped.llm?.stream !== 'function') return
       const compaction = scoped.compaction
       const llm = scoped.llm
@@ -691,7 +678,7 @@ export function installRuntimeTuning(
         () => installCompactionEffortBridge(
           compaction,
           llm,
-          () => ({ compactionInheritEffort, compactionReasoningEffort }),
+          () => ({ compactionInheritEffort, compactionReasoningEffort: compactionReasoningEffort ?? '' }),
           logger,
         ),
         'session-manager.compaction-effort',
@@ -713,7 +700,7 @@ export function installRuntimeTuning(
       },
     )
     ctx.effect(() => {
-      const offEvent = hostEvents.on!('session/event', (session: { id?: string; header?: unknown } | undefined, event: SessionEvent) => {
+      const offEvent = hostEvents.on!('session/event', (session: { id?: string | undefined; header?: unknown | undefined } | undefined, event: SessionEvent) => {
         try {
           if (isTopLevelSession(session)) tracker.onEvent(session?.id, event)
         } catch (error) {
@@ -723,7 +710,11 @@ export function installRuntimeTuning(
         }
       })
       const offExec = hostEvents.on!('tools/execute', async (
-        exec: { name?: string; agent?: { session?: { id?: string; header?: unknown } }; deferContext?: (message: UserMessage) => void },
+        exec: {
+          name?: string | undefined
+          agent?: { session?: { id?: string | undefined; header?: unknown | undefined } | undefined } | undefined
+          deferContext?: ((message: UserMessage) => void) | undefined
+        },
         next: () => Promise<unknown>,
       ) => {
         const result = await next()

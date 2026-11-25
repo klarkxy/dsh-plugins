@@ -116,7 +116,7 @@ export interface EditPrepareValue {
   readonly promptSeq: number
   readonly text: string
   /** Original order; images are read through the source Session's authorized endpoint. */
-  readonly content?: readonly EditContent[]
+  readonly content?: readonly EditContent[] | undefined
   /** The host recorded later file changes after this prompt. */
   readonly modified: boolean
 }
@@ -128,7 +128,7 @@ export interface WelcomeBackPrepareRequest {
    * skips the recap model call when the mark is unchanged, so a dismissed
    * card costs one cheap observation instead of a model call.
    */
-  readonly knownLastResponseAt?: number
+  readonly knownLastResponseAt?: number | undefined
 }
 
 export type WelcomeBackPrepareValue =
@@ -162,18 +162,18 @@ export interface ContinueSuggestRequest {
    * still matches the active branch, the host returns the stored line and
    * skips another model call.
    */
-  readonly knownSeq?: number
+  readonly knownSeq?: number | undefined
 }
 
 export interface ContinueSuggestValue {
   /** Null means there is no continuation to show. */
   readonly text: string | null
   /** Active-branch sequence this text belongs to; absent while a turn is still open. */
-  readonly seq?: number
+  readonly seq?: number | undefined
   /** True while the latest turn has not ended, so the composer keeps its own placeholder. */
-  readonly pending?: true
+  readonly pending?: true | undefined
   /** Empty fixed text uses the localized default once a turn has ended. */
-  readonly fallback?: true
+  readonly fallback?: true | undefined
 }
 
 /** The user-facing presence settings view served to the bundle config page. */
@@ -202,10 +202,10 @@ export interface ConfigView {
 
 /** Sparse settings patch from the bundle config page; every key optional. */
 export interface ConfigPatch {
-  readonly recapMinutes?: number
-  readonly compactMinutes?: number
-  readonly continueText?: string
-  readonly continueMode?: ContinueMode
+  readonly recapMinutes?: number | undefined
+  readonly compactMinutes?: number | undefined
+  readonly continueText?: string | undefined
+  readonly continueMode?: ContinueMode | undefined
   /** Null resumes following the default auxiliary model. */
   readonly model?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
   /** Null resumes following the default auxiliary model for the ghost. */
@@ -214,10 +214,10 @@ export interface ConfigPatch {
   readonly judgeModel?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
   /** Null resumes following the default auxiliary model for read_session handoff summaries. */
   readonly handoffModel?: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string } | null
-  readonly autoContinueMode?: AutoContinueMode
-  readonly autoContinueMax?: number
-  readonly allowSelfFork?: boolean
-  readonly allowSendMessage?: boolean
+  readonly autoContinueMode?: AutoContinueMode | undefined
+  readonly autoContinueMax?: number | undefined
+  readonly allowSelfFork?: boolean | undefined
+  readonly allowSendMessage?: boolean | undefined
 }
 
 export interface ConfigWriteRequest {
@@ -243,39 +243,39 @@ export const PREVIEW_RESPONSE_CHARS = 512
 
 export interface Config {
   /** Maximum serialized UTF-8 bytes of one read_session details/handoff page, including item metadata. Conversation turn previews do not use this budget. */
-  pageChars?: number
+  pageChars?: number | undefined
   /** Maximum sessions returned by one list_sessions page. */
-  listLimit?: number
+  listLimit?: number | undefined
   /** Maximum sessions returned by one search_sessions page. */
-  searchLimit?: number
+  searchLimit?: number | undefined
   /** Idle minutes since the last response before the welcome-back recap card may appear; 0 disables it. */
-  recapMinutes?: number
+  recapMinutes?: number | undefined
   /** Idle minutes since the last response before the card also suggests context compaction; 0 disables it. */
-  compactMinutes?: number
+  compactMinutes?: number | undefined
   /** Fixed ghost continuation text; empty falls back to the localized default ("继续"/"Continue"). */
-  continueText?: string
+  continueText?: string | undefined
   /** fixed: send continueText; auto: generate the ghost once after the previous turn ends and cache it in the session. */
-  continueMode?: ContinueMode
+  continueMode?: ContinueMode | undefined
   /** Initial auto-continue mode for sessions created later. */
-  autoContinueMode?: AutoContinueMode
+  autoContinueMode?: AutoContinueMode | undefined
   /** Automatic continuations allowed after each human message in an auto-continue session. */
-  autoContinueMax?: number
+  autoContinueMax?: number | undefined
   /** Register the fork_session tool: one-call forks of the calling session, approved once by the toggle. */
-  allowSelfFork?: boolean
+  allowSelfFork?: boolean | undefined
   /** Register the send_session_message tool: agent-attributed messages to other unarchived sessions, approved once by the toggle. */
-  allowSendMessage?: boolean
+  allowSendMessage?: boolean | undefined
   /** Inherit the conversation's effective reasoningEffort during same-model compaction summarization (default: true). */
-  compactionInheritEffort?: boolean
+  compactionInheritEffort?: boolean | undefined
   /** Optional explicit reasoningEffort override for compaction summarization calls. */
-  compactionReasoningEffort?: string
+  compactionReasoningEffort?: string | undefined
   /** Minutes without visible assistant prose in an active top-level turn before queuing a progress-note reminder; 0 disables it. */
-  progressNoteMinutes?: number
+  progressNoteMinutes?: number | undefined
   /** Minimum tool-only assistant steps since the last visible prose before a progress-note reminder can fire. */
-  progressNoteMinSteps?: number
+  progressNoteMinSteps?: number | undefined
   /** Seconds without non-heartbeat SSE progress after content starts on POST .../messages streams before aborting for retry; 0 disables it. */
-  streamStallSeconds?: number
+  streamStallSeconds?: number | undefined
   /** Optional seconds before the first non-heartbeat SSE event arrives on POST .../messages streams; 0 leaves queue wait to the host. */
-  streamFirstContentSeconds?: number
+  streamFirstContentSeconds?: number | undefined
 }
 
 export interface ResolvedConfig {
@@ -291,7 +291,7 @@ export interface ResolvedConfig {
   readonly allowSelfFork: boolean
   readonly allowSendMessage: boolean
   readonly compactionInheritEffort: boolean
-  readonly compactionReasoningEffort?: string | undefined
+  readonly compactionReasoningEffort: string
   readonly progressNoteMinutes: number
   readonly progressNoteMinSteps: number
   readonly streamStallSeconds: number
@@ -299,7 +299,6 @@ export interface ResolvedConfig {
 }
 
 export function resolveConfig(config: Config = {}): ResolvedConfig {
-  const explicitEffort = boundOptionalEffort(config.compactionReasoningEffort, 'compactionReasoningEffort')
   return {
     pageChars: boundInteger(config.pageChars, DEFAULT_PAGE_CHARS, MIN_PAGE_CHARS, MAX_PAGE_CHARS, 'pageChars'),
     listLimit: boundInteger(config.listLimit, DEFAULT_LIST_LIMIT, 1, MAX_LIST_LIMIT, 'listLimit'),
@@ -313,7 +312,7 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
     allowSelfFork: boundFlag(config.allowSelfFork, 'allowSelfFork'),
     allowSendMessage: boundFlag(config.allowSendMessage, 'allowSendMessage'),
     compactionInheritEffort: boundFlagDefault(config.compactionInheritEffort, true, 'compactionInheritEffort'),
-    ...(explicitEffort === undefined ? {} : { compactionReasoningEffort: explicitEffort }),
+    compactionReasoningEffort: boundText(config.compactionReasoningEffort, 64, 'compactionReasoningEffort'),
     progressNoteMinutes: boundInteger(config.progressNoteMinutes, DEFAULT_PROGRESS_NOTE_MINUTES, 0, MAX_PROGRESS_NOTE_MINUTES, 'progressNoteMinutes'),
     progressNoteMinSteps: boundInteger(config.progressNoteMinSteps, DEFAULT_PROGRESS_NOTE_MIN_STEPS, 1, MAX_PROGRESS_NOTE_MIN_STEPS, 'progressNoteMinSteps'),
     streamStallSeconds: boundInteger(config.streamStallSeconds, DEFAULT_STREAM_STALL_SECONDS, 0, MAX_STREAM_STALL_SECONDS, 'streamStallSeconds'),
@@ -333,14 +332,6 @@ function boundFlagDefault(value: boolean | undefined, fallback: boolean, name: s
   return resolved
 }
 
-function boundOptionalEffort(value: string | undefined, name: string): string | undefined {
-  if (value === undefined) return undefined
-  if (typeof value !== 'string') {
-    throw new TypeError(`${PLUGIN_NAME}: ${name} must be a string`)
-  }
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : undefined
-}
 
 function boundInteger(value: number | undefined, fallback: number, min: number, max: number, name: string): number {
   const resolved = value ?? fallback
