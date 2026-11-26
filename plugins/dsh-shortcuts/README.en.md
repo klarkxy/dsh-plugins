@@ -4,7 +4,7 @@
 
 [简体中文](README.md) / English
 
-Customize DeepSeek Harness application shortcuts and recognized local actions, and run participating plugins' commands from a command palette.
+Customize DeepSeek Harness application shortcuts and recognized local actions, run participating plugins' commands from a command palette, and search across full conversation history with a denoised find bar.
 
 ## Demo
 
@@ -35,6 +35,12 @@ Open **Settings → Shortcuts** to browse, search, and rebind shortcuts:
 
 - **Web**: Defaults to `Ctrl+Shift+P` (matching VS Code). Change, unbind, or restore `Ctrl+Shift+P` in settings (including choosing `Ctrl+K`, using Control, Alt, or Meta plus a letter or digit). It triggers when the browser delivers the keypress to the page with no conflicts and no modal dialog open.
 - **Desktop**: Also defaults to `Ctrl+Shift+P` (rebindable in the application shortcuts list below). Because `Ctrl+K` is assigned to session search (`session.search`) by default, click **Use Ctrl+K** in settings and explicitly confirm in the dialog to unbind session search and assign `Ctrl+K` to the palette (session search remains accessible in the UI or can be bound to another key in the list).
+
+### In-Conversation Full-History Find (`conversation.findInSession`)
+
+- **Entry points**: Click the magnifying-glass button in the session header utility strip, or press `Ctrl+F` / `Cmd+F` on Desktop and `Ctrl+Alt+F` / `Cmd+Alt+F` on Web (an optional toggle in **Settings → Shortcuts** also lets Web intercept `Ctrl+F` / `Cmd+F` when an active conversation has focus).
+- **Denoised body scope by default**: Searches user messages and assistant replies by default (matching visible text across inline formatting and file links while skipping reasoning and tool noise). Click the scope button or right-click the bar to include reasoning, tool calls/output, commands, injected context, compaction summaries, todo lists, or turn errors.
+- **On-demand full-history scan & jump**: Matches the loaded window and live stream immediately, scans older history pages on demand within an 8 MiB per-session LRU cache (with Pause/Resume), auto-expands collapsed blocks on jump, and supports dragging the floating bar (double-click the grip to reset).
 
 ### Application Shortcuts & Local Overrides
 
