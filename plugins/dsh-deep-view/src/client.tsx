@@ -184,7 +184,10 @@ export function ToolCallView(props: SharedViewProps) {
       sequence.current += 1
       if (retryTimer !== undefined) clearTimeout(retryTimer)
     }
-  }, [props.call, props.sessionId, callId, expectsPending, read.presentation, read.phase, restored, props.store])
+  // Keep object identities out of the deps: every pending RPC returns a fresh
+  // record, so depending on read.presentation re-runs this effect in an
+  // endless publish/render loop. Primitives capture the same semantic change.
+  }, [props.call, props.sessionId, callId, expectsPending, read.presentation?.viewId, read.phase, restored, props.store])
   // Keep one editable owner. The inline occurrence is the durable home after
   // the turn; the composer dock only borrows it while work is still running.
   const standalone = props.surface === 'standalone' || props.surface === undefined

@@ -77,3 +77,4 @@ Interactive estimate example:
 \`\`\`deepui
 {"title":"资源估算","view":{"type":"stack","children":[{"type":"row","children":[{"type":"slider","id":"quantity","label":"实例数量","min":1,"max":100,"step":1,"value":2,"unit":"台"},{"type":"number","id":"price","label":"单台月费","min":0,"max":10000,"step":1,"value":10,"unit":"元"}]},{"type":"metric","label":"预计月度总计","value":{"=":"quantity * price"},"tone":"accent"}]}}
 \`\`\`
+`
