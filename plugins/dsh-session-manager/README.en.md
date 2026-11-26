@@ -65,6 +65,14 @@ This plugin exposes 5 session tools for the agent:
 
 - **Agent actions (off by default)**: enable **Allow self-fork** and **Allow sending messages** independently under **Settings → Session Management → Agent actions**; changes save immediately and run without per-call confirmation. Both tools also require host support for session forking or agent message delivery and report unavailable if the host lacks them.
 
+### Long-turn runtime guards and compaction cache preservation
+
+Three host-side guards run automatically by default (configurable or disableable via plugin config):
+
+- **Compaction reasoning-effort inheritance (`compactionInheritEffort`, on by default)**: when context compaction runs on the same provider and model as the active conversation and the model advertises that effort level, inherits the session's effective `reasoningEffort` (or uses `compactionReasoningEffort` when set) so compaction calls keep KV prefix cache hits instead of falling back to the adapter default.
+- **Silent-turn progress notes (`progressNoteMinutes`, default `3`; `progressNoteMinSteps`, default `3`)**: when a top-level turn runs past the threshold across multiple tool-only steps without visible assistant text, queues a lightweight deferred reminder so the model includes one or two short progress sentences alongside its next tool call without ending the turn early (`0` disables it).
+- **SSE heartbeat stall recovery (`streamStallSeconds`, default `180`; `streamFirstContentSeconds`, default `0`)**: watches `POST .../messages` event streams and aborts streams that emit only heartbeats (`ping` / `: keep-alive`) after content has started so host retry logic can recover (`0` disables it).
+
 ### Model settings
 
 Under **Settings → Session Management**, four features each provide an independent model selector inside their settings row:
