@@ -291,7 +291,9 @@ function wrapLlmForCall(baseLlm: LlmServiceLike, reasoningEffort: string): LlmSe
       },
     })
   }
-  return { ...baseLlm, stream: wrappedStream }
+  // The canProxyOverride guard narrows the else branch away from object, so
+  // the spread needs an explicit object type even though it is the fallback.
+  return { ...(baseLlm as LlmServiceLike), stream: wrappedStream }
 }
 
 function wrapCtxForCall(baseCtx: Record<string, unknown>, scopedLlm: LlmServiceLike): Record<string, unknown> {
@@ -304,7 +306,7 @@ function wrapCtxForCall(baseCtx: Record<string, unknown>, scopedLlm: LlmServiceL
       },
     })
   }
-  return { ...baseCtx, llm: scopedLlm }
+  return { ...(baseCtx as Record<string, unknown>), llm: scopedLlm }
 }
 
 /** Build a single-call receiver around `engine` so concurrent compactions never share state. */
@@ -631,15 +633,18 @@ export function wrapStreamStallFetch(
     })
     signal.addEventListener('abort', clear, { once: true })
     arm(firstContentSeconds, 'first-content')
-    const body = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
-      start(controller) { out = controller },
-      transform(chunk, controller) {
+    // The WHATWG Transformer allows `cancel`, but lib.dom typings omit it, so
+    // widen the literal once instead of dropping stall cleanup on cancel.
+    const transformer = {
+      start(controller: TransformStreamDefaultController<Uint8Array>) { out = controller },
+      transform(chunk: Uint8Array, controller: TransformStreamDefaultController<Uint8Array>) {
         controller.enqueue(chunk)
         count(chunk)
       },
       flush() { clear() },
       cancel() { clear() },
-    }))
+    } as Transformer<Uint8Array, Uint8Array>
+    const body = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>(transformer))
     return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers })
   }
 }
