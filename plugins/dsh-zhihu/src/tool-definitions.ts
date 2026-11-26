@@ -31,7 +31,7 @@ const RESEARCH_QUOTA_IDS: Record<ZhihuResearchAction, ZhihuQuotaId> = {
 }
 
 /** 合并前的五个检索工具各自执行逻辑不变，这里只按 action 分发。 */
-function executeResearch(
+export function executeZhihuResearchAction(
   action: ZhihuResearchAction,
   args: { query?: string; count?: number; limit?: number; searchDb?: string; model?: string; recallScopes?: unknown; host?: unknown; hostOperator?: unknown; publishTime?: unknown; publishTimeOperator?: unknown },
   client: ZhihuClientOptions,
@@ -108,7 +108,7 @@ export function createZhihuResearchTool(options: ZhihuToolOptions = {}) {
         throw new ZhihuSearchError('INVALID_ARGUMENTS', `action ${typed.action} 需要 query 参数。`)
       }
       try {
-        const { result, results } = await executeResearch(typed.action, typed, client, exec.signal)
+        const { result, results } = await executeZhihuResearchAction(typed.action, typed, client, exec.signal)
         reportExecuted(onExecuted, { ok: true, results, quotaId: RESEARCH_QUOTA_IDS[typed.action] })
         return result
       } catch (error) {

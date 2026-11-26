@@ -1,13 +1,11 @@
 import { createHmac } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  publishZhihuSync,
   syncRequest,
   ZhihuSyncApiError,
   ZHIHU_SYNC_DEFAULT_BASE_URL,
   type ZhihuSyncTransportOptions,
 } from './sync-api.ts'
-import type { SyncPrepared } from './sync-types.ts'
 
 const creds = { appKey: 'test-user-token', appSecret: 'test-secret' }
 const transport = (fetcher?: typeof fetch): ZhihuSyncTransportOptions => ({
@@ -25,9 +23,9 @@ const sign = (key: string, ts: string, logId: string, extra: string, secret: str
 describe('syncRequest · URL allowlist', () => {
   it('accepts relative path on openapi.zhihu.com', async () => {
     const fetcher = vi.fn(async () => jsonResponse(200, { status: 0, data: { ok: 1 } })) as unknown as typeof fetch
-    const r = await syncRequest('/openapi/publish', { method: 'POST', body: {} }, transport(fetcher))
+    const r = await syncRequest('/openapi/media/apply', { method: 'POST', body: {} }, transport(fetcher))
     expect(r).toEqual({ ok: 1 })
-    expect(fetcher).toHaveBeenCalledWith(`${ZHIHU_SYNC_DEFAULT_BASE_URL}/openapi/publish`, expect.any(Object))
+    expect(fetcher).toHaveBeenCalledWith(`${ZHIHU_SYNC_DEFAULT_BASE_URL}/openapi/media/apply`, expect.any(Object))
   })
   it('rejects non-openapi origin absolute URL', async () => {
     await expect(syncRequest('https://evil.com/x', { method: 'GET' }, transport()))
@@ -51,7 +49,7 @@ describe('syncRequest · URL allowlist', () => {
 describe('syncRequest · auth headers & signing', () => {
   it('sends all signed headers; X-Extra-Info empty still present', async () => {
     const fetcher = vi.fn(async () => jsonResponse(200, { status: 0, data: {} })) as unknown as typeof fetch
-    await syncRequest('/openapi/publish', { method: 'POST', body: {} }, transport(fetcher))
+    await syncRequest('/openapi/media/apply', { method: 'POST', body: {} }, transport(fetcher))
     const headers = (fetcher as any).mock.calls[0][1].headers as Record<string, string>
     expect(headers['X-App-Key']).toBe(creds.appKey)
     expect(headers['X-Extra-Info']).toBe('')
@@ -62,7 +60,7 @@ describe('syncRequest · auth headers & signing', () => {
   })
   it('custom extraInfo participates in signature', async () => {
     const fetcher = vi.fn(async () => jsonResponse(200, { status: 0, data: {} })) as unknown as typeof fetch
-    await syncRequest('/openapi/publish', { method: 'POST', body: {}, extraInfo: 'v1' }, transport(fetcher))
+    await syncRequest('/openapi/media/apply', { method: 'POST', body: {}, extraInfo: 'v1' }, transport(fetcher))
     const headers = (fetcher as any).mock.calls[0][1].headers as Record<string, string>
     expect(headers['X-Extra-Info']).toBe('v1')
     expect(headers['X-Sign']).toBe(sign(creds.appKey, headers['X-Timestamp'], headers['X-Log-Id'], 'v1', creds.appSecret))
@@ -90,7 +88,7 @@ describe('syncRequest · auth headers & signing', () => {
 describe('syncRequest · envelope unwrapping', () => {
   it('publishes envelope status=0 → returns data', async () => {
     const fetcher = vi.fn(async () => jsonResponse(200, { status: 0, msg: 'success', data: { content_token: '42', url: 'https://zhuanlan.zhihu.com/p/42' } })) as unknown as typeof fetch
-    const r = await syncRequest('/openapi/publish', { method: 'POST', body: {} }, transport(fetcher))
+    const r = await syncRequest('/openapi/media/apply', { method: 'POST', body: {} }, transport(fetcher))
     expect(r).toEqual({ content_token: '42', url: 'https://zhuanlan.zhihu.com/p/42' })
   })
   it('envelope status!=0 → UPSTREAM_REJECTED definite, msg sanitized', async () => {
@@ -225,13 +223,13 @@ describe('syncRequest · timeout & cancellation', () => {
     const controller = new AbortController()
     controller.abort()
     const fetcher = vi.fn() as unknown as typeof fetch
-    await expect(syncRequest('/openapi/publish', { method: 'POST' }, transport(fetcher), controller.signal))
+    await expect(syncRequest('/openapi/media/apply', { method: 'POST' }, transport(fetcher), controller.signal))
       .rejects.toMatchObject({ code: 'CANCELLED', definite: true })
     expect(fetcher).not.toHaveBeenCalled()
   })
   it('keeps a non-JSON server error uncertain', async () => {
     const fetcher = vi.fn(async () => new Response('<html>Unavailable</html>', { status: 503 })) as unknown as typeof fetch
-    await expect(syncRequest('/openapi/publish', { method: 'POST' }, transport(fetcher)))
+    await expect(syncRequest('/openapi/media/apply', { method: 'POST' }, transport(fetcher)))
       .rejects.toMatchObject({ code: 'BAD_RESPONSE', definite: false })
   })
   it('timeout → TIMEOUT non-definite', async () => {
@@ -258,49 +256,5 @@ describe('syncRequest · timeout & cancellation', () => {
   it('missing credentials → TOKEN_MISSING', async () => {
     await expect(syncRequest('/x', { method: 'GET' }, { resolveCredentials: async () => ({ appKey: '', appSecret: '' }) }))
       .rejects.toMatchObject({ code: 'TOKEN_MISSING', definite: true })
-  })
-})
-
-describe('publishZhihuSync', () => {
-  const prepared: SyncPrepared = {
-    draft: { type: 'article', title: 't', body: 'x'.repeat(20), format: 'markdown' },
-    html: '<p>x</p>',
-    issues: [],
-    canPublish: true,
-    counts: { titleChars: 1, bodyChars: 20, images: 0, topics: 0 },
-  }
-  it('sends publish envelope and returns url/contentToken/type', async () => {
-    const fetcher = vi.fn(async () => jsonResponse(200, { status: 0, data: { content_token: '99', url: 'https://zhuanlan.zhihu.com/p/99', type: 'article' } })) as unknown as typeof fetch
-    const r = await publishZhihuSync(prepared, transport(fetcher))
-    expect(r).toEqual({ contentToken: '99', url: 'https://zhuanlan.zhihu.com/p/99', type: 'article' })
-    const body = JSON.parse((fetcher as any).mock.calls[0][1].body)
-    expect(body.type).toBe('article')
-    expect(body.confirmed).toBe(true)
-    expect(body.content.title).toBe('t')
-  })
-  it('missing content_token/url → BAD_RESPONSE', async () => {
-    const fetcher = vi.fn(async () => jsonResponse(200, { status: 0, data: {} })) as unknown as typeof fetch
-    await expect(publishZhihuSync(prepared, transport(fetcher))).rejects.toMatchObject({ code: 'BAD_RESPONSE' })
-  })
-  it('upstream reject propagates', async () => {
-    const fetcher = vi.fn(async () => jsonResponse(200, { status: 5, msg: 'quota' })) as unknown as typeof fetch
-    await expect(publishZhihuSync(prepared, transport(fetcher))).rejects.toMatchObject({ code: 'UPSTREAM_REJECTED', definite: true })
-  })
-  it('status as string (malformed) → BAD_RESPONSE not UPSTREAM_REJECTED', async () => {
-    const fetcher = vi.fn(async () => jsonResponse(200, { status: '0', data: { content_token: '1', url: 'https://zhuanlan.zhihu.com/p/1' } })) as unknown as typeof fetch
-    await expect(publishZhihuSync(prepared, transport(fetcher))).rejects.toMatchObject({ code: 'BAD_RESPONSE', definite: false })
-  })
-  it('flat response without status → BAD_RESPONSE (not treated as publish success)', async () => {
-    // publishZhihuSync 只接受 status===0 信封；{url,content_token} 裸响应不是合法成功。
-    const fetcher = vi.fn(async () => jsonResponse(200, { url: 'https://zhuanlan.zhihu.com/p/1', content_token: '1' })) as unknown as typeof fetch
-    await expect(publishZhihuSync(prepared, transport(fetcher))).rejects.toMatchObject({ code: 'BAD_RESPONSE', definite: false })
-  })
-  it('non-zhihu url → BAD_RESPONSE', async () => {
-    const fetcher = vi.fn(async () => jsonResponse(200, { status: 0, data: { content_token: '1', url: 'https://evil.com/p/1', type: 'article' } })) as unknown as typeof fetch
-    await expect(publishZhihuSync(prepared, transport(fetcher))).rejects.toMatchObject({ code: 'BAD_RESPONSE' })
-  })
-  it('type mismatch → BAD_RESPONSE', async () => {
-    const fetcher = vi.fn(async () => jsonResponse(200, { status: 0, data: { content_token: '1', url: 'https://zhuanlan.zhihu.com/p/1', type: 'question' } })) as unknown as typeof fetch
-    await expect(publishZhihuSync(prepared, transport(fetcher))).rejects.toMatchObject({ code: 'BAD_RESPONSE' })
   })
 })

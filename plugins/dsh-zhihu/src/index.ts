@@ -2,11 +2,12 @@ import { resolveZhihuCallPolicy, type ZhihuCallPolicyOptions } from './call-poli
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { installPluginLogger, type PluginLogger } from '@klarkxy/dsh-plugin-kit/logger'
-import { executeZhihuSearch, ZHIHU_SEARCH_DEFAULT_COUNT } from './search-api.ts'
+import { ZHIHU_SEARCH_DEFAULT_COUNT } from './search-api.ts'
 import {
-  executeZhihuGlobalSearch, executeZhihuHotList, executeZhihuAsk, executeZhihuKnowledgeSearch,
-  normalizeRecallScopes, readZhihuGlobalFilter, ZHIHU_ASK_MODELS, ZHIHU_ASK_DEFAULT_MODEL,
+  ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT, ZHIHU_HOT_LIST_DEFAULT_LIMIT,
+  ZHIHU_KNOWLEDGE_SEARCH_DEFAULT_LIMIT, ZHIHU_ASK_MODELS, ZHIHU_ASK_DEFAULT_MODEL,
 } from './operations.ts'
+import { executeZhihuResearchAction, type ZhihuResearchAction } from './tool-definitions.ts'
 import { listZhihuKnowledgeBases, uploadZhihuKnowledgeFile, ZHIHU_KNOWLEDGE_UPLOAD_MAX_BYTES } from './zhihu-knowledge.ts'
 import { type ZhihuClientOptions, type ZhihuSearchExecuted, ZhihuSearchError } from './zhihu-client.ts'
 import { ZhihuResponseCache } from './response-cache.ts'
@@ -33,6 +34,14 @@ type Host = Context & HostRpcContext & {
   credentials: { resolve: (ref: ReturnType<typeof credentialRef>) => Promise<{ value: string } | undefined> }
 }
 const fail = (code: string, message: string, details: Record<string, unknown> = {}): ZhihuRpcResult => ({ ok: false, error: { code, message, details } })
+
+const RESEARCH_ENDPOINT_ACTIONS = {
+  search: 'search',
+  'global.search': 'global_search',
+  'hot.list': 'hot_list',
+  ask: 'ask',
+  'knowledge.search': 'knowledge_search',
+} as const satisfies Record<string, ZhihuResearchAction>
 
 /** One shared service for direct UI RPC and optional Tool wrappers. */
 export function createZhihuService(
@@ -97,23 +106,17 @@ export function createZhihuService(
           counted = operation !== 'quota'
           const result = await executeZhihuOpenPlatform(operation, payload === undefined ? {} : payload, client)
           value = result; results = zhihuOpenPlatformResultCount(result)
-        } else if (endpoint === 'search') {
-          const result = await executeZhihuSearch(query, typeof body.count === 'number' ? body.count : ZHIHU_SEARCH_DEFAULT_COUNT, client)
-          value = result; results = result.items.length
-        } else if (endpoint === 'global.search') {
-          const result = await executeZhihuGlobalSearch(query, typeof body.count === 'number' ? body.count : 10,
-            body.searchDb === 'realtime' || body.searchDb === 'static' ? body.searchDb : 'all',
-            { ...client, ...(readZhihuGlobalFilter(body) ? { filter: readZhihuGlobalFilter(body) } : {}) })
-          value = result; results = result.items.length
-        } else if (endpoint === 'hot.list') {
-          const result = await executeZhihuHotList(typeof body.limit === 'number' ? body.limit : 10, client)
-          value = result; results = result.items.length
-        } else if (endpoint === 'ask') {
-          const model = (ZHIHU_ASK_MODELS as readonly unknown[]).includes(body.model) ? body.model as typeof ZHIHU_ASK_MODELS[number] : ZHIHU_ASK_DEFAULT_MODEL
-          value = await executeZhihuAsk(query, model, client); results = 1
-        } else if (endpoint === 'knowledge.search') {
-          const result = await executeZhihuKnowledgeSearch(query, typeof body.limit === 'number' ? body.limit : 5, normalizeRecallScopes(body.recallScopes), client)
-          value = result; results = result.items.length
+        } else if (Object.hasOwn(RESEARCH_ENDPOINT_ACTIONS, endpoint)) {
+          const action = RESEARCH_ENDPOINT_ACTIONS[endpoint as keyof typeof RESEARCH_ENDPOINT_ACTIONS]
+          const researchArgs: Record<string, unknown> = { ...body, query }
+          if (action === 'search') researchArgs.count = typeof body.count === 'number' ? body.count : ZHIHU_SEARCH_DEFAULT_COUNT
+          if (action === 'global_search') researchArgs.count = typeof body.count === 'number' ? body.count : ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT
+          if (action === 'hot_list') researchArgs.limit = typeof body.limit === 'number' ? body.limit : ZHIHU_HOT_LIST_DEFAULT_LIMIT
+          if (action === 'knowledge_search') researchArgs.limit = typeof body.limit === 'number' ? body.limit : ZHIHU_KNOWLEDGE_SEARCH_DEFAULT_LIMIT
+          if (action === 'ask') researchArgs.model = (ZHIHU_ASK_MODELS as readonly unknown[]).includes(body.model) ? body.model : ZHIHU_ASK_DEFAULT_MODEL
+          const executed = await executeZhihuResearchAction(action, researchArgs, client, signal)
+          value = executed.result
+          results = action === 'ask' ? 1 : executed.results
         } else if (endpoint === 'knowledge.bases') {
           const result = await listZhihuKnowledgeBases(client); value = result; results = result.bases.length
         } else if (endpoint === 'study' || endpoint === 'study.report') {

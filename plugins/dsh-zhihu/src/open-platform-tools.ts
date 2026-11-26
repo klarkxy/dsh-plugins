@@ -52,7 +52,7 @@ export function createZhihuAccountTool(options: ZhihuOpenPlatformToolOptions = {
       action: { type: 'string', enum: Object.keys(ZHIHU_ACCOUNT_ACTIONS), required: true },
       query: { type: 'string', description: 'question_recommendations 主题；省略按画像推荐。' },
       count: { type: 'integer', description: 'question_recommendations 数量，1-20，默认 5。' },
-      questionUrl: { type: 'string', description: 'question_answers 必填，https://www.zhihu.com/question/{id} 链接。' },
+      questionUrl: { type: 'string', description: 'question_answers 必填，https://www.zhihu.com/question/{id} 链接；也接受问题下的 /answer/{aid} 回答链接。' },
       contentUrl: { type: 'string', description: 'content_detail、content_comments、creator_content_stats 必填：本人已发布的 HTTPS 回答/专栏/想法/视频链接。' },
       offset: { type: 'string', description: 'question_answers、content_comments 为非负 Int64 字符串；user_contents、user_followees、favlist_contents 为不透明游标，续读直接传入上页返回的 paging.nextOffset；默认 "0"。' },
       limit: { type: 'integer', description: 'question_answers、content_comments 与用户数据列表每页条数，1-50，默认 20。' },

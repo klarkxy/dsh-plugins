@@ -34,7 +34,7 @@ With the Web Search plugin (`@klarkxy/dsh-web-search-manager`) installed, Zhihu 
 
 - In **Settings → Zhihu → Settings**, configure the publisher credentials obtained from the [Zhihu publishing assistant](https://www.zhihu.com/playground/zhihu-publisher). These are separate from the search `Access Secret`.
 - You can paste Zhihu's full authorization text directly into the **App Secret** field when both `ZHIHU_OPENAPI_APP_KEY:"…"` and `ZHIHU_OPENAPI_APP_SECRET:"…"` are present; the plugin extracts and keeps only those two values (and offers a **Save both** action).
-- Once configured, `zhihu_sync` lets the model save, list, read, and validate `article`, `question`, or `pin` drafts and upload images for them. Drafts persist across DSH restarts. This plugin covers draft preparation, validation, and image uploads; publishing is done on Zhihu.
+- Once configured, `zhihu_sync` lets the model save, list, read, and validate `article`, `question`, or `pin` drafts and upload images for them. Drafts persist across DSH restarts. Drafts are stored locally in DSH. The plugin prepares and validates drafts and uploads images, but does not publish. To publish, paste the content into the Zhihu editor or use the official Zhihu publishing assistant.
 
 ## Agent Tools
 
@@ -54,36 +54,21 @@ The routes `zhihu-deep-research`, `zhihu-observation`, and `zhihu-recent-briefin
 
 ## Deep research, Zhihu observation, and 30-day briefing
 
-These three workflows are not separate official endpoints and not three prompts. The plugin combines the existing Zhihu search, web search, and optional knowledge-base search into a bounded evidence pass. The host writes the synthesis, then the plugin exports a local report. Zhida answers are not treated as original sources. The implementation is independent and does not include the official skill text, renderer, or layout.
+These modes are not separate official endpoints. They are bounded evidence passes: `deep` searches Zhihu and the web by sub-question, `observation` samples viewpoints and also reads answer summaries under up to 2 matched questions by default, and `briefing` collects recent items in a fixed calendar window.
 
-### Entry
+How to use them:
 
-1. Call `zhihu_study`. Deep research searches Zhihu and the web; two or three sub-questions fit in the six-call cap, while four sub-questions plus both sources are rejected before any request. Observation searches both. A briefing freezes an Asia/Shanghai calendar window at collection time, covering the start day through that day, for up to 30 days. Web search uses the realtime index and a publication-time filter.
-2. The result is evidence, not a finished report. Failure, exhausted budget, too few sources, and missing dates stay visible.
-3. After synthesis, call `zhihu_study_report` with that same evidence. A sourced quantity must show its name, number, and adjacent unit in the quoted excerpt; otherwise mark it as an assumption. Dividing 20 square meters by 2 yuan yields 10 square meters per yuan. Read-only and unknown workspace modes cannot write files. A finished report means the structure checked out.
-4. Open the returned `html`. The folder also contains `report.md` and `report.json`. The page loads nothing external and is not part of the settings UI.
+1. Call `zhihu_study` to receive evidence with status, excerpts, and limitations; this is not a finished report.
+2. Let the model synthesize that evidence, then call `zhihu_study_report`.
+3. Open the generated `report.html`; `report.md` and `report.json` are written next to it.
 
-### Input and output
+Main limits:
 
-`zhihu_study` takes `mode` and `question`, plus optional `queries`, `sources`, `maxCalls`, `windowDays`, and `since`. A knowledge base is searched only when `sources` includes `knowledge`. The result carries status, the call plan, failures, excerpts, limitations, and the host's synthesis constraints.
-
-`zhihu_study_report` takes the synthesized `report`. Deep research may include interactive blocks. Observation needs at least two viewpoints tied to different sources. A briefing separates confirmed events, publication or update times, and undated items. Invalid input writes no files.
-
-### Cost and boundaries
-
-Upstream requests are protected by the official free allowance: while plenty remains, each API's quota is checked at most every 5 minutes, otherwise before every request. The Beijing-day ledger, unknown-mapping rejection, explicit `allowPaid`, and no automatic retry still apply. The study tools accept neither a paid switch nor credentials. One study cannot make more than six upstream searches or cover more than 30 days. When the call budget is omitted, the tool uses the plan size; a plan that does not fit is rejected before any request and cannot be extended by calling the tool again. The allowance is whatever the official quota call returns. Web filters accept structured site and publication-time fields only. The model tool and the shared search entry use those parameters; the settings page has no new filter controls.
-
-Failure, exhausted budget, too few sources, missing dates, and cancellation each have their own status. They are not empty results. `empty` means the upstream call succeeded and returned nothing.
-
-### Sampling, dates, and the host's job
-
-Excerpts are not full text and not a complete sample. `HasMore: true` does not come with a public cursor. An observation sample must not be described as what all Zhihu users think. Author names and vote counts are kept only when the upstream payload actually includes them.
-
-Web `AuthorityLevel` values `1` through `4` are labeled low, medium, high, and very high. Zhihu search keeps the raw `AuthorityLevel` and `RankingScore` only when they are present; those site values are not given the four-level labels, and missing scores are not invented.
-
-Web `EditTime` is the last edit. Zhihu `EditTime` is a publication or update time. Neither is the time an event happened. A `publish_time` filter does not prove that either. Missing, unparseable, or conflicting item times stay out of the confirmed timeline. An event date must appear in a cited excerpt; otherwise it belongs with the undated items.
-
-Every interactive number needs a source id or an explicit assumption. The plugin supplies no default airflow, price, or lifespan and does not evaluate an undeclared formula. The host writes conclusions, comparison, and impact. The exporter validates, escapes, and writes files. The automated tests cover those contracts, not the quality of a model's synthesis.
+- Excerpts and answer summaries are not full text; one sample is not Zhihu user consensus.
+- One study makes at most 6 upstream requests and cannot be extended through repeated calls.
+- A briefing window is at most 30 days. Item times are publication or edit times, not event times.
+- Export requires a writable workspace; invalid input writes no files.
+- Official free-quota protection applies. Requests are not retried, and the study input cannot carry credentials or a paid switch.
 
 ## Cost Protection
 

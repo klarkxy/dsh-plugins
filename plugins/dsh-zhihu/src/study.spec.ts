@@ -144,6 +144,99 @@ describe('zhihu study evidence', () => {
     expect(renderZhihuStudy(partial)).not.toContain('上游没有返回条目')
   })
 
+  it('follows at most two deduplicated question links by default with answer-page parameters', async () => {
+    const seen: URL[] = []
+    const questions = [
+      'https://www.zhihu.com/question/101',
+      'https://www.zhihu.com/question/202',
+      'https://www.zhihu.com/question/303',
+    ]
+    const result = await executeZhihuStudy({ mode: 'observation', question: '这个话题有哪些观点' }, client(url => {
+      if (url.pathname.endsWith('/zhihu_search')) return { Items: [
+        item({ Title: '第一问', Url: 'https://www.zhihu.com/question/101' }),
+        item({ Title: '第一问的答案链接', Url: 'https://www.zhihu.com/question/101/answer/456' }),
+        item({ Title: '第二问', Url: 'https://www.zhihu.com/question/202/answer/789/' }),
+        item({ Title: '第三问', Url: 'https://www.zhihu.com/question/303' }),
+      ] }
+      if (url.pathname.endsWith('/global_search')) return { Items: [] }
+      if (url.pathname.endsWith('/question_answers')) {
+        const question = url.searchParams.get('QuestionUrl')!
+        return { Items: [{ Url: `${question}/answer/999`, Summary: '<b>上游摘要</b>' }], Paging: { IsEnd: question !== questions[0] } }
+      }
+      throw new Error(`unexpected ${url.pathname}`)
+    }, seen))
+    const answerRequests = seen.filter(url => url.pathname.endsWith('/question_answers'))
+    expect(answerRequests.map(url => url.searchParams.get('QuestionUrl'))).toEqual([questions[0], questions[1]])
+    for (const request of answerRequests) {
+      expect(request.searchParams.get('Offset')).toBe('0')
+      expect(request.searchParams.get('Limit')).toBe('5')
+    }
+    expect(result.stop).toMatchObject({ callsPlanned: 5, callsUsed: 4, budgetApplied: 4, budgetRequested: null })
+    expect(result.calls.filter(call => call.source === 'question_answers').map(call => call.state)).toEqual(['completed', 'completed', 'skipped'])
+    const answers = result.evidence.filter(entry => entry.sources.includes('question_answers'))
+    expect(answers).toHaveLength(2)
+    expect(answers[0]).toMatchObject({ excerptKind: 'answer_summary', followedQuestion: questions[0], title: '第一问 · 回答摘要', editTimeMeaning: 'unavailable' })
+    expect(answers[0]?.excerpts).toEqual(['上游摘要'])
+    expect(answers[0]?.author).toBeUndefined()
+    expect(answers[0]?.votes).toBeUndefined()
+    expect(answers[0]?.comments).toBeUndefined()
+    expect(result.limitations.join('\n')).toContain(`${questions[0]} 的回答摘要未取完；工具不自动翻页，摘要不是回答全文。`)
+    expect(result.limitations.join('\n')).toContain('问题回答摘要')
+    expect(result.sample.questionAnswers).toBe(2)
+  })
+
+  it('uses only leftover budget for follow-ups and marks unaffordable questions skipped', async () => {
+    const seen: URL[] = []
+    const result = await executeZhihuStudy({ mode: 'observation', question: '这个话题有哪些观点', maxCalls: 2 }, client(url => {
+      if (url.pathname.endsWith('/zhihu_search')) return { Items: [item({ Title: '问题', Url: 'https://www.zhihu.com/question/101' })] }
+      return { Items: [] }
+    }, seen))
+    expect(seen.some(url => url.pathname.endsWith('/question_answers'))).toBe(false)
+    expect(result.stop).toMatchObject({ callsPlanned: 3, callsUsed: 2, budgetApplied: 2, budgetRequested: 2 })
+    expect(result.calls.find(call => call.source === 'question_answers')).toMatchObject({ state: 'skipped', query: 'https://www.zhihu.com/question/101' })
+    expect(result.status).toBe('budget_exhausted')
+  })
+
+  it('does not follow questions in deep mode by default and rejects followQuestions for briefing', async () => {
+    const seen: URL[] = []
+    const result = await executeZhihuStudy({ mode: 'deep', question: '怎么选' }, client(url => {
+      if (url.pathname.endsWith('/zhihu_search')) return { Items: [item({ Url: 'https://www.zhihu.com/question/101' })] }
+      return { Items: [] }
+    }, seen))
+    expect(seen.some(url => url.pathname.endsWith('/question_answers'))).toBe(false)
+    expect(result.calls.some(call => call.source === 'question_answers')).toBe(false)
+    expect(result.stop.budgetApplied).toBe(2)
+    await expect(executeZhihuStudy({ mode: 'briefing', question: '最近进展', followQuestions: true }, client(() => ({ Items: [] })))).rejects.toThrow('followQuestions 不适用于 briefing。')
+  })
+
+  it('stops following further questions after the first follow failure', async () => {
+    const seen: URL[] = []
+    const result = await executeZhihuStudy({ mode: 'observation', question: '这个话题有哪些观点' }, client(url => {
+      if (url.pathname.endsWith('/zhihu_search')) return { Items: [
+        item({ Title: '第一问', Url: 'https://www.zhihu.com/question/101' }),
+        item({ Title: '第二问', Url: 'https://www.zhihu.com/question/202' }),
+      ] }
+      if (url.pathname.endsWith('/global_search')) return { Items: [] }
+      if (url.pathname.endsWith('/question_answers')) return new Error('回答接口失败')
+      return { Items: [] }
+    }, seen))
+    expect(seen.filter(url => url.pathname.endsWith('/question_answers'))).toHaveLength(1)
+    expect(result.failures).toHaveLength(1)
+    expect(result.failures[0]).toMatchObject({ source: 'question_answers', query: 'https://www.zhihu.com/question/101', retried: false })
+    expect(result.calls.filter(call => call.source === 'question_answers').map(call => call.state)).toEqual(['failed', 'skipped'])
+  })
+
+  it('counts one Zhihu search hit plus one answer summary as enough observation sources', async () => {
+    const result = await executeZhihuStudy({ mode: 'observation', question: '这个话题有哪些观点' }, client(url => {
+      if (url.pathname.endsWith('/zhihu_search')) return { Items: [item({ Title: '唯一问题', Url: 'https://www.zhihu.com/question/101' })] }
+      if (url.pathname.endsWith('/global_search')) return { Items: [] }
+      if (url.pathname.endsWith('/question_answers')) return { Items: [{ Url: 'https://www.zhihu.com/question/101/answer/999', ContentText: '回答内容摘要' }], Paging: { IsEnd: true } }
+      return { Items: [] }
+    }))
+    expect(result.status).toBe('complete')
+    expect(result.evidence.some(entry => entry.sources.includes('question_answers'))).toBe(true)
+  })
+
   it('stops at the budget and merges duplicate urls in a 30-day briefing', async () => {
     const seen: URL[] = []
     const result = await executeZhihuStudy({

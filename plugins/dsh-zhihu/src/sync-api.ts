@@ -22,10 +22,8 @@
  *     definite）；媒体 Apply/Commit 返回扁平 JSON（无 status）时原样返回。
  */
 import { createHmac, randomUUID } from 'node:crypto'
-import { buildZhihuPublishRequest } from './sync-content.ts'
 
 export const ZHIHU_SYNC_DEFAULT_BASE_URL = 'https://openapi.zhihu.com'
-export const ZHIHU_SYNC_PUBLISH_PATH = '/openapi/publish'
 export const ZHIHU_SYNC_DEFAULT_TIMEOUT_MS = 30_000
 export const ZHIHU_SYNC_ALLOWED_ORIGIN = 'https://openapi.zhihu.com'
 
@@ -358,47 +356,4 @@ export async function syncRequest(
     )
   }
   return body
-}
-
-/** 知乎发布成功 URL：必须是 https 且属于知乎域（与 content 的 ZHIHU_DOMAIN_RE 一致）。 */
-const ZHIHU_PUBLISH_DOMAIN_RE = /^([a-z0-9-]+\.)*(zhimg\.com|zhihu\.com)$/i
-function isValidPublishUrl(value: string): boolean {
-  try {
-    const u = new URL(value)
-    return u.protocol === 'https:' && !u.username && !u.password && ZHIHU_PUBLISH_DOMAIN_RE.test(u.hostname)
-  } catch { return false }
-}
-
-/**
- * 将 prepareZhihuSyncDraft 的结果组装并发送到 /openapi/publish。
- *
- * 发送前不做内容字段二次校验（发布字段唯一事实源是 SyncPrepared）；
- * 上层负责：预览确认、持久化 publishing 意图、按 definite 标记结果。
- */
-export async function publishZhihuSync(
-  prepared: unknown,
-  options: ZhihuSyncTransportOptions,
-  signal?: AbortSignal,
-): Promise<{ url: string; contentToken: string; type: string }> {
-  const request = buildZhihuPublishRequest(prepared)
-  const data = await syncRequest(ZHIHU_SYNC_PUBLISH_PATH, { method: 'POST', body: request }, options, signal)
-  // syncRequest 只在上游 status===0 时返回 data；扁平 {url,content_token} 无 status
-  // 不会被当成成功（publish-openapi.md：成功判断 = status===0）。
-  const row = (data ?? {}) as Record<string, unknown>
-  const contentToken =
-    typeof row.content_token === 'string' || typeof row.content_token === 'number'
-      ? String(row.content_token)
-      : ''
-  const url = typeof row.url === 'string' ? row.url : ''
-  const type = typeof row.type === 'string' ? row.type : ''
-  if (!contentToken || !url) {
-    throw new ZhihuSyncApiError('BAD_RESPONSE', '发布成功响应缺少 content_token 或 url。', false)
-  }
-  if (!isValidPublishUrl(url)) {
-    throw new ZhihuSyncApiError('BAD_RESPONSE', `发布成功响应返回了无效的 url：${sanitizeMessage(url, [])}`, false)
-  }
-  if (type !== request.type) {
-    throw new ZhihuSyncApiError('BAD_RESPONSE', `发布响应 type 与请求不一致：${String(type)} ≠ ${request.type}。`, false)
-  }
-  return { url, contentToken, type }
 }

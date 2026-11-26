@@ -45,7 +45,7 @@ ${SHARED}
 
 ${SHARED}
 
-调用 zhihu_study（mode 设为 observation），默认检索知乎与全网。当知乎命中少于两条时，如实依据返回的 insufficient_sources 或 empty 说明样本有限。
+调用 zhihu_study（mode 设为 observation），默认检索知乎与全网，并默认读取最多 2 个命中问题下的回答摘要。当知乎命中与回答摘要少于两条时，如实依据返回的 insufficient_sources 或 empty 说明样本有限。
 
 报告中的现状、进展和观点须附带 sourceIds，至少包含两条观点及两个独立来源；作者与赞同数仅在证据返回时展示，并明确标注结论基于本次检索样本。`,
   },

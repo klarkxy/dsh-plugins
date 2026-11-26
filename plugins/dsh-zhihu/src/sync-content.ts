@@ -9,7 +9,6 @@
  *
  * 分层：
  *   prepareZhihuSyncDraft(input)   规范化 SyncDraft → 知乎适配 html + issues + counts
- *   buildZhihuPublishRequest(prepared)  SyncPrepared → publish OpenAPI request envelope
  *
  * 必须遵守的硬约束（不静默丢内容）：
  *   - 标题/正文超限 → error issue，不截断、不自动精简（conversion.md §1.3）。
@@ -1090,73 +1089,6 @@ function validateSettings(draft: SyncDraft, issues: SyncIssue[], pinImageCount: 
   void pinImageCount
 }
 
-// ---------------------------------------------------------------------------
-// buildZhihuPublishRequest（publish-*.md 字段映射；不二次校验内容字段）
-// ---------------------------------------------------------------------------
-
-export type ZhihuPublishRequest = {
-  type: SyncDraft['type']
-  confirmed: true
-  confirm_note: string
-  content: Record<string, unknown>
-}
-
-export function buildZhihuPublishRequest(prepared: unknown): ZhihuPublishRequest {
-  if (!isRecord(prepared) || prepared.canPublish !== true || !isRecord(prepared.draft)) {
-    throw new Error('buildZhihuPublishRequest: 需要 prepareZhihuSyncDraft 返回且 canPublish 为 true 的结果。')
-  }
-  const draft = prepared.draft as unknown as SyncDraft
-  const html = typeof prepared.html === 'string' ? prepared.html : ''
-  const s = draft.settings ?? {}
-  const base = { type: draft.type, confirmed: true as const, confirm_note: 'confirmed by user after local preview' }
-
-  if (draft.type === 'article') {
-    const content: Record<string, unknown> = {
-      title: draft.title,
-      html,
-      comment_permission: s.commentPermission ?? 'all',
-      table_of_contents_enabled: s.tableOfContentsEnabled ?? false,
-    }
-    if (s.creationStatement) content.creation_statement = s.creationStatement
-    const topics = extractTopicTokens(s.topics ?? [], SYNC_LIMITS.articleTopicsMax)
-    if (topics.length) content.topics = topics
-    return { ...base, content }
-  }
-
-  if (draft.type === 'question') {
-    const content: Record<string, unknown> = { title: draft.title, html }
-    const topics = extractTopicTokens(s.topics ?? [], SYNC_LIMITS.questionTopicsMax)
-    if (topics.length) content.topics = topics
-    return { ...base, content }
-  }
-
-  // pin：publish 要求 content.html 非空（publish-pin.md 前置校验）。
-  const content: Record<string, unknown> = {
-    title: draft.title,
-    html,
-    comment_permission: s.commentPermission ?? 'all',
-  }
-  const images = (draft.images ?? []).filter(i => typeof i.url === 'string' && i.url)
-  if (images.length) {
-    // publish-pin.md：images[].url 优先水印 URL 再原图 URL——SyncImage.url 已按此约定填充。
-    content.images = images.map(i => ({ url: i.url }))
-  } else if (draft.linkCard) {
-    const lc = draft.linkCard
-    content.linkcard = {
-      data_content_type: lc.contentType ?? 'common_url',
-      data_content_id: lc.contentId ?? '0',
-      url: lc.url,
-      data_draft_title: lc.title ?? '',
-      data_draft_cover: lc.cover ?? '',
-      is_from_forward: lc.isFromForward ?? false,
-    }
-  }
-  if (s.creationStatement === 'ai_creation') content.creation_statement = 'ai_creation'
-  const ring = extractRingId(s.ring)
-  if (ring) content.ring = ring
-  return { ...base, content }
-}
-
 function strictZhihuUrl(raw: string, pathRe: RegExp): string | '' {
   try {
     const u = new URL(raw)
@@ -1165,23 +1097,4 @@ function strictZhihuUrl(raw: string, pathRe: RegExp): string | '' {
     const m = u.pathname.match(pathRe)
     return m?.[1] ?? ''
   } catch { return '' }
-}
-
-function extractTopicTokens(urls: string[], max: number): { topic_id: string; topic_token: string; topic_name: string }[] {
-  const out: { topic_id: string; topic_token: string; topic_name: string }[] = []
-  const seen = new Set<string>()
-  for (const u of urls) {
-    const token = strictZhihuUrl(String(u), /^\/topic\/(\d+)(?:\/|$)/)
-    if (!token || seen.has(token)) continue
-    seen.add(token)
-    out.push({ topic_id: '', topic_token: token, topic_name: '' })
-    if (out.length >= max) break
-  }
-  return out
-}
-
-function extractRingId(url: string | undefined): { ring_id: string; ring_name: string } | undefined {
-  if (!url) return undefined
-  const id = strictZhihuUrl(url, /^\/ring\/host\/(\d+)(?:\/|$)/)
-  return id ? { ring_id: id, ring_name: '' } : undefined
 }

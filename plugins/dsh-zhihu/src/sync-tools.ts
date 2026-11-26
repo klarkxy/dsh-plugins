@@ -2,8 +2,8 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ZhihuService } from './index.ts'
 import type { ZhihuJsonValue } from './open-platform.ts'
 
-/** Publishing is a human confirmation action in the preview pane. The tool can
- * prepare the same saved draft, but never receives a UI review ticket. */
+/** The plugin stores and validates local drafts but never publishes them.
+ * Publishing is intentionally outside every tool and RPC operation. */
 export function createZhihuSyncTool(service: ZhihuService) {
   return defineTool({
     name: 'zhihu_sync',

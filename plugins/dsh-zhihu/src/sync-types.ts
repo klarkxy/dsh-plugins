@@ -6,8 +6,7 @@
  *   zhihu-sync/zhihu-validate/reference/config.md     — 话题/目录/创作声明/评论权限/圈子
  *   zhihu-sync/zhihu-publish/reference/publish-*.md   — 各形态发布字段与交互确认项
  *
- * 字段命名约定：SyncDraft 用 camelCase；进入知乎 OpenAPI 请求体时由
- * sync-content 的 buildZhihuPublishRequest 映射为 snake_case。
+ * 字段命名约定：SyncDraft 使用 camelCase；校验只约束本地草稿，不生成发布请求。
  */
 
 export type SyncContentType = 'article' | 'question' | 'pin'
@@ -69,8 +68,8 @@ export interface SyncLinkCard {
 }
 
 /**
- * 发布阶段可交互确认的设置项。validate 阶段只收集与校验；
- * 是否真正写入请求体由 buildZhihuPublishRequest 按形态决定。
+ * 可按内容形态校验的发布相关设置项。validate 阶段只收集与校验；
+ * 插件不生成或发送发布请求。
  */
 export interface SyncPublishSettings {
   /**

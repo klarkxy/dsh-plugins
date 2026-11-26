@@ -7,6 +7,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { ZHIHU_STUDY_TOOL_NAME } from './contracts.ts'
 import { reportExecuted, ZhihuSearchError, type ZhihuClientOptions } from './zhihu-client.ts'
 import { fetchZhihuSearchData, compileZhihuSortBy } from './search-api.ts'
+import { executeZhihuOpenPlatform } from './open-platform.ts'
 import {
   fetchZhihuGlobalSearchData, executeZhihuKnowledgeSearch,
   type ZhihuGlobalSearchDb, type ZhihuRecallScope,
@@ -14,6 +15,8 @@ import {
 
 export const ZHIHU_STUDY_VERSION = 1
 export const ZHIHU_STUDY_MAX_CALLS = 6
+export const ZHIHU_STUDY_MAX_FOLLOW = 2
+export const ZHIHU_STUDY_FOLLOW_ANSWER_LIMIT = 5
 export const ZHIHU_STUDY_MAX_QUERIES = 4
 export const ZHIHU_STUDY_DEFAULT_WINDOW_DAYS = 30
 export const ZHIHU_STUDY_MAX_WINDOW_DAYS = 30
@@ -24,6 +27,7 @@ export const ZHIHU_STUDY_MODES = ['deep', 'observation', 'briefing'] as const
 export const ZHIHU_STUDY_SOURCES = ['zhihu', 'web', 'knowledge'] as const
 export type ZhihuStudyMode = (typeof ZHIHU_STUDY_MODES)[number]
 export type ZhihuStudySource = (typeof ZHIHU_STUDY_SOURCES)[number]
+export type ZhihuStudyCallSource = ZhihuStudySource | 'question_answers'
 export type ZhihuStudyStatus = 'complete' | 'partial' | 'insufficient_sources' | 'insufficient_dates' | 'budget_exhausted' | 'failed' | 'empty' | 'cancelled'
 
 /** Calendar days in Asia/Shanghai. The day containing the rolling start is included whole. */
@@ -66,7 +70,7 @@ export const ZHIHU_GLOBAL_AUTHORITY_LEGEND: Record<string, string> = {
 }
 
 export type ZhihuStudyCall = {
-  source: ZhihuStudySource
+  source: ZhihuStudyCallSource
   query: string
   state: 'completed' | 'failed' | 'skipped'
   searchDb?: ZhihuGlobalSearchDb
@@ -79,7 +83,7 @@ export type ZhihuStudyCall = {
 }
 
 export type ZhihuStudyFailure = {
-  source: ZhihuStudySource
+  source: ZhihuStudyCallSource
   query: string
   code: string
   message: string
@@ -88,12 +92,12 @@ export type ZhihuStudyFailure = {
 
 export type ZhihuStudyEvidence = {
   id: string
-  sources: ZhihuStudySource[]
+  sources: ZhihuStudyCallSource[]
   queries: string[]
   title: string
   url: string
   excerpts: string[]
-  excerptKind: 'snippet'
+  excerptKind: 'snippet' | 'answer_summary'
   fullText: false
   author?: string
   authorConflict?: boolean
@@ -116,6 +120,7 @@ export type ZhihuStudyEvidence = {
   novelty: 'after_since' | 'in_window_before_since' | 'not_compared' | 'unknown'
   passedPublishFilter: boolean
   sourceConflict: boolean
+  followedQuestion?: string
 }
 
 export type ZhihuStudyResult = {
@@ -139,7 +144,7 @@ export type ZhihuStudyResult = {
   limitations: string[]
   evidence: ZhihuStudyEvidence[]
   groups?: { publicationOrUpdate: string[]; outsideWindow: string[]; undated: string[] }
-  sample: { zhihu: number; web: number; knowledge: number; notPopulation: true }
+  sample: { zhihu: number; web: number; knowledge: number; questionAnswers: number; notPopulation: true }
   window?: ZhihuStudyWindow
   hasMore: boolean
   figures: { extracted: []; policy: string }
@@ -156,7 +161,7 @@ export type ZhihuStudyResult = {
 }
 
 type Hit = {
-  source: ZhihuStudySource
+  source: ZhihuStudyCallSource
   query: string
   title: string
   url: string
@@ -172,6 +177,7 @@ type Hit = {
   editTimeUnparseable?: boolean
   createTime?: number
   passedPublishFilter: boolean
+  followedQuestion?: string
 }
 
 const FIGURE_POLICY = '检索阶段仅原样保留文本摘录；报告中的交互测算数值由宿主逐项标注摘录出处（source）、换算（conversion）或明确假设（assumption）。'
@@ -284,6 +290,29 @@ function hitFromSearch(raw: Record<string, unknown>, source: ZhihuStudySource, q
   }
 }
 
+function followQuestionUrl(value: string): string | undefined {
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:' || url.hostname !== 'www.zhihu.com' || url.username || url.password) return undefined
+    const match = /^\/question\/(\d+)(?:\/answer\/\d+)?\/?$/.exec(url.pathname)
+    return match ? `https://www.zhihu.com/question/${match[1]}` : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function hitFromAnswer(raw: Record<string, unknown>, questionUrl: string, parentTitle: string): Hit {
+  return {
+    source: 'question_answers', query: questionUrl, passedPublishFilter: false, followedQuestion: questionUrl,
+    title: parentTitle ? `${parentTitle} · 回答摘要` : '回答摘要',
+    url: safeHttpUrl(raw.Url),
+    excerpt: plainExcerpt(raw.Summary ?? raw.ContentText),
+    ...(textField(raw.AuthorName) ? { author: textField(raw.AuthorName) } : {}),
+    ...(integer(raw.VoteUpCount) !== undefined ? { votes: integer(raw.VoteUpCount) } : {}),
+    ...(integer(raw.CommentCount) !== undefined ? { comments: integer(raw.CommentCount) } : {}),
+  }
+}
+
 type ParsedRequest = {
   mode: ZhihuStudyMode
   question: string
@@ -291,6 +320,7 @@ type ParsedRequest = {
   querySource: 'host_queries' | 'question_only'
   sources: ZhihuStudySource[]
   recallScopes: ZhihuRecallScope[]
+  followQuestions: boolean
   budget: number
   budgetRequested: number | null
   windowDays: number
@@ -338,6 +368,9 @@ function parseRequest(input: unknown, now: number): ParsedRequest {
       if (!recallScopes.includes(scope)) recallScopes.push(scope)
     }
   }
+  if (body.followQuestions !== undefined && typeof body.followQuestions !== 'boolean') invalid('followQuestions 必须是布尔值。')
+  if (mode === 'briefing' && body.followQuestions === true) invalid('followQuestions 不适用于 briefing。')
+  const followQuestions = body.followQuestions === undefined ? mode === 'observation' : body.followQuestions
   const plannedCalls = queries.length * sources.length
   let budgetRequested: number | null = null
   if (body.maxCalls !== undefined) {
@@ -368,8 +401,8 @@ function parseRequest(input: unknown, now: number): ParsedRequest {
     invalid('研究工具不能接收付费开关或凭据。')
   }
   return {
-    mode, question, queries, querySource, sources, recallScopes,
-    budget: budgetRequested ?? plannedCalls,
+    mode, question, queries, querySource, sources, recallScopes, followQuestions,
+    budget: budgetRequested ?? Math.min(ZHIHU_STUDY_MAX_CALLS, plannedCalls + (followQuestions ? ZHIHU_STUDY_MAX_FOLLOW : 0)),
     budgetRequested, windowDays, ...(since !== undefined ? { since } : {}),
   }
 }
@@ -386,7 +419,7 @@ function timeState(seconds: number | undefined, unparseable: boolean, nowSeconds
   return 'present'
 }
 
-function meaningOf(sources: ZhihuStudySource[]): ZhihuStudyEvidence['editTimeMeaning'] {
+function meaningOf(sources: ZhihuStudyCallSource[]): ZhihuStudyEvidence['editTimeMeaning'] {
   const timed = sources.filter(source => source === 'zhihu' || source === 'web')
   if (timed.length === 0) return 'unavailable'
   if (timed.every(source => source === 'zhihu')) return 'publish_or_update'
@@ -438,7 +471,7 @@ function mergeHits(hits: Hit[], now: number, window: ZhihuStudyWindow | undefine
       title: first.title,
       url: first.url,
       excerpts,
-      excerptKind: 'snippet',
+      excerptKind: group.hits.every(hit => hit.source === 'question_answers') ? 'answer_summary' : 'snippet',
       fullText: false,
       ...(authors.length === 1 ? { author: authors[0] } : {}),
       ...(authors.length > 1 ? { authorConflict: true } : {}),
@@ -461,6 +494,7 @@ function mergeHits(hits: Hit[], now: number, window: ZhihuStudyWindow | undefine
       novelty,
       passedPublishFilter: group.hits.some(hit => hit.passedPublishFilter),
       sourceConflict: excerpts.length > 1,
+      ...(first.followedQuestion ? { followedQuestion: first.followedQuestion } : {}),
     }
   })
 }
@@ -477,7 +511,7 @@ function statusOf(input: {
   if (input.cancelled) return 'cancelled'
   if (input.completed === 0 && input.failures.length > 0) return 'failed'
   if (input.budgetExhausted) return 'budget_exhausted'
-  const zhihuCount = input.evidence.filter(item => item.sources.includes('zhihu')).length
+  const zhihuCount = input.evidence.filter(item => item.sources.includes('zhihu') || item.sources.includes('question_answers')).length
   if (input.mode === 'observation' && zhihuCount < 2) return input.evidence.length === 0 && input.failures.length === 0 ? 'empty' : 'insufficient_sources'
   if (input.briefing) {
     const dated = input.evidence.filter(item => item.inWindow === true && item.editTimeStatus === 'present')
@@ -571,16 +605,67 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
       }
     }
   }
+  let followPlanned = 0
+  let followQuestionFound = false
+  const followNotes: string[] = []
+  if (request.followQuestions && !cancelled) {
+    const questions: Array<{ url: string; parentTitle: string }> = []
+    const seenQuestions = new Set<string>()
+    for (const hit of hits) {
+      const questionUrl = followQuestionUrl(hit.url)
+      if (!questionUrl || seenQuestions.has(questionUrl)) continue
+      seenQuestions.add(questionUrl)
+      questions.push({ url: questionUrl, parentTitle: hit.title })
+    }
+    followQuestionFound = questions.length > 0
+    const used = calls.filter(call => call.state !== 'skipped').length
+    const remaining = Math.max(0, request.budget - used)
+    const followCapacity = Math.min(ZHIHU_STUDY_MAX_FOLLOW, remaining)
+    let stopFollowing = false
+    for (let index = 0; index < questions.length; index += 1) {
+      const question = questions[index]!
+      followPlanned += 1
+      if (index >= followCapacity || stopFollowing || cancelled) {
+        calls.push({ source: 'question_answers', query: question.url, state: 'skipped' })
+        continue
+      }
+      try {
+        if (options.signal?.aborted) throw new ZhihuSearchError('CANCELLED', '请求已取消')
+        const result = await executeZhihuOpenPlatform('question.answers', {
+          questionUrl: question.url, offset: 0, limit: ZHIHU_STUDY_FOLLOW_ANSWER_LIMIT,
+        }, options)
+        const found = itemsOf(result.data).map(item => hitFromAnswer(item, question.url, question.parentTitle))
+        hits.push(...found)
+        calls.push({ source: 'question_answers', query: question.url, state: 'completed', resultCount: found.length })
+        const paging = result.data.Paging
+        if (!paging || typeof paging !== 'object' || Array.isArray(paging) || (paging as { IsEnd?: unknown }).IsEnd !== true) {
+          followNotes.push(`${question.url} 的回答摘要未取完；工具不自动翻页，摘要不是回答全文。`)
+        }
+      } catch (error) {
+        const aborted = options.signal?.aborted || (error instanceof ZhihuSearchError && error.code === 'CANCELLED')
+        const code = error instanceof ZhihuSearchError ? error.code : 'BAD_RESPONSE'
+        const message = error instanceof Error ? error.message : '知乎问题回答摘要读取失败'
+        calls.push({ source: 'question_answers', query: question.url, state: 'failed', code })
+        failures.push({ source: 'question_answers', query: question.url, code, message, retried: false })
+        if (aborted) cancelled = true
+        stopFollowing = true
+      }
+    }
+    if (questions.length > followCapacity && remaining < ZHIHU_STUDY_MAX_FOLLOW) budgetExhausted = true
+  }
   const evidence = mergeHits(hits, now, studyWindow, request.since)
   const completed = calls.filter(call => call.state === 'completed').length
   const status = statusOf({ mode: request.mode, cancelled, budgetExhausted, failures, completed, evidence, briefing: request.mode === 'briefing' })
+  const followAttempted = calls.some(call => call.source === 'question_answers' && call.state !== 'skipped')
   const limitations = [
     '当前返回片段摘录；如需完整上下文请打开原始链接核对。',
     '结果仅代表本次检索命中的有限样本。',
-    '原始证据仅来自站内、全网及可选知识库检索结果。',
+    followAttempted ? '原始证据仅来自站内、全网、可选知识库检索结果及问题回答摘要。' : '原始证据仅来自站内、全网及可选知识库检索结果。',
     'EditTime 仅记录页面发布或编辑时间；已确认事件日期须以摘录正文为准。',
     '全网权威等级 1 到 4 附官方四档说明；知乎站内等级保留上游原值。',
+    ...followNotes,
   ]
+  if (request.followQuestions && !cancelled && !followQuestionFound) limitations.push('结果里没有可识别的知乎问题链接，未读取回答摘要。')
   if (request.querySource === 'question_only') limitations.push('本次仅直接检索原问题（未拆解多角度子问题）。')
   if (request.querySource === 'question_only' && request.question.length > 200) limitations.push('原问题超过 200 字，单次检索词截取前 200 字。')
   if (request.mode === 'briefing') limitations.push('全网 publish_time 与知乎 EditTime 均按条目发布或编辑时间筛选；已确认事件时间线仅收录摘录中写明日期的条目。')
@@ -592,6 +677,7 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
   const zhihu = evidence.filter(item => item.sources.includes('zhihu')).length
   const web = evidence.filter(item => item.sources.includes('web')).length
   const knowledge = evidence.filter(item => item.sources.includes('knowledge')).length
+  const questionAnswers = evidence.filter(item => item.sources.includes('question_answers')).length
   const groups = request.mode === 'briefing' ? {
     publicationOrUpdate: evidence.filter(item => item.inWindow === true && item.editTimeStatus === 'present').map(item => item.id),
     outsideWindow: evidence.filter(item => item.editTimeStatus === 'present' && item.inWindow === false).map(item => item.id),
@@ -608,14 +694,14 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
     stop: {
       reason: cancelled ? 'cancelled' : budgetExhausted ? 'budget_exhausted' : 'plan_complete',
       callsUsed: calls.filter(call => call.state !== 'skipped').length,
-      callsPlanned: ordered.length,
+      callsPlanned: ordered.length + followPlanned,
       budgetApplied: request.budget,
       budgetRequested: request.budgetRequested,
     },
     coverage: { decomposition: request.querySource, multiAngle: request.querySource === 'host_queries' && request.queries.length > 1 },
     calls, failures, limitations, evidence,
     ...(groups ? { groups } : {}),
-    sample: { zhihu, web, knowledge, notPopulation: true },
+    sample: { zhihu, web, knowledge, questionAnswers, notPopulation: true },
     ...(studyWindow ? { window: studyWindow } : {}),
     hasMore,
     figures: { extracted: [], policy: FIGURE_POLICY },
@@ -653,7 +739,7 @@ export function renderZhihuStudy(result: ZhihuStudyResult): string {
     lines.push('证据摘录：')
     for (const item of result.evidence) {
       lines.push(`- ${item.id} ${item.title}${item.url ? ` ${item.url}` : ''}`)
-      lines.push(`  来源：${item.sources.join(', ')}；内容形式：片段摘录；事件时间：待核实`)
+      lines.push(`  来源：${item.sources.join(', ')}；内容形式：${item.excerptKind === 'answer_summary' ? '回答摘要' : '片段摘录'}；事件时间：待核实`)
       if (item.authority) lines.push(`  权威原值：${item.authority}${item.authorityMeaning ? `（全网含义：${item.authorityMeaning}）` : '（保留上游原值）'}`)
       if (item.rankingScore !== undefined) lines.push(`  排序分：${item.rankingScore}（上游返回原值）`)
       if (item.editTime) lines.push(`  条目时间：${item.editTime}，含义 ${item.editTimeMeaning}${item.inWindow === null ? '' : `，窗口内 ${item.inWindow}`}`)
@@ -691,6 +777,7 @@ export function createZhihuStudyTool(options: ZhihuClientOptions & { onExecuted?
       maxCalls: { type: 'integer', description: `单次调用内的请求预算（1 到 ${ZHIHU_STUDY_MAX_CALLS}）；省略时按本次计划数执行且在 ${ZHIHU_STUDY_MAX_CALLS} 次内完成。` },
       windowDays: { type: 'integer', description: `仅适用于 briefing；1 到 ${ZHIHU_STUDY_MAX_WINDOW_DAYS} 天，默认 ${ZHIHU_STUDY_DEFAULT_WINDOW_DAYS}。` },
       since: { type: 'string', description: '仅适用于 briefing；可选 ISO 时间，用于标记窗口内新增条目。' },
+      followQuestions: { type: 'boolean', description: `observation 默认 true：检索后最多读取 2 个命中问题下的回答摘要；deep 默认 false；briefing 不适用。` },
     },
     output: {
       schema: { type: 'object', additionalProperties: true, properties: {} },
