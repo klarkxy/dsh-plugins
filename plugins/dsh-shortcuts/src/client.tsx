@@ -1,4 +1,4 @@
-import { Service, type Context } from '@deepseek-ai/cordis'
+import { Service, symbols, type Context } from '@deepseek-ai/cordis'
 import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import { installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
 import { IconKeyboardSettings, registerSettingsSectionIcon } from '@klarkxy/dsh-plugin-kit/client-utils'
@@ -38,21 +38,22 @@ export class CommandPaletteService extends Service {
   constructor(ctx: Context, private readonly model: CommandPaletteModel, private readonly begin: (context: ShortcutContext) => void = context => model.open(context)) {
     super(ctx, 'commandPalette')
     this.state = model.state
+    ctx.effect(() => () => model.dispose())
   }
   register(command: CommandPaletteCommand): () => void {
-    const caller = this[Context.current]
+    // `symbols.caller` resolves the consuming plugin's context through the
+    // service proxy, so each registration unloads with its own caller fiber.
+    const caller = (this as unknown as Record<symbol, Context | undefined>)[symbols.caller as symbol]
     const unregister = this.model.register(command)
     caller?.effect(() => unregister)
     return unregister
   }
+  isRegistered(id: ShortcutCommandId): boolean { return this.model.isRegistered(id) }
   open(context?: ShortcutContext | undefined): void { this.begin(context ?? captureContext(document)) }
   close(): void { this.model.close() }
   execute(id: ShortcutCommandId): Promise<boolean> { return this.model.execute(id) }
   currentContext(): ShortcutContext | null { return this.model.currentContext() }
-}
-
-declare module '@deepseek-ai/cordis' {
-  interface Context { commandPalette: CommandPaletteService }
+  clearError(): void { this.model.clearError() }
 }
 
 type Source<T> = { getSnapshot(): T; subscribe(listener: () => void): () => void }

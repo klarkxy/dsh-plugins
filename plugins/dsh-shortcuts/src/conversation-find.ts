@@ -1066,7 +1066,9 @@ export function createHistoryCache(maxBytes = MAX_HISTORY_CACHE_BYTES) {
         p.compactHitsValidForQuery = true
       }
       sum -= p.extracted.byteSize
-      p.extracted = null
+      // The filter narrowed extracted to non-null for the byte accounting
+      // above; resetting it needs the un-narrowed record type.
+      ;(p as CachedHistoryPage).extracted = null
       p.evicted = true
     }
   }

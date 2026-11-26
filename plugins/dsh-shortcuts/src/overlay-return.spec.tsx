@@ -31,6 +31,7 @@ function seat(injected: any) {
     useCatalog: use(injected.hooks.catalog), useFixedCatalog: use(injected.hooks.fixedCatalog),
     useConfig: use(injected.hooks.config), useTrigger: use(injected.hooks.trigger),
     useFixedBindings: use(injected.hooks.fixedBindings), useDispatchStatus: use(injected.hooks.dispatchStatus),
+    useWebCtrlF: use(injected.hooks.webCtrlF), useFindController: use(injected.hooks.findController),
   }
 }
 

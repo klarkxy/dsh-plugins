@@ -192,8 +192,17 @@ describe('conversation-find extraction, scopes, and 8 MiB history cache', () => 
     expect(range?.toString()).toBe('report.html')
 
     expect(clampOverlayPosition({ left: -40, top: 900 }, { width: 420, height: 48 }, { width: 1000, height: 700 })).toEqual({ left: 8, top: 644 })
-    writeSavedOverlayPosition({ left: 180, top: 90 })
-    expect(readSavedOverlayPosition()).toEqual({ left: 180, top: 90 })
+    // Use an explicit memory store: newer Node versions expose their own
+    // global window/localStorage in the jsdom environment without a backing
+    // file, so the ambient browser store cannot be relied on in tests.
+    const memoryStorage = new Map<string, string>()
+    const storage = {
+      getItem: (key: string) => memoryStorage.get(key) ?? null,
+      setItem: (key: string, value: string) => { memoryStorage.set(key, value) },
+      removeItem: (key: string) => { memoryStorage.delete(key) },
+    } as unknown as Storage
+    writeSavedOverlayPosition({ left: 180, top: 90 }, storage)
+    expect(readSavedOverlayPosition(storage)).toEqual({ left: 180, top: 90 })
 
     document.body.innerHTML = `<button id="trig">Find</button><div data-conversation-session="s1"><div data-chat-flow="true"><div data-chat-node-key="${conversationContextKey('input-message', 'm0')}">hello world</div></div></div><div id="mount"></div>`
     const trigger = document.getElementById('trig')!
