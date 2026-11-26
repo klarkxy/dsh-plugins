@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { assertObjectJsonSchema, projectToolSchema, validateJsonSchemaValue, type ToolDefinition } from '@deepseek-ai/dsh-tools'
-import { createRpc, createShowViewTool, handoffPendingSession, resolveSessionId, apply } from './index.ts'
+import { createAskViewTool, createRpc, createShowViewTool, handoffPendingSession, resolveSessionId, apply, type PendingWaiter } from './index.ts'
 import { DEEP_VIEW_SKILL, DEEP_VIEW_SKILL_DESCRIPTION } from './skill.ts'
 
 function hostFixture(options: { flush?: () => Promise<boolean>; followup?: (message: unknown) => void } = {}) {
@@ -101,7 +101,7 @@ describe('show_view Host boundary', () => {
     const rpc = createRpc(host, pending)
     expect(await rpc('reply', { sessionId: 'session-test', viewId: 'revisions', action: 'pick', values: { selected: ['Two'] }, revision: 1 }, new AbortController().signal)).toMatchObject({ ok: false, error: { code: 'stale' } })
     expect(await rpc('reply', { sessionId: 'session-test', viewId: 'revisions', action: 'pick', values: { selected: ['Two'] }, revision: 2 }, new AbortController().signal)).toMatchObject({ ok: true })
-    expect(messages[0].source.deepView.answer).toMatchObject({ revision: 2 })
+    expect((messages[0] as { source: { deepView: { answer: unknown } } }).source.deepView.answer).toMatchObject({ revision: 2 })
     expect(await tool.execute({ view_id: 'revisions', view: secondView, base_revision: 2 }, { ...exec, callId: 'r3' })).toMatchObject({ status: 'stale' })
   })
   it('rejects changing answer controls during a revision', async () => {
@@ -226,7 +226,7 @@ describe('show_view Host boundary', () => {
     expect(pending.has('session-test')).toBe(false)
   })
   it('reopens the card when appending the user message itself fails', async () => {
-    const { host, messages } = hostFixture({ followup: () => { throw new Error('session closed') } })
+    const { host } = hostFixture({ followup: () => { throw new Error('session closed') } })
     const record = { id: 'view-fixed', sessionId: 'session-test', title: '', view: interactiveView }
     const pending = new Map([['session-test', record]])
     const rpc = createRpc(host, pending)
@@ -274,13 +274,13 @@ describe('final-reply handoff', () => {
     }
     const pending = new Map([['seg-1', { id: 'view-1', sessionId: 'seg-1', callId: 'call-1', title: '确认方案', view: interactiveView }]])
     const redirects = new Map<string, string>()
-    expect(handoffPendingSession(pending, redirects, 'seg-1', 'seg-2')).toBe(true)
-    expect(handoffPendingSession(pending, redirects, 'seg-2', 'seg-3')).toBe(true)
+    expect(handoffPendingSession(pending as never, redirects, 'seg-1', 'seg-2')).toBe(true)
+    expect(handoffPendingSession(pending as never, redirects, 'seg-2', 'seg-3')).toBe(true)
     expect(resolveSessionId(redirects, 'seg-1')).toBe('seg-3')
     expect(pending.has('seg-1')).toBe(false)
     expect(pending.get('seg-3')).toMatchObject({ id: 'view-1', sessionId: 'seg-3', callId: 'call-1' })
 
-    const rpc = createRpc(host as never, pending, redirects)
+    const rpc = createRpc(host as never, pending as never, redirects)
     expect(await rpc('pending', { sessionId: 'seg-3', callId: 'call-1' }, new AbortController().signal))
       .toMatchObject({ ok: true, value: { id: 'view-1', sessionId: 'seg-3' } })
     // Even an in-flight reply carrying the pre-rollover sessionId resolves cleanly to seg-3.
@@ -292,5 +292,102 @@ describe('final-reply handoff', () => {
       source: { kind: 'user', deepView: { answer: { id: 'view-1', action: 'pick', values: { selected: ['Two'] } } } },
     })
     expect(pending.size).toBe(0)
+  })
+})
+
+describe('ask_view synchronous & deferrable Host boundary', () => {
+  it('exports a valid model-facing schema and rejects display-only or non-root calls', async () => {
+    const { host, agent } = hostFixture()
+    const tool = createAskViewTool(host, new Map()) as unknown as ToolDefinition & { execute(args: unknown, exec: unknown): Promise<Record<string, unknown>> }
+    const { parameters } = JSON.parse(JSON.stringify(projectToolSchema(tool, true)))
+    assertObjectJsonSchema(parameters)
+    expect(parameters.required).toEqual(['view'])
+    expect(await tool.execute({ view: { type: 'metric', label: 'M', value: 1 } }, { agent, concludeTurn() {} })).toMatchObject({ status: 'invalid', awaitReply: false })
+    expect(await tool.execute({ view: interactiveView }, { agent: undefined, concludeTurn() {} })).toMatchObject({ status: 'invalid', awaitReply: false })
+  })
+
+  it('suspends until reply RPC and resolves in-turn without followup messages, persisting meta.answer', async () => {
+    const { host, agent, messages } = hostFixture()
+    const pending = new Map()
+    const waiters = new Map<string, PendingWaiter>()
+    const latest = new Map()
+    const tool = createAskViewTool(host, pending, waiters, () => 'ask-sync', undefined, latest) as {
+      execute(args: unknown, exec: unknown): Promise<Record<string, unknown>>
+      output: { presentationMeta(args: unknown, value: unknown): unknown }
+    }
+    const rpc = createRpc(host, pending, new Map(), undefined, waiters, latest)
+    const execution = tool.execute({ title: '确认模块', view: interactiveView }, { agent, callId: 'call-ask', concludeTurn() {} })
+    expect(pending.get('session-test')).toMatchObject({ id: 'ask-sync', blocking: true })
+    expect(waiters.has('ask-sync')).toBe(true)
+
+    const replyRes = await rpc('reply', {
+      sessionId: 'session-test', viewId: 'ask-sync', revision: 1, action: 'pick', values: { selected: ['Two'] },
+    }, new AbortController().signal)
+    expect(replyRes).toMatchObject({ ok: true, value: { answered: true, resumed: true } })
+    expect(messages).toHaveLength(0)
+
+    const result = await execution
+    expect(result).toMatchObject({
+      owner: 'dsh-deep-view',
+      status: 'answered',
+      viewId: 'ask-sync',
+      awaitReply: true,
+      action: 'pick',
+      values: { selected: ['Two'] },
+      answer: '确认模块\nTwo',
+    })
+    expect(tool.output.presentationMeta({}, result)).toMatchObject({
+      owner: 'dsh-deep-view',
+      viewId: 'ask-sync',
+      awaitReply: true,
+      answer: { id: 'ask-sync', action: 'pick', values: { selected: ['Two'] }, revision: 1 },
+    })
+  })
+
+  it('downgrades blocking ask_view to async pending on defer RPC and later delivers followup on reply', async () => {
+    const { host, agent, messages } = hostFixture()
+    const pending = new Map()
+    const waiters = new Map<string, PendingWaiter>()
+    const latest = new Map()
+    const tool = createAskViewTool(host, pending, waiters, () => 'ask-defer', undefined, latest) as { execute(args: unknown, exec: unknown): Promise<Record<string, unknown>> }
+    const rpc = createRpc(host, pending, new Map(), undefined, waiters, latest)
+    const execution = tool.execute({ title: '稍后决定', view: interactiveView }, { agent, callId: 'call-defer', concludeTurn() {} })
+
+    const deferRes = await rpc('defer', { sessionId: 'session-test', viewId: 'ask-defer' }, new AbortController().signal)
+    expect(deferRes).toMatchObject({ ok: true, value: { deferred: true } })
+    const resolved = await execution
+    expect(resolved).toMatchObject({ status: 'pending', viewId: 'ask-defer', awaitReply: true })
+    expect(pending.get('session-test')).toMatchObject({ id: 'ask-defer', blocking: false })
+
+    expect(await rpc('reply', {
+      sessionId: 'session-test', viewId: 'ask-defer', revision: 1, action: 'pick', values: { selected: ['One'] },
+    }, new AbortController().signal)).toMatchObject({ ok: true, value: { answered: true } })
+    expect(messages).toHaveLength(1)
+  })
+
+  it('cleans up waiters on dismiss, abort signal and optional replaceNativeAskUser config', async () => {
+    const { host, agent } = hostFixture()
+    const pending = new Map()
+    const waiters = new Map<string, PendingWaiter>()
+    const tool = createAskViewTool(host, pending, waiters, () => 'ask-cancel') as { execute(args: unknown, exec: unknown): Promise<Record<string, unknown>> }
+    const controller = new AbortController()
+    const abortedRun = tool.execute({ view: interactiveView }, { agent, signal: controller.signal, concludeTurn() {} })
+    controller.abort()
+    expect(await abortedRun).toMatchObject({ status: 'cancelled', awaitReply: false })
+    expect(waiters.size).toBe(0)
+    expect(pending.size).toBe(0)
+
+    const restricted: unknown[] = []
+    const disposers: Array<() => void> = []
+    const ctx = host as never as Record<string, unknown>
+    ctx.effect = (setup: () => () => void) => { disposers.push(setup()) }
+    ctx.provide = () => {}
+    ctx.on = () => () => {}
+    ;(host as never as { skills: { register(): () => void } }).skills = { register: () => () => {} }
+    ;(host as never as { webServer: { register(): () => void } }).webServer = { register: () => () => {} }
+    ;(host as never as { tools: { restrict(rule: unknown): () => void } }).tools.restrict = rule => { restricted.push(rule); return () => {} }
+    await apply(ctx as never, { replaceNativeAskUser: true })
+    expect(restricted).toEqual([{ deny: ['ask_user_question'] }])
+    for (const d of disposers) d()
   })
 })

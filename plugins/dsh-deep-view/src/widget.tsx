@@ -3,7 +3,7 @@
 // remain live; only a supplied onSubmit callback may deliver an answer.
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ComponentType } from 'react'
-import { asText, choiceValue, hasInputs, inputDefault, mathDefaults, resolve, viewInputs, viewScope } from './core/index.js'
+import { asText, choiceValue, hasInputs, inputDefault, inputsSummary, mathDefaults, resolve, viewInputs, viewScope } from './core/index.js'
 import { isSourceItem, isStepItem, type ViewNode } from './contracts.ts'
 import { WidgetChart, type ChartHandle } from './chart.tsx'
 import { CheckIcon, CopyIcon, DotsIcon, InfoIcon, LinkIcon, Segmented, TableIcon, english, keyLetter, type ViewT } from './ui.tsx'
@@ -89,44 +89,123 @@ function ActionButton({ primary = false, className = '', children, host: Host, .
 }
 function FallbackMarkdown({ text }: MarkdownProps) { return <span>{text}</span> }
 
+function findControl(view: ViewNode, id: string): ViewNode | undefined {
+  if (['options', 'confirm', 'form', 'submit'].includes(view.type) && view.id === id) return view
+  for (const child of view.children ?? []) {
+    const found = findControl(child, id)
+    if (found) return found
+  }
+  return undefined
+}
+
+export function settledCardSummary(title: string, view: ViewNode, answer: Answer, t: ViewT): string {
+  const node = findControl(view, answer.action)
+  const values = answer.values
+  let controlPart = ''
+  if (Array.isArray(values.selected)) {
+    controlPart = values.selected.map(String).join(', ')
+  } else if (typeof values.confirmed === 'boolean') {
+    controlPart = values.confirmed ? (node?.confirmLabel ?? t('Confirm')) : (node?.cancelLabel ?? t('Cancel'))
+  } else if (values.canceled === true) {
+    controlPart = node?.cancelLabel ?? t('Cancel')
+  } else if (values.fields !== null && typeof values.fields === 'object' && !Array.isArray(values.fields)) {
+    const fieldMap = values.fields as Record<string, unknown>
+    const pairs = fieldsOf(node ?? { type: 'form' }).map(field => {
+      const val = String(fieldMap[field.id] ?? '').replace(/\s+/g, ' ').trim()
+      return val !== '' ? `${field.label}: ${val}` : ''
+    }).filter(Boolean).join(' · ')
+    const submitLabel = node?.submitLabel ?? t('Submit')
+    controlPart = pairs !== '' ? `${submitLabel} · ${pairs}` : submitLabel
+  } else if (node?.type === 'submit') {
+    controlPart = node.label || t('Send')
+  }
+  const inputPart = values.inputs !== null && typeof values.inputs === 'object' && !Array.isArray(values.inputs)
+    ? inputsSummary(view, values.inputs)
+    : ''
+  return [title.trim(), controlPart, inputPart].filter(Boolean).join(' · ') || t('Your answer')
+}
+
 function OptionsInput({ node, ctx, t }: { node: ViewNode; ctx: Ctx; t: ViewT }) {
   const [picked, setPicked] = useState<string[]>([])
+  const [customText, setCustomText] = useState('')
+  const [customSelected, setCustomSelected] = useState(false)
   const options = optionsOf(node)
   const multi = node.multi === true
-  // A card that can fill a draft needs a pick first, so one-tap submit becomes
-  // select-then-act only while filling is available; plain cards keep the
-  // instant single-tap answer.
-  const staged = multi || ctx.onFillDraft !== undefined
+  const allowCustom = node.allowCustom === true
+  // A card that can fill a draft or accept custom text needs a pick first, so
+  // one-tap submit becomes select-then-act; plain cards keep instant single-tap.
+  const staged = multi || ctx.onFillDraft !== undefined || allowCustom
   const choose = (label: string) => {
     if (!ctx.editable) return
     if (multi) setPicked(current => current.includes(label) ? current.filter(item => item !== label) : [...current, label])
-    else if (staged) setPicked([label])
+    else if (staged) { setPicked([label]); setCustomSelected(false) }
     else ctx.onSubmit?.(node.id!, { selected: [label] })
   }
-  const values = () => ({ selected: picked })
+  const customTrimmed = customText.trim()
+  const activeCustom = allowCustom && customSelected && customTrimmed !== '' ? [customTrimmed] : []
+  const effectivePicked = multi
+    ? [...picked, ...activeCustom.filter(item => !picked.includes(item))]
+    : (activeCustom.length > 0 ? activeCustom : picked)
+  const values = () => ({ selected: effectivePicked })
   const onKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
     const index = event.key.toUpperCase().charCodeAt(0) - 65
     if (index >= 0 && index < options.length && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); choose(options[index].label) }
   }
+  const customPlaceholder = node.customPlaceholder ?? t('Type your own…')
   return <Fragment>
-    <div className="dvui-options" role="group" aria-label={t('Options')} onKeyDown={onKey}>{options.map((option, index) => {
-      const selected = staged && picked.includes(option.label)
-      return <button key={option.label} type="button" className="dvui-option" disabled={!ctx.editable} aria-pressed={staged ? selected : undefined} aria-keyshortcuts={keyLetter(index).toLowerCase()} onClick={() => choose(option.label)}>
-        <span className="dvui-key" aria-hidden="true">{keyLetter(index)}</span>
-        <span className="dvui-option-body"><span className="dvui-option-label">{option.label}</span>{option.description ? <span className="dvui-option-desc">{option.description}</span> : null}</span>
-        {selected ? <span className="dvui-check"><CheckIcon /></span> : null}
-      </button>
-    })}</div>
+    <div className="dvui-options" role="group" aria-label={t('Options')} onKeyDown={onKey}>
+      {options.map((option, index) => {
+        const selected = staged && (multi ? picked.includes(option.label) : !customSelected && picked.includes(option.label))
+        return <button key={option.label} type="button" className="dvui-option" disabled={!ctx.editable} aria-pressed={staged ? selected : undefined} aria-keyshortcuts={keyLetter(index).toLowerCase()} onClick={() => choose(option.label)}>
+          <span className="dvui-key" aria-hidden="true">{keyLetter(index)}</span>
+          <span className="dvui-option-body"><span className="dvui-option-label">{option.label}</span>{option.description ? <span className="dvui-option-desc">{option.description}</span> : null}</span>
+          {selected ? <span className="dvui-check"><CheckIcon /></span> : null}
+        </button>
+      })}
+      {allowCustom ? <div className="dvui-option dvui-option-custom" data-selected={activeCustom.length > 0 ? '' : undefined}>
+        <span className="dvui-key" aria-hidden="true">{keyLetter(options.length)}</span>
+        <input
+          type="text"
+          className="dvui-input dvui-custom-input"
+          value={customText}
+          readOnly={!ctx.editable}
+          placeholder={customPlaceholder}
+          aria-label={customPlaceholder}
+          onFocus={() => { if (ctx.editable && customText.trim() !== '') { setCustomSelected(true); if (!multi) setPicked([]) } }}
+          onChange={event => {
+            const raw = event.target.value
+            setCustomText(raw)
+            const hasText = raw.trim() !== ''
+            setCustomSelected(hasText)
+            if (!multi && hasText) setPicked([])
+          }}
+          onKeyDown={event => {
+            if (event.key !== 'Enter' || event.nativeEvent.isComposing || !ctx.editable || effectivePicked.length === 0) return
+            event.preventDefault()
+            const act = ctx.onSubmit ?? ctx.onFillDraft
+            act?.(node.id!, values())
+          }}
+        />
+        {activeCustom.length > 0 ? <span className="dvui-check"><CheckIcon /></span> : null}
+      </div> : null}
+    </div>
     {staged ? <div className="dvui-actions">
-      {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} primary={!directAnswer(ctx)} disabled={ctx.fillLocked || picked.length === 0} onClick={() => ctx.onFillDraft?.(node.id!, values())}>{t('Fill composer')}</ActionButton> : null}
-      {directAnswer(ctx) ? <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked || picked.length === 0} onClick={() => ctx.onSubmit?.(node.id!, values())}>{t('Submit')}</ActionButton> : null}
+      {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} primary={!directAnswer(ctx)} disabled={ctx.fillLocked || effectivePicked.length === 0} onClick={() => ctx.onFillDraft?.(node.id!, values())}>{t('Fill composer')}</ActionButton> : null}
+      {directAnswer(ctx) ? <ActionButton host={ctx.ButtonComponent} primary disabled={ctx.answerLocked || effectivePicked.length === 0} onClick={() => ctx.onSubmit?.(node.id!, values())}>{t('Submit')}</ActionButton> : null}
     </div> : null}
   </Fragment>
 }
 function SettledOptions({ node, answer, t }: { node: ViewNode; answer?: Answer | null; t: ViewT }) {
   const selected = answerValues(answer, node)?.selected
-  const chosen = Array.isArray(selected) ? selected : []
-  return <div className="dvui-options" role="group" aria-label={t('Your answer')}>{optionsOf(node).map(option => <div key={option.label} className="dvui-option" aria-pressed={chosen.includes(option.label) || undefined}><span className="dvui-option-body"><span className="dvui-option-label">{option.label}</span>{option.description ? <span className="dvui-option-desc">{option.description}</span> : null}</span>{chosen.includes(option.label) ? <span className="dvui-check" role="img" aria-label={t('Selected')}><CheckIcon /></span> : null}</div>)}</div>
+  const chosen = Array.isArray(selected) ? selected.map(String) : []
+  const declared = optionsOf(node)
+  const declaredLabels = new Set(declared.map(option => option.label))
+  const customChosen = chosen.filter(label => !declaredLabels.has(label))
+  return <div className="dvui-options" role="group" aria-label={t('Your answer')}>
+    {declared.map(option => <div key={option.label} className="dvui-option" aria-pressed={chosen.includes(option.label) || undefined}><span className="dvui-option-body"><span className="dvui-option-label">{option.label}</span>{option.description ? <span className="dvui-option-desc">{option.description}</span> : null}</span>{chosen.includes(option.label) ? <span className="dvui-check" role="img" aria-label={t('Selected')}><CheckIcon /></span> : null}</div>)}
+    {customChosen.map(label => <div key={`custom-${label}`} className="dvui-option" aria-pressed><span className="dvui-option-body"><span className="dvui-option-label">{label}</span></span><span className="dvui-check" role="img" aria-label={t('Selected')}><CheckIcon /></span></div>)}
+  </div>
 }
 function ConfirmInput({ node, ctx, t }: { node: ViewNode; ctx: Ctx; t: ViewT }) {
   return <div className="dvui-actions">
@@ -178,15 +257,19 @@ function FormInput({ node, ctx, t }: { node: ViewNode; ctx: Ctx; t: ViewT }) {
     </div>
   </form>
 }
-// A settled form keeps a receipt line, not a second frozen copy of the fields.
-// The full values already live in the user message's answer text.
+// A settled form keeps a receipt line and read-only field values (when expanded) without editable inputs.
 function SettledForm({ node, answer, t }: { node: ViewNode; answer?: Answer | null; t: ViewT }) {
   const sent = answerValues(answer, node)
   if (sent === undefined) return <div className="dvui-form">{fieldsOf(node).map(field => <div className="dvui-field" key={field.id}>
     <span className="dvui-field-label">{field.label}</span><span className="dvui-option-desc">{field.value || field.placeholder || ''}</span>
   </div>)}</div>
   const label = sent.canceled === true ? (node.cancelLabel ?? t('Cancel')) : (node.submitLabel ?? t('Submit'))
-  return <div className="dvui-actions"><span className="dvui-badge">{label}</span></div>
+  const fieldMap = sent.canceled !== true && sent.fields !== null && typeof sent.fields === 'object' ? sent.fields as Record<string, unknown> : undefined
+  const recorded = fieldMap ? fieldsOf(node).filter(field => String(fieldMap[field.id] ?? '') !== '') : []
+  return <div className="dvui-form">
+    {recorded.map(field => <div className="dvui-field" key={field.id}><span className="dvui-field-label">{field.label}</span><span className="dvui-option-desc">{String(fieldMap![field.id] ?? '')}</span></div>)}
+    <div className="dvui-actions"><span className="dvui-badge">{label}</span></div>
+  </div>
 }
 function WidgetTable({ node, lookup, Markdown, labels }: { node: ViewNode; lookup: (name: string) => unknown; Markdown: ComponentType<MarkdownProps>; labels: ViewLabels }) {
   const columns = Array.isArray(node.columns) ? node.columns : []
@@ -294,10 +377,113 @@ function NumberInput({ node, ctx }: { node: ViewNode; ctx: Ctx }) {
     ctx.setInput(node.id!, next)
   }} onBlur={() => setDraft(null)} />{node.unit ? <span className="dvui-unit">{node.unit}</span> : null}</span></div>
 }
-function ChoiceInput({ node, ctx }: { node: ViewNode; ctx: Ctx }) {
+function ChoiceInput({ node, ctx, t }: { node: ViewNode; ctx: Ctx; t: ViewT }) {
   const labelId = useId()
   const options = optionsOf(node)
+  const declaredValues = useMemo(() => new Set(options.map(choiceValue)), [options])
   const current = ctx.values[node.id!]
+  const multi = node.multi === true
+  const allowCustom = node.allowCustom === true
+  const customPlaceholder = node.customPlaceholder ?? t('Other…')
+  const initialCustom = multi
+    ? (Array.isArray(current) ? current.find(item => !declaredValues.has(item as never)) : undefined)
+    : (current !== undefined && !declaredValues.has(current as never) ? current : undefined)
+  const [customDraft, setCustomDraft] = useState<string>(() => typeof initialCustom === 'string' ? initialCustom : '')
+
+  if (multi) {
+    const list = Array.isArray(current) ? current : []
+    const committedCustom = list.find(item => !declaredValues.has(item as never))
+    const customChecked = committedCustom !== undefined
+    const toggleDeclared = (val: unknown) => {
+      const next = list.includes(val) ? list.filter(item => item !== val) : [...list, val]
+      ctx.setInput(node.id!, next)
+    }
+    const updateCustom = (raw: string) => {
+      setCustomDraft(raw)
+      const base = list.filter(item => declaredValues.has(item as never))
+      const trimmed = raw.trim()
+      if (trimmed === '') ctx.setInput(node.id!, base)
+      else if (declaredValues.has(trimmed)) ctx.setInput(node.id!, base.includes(trimmed) ? base : [...base, trimmed])
+      else ctx.setInput(node.id!, [...base, trimmed])
+    }
+    return <div className="dvui-input-row">
+      <span className="dvui-input-label" id={labelId}>{node.label}</span>
+      <div className="dvui-checks" role="group" aria-labelledby={labelId}>
+        {options.map(option => {
+          const val = choiceValue(option)
+          const checked = list.includes(val)
+          return <button key={option.label} type="button" role="checkbox" className="dvui-check-option" aria-checked={checked} disabled={ctx.locked} onClick={() => toggleDeclared(val)}>
+            <span className="dvui-check-box" aria-hidden="true">{checked ? <CheckIcon /> : null}</span>
+            <span>{option.label}</span>
+          </button>
+        })}
+        {allowCustom ? <div className="dvui-custom-row">
+          <button
+            type="button"
+            role="checkbox"
+            className="dvui-check-option"
+            aria-checked={customChecked}
+            aria-label={customPlaceholder}
+            disabled={ctx.locked}
+            onClick={() => {
+              const base = list.filter(item => declaredValues.has(item as never))
+              if (customChecked) ctx.setInput(node.id!, base)
+              else if (customDraft.trim() !== '') ctx.setInput(node.id!, [...base, customDraft.trim()])
+            }}
+          >
+            <span className="dvui-check-box" aria-hidden="true">{customChecked ? <CheckIcon /> : null}</span>
+          </button>
+          <input
+            type="text"
+            className="dvui-input dvui-custom-input"
+            value={customDraft}
+            disabled={ctx.locked}
+            placeholder={customPlaceholder}
+            aria-label={customPlaceholder}
+            onChange={event => updateCustom(event.target.value)}
+          />
+        </div> : null}
+      </div>
+    </div>
+  }
+
+  if (allowCustom) {
+    const isCustom = current !== undefined && !declaredValues.has(current as never)
+    return <div className="dvui-input-row">
+      <span className="dvui-input-label" id={labelId}>{node.label}</span>
+      <div className="dvui-radios" role="radiogroup" aria-labelledby={labelId}>
+        {options.map(option => <button key={option.label} type="button" role="radio" className="dvui-radio" aria-checked={choiceValue(option) === current} disabled={ctx.locked} onClick={() => ctx.setInput(node.id!, choiceValue(option))}><span className="dvui-radio-dot" aria-hidden="true" />{option.label}</button>)}
+        <div className="dvui-custom-row">
+          <button
+            type="button"
+            role="radio"
+            className="dvui-radio"
+            aria-checked={isCustom}
+            aria-label={customPlaceholder}
+            disabled={ctx.locked}
+            onClick={() => { if (customDraft.trim() !== '') ctx.setInput(node.id!, customDraft.trim()) }}
+          >
+            <span className="dvui-radio-dot" aria-hidden="true" />
+          </button>
+          <input
+            type="text"
+            className="dvui-input dvui-custom-input"
+            value={customDraft}
+            disabled={ctx.locked}
+            placeholder={customPlaceholder}
+            aria-label={customPlaceholder}
+            onFocus={() => { if (!ctx.locked && customDraft.trim() !== '') ctx.setInput(node.id!, customDraft.trim()) }}
+            onChange={event => {
+              const raw = event.target.value
+              setCustomDraft(raw)
+              if (raw.trim() !== '') ctx.setInput(node.id!, raw.trim())
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  }
+
   const side = options.length <= 5 && options.every(option => [...option.label].length <= 16)
   return <div className="dvui-input-row"><span className="dvui-input-label" id={labelId}>{node.label}</span>{side
     ? <Segmented label={node.label ?? ''} value={options.findIndex(option => choiceValue(option) === current)} className="dvui-choice-seg">{options.map(option => <button key={option.label} type="button" aria-pressed={choiceValue(option) === current} disabled={ctx.locked} onClick={() => ctx.setInput(node.id!, choiceValue(option))}>{option.label}</button>)}</Segmented>
@@ -324,7 +510,7 @@ function WidgetNode({ node, ctx, Markdown, labels, t }: { node: ViewNode; ctx: C
     case 'steps': return <WidgetSteps node={node} lookup={lookup} t={t} />
     case 'slider': return <SliderInput node={node} ctx={ctx} />
     case 'number': return <NumberInput node={node} ctx={ctx} />
-    case 'choice': return <ChoiceInput node={node} ctx={ctx} />
+    case 'choice': return <ChoiceInput node={node} ctx={ctx} t={t} />
     case 'toggle': return <ToggleInput node={node} ctx={ctx} />
     case 'submit': return ctx.settled || ctx.closed ? null : <div className="dvui-actions">
       {ctx.onFillDraft ? <ActionButton host={ctx.ButtonComponent} primary={!directAnswer(ctx)} disabled={ctx.fillLocked} onClick={() => ctx.onFillDraft?.(node.id!, {})}>{directAnswer(ctx) ? t('Fill composer') : node.label || t('Fill composer')}</ActionButton> : null}
@@ -407,13 +593,21 @@ function ViewMenu({ charts, t }: { charts: ChartHandle[]; t: ViewT }) {
 export function WidgetCard({ title = '', view, onSubmit, onFillDraft, onDismiss, busy = false, settled = false, closed = false, embedded = false, answer = null, t = english, labels = { code: { copyLabel: 'Copy', copiedLabel: 'Copied' }, footnotes: 'Footnotes' }, Markdown = FallbackMarkdown, localOnly = false, localNote, ButtonComponent, values, onValuesChange }: WidgetCardProps) {
   const titleId = useId()
   const { charts, registerChart, refreshCharts } = useChartHandles()
+  const collapsible = settled && !closed && answer !== null
+  const [expanded, setExpanded] = useState(false)
+  useEffect(() => { setExpanded(false) }, [answer?.id, answer?.revision])
   const framed = hasType(view, new Set(['slider', 'number', 'choice', 'toggle', 'options', 'confirm', 'form', 'submit', 'math']))
   // Single standalone callouts or source strips already draw their own shell, so
   // they omit a redundant outer card box when untitled.
   const selfFramed = !title && !onDismiss && (view.type === 'callout' || view.type === 'sources')
   const showHead = Boolean(title || onDismiss || charts.length > 0)
   const toolsOnlyHead = !title && !onDismiss && charts.length > 0
-  return <div className={`dvui-view ${framed ? 'dvui-framed' : 'dvui-bare'}${selfFramed ? ' dvui-bare-inline' : ''}${settled ? ' dvui-settled' : ''}${closed ? ' dvui-closed' : ''}${embedded ? ' dvui-embedded' : ''}`} role="group" aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : t('View')} aria-busy={busy || undefined}>
+  return <div className={`dvui-view ${framed ? 'dvui-framed' : 'dvui-bare'}${selfFramed ? ' dvui-bare-inline' : ''}${settled ? ' dvui-settled' : ''}${closed ? ' dvui-closed' : ''}${embedded ? ' dvui-embedded' : ''}${collapsible && !expanded ? ' dvui-collapsed' : ''}`} role="group" aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : t('View')} aria-busy={busy || undefined}>
+    {collapsible && answer ? <button type="button" className="dvui-settled-bar" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
+      <span className="dvui-settled-check" aria-hidden="true"><CheckIcon /></span>
+      <span className="dvui-settled-text">{settledCardSummary(title, view, answer, t)}</span>
+      <span className="dvui-settled-toggle">{expanded ? t('Collapse') : t('Expand')}</span>
+    </button> : null}
     {showHead ? <div className={`dvui-head${toolsOnlyHead ? ' dvui-head-tools-only' : ''}`}>{title ? <p className="dvui-title" id={titleId}>{title}</p> : null}{charts.length > 0 ? <ViewMenu charts={charts} t={t} /> : null}{onDismiss ? <button type="button" className="dvui-dismiss" aria-label={t('Dismiss view')} onClick={onDismiss} disabled={busy}>×</button> : null}</div> : null}
     <div className="dvui-body"><WidgetView view={view} onSubmit={onSubmit} onFillDraft={onFillDraft} settled={settled} closed={closed} answer={answer} busy={busy} ButtonComponent={ButtonComponent} registerChart={registerChart} refreshCharts={refreshCharts} t={t} labels={labels} Markdown={Markdown} values={values} onValuesChange={onValuesChange} /></div>
     {(localOnly || closed) && hasType(view, new Set(['options', 'confirm', 'form', 'submit'])) ? <p className="dvui-local-note" role="note">{localNote ?? t('Local preview only; this card does not send an answer.')}</p> : null}

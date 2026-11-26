@@ -34,6 +34,7 @@ const viewT = (t: UiT): ((key: string, params?: Record<string, unknown>) => stri
     Value: 'value', Series: 'series', View: 'view', Sources: 'sources', Progress: 'progress', 'Your answer': 'yourAnswer',
     'Local preview only; this card does not send an answer.': 'local',
     Options: 'options', Submit: 'submit', Cancel: 'cancel', Confirm: 'confirm', Send: 'send', Selected: 'selected',
+    'Other…': 'otherPlaceholder', 'Type your own…': 'customOptionPlaceholder', Expand: 'expand', Collapse: 'collapse',
     sending: 'sending', filling: 'filling', filled: 'filled', fillFailed: 'fillFailed', fillDraft: 'fillDraft', waitingDock: 'waitingDock', expired: 'expired', dismissFailed: 'dismissFailed', 'Dismiss view': 'dismissView',
     draftConflict: 'draftConflict', replaceDraft: 'replaceDraft', appendDraft: 'appendDraft', 'Fill composer': 'fillDraft', Steps: 'steps',
     'Composing interface…': 'composing', 'Point values': 'pointValues',
@@ -77,7 +78,30 @@ export function readToolCall(props: Pick<ToolViewProps, 'phase' | 'block'>): { p
   if (isRecord(meta) && meta.owner === VIEW_OWNER) {
     const shown = checkShownView(meta.title, meta.view) as ShownView | { error: string }
     if ('error' in shown) return { title: meta.title, view: meta.view, viewReady: true, phase, isError: true }
-    return { presentation: { owner: VIEW_OWNER, ...shown, ...(typeof meta.viewId === 'string' ? { viewId: meta.viewId } : {}), awaitReply: meta.awaitReply === true, ...(typeof meta.revision === 'number' && Number.isSafeInteger(meta.revision) && meta.revision > 0 ? { revision: meta.revision } : {}) }, title: meta.title, view: meta.view, viewReady: true, phase, isError }
+    const persistedAnswer = isRecord(meta.answer) && typeof meta.answer.id === 'string' && typeof meta.answer.action === 'string' && isRecord(meta.answer.values)
+      ? {
+          id: meta.answer.id,
+          action: meta.answer.action,
+          values: meta.answer.values,
+          ...(typeof meta.answer.revision === 'number' ? { revision: meta.answer.revision } : {}),
+        }
+      : undefined
+    return {
+      presentation: {
+        owner: VIEW_OWNER,
+        ...shown,
+        ...(typeof meta.viewId === 'string' ? { viewId: meta.viewId } : {}),
+        awaitReply: meta.awaitReply === true,
+        ...(typeof meta.revision === 'number' && Number.isSafeInteger(meta.revision) && meta.revision > 0 ? { revision: meta.revision } : {}),
+        ...(meta.blocking === true ? { blocking: true } : {}),
+        ...(persistedAnswer ? { answer: persistedAnswer } : {}),
+      },
+      title: meta.title,
+      view: meta.view,
+      viewReady: true,
+      phase,
+      isError,
+    }
   }
   const args = block.args
   const title = argField(args, 'title')
@@ -121,28 +145,49 @@ export function ToolCallView(props: SharedViewProps) {
   const status = useViewStatus(props.store, props.callId)
   const [localAnswer, setAnswer] = useState<Answer | null>(null)
   const [draftChoice, setDraftChoice] = useState<{ action: string; values: Record<string, unknown> } | null>(null)
+  const answerCandidate = props.restoredAnswer ?? read.presentation?.answer
   const restored = useMemo(() => shown
-    ? checkedAnswer(props.restoredAnswer, read.presentation?.viewId, shown.view, shown.revision) : null,
-  [props.restoredAnswer, read.presentation?.viewId, shown])
+    ? checkedAnswer(answerCandidate, read.presentation?.viewId, shown.view, shown.revision) : null,
+  [answerCandidate, read.presentation?.viewId, shown])
   const answer = restored ?? localAnswer
   const sequence = useRef(0)
   const callId = props.callId
+  // Blocking ask_view stays in phase 'start' until answered, so also poll pending
+  // when shown.awaitReply is already known from the validated call arguments.
+  const expectsPending = read.presentation ? read.presentation.awaitReply === true : shown?.awaitReply === true
   useEffect(() => {
     const seq = ++sequence.current
-    if (restored || !read.presentation?.awaitReply || !callId) {
+    if (restored || !expectsPending || !callId) {
       props.store.clearPending(props.sessionId, callId)
       return
     }
-    void props.call('pending', { sessionId: props.sessionId, callId }).then(result => {
-      if (sequence.current !== seq) return
-      const envelope = result as RpcResult<PendingView | null> | undefined
-      if (envelope?.ok) {
-        if (envelope.value && (!envelope.value.callId || envelope.value.callId === callId)) props.store.setPending(envelope.value)
-        else props.store.clearPending(props.sessionId, callId)
-      }
-    }).catch(() => {})
-    return () => { sequence.current += 1 }
-  }, [props.call, props.sessionId, callId, read.presentation?.awaitReply, read.presentation?.viewId, restored, props.store])
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
+    let attempts = 0
+    const check = () => {
+      void props.call('pending', { sessionId: props.sessionId, callId }).then(result => {
+        if (sequence.current !== seq) return
+        const envelope = result as RpcResult<PendingView | null> | undefined
+        if (envelope?.ok) {
+          if (envelope.value && (!envelope.value.callId || envelope.value.callId === callId)) {
+            props.store.setPending(envelope.value)
+          } else if (!read.presentation && read.phase === 'start' && attempts < 5) {
+            attempts += 1
+            retryTimer = setTimeout(check, 100)
+          } else {
+            props.store.clearPending(props.sessionId, callId)
+          }
+        }
+      }).catch(() => {})
+    }
+    check()
+    return () => {
+      sequence.current += 1
+      if (retryTimer !== undefined) clearTimeout(retryTimer)
+    }
+  // Keep object identities out of the deps: every pending RPC returns a fresh
+  // record, so depending on read.presentation re-runs this effect in an
+  // endless publish/render loop. Primitives capture the same semantic change.
+  }, [props.call, props.sessionId, callId, expectsPending, read.presentation?.viewId, read.phase, restored, props.store])
   // Keep one editable owner. The inline occurrence is the durable home after
   // the turn; the composer dock only borrows it while work is still running.
   const standalone = props.surface === 'standalone' || props.surface === undefined
@@ -200,7 +245,7 @@ export function ToolCallView(props: SharedViewProps) {
       createClientPluginLogger(PLUGIN_NAME).warn('dismiss.failed', 'Deep View dismiss RPC failed.', error, { sessionId: props.sessionId, viewId: pending.id })
       props.store.setStatus(callId, { state: 'failed', text: t('dismissFailed'), copyKey: 'dismissFailed' })
     })
-  }, [pending, canAnswer, props.store, props.sessionId, callId, props.call])
+  }, [pending, canAnswer, props.store, props.sessionId, callId, props.call, t])
   if (read.phase === 'preparing') return <div className="dvui-root dvui-tool-loading" role="status">{t('preparing')}</div>
   if (read.isError || !shown) {
     if (read.phase !== 'result' && !read.isError) return <div className="dvui-root dvui-tool-loading" role="status">{t('preparing')}</div>
@@ -211,7 +256,7 @@ export function ToolCallView(props: SharedViewProps) {
   return <div className="dvui-root">
     <WidgetCard title={shown.title} view={shown.view} ButtonComponent={Button}
       onSubmit={canAnswer ? submit : undefined}
-      onFillDraft={canAnswer && (props.fillDraft || props.inputActions) ? (action, values) => {
+      onFillDraft={canAnswer && !pending?.blocking && (props.fillDraft || props.inputActions) ? (action, values) => {
         if (!props.fillDraft && input.draft.trim() !== '') setDraftChoice({ action, values })
         else void fill(action, values)
       } : undefined}
@@ -244,7 +289,7 @@ export function ActivityDock(props: ToolViewProps & { call(endpoint: string, pay
   const t = useViewT(props.store, props.t) as UiT
   const labels = useMarkdownLabels(t)
   const pendingBlock = useMemo(() => pending ? { callId: pending.callId!, kind: 'tool-result' as const,
-    meta: { owner: VIEW_OWNER, viewId: pending.id, title: pending.title, view: pending.view, interactive: true, awaitReply: true, revision: pending.revision } } : undefined, [pending])
+    meta: { owner: VIEW_OWNER, viewId: pending.id, title: pending.title, view: pending.view, interactive: true, awaitReply: true, revision: pending.revision, ...(pending.blocking ? { blocking: true } : {}) } } : undefined, [pending])
   useEffect(() => { if (!running) props.store.clearProgress(props.sessionId) }, [running, props.store, props.sessionId])
   useEffect(() => {
     if (!pending?.callId || latestMessage === undefined) return
@@ -256,10 +301,29 @@ export function ActivityDock(props: ToolViewProps & { call(endpoint: string, pay
     }).catch(() => {})
     return () => { current = false }
   }, [latestMessage, pending?.callId, props.call, props.sessionId, props.store])
+  const defer = useCallback(() => {
+    if (!pending || !pending.blocking) return
+    void props.call('defer', { sessionId: props.sessionId, viewId: pending.id }).then(result => {
+      const envelope = result as RpcResult<{ deferred?: boolean; value?: PendingView }> | undefined
+      if (envelope?.ok) {
+        props.store.setPending(envelope.value?.value ?? { ...pending, blocking: false })
+      } else if (pending.callId) {
+        props.store.setStatus(pending.callId, { state: 'failed', text: t('deferFailed'), copyKey: 'deferFailed' })
+      }
+    }).catch(() => {
+      if (pending.callId) props.store.setStatus(pending.callId, { state: 'failed', text: t('deferFailed'), copyKey: 'deferFailed' })
+    })
+  }, [pending, props.call, props.sessionId, props.store, t])
   if (running && pending && status?.state !== 'filled') {
-    return <div className="dvui-root dvui-dock"><ToolCallView {...props} key={pending.id} callId={pending.callId!} phase="result"
-      block={pendingBlock!}
-      store={props.store} surface="dock" /></div>
+    return <div className="dvui-root dvui-dock">
+      <ToolCallView {...props} key={pending.id} callId={pending.callId!} phase="result"
+        block={pendingBlock!}
+        store={props.store} surface="dock" />
+      {pending.blocking ? <div className="dvui-dock-bar">
+        <span>{t('waitingAnswer')}</span>
+        <Button size="sm" variant="ghost" onClick={defer}>{t('continueFirst')}</Button>
+      </div> : null}
+    </div>
   }
   if (running && progress) return <div className="dvui-root dvui-dock dvui-activity"><WidgetCard key={progress.callId} title={progress.title} view={progress.view} ButtonComponent={Button} t={viewT(t)} labels={labels} Markdown={ViewMarkdown} /></div>
   return null
@@ -544,10 +608,10 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'deep-view.styles')
-  ctx.effect(() => client.slots.inject('tool.call.toolview', () => client.slots.register({
-    name: 'tool.call.toolview', key: 'show_view', locale: LOCALE,
+  for (const toolName of ['show_view', 'ask_view']) ctx.effect(() => client.slots.inject('tool.call.toolview', () => client.slots.register({
+    name: 'tool.call.toolview', key: toolName, locale: LOCALE,
     inject: () => ({ call, store }),
-  }, ToolCallStatus)), 'deep-view.tool')
+  }, ToolCallStatus)), `deep-view.tool.${toolName}`)
   ctx.effect(() => client.slots.inject('tool.call.toolview', () => client.slots.register({
     name: 'tool.call.toolview', key: 'show_canvas', locale: LOCALE,
     inject: () => ({

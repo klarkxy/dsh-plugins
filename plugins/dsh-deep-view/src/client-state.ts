@@ -9,7 +9,7 @@ export type LocaleSource = { getSnapshot?(): { active?: string }; subscribe?(lis
 export type ViewStatus = {
   state: 'filling' | 'filled' | 'sending' | 'failed'
   text: string
-  copyKey?: 'filling' | 'filled' | 'sending' | 'answerFailed' | 'fillFailed' | 'expired' | 'dismissFailed'
+  copyKey?: 'filling' | 'filled' | 'sending' | 'answerFailed' | 'fillFailed' | 'expired' | 'dismissFailed' | 'deferFailed'
 }
 export type ProgressRecord = { callId: string; title: string; view: ViewNode; at: number }
 export type LiveSnapshot = ViewSnapshot & { originCallId: string }

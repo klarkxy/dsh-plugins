@@ -3,7 +3,7 @@ import { isRecord, VIEW_OWNER, type ViewAnswer, type ViewNode } from './contract
 import type { ReplySnapshot, ToolViewBlock } from './runtime.ts'
 import { legacyAnswer } from './answer-text.ts'
 
-/** Read visible, durable user/steering messages only, including inherited history. */
+/** Read visible, durable user/steering messages and synchronous ask_view tool results. */
 export function replyAnswers(snapshot: ReplySnapshot): ReadonlyMap<string, ViewAnswer> {
   const answers = new Map<string, ViewAnswer>()
   type Card = { id: string; title: string; view: ViewNode; revision: number }
@@ -17,7 +17,15 @@ export function replyAnswers(snapshot: ReplySnapshot): ReadonlyMap<string, ViewA
       const shown = checkShownView(meta.title, meta.view)
       if (!('error' in shown)) {
         const revision = typeof meta.revision === 'number' && Number.isSafeInteger(meta.revision) && meta.revision > 0 ? meta.revision : 1
-        if (revision >= (cards.get(meta.viewId)?.revision ?? 0)) cards.set(meta.viewId, { id: meta.viewId, title: shown.title, view: shown.view, revision })
+        // Synchronous ask_view resolves inside the tool call itself and persists its validated answer on meta.answer.
+        if (isRecord(meta.answer) && typeof meta.answer.id === 'string' && meta.answer.id === meta.viewId
+          && typeof meta.answer.action === 'string' && isRecord(meta.answer.values)) {
+          if (!answers.has(meta.viewId)) {
+            answers.set(meta.viewId, { id: meta.viewId, action: meta.answer.action, values: meta.answer.values, revision })
+          }
+        } else if (revision >= (cards.get(meta.viewId)?.revision ?? 0)) {
+          cards.set(meta.viewId, { id: meta.viewId, title: shown.title, view: shown.view, revision })
+        }
       }
     }
     for (const child of block.subCalls ?? []) collect(child)

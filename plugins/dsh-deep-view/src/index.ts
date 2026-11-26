@@ -9,7 +9,7 @@ import { checkShownView, validateViewAnswer, viewSummary } from './core/index.js
 import { answerText } from './answer-text.ts'
 import { DEEP_VIEW_POLICY, DEEP_VIEW_PROMPT } from './prompt.ts'
 import { DEEP_VIEW_SKILL, DEEP_VIEW_SKILL_DESCRIPTION } from './skill.ts'
-import { HOST_SERVICE, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, CANVAS_OWNER, isRecord, type CanvasPresentation, type DeepViewHost, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation, type ViewAnswerMetadata, type ViewSnapshot } from './contracts.ts'
+import { HOST_SERVICE, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, CANVAS_OWNER, isRecord, type CanvasPresentation, type DeepViewConfig, type DeepViewHost, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation, type ViewAnswerMetadata, type ViewSnapshot } from './contracts.ts'
 import { fileAddressFor } from './file-address.ts'
 
 export const name = 'deep-view'
@@ -20,6 +20,15 @@ declare module '@deepseek-ai/cordis' {
 }
 
 const MAX_REDIRECTS = 256
+
+export type PendingWaiter = {
+  id: string
+  sessionId: string
+  callId?: string
+  snapshot: ViewSnapshot
+  resolve(result: Record<string, unknown>): void
+  cleanup(): void
+}
 
 export function resolveSessionId(redirects: ReadonlyMap<string, string>, sessionId: string): string {
   let current = sessionId
@@ -38,6 +47,7 @@ export function handoffPendingSession(
   redirects: Map<string, string>,
   fromSessionId: string,
   toSessionId: string,
+  waiters?: Map<string, PendingWaiter>,
 ): boolean {
   if (!short(fromSessionId, 200) || !short(toSessionId, 200) || fromSessionId === toSessionId) return false
   const source = resolveSessionId(redirects, fromSessionId)
@@ -54,8 +64,31 @@ export function handoffPendingSession(
   if (!record) return false
   pending.delete(source)
   if (pending.has(target)) return false
-  pending.set(target, { ...record, sessionId: target })
+  const nextRecord: PendingView = { ...record, sessionId: target }
+  pending.set(target, nextRecord)
+  const waiter = waiters?.get(record.id)
+  if (waiter) {
+    waiter.sessionId = target
+    waiter.snapshot = nextRecord
+  }
   return true
+}
+
+function supersedeSessionWaiters(waiters: Map<string, PendingWaiter> | undefined, sessionId: string, summary: string): void {
+  if (!waiters) return
+  for (const [viewId, waiter] of [...waiters]) {
+    if (waiter.sessionId !== sessionId) continue
+    waiters.delete(viewId)
+    waiter.cleanup()
+    waiter.resolve({
+      owner: VIEW_OWNER,
+      status: 'superseded',
+      viewId,
+      revision: waiter.snapshot.revision,
+      awaitReply: false,
+      summary,
+    })
+  }
 }
 
 type AgentLike = {
@@ -75,6 +108,7 @@ type Host = Context & HostRpcContext & {
   tools: {
     get(name: string, scope?: object): unknown
     register(definition: Record<string, unknown>): () => void
+    restrict?(rule: { deny?: string[]; allow?: string[] }): () => void
   }
   systemPrompt: {
     section?(contribution: {
@@ -133,14 +167,19 @@ function replyInterfaceContextText(context: { agent?: { session?: unknown } }): 
 // The host snapshots presentationMeta as JSON on every result, so a result
 // without a card reports null; undefined fails the whole call as invalid output.
 function presentation(_args: unknown, value: unknown): ViewPresentation | null {
-  if (!isRecord(value) || value.owner !== VIEW_OWNER || !['shown', 'pending'].includes(String(value.status)) || !isRecord(value.snapshot)) return null
+  if (!isRecord(value) || value.owner !== VIEW_OWNER || !['shown', 'pending', 'answered'].includes(String(value.status)) || !isRecord(value.snapshot)) return null
   const snapshot = value.snapshot
   const shown = checkedShown(snapshot.title, snapshot.view)
   if (!isShown(shown) || !short(snapshot.id, 80) || !short(snapshot.sessionId, 200)
     || typeof snapshot.revision !== 'number' || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 1) return null
+  const answer = value.status === 'answered' && short(value.action, 160) && isRecord(value.values)
+    ? { id: snapshot.id, action: value.action, values: value.values, revision: snapshot.revision }
+    : undefined
   return {
     owner: VIEW_OWNER, viewId: snapshot.id, ...shown, revision: snapshot.revision,
     awaitReply: value.awaitReply === true,
+    ...(snapshot.blocking === true && value.status === 'pending' ? { blocking: true } : {}),
+    ...(answer ? { answer } : {}),
   }
 }
 
@@ -150,10 +189,11 @@ export function createShowViewTool(
   makeId: () => string = randomUUID,
   logger?: PluginLogger,
   latest: Map<string, ViewSnapshot> = new Map(),
+  waiters?: Map<string, PendingWaiter>,
 ): Record<string, unknown> {
   return {
     name: 'show_view',
-    description: 'Display or update a live native progress/status card during multi-step work, or present an interactive card (options, confirm, form, submit) that collects a Host-validated user answer. For charts, architecture flows, tables and local estimates inside the reply text itself, emit a ```deepui block directly.',
+    description: 'Display or update a live native progress/status card during multi-step work, or present a non-blocking interactive card (options, confirm, form, submit) left open for an optional user answer after the turn ends. Use ask_view instead when execution must pause for the user\'s answer first; for charts, architecture flows, tables and local estimates inside the reply text itself, emit a ```deepui block directly.',
     // tools.register() takes raw JSON Schema; the per-field DSL is only for defineTool().
     parameters: {
       type: 'object',
@@ -223,6 +263,7 @@ export function createShowViewTool(
       latest.set(viewId, snapshot)
       while (latest.size > 256) latest.delete(latest.keys().next().value!)
       if (awaitReply && agent) {
+        supersedeSessionWaiters(waiters, agent.id, 'The previous blocking question card was superseded by a newer interactive view.')
         // set() alone replaces an earlier unanswered card: the old card becomes
         // stale and its pending record points at the newest revision only.
         pending.set(agent.id, snapshot)
@@ -238,6 +279,130 @@ export function createShowViewTool(
         // while the turn runs; the model must still produce its final answer.
         summary: `${current ? `Updated interface revision ${revision}` : 'Interface shown to the user'}. viewId=${viewId}; revision=${revision}. Finish with a concise final answer that complements the card rather than repeating its data. ${viewSummary(shown.view)}${awaitReply ? ' End the turn normally so the user can answer on the card or in the composer.' : ''}`,
       }
+    },
+    isConcurrencySafe: () => false,
+  }
+}
+
+export function createAskViewTool(
+  host: Host,
+  pending: Map<string, PendingView>,
+  waiters: Map<string, PendingWaiter> = new Map(),
+  makeId: () => string = randomUUID,
+  logger?: PluginLogger,
+  latest: Map<string, ViewSnapshot> = new Map(),
+): Record<string, unknown> {
+  return {
+    name: 'ask_view',
+    description: 'Present a blocking interactive Deep View card (single/multi-select options, custom text input, confirm, form, or multi-question stack of choice/slider/number/toggle inputs + submit/form) and wait for the user\'s validated answer inside the current turn. Prefer ask_view over ask_user_question whenever execution depends on user choices or parameters.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Optional short card heading summarizing the question or form.' },
+        view: { type: 'object', additionalProperties: true, description: 'Interactive ViewNode containing at least one answer control (options, confirm, form, or submit).' },
+      },
+      required: ['view'],
+    } satisfies ObjectJsonSchema,
+    output: {
+      schema: {
+        type: 'object',
+        properties: {
+          owner: { type: 'string', const: VIEW_OWNER },
+          status: { type: 'string' },
+          viewId: { type: 'string' },
+          revision: { type: 'integer' },
+          awaitReply: { type: 'boolean' },
+          action: { type: 'string' },
+          values: { type: 'object', additionalProperties: true },
+          answer: { type: 'string' },
+          snapshot: { type: 'object', additionalProperties: true },
+          summary: { type: 'string' },
+        },
+        required: ['owner', 'status', 'awaitReply', 'summary'],
+        additionalProperties: false,
+      },
+      render: (_args: unknown, value: { summary?: string }) => [{ type: 'text', text: String(value.summary ?? '') }],
+      presentationMeta: presentation,
+    },
+    async execute(args: unknown, exec: { agent?: AgentLike; callId?: string; signal?: AbortSignal; concludeTurn(): void }) {
+      const input = isRecord(args) ? args : {}
+      const shown = checkedShown(input.title, input.view)
+      if (!isShown(shown)) {
+        logger?.debug('ask.invalid', 'Rejected invalid ask_view arguments.', {
+          sessionId: exec.agent?.id ?? null,
+          reason: shown.error,
+        })
+        return { owner: VIEW_OWNER, status: 'invalid', awaitReply: false, summary: shown.error }
+      }
+      if (!shown.interactive) {
+        return {
+          owner: VIEW_OWNER,
+          status: 'invalid',
+          awaitReply: false,
+          summary: 'ask_view requires at least one interactive answer control (options, confirm, form, or submit). Use show_view or a ```deepui fence for display-only cards.',
+        }
+      }
+      const id = exec.agent?.id
+      const agent = id === undefined ? undefined : host.agents.get(id)
+      if (!isLiveRoot(host, agent)) {
+        logger?.debug('ask.non-root-rejected', 'Rejected ask_view outside a live root session.', { sessionId: id ?? null })
+        return {
+          owner: VIEW_OWNER,
+          status: 'invalid',
+          awaitReply: false,
+          summary: 'ask_view requires a live root session; state the question or options directly in your reply.',
+        }
+      }
+      if (exec.signal?.aborted) {
+        return { owner: VIEW_OWNER, status: 'cancelled', awaitReply: false, summary: 'The question card was cancelled before it could be shown.' }
+      }
+      const revision = 1
+      const snapshot: ViewSnapshot = {
+        ...shown,
+        revision,
+        id: makeId(),
+        sessionId: agent.id,
+        blocking: true,
+        ...(exec.callId ? { callId: exec.callId } : {}),
+      }
+      const viewId = snapshot.id
+      supersedeSessionWaiters(waiters, agent.id, 'The previous blocking question card was superseded by a newer ask_view call.')
+      latest.delete(viewId)
+      latest.set(viewId, snapshot)
+      while (latest.size > 256) latest.delete(latest.keys().next().value!)
+      pending.set(agent.id, snapshot)
+      logger?.info('ask.waiting', 'Presented blocking Deep View question card.', {
+        sessionId: agent.id,
+        viewId,
+      })
+      return await new Promise<Record<string, unknown>>(resolve => {
+        const onAbort = () => {
+          const waiter = waiters.get(viewId)
+          if (!waiter) return
+          waiters.delete(viewId)
+          if (pending.get(waiter.sessionId)?.id === viewId) pending.delete(waiter.sessionId)
+          resolve({
+            owner: VIEW_OWNER,
+            status: 'cancelled',
+            viewId,
+            revision,
+            awaitReply: false,
+            summary: 'The question card was cancelled because the turn was aborted.',
+          })
+        }
+        const cleanup = () => {
+          exec.signal?.removeEventListener('abort', onAbort)
+        }
+        exec.signal?.addEventListener('abort', onAbort, { once: true })
+        waiters.set(viewId, {
+          id: viewId,
+          sessionId: agent.id,
+          ...(exec.callId ? { callId: exec.callId } : {}),
+          snapshot,
+          resolve,
+          cleanup,
+        })
+      })
     },
     isConcurrencySafe: () => false,
   }
@@ -328,6 +493,8 @@ export function createRpc(
   pending: Map<string, PendingView>,
   redirects: ReadonlyMap<string, string> = new Map(),
   logger?: PluginLogger,
+  waiters: Map<string, PendingWaiter> = new Map(),
+  latest: Map<string, ViewSnapshot> = new Map(),
 ) {
   const claims = new Set<string>()
   return async (endpoint: string, payload: unknown, signal: AbortSignal): Promise<RpcResult> => {
@@ -338,9 +505,47 @@ export function createRpc(
     if (endpoint === 'dismiss') {
       if (record && record.id === payload.viewId) {
         pending.delete(sessionId)
+        const waiter = waiters.get(record.id)
+        if (waiter) {
+          waiters.delete(record.id)
+          waiter.cleanup()
+          waiter.resolve({
+            owner: VIEW_OWNER,
+            status: 'dismissed',
+            viewId: record.id,
+            revision: record.revision,
+            snapshot: record,
+            awaitReply: false,
+            summary: 'The user dismissed the question card without answering. Proceed with sensible defaults or ask briefly in text if blocked.',
+          })
+        }
         logger?.debug('view.dismissed', 'Dismissed pending Deep View card.', { sessionId, viewId: record.id })
       }
       return ok(true)
+    }
+    if (endpoint === 'defer') {
+      if (!record || !short(payload.viewId, 80) || payload.viewId !== record.id) {
+        return fail('stale', 'This view is no longer open')
+      }
+      const asyncRecord: PendingView = { ...record, blocking: false }
+      pending.set(sessionId, asyncRecord)
+      latest.set(record.id, asyncRecord)
+      const waiter = waiters.get(record.id)
+      if (waiter) {
+        waiters.delete(record.id)
+        waiter.cleanup()
+        waiter.resolve({
+          owner: VIEW_OWNER,
+          status: 'pending',
+          viewId: record.id,
+          revision: record.revision,
+          snapshot: asyncRecord,
+          awaitReply: true,
+          summary: `The user clicked "Continue first" to let you proceed now while keeping the card open for an asynchronous answer (viewId=${record.id}; revision=${record.revision}). Proceed with sensible provisional defaults and finish with a concise reply so the user can answer on the card when ready.`,
+        })
+      }
+      logger?.info('view.deferred', 'Downgraded blocking ask_view card to asynchronous pending card.', { sessionId, viewId: record.id })
+      return ok({ deferred: true, value: asyncRecord })
     }
     if (endpoint !== 'reply') return fail('not-found', 'Unknown Deep View endpoint')
     if (!record || !short(payload.viewId, 80) || payload.viewId !== record.id || !short(payload.action, 160) || !isRecord(payload.values)
@@ -358,6 +563,34 @@ export function createRpc(
         reason: checked.error,
       })
       return fail('invalid', checked.error)
+    }
+    const waiter = waiters.get(record.id)
+    if (waiter) {
+      if (signal.aborted) return fail('cancelled', 'The request was cancelled')
+      const live = host.agents.get(sessionId)
+      if (!isLiveRoot(host, live)) return fail('stale', 'The session is no longer a live root session')
+      pending.delete(sessionId)
+      waiters.delete(record.id)
+      waiter.cleanup()
+      const text = answerText(record, payload.action, checked)
+      waiter.resolve({
+        owner: VIEW_OWNER,
+        status: 'answered',
+        viewId: record.id,
+        revision: record.revision,
+        snapshot: record,
+        awaitReply: true,
+        action: payload.action,
+        values: checked,
+        answer: text,
+        summary: `User answered Deep View card (viewId=${record.id}):\n${text}`,
+      })
+      logger?.info('reply.resumed', 'Resolved blocking ask_view call with validated user answer.', {
+        sessionId,
+        viewId: record.id,
+        action: payload.action,
+      })
+      return ok({ answered: true, resumed: true })
     }
     claims.add(record.id)
     pending.delete(sessionId)
@@ -410,12 +643,13 @@ export function createRpc(
   }
 }
 
-export async function apply(ctx: Context): Promise<void> {
+export async function apply(ctx: Context, config?: DeepViewConfig): Promise<void> {
   const host = ctx as unknown as Host
   const logger = installPluginLogger(ctx, PLUGIN_NAME, { forwardHostWarnError: false })
   const pending = new Map<string, PendingView>()
   const redirects = new Map<string, string>()
   const latest = new Map<string, ViewSnapshot>()
+  const waiters = new Map<string, PendingWaiter>()
   const canvasServices: { current: CanvasServices } = { current: {} }
   // Optional host services arrive through their own inject scopes so a missing
   // workspace file service or sandbox policy never blocks this bundle loading.
@@ -439,7 +673,7 @@ export async function apply(ctx: Context): Promise<void> {
   }), 'deep-view.skill')
   ctx.provide(HOST_SERVICE, {
     handoffSession: (fromSessionId, toSessionId) => {
-      const moved = handoffPendingSession(pending, redirects, fromSessionId, toSessionId)
+      const moved = handoffPendingSession(pending, redirects, fromSessionId, toSessionId, waiters)
       if (moved) {
         const current = pending.get(toSessionId)
         if (current) latest.set(current.id, current)
@@ -458,13 +692,22 @@ export async function apply(ctx: Context): Promise<void> {
       return () => {}
     }
     let disposeTool: () => void
+    let disposeAskTool: (() => void) | undefined
     try {
-      disposeTool = host.tools.register(createShowViewTool(host, pending, randomUUID, logger, latest))
+      disposeTool = host.tools.register(createShowViewTool(host, pending, randomUUID, logger, latest, waiters))
     }
     catch (error) {
       logger.warn('tool.register-failed', 'show_view tool registration failed.', error)
       host.logger?.warn('deep-view: show_view registration skipped: %s', error instanceof Error ? error.message : String(error))
       return () => {}
+    }
+    if (!host.tools.get('ask_view')) {
+      try {
+        disposeAskTool = host.tools.register(createAskViewTool(host, pending, waiters, randomUUID, logger, latest))
+      } catch (error) {
+        logger.warn('tool.register-failed', 'ask_view tool registration failed.', error)
+        host.logger?.warn('deep-view: ask_view registration skipped: %s', error instanceof Error ? error.message : String(error))
+      }
     }
     let disposeSection: (() => void) | undefined
     let disposeContext: () => void
@@ -485,17 +728,34 @@ export async function apply(ctx: Context): Promise<void> {
     }
     catch (error) {
       disposeSection?.()
+      disposeAskTool?.()
       disposeTool()
       logger.warn('prompt.register-failed', 'Deep View reply context was not registered.', error)
       host.logger?.warn('deep-view: reply context registration skipped: %s', error instanceof Error ? error.message : String(error))
       return () => {}
     }
     return () => {
+      for (const [viewId, waiter] of [...waiters]) {
+        waiters.delete(viewId)
+        waiter.cleanup()
+        waiter.resolve({ owner: VIEW_OWNER, status: 'cancelled', viewId, revision: waiter.snapshot.revision, awaitReply: false, summary: 'Deep View plugin was unloaded while waiting for an answer.' })
+      }
       disposeContext()
       disposeSection?.()
+      disposeAskTool?.()
       disposeTool()
     }
   }, 'deep-view.tool')
+  if (config?.replaceNativeAskUser === true && typeof host.tools.restrict === 'function') {
+    ctx.effect(() => {
+      try {
+        return host.tools.restrict!({ deny: ['ask_user_question'] })
+      } catch (error) {
+        logger.warn('tool.restrict-failed', 'Could not restrict native ask_user_question.', error)
+        return () => {}
+      }
+    }, 'deep-view.restrict-native-ask')
+  }
   ctx.effect(() => {
     if (host.tools.get('show_canvas')) {
       logger.warn('tool.already-registered', 'show_canvas is already registered by another plugin; skipping registration.')
@@ -514,7 +774,9 @@ export async function apply(ctx: Context): Promise<void> {
   // Only admission events are observed, never scanned. A new human message closes a stale card.
   ctx.effect(() => ctx.on('session/event', (session: { id: string }, event: { type: string; data?: unknown }) => {
     if (event.type !== 'user/message' || !isRecord(event.data) || !isRecord(event.data.source) || event.data.source.kind !== 'user') return
-    pending.delete(resolveSessionId(redirects, session.id))
+    const resolvedId = resolveSessionId(redirects, session.id)
+    pending.delete(resolvedId)
+    supersedeSessionWaiters(waiters, resolvedId, 'The question card was superseded by a new user message.')
   }), 'deep-view.close-pending')
-  ctx.effect(() => registerHostRpc(host, RPC_CHANNEL, createRpc(host, pending, redirects, logger), { maxBodyBytes: 24 * 1024, logger }), 'deep-view.rpc')
+  ctx.effect(() => registerHostRpc(host, RPC_CHANNEL, createRpc(host, pending, redirects, logger, waiters, latest), { maxBodyBytes: 24 * 1024, logger }), 'deep-view.rpc')
 }

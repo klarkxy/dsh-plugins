@@ -15,7 +15,7 @@ let createRoot: typeof import('react-dom/client').createRoot
 beforeAll(async () => { createRoot = (await import('react-dom/client')).createRoot })
 afterEach(() => { document.body.innerHTML = '<div id="root"></div>' })
 
-const view = { type: 'options', id: 'pick', options: [{ label: 'One' }, { label: 'Two' }] }
+const view = { type: 'options' as const, id: 'pick', options: [{ label: 'One' }, { label: 'Two' }] }
 const card = (id: string): ToolViewBlock => ({
   kind: 'tool-result', callId: id, name: 'show_view',
   meta: { owner: 'dsh-deep-view', viewId: id, title: 'Choose', view, awaitReply: true },
@@ -29,7 +29,7 @@ function snapshot(blocks: ToolViewBlock[]): ReplySnapshot {
 }
 function props(blocks: ToolViewBlock[], call: ReplyViewProps['call']) {
   return {
-    sessionId: 'session', turn: { turn: 2, status: 'closed' as const }, t: key => key,
+    sessionId: 'session', turn: { turn: 2, status: 'closed' as const }, t: (key: string) => key,
     useChat: <T,>(selector: (snapshot: ReplySnapshot) => T) => selector(snapshot(blocks)), call,
     store: createViewStateStore(),
     useInput: <T,>(selector: (snapshot: { draft: string; phase: 'plain' }) => T) => selector({ draft: '', phase: 'plain' }),
@@ -134,7 +134,7 @@ describe('cards in the final reply', () => {
       ? { ok: true, value: { id: 'one', sessionId: 'session', callId: 'one', title: 'Choose', view } }
       : { ok: false, error: { code: 'stale', message: 'stale' } })
     const p = props([one], call)
-    p.store.setPending({ id: 'one', sessionId: 'session', callId: 'one', title: 'Choose', view })
+    p.store.setPending({ id: 'one', sessionId: 'session', callId: 'one', title: 'Choose', view, interactive: true, revision: 1 })
     const root = createRoot(document.getElementById('root')!)
     await act(async () => root.render(<ActivityDock sessionId="session" callId="one" phase="result" block={one} t={p.t} store={p.store} call={call} useSession={p.useSession} useInput={p.useInput} inputActions={p.inputActions} />))
     await act(async () => (document.querySelector('.dvui-dock button.dvui-option') as HTMLButtonElement).click())
@@ -168,7 +168,7 @@ describe('cards in the final reply', () => {
     const listeners = new Set<() => void>()
     let locale = { active: 'en' }
     const store = createViewStateStore({ getSnapshot: () => locale, subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener) } } })
-    store.setPending({ id: 'one', sessionId: 'session', callId: 'one', title: 'Choose', view })
+    store.setPending({ id: 'one', sessionId: 'session', callId: 'one', title: 'Choose', view, interactive: true, revision: 1 })
     store.setStatus('one', { state: 'filled', text: 'Added to the composer. Review and send when ready.', copyKey: 'filled' })
     const root = createRoot(document.getElementById('root')!)
     await act(async () => root.render(<ToolCallView sessionId="session" callId="one" phase="result" block={card('one')} t={key => key} store={store} call={p.call} surface="inline" />))
@@ -179,7 +179,7 @@ describe('cards in the final reply', () => {
     await act(async () => root.unmount())
   })
   it('replaces activity progress instead of accumulating cards', async () => {
-    const steps = { type: 'steps', items: [{ label: 'Working', status: 'active' }] }
+    const steps = { type: 'steps' as const, items: [{ label: 'Working', status: 'active' as const }] }
     const block = { callId: 'progress', kind: 'tool-result' as const, meta: { owner: 'dsh-deep-view', title: 'Progress', view: steps, interactive: false, awaitReply: false } }
     const p = props([], vi.fn(async () => ({ ok: true, value: null })))
     const root = createRoot(document.getElementById('root')!)
@@ -209,9 +209,9 @@ describe('cards in the final reply', () => {
     await act(async () => root.unmount())
   })
   it('restores submitted inputs, formulas and selected options after remount', async () => {
-    const submittedView = { type: 'stack', children: [
-      { type: 'number', id: 'price', label: 'Price', value: 4 },
-      { type: 'metric', label: 'Total', value: { '=': 'price * 2' } },
+    const submittedView = { type: 'stack' as const, children: [
+      { type: 'number' as const, id: 'price', label: 'Price', value: 4 },
+      { type: 'metric' as const, label: 'Total', value: { '=': 'price * 2' } },
       view,
     ] }
     const block = { ...card('saved'), meta: {
@@ -236,5 +236,24 @@ describe('cards in the final reply', () => {
       await act(async () => root.unmount())
     }
     expect(call).not.toHaveBeenCalled()
+  })
+  it('shows Continue-first on a blocking ask_view dock card and downgrades to async pending', async () => {
+    const one = card('ask-1')
+    const call = vi.fn(async (endpoint: string) => {
+      if (endpoint === 'pending') return { ok: true, value: { id: 'ask-1', sessionId: 'session', callId: 'ask-1', title: 'Choose', view, interactive: true, revision: 1, blocking: true } }
+      if (endpoint === 'defer') return { ok: true, value: { deferred: true, value: { id: 'ask-1', sessionId: 'session', callId: 'ask-1', title: 'Choose', view, interactive: true, revision: 1, blocking: false } } }
+      return { ok: true, value: null }
+    })
+    const p = props([one], call)
+    p.store.setPending({ id: 'ask-1', sessionId: 'session', callId: 'ask-1', title: 'Choose', view, interactive: true, revision: 1, blocking: true })
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<ActivityDock sessionId="session" callId="ask-1" phase="result" block={one} t={p.t} store={p.store} call={call} useSession={p.useSession} useInput={p.useInput} inputActions={p.inputActions} />))
+    const deferBtn = [...document.querySelectorAll('.dvui-dock-bar button')].find(btn => btn.textContent === 'continueFirst') as HTMLButtonElement
+    expect(deferBtn).toBeTruthy()
+    await act(async () => deferBtn.click())
+    expect(call).toHaveBeenCalledWith('defer', { sessionId: 'session', viewId: 'ask-1' })
+    expect(document.querySelector('.dvui-dock-bar')).toBeNull()
+    expect(document.querySelector('.dvui-dock')).toBeTruthy()
+    await act(async () => root.unmount())
   })
 })

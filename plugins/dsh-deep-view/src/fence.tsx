@@ -9,8 +9,8 @@ import type { ShownView } from './contracts.ts'
 import { compileDeepUi } from './parser.ts'
 import { answerText } from './answer-text.ts'
 import { fillComposerDraft, type ComposerActions, type InputSnapshot } from './draft.ts'
-import { WidgetCard, type ViewLabels } from './widget.tsx'
-import type { ViewT } from './ui.tsx'
+import { WidgetCard, settledCardSummary, type Answer, type ViewLabels } from './widget.tsx'
+import { CheckIcon, type ViewT } from './ui.tsx'
 
 /** Standard props a session-scoped markdown fence layer receives, plus owner content. */
 export type DeepViewFenceProps = {
@@ -37,6 +37,7 @@ const VIEW_KEYS: Record<string, string> = {
   Value: 'value', Series: 'series', View: 'view', Sources: 'sources', Progress: 'progress', 'Your answer': 'yourAnswer',
   'Local preview only; this card does not send an answer.': 'local',
   Options: 'options', Submit: 'submit', Cancel: 'cancel', Confirm: 'confirm', Send: 'send', Selected: 'selected',
+  'Other…': 'otherPlaceholder', 'Type your own…': 'customOptionPlaceholder', Expand: 'expand', Collapse: 'collapse',
   'Fill composer': 'fillDraft', Steps: 'steps', 'Composing interface…': 'composing', 'Point values': 'pointValues',
   'Node graph': 'nodeGraph', 'Select a node': 'selectNode', 'Nothing to explore': 'nothingToExplore',
   '{n} selected: {values}': 'selectedValues', 'Drag to select a range; double-click to clear': 'exploreIntervalHint',
@@ -81,6 +82,8 @@ export function DeepViewFence(props: DeepViewFenceProps) {
   const input = props.useInput?.(value => value) ?? { draft: '', phase: 'plain' as const }
   const [status, setStatus] = useState<FillStatus | null>(null)
   const [draftChoice, setDraftChoice] = useState<DraftChoice | null>(null)
+  const [filledAnswer, setFilledAnswer] = useState<Answer | null>(null)
+  const [collapsed, setCollapsed] = useState(false)
   const canFill = props.inputActions !== undefined
   const fill = useCallback((choice: DraftChoice, replace = false) => {
     if (!shown) return
@@ -93,6 +96,10 @@ export function DeepViewFence(props: DeepViewFenceProps) {
     const text = answerText(shown, choice.action, checked)
     const accepted = fillComposerDraft(input, props.inputActions, text, replace)
     setStatus(accepted ? { state: 'filled' } : { state: 'fillFailed' })
+    if (accepted) {
+      setFilledAnswer({ id: 'fence', action: choice.action, values: checked })
+      setCollapsed(true)
+    }
     setDraftChoice(null)
   }, [shown, input, props.inputActions])
   const onFillDraft = useCallback((action: string, values: Record<string, unknown>) => {
@@ -118,7 +125,12 @@ export function DeepViewFence(props: DeepViewFenceProps) {
       <span className="dvui-fence-hint">{t('preparing')}</span>
     </div>
   }
-  return <div className="dvui-fence dvui-fence-card">
+  return <div className={`dvui-fence dvui-fence-card${filledAnswer && collapsed ? ' dvui-fence-collapsed' : ''}`}>
+    {filledAnswer ? <button type="button" className="dvui-settled-bar" aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)}>
+      <span className="dvui-settled-check" aria-hidden="true"><CheckIcon /></span>
+      <span className="dvui-settled-text">{`${settledCardSummary(shown.title, shown.view, filledAnswer, viewT)} · ${t('filled')}`}</span>
+      <span className="dvui-settled-toggle">{collapsed ? viewT('Expand') : viewT('Collapse')}</span>
+    </button> : null}
     <WidgetCard title={shown.title} view={shown.view} ButtonComponent={Button}
       onFillDraft={canFill ? onFillDraft : undefined}
       localOnly={!canFill}

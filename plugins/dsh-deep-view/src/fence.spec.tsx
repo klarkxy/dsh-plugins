@@ -89,7 +89,7 @@ describe('deepui fence layer', () => {
     await act(async () => ([...document.querySelectorAll('button')].find(button => button.textContent === 'Fill composer') as HTMLButtonElement).click())
     expect(composer.setDraft).toHaveBeenCalledOnce()
     expect(composer.persistDraft).toHaveBeenCalledOnce()
-    expect(String(vi.mocked(composer.setDraft).mock.calls[0][0])).toContain('One')
+    expect(String(vi.mocked(composer.setDraft).mock.calls[0]![0])).toContain('One')
     expect(document.body.textContent).toContain('filled')
     await act(async () => root.unmount())
   })
@@ -135,7 +135,7 @@ describe('deepui fence layer', () => {
     ] } })
     await act(async () => root.render(<DeepViewFence code={code} streaming={false} t={t} inputActions={actions()} useInput={useInput({ draft: '', phase: 'plain' })}/>))
     expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('6')
-    const range = document.querySelector('input[type=range]')!
+    const range = document.querySelector('input[type=range]')! as HTMLInputElement
     const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!
     await act(async () => { setter.call(range, '5'); range.dispatchEvent(new dom.window.Event('input', { bubbles: true })) })
     expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('15')
@@ -146,6 +146,21 @@ describe('deepui fence layer', () => {
     await act(async () => root.render(<DeepViewFence code={ask} streaming={false} t={t} />))
     expect(document.body.textContent).toContain('Local preview only; this card does not send an answer.')
     expect(document.querySelector('button.dvui-option')).toBeNull()
+    await act(async () => root.unmount())
+  })
+  it('auto-collapses into an expandable summary bar once filled into the composer', async () => {
+    const root = createRoot(document.getElementById('root')!)
+    const composer = actions()
+    await act(async () => root.render(<DeepViewFence code={ask} streaming={false} t={t} inputActions={composer} useInput={useInput({ draft: '', phase: 'plain' })}/>))
+    await act(async () => (document.querySelector('.dvui-option') as HTMLButtonElement).click())
+    await act(async () => ([...document.querySelectorAll('button')].find(button => button.textContent === 'Fill composer') as HTMLButtonElement).click())
+    const bar = document.querySelector('button.dvui-settled-bar') as HTMLButtonElement
+    expect(bar).toBeTruthy()
+    expect(bar.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('.dvui-fence-collapsed')).toBeTruthy()
+    await act(async () => bar.click())
+    expect(bar.getAttribute('aria-expanded')).toBe('true')
+    expect(document.querySelector('.dvui-fence-collapsed')).toBeNull()
     await act(async () => root.unmount())
   })
 })
