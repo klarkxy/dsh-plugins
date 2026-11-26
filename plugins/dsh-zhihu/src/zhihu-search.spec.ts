@@ -291,7 +291,7 @@ describe('zhihu_research search', () => {
       })
       const result = await executeTool(tool, { query: 'q', count: 1 })
       expect(result.items).toHaveLength(1)
-      expect(events).toEqual([{ ok: true, results: 1 }])
+      expect(events).toEqual([{ ok: true, results: 1, quotaId: 'zhihu_search' }])
     })
 
     it('reports failures through onExecuted and still rethrows', async () => {
@@ -303,7 +303,7 @@ describe('zhihu_research search', () => {
         onExecuted: (event) => events.push(event),
       })
       await expect(executeTool(tool, { query: 'q', count: 1 })).rejects.toMatchObject({ code: 'HTTP_ERROR' })
-      expect(events).toEqual([{ ok: false, results: 0 }])
+      expect(events).toEqual([{ ok: false, results: 0, quotaId: 'zhihu_search' }])
     })
 
     it('never lets a throwing onExecuted hook break the tool result', async () => {

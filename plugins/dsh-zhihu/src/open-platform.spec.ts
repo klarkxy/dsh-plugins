@@ -2,7 +2,7 @@ import '../tests/legacy-call-policy.ts'
 import { describe, it } from 'vitest'
 import assert from 'node:assert/strict'
 import {
-  executeZhihuOpenPlatform, normalizeZhihuOffset, normalizeZhihuPaging,
+  executeZhihuOpenPlatform, normalizeZhihuCursorOffset, normalizeZhihuCursorPaging, normalizeZhihuOffset, normalizeZhihuPaging,
   resolveZhihuOpenPlatformOperation, ZHIHU_OPEN_PLATFORM_APIS,
   type ZhihuOpenPlatformOperation,
 } from './open-platform.ts'
@@ -29,6 +29,11 @@ function fixture(data: unknown = { Items: [] }, code: unknown = 0, status = 200,
 const CASES: Array<[ZhihuOpenPlatformOperation, Record<string, unknown>, Record<string, string>]> = [
   ['question.recommendations', {}, { Count: '5' }],
   ['question.answers', { questionUrl: QUESTION }, { QuestionUrl: QUESTION, Offset: '0', Limit: '20' }],
+  ['user.contents', {}, { Offset: '0', Limit: '20', ContentType: 'all', SortField: 'ts', SortOrder: 'desc' }],
+  ['user.followees', {}, { Offset: '0', Limit: '20' }],
+  ['user.collections', {}, { Limit: '20' }],
+  ['user.favlists', {}, { Limit: '20' }],
+  ['favlist.contents', { favlistId: 123 }, { FavlistId: '123', Offset: '0', Limit: '20' }],
   ['content.detail', { contentUrl: CONTENT }, { ContentUrl: CONTENT }],
   ['content.comments', { contentUrl: CONTENT }, { ContentUrl: CONTENT, Offset: '0', Limit: '20', Order: 'score' }],
   ['creator.account.stats', {}, { ContentType: 'all' }],
@@ -93,6 +98,18 @@ describe('question/creator request contracts', () => {
     assert.equal(calls[0]!.url.searchParams.get('QuestionUrl'), `${QUESTION}/`)
     assert.equal(calls[0]!.url.searchParams.get('Offset'), '20')
   })
+  it('sends user content filters and opaque cursors exactly as provided', async () => {
+    const { options, calls } = fixture()
+    await executeZhihuOpenPlatform('user.contents', { contentType: 'question', sortField: 'like_count', sortOrder: 'asc', offset: 'cursor-20', limit: 50 }, options)
+    assert.deepEqual(Object.fromEntries(calls[0]!.url.searchParams), { Offset: 'cursor-20', Limit: '50', ContentType: 'question', SortField: 'like_count', SortOrder: 'asc' })
+  })
+  it('sends exactly one favlist identifier', async () => {
+    const { options, calls } = fixture()
+    await executeZhihuOpenPlatform('favlist.contents', { favlistUrlToken: 456, offset: 20 }, options)
+    assert.equal(calls[0]!.url.searchParams.get('FavlistUrlToken'), '456')
+    assert.equal(calls[0]!.url.searchParams.has('FavlistId'), false)
+    assert.equal(calls[0]!.url.searchParams.get('Offset'), '20')
+  })
   it('queries official categories in first-seen order and wraps a top-level quota list', async () => {
     const data = [{ APIID: 'creator', RemainingQuota: 4 }]
     const { options, calls } = fixture(data)
@@ -113,6 +130,11 @@ describe('question/creator request contracts', () => {
     assert.equal(resolveZhihuOpenPlatformOperation('creator_account_stats'), 'creator.account.stats')
     assert.equal(resolveZhihuOpenPlatformOperation('creator_content_stats'), 'creator.content.stats')
     assert.equal(resolveZhihuOpenPlatformOperation('question_answers'), 'question.answers')
+    assert.equal(resolveZhihuOpenPlatformOperation('user_contents'), 'user.contents')
+    assert.equal(resolveZhihuOpenPlatformOperation('user_followees'), 'user.followees')
+    assert.equal(resolveZhihuOpenPlatformOperation('user_collections'), 'user.collections')
+    assert.equal(resolveZhihuOpenPlatformOperation('user_favlists'), 'user.favlists')
+    assert.equal(resolveZhihuOpenPlatformOperation('favlist_contents'), 'favlist.contents')
     assert.equal(resolveZhihuOpenPlatformOperation('constructor'), undefined)
   })
 })
@@ -127,6 +149,20 @@ const INVALID_INPUTS: Array<[ZhihuOpenPlatformOperation, unknown]> = [
   ['content.comments', { contentUrl: CONTENT, limit: 51 }],
   ['question.answers', { questionUrl: QUESTION, limit: 0 }],
   ['creator.account.stats', { contentType: 'question' }],
+  ['user.contents', { contentType: 'video' }],
+  ['user.contents', { sortField: 'created_at' }],
+  ['user.contents', { sortOrder: 'newest' }],
+  ['user.contents', { offset: '' }],
+  ['user.contents', { offset: 'has space' }],
+  ['user.contents', { offset: 'x'.repeat(257) }],
+  ['user.contents', { offset: -1 }],
+  ['user.contents', { offset: Number.MAX_SAFE_INTEGER + 1 }],
+  ['user.collections', { limit: 51 }],
+  ['user.favlists', { limit: 0 }],
+  ['favlist.contents', {}],
+  ['favlist.contents', { favlistUrlToken: 1, favlistId: 2 }],
+  ['favlist.contents', { favlistUrlToken: 0 }],
+  ['favlist.contents', { favlistId: 1.5 }],
   ['creator.account.stats', { startDate: '2026-01-01' }],
   ['creator.account.stats', { endDate: '2026-01-01' }],
   ['creator.account.stats', { startDate: '2026-01-02', endDate: '2026-01-01' }],
@@ -154,6 +190,11 @@ describe('local validation before credentials or HTTP', () => {
     assert.equal(normalizeZhihuOffset(0), '0')
     assert.equal(normalizeZhihuOffset(Number.MAX_SAFE_INTEGER), String(Number.MAX_SAFE_INTEGER))
     assert.equal(normalizeZhihuOffset('9223372036854775807'), '9223372036854775807')
+  })
+  it('accepts opaque user-data cursors without rewriting them', () => {
+    assert.equal(normalizeZhihuCursorOffset('00020'), '00020')
+    assert.equal(normalizeZhihuCursorOffset('opaque_cursor-abcdef'), 'opaque_cursor-abcdef')
+    assert.equal(normalizeZhihuCursorOffset(0), '0')
   })
 })
 
@@ -183,6 +224,19 @@ describe('explicit pagination, including filtered and empty pages', () => {
     const result = await executeZhihuOpenPlatform('content.comments', { contentUrl: CONTENT }, options)
     assert.deepEqual(result.data, data)
     assert.equal(result.paging?.nextOffset, '50')
+  })
+  it('continues user-data paging only with a different opaque NextOffset', async () => {
+    const { options } = fixture({ Items: [], Paging: { IsEnd: false, NextOffset: 'cursor-next' } })
+    const result = await executeZhihuOpenPlatform('user.contents', { offset: 'cursor-current' }, options)
+    assert.deepEqual(result.paging, { isEnd: false, canContinue: true, nextOffset: 'cursor-next' })
+    assert.deepEqual(normalizeZhihuCursorPaging({ Paging: { IsEnd: false, NextOffset: 20 } }, '10'), { isEnd: false, canContinue: true, nextOffset: '20' })
+    for (const next of [undefined, null, '', -1, Number.MAX_SAFE_INTEGER + 1, 'cursor-current']) {
+      const paging = normalizeZhihuCursorPaging({ Paging: { IsEnd: false, NextOffset: next } }, 'cursor-current')
+      assert.equal(paging.canContinue, false)
+      assert.match(paging.warning ?? '', /停止翻页/)
+    }
+    assert.deepEqual(normalizeZhihuCursorPaging({ Paging: { IsEnd: true, NextOffset: 'same' } }, 'same'), { isEnd: true, canContinue: false })
+    assert.match(normalizeZhihuCursorPaging({ Items: [] }, '0').warning ?? '', /缺少有效的 Paging\.IsEnd/)
   })
 })
 
@@ -327,5 +381,19 @@ describe('untrusted presentation and raw result preservation', () => {
     const text = renderZhihuOpenPlatform({ version: 1, operation: 'content.detail', data: { Body: '```\n![tracking](https://example.com)\n```' } })
     assert.match(text, /````json/)
     assert.equal(text.endsWith('````'), true)
+  })
+  it('renders user-data lists readably and falls back to compact JSON for unknown items', () => {
+    const text = renderZhihuOpenPlatform({
+      version: 1,
+      operation: 'user.contents',
+      data: { Items: [{ Title: '<b>我的回答</b>', Url: 'https://www.zhihu.com/answer/1' }, { Unexpected: 'shape' }] },
+      paging: { isEnd: false, canContinue: true, nextOffset: 'cursor-next' },
+    })
+    assert.match(text, /## 本人创作列表/)
+    assert.match(text, /1\. 我的回答/)
+    assert.match(text, /链接：https:\/\/www\.zhihu\.com\/answer\/1/)
+    assert.match(text, /2\. \{"Unexpected":"shape"\}/)
+    assert.match(text, /下一页 Offset：cursor-next/)
+    assert.equal(text.includes('<b>'), false)
   })
 })

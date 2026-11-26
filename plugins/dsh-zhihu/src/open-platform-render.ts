@@ -1,4 +1,4 @@
-import { ZHIHU_OPEN_PLATFORM_APIS, type ZhihuOpenPlatformResult } from './open-platform.ts'
+import { ZHIHU_OPEN_PLATFORM_APIS, type ZhihuOpenPlatformResult, type ZhihuJsonValue } from './open-platform.ts'
 
 /** Display only: the structured result always retains the original upstream HTML. */
 export function plainZhihuText(value: string): string {
@@ -17,6 +17,57 @@ export function plainZhihuText(value: string): string {
     .replace(/\n{3,}/g, '\n\n').trim()
 }
 
+const USER_DATA_LIST_OPERATIONS = new Set(['user.contents', 'user.followees', 'user.collections', 'user.favlists', 'favlist.contents'])
+const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
+
+function oneLine(value: string): string {
+  return plainZhihuText(value).replace(/\s+/g, ' ').trim()
+}
+
+function field(value: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const item = value[key]
+    if (typeof item === 'string' && oneLine(item)) return oneLine(item)
+  }
+  for (const nested of Object.values(value)) {
+    if (!record(nested)) continue
+    for (const key of keys) {
+      const item = nested[key]
+      if (typeof item === 'string' && oneLine(item)) return oneLine(item)
+    }
+  }
+  return ''
+}
+
+function displayUrl(value: string): string {
+  if (/[\s\u0000-\u001f\u007f]/u.test(value)) return ''
+  try {
+    const url = new URL(value)
+    return ['https:', 'http:'].includes(url.protocol) ? value : ''
+  } catch {
+    return ''
+  }
+}
+
+function compactJson(value: ZhihuJsonValue): string {
+  return JSON.stringify(value, (_key, item: unknown) => typeof item === 'string' ? oneLine(item) : item) ?? '{}'
+}
+
+function renderUserDataItems(result: ZhihuOpenPlatformResult): string[] {
+  const jsonObject = (value: ZhihuJsonValue): value is { [key: string]: ZhihuJsonValue } => record(value)
+  const items = Array.isArray(result.data.Items) ? result.data.Items.filter(jsonObject) : []
+  if (!items.length) return ['没有条目。']
+  return items.flatMap((item, index) => {
+    const title = field(item, ['Title', 'Name', 'QuestionTitle', 'ContentTitle', 'DocName', 'Nickname'])
+    const url = displayUrl(field(item, ['Url', 'URL', 'Link', 'ContentUrl', 'QuestionUrl']))
+    if (!title) return [`${index + 1}. ${compactJson(item as ZhihuJsonValue)}`, '']
+    const lines = [`${index + 1}. ${title}`]
+    if (url) lines.push(`   - 链接：${url}`)
+    lines.push('')
+    return lines
+  })
+}
+
 /**
  * An inert, dynamically fenced text block also prevents upstream Markdown from
  * injecting links/images or breaking out with backticks. This is presentation,
@@ -30,6 +81,13 @@ export function renderZhihuOpenPlatform(result: ZhihuOpenPlatformResult): string
       break
     case 'question.answers':
       notes.push('Summary 为上游返回的原始摘要或截取片段；翻页请直接使用 paging.nextOffset（Totals 可能包含已过滤条目）。')
+      break
+    case 'user.contents':
+    case 'user.followees':
+    case 'user.collections':
+    case 'user.favlists':
+    case 'favlist.contents':
+      notes.push('本人账号数据仅按用户明确要求查询；翻页请直接回传 paging.nextOffset，不要自行构造游标。')
       break
     case 'content.detail':
       notes.push('仅返回当前 Access Secret 所属账号已发布的正文（视频返回关联文案）。')
@@ -49,6 +107,9 @@ export function renderZhihuOpenPlatform(result: ZhihuOpenPlatformResult): string
   if (result.paging?.warning) notes.push(result.paging.warning)
   else if (result.paging?.canContinue) notes.push(`下一页 Offset：${result.paging.nextOffset}`)
   else if (result.paging?.isEnd) notes.push('已到最后一页。')
+  if (USER_DATA_LIST_OPERATIONS.has(result.operation)) {
+    return [`## ${ZHIHU_OPEN_PLATFORM_APIS[result.operation].label}`, '', ...notes, '', ...renderUserDataItems(result)].join('\n').trimEnd()
+  }
   const text = JSON.stringify(result.data, (_key, value: unknown) => typeof value === 'string' ? plainZhihuText(value) : value, 2)
   let longest = 2
   for (const match of text.matchAll(/`+/g)) longest = Math.max(longest, match[0].length)

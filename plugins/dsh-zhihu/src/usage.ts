@@ -1,5 +1,6 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
+import type { ZhihuQuotaId } from './contracts.ts'
 export class UsageInputError extends Error {
   constructor(message: string, readonly code: string) { super(message); this.name = 'UsageInputError' }
 }
@@ -29,8 +30,8 @@ export type ZhihuDailyUsage = {
   results: number
 }
 
-/** Metering payload emitted by novel tool hosts after each zhihu_search execution. */
-export type ZhihuSearchEvent = { ok: boolean; results?: number }
+/** Metering payload emitted after each Zhihu execution; quotaId is informational and not persisted separately. */
+export type ZhihuSearchEvent = { ok: boolean; results?: number; quotaId?: ZhihuQuotaId }
 
 const dailyRowSchema = z.object({
   date: z.string(),

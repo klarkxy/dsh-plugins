@@ -45,7 +45,7 @@ These model tools are enabled by default in agent presets:
 | `zhihu_research` | One search: `search` (Zhihu), `global_search` (web, with optional `SearchDB` and structured `host` / `publishTime` filters), `hot_list`, `ask` (Zhida), `knowledge_search` |
 | `zhihu_study` | Budgeted evidence for `deep`, `observation`, and `briefing`. The result is evidence, not a finished report |
 | `zhihu_study_report` | Writes the host's synthesis to `report.md`, `report.json`, and a self-contained `report.html` the user can open |
-| `zhihu_account` | Account & creator data: `question_recommendations` (question discovery), `question_answers` (answer summaries, not full text), `content_detail` (full text of your posts), `content_comments` (comments on your posts), `creator_account_stats` (account creator stats), `creator_content_stats` (per-post creator stats), `quota` (official daily free quota) |
+| `zhihu_account` | Account & creator data: `question_recommendations` (question discovery), `question_answers` (answer summaries, not full text), `content_detail` (full text of your posts), `content_comments` (comments on your posts), `creator_account_stats` (account creator stats), `creator_content_stats` (per-post creator stats), `user_contents` (your posts), `user_followees` (accounts you follow), `user_collections` (recent collections), `user_favlists` (favlists), `favlist_contents` (favlist contents), `quota` (official daily free quota) |
 | `zhihu_sync` | Drafts & media: `list` (list drafts), `get` (read draft), `save` (create/update draft), `prepare` (validate draft), `upload_image` (upload draft image) |
 
 Site search and web search return an empty list when nothing matches, along with the upstream explanation when provided.
@@ -71,7 +71,7 @@ These three workflows are not separate official endpoints and not three prompts.
 
 ### Cost and boundaries
 
-Every upstream request still checks that API's free quota and keeps the Beijing-day ledger, unknown-mapping rejection, explicit `allowPaid`, and no automatic retry. The study tools accept neither a paid switch nor credentials. One study cannot make more than six upstream searches or cover more than 30 days. When the call budget is omitted, the tool uses the plan size; a plan that does not fit is rejected before any request and cannot be extended by calling the tool again. The allowance is whatever the official quota call returns. Web filters accept structured site and publication-time fields only. The model tool and the shared search entry use those parameters; the settings page has no new filter controls.
+Upstream requests are protected by the official free allowance: while plenty remains, each API's quota is checked at most every 5 minutes, otherwise before every request. The Beijing-day ledger, unknown-mapping rejection, explicit `allowPaid`, and no automatic retry still apply. The study tools accept neither a paid switch nor credentials. One study cannot make more than six upstream searches or cover more than 30 days. When the call budget is omitted, the tool uses the plan size; a plan that does not fit is rejected before any request and cannot be extended by calling the tool again. The allowance is whatever the official quota call returns. Web filters accept structured site and publication-time fields only. The model tool and the shared search entry use those parameters; the settings page has no new filter controls.
 
 Failure, exhausted budget, too few sources, missing dates, and cancellation each have their own status. They are not empty results. `empty` means the upstream call succeeded and returned nothing.
 
@@ -87,7 +87,8 @@ Every interactive number needs a source id or an explicit assumption. The plugin
 
 ## Cost Protection
 
-- By default, research and open-platform queries use only Zhihu's free allowance: before each request, the plugin checks the official quota for that API and sends the request only when free quota remains (with no extra local daily call limit).
+- By default, research and open-platform queries use only Zhihu's free allowance: while plenty remains, the official quota for each API is re-checked at most every 5 minutes; when allowance is low or uncertain, it is checked before every request, and the request is sent only when free quota remains (with no extra local daily call limit).
+- Identical search, web-search, hot-list, and question-answer results are reused briefly; cache hits do not spend free allowance. A protection lock left behind by a crashed process recovers automatically.
 - Paid calls are disabled by default and require explicit opt-in via `allowPaid: true` in plugin config (or via environment variable):
 
 ```yaml

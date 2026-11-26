@@ -1,6 +1,6 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { reportExecuted, ZhihuSearchError, type ZhihuClientOptions } from './zhihu-client.ts'
-import { ZHIHU_RESEARCH_TOOL_NAME } from './contracts.ts'
+import { reportExecuted, ZhihuSearchError, type ZhihuClientOptions, type ZhihuSearchExecuted } from './zhihu-client.ts'
+import { ZHIHU_RESEARCH_TOOL_NAME, type ZhihuQuotaId } from './contracts.ts'
 import { executeZhihuSearch, renderZhihuSearch, ZHIHU_SEARCH_DEFAULT_COUNT, ZHIHU_SEARCH_MAX_COUNT, type ZhihuSearchResult } from './search-api.ts'
 import {
   ZHIHU_GLOBAL_SEARCH_DEFAULT_COUNT, ZHIHU_GLOBAL_SEARCH_MAX_COUNT,
@@ -17,11 +17,18 @@ import {
 } from './operations.ts'
 export type CreateZhihuSearchToolOptions = ZhihuClientOptions & {
   /** Best-effort metering hook; invoked after every execution, failures included. */
-  onExecuted?: (event: { ok: boolean; results: number }) => void
+  onExecuted?: (event: ZhihuSearchExecuted) => void
 }
 
 const ZHIHU_RESEARCH_ACTIONS = ['search', 'global_search', 'hot_list', 'ask', 'knowledge_search'] as const
 export type ZhihuResearchAction = (typeof ZHIHU_RESEARCH_ACTIONS)[number]
+const RESEARCH_QUOTA_IDS: Record<ZhihuResearchAction, ZhihuQuotaId> = {
+  search: 'zhihu_search',
+  global_search: 'global_search',
+  hot_list: 'hot_list',
+  ask: 'zhida_openai',
+  knowledge_search: 'knowledge',
+}
 
 /** 合并前的五个检索工具各自执行逻辑不变，这里只按 action 分发。 */
 function executeResearch(
@@ -102,10 +109,10 @@ export function createZhihuResearchTool(options: ZhihuToolOptions = {}) {
       }
       try {
         const { result, results } = await executeResearch(typed.action, typed, client, exec.signal)
-        reportExecuted(onExecuted, { ok: true, results })
+        reportExecuted(onExecuted, { ok: true, results, quotaId: RESEARCH_QUOTA_IDS[typed.action] })
         return result
       } catch (error) {
-        reportExecuted(onExecuted, { ok: false, results: 0 })
+        reportExecuted(onExecuted, { ok: false, results: 0, quotaId: RESEARCH_QUOTA_IDS[typed.action] })
         throw error
       }
     },

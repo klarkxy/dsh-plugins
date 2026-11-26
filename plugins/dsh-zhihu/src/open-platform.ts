@@ -9,6 +9,11 @@ import { ZHIHU_QUOTA_IDS, normalizeZhihuQuotaId, type ZhihuQuotaId } from './con
 export const ZHIHU_OPEN_PLATFORM_APIS = {
   'question.recommendations': { path: '/api/v1/user/question_recommendations', label: '适合回答的问题', quotaId: 'question_discovery' },
   'question.answers': { path: '/api/v1/content/question_answers', label: '问题回答摘要', quotaId: 'question_discovery' },
+  'user.contents': { path: '/api/v1/user/contents', label: '本人创作列表', quotaId: 'user_data' },
+  'user.followees': { path: '/api/v1/user/followees', label: '本人关注', quotaId: 'user_data' },
+  'user.collections': { path: '/api/v1/user/collections', label: '近期收藏', quotaId: 'user_data' },
+  'user.favlists': { path: '/api/v1/user/favlists', label: '收藏夹列表', quotaId: 'user_data' },
+  'favlist.contents': { path: '/api/v1/user/favlist_contents', label: '收藏夹内容', quotaId: 'user_data' },
   'content.detail': { path: '/api/v1/user/content_detail', label: '本人创作全文', quotaId: 'creator' },
   'content.comments': { path: '/api/v1/user/content_comments', label: '本人创作评论', quotaId: 'creator' },
   'creator.account.stats': { path: '/api/v1/user/creator_account_stats', label: '账号创作数据', quotaId: 'creator' },
@@ -16,12 +21,15 @@ export const ZHIHU_OPEN_PLATFORM_APIS = {
   quota: { path: '/api/v1/quota', label: '官方每日额度', quotaId: undefined },
 } as const
 export type ZhihuOpenPlatformOperation = keyof typeof ZHIHU_OPEN_PLATFORM_APIS
+const CURSOR_PAGED_OPERATIONS = new Set<ZhihuOpenPlatformOperation>(['user.contents', 'user.followees', 'favlist.contents'])
 
 const ENDPOINT_ALIASES: Record<string, ZhihuOpenPlatformOperation> = {
   question_recommendations: 'question.recommendations', question_answers: 'question.answers',
   content_detail: 'content.detail', user_content_detail: 'content.detail', 'user.content.detail': 'content.detail',
   content_comments: 'content.comments', user_content_comments: 'content.comments', 'user.content.comments': 'content.comments',
   creator_account_stats: 'creator.account.stats', creator_content_stats: 'creator.content.stats',
+  user_contents: 'user.contents', user_followees: 'user.followees', user_collections: 'user.collections',
+  user_favlists: 'user.favlists', favlist_contents: 'favlist.contents',
 }
 export function resolveZhihuOpenPlatformOperation(endpoint: string): ZhihuOpenPlatformOperation | undefined {
   if (Object.hasOwn(ZHIHU_OPEN_PLATFORM_APIS, endpoint)) return endpoint as ZhihuOpenPlatformOperation
@@ -84,6 +92,18 @@ export function normalizeZhihuOffset(value: unknown): string {
   return decimal
 }
 
+/** User-data offsets are opaque cursors, unlike the Int64 question/comment offsets. */
+export function normalizeZhihuCursorOffset(value: unknown): string {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return String(value)
+  if (typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\s\u0000-\u001f\u007f-\u009f]/u.test(value)) return value
+  return invalid('offset 必须是非负整数或不透明游标字符串；游标不超过 256 字符，且不能包含空白或控制字符。')
+}
+
+function positiveInteger(value: unknown, name: string): string {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) return invalid(`${name} 必须是正整数。`)
+  return String(value)
+}
+
 function zhihuUrl(value: unknown, question: boolean): string {
   if (typeof value !== 'string' || !value.trim()) return invalid(question ? 'questionUrl 不能为空。' : 'contentUrl 不能为空。')
   const cleaned = value.trim()
@@ -123,6 +143,22 @@ function paramsFor(operation: ZhihuOpenPlatformOperation, input: Record<string, 
     params.Count = limit(input.count, 5, 20, 'count')
   } else if (operation === 'question.answers') {
     params.QuestionUrl = zhihuUrl(input.questionUrl, true)
+  } else if (operation === 'user.contents') {
+    const type = input.contentType === undefined ? 'all' : input.contentType
+    if (typeof type !== 'string' || !['all', 'answer', 'article', 'zvideo', 'pin', 'question'].includes(type)) invalid('user_contents 的 contentType 必须是 all、answer、article、zvideo、pin 或 question。')
+    const sortField = input.sortField === undefined ? 'ts' : input.sortField
+    if (typeof sortField !== 'string' || !['like_count', 'ts'].includes(sortField)) invalid('sortField 必须是 like_count 或 ts。')
+    const sortOrder = input.sortOrder === undefined ? 'desc' : input.sortOrder
+    if (typeof sortOrder !== 'string' || !['asc', 'desc'].includes(sortOrder)) invalid('sortOrder 必须是 asc 或 desc。')
+    params.ContentType = type
+    params.SortField = sortField
+    params.SortOrder = sortOrder
+  } else if (operation === 'favlist.contents') {
+    const hasUrlToken = input.favlistUrlToken !== undefined
+    const hasId = input.favlistId !== undefined
+    if (hasUrlToken === hasId) invalid('favlistUrlToken 与 favlistId 必须且只能提供一个。')
+    if (hasUrlToken) params.FavlistUrlToken = positiveInteger(input.favlistUrlToken, 'favlistUrlToken')
+    else params.FavlistId = positiveInteger(input.favlistId, 'favlistId')
   } else if (operation === 'content.detail' || operation === 'content.comments' || operation === 'creator.content.stats') {
     params.ContentUrl = zhihuUrl(input.contentUrl, false)
   } else if (operation === 'creator.account.stats') {
@@ -133,6 +169,13 @@ function paramsFor(operation: ZhihuOpenPlatformOperation, input: Record<string, 
     if (Array.isArray(input.apiIds)) input.apiIds = input.apiIds.map(normalizeZhihuQuotaId)
     if (!Array.isArray(input.apiIds) || input.apiIds.some(id => typeof id !== 'string' || !(ZHIHU_QUOTA_IDS as readonly string[]).includes(id))) invalid('apiIds 包含未知官方额度项。')
     if (input.apiIds.length) params.APIIDs = [...new Set(input.apiIds)].join(',')
+  }
+  if (operation === 'user.contents' || operation === 'user.followees' || operation === 'favlist.contents') {
+    params.Offset = normalizeZhihuCursorOffset(input.offset === undefined ? '0' : input.offset)
+    params.Limit = limit(input.limit, 20, 50)
+  }
+  if (operation === 'user.collections' || operation === 'user.favlists') {
+    params.Limit = limit(input.limit, 20, 50)
   }
   if (operation === 'question.answers' || operation === 'content.comments') {
     params.Offset = normalizeZhihuOffset(input.offset === undefined ? 0 : input.offset)
@@ -162,6 +205,21 @@ export function normalizeZhihuPaging(data: Record<string, unknown>, offset: stri
   }
 }
 
+/** Opaque cursor paging for user-data lists; never compare cursors numerically. */
+export function normalizeZhihuCursorPaging(data: Record<string, unknown>, offset: string): ZhihuPaging {
+  const paging = data.Paging
+  if (!record(paging) || typeof paging.IsEnd !== 'boolean') {
+    return { canContinue: false, warning: '分页信息不完整：缺少有效的 Paging.IsEnd，请停止翻页。' }
+  }
+  if (paging.IsEnd) return { isEnd: true, canContinue: false }
+  const next = paging.NextOffset
+  const nextOffset = typeof next === 'string' && next.length > 0 ? next
+    : typeof next === 'number' && Number.isSafeInteger(next) && next >= 0 ? String(next)
+    : undefined
+  if (nextOffset !== undefined && nextOffset !== offset) return { isEnd: false, canContinue: true, nextOffset }
+  return { isEnd: false, canContinue: false, warning: '分页信息不完整：NextOffset 缺失、无效或未变化，请停止翻页；不要按条数计算偏移。' }
+}
+
 export async function executeZhihuOpenPlatform(
   operation: ZhihuOpenPlatformOperation,
   input: unknown = {},
@@ -178,6 +236,8 @@ export async function executeZhihuOpenPlatform(
     ...(api.quotaId ? { quotaId: api.quotaId } : {}),
     ...(operation === 'question.answers' || operation === 'content.comments'
       ? { paging: normalizeZhihuPaging(data, params.Offset!) } : {}),
+    ...(CURSOR_PAGED_OPERATIONS.has(operation)
+      ? { paging: normalizeZhihuCursorPaging(data, params.Offset!) } : {}),
   }
 }
 

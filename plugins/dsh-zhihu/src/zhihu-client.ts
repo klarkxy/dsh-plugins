@@ -16,10 +16,12 @@ import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { withZhihuCallPolicy, ZhihuCallPolicyError, type ZhihuCallPolicyOptions } from './call-policy.ts'
+import { ZHIHU_RESPONSE_CACHE_TTL_MS, zhihuResponseCacheKey, type ZhihuResponseCache } from './response-cache.ts'
 import type { ZhihuQuotaId } from './contracts.ts'
 
 export const ZHIHU_BASE_URL = 'https://developer.zhihu.com'
 export const ZHIHU_DEFAULT_TIMEOUT_MS = 15_000
+export const ZHIHU_QUOTA_PRECHECK_TIMEOUT_MS = 10_000
 export const ZHIHU_SUMMARY_MAX_CHARS = 200
 
 const ZHIHU_CREDENTIALS_PRIMARY = 'ZHIHU_ACCESS_TOKEN'
@@ -137,6 +139,8 @@ export type ZhihuClientOptions = ZhihuSearchResolveOptions & {
   signal?: AbortSignal
   /** Override the request timeout in ms. Defaults to {@link ZHIHU_DEFAULT_TIMEOUT_MS}. */
   timeoutMs?: number
+  /** Shared in-process cache for cacheable successful GET responses. */
+  responseCache?: ZhihuResponseCache
 }
 
 function isAbortError(error: unknown): boolean {
@@ -182,6 +186,15 @@ export async function zhihuFetchJson(
   const fetcher = options.fetcher ?? globalFetch
   if (!fetcher) throw new ZhihuSearchError('BAD_RESPONSE', '当前环境没有可用的 fetch。')
   const method = init.method ?? (init.formData || init.body !== undefined ? 'POST' : 'GET')
+  const cacheTtl = method === 'GET' ? ZHIHU_RESPONSE_CACHE_TTL_MS[url.pathname] : undefined
+  let cacheKey: string | undefined
+  if (cacheTtl !== undefined && options.responseCache) {
+    const query: Record<string, string> = {}
+    for (const [key, value] of url.searchParams.entries()) query[key] = value
+    cacheKey = zhihuResponseCacheKey(token.token, url.pathname, query, init.envelope === true)
+    const cached = options.responseCache.get(cacheKey)
+    if (cached !== undefined) return cached
+  }
   const timeout = options.timeoutMs !== undefined && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
     ? options.timeoutMs : ZHIHU_DEFAULT_TIMEOUT_MS
   const controller = new AbortController()
@@ -247,21 +260,48 @@ export async function zhihuFetchJson(
     const quota = async (apiId: string) => {
       const quotaUrl = new URL('/api/v1/quota', ZHIHU_BASE_URL)
       quotaUrl.searchParams.set('APIIDs', apiId)
-      const response = await fetcher(quotaUrl.toString(), {
-        method: 'GET', signal: controller.signal,
-        headers: { Authorization: `Bearer ${token.token}`, 'X-Request-Timestamp': String(Math.floor(Date.now() / 1000)), Accept: 'application/json' },
+      const quotaController = new AbortController()
+      const abortQuota = () => quotaController.abort(controller.signal.reason)
+      if (controller.signal.aborted) abortQuota()
+      else controller.signal.addEventListener('abort', abortQuota, { once: true })
+      const quotaTimer = setTimeout(() => quotaController.abort(new Error('官方额度查询超时')), ZHIHU_QUOTA_PRECHECK_TIMEOUT_MS)
+      let stopQuotaWaiting = () => {}
+      const quotaAborted = new Promise<never>((_resolve, reject) => {
+        const rejectAbort = () => reject(quotaController.signal.reason)
+        if (quotaController.signal.aborted) rejectAbort()
+        else {
+          quotaController.signal.addEventListener('abort', rejectAbort, { once: true })
+          stopQuotaWaiting = () => quotaController.signal.removeEventListener('abort', rejectAbort)
+        }
       })
-      const body = await response.json()
-      const data = parseZhihuEnvelope(body, { status: response.status, officialErrors: true })
-      if (!response.ok) throw new Error('官方额度查询失败')
-      return data
+      void quotaAborted.catch(() => {})
+      const read = (async () => {
+        const response = await fetcher(quotaUrl.toString(), {
+          method: 'GET', signal: quotaController.signal,
+          headers: { Authorization: `Bearer ${token.token}`, 'X-Request-Timestamp': String(Math.floor(Date.now() / 1000)), Accept: 'application/json' },
+        })
+        return { response, body: await response.json() }
+      })()
+      void read.catch(() => {})
+      try {
+        const { response, body } = await Promise.race([read, quotaAborted])
+        const data = parseZhihuEnvelope(body, { status: response.status, officialErrors: true })
+        if (!response.ok) throw new Error('官方额度查询失败')
+        return data
+      } finally {
+        clearTimeout(quotaTimer)
+        stopQuotaWaiting()
+        controller.signal.removeEventListener('abort', abortQuota)
+      }
     }
     const guarded = path === '/api/v1/quota' && method === 'GET' ? Promise.race([request(), aborted]) : withZhihuCallPolicy(
       path, init.body, apiId => Promise.race([quota(apiId), aborted]),
       () => Promise.race([request(), aborted]),
       { ...options.callPolicy, env: options.env, signal: controller.signal },
     )
-    return await guarded
+    const result = await guarded
+    if (cacheKey !== undefined && cacheTtl !== undefined) options.responseCache?.set(cacheKey, result, cacheTtl)
+    return result
   } catch (error) {
     if (linked?.aborted) throw new ZhihuSearchError('CANCELLED', '请求已取消')
     if (controller.signal.aborted || isAbortError(error)) {

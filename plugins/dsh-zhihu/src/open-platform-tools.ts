@@ -12,6 +12,11 @@ export type ZhihuOpenPlatformToolOptions = ZhihuClientOptions & { onExecuted?: (
 const ZHIHU_ACCOUNT_ACTIONS = {
   question_recommendations: 'question.recommendations',
   question_answers: 'question.answers',
+  user_contents: 'user.contents',
+  user_followees: 'user.followees',
+  user_collections: 'user.collections',
+  user_favlists: 'user.favlists',
+  favlist_contents: 'favlist.contents',
   content_detail: 'content.detail',
   content_comments: 'content.comments',
   creator_account_stats: 'creator.account.stats',
@@ -23,6 +28,11 @@ export type ZhihuAccountAction = keyof typeof ZHIHU_ACCOUNT_ACTIONS
 const REQUIRED: Record<ZhihuAccountAction, string> = {
   question_recommendations: '主题 query 可选；省略按画像推荐。',
   question_answers: 'questionUrl 必填。',
+  user_contents: '无额外必填参数。',
+  user_followees: '无额外必填参数。',
+  user_collections: '无额外必填参数。',
+  user_favlists: '无额外必填参数。',
+  favlist_contents: 'favlistUrlToken 与 favlistId 必须且只能提供一个。',
   content_detail: 'contentUrl 必填。',
   content_comments: 'contentUrl 必填。',
   creator_account_stats: 'contentType 与日期可选。',
@@ -36,17 +46,22 @@ export function createZhihuAccountTool(options: ZhihuOpenPlatformToolOptions = {
     name: ZHIHU_ACCOUNT_TOOL_NAME,
     description:
       '知乎账号与创作者数据查询（使用已配置的 Access Secret 鉴权，结果仅作对话内参考）。' +
-      'action：question_recommendations 问题推荐；question_answers 回答摘要；content_detail 本人创作正文；content_comments 内容评论；creator_account_stats 账号统计；creator_content_stats 单篇统计；quota 官方额度。',
+      'action：question_recommendations 问题推荐；question_answers 回答摘要；user_contents 本人创作列表；user_followees 本人关注；user_collections 近期收藏；user_favlists 收藏夹列表；favlist_contents 收藏夹内容；content_detail 本人创作正文；content_comments 内容评论；creator_account_stats 账号统计；creator_content_stats 单篇统计；quota 官方额度。' +
+      'user_* 与 favlist_contents 仅当用户明确要求查看自己的账号数据时使用。',
     parameters: {
       action: { type: 'string', enum: Object.keys(ZHIHU_ACCOUNT_ACTIONS), required: true },
       query: { type: 'string', description: 'question_recommendations 主题；省略按画像推荐。' },
       count: { type: 'integer', description: 'question_recommendations 数量，1-20，默认 5。' },
       questionUrl: { type: 'string', description: 'question_answers 必填，https://www.zhihu.com/question/{id} 链接。' },
       contentUrl: { type: 'string', description: 'content_detail、content_comments、creator_content_stats 必填：本人已发布的 HTTPS 回答/专栏/想法/视频链接。' },
-      offset: { type: 'string', description: 'question_answers、content_comments 分页游标（非负 Int64 字符串，默认 "0"，续读直接传入上页返回的 paging.nextOffset）。' },
-      limit: { type: 'integer', description: 'question_answers、content_comments 每页条数，1-50，默认 20。' },
+      offset: { type: 'string', description: 'question_answers、content_comments 为非负 Int64 字符串；user_contents、user_followees、favlist_contents 为不透明游标，续读直接传入上页返回的 paging.nextOffset；默认 "0"。' },
+      limit: { type: 'integer', description: 'question_answers、content_comments 与用户数据列表每页条数，1-50，默认 20。' },
       order: { type: 'string', enum: ['score', 'reverse', 'ascending'], description: 'content_comments 排序，默认 score。' },
-      contentType: { type: 'string', enum: ['all', 'answer', 'article', 'pin', 'zvideo'], description: 'creator_account_stats 内容类型，默认 all（可选 answer、article、pin、zvideo）。' },
+      contentType: { type: 'string', enum: ['all', 'answer', 'article', 'pin', 'zvideo', 'question'], description: 'creator_account_stats 可选 all、answer、article、pin、zvideo；user_contents 还可选 question。默认 all。' },
+      sortField: { type: 'string', enum: ['like_count', 'ts'], description: 'user_contents 排序字段，默认 ts。' },
+      sortOrder: { type: 'string', enum: ['asc', 'desc'], description: 'user_contents 排序方向，默认 desc。' },
+      favlistUrlToken: { type: 'integer', description: 'favlist_contents 的收藏夹 URL Token（正整数）；与 favlistId 必须且只能提供一个。' },
+      favlistId: { type: 'integer', description: 'favlist_contents 的收藏夹 Id（正整数）；与 favlistUrlToken 必须且只能提供一个。' },
       startDate: { type: 'string', description: 'stats action 可选，YYYY-MM-DD，与 endDate 成对；都省略用上游默认范围。' },
       endDate: { type: 'string', description: '结束日期 YYYY-MM-DD（需等于或晚于 startDate）。' },
       apiIds: { type: 'array', items: { type: 'string', enum: [...ZHIHU_QUOTA_IDS, 'question_answers'] }, description: 'quota 可选额度项，默认全部。' },
@@ -57,9 +72,10 @@ export function createZhihuAccountTool(options: ZhihuOpenPlatformToolOptions = {
     },
     isConcurrencySafe() { return true },
     async execute(args, exec) {
-      const input = args as { action: ZhihuAccountAction; questionUrl?: string; contentUrl?: string }
+      const input = args as { action: ZhihuAccountAction; questionUrl?: string; contentUrl?: string; favlistUrlToken?: number; favlistId?: number }
       const operation = ZHIHU_ACCOUNT_ACTIONS[input.action]
-      if ((operation === 'question.answers' && !input.questionUrl) || ((operation === 'content.detail' || operation === 'content.comments' || operation === 'creator.content.stats') && !input.contentUrl)) {
+      if ((operation === 'question.answers' && !input.questionUrl) || ((operation === 'content.detail' || operation === 'content.comments' || operation === 'creator.content.stats') && !input.contentUrl)
+        || (operation === 'favlist.contents' && (input.favlistUrlToken === undefined) === (input.favlistId === undefined))) {
         throw new ZhihuSearchError('INVALID_ARGUMENTS', `action ${input.action} 缺少必填参数：${REQUIRED[input.action]}`)
       }
       const quotaId = ZHIHU_OPEN_PLATFORM_APIS[operation].quotaId
