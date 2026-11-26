@@ -48,13 +48,21 @@ Open **Settings → Secrets** (the Secret Manager settings section):
 - **Secrets**: enter a slot name (lowercase letters, digits, and inner hyphens) and a masked value to save (an existing slot name overwrites), or use **Replace** and **Delete** behind confirmation dialogs. Stored values are always masked and never echoed back or shown as partial tails.
 - **This session’s grants**: inspect shell and HTTP permissions held by the currently open session and active session counts per slot, and click **Revoke this session’s grant** or **Revoke every session’s grant** to withdraw access without deleting the secret itself.
 
+### Host Credential Masking and Plaintext Leak Guards
+
+Alongside `secret://<slot>` grants, the Host enables three defense-in-depth guards by default (configurable via plugin options):
+
+- **Host credential file masking (`maskCredentialFiles`, on by default)**: masks `dsh` (`.dsh/.credentials.yaml`, honoring `DSH_HOME`), `cloud` (`.aws/credentials`, `gcloud`, `.azure`, `.kube/config`, `.docker/config.json`), and `registry` (`.cargo/credentials*`, `.pypirc`) paths (including WSL `/mnt/c/Users/*` profiles) inside Linux `bwrap` and macOS `sandbox-exec` sandboxes, and blocks direct `read`, `read_image`, `write`, `edit`, `open_sidebar`, and `grep` access before execution. The `git` (`.ssh`, `gh`) and `npm` (`.npmrc`) groups remain opt-in via `maskGroups` or `extraMaskedPaths` so standard CLI workflows keep working.
+- **Chat solicitation and raw-token call blocking (`guardToolSecrets`, on by default)**: blocks question tools from asking you to paste API keys, tokens, or passwords into chat (directing the agent to `request_secret` or `gh`), blocks `gh auth token` extraction in `bash` / `pwsh`, and rejects hardcoded `github_pat_*`, `ghp_*`, or `sk-*` literals in non-secret tool arguments.
+- **Ambient token pattern redaction (`redactTokenPatterns`, on by default)**: masks `github_pat_*`, `gh[pousr]_*`, and `sk-*` tokens as `[REDACTED:...]` before committed tool outputs enter session history.
+
 ## Limitations
 
 - **Local plaintext storage**: secrets are persisted locally through the Host credential store **in plaintext**—this is a reference manager, not an encrypted vault. Anyone able to read your DSH data directory can read stored values.
 - **Input isolation vs. redaction boundaries**: dialog submissions go straight to the Host and clear immediately on submit, decline, or close without entering chat history, persistent browser storage, or plugin logs. Post-execute redaction covers normal committed tool results, **not** live streaming shell output, spilled temp files, encoded or transformed rewrites (such as Base64/Hex), or external logs. Any shell command running in a granted session can read its granted `DSH_SECRET_*` variables, so grant shell access deliberately.
 - **Strict session and lifetime bounds**: grants apply only to the top-level session that approved them—they are **not** inherited by delegated subagents, expire after about an hour, and are cleared on plugin unload or Host restart. Replacing or deleting a secret immediately revokes all grants for that slot, and unanswered `request_secret` dialogs expire after 5 minutes.
 - **Shell and HTTP scope boundaries**: shell injection works only in native non-persistent shells (persistent shells are not supported). `secret_http` accepts only exact `https://` origins (no domain wildcards, plain HTTP, embedded URL credentials, or HTTP redirects) and enforces response size limits.
-- **No transparent rewriting or auto-granting**: arguments to other tools that already contain raw secrets are never rewritten automatically; the model can only ask, and every save, grant, replacement, or revocation requires explicit user action.
+- **No transparent rewriting or auto-granting**: non-secret tool calls carrying recognized raw token formats (`github_pat_*`, `ghp_*`, `sk-*`) are blocked outright, and unrecognized raw strings are never rewritten into references automatically; the model can only ask, and every save, grant, replacement, or revocation requires explicit user action.
 
 ## License
 

@@ -344,3 +344,22 @@ export function valueProblem(value: unknown): string | undefined {
   if (value.length > MAX_VALUE_LENGTH) return `value: at most ${MAX_VALUE_LENGTH} characters`
   return undefined
 }
+
+/** Credential file groups that can be masked in sandboxed shells and file tools. */
+export type SecretMaskGroup = 'dsh' | 'cloud' | 'registry' | 'git' | 'npm'
+
+export const ALL_SECRET_MASK_GROUPS: readonly SecretMaskGroup[] = ['dsh', 'cloud', 'registry', 'git', 'npm']
+export const DEFAULT_SECRET_MASK_GROUPS: readonly SecretMaskGroup[] = ['dsh', 'cloud', 'registry']
+
+export interface SandboxGuardConfig {
+  /** Enable host credential file masking in sandboxed commands and file tools (default: true). */
+  maskCredentialFiles?: boolean
+  /** Credential file groups to mask (default: ['dsh', 'cloud', 'registry']; 'git' and 'npm' stay opt-in). */
+  maskGroups?: readonly SecretMaskGroup[]
+  /** Extra absolute or `~/` paths to mask alongside the configured groups. */
+  extraMaskedPaths?: readonly string[]
+  /** Block chat secret solicitation, raw token arguments, and `gh auth token` extraction (default: true). */
+  guardToolSecrets?: boolean
+  /** Redact ambient token patterns (`github_pat_`, `ghp_`, `sk-`) from tool outputs (default: true). */
+  redactTokenPatterns?: boolean
+}
