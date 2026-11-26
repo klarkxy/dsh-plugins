@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-sidebar-layout",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sidebar Layout: switch the right Sidebar between push, drawer overlay and body-swap layouts in the DeepSeek Harness Web GUI.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -127,6 +127,6 @@
     }
   },
   "dshRelease": {
-    "contentHash": "ef710d0268ee61d6ba38c97d51c2157634761dbd1b26bac7d1b0094c3815786f"
+    "contentHash": "5abcd2cf275a61a9d28f4d198a9a98457e111d28e5afdb00a5c01ca1c4f6cf1a"
   }
 }
