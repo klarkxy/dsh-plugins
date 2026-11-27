@@ -382,8 +382,10 @@ function parseRequest(input: unknown, now: number): ParsedRequest {
     budgetRequested = body.maxCalls
   } else if (plannedCalls > ZHIHU_STUDY_MAX_CALLS) {
     invalid(`这次计划需要 ${plannedCalls} 次上游检索，超出单次上限 ${ZHIHU_STUDY_MAX_CALLS}；请缩减子问题或来源数量，在单次调用内完成。`)
-  } else if (followQuestionsExplicit && plannedCalls >= ZHIHU_STUDY_MAX_CALLS) {
-    invalid(`基础检索需要 ${plannedCalls} 次上游调用，已占满单次上限 ${ZHIHU_STUDY_MAX_CALLS}，无剩余额度跟进问题回答；请缩减子问题或来源数量，或关闭 followQuestions。`)
+  }
+  const effectiveCap = budgetRequested ?? ZHIHU_STUDY_MAX_CALLS
+  if (followQuestionsExplicit && plannedCalls >= effectiveCap) {
+    invalid(`基础检索需要 ${plannedCalls} 次上游调用，已占满预算上限 ${effectiveCap}，无剩余额度跟进问题回答；请缩减子问题或来源数量，或关闭 followQuestions。`)
   }
   if (body.windowDays !== undefined && mode !== 'briefing') invalid('windowDays 只适用于 briefing。')
   let windowDays = ZHIHU_STUDY_DEFAULT_WINDOW_DAYS
@@ -488,7 +490,7 @@ function mergeHits(hits: Hit[], now: number, window: ZhihuStudyWindow | undefine
       title,
       url: first.url,
       excerpts,
-      excerptKind: group.hits.every(hit => hit.source === 'question_answers') ? 'answer_summary' : 'snippet',
+      excerptKind: group.hits.some(hit => hit.source === 'question_answers') ? 'answer_summary' : 'snippet',
       fullText: false,
       ...(authors.length === 1 ? { author: authors[0] } : {}),
       ...(authors.length > 1 ? { authorConflict: true } : {}),

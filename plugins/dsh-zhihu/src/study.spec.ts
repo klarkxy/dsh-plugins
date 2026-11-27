@@ -279,6 +279,7 @@ describe('zhihu study evidence', () => {
     expect(answerQuestionUrls).toEqual(['https://www.zhihu.com/question/101', 'https://www.zhihu.com/question/202'])
     const merged = result.evidence.find(entry => entry.url.startsWith(answerUrl))!
     expect(merged.sources).toEqual(['zhihu', 'question_answers'])
+    expect(merged.excerptKind).toBe('answer_summary')
     expect(merged.followedQuestion).toBe('https://www.zhihu.com/question/101')
     expect(merged.votes).toBe(45)
     expect(merged.comments).toBe(7)
@@ -311,6 +312,12 @@ describe('zhihu study evidence', () => {
       mode: 'observation',
       question: '多角度观察',
       queries: ['子问题一', '子问题二', '子问题三'],
+      followQuestions: true,
+    }, client(() => ({ Items: [] }), blocked))).rejects.toThrow(/followQuestions/)
+    await expect(executeZhihuStudy({
+      mode: 'observation',
+      question: '显式预算占满',
+      maxCalls: 2,
       followQuestions: true,
     }, client(() => ({ Items: [] }), blocked))).rejects.toThrow(/followQuestions/)
     expect(blocked).toHaveLength(0)
