@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-zhihu",
-  "version": "0.3.9",
+  "version": "0.3.11",
   "description": "Search Zhihu and the web, browse hot lists, Zhida, knowledge bases, Q&A, creator data, and drafts, and export local reports for deep research, opinion comparison, and rolling 30-day briefings.",
   "icon": "./icon.svg",
   "license": "SEE LICENSE IN LICENSE",
@@ -177,6 +177,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "62e975a39a7b80256f8b54a7fda1173a7ca399520389d68f3d5c26ddd9426f9c"
+    "contentHash": "8765f6a1e0eddd2b314c4f7dfb2462e6995c62811c854231c3da9e3843fdca8a"
   }
 }
