@@ -92,11 +92,16 @@ describe('question/creator request contracts', () => {
     assert.equal(calls[0]!.url.searchParams.get('Order'), 'ascending')
     assert.equal(calls[0]!.url.searchParams.get('Limit'), '50')
   })
-  it('accepts numeric offsets and preserves a question URL trailing slash', async () => {
+  it('accepts numeric offsets and normalizes question URL trailing slash, query, and hash', async () => {
     const { options, calls } = fixture()
-    await executeZhihuOpenPlatform('question.answers', { questionUrl: `${QUESTION}/`, offset: 20, limit: 10 }, options)
-    assert.equal(calls[0]!.url.searchParams.get('QuestionUrl'), `${QUESTION}/`)
+    await executeZhihuOpenPlatform('question.answers', { questionUrl: `${QUESTION}/?utm_psn=123#answers`, offset: 20, limit: 10 }, options)
+    assert.equal(calls[0]!.url.searchParams.get('QuestionUrl'), QUESTION)
     assert.equal(calls[0]!.url.searchParams.get('Offset'), '20')
+  })
+  it('normalizes answer links under a question to the canonical question URL', async () => {
+    const { options, calls } = fixture()
+    await executeZhihuOpenPlatform('question.answers', { questionUrl: `${QUESTION}/answer/456/?utm_psn=456#comment` }, options)
+    assert.equal(calls[0]!.url.searchParams.get('QuestionUrl'), QUESTION)
   })
   it('sends user content filters and opaque cursors exactly as provided', async () => {
     const { options, calls } = fixture()
@@ -142,7 +147,7 @@ describe('question/creator request contracts', () => {
 const INVALID_INPUTS: Array<[ZhihuOpenPlatformOperation, unknown]> = [
   ...['', '  ', null, false].map(query => ['question.recommendations', { query }] as [ZhihuOpenPlatformOperation, unknown]),
   ...[0, 21, 1.5, '5', null, Infinity, NaN].map(count => ['question.recommendations', { count }] as [ZhihuOpenPlatformOperation, unknown]),
-  ...['http://www.zhihu.com/question/1', CONTENT, 'https://example.com/question/1', 'https://www.zhihu.com.evil.test/question/1', '', 'https://user:pass@www.zhihu.com/question/1', 'https://www.zhihu.com:8443/question/1'].map(questionUrl => ['question.answers', { questionUrl }] as [ZhihuOpenPlatformOperation, unknown]),
+  ...['http://www.zhihu.com/question/1', 'https://example.com/question/1', 'https://www.zhihu.com.evil.test/question/1', 'https://www.zhihu.com/answer/456', '', 'https://user:pass@www.zhihu.com/question/1', 'https://www.zhihu.com:8443/question/1'].map(questionUrl => ['question.answers', { questionUrl }] as [ZhihuOpenPlatformOperation, unknown]),
   ...[QUESTION, 'https://example.com/p/1', 'http://zhuanlan.zhihu.com/p/1'].map(contentUrl => ['content.detail', { contentUrl }] as [ZhihuOpenPlatformOperation, unknown]),
   ...[-1, 1.5, false, '', 'cursor_abc', '-1', '1.5', '9223372036854775808', Number.MAX_SAFE_INTEGER + 1].map(offset => ['question.answers', { questionUrl: QUESTION, offset }] as [ZhihuOpenPlatformOperation, unknown]),
   ['content.comments', { contentUrl: CONTENT, order: 'recent' }],

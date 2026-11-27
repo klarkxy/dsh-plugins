@@ -147,6 +147,8 @@ describe('publisher credentials', () => {
       const clears = [...container.querySelectorAll('button')].filter(node => node.textContent === '清除')
       expect(clears).toHaveLength(1)
       await act(async () => clears[0].click())
+      expect(document.body.textContent).toContain('草稿配图上传将不可用')
+      expect(document.body.textContent).not.toContain('发布与预览会失败')
       const confirmed = [...document.querySelectorAll('button')].filter(node => node.textContent === '清除').at(-1)!
       await act(async () => confirmed.click())
       expect(unset).toHaveBeenCalledWith({ ref: ZHIHU_APP_KEY_REF })

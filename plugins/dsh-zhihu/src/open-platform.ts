@@ -111,11 +111,14 @@ function zhihuUrl(value: unknown, question: boolean): string {
   let url: URL
   try { url = new URL(cleaned) } catch { return invalid('不是有效的知乎 URL。') }
   if (url.protocol !== 'https:' || url.username || url.password || url.port) return invalid('必须使用无账号密码、无非标准端口的 HTTPS 知乎链接。')
-  const valid = question
-    ? url.hostname === 'www.zhihu.com' && /^\/question\/\d+\/?$/.test(url.pathname)
-    : (url.hostname === 'www.zhihu.com' && /^\/(?:answer\/\d+|question\/\d+\/answer\/\d+|pin\/\d+|zvideo\/\d+)\/?$/.test(url.pathname))
-      || (url.hostname === 'zhuanlan.zhihu.com' && /^\/p\/\d+\/?$/.test(url.pathname))
-  if (!valid) return invalid(question ? 'questionUrl 仅支持 https://www.zhihu.com/question/{id}。' : 'contentUrl 仅支持知乎回答、专栏文章、想法或视频链接。')
+  if (question) {
+    const match = url.hostname === 'www.zhihu.com' ? /^\/question\/(\d+)(?:\/answer\/\d+)?\/?$/.exec(url.pathname) : null
+    if (match) return `https://www.zhihu.com/question/${match[1]}`
+    return invalid('questionUrl 仅支持 https://www.zhihu.com/question/{id} 或其下的 /answer/{aid} 回答链接。')
+  }
+  const valid = (url.hostname === 'www.zhihu.com' && /^\/(?:answer\/\d+|question\/\d+\/answer\/\d+|pin\/\d+|zvideo\/\d+)\/?$/.test(url.pathname))
+    || (url.hostname === 'zhuanlan.zhihu.com' && /^\/p\/\d+\/?$/.test(url.pathname))
+  if (!valid) return invalid('contentUrl 仅支持知乎回答、专栏文章、想法或视频链接。')
   return cleaned
 }
 

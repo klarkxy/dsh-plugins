@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
 import { prepareZhihuSyncDraft } from './sync-content.ts'
-import { publishZhihuSync, ZhihuSyncApiError, type ZhihuSyncTransportOptions } from './sync-api.ts'
+import type { ZhihuSyncTransportOptions } from './sync-api.ts'
 import { uploadZhihuSyncMedia } from './sync-media.ts'
 import type { SyncDraft } from './sync-types.ts'
 
@@ -64,10 +64,7 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
-/** Review tickets bind an exact saved revision. Only the human UI receives them;
- * model tools can prepare content but cannot grant publishing authority. */
 export function createZhihuSyncService(table: SyncDraftTable, options: ZhihuSyncTransportOptions) {
-  const reviews = new Map<string, { revision: number; token: string; expires: number }>()
   const locks = new Map<string, Promise<unknown>>()
   async function locked<T>(id: string, operation: () => Promise<T>): Promise<T> {
     const previous = locks.get(id) ?? Promise.resolve()
@@ -106,8 +103,7 @@ export function createZhihuSyncService(table: SyncDraftTable, options: ZhihuSync
       if (endpoint === 'sync.media.upload') {
         return uploadZhihuSyncMedia(body as Parameters<typeof uploadZhihuSyncMedia>[0], options, signal)
       }
-      if (endpoint === 'sync.publish' && caller !== 'ui') throw new ZhihuSyncServiceError('confirmation-required', 'Publishing requires a human-confirmed UI review; the agent tool can only save and validate drafts.')
-      if (!['sync.save', 'sync.prepare', 'sync.publish'].includes(endpoint)) throw new ZhihuSyncServiceError('bad-request', '未知同步操作。')
+      if (!['sync.save', 'sync.prepare'].includes(endpoint)) throw new ZhihuSyncServiceError('bad-request', '未知同步操作。')
       const id = endpoint === 'sync.save' && body.id === undefined ? randomUUID() : body.id
       if (typeof id !== 'string' || !id) throw new ZhihuSyncServiceError('bad-request', '缺少草稿 ID。')
       return locked(id, async () => {
@@ -128,52 +124,13 @@ export function createZhihuSyncService(table: SyncDraftTable, options: ZhihuSync
             draft: parsed.data,
           }
           await table.put(id, record)
-          reviews.delete(id)
           return structuredClone(record)
         }
         const record = get(id)
         revision(record, body.expectedRevision)
         editable(record)
         const prepared = prepareZhihuSyncDraft(record.draft)
-        if (endpoint === 'sync.prepare') {
-          if (caller === 'tool') return { record, prepared }
-          // One bounded, short-lived ticket per draft. Preparing again replaces it.
-          for (const [key, review] of reviews) if (review.expires < Date.now()) reviews.delete(key)
-          const reviewToken = randomUUID()
-          if (prepared.canPublish) reviews.set(id, { revision: record.revision, token: reviewToken, expires: Date.now() + 30 * 60_000 })
-          return { record, prepared, reviewToken: prepared.canPublish ? reviewToken : '' }
-        }
-        const review = reviews.get(id)
-        if (body.confirmed !== true || !review || review.token !== body.reviewToken
-          || review.revision !== record.revision || review.expires < Date.now()) {
-          throw new ZhihuSyncServiceError('confirmation-required', '请重新预览当前草稿并确认发布。')
-        }
-        if (!prepared.canPublish) throw new ZhihuSyncServiceError('validation-failed', '请先修正校验错误。')
-        // Check configuration before recording a possibly sent request. Pin this
-        // credential pair for this single operation, never across operations.
-        const credentials = await options.resolveCredentials()
-        signal.throwIfAborted()
-        record.publishState = 'publishing'
-        record.updatedAt = new Date().toISOString()
-        await table.put(id, record)
-        reviews.delete(id)
-        // Persist intent before the network call: after process loss it must never
-        // look like an unsent draft. There is no upstream idempotency contract.
-        try {
-          record.published = await publishZhihuSync(prepared, { ...options, resolveCredentials: async () => credentials }, signal)
-          record.publishState = 'published'
-        } catch (error) {
-          if (error instanceof ZhihuSyncApiError && error.definite) {
-            delete record.publishState
-            record.lastError = error.message
-          } else {
-            record.publishState = 'uncertain'
-            record.lastError = '未能确认发布结果，请检查知乎主页，避免重复发布。'
-          }
-        }
-        record.updatedAt = new Date().toISOString()
-        await table.put(id, record)
-        return structuredClone(record)
+        return { record, prepared }
       })
     },
   }

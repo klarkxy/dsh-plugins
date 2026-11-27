@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildZhihuPublishRequest, normalizeCodeLang, prepareZhihuSyncDraft, SYNC_LIMITS } from './sync-content.ts'
-import type { SyncDraft, SyncPrepared } from './sync-types.ts'
+import { normalizeCodeLang, prepareZhihuSyncDraft, SYNC_LIMITS } from './sync-content.ts'
+import type { SyncDraft } from './sync-types.ts'
 
 const base = (partial: Partial<SyncDraft> = {}): SyncDraft => ({
   type: 'article',
@@ -406,58 +406,6 @@ describe('boundary regressions (sync-content)', () => {
   it('pin media-area images do not trigger image.unused warning', () => {
     const r = prepare({ type: 'pin', title: '', body: '内容', format: 'markdown', images: [{ url: 'https://pic1.zhimg.com/x.png' }] })
     expect(r.issues.some(i => i.code === 'image.unused')).toBe(false)
-  })
-})
-
-describe('buildZhihuPublishRequest', () => {
-  const ok = (d: Partial<SyncDraft>): SyncPrepared => {
-    const p = prepareZhihuSyncDraft({ type: 'article', title: '标题', body: 'x'.repeat(20), format: 'markdown', ...d })
-    if (!p.canPublish) throw new Error('fixture not publishable: ' + JSON.stringify(p.issues))
-    return p
-  }
-  it('article envelope + fields', () => {
-    const p = ok({ settings: { commentPermission: 'follower', tableOfContentsEnabled: true, creationStatement: 'ai_creation', topics: ['https://www.zhihu.com/topic/123/hot', 'https://www.zhihu.com/topic/123/hot', 'https://www.zhihu.com/topic/456/hot'] } })
-    const req = buildZhihuPublishRequest(p)
-    expect(req.type).toBe('article')
-    expect(req.confirmed).toBe(true)
-    expect(req.content.html).toBe(p.html)
-    expect(req.content.comment_permission).toBe('follower')
-    expect(req.content.table_of_contents_enabled).toBe(true)
-    expect(req.content.creation_statement).toBe('ai_creation')
-    expect((req.content.topics as any[]).length).toBe(2) // dedup
-    expect((req.content.topics as any[])[0].topic_token).toBe('123')
-  })
-  it('question envelope', () => {
-    const p = ok({ type: 'question', title: '问题标题足够长？', body: '补充说明', settings: { topics: ['https://www.zhihu.com/topic/77/hot'] } })
-    const req = buildZhihuPublishRequest(p)
-    expect(req.type).toBe('question')
-    expect(req.content.title).toBe('问题标题足够长？')
-    expect((req.content.topics as any[])[0].topic_token).toBe('77')
-    expect(req.content.comment_permission).toBeUndefined()
-  })
-  it('pin: images win over linkcard; ring extracted', () => {
-    const p = ok({
-      type: 'pin', title: '', body: '内容', format: 'markdown',
-      images: [{ url: 'https://pic1.zhimg.com/x.png' }],
-      settings: { ring: 'https://www.zhihu.com/ring/host/999', creationStatement: 'ai_creation' },
-    })
-    const req = buildZhihuPublishRequest(p)
-    expect(req.type).toBe('pin')
-    expect((req.content.images as any[])[0].url).toBe('https://pic1.zhimg.com/x.png')
-    expect(req.content.linkcard).toBeUndefined()
-    expect((req.content.ring as any).ring_id).toBe('999')
-    expect(req.content.creation_statement).toBe('ai_creation')
-  })
-  it('pin: linkcard only', () => {
-    const p = ok({ type: 'pin', title: '', body: '内容', format: 'markdown', linkCard: { url: 'https://www.zhihu.com', title: '知乎' } })
-    const req = buildZhihuPublishRequest(p)
-    expect((req.content.linkcard as any).url).toBe('https://www.zhihu.com')
-    expect((req.content.linkcard as any).is_from_forward).toBe(false)
-    expect(req.content.images).toBeUndefined()
-  })
-  it('throws when not canPublish', () => {
-    const bad = prepareZhihuSyncDraft({ type: 'article', title: '', body: 'x', format: 'markdown' })
-    expect(() => buildZhihuPublishRequest(bad)).toThrow()
   })
 })
 

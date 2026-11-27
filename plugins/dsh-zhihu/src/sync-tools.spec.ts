@@ -6,6 +6,8 @@ describe('Zhihu sync model tool', () => {
   it('exposes draft and upload operations but not human confirmation or publication', async () => {
     const syncCall = vi.fn(async () => ({ id: 'draft-1', revision: 1 }))
     const tool = createZhihuSyncTool({ syncCall } as unknown as ZhihuService)
+    expect(tool.description).toContain('草稿仅保存在本地')
+    expect(tool.description).not.toContain('预览界面')
     const schema = JSON.stringify(tool.parameters)
     expect(schema).not.toContain('reviewToken')
     expect(schema).not.toContain('confirmed')
