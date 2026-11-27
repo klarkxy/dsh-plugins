@@ -10,12 +10,12 @@ export type ZhihuStudySkill = {
 
 const SHARED = `
 按三步完成研究与导出：
-1. 调用 zhihu_study 采集有预算的检索证据（phase 固定为 evidence，finishedReport 固定为 false）。单次研究在同一次调用内完成，上限 6 次上游检索；原始证据仅使用站内、全网及可选知识库来源，仅在免费额度内执行，并在 windowDays ≤ 30 的范围内请求。
+1. 调用 zhihu_study 采集有预算的检索证据（phase 固定为 evidence，finishedReport 固定为 false）。单次研究在同一次调用内完成，上限 6 次上游检索；原始证据仅使用站内、全网、可选知识库及问题回答摘要来源，仅在免费额度内执行，并在 windowDays ≤ 30 的范围内请求。
 2. 基于返回的 evidence 综合分析，如实呈现检索 status：failed、budget_exhausted、insufficient_sources、insufficient_dates、cancelled 或 partial 需说明具体原因与未覆盖范围；empty 表示上游成功检索但命中为零。
 3. 在可写工作区下调用 zhihu_study_report，原样附带本次返回的 evidence，将 report.md、report.json 与可打开的 report.html 导出到会话工作区的 zhihu-study 目录。
 
 出处与数值规范：
-- 所有来源编号、链接、摘录、作者、赞同数及权威字段均逐字源自本次 evidence；摘录为片段预览。
+- 所有来源编号、链接、摘录、作者、赞同数及权威字段均逐字源自本次 evidence；摘录与问题回答摘要均为片段预览，并非全文。
 - 标为 source 的数值须在对应引文中同时包含量名、数字与紧邻单位；估算值与区间标为 assumption，单位换算标为 conversion 并写明原文数值、系数与量纲说明（例如 20 平方米 ÷ 2 元 = 10 平方米/元）。
 - 全网 AuthorityLevel 的 1–4 对应官方低/中/高/超高四档；知乎站内的 AuthorityLevel 与 RankingScore 仅在上游返回时原样保留。
 `.trim()

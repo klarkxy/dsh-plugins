@@ -293,7 +293,7 @@ function hitFromSearch(raw: Record<string, unknown>, source: ZhihuStudySource, q
 function followQuestionUrl(value: string): string | undefined {
   try {
     const url = new URL(value)
-    if (url.protocol !== 'https:' || url.hostname !== 'www.zhihu.com' || url.username || url.password) return undefined
+    if (url.protocol !== 'https:' || url.hostname !== 'www.zhihu.com' || url.username || url.password || Boolean(url.port)) return undefined
     const match = /^\/question\/(\d+)(?:\/answer\/\d+)?\/?$/.exec(url.pathname)
     return match ? `https://www.zhihu.com/question/${match[1]}` : undefined
   } catch {
@@ -321,6 +321,7 @@ type ParsedRequest = {
   sources: ZhihuStudySource[]
   recallScopes: ZhihuRecallScope[]
   followQuestions: boolean
+  followQuestionsExplicit: boolean
   budget: number
   budgetRequested: number | null
   windowDays: number
@@ -370,6 +371,7 @@ function parseRequest(input: unknown, now: number): ParsedRequest {
   }
   if (body.followQuestions !== undefined && typeof body.followQuestions !== 'boolean') invalid('followQuestions 必须是布尔值。')
   if (mode === 'briefing' && body.followQuestions === true) invalid('followQuestions 不适用于 briefing。')
+  const followQuestionsExplicit = body.followQuestions === true
   const followQuestions = body.followQuestions === undefined ? mode === 'observation' : body.followQuestions
   const plannedCalls = queries.length * sources.length
   let budgetRequested: number | null = null
@@ -380,6 +382,8 @@ function parseRequest(input: unknown, now: number): ParsedRequest {
     budgetRequested = body.maxCalls
   } else if (plannedCalls > ZHIHU_STUDY_MAX_CALLS) {
     invalid(`这次计划需要 ${plannedCalls} 次上游检索，超出单次上限 ${ZHIHU_STUDY_MAX_CALLS}；请缩减子问题或来源数量，在单次调用内完成。`)
+  } else if (followQuestionsExplicit && plannedCalls >= ZHIHU_STUDY_MAX_CALLS) {
+    invalid(`基础检索需要 ${plannedCalls} 次上游调用，已占满单次上限 ${ZHIHU_STUDY_MAX_CALLS}，无剩余额度跟进问题回答；请缩减子问题或来源数量，或关闭 followQuestions。`)
   }
   if (body.windowDays !== undefined && mode !== 'briefing') invalid('windowDays 只适用于 briefing。')
   let windowDays = ZHIHU_STUDY_DEFAULT_WINDOW_DAYS
@@ -401,7 +405,7 @@ function parseRequest(input: unknown, now: number): ParsedRequest {
     invalid('研究工具不能接收付费开关或凭据。')
   }
   return {
-    mode, question, queries, querySource, sources, recallScopes, followQuestions,
+    mode, question, queries, querySource, sources, recallScopes, followQuestions, followQuestionsExplicit,
     budget: budgetRequested ?? Math.min(ZHIHU_STUDY_MAX_CALLS, plannedCalls + (followQuestions ? ZHIHU_STUDY_MAX_FOLLOW : 0)),
     budgetRequested, windowDays, ...(since !== undefined ? { since } : {}),
   }
@@ -438,12 +442,25 @@ function mergeHits(hits: Hit[], now: number, window: ZhihuStudyWindow | undefine
   const nowSeconds = Math.floor(now / 1000)
   return groups.map((group, index) => {
     const first = group.hits[0]!
+    const title = group.hits.find(hit => hit.title && hit.title !== '(无标题)')?.title ?? first.title
     const sources = [...new Set(group.hits.map(hit => hit.source))]
     const excerpts = [...new Set(group.hits.map(hit => hit.excerpt).filter(excerpt => excerpt.length > 0))]
+    const snippetExcerpts = [...new Set(
+      group.hits.filter(hit => hit.source !== 'question_answers').map(hit => hit.excerpt).filter(excerpt => excerpt.length > 0),
+    )]
+    const answerSummaryExcerpts = [...new Set(
+      group.hits.filter(hit => hit.source === 'question_answers').map(hit => hit.excerpt).filter(excerpt => excerpt.length > 0),
+    )]
     const authors = [...new Set(group.hits.map(hit => hit.author).filter((author): author is string => !!author))]
     const badges = [...new Set(group.hits.map(hit => hit.authorBadgeText).filter((badge): badge is string => !!badge))]
+    const voteValues = group.hits.flatMap(hit => hit.votes !== undefined ? [hit.votes] : [])
+    const votes = group.hits.find(hit => hit.source === 'question_answers' && hit.votes !== undefined)?.votes ?? voteValues[0]
+    const commentValues = group.hits.flatMap(hit => hit.comments !== undefined ? [hit.comments] : [])
+    const comments = group.hits.find(hit => hit.source === 'question_answers' && hit.comments !== undefined)?.comments ?? commentValues[0]
     const authorities = [...new Set(group.hits.map(hit => hit.authority).filter((value): value is string => !!value))]
     const scores = [...new Set(group.hits.flatMap(hit => hit.rankingScore !== undefined ? [hit.rankingScore] : []))]
+    const contentId = group.hits.map(hit => textField(hit.contentId)).find((id): id is string => id !== undefined)
+    const followedQuestion = group.hits.map(hit => textField(hit.followedQuestion)).find((url): url is string => url !== undefined)
     const editValues = group.hits.flatMap(hit => hit.editTime !== undefined ? [hit.editTime] : [])
     const unparseable = group.hits.some(hit => hit.editTimeUnparseable)
     const uniqueEdits = [...new Set(editValues)]
@@ -468,7 +485,7 @@ function mergeHits(hits: Hit[], now: number, window: ZhihuStudyWindow | undefine
       id: `e${index + 1}`,
       sources,
       queries: [...new Set(group.hits.map(hit => hit.query))],
-      title: first.title,
+      title,
       url: first.url,
       excerpts,
       excerptKind: group.hits.every(hit => hit.source === 'question_answers') ? 'answer_summary' : 'snippet',
@@ -476,14 +493,14 @@ function mergeHits(hits: Hit[], now: number, window: ZhihuStudyWindow | undefine
       ...(authors.length === 1 ? { author: authors[0] } : {}),
       ...(authors.length > 1 ? { authorConflict: true } : {}),
       ...(badges.length === 1 ? { authorBadgeText: badges[0] } : {}),
-      ...(first.votes !== undefined && group.hits.every(hit => hit.votes === first.votes) ? { votes: first.votes } : {}),
-      ...(first.comments !== undefined && group.hits.every(hit => hit.comments === first.comments) ? { comments: first.comments } : {}),
+      ...(votes !== undefined ? { votes } : {}),
+      ...(comments !== undefined ? { comments } : {}),
       ...(authorities.length === 1 ? { authority: authorities[0] } : {}),
       ...(authorityMeaning ? { authorityMeaning } : {}),
       ...(authorities.length > 1 ? { authorityConflict: true } : {}),
       ...(sources.includes('zhihu') && scores.length === 1 ? { rankingScore: scores[0] } : {}),
       rankingScoreDocumented: sources.includes('zhihu') && scores.length === 1,
-      ...(textField(first.contentId) ? { contentId: first.contentId } : {}),
+      ...(contentId !== undefined ? { contentId } : {}),
       ...(newest !== undefined ? { editTime: String(newest) } : {}),
       editTimes: uniqueEdits.map(String),
       editTimeStatus: editStatus,
@@ -493,8 +510,8 @@ function mergeHits(hits: Hit[], now: number, window: ZhihuStudyWindow | undefine
       inWindow,
       novelty,
       passedPublishFilter: group.hits.some(hit => hit.passedPublishFilter),
-      sourceConflict: excerpts.length > 1,
-      ...(first.followedQuestion ? { followedQuestion: first.followedQuestion } : {}),
+      sourceConflict: snippetExcerpts.length > 1 || answerSummaryExcerpts.length > 1,
+      ...(followedQuestion !== undefined ? { followedQuestion } : {}),
     }
   })
 }
@@ -607,51 +624,63 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
   }
   let followPlanned = 0
   let followQuestionFound = false
+  let followSkippedByImplicitCap = false
   const followNotes: string[] = []
   if (request.followQuestions && !cancelled) {
-    const questions: Array<{ url: string; parentTitle: string }> = []
-    const seenQuestions = new Set<string>()
-    for (const hit of hits) {
-      const questionUrl = followQuestionUrl(hit.url)
-      if (!questionUrl || seenQuestions.has(questionUrl)) continue
-      seenQuestions.add(questionUrl)
-      questions.push({ url: questionUrl, parentTitle: hit.title })
-    }
-    followQuestionFound = questions.length > 0
     const used = calls.filter(call => call.state !== 'skipped').length
     const remaining = Math.max(0, request.budget - used)
-    const followCapacity = Math.min(ZHIHU_STUDY_MAX_FOLLOW, remaining)
-    let stopFollowing = false
-    for (let index = 0; index < questions.length; index += 1) {
-      const question = questions[index]!
-      followPlanned += 1
-      if (index >= followCapacity || stopFollowing || cancelled) {
-        calls.push({ source: 'question_answers', query: question.url, state: 'skipped' })
-        continue
-      }
-      try {
-        if (options.signal?.aborted) throw new ZhihuSearchError('CANCELLED', '请求已取消')
-        const result = await executeZhihuOpenPlatform('question.answers', {
-          questionUrl: question.url, offset: 0, limit: ZHIHU_STUDY_FOLLOW_ANSWER_LIMIT,
-        }, options)
-        const found = itemsOf(result.data).map(item => hitFromAnswer(item, question.url, question.parentTitle))
-        hits.push(...found)
-        calls.push({ source: 'question_answers', query: question.url, state: 'completed', resultCount: found.length })
-        const paging = result.data.Paging
-        if (!paging || typeof paging !== 'object' || Array.isArray(paging) || (paging as { IsEnd?: unknown }).IsEnd !== true) {
-          followNotes.push(`${question.url} 的回答摘要未取完；工具不自动翻页，摘要不是回答全文。`)
+    if (!request.followQuestionsExplicit && request.budgetRequested === null && remaining === 0) {
+      followSkippedByImplicitCap = true
+    } else {
+      const questions: Array<{ url: string; parentTitle: string }> = []
+      const questionByUrl = new Map<string, { url: string; parentTitle: string }>()
+      for (const hit of hits) {
+        const questionUrl = followQuestionUrl(hit.url)
+        if (!questionUrl) continue
+        const candidateTitle = hit.title === '(无标题)' ? '' : hit.title
+        const existing = questionByUrl.get(questionUrl)
+        if (existing) {
+          if (!existing.parentTitle && candidateTitle) existing.parentTitle = candidateTitle
+          continue
         }
-      } catch (error) {
-        const aborted = options.signal?.aborted || (error instanceof ZhihuSearchError && error.code === 'CANCELLED')
-        const code = error instanceof ZhihuSearchError ? error.code : 'BAD_RESPONSE'
-        const message = error instanceof Error ? error.message : '知乎问题回答摘要读取失败'
-        calls.push({ source: 'question_answers', query: question.url, state: 'failed', code })
-        failures.push({ source: 'question_answers', query: question.url, code, message, retried: false })
-        if (aborted) cancelled = true
-        stopFollowing = true
+        const entry = { url: questionUrl, parentTitle: candidateTitle }
+        questionByUrl.set(questionUrl, entry)
+        questions.push(entry)
       }
+      followQuestionFound = questions.length > 0
+      const followCapacity = Math.min(ZHIHU_STUDY_MAX_FOLLOW, remaining)
+      let stopFollowing = false
+      for (let index = 0; index < questions.length; index += 1) {
+        const question = questions[index]!
+        followPlanned += 1
+        if (index >= followCapacity || stopFollowing || cancelled) {
+          calls.push({ source: 'question_answers', query: question.url, state: 'skipped' })
+          continue
+        }
+        try {
+          if (options.signal?.aborted) throw new ZhihuSearchError('CANCELLED', '请求已取消')
+          const result = await executeZhihuOpenPlatform('question.answers', {
+            questionUrl: question.url, offset: 0, limit: ZHIHU_STUDY_FOLLOW_ANSWER_LIMIT,
+          }, options)
+          const found = itemsOf(result.data).map(item => hitFromAnswer(item, question.url, question.parentTitle))
+          hits.push(...found)
+          calls.push({ source: 'question_answers', query: question.url, state: 'completed', resultCount: found.length })
+          const paging = result.data.Paging
+          if (!paging || typeof paging !== 'object' || Array.isArray(paging) || (paging as { IsEnd?: unknown }).IsEnd !== true) {
+            followNotes.push(`${question.url} 的回答摘要未取完；工具不自动翻页，摘要不是回答全文。`)
+          }
+        } catch (error) {
+          const aborted = options.signal?.aborted || (error instanceof ZhihuSearchError && error.code === 'CANCELLED')
+          const code = error instanceof ZhihuSearchError ? error.code : 'BAD_RESPONSE'
+          const message = error instanceof Error ? error.message : '知乎问题回答摘要读取失败'
+          calls.push({ source: 'question_answers', query: question.url, state: 'failed', code })
+          failures.push({ source: 'question_answers', query: question.url, code, message, retried: false })
+          if (aborted) cancelled = true
+          stopFollowing = true
+        }
+      }
+      if (questions.length > followCapacity && remaining < ZHIHU_STUDY_MAX_FOLLOW) budgetExhausted = true
     }
-    if (questions.length > followCapacity && remaining < ZHIHU_STUDY_MAX_FOLLOW) budgetExhausted = true
   }
   const evidence = mergeHits(hits, now, studyWindow, request.since)
   const completed = calls.filter(call => call.state === 'completed').length
@@ -665,7 +694,8 @@ export async function executeZhihuStudy(input: unknown, options: ZhihuClientOpti
     '全网权威等级 1 到 4 附官方四档说明；知乎站内等级保留上游原值。',
     ...followNotes,
   ]
-  if (request.followQuestions && !cancelled && !followQuestionFound) limitations.push('结果里没有可识别的知乎问题链接，未读取回答摘要。')
+  if (followSkippedByImplicitCap) limitations.push('基础检索已占满单次调用上限，本次未额外读取问题回答摘要。')
+  if (request.followQuestions && !cancelled && !followSkippedByImplicitCap && !followQuestionFound) limitations.push('结果里没有可识别的知乎问题链接，未读取回答摘要。')
   if (request.querySource === 'question_only') limitations.push('本次仅直接检索原问题（未拆解多角度子问题）。')
   if (request.querySource === 'question_only' && request.question.length > 200) limitations.push('原问题超过 200 字，单次检索词截取前 200 字。')
   if (request.mode === 'briefing') limitations.push('全网 publish_time 与知乎 EditTime 均按条目发布或编辑时间筛选；已确认事件时间线仅收录摘录中写明日期的条目。')
@@ -765,8 +795,8 @@ export function createZhihuStudyTool(options: ZhihuClientOptions & { onExecuted?
     name: ZHIHU_STUDY_TOOL_NAME,
     description:
       '按预算采集知乎与全网研究证据（阶段为 evidence，综合后通过 zhihu_study_report 导出报告）。' +
-      'mode：deep 多子问题拆解检索；observation 话题多方观点样本；briefing 近 30 天滚动动态（全网使用 realtime 与 publish_time 过滤，结合知乎条目时间）。' +
-      '请依据返回的 status 如实说明检索覆盖、失败或样本局限，原始证据仅使用检索来源。',
+      'mode：deep 多子问题拆解检索；observation 话题多方观点样本（默认跟进最多 2 个命中问题下的回答摘要）；briefing 近 30 天滚动动态（全网使用 realtime 与 publish_time 过滤，结合知乎条目时间）。' +
+      '请依据返回的 status 如实说明检索覆盖、失败或样本局限，原始证据仅使用检索与问题回答摘要来源。',
     parameters: {
       mode: { type: 'string', enum: [...ZHIHU_STUDY_MODES], required: true },
       question: { type: 'string', required: true, description: '用户的原问题，1 到 4000 字符。' },

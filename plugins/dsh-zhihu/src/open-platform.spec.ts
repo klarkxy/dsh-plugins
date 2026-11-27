@@ -92,15 +92,15 @@ describe('question/creator request contracts', () => {
     assert.equal(calls[0]!.url.searchParams.get('Order'), 'ascending')
     assert.equal(calls[0]!.url.searchParams.get('Limit'), '50')
   })
-  it('accepts numeric offsets and preserves a question URL trailing slash', async () => {
+  it('accepts numeric offsets and normalizes question URL trailing slash, query, and hash', async () => {
     const { options, calls } = fixture()
-    await executeZhihuOpenPlatform('question.answers', { questionUrl: `${QUESTION}/`, offset: 20, limit: 10 }, options)
-    assert.equal(calls[0]!.url.searchParams.get('QuestionUrl'), `${QUESTION}/`)
+    await executeZhihuOpenPlatform('question.answers', { questionUrl: `${QUESTION}/?utm_psn=123#answers`, offset: 20, limit: 10 }, options)
+    assert.equal(calls[0]!.url.searchParams.get('QuestionUrl'), QUESTION)
     assert.equal(calls[0]!.url.searchParams.get('Offset'), '20')
   })
-  it('normalizes answer links under a question to the question URL', async () => {
+  it('normalizes answer links under a question to the canonical question URL', async () => {
     const { options, calls } = fixture()
-    await executeZhihuOpenPlatform('question.answers', { questionUrl: `${QUESTION}/answer/456/` }, options)
+    await executeZhihuOpenPlatform('question.answers', { questionUrl: `${QUESTION}/answer/456/?utm_psn=456#comment` }, options)
     assert.equal(calls[0]!.url.searchParams.get('QuestionUrl'), QUESTION)
   })
   it('sends user content filters and opaque cursors exactly as provided', async () => {
@@ -190,7 +190,7 @@ describe('local validation before credentials or HTTP', () => {
     assert.equal(resolved, false)
     assert.equal(calls.length, 0)
   }))
-  it('normalizes leading zeros and all valid Int64 boundaries without rounding', () => {
+  it('normalizes leading zeros and all valid Int64 boundaries without rounding', => {
     assert.equal(normalizeZhihuOffset('00020'), '20')
     assert.equal(normalizeZhihuOffset(0), '0')
     assert.equal(normalizeZhihuOffset(Number.MAX_SAFE_INTEGER), String(Number.MAX_SAFE_INTEGER))
