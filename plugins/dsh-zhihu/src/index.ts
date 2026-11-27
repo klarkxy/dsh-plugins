@@ -9,6 +9,7 @@ import {
 } from './operations.ts'
 import { listZhihuKnowledgeBases, uploadZhihuKnowledgeFile, ZHIHU_KNOWLEDGE_UPLOAD_MAX_BYTES } from './zhihu-knowledge.ts'
 import { type ZhihuClientOptions, type ZhihuSearchExecuted, ZhihuSearchError } from './zhihu-client.ts'
+import { ZhihuResponseCache } from './response-cache.ts'
 import { createZhihuUsageRecorder, resolveDays, zhihuUsageDomainSpec, type ZhihuUsageRecorder } from './usage.ts'
 import { ZHIHU_RPC_CHANNEL, ZHIHU_CREDENTIAL_REF, ZHIHU_SEARCH_EVENT, type ZhihuRpcResult } from './contracts.ts'
 import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
@@ -44,6 +45,19 @@ export function createZhihuService(
   let pendingUsage = Promise.resolve()
   const lifetime = new AbortController()
   const active = new Set<Promise<unknown>>()
+  const responseCache = new ZhihuResponseCache()
+  const upstreamPhase2Hook = options.callPolicy?.onPhase2Error
+  const clientOptions = {
+    ...options,
+    responseCache,
+    callPolicy: {
+      ...options.callPolicy,
+      onPhase2Error: (error: unknown) => {
+        try { upstreamPhase2Hook?.(error) } catch { /* observer failures are isolated */ }
+        logger?.warn('call-policy.settle-failed', 'Failed to settle a successful Zhihu call reservation.', error)
+      },
+    },
+  }
   const run: ZhihuService['run'] = (execute, signal) => {
     const combined = AbortSignal.any([signal, lifetime.signal])
     const request = Promise.resolve().then(() => { combined.throwIfAborted(); return execute(combined) })
@@ -57,13 +71,13 @@ export function createZhihuService(
     try { notify(event) } catch { /* observer failure does not change a request */ }
   }
   const service = {
-    toolOptions: { ...options, onExecuted: record },
+    toolOptions: { ...clientOptions, onExecuted: record },
     async usageSummary(days: unknown) { await pendingUsage; return { days: await usage.read(resolveDays(days)) } },
     async call(endpoint: string, payload: unknown, signal: AbortSignal): Promise<ZhihuRpcResult> {
       if (signal.aborted) return fail('cancelled', '请求已取消')
       const startedAt = Date.now()
       const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
-      const client = { ...options, signal }
+      const client = { ...clientOptions, signal }
       let counted = false
       const operation = resolveZhihuOpenPlatformOperation(endpoint)
       const quotaId = operation ? ZHIHU_OPEN_PLATFORM_APIS[operation].quotaId : undefined
@@ -173,6 +187,7 @@ export function createZhihuService(
       lifetime.abort()
       await Promise.allSettled([...active])
       await pendingUsage
+      responseCache.clear()
     },
   }
 }

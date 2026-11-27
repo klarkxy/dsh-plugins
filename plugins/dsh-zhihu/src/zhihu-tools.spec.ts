@@ -77,7 +77,7 @@ describe('zhihu_research global_search', () => {
     const execute = tool.execute as unknown as (args: unknown, exec: { signal: AbortSignal }) => Promise<{ items: unknown[] }>
     const result = await execute({ action: 'global_search', query: 'q' }, execSignal)
     expect(result.items).toHaveLength(2)
-    expect(events).toEqual([{ ok: true, results: 2 }])
+    expect(events).toEqual([{ ok: true, results: 2, quotaId: 'global_search' }])
   })
 })
 
@@ -107,7 +107,7 @@ describe('zhihu_research hot_list', () => {
     const tool = createZhihuResearchTool({ fetcher, env: ENV, onExecuted: (event) => events.push(event) })
     const execute = tool.execute as unknown as (args: unknown, exec: { signal: AbortSignal }) => Promise<unknown>
     await expect(execute({ action: 'hot_list' }, execSignal)).rejects.toMatchObject({ code: 'HTTP_ERROR', status: 500 })
-    expect(events).toEqual([{ ok: false, results: 0 }])
+    expect(events).toEqual([{ ok: false, results: 0, quotaId: 'hot_list' }])
   })
 })
 
@@ -212,6 +212,32 @@ describe('zhihu_research knowledge_search', () => {
     expect(text).toContain('1. 文档')
     expect(text).toContain('来源：u')
     expect(text).toContain('- 片段')
+  })
+})
+
+describe('zhihu_research quota metering', () => {
+  it('reports the official quota id for every action', async () => {
+    const events: Array<{ ok: boolean; results: number; quotaId?: string }> = []
+    const fetcher = makeFetcher((url) => {
+      if (new URL(url).pathname === '/v1/chat/completions') {
+        return jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+      }
+      return jsonResponse(ENVELOPE({ Items: [] }))
+    })
+    const tool = createZhihuResearchTool({ fetcher, env: ENV, onExecuted: event => events.push(event) })
+    const execute = tool.execute as unknown as (args: unknown, exec: { signal: AbortSignal }) => Promise<unknown>
+    await execute({ action: 'search', query: 'q' }, execSignal)
+    await execute({ action: 'global_search', query: 'q' }, execSignal)
+    await execute({ action: 'hot_list' }, execSignal)
+    await execute({ action: 'ask', query: 'q' }, execSignal)
+    await execute({ action: 'knowledge_search', query: 'q' }, execSignal)
+    expect(events).toEqual([
+      { ok: true, results: 0, quotaId: 'zhihu_search' },
+      { ok: true, results: 0, quotaId: 'global_search' },
+      { ok: true, results: 0, quotaId: 'hot_list' },
+      { ok: true, results: 1, quotaId: 'zhida_openai' },
+      { ok: true, results: 0, quotaId: 'knowledge' },
+    ])
   })
 })
 

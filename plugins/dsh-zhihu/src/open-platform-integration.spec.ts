@@ -19,6 +19,11 @@ type Tool = {
 const cases: Array<[ZhihuOpenPlatformOperation, string, Record<string, unknown>]> = [
   ['question.recommendations', 'question_recommendations', {}],
   ['question.answers', 'question_answers', { questionUrl: 'https://www.zhihu.com/question/1' }],
+  ['user.contents', 'user_contents', {}],
+  ['user.followees', 'user_followees', {}],
+  ['user.collections', 'user_collections', {}],
+  ['user.favlists', 'user_favlists', {}],
+  ['favlist.contents', 'favlist_contents', { favlistId: 1 }],
   ['content.detail', 'content_detail', { contentUrl: 'https://www.zhihu.com/answer/1' }],
   ['content.comments', 'content_comments', { contentUrl: 'https://www.zhihu.com/answer/1' }],
   ['creator.account.stats', 'creator_account_stats', {}],
@@ -68,10 +73,10 @@ describe('open platform real RPC and optional tool registration', () => {
     const tool = accountTool(tools)
     const result = await tool.execute({ action, ...input }, { signal: signal() })
     assert.deepEqual(rpc.value, result)
-    assert.deepEqual(paths, [ZHIHU_OPEN_PLATFORM_APIS[operation].path, ZHIHU_OPEN_PLATFORM_APIS[operation].path])
+    assert.deepEqual(paths, Array.from({ length: operation === 'question.answers' ? 1 : 2 }, () => ZHIHU_OPEN_PLATFORM_APIS[operation].path))
     assert.equal(tool.output.render(input, result)[0]?.type, 'text')
     assert.match(tool.description, /Access Secret 鉴权/)
-    assert.equal(Object.keys((tool.parameters as { properties?: Record<string, unknown> }).properties ?? tool.parameters).some(key => /token|secret|oauth/i.test(key)), false)
+    assert.equal(Object.keys((tool.parameters as { properties?: Record<string, unknown> }).properties ?? tool.parameters).some(key => ['token', 'accessSecret', 'access_secret', 'accessToken', 'access_token', 'oauthToken', 'oauth_token'].includes(key)), false)
     await service.dispose()
     assert.equal(stored.length, operation === 'quota' ? 0 : 2)
   })
@@ -83,10 +88,11 @@ describe('open platform real RPC and optional tool registration', () => {
       tool.execute({ action, ...input }, { signal: signal() }),
     ]))
     await service.dispose()
-    assert.equal(stored.length, 12, 'six business operations through two entry points; quota is not metered')
+    assert.equal(stored.length, 22, 'eleven business operations through two entry points; quota is not metered')
     assert.deepEqual(stored, emitted)
     assert.equal(stored.filter(event => event.quotaId === 'creator').length, 8)
     assert.equal(stored.filter(event => event.quotaId === 'question_discovery').length, 4)
+    assert.equal(stored.filter(event => event.quotaId === 'user_data').length, 10)
     assert.ok(stored.every(event => event.ok && event.results === 1))
   })
   it('preserves risk-control metadata through RPC and meters a business failure once', async () => {
@@ -178,6 +184,8 @@ describe('open platform real RPC and optional tool registration', () => {
     const tool = accountTool(tools)
     await assert.rejects(tool.execute({ action: 'question_answers' }, { signal: signal() }), /questionUrl 必填/)
     await assert.rejects(tool.execute({ action: 'content_comments' }, { signal: signal() }), /contentUrl 必填/)
+    await assert.rejects(tool.execute({ action: 'favlist_contents' }, { signal: signal() }), /必须且只能提供一个/)
+    await assert.rejects(tool.execute({ action: 'favlist_contents', favlistUrlToken: 1, favlistId: 2 }, { signal: signal() }), /必须且只能提供一个/)
     await service.dispose()
     assert.equal(stored.length, 0)
   })

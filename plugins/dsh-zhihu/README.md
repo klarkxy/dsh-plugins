@@ -45,7 +45,7 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 | `zhihu_research` | 单次检索：`search`（站内搜索）、`global_search`（全网搜索，可选 `SearchDB` 与结构化 `host` / `publishTime` 过滤）、`hot_list`（知乎热榜）、`ask`（知乎直答）、`knowledge_search`（知识库检索） |
 | `zhihu_study` | 有预算的取证：`deep`（深度研究）、`observation`（知乎观察）、`briefing`（近况速览）。只返回证据，不是成品报告 |
 | `zhihu_study_report` | 把宿主综合后的结构写成 `report.md`、`report.json` 和可打开的单文件 `report.html` |
-| `zhihu_account` | 账号与创作：`question_recommendations`（问题推荐）、`question_answers`（回答摘要，非全文）、`content_detail`（本人创作全文）、`content_comments`（本人创作评论）、`creator_account_stats`（账号创作数据）、`creator_content_stats`（单篇创作数据）、`quota`（官方每日免费额度） |
+| `zhihu_account` | 账号与创作：`question_recommendations`（问题推荐）、`question_answers`（回答摘要，非全文）、`content_detail`（本人创作全文）、`content_comments`（本人创作评论）、`creator_account_stats`（账号创作数据）、`creator_content_stats`（单篇创作数据）、`user_contents`（本人创作列表）、`user_followees`（本人关注）、`user_collections`（近期收藏）、`user_favlists`（收藏夹列表）、`favlist_contents`（收藏夹内容）、`quota`（官方每日免费额度） |
 | `zhihu_sync` | 草稿与配图：`list`（列出草稿）、`get`（读取草稿）、`save`（保存/更新草稿）、`prepare`（校验草稿）、`upload_image`（上传配图） |
 
 站内搜索与全网搜索无匹配结果时返回空列表；上游提供说明原因时会一并展示。
@@ -71,7 +71,7 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 
 ### 费用和边界
 
-每次上游请求仍先查询该接口的官方免费额度，沿用本地北京时间日记账、未知映射拒绝、显式 `allowPaid` 和不自动重试。研究工具不能接收付费开关或凭据，也不能把单次上游检索提高到 6 次以上，或把窗口提高到 30 天以上。省略次数限制时按计划调用；计划放不下就在请求前拒绝，不能靠连续调用把同一次研究加长。额度以当时官方返回为准。全网过滤只接受结构化的站点和发布时间，模型工具和同一搜索入口使用这组参数；设置页没有新增筛选项。
+上游请求按官方免费额度保护：额度充足时同一接口最多每 5 分钟重新查询一次，否则每次请求前查询；沿用本地北京时间日记账、未知映射拒绝、显式 `allowPaid` 和不自动重试。研究工具不能接收付费开关或凭据，也不能把单次上游检索提高到 6 次以上，或把窗口提高到 30 天以上。省略次数限制时按计划调用；计划放不下就在请求前拒绝，不能靠连续调用把同一次研究加长。额度以当时官方返回为准。全网过滤只接受结构化的站点和发布时间，模型工具和同一搜索入口使用这组参数；设置页没有新增筛选项。
 
 失败、预算用尽、来源不足、缺日期和取消都会以独立状态返回。它们不是空结果。`empty` 只表示上游成功返回了零条。
 
@@ -87,7 +87,8 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 
 ## 费用保护
 
-- 检索与开放平台查询默认仅使用知乎官方免费额度：每次请求前都会预查对应接口的剩余免费额度，确认仍有额度才会发出请求（不另设本地每日次数上限）。
+- 检索与开放平台查询默认仅使用知乎官方免费额度：额度充足时，同一接口的官方免费额度最多每 5 分钟重新查询一次；额度接近耗尽或无法确认时，则每次请求前查询，确认仍有额度才会发出请求（不另设本地每日次数上限）。
+- 相同的搜索、全网搜索、热榜和问题回答摘要结果会在短时间内复用；复用命中不会再消耗免费额度。进程崩溃留下的保护锁会自动恢复，无需手动处理。
 - 付费调用默认关闭，仅当你自己在插件配置中将 `allowPaid` 设为 `true`（或通过环境变量显式开启）时才允许：
 
 ```yaml

@@ -31,7 +31,7 @@ describe('independent Zhihu service', () => {
     const tool = createZhihuResearchTool(service.toolOptions) as unknown as { execute(args: unknown, ctx: { signal: AbortSignal }): Promise<unknown> }
     try {
       expect(await service.call('search', { query: '已保存密钥' }, signal())).toMatchObject({ ok: true })
-      await tool.execute({ action: 'search', query: '已保存密钥' }, { signal: signal() })
+      await tool.execute({ action: 'search', query: '工具已保存密钥' }, { signal: signal() })
       credential = undefined
       const result = await service.call('search', { query: '已清除密钥' }, signal())
       expect(result).toMatchObject({ ok: false, error: { code: 'token-missing' } })
