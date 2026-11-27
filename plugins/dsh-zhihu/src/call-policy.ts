@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, rename, unlink, rmdir, stat } from 'node:fs/promises'
+import { mkdir, open, readFile, rename, rm, rmdir, stat, unlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -7,6 +7,8 @@ import { setTimeout as delay } from 'node:timers/promises'
 /** Ledger format is shared with zhihu-search/call_policy.py; counters are not limits. */
 export type ZhihuCallPolicyOptions = {
   allowPaid?: boolean
+  /** Optional 16-hex SHA-256 credential digest; omitted when callers do not bind credentials. */
+  credential?: string
   directory?: string
   lockTimeoutMs?: number
   /** Best-effort observer for settlement failures; hooks must not affect requests. */
@@ -18,9 +20,10 @@ export const QUOTA_CHECK_TTL = 300
 export const QUOTA_CHECK_MIN_REMAINING = 20
 export const LOCK_STALE_AFTER = 60
 export const LOCK_WAIT_TIMEOUT = 75
+export const SETTLE_LOCK_TIMEOUT_MS = 5_000
 const LOCK_STALE_AFTER_MS = LOCK_STALE_AFTER * 1000
 const LOCK_WAIT_TIMEOUT_MS = LOCK_WAIT_TIMEOUT * 1000
-const OWNER_CLOCK_TOLERANCE_MS = 2
+const OWNER_CLOCK_TOLERANCE_MS = 50
 
 const GROUPS: Record<string, string> = {
   '/api/v1/content/zhihu_search': 'zhihu_search', '/api/v1/content/global_search': 'global_search',
@@ -53,6 +56,7 @@ type Ledger = {
   uncertain: Record<string, number>
   free: Record<string, number>
   checked: Record<string, number>
+  credential?: string
   [key: string]: unknown
 }
 const integer = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
@@ -71,6 +75,7 @@ async function readLedger(directory: string): Promise<Ledger> {
   if (!row.free || Array.isArray(row.free) || typeof row.free !== 'object' || !Object.values(row.free).every(integer)) blocked('本地免费预留记录无效；已阻止请求。')
   if (row.checked === undefined) row.checked = {} // Backward-compatible version-1 ledger.
   if (!row.checked || Array.isArray(row.checked) || typeof row.checked !== 'object' || !Object.values(row.checked).every(integer)) blocked('本地额度预查记录无效；已阻止请求。')
+  if (row.credential !== undefined && (typeof row.credential !== 'string' || !row.credential.trim())) blocked('本地凭证记录无效；已阻止请求。')
   if (row.day !== day()) { row.day = day(); row.calls = 0; row.uncertain = {}; row.free = {}; row.checked = {} }
   return row
 }
@@ -136,7 +141,7 @@ async function reclaimStaleLock(directory: string): Promise<boolean> {
       try {
         const reclaimStat = await stat(reclaim)
         if (!reclaimStat.isDirectory() || Date.now() - reclaimStat.mtimeMs <= LOCK_STALE_AFTER_MS) return false
-        await rmdir(reclaim).catch(() => {})
+        await rm(reclaim, { recursive: true, force: true }).catch(() => {})
       } catch (statError) {
         if (code(statError) === 'ENOENT') continue
         throw statError
@@ -152,19 +157,16 @@ async function reclaimStaleLock(directory: string): Promise<boolean> {
       throw error
     })
     if (!lockStat?.isDirectory()) return false
-    // Remove the old owner before renaming. While request.lock exists no new
-    // owner can be created; this avoids deleting a successor's owner file.
-    await unlink(ownerPath(directory)).catch(() => {})
     const stale = join(directory, `request.lock.stale-${randomUUID()}`)
     try {
       await rename(lockPath(directory), stale)
     } catch {
       return false
     }
-    await rmdir(stale).catch(() => {})
+    await rm(stale, { recursive: true, force: true }).catch(() => {})
     return true
   } finally {
-    await rmdir(reclaim).catch(() => {})
+    await rm(reclaim, { recursive: true, force: true }).catch(() => {})
   }
 }
 
@@ -219,12 +221,16 @@ function reportPhase2Error(options: ZhihuCallPolicyOptions, error: unknown): voi
   try { options.onPhase2Error(error) } catch { /* observers never affect requests */ }
 }
 
-async function settleReservation(directory: string, group: string, options: ZhihuCallPolicyOptions & { signal?: AbortSignal }): Promise<void> {
+async function settleReservation(directory: string, group: string, credential: string | undefined, options: ZhihuCallPolicyOptions): Promise<void> {
   let token: string | undefined
   try {
-    token = await acquireLock(directory, options)
+    token = await acquireLock(directory, {
+      ...(options.lockTimeoutMs !== undefined ? { lockTimeoutMs: options.lockTimeoutMs } : {}),
+      signal: AbortSignal.timeout(SETTLE_LOCK_TIMEOUT_MS),
+    })
     try {
       const row = await readLedger(directory)
+      if (credential !== undefined && row.credential !== undefined && row.credential !== credential) return
       row.uncertain[group] = Math.max(0, (row.uncertain[group] ?? 0) - 1)
       await writeLedger(directory, row)
     } finally {
@@ -239,6 +245,11 @@ export async function withZhihuCallPolicy<T>(path: string, body: unknown, quota:
   const group = zhihuQuotaGroup(path, body)
   const env = options.env ?? process.env
   const policy = resolveZhihuCallPolicy(env, options)
+  const credential = options.credential === undefined
+    ? undefined
+    : typeof options.credential === 'string' && options.credential.trim()
+      ? options.credential.trim()
+      : blocked('本地凭证摘要无效；已阻止请求。')
   const priced = PRICED_PATHS.has(path) || /^\/api\/v1\/knowledge\/bases\/[^/]+\/items$/.test(path) || (path === '/v1/chat/completions' && body && typeof body === 'object' && (body as { model?: unknown }).model === 'zhida-agent')
   if (policy.allowPaid && !priced) blocked('付费调用已阻止：该能力的官方计费未确认；请使用免费保护模式。')
   const directory = options.directory ?? env.ZHIHU_CALL_POLICY_DIR ?? join(env.ZHIHU_SEARCH_HOME ?? join(homedir(), '.config', 'zhihu-search'), 'call-policy')
@@ -248,14 +259,21 @@ export async function withZhihuCallPolicy<T>(path: string, body: unknown, quota:
     try {
       options.signal?.throwIfAborted()
       const row = await readLedger(directory)
+      if (credential !== undefined && row.credential !== undefined && row.credential !== credential) {
+        row.free = {}
+        row.checked = {}
+        row.uncertain = {}
+      }
       if (!policy.allowPaid) {
         const nowSeconds = Math.floor(Date.now() / 1000)
         const checked = row.checked[group]
         const floor = row.free[group]
         const cached = checked !== undefined && nowSeconds - checked < QUOTA_CHECK_TTL && floor !== undefined && floor >= QUOTA_CHECK_MIN_REMAINING
         let available: number
+        let nextFloor: number
         if (cached) {
           available = floor
+          nextFloor = floor - 1
         } else {
           let rows: unknown
           try { rows = await quota(group) }
@@ -263,13 +281,17 @@ export async function withZhihuCallPolicy<T>(path: string, body: unknown, quota:
           options.signal?.throwIfAborted()
           const matches = Array.isArray(rows) ? rows.filter(value => value && typeof value === 'object' && value.APIID === group) : []
           if (matches.length !== 1 || !integer(matches[0].RemainingQuota)) blocked('官方未返回有效的免费剩余额度；未发送业务请求。')
+          const official = matches[0].RemainingQuota
+          const quotaFloor = Math.min(official, floor ?? official)
           row.checked[group] = nowSeconds
-          available = Math.min(matches[0].RemainingQuota - (row.uncertain[group] ?? 0), row.free[group] ?? matches[0].RemainingQuota)
+          available = Math.min(official - (row.uncertain[group] ?? 0), quotaFloor)
+          nextFloor = quotaFloor - 1
         }
         if (available <= 0) blocked('免费额度不足，或有结果未知的已发送请求；未发送业务请求。')
-        row.free[group] = available - 1
+        row.free[group] = nextFloor
       } else if (row.free[group] !== undefined) row.free[group] = Math.max(0, row.free[group] - 1)
       options.signal?.throwIfAborted()
+      if (credential !== undefined) row.credential = credential
       // Count reservations before dispatch; cancellation/unknown results are not refunded.
       row.calls++
       row.uncertain[group] = (row.uncertain[group] ?? 0) + 1
@@ -281,7 +303,7 @@ export async function withZhihuCallPolicy<T>(path: string, body: unknown, quota:
     const result = await execute()
     // Settlement is best-effort: a local lock/IO failure must not turn an
     // already successful upstream response into a failed tool call.
-    await settleReservation(directory, group, options)
+    await settleReservation(directory, group, credential, options)
     return result
   } catch (error) {
     options.signal?.throwIfAborted()

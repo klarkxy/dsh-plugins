@@ -427,3 +427,132 @@ it('response cache never caches errors', async () => {
   await expect(zhihuFetchJson(business, { params: { Query: 'RAG' } }, '搜索', client)).resolves.toBeDefined()
   expect(paths.filter(value => value.startsWith(business))).toHaveLength(2)
 })
+
+
+it('omits credential when unset for cross-language compatibility and resets quota state on credential switch', async () => {
+  const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10)
+  await withZhihuCallPolicy(business, undefined, async group => [{ APIID: group, RemainingQuota: 25 }], async () => 'ok', options())
+  const unkeyed = await ledger()
+  expect(Object.hasOwn(unkeyed, 'credential')).toBe(false)
+  expect(unkeyed).toEqual({
+    version: 1,
+    day: today,
+    calls: 1,
+    uncertain: { zhihu_search: 0 },
+    free: { zhihu_search: 24 },
+    checked: { zhihu_search: expect.any(Number) },
+  })
+
+  // Exhaust quota under credential A, then switch to credential B: B must re-check official quota instead of staying locked at free=0.
+  await writeFile(join(directory, 'daily.json'), JSON.stringify({
+    version: 1,
+    day: today,
+    calls: 5,
+    uncertain: { zhihu_search: 1 },
+    free: { zhihu_search: 0 },
+    checked: { zhihu_search: Math.floor(Date.now() / 1000) },
+    credential: 'aaaaaaaa00000000',
+  }))
+  let bChecks = 0
+  const result = await zhihuFetchJson(business, { params: { Query: '切换密钥' } }, '搜索', {
+    env: {},
+    resolveCredential: async () => 'second-valid-access-secret',
+    callPolicy: { directory },
+    fetcher: async url => {
+      const parsed = new URL(url)
+      if (parsed.pathname === '/api/v1/quota') {
+        bChecks++
+        const body = { Code: 0, Data: [{ APIID: 'zhihu_search', RemainingQuota: 30 }] }
+        return { ok: true, status: 200, async text() { return JSON.stringify(body) }, async json() { return body } }
+      }
+      const body = { Code: 0, Data: { Items: [] } }
+      return { ok: true, status: 200, async text() { return JSON.stringify(body) }, async json() { return body } }
+    },
+  })
+  expect(result).toBeDefined()
+  expect(bChecks).toBe(1)
+  const switched = await ledger()
+  expect(switched.calls).toBe(6)
+  expect(switched.free.zhihu_search).toBe(29)
+  expect(switched.uncertain.zhihu_search).toBe(0)
+  expect(switched.credential).toMatch(/^[0-9a-f]{16}$/)
+  expect(switched.credential).not.toBe('aaaaaaaa00000000')
+})
+
+
+it('does not permanently double-subtract transient in-flight uncertain from free floor', async () => {
+  const firstExecute = Promise.withResolvers<void>()
+  const releaseFirst = Promise.withResolvers<void>()
+  let serverRemaining = 10
+  const first = withZhihuCallPolicy(business, undefined, async group => [{ APIID: group, RemainingQuota: serverRemaining }], async () => {
+    // Simulate upstream having already counted the first request before the second checks quota.
+    serverRemaining = 9
+    firstExecute.resolve()
+    await releaseFirst.promise
+    return 'first'
+  }, options())
+  await firstExecute.promise
+  const second = await withZhihuCallPolicy(business, undefined, async group => [{ APIID: group, RemainingQuota: serverRemaining }], async () => {
+    serverRemaining = 8
+    return 'second'
+  }, options())
+  releaseFirst.resolve()
+  await expect(first).resolves.toBe('first')
+  expect(second).toBe('second')
+  const saved = await ledger()
+  expect(saved.uncertain.zhihu_search).toBe(0)
+  expect(saved.free.zhihu_search).toBe(8)
+})
+
+
+it('settles reservation with an independent timeout after a near-deadline HTTP response', async () => {
+  let holdLock!: () => Promise<void>
+  const fetcher: ZhihuSearchFetcher = async url => {
+    const parsed = new URL(url)
+    if (parsed.pathname === '/api/v1/quota') {
+      const body = { Code: 0, Data: [{ APIID: 'zhihu_search', RemainingQuota: 10 }] }
+      return { ok: true, status: 200, async text() { return JSON.stringify(body) }, async json() { return body } }
+    }
+    await new Promise(resolve => setTimeout(resolve, 25))
+    await holdLock()
+    const body = { Code: 0, Data: { Items: [] } }
+    return { ok: true, status: 200, async text() { return JSON.stringify(body) }, async json() { return body } }
+  }
+  const lock = join(directory, 'request.lock')
+  holdLock = async () => {
+    await mkdir(lock)
+    setTimeout(() => { void rm(lock, { recursive: true, force: true }) }, 30)
+  }
+  await expect(zhihuFetchJson(business, { params: { Query: '临界超时' } }, '搜索', {
+    fetcher,
+    env: {},
+    resolveCredential: async () => 'near-deadline-secret',
+    timeoutMs: 45,
+    callPolicy: { directory },
+  })).resolves.toBeDefined()
+  expect((await ledger()).uncertain.zhihu_search).toBe(0)
+})
+
+
+it('reclaims non-empty stale lock directories and tolerates small owner-file mtime skew', async () => {
+  const lock = join(directory, 'request.lock')
+  const owner = join(directory, 'request.lock.owner.json')
+  await mkdir(lock)
+  await writeFile(join(lock, 'stray.tmp'), 'leftover')
+  const old = new Date(Date.now() - 120_000)
+  await utimes(lock, old, old)
+  await expect(withZhihuCallPolicy(business, undefined, quota, async () => 'ok', options())).resolves.toBe('ok')
+
+  // Sub-50ms filesystem mtime skew on owner.json must still honor a fresh acquiredAt timestamp.
+  await mkdir(lock)
+  const now = Date.now()
+  await writeFile(owner, JSON.stringify({ token: 'live-owner', pid: process.pid, acquiredAt: now }))
+  const lockTime = new Date(now)
+  const slightlyEarlier = new Date(now - 20)
+  await utimes(lock, lockTime, lockTime)
+  await utimes(owner, slightlyEarlier, slightlyEarlier)
+  await expect(withZhihuCallPolicy(business, undefined, quota, async () => 'bad', { ...options(), lockTimeoutMs: 0 })).rejects.toThrow('保护锁忙')
+  expect(JSON.parse(await readFile(owner, 'utf8')).token).toBe('live-owner')
+  await rm(lock, { recursive: true, force: true })
+  await rm(owner, { force: true })
+})
