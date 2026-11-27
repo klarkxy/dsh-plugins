@@ -190,7 +190,7 @@ describe('local validation before credentials or HTTP', () => {
     assert.equal(resolved, false)
     assert.equal(calls.length, 0)
   }))
-  it('normalizes leading zeros and all valid Int64 boundaries without rounding', => {
+  it('normalizes leading zeros and all valid Int64 boundaries without rounding', () => {
     assert.equal(normalizeZhihuOffset('00020'), '20')
     assert.equal(normalizeZhihuOffset(0), '0')
     assert.equal(normalizeZhihuOffset(Number.MAX_SAFE_INTEGER), String(Number.MAX_SAFE_INTEGER))
