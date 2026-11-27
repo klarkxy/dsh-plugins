@@ -513,7 +513,7 @@ it('settles reservation with an independent timeout after a near-deadline HTTP r
       const body = { Code: 0, Data: [{ APIID: 'zhihu_search', RemainingQuota: 10 }] }
       return { ok: true, status: 200, async text() { return JSON.stringify(body) }, async json() { return body } }
     }
-    await new Promise(resolve => setTimeout(resolve, 25))
+    await new Promise(resolve => setTimeout(resolve, 60))
     await holdLock()
     const body = { Code: 0, Data: { Items: [] } }
     return { ok: true, status: 200, async text() { return JSON.stringify(body) }, async json() { return body } }
@@ -521,16 +521,70 @@ it('settles reservation with an independent timeout after a near-deadline HTTP r
   const lock = join(directory, 'request.lock')
   holdLock = async () => {
     await mkdir(lock)
-    setTimeout(() => { void rm(lock, { recursive: true, force: true }) }, 30)
+    setTimeout(() => { void rm(lock, { recursive: true, force: true }) }, 320)
   }
   await expect(zhihuFetchJson(business, { params: { Query: '临界超时' } }, '搜索', {
     fetcher,
     env: {},
     resolveCredential: async () => 'near-deadline-secret',
-    timeoutMs: 45,
+    timeoutMs: 300,
     callPolicy: { directory },
   })).resolves.toBeDefined()
   expect((await ledger()).uncertain.zhihu_search).toBe(0)
+})
+
+it('re-checks official quota when uncertain reduces net cached allowance below 20 and skips cross-day settlement', async () => {
+  const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10)
+  const nowS = Math.floor(Date.now() / 1000)
+  await writeFile(join(directory, 'daily.json'), JSON.stringify({
+    version: 1,
+    day: today,
+    calls: 20,
+    uncertain: { zhihu_search: 20 },
+    free: { zhihu_search: 20 },
+    checked: { zhihu_search: nowS - 5 },
+  }))
+  let checks = 0
+  await expect(withZhihuCallPolicy(
+    business,
+    undefined,
+    async group => { checks++; return [{ APIID: group, RemainingQuota: 20 }] },
+    async () => 'should-not-run',
+    options(),
+  )).rejects.toThrow('免费额度不足')
+  expect(checks).toBe(1)
+
+  // Cross-day in-flight settlement must not decrement the new Beijing day's uncertain counter.
+  const crossDir = join(directory, 'cross-day')
+  let fakeNow = Date.parse('2026-11-26T15:59:59Z') // 2026-11-26 23:59:59+08:00
+  const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => fakeNow)
+  try {
+    const entered = Promise.withResolvers<void>()
+    const finishOld = Promise.withResolvers<void>()
+    const oldCall = withZhihuCallPolicy(business, undefined, quota, async () => {
+      entered.resolve()
+      await finishOld.promise
+      return 'old-day'
+    }, { ...options(), directory: crossDir })
+    await entered.promise
+    fakeNow = Date.parse('2026-11-26T16:00:05Z') // 2026-11-27 00:00:05+08:00
+    const newEntered = Promise.withResolvers<void>()
+    const finishNew = Promise.withResolvers<void>()
+    const newCall = withZhihuCallPolicy(business, undefined, quota, async () => {
+      newEntered.resolve()
+      await finishNew.promise
+      return 'new-day'
+    }, { ...options(), directory: crossDir })
+    await newEntered.promise
+    finishOld.resolve()
+    await expect(oldCall).resolves.toBe('old-day')
+    expect(JSON.parse(await readFile(join(crossDir, 'daily.json'), 'utf8')).uncertain.zhihu_search).toBe(1)
+    finishNew.resolve()
+    await expect(newCall).resolves.toBe('new-day')
+    expect(JSON.parse(await readFile(join(crossDir, 'daily.json'), 'utf8')).uncertain.zhihu_search).toBe(0)
+  } finally {
+    nowSpy.mockRestore()
+  }
 })
 
 
