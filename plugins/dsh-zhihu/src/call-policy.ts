@@ -221,7 +221,7 @@ function reportPhase2Error(options: ZhihuCallPolicyOptions, error: unknown): voi
   try { options.onPhase2Error(error) } catch { /* observers never affect requests */ }
 }
 
-async function settleReservation(directory: string, group: string, credential: string | undefined, options: ZhihuCallPolicyOptions): Promise<void> {
+async function settleReservation(directory: string, group: string, reservedDay: string, credential: string | undefined, options: ZhihuCallPolicyOptions): Promise<void> {
   let token: string | undefined
   try {
     token = await acquireLock(directory, {
@@ -230,6 +230,7 @@ async function settleReservation(directory: string, group: string, credential: s
     })
     try {
       const row = await readLedger(directory)
+      if (row.day !== reservedDay) return
       if (credential !== undefined && row.credential !== undefined && row.credential !== credential) return
       row.uncertain[group] = Math.max(0, (row.uncertain[group] ?? 0) - 1)
       await writeLedger(directory, row)
@@ -255,6 +256,7 @@ export async function withZhihuCallPolicy<T>(path: string, body: unknown, quota:
   const directory = options.directory ?? env.ZHIHU_CALL_POLICY_DIR ?? join(env.ZHIHU_SEARCH_HOME ?? join(homedir(), '.config', 'zhihu-search'), 'call-policy')
   try {
     options.signal?.throwIfAborted()
+    let reservedDay = ''
     const token = await acquireLock(directory, options)
     try {
       options.signal?.throwIfAborted()
@@ -264,15 +266,17 @@ export async function withZhihuCallPolicy<T>(path: string, body: unknown, quota:
         row.checked = {}
         row.uncertain = {}
       }
+      reservedDay = row.day
       if (!policy.allowPaid) {
         const nowSeconds = Math.floor(Date.now() / 1000)
         const checked = row.checked[group]
         const floor = row.free[group]
-        const cached = checked !== undefined && nowSeconds - checked < QUOTA_CHECK_TTL && floor !== undefined && floor >= QUOTA_CHECK_MIN_REMAINING
+        const uncertain = row.uncertain[group] ?? 0
+        const cached = checked !== undefined && nowSeconds - checked < QUOTA_CHECK_TTL && floor !== undefined && floor - uncertain >= QUOTA_CHECK_MIN_REMAINING
         let available: number
         let nextFloor: number
         if (cached) {
-          available = floor
+          available = floor - uncertain
           nextFloor = floor - 1
         } else {
           let rows: unknown
@@ -284,7 +288,7 @@ export async function withZhihuCallPolicy<T>(path: string, body: unknown, quota:
           const official = matches[0].RemainingQuota
           const quotaFloor = Math.min(official, floor ?? official)
           row.checked[group] = nowSeconds
-          available = Math.min(official - (row.uncertain[group] ?? 0), quotaFloor)
+          available = Math.min(official - uncertain, quotaFloor)
           nextFloor = quotaFloor - 1
         }
         if (available <= 0) blocked('免费额度不足，或有结果未知的已发送请求；未发送业务请求。')
@@ -303,7 +307,7 @@ export async function withZhihuCallPolicy<T>(path: string, body: unknown, quota:
     const result = await execute()
     // Settlement is best-effort: a local lock/IO failure must not turn an
     // already successful upstream response into a failed tool call.
-    await settleReservation(directory, group, credential, options)
+    await settleReservation(directory, group, reservedDay, credential, options)
     return result
   } catch (error) {
     options.signal?.throwIfAborted()
