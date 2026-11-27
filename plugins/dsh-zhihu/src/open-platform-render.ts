@@ -18,18 +18,26 @@ export function plainZhihuText(value: string): string {
 }
 
 const USER_DATA_LIST_OPERATIONS = new Set(['user.contents', 'user.followees', 'user.collections', 'user.favlists', 'favlist.contents'])
+const CONTENT_CONTAINERS = ['Target', 'Content', 'Question', 'Answer', 'Article', 'Pin', 'ZVideo', 'Favlist', 'Collection'] as const
+const USER_DATA_EXCERPT_MAX = 200
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 
 function oneLine(value: string): string {
   return plainZhihuText(value).replace(/\s+/g, ' ').trim()
 }
 
-function field(value: Record<string, unknown>, keys: string[]): string {
+/** Escape Markdown control syntax so untrusted user/favlist titles cannot inject links, images, or code spans. */
+export function escapeZhihuMarkdown(value: string): string {
+  return value.replace(/[\\[\]()!<>`*_~#|]/g, '\\$&')
+}
+
+function field(value: Record<string, unknown>, keys: readonly string[]): string {
   for (const key of keys) {
     const item = value[key]
     if (typeof item === 'string' && oneLine(item)) return oneLine(item)
   }
-  for (const nested of Object.values(value)) {
+  for (const container of CONTENT_CONTAINERS) {
+    const nested = value[container]
     if (!record(nested)) continue
     for (const key of keys) {
       const item = nested[key]
@@ -50,7 +58,7 @@ function displayUrl(value: string): string {
 }
 
 function compactJson(value: ZhihuJsonValue): string {
-  return JSON.stringify(value, (_key, item: unknown) => typeof item === 'string' ? oneLine(item) : item) ?? '{}'
+  return JSON.stringify(value, (_key, item: unknown) => typeof item === 'string' ? escapeZhihuMarkdown(oneLine(item)) : item) ?? '{}'
 }
 
 function renderUserDataItems(result: ZhihuOpenPlatformResult): string[] {
@@ -58,10 +66,14 @@ function renderUserDataItems(result: ZhihuOpenPlatformResult): string[] {
   const items = Array.isArray(result.data.Items) ? result.data.Items.filter(jsonObject) : []
   if (!items.length) return ['没有条目。']
   return items.flatMap((item, index) => {
-    const title = field(item, ['Title', 'Name', 'QuestionTitle', 'ContentTitle', 'DocName', 'Nickname'])
+    let rawTitle = field(item, ['Title', 'Name', 'QuestionTitle', 'ContentTitle', 'DocName', 'Nickname'])
+    if (!rawTitle) {
+      const fallback = field(item, ['ContentText', 'Excerpt', 'Summary', 'Content', 'Description', 'Headline'])
+      rawTitle = fallback.length > USER_DATA_EXCERPT_MAX ? `${fallback.slice(0, USER_DATA_EXCERPT_MAX)}…` : fallback
+    }
     const url = displayUrl(field(item, ['Url', 'URL', 'Link', 'ContentUrl', 'QuestionUrl']))
-    if (!title) return [`${index + 1}. ${compactJson(item as ZhihuJsonValue)}`, '']
-    const lines = [`${index + 1}. ${title}`]
+    if (!rawTitle) return [`${index + 1}. ${compactJson(item as ZhihuJsonValue)}`, '']
+    const lines = [`${index + 1}. ${escapeZhihuMarkdown(rawTitle)}`]
     if (url) lines.push(`   - 链接：${url}`)
     lines.push('')
     return lines

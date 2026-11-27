@@ -12,6 +12,7 @@
  *   - 未提供解析器的独立客户端依次兼容 ZHIHU_ACCESS_TOKEN、
  *     ZHIHU_ACCESS_SECRET 和 ~/.config/zhihu-search/credentials.json。
  */
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -185,6 +186,7 @@ export async function zhihuFetchJson(
   if (linked?.aborted) throw new ZhihuSearchError('CANCELLED', '请求已取消')
   const fetcher = options.fetcher ?? globalFetch
   if (!fetcher) throw new ZhihuSearchError('BAD_RESPONSE', '当前环境没有可用的 fetch。')
+  const credential = createHash('sha256').update(token.token, 'utf8').digest('hex').slice(0, 16)
   const method = init.method ?? (init.formData || init.body !== undefined ? 'POST' : 'GET')
   const cacheTtl = method === 'GET' ? ZHIHU_RESPONSE_CACHE_TTL_MS[url.pathname] : undefined
   let cacheKey: string | undefined
@@ -294,10 +296,24 @@ export async function zhihuFetchJson(
         controller.signal.removeEventListener('abort', abortQuota)
       }
     }
-    const guarded = path === '/api/v1/quota' && method === 'GET' ? Promise.race([request(), aborted]) : withZhihuCallPolicy(
+    const runRequest = async () => {
+      try {
+        return await Promise.race([request(), aborted])
+      } finally {
+        // Stop the HTTP deadline before Phase 2 ledger settlement so a response
+        // completing just before timeout cannot abort settlement and leak uncertain.
+        clearTimeout(timer)
+      }
+    }
+    const guarded = path === '/api/v1/quota' && method === 'GET' ? runRequest() : withZhihuCallPolicy(
       path, init.body, apiId => Promise.race([quota(apiId), aborted]),
-      () => Promise.race([request(), aborted]),
-      { ...options.callPolicy, env: options.env, signal: controller.signal },
+      runRequest,
+      {
+        ...options.callPolicy,
+        credential: options.callPolicy?.credential ?? credential,
+        ...(options.env !== undefined ? { env: options.env } : {}),
+        signal: controller.signal,
+      },
     )
     const result = await guarded
     if (cacheKey !== undefined && cacheTtl !== undefined) options.responseCache?.set(cacheKey, result, cacheTtl)
