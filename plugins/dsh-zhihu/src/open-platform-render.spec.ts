@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { escapeZhihuMarkdown, renderZhihuOpenPlatform } from './open-platform-render.ts'
 
 describe('user-data list untrusted Markdown escaping and Pin extraction', () => {
-  it('escapes Markdown links, images, HTML entities and code spans in user-data titles', () => {
+  it('escapes Markdown links, images, formatting syntax and code spans while stripping decoded HTML tags', () => {
     const rendered = renderZhihuOpenPlatform({
       version: 1,
       operation: 'user.favlists',
       data: {
         Items: [
           {
-            Title: '[诱导点击](https://evil.example/phish) ![tracker](https://evil.example/pixel.png) `code` &lt;img src=x&gt;',
+            Title: '[诱导点击](https://evil.example/phish) ![tracker](https://evil.example/pixel.png) `code` *bold* > quote &lt;img src=x&gt;',
             Url: 'https://www.zhihu.com/collection/123',
           },
           {
@@ -19,7 +19,8 @@ describe('user-data list untrusted Markdown escaping and Pin extraction', () => 
       },
       paging: { isEnd: true, canContinue: false },
     })
-    expect(rendered).toContain('1. \\[诱导点击\\]\\(https://evil.example/phish\\) \\!\\[tracker\\]\\(https://evil.example/pixel.png\\) \\`code\\` \\<img src=x\\>')
+    expect(rendered).toContain('1. \\[诱导点击\\]\\(https://evil.example/phish\\) \\!\\[tracker\\]\\(https://evil.example/pixel.png\\) \\`code\\` \\*bold\\* \\> quote')
+    expect(rendered).not.toContain('img src=x')
     expect(rendered).toContain('   - 链接：https://www.zhihu.com/collection/123')
     expect(rendered).toContain('2. {"Unexpected":"\\[注入\\]\\(https://evil.example/fallback\\)"}')
     expect(rendered).not.toMatch(/(?<!\\)\[诱导点击\]\(/)

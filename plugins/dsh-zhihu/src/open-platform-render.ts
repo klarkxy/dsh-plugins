@@ -58,7 +58,7 @@ function displayUrl(value: string): string {
 }
 
 function compactJson(value: ZhihuJsonValue): string {
-  return JSON.stringify(value, (_key, item: unknown) => typeof item === 'string' ? escapeZhihuMarkdown(oneLine(item)) : item) ?? '{}'
+  return escapeZhihuMarkdown(JSON.stringify(value, (_key, item: unknown) => typeof item === 'string' ? oneLine(item) : item) ?? '{}')
 }
 
 function renderUserDataItems(result: ZhihuOpenPlatformResult): string[] {
@@ -69,7 +69,8 @@ function renderUserDataItems(result: ZhihuOpenPlatformResult): string[] {
     let rawTitle = field(item, ['Title', 'Name', 'QuestionTitle', 'ContentTitle', 'DocName', 'Nickname'])
     if (!rawTitle) {
       const fallback = field(item, ['ContentText', 'Excerpt', 'Summary', 'Content', 'Description', 'Headline'])
-      rawTitle = fallback.length > USER_DATA_EXCERPT_MAX ? `${fallback.slice(0, USER_DATA_EXCERPT_MAX)}…` : fallback
+      const chars = Array.from(fallback)
+      rawTitle = chars.length > USER_DATA_EXCERPT_MAX ? `${chars.slice(0, USER_DATA_EXCERPT_MAX).join('')}…` : fallback
     }
     const url = displayUrl(field(item, ['Url', 'URL', 'Link', 'ContentUrl', 'QuestionUrl']))
     if (!rawTitle) return [`${index + 1}. ${compactJson(item as ZhihuJsonValue)}`, '']
