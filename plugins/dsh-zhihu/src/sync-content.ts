@@ -1016,7 +1016,7 @@ export function prepareZhihuSyncDraft(input: unknown): SyncPrepared {
   }
 
   // ---- 发布设置校验（不修改 draft.settings；错误只进 issues）----
-  validateSettings(draft, issues, pinImages.length)
+  validateSettings(draft, issues)
 
   return {
     draft,
@@ -1032,7 +1032,7 @@ export function prepareZhihuSyncDraft(input: unknown): SyncPrepared {
   }
 }
 
-function validateSettings(draft: SyncDraft, issues: SyncIssue[], pinImageCount: number) {
+function validateSettings(draft: SyncDraft, issues: SyncIssue[]) {
   const ctx: Ctx = { issues, type: draft.type, pinMode: draft.type === 'pin', bodyImages: [], formulas: [], ph: { img: () => '', formula: () => '' } }
   const s = draft.settings ?? {}
 
@@ -1086,7 +1086,6 @@ function validateSettings(draft: SyncDraft, issues: SyncIssue[], pinImageCount: 
       error(ctx, 'ring.invalid', '圈子必须是知乎圈子链接（https://www.zhihu.com/ring/host/{id}）。')
     }
   }
-  void pinImageCount
 }
 
 function strictZhihuUrl(raw: string, pathRe: RegExp): string | '' {

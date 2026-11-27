@@ -1,8 +1,7 @@
 /**
- * 知乎 OpenAPI 发布/媒体上传共享 HTTP 层（HMAC-SHA256 签名）。
+ * 知乎 OpenAPI 媒体上传共享 HTTP 层（HMAC-SHA256 签名）。
  *
  * 契约来源（只读镜像 H:\Reference\zhihu-sync-full_v0.1.4，MIT / author zhihu）：
- *   zhihu-sync/zhihu-publish/reference/publish-openapi.md — POST /openapi/publish
  *   zhihu-mediacloud-uploader/mediacloud_uploader/api.py  — /openapi/media/* 上传三步
  *
  * 签名：
@@ -302,7 +301,7 @@ export async function syncRequest(
     if (hasStatus && typeof envelope!.status === 'number' && envelope!.status !== 0) {
       throw new ZhihuSyncApiError(
         'UPSTREAM_REJECTED',
-        `发布被服务端拒绝（status=${envelope!.status}）：${sanitizeMessage(envelope!.msg, secrets)}`,
+        `OpenAPI 请求被服务端拒绝（status=${envelope!.status}）：${sanitizeMessage(envelope!.msg, secrets)}`,
         true,
         response.status,
         envelope!.status,
@@ -312,7 +311,7 @@ export async function syncRequest(
     if (hasStatus && typeof envelope!.status !== 'number') {
       throw new ZhihuSyncApiError(
         'BAD_RESPONSE',
-        `发布响应 status 不是数字（收到 ${typeof envelope!.status}）。`,
+        `OpenAPI 响应 status 不是数字（收到 ${typeof envelope!.status}）。`,
         false,
         response.status,
       )
@@ -321,7 +320,7 @@ export async function syncRequest(
       throw new ZhihuSyncApiError('AUTH_REJECTED', '鉴权失败（HTTP 401）。请检查 app key / app secret。', true, 401)
     }
     if (response.status === 429) {
-      throw new ZhihuSyncApiError('RATE_LIMITED', '发布频率超限（每人每天最多 50 次）。', true, 429)
+      throw new ZhihuSyncApiError('RATE_LIMITED', 'OpenAPI 请求频率超限（HTTP 429）。', true, 429)
     }
     throw new ZhihuSyncApiError(
       'HTTP_ERROR',
@@ -341,7 +340,7 @@ export async function syncRequest(
     if (typeof envelope!.status === 'number') {
       throw new ZhihuSyncApiError(
         'UPSTREAM_REJECTED',
-        `发布被服务端拒绝（status=${envelope!.status}）：${sanitizeMessage(envelope!.msg, secrets)}`,
+        `OpenAPI 请求被服务端拒绝（status=${envelope!.status}）：${sanitizeMessage(envelope!.msg, secrets)}`,
         true,
         response.status,
         envelope!.status,
@@ -350,7 +349,7 @@ export async function syncRequest(
     }
     throw new ZhihuSyncApiError(
       'BAD_RESPONSE',
-      `发布响应 status 不是数字（收到 ${typeof envelope!.status}）。`,
+      `OpenAPI 响应 status 不是数字（收到 ${typeof envelope!.status}）。`,
       false,
       response.status,
     )

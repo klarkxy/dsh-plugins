@@ -42,7 +42,7 @@ export function parseZhihuPublisherGrant(value: string): { appKey: string; appSe
 
 /**
  * 文字里出现了凭据标记，但没能按受支持的格式读出两项凭据。这样的文本不能当凭据存：
- * 整段授权说明一旦落进密钥框，格式稍有出入就会变成一个坏凭据，而且要到发布时才报错。
+ * 整段授权说明一旦落进密钥框，格式稍有出入就会变成一个坏凭据，而且要到上传草稿配图时才报错。
  */
 export function looksLikeZhihuPublisherGrant(value: string): boolean {
   return GRANT_MARKER.test(value)
@@ -332,8 +332,8 @@ export function ZhihuSyncCredentials(props: { credentials: SyncCredentialsApi })
         </div>}>
         <p className="dsh-ui-help">
           {t(
-            '清除后，发布与预览会失败，直到重新填写凭据。',
-            'Publishing and previewing fail until you enter the credentials again.',
+            '清除后，草稿配图上传将不可用，直到重新填写凭据；本地草稿保存与校验不受影响。',
+            'Uploading draft images will fail until you enter the credentials again; local draft saving and validation are unaffected.',
           )}
         </p>
       </Modal>
