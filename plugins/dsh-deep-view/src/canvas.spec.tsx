@@ -161,8 +161,6 @@ describe('canvas error capture', () => {
     expect(errors).toHaveLength(20)
     expect(errors.at(-1)?.message).toBe('m18')
   })
-})
-
   it('backfills missing source/line/column when duplicate messages arrive and formats locations cleanly', () => {
     let errors: import('./canvas/capture.ts').CanvasError[] = []
     errors = recordCanvasError(errors, { kind: 'error', message: 'ReferenceError: x is not defined' })
@@ -206,13 +204,22 @@ describe('canvas error capture', () => {
     expect(prepared.assets[0]!.text).toContain('//# sourceURL=sub/app.js')
 
     // Verify __dvuiAssets rewrites blob: URLs inside error stack and filename before posting
-    const page = new JSDOM(`<!doctype html><html><head><script>window.__dvuiAssets={"blob:null/uuid-99":"sub/app.js"};</script>${createCaptureScript('nonce-map')}</head><body><script>var err=new Error("boom");err.stack="Error: boom\n    at run (blob:null/uuid-99:8:3)";dispatchEvent(new ErrorEvent("error",{message:err.stack,filename:"blob:null/uuid-99",lineno:8,colno:3,error:err}));</script></body></html>`, {
+    const page = new JSDOM(`<!doctype html><html><head><script>window.__dvuiAssets={"blob:null/uuid-99":"sub/app.js"};</script>${createCaptureScript('nonce-map')}</head><body></body></html>`, {
       url: 'https://canvas.test/map',
       runScripts: 'dangerously',
       virtualConsole: new VirtualConsole(),
     })
     const posted: unknown[] = []
     page.window.addEventListener('message', event => posted.push(event.data))
+    const err = new page.window.Error('boom')
+    err.stack = 'Error: boom\n    at run (blob:null/uuid-99:8:3)'
+    page.window.dispatchEvent(new page.window.ErrorEvent('error', {
+      message: err.stack,
+      filename: 'blob:null/uuid-99',
+      lineno: 8,
+      colno: 3,
+      error: err,
+    }))
     await new Promise<void>(resolve => { page.window.setTimeout(resolve, 0) })
     const report = posted.map(d => canvasErrorReportOf(d, 'nonce-map')).find(Boolean)!
     expect(report.source).toBe('sub/app.js')
@@ -238,12 +245,7 @@ describe('canvas error capture', () => {
     await act(async () => { await new Promise<void>(r => setTimeout(r, 10)) })
     const iframe = document.querySelector('iframe') as HTMLIFrameElement
     expect(iframe).toBeTruthy()
-    // Extract nonce from the created blob or simulate posting with matching source
-    await act(async () => {
-      // Trigger a message event from iframe.contentWindow with the frame's nonce
-      // Read nonce by spying on postMessage or inspecting CanvasBody's error list via formatCanvasError
-      expect(formatCanvasError({ message: 'TypeError: bad', count: 1, source: 'sub/app.js', line: 8, column: 3 })).toBe('TypeError: bad (sub/app.js:8:3)')
-    })
+    expect(formatCanvasError({ message: 'TypeError: bad', count: 1, source: 'sub/app.js', line: 8, column: 3 })).toBe('TypeError: bad (sub/app.js:8:3)')
     await act(async () => root.unmount())
   })
   it('emits one dvui-canvas-ready settlement report after load with zero-height collapse status', async () => {
@@ -254,13 +256,15 @@ describe('canvas error capture', () => {
     })
     const posted: unknown[] = []
     page.window.addEventListener('message', event => posted.push(event.data))
-    await new Promise<void>(resolve => { page.window.setTimeout(resolve, 80) })
+    await new Promise<void>(resolve => { page.window.setTimeout(resolve, 120) })
     const readyReports = posted.map(data => canvasReadyReportOf(data, 'nonce-ready')).filter(Boolean)
     expect(readyReports).toHaveLength(1)
     expect(readyReports[0]).toEqual({ collapsed: true, height: 0 })
     expect(canvasReadyReportOf({ type: 'dvui-canvas-ready', nonce: 'wrong', collapsed: false, height: 120 }, 'nonce-ready')).toBeUndefined()
     page.window.close()
   })
+})
+
 describe('canvas HTML packing and bootstrap', () => {
   const bytes = (text: string) => new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>
   const read = (files: Record<string, string>) => async (reference: string) => {
