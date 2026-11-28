@@ -18,11 +18,9 @@ import {
   VIEW_OWNER,
   CANVAS_OWNER,
   isRecord,
-  clampCanvasPreferredWidth,
   type CanvasHealthReport,
   type CanvasPresentation,
   type CanvasProbeDescriptor,
-  type CanvasSurface,
   type DeepViewConfig,
   type DeepViewHost,
   type PendingView,
@@ -63,8 +61,7 @@ export type CanvasProbeWaiter = {
   path: string
   address: string
   title?: string
-  surface?: CanvasSurface
-  preferredWidth?: number
+  byteLength?: number
   resolve(report: CanvasHealthReport | undefined): void
   cleanup(): void
 }
@@ -462,7 +459,7 @@ export function createAskViewTool(
 /** Host workspace-file service reached through optional injection; absent keeps the tool working. */
 export type CanvasServices = {
   workspaceFiles?: {
-    stat(scope: { sessionId: string; workspaceRoot: string }, path: string, signal: AbortSignal): Promise<{ absolutePath?: string }>
+    stat(scope: { sessionId: string; workspaceRoot: string }, path: string, signal: AbortSignal): Promise<{ absolutePath?: string; size?: number }>
     readBytes?(scope: { sessionId: string; workspaceRoot: string }, path: string, signal: AbortSignal): Promise<{ data?: Uint8Array } | Uint8Array>
   }
   sandboxPolicy?: { workspaceRoot?: string }
@@ -548,12 +545,9 @@ async function readWorkspaceUtf8(
 function canvasPresentation(_args: unknown, value: unknown): CanvasPresentation | null {
   if (!isRecord(value) || value.owner !== CANVAS_OWNER || value.status !== 'shown') return null
   if (!short(value.path, 1024) || !short(value.address, 4096)) return null
-  const preferredWidth = clampCanvasPreferredWidth(value.preferredWidth)
   return {
     owner: CANVAS_OWNER, path: value.path, address: value.address,
     ...(short(value.title, 120) ? { title: value.title } : {}),
-    ...(value.surface === 'inline' ? { surface: 'inline' as const } : {}),
-    ...(preferredWidth !== undefined ? { preferredWidth } : {}),
   }
 }
 
@@ -571,19 +565,17 @@ export function createShowCanvasTool(
     : CANVAS_PROBE_TIMEOUT_MS
   return {
     name: 'show_canvas',
-    description: 'Render a sandboxed HTML/SVG file either inline as an auto-resizing card in the chat stream (surface: "inline") or in the right Sidebar (surface: "sidebar", default), with static syntax/asset prechecks and a bounded first-paint health check. Write the .html file with the write tool first, then call this once; later edit tool changes refresh the preview automatically.',
+    description: 'Open a runnable preview of an HTML file in the right Sidebar with static syntax/asset prechecks and a bounded first-paint health check. Write the .html file with the write tool first, then call this once; later edit tool changes refresh the preview automatically.',
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Workspace path of the .html/.htm file to preview (use .dsh/deep-view/<name>.html for conversational inline visuals to keep the project root clean).' },
+        path: { type: 'string', description: 'Workspace path of the .html/.htm file to preview.' },
         title: { type: 'string', description: 'Optional short label for the preview card.' },
-        surface: { type: 'string', enum: ['inline', 'sidebar'], description: 'Mounting surface: "inline" embeds an auto-resizing sandboxed card directly in the reply stream; "sidebar" (default) opens the full-height right Sidebar preview.' },
-        preferred_width: { type: 'number', description: 'Optional preferred inline card width in CSS pixels (clamped to 240..1200; omit to use the chat stream width).' },
       },
       required: ['path'],
     } satisfies ObjectJsonSchema,
     output: {
-      schema: { type: 'object', properties: { owner: { type: 'string', const: CANVAS_OWNER }, status: { type: 'string' }, path: { type: 'string' }, address: { type: 'string' }, title: { type: 'string' }, surface: { type: 'string', enum: ['inline', 'sidebar'] }, preferredWidth: { type: 'number' }, summary: { type: 'string' } }, required: ['owner', 'status', 'summary'], additionalProperties: false },
+      schema: { type: 'object', properties: { owner: { type: 'string', const: CANVAS_OWNER }, status: { type: 'string' }, path: { type: 'string' }, address: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' } }, required: ['owner', 'status', 'summary'], additionalProperties: false },
       render: (_args: unknown, value: { summary?: string }) => [{ type: 'text', text: String(value.summary ?? '') }],
       presentationMeta: canvasPresentation,
     },
@@ -591,8 +583,6 @@ export function createShowCanvasTool(
       const input = isRecord(args) ? args : {}
       if (!short(input.path, 1024)) return { owner: CANVAS_OWNER, status: 'invalid', summary: 'path: expected a file path of at most 1024 characters' }
       if (input.title !== undefined && !short(input.title, 120)) return { owner: CANVAS_OWNER, status: 'invalid', summary: 'title: expected a string of at most 120 characters' }
-      if (input.surface !== undefined && input.surface !== 'inline' && input.surface !== 'sidebar') return { owner: CANVAS_OWNER, status: 'invalid', summary: 'surface: expected "inline" or "sidebar"' }
-      if (input.preferred_width !== undefined && typeof input.preferred_width !== 'number') return { owner: CANVAS_OWNER, status: 'invalid', summary: 'preferred_width: expected a number' }
       const path = input.path.trim()
       if (path === '' || !/\.html?$/iu.test(path)) return { owner: CANVAS_OWNER, status: 'invalid', summary: 'path: expected an .html or .htm file' }
       const id = exec.agent?.id
@@ -609,12 +599,16 @@ export function createShowCanvasTool(
       const { workspaceFiles, sandboxPolicy } = services.current
       const workspaceRoot = cwd ?? (typeof sandboxPolicy?.workspaceRoot === 'string' && sandboxPolicy.workspaceRoot !== '' ? sandboxPolicy.workspaceRoot : undefined)
       let absolutePath: string | undefined
+      let statByteLength: number | undefined
       const signal = exec.signal ? AbortSignal.any([exec.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000)
       if (workspaceFiles && workspaceRoot !== undefined) {
         const scope = { sessionId: agent.id, workspaceRoot }
         try {
           const stat = await workspaceFiles.stat(scope, path, signal)
           absolutePath = typeof stat?.absolutePath === 'string' ? stat.absolutePath : undefined
+          if (typeof stat?.size === 'number' && Number.isFinite(stat.size) && stat.size >= 0) {
+            statByteLength = Math.trunc(stat.size)
+          }
         } catch (error) {
           logger?.debug('canvas.missing', 'show_canvas stat failed.', { sessionId: agent.id, path, reason: error instanceof Error ? error.message : String(error) })
           return { owner: CANVAS_OWNER, status: 'missing', path, summary: `File "${path}" is missing or unreadable; create it with the write tool first, then call show_canvas.` }
@@ -622,8 +616,6 @@ export function createShowCanvasTool(
       }
       const address = fileAddressFor(agent.id, workspaceRoot, absolutePath ?? path)
       const title = typeof input.title === 'string' ? input.title : undefined
-      const surface: CanvasSurface = input.surface === 'inline' ? 'inline' : 'sidebar'
-      const preferredWidth = clampCanvasPreferredWidth(input.preferred_width)
       // Register the first-paint probe immediately after root stat — before multi-asset
       // static precheck I/O — so live clients polling `canvas.probe` or hot-reloading an
       // already-open tab never race ahead of probe registration.
@@ -662,8 +654,7 @@ export function createShowCanvasTool(
             path,
             address,
             ...(title !== undefined ? { title } : {}),
-            ...(surface === 'inline' ? { surface: 'inline' as const } : {}),
-            ...(preferredWidth !== undefined ? { preferredWidth } : {}),
+            ...(statByteLength !== undefined ? { byteLength: statByteLength } : {}),
             cleanup,
             resolve: report => resolve({ kind: 'settled', report }),
           })
@@ -687,7 +678,7 @@ export function createShowCanvasTool(
             } catch {
               return { exists: false }
             }
-          }, { surface })
+          })
         }
       }
 
@@ -712,9 +703,7 @@ export function createShowCanvasTool(
       const hasErrors = staticFindings.some(item => item.severity === 'error') || runtimeDiagnostics.length > 0
       const hasWarnings = staticFindings.some(item => item.severity === 'warn')
       const sections: string[] = [
-        surface === 'inline'
-          ? `Inline sandboxed canvas card mounted in the reply stream for ${path}. Subsequent edits with the edit tool refresh the card automatically.`
-          : `Canvas preview opened in the right Sidebar for ${path}. Subsequent edits with the edit tool refresh the preview automatically; call show_canvas again only if the user asks to reopen it.`,
+        `Canvas preview opened in the right Sidebar for ${path}. Subsequent edits with the edit tool refresh the preview automatically; call show_canvas again only if the user asks to reopen it.`,
       ]
       if (staticFindings.length > 0) {
         sections.push(`Static precheck diagnostics:\n${staticFindings.map((item, idx) => `${idx + 1}. [${item.severity}] ${item.message}`).join('\n')}`)
@@ -742,8 +731,6 @@ export function createShowCanvasTool(
         path,
         address,
         ...(title !== undefined ? { title } : {}),
-        ...(surface === 'inline' ? { surface: 'inline' as const } : {}),
-        ...(preferredWidth !== undefined ? { preferredWidth } : {}),
         summary: sections.join('\n\n').replace('.\n\nFinish with a concise final answer.', '. Finish with a concise final answer.'),
       }
     },
@@ -783,8 +770,7 @@ export function createRpc(
             path: matched.path,
             address: matched.address,
             ...(matched.title !== undefined ? { title: matched.title } : {}),
-            ...(matched.surface === 'inline' ? { surface: 'inline' as const } : {}),
-            ...(matched.preferredWidth !== undefined ? { preferredWidth: matched.preferredWidth } : {}),
+            ...(matched.byteLength !== undefined ? { byteLength: matched.byteLength } : {}),
           }
         : null
       return ok(descriptor)

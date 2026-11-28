@@ -109,24 +109,12 @@ export type ViewPresentation = {
   blocking?: boolean
   answer?: ViewAnswer
 }
-export type CanvasSurface = 'inline' | 'sidebar'
-export const CANVAS_WIDTH_MIN = 240
-export const CANVAS_WIDTH_MAX = 1200
-
-/** Clamp finite positive preferred widths to 240..1200 px; invalid values fall back to stream width. */
-export function clampCanvasPreferredWidth(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined
-  return Math.round(Math.min(CANVAS_WIDTH_MAX, Math.max(CANVAS_WIDTH_MIN, value)))
-}
-
 /** Persisted `show_canvas` result metadata the client tool card renders. */
 export type CanvasPresentation = {
   owner: typeof CANVAS_OWNER
   path: string
   address: string
   title?: string
-  surface?: CanvasSurface
-  preferredWidth?: number
 }
 /** Active first-paint probe descriptor queried by a live client during `show_canvas`. */
 export type CanvasProbeDescriptor = {
@@ -134,8 +122,7 @@ export type CanvasProbeDescriptor = {
   path: string
   address: string
   title?: string
-  surface?: CanvasSurface
-  preferredWidth?: number
+  byteLength?: number
 }
 /** Single-turn first-paint health payload reported back through `canvas.report`. */
 export type CanvasHealthReport = {
