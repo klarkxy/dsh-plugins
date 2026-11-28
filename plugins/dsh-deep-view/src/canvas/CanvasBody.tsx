@@ -79,7 +79,7 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
       try {
         const bundle = await packCanvasHtml(data, readRelative, controller.signal)
         controller.signal.throwIfAborted()
-        const html = createHtmlDocument(bundle, createCaptureScript(nonce))
+        const html = createHtmlDocument(bundle, createCaptureScript(nonce), { rootPath: displayPath(resourceAddress) })
         url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
         setFrame({ data, url, nonce })
       } catch {
@@ -99,7 +99,8 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
     if (!live) return
     const nonce = frame.nonce
     const listener = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow) return
+      const sourceWindow = iframeRef.current?.contentWindow
+      if (!sourceWindow || event.source !== sourceWindow) return
       const report = canvasErrorReportOf(event.data, nonce)
       if (report !== undefined) setErrors(list => recordCanvasError(list, report))
     }
