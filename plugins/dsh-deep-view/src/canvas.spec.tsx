@@ -283,19 +283,31 @@ describe('canvas error capture', () => {
     page.window.close()
 
     const setDraft = vi.fn()
+    let lastBootstrapHtml = ''
+    const OrigBlob = globalThis.Blob
+    globalThis.Blob = class extends OrigBlob {
+      constructor(parts?: BlobPart[], opts?: BlobPropertyBag) {
+        super(parts, opts)
+        if (parts && typeof parts[0] === 'string') lastBootstrapHtml = parts[0]
+      }
+    } as typeof Blob
     const root = createRoot(document.getElementById('root')!)
-    await act(async () => root.render(<CanvasBody
-      resourceAddress="dsh-resource://file/session/s1/index.html"
-      content={{ kind: 'bytes', data: bytes('<!doctype html><html><body>ok</body></html>') }}
-      addResource={() => {}}
-      setResources={() => {}}
-      readRelated={async () => ({ ok: true, value: { data: new Uint8Array() } })}
-      sessionId="s1"
-      t={t}
-      inputActions={{ captureInsertion: () => ({ start: 0, end: 0 }), insertText: () => true, setDraft, persistDraft: () => {} }}
-      useInput={sel => sel({ draft: '', phase: 'plain' })}
-    />))
-    await act(async () => { await new Promise<void>(r => setTimeout(r, 20)) })
+    try {
+      await act(async () => root.render(<CanvasBody
+        resourceAddress="dsh-resource://file/session/s1/index.html"
+        content={{ kind: 'bytes', data: bytes('<!doctype html><html><body>ok</body></html>') }}
+        addResource={() => {}}
+        setResources={() => {}}
+        readRelated={async () => ({ ok: true, value: { data: new Uint8Array() } })}
+        sessionId="s1"
+        t={t}
+        inputActions={{ captureInsertion: () => ({ start: 0, end: 0 }), insertText: () => false, setDraft, persistDraft: () => {} }}
+        useInput={sel => sel({ draft: '', phase: 'plain' })}
+      />))
+      await act(async () => { await new Promise<void>(r => setTimeout(r, 20)) })
+    } finally {
+      globalThis.Blob = OrigBlob
+    }
     const encodedBundle = await packCanvasHtml(
       bytes('<!doctype html><html><head><script src="./sub/my%20app.js"></script><script src="./sub/pre.js"></script></head><body></body></html>'),
       async ref => ({ data: bytes(ref.includes('pre.js') ? 'ok()\n//# sourceURL=custom.js' : 'ok()') }),
@@ -309,9 +321,22 @@ describe('canvas error capture', () => {
     const iframe = document.querySelector('iframe') as HTMLIFrameElement
     expect(iframe).toBeTruthy()
     const fillDoc = createHtmlDocument({ data: bytes('<!doctype html><html><body></body></html>'), assets: [] }, '<script></script>', { rootPath: 'index.html' })
-    expect(fillDoc).toContain('rootPath')
+    const fillPayload = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(/JSON\.parse\(text\("([^"]+)"\)\)/.exec(fillDoc)![1]!), c => c.charCodeAt(0))))
+    expect(fillPayload.rootPath).toBe('index.html')
     expect(formatCanvasError({ message: 'TypeError: bad', count: 1, source: 'sub/app.js', line: 8, column: 3 })).toBe('TypeError: bad (sub/app.js:8:3)')
-    expect(setDraft).not.toHaveBeenCalled()
+
+    const mountedPayload = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(/JSON\.parse\(text\("([^"]+)"\)\)/.exec(lastBootstrapHtml)![1]!), c => c.charCodeAt(0))))
+    const mountedNonce = /\}\)\("([^"]+)"(?:,|\);<\/script>)/.exec(mountedPayload.html)![1]!
+    await act(async () => {
+      window.dispatchEvent(new window.MessageEvent('message', {
+        data: { type: 'dvui-canvas-error', nonce: mountedNonce, kind: 'error', message: 'TypeError: bad', source: 'sub/app.js', line: 8, column: 3 },
+        source: iframe.contentWindow,
+      }))
+    })
+    const fillBtn = [...document.querySelectorAll('.dvui-canvas-actions button')].find(btn => btn.textContent === 'fillDraft') as HTMLButtonElement | undefined
+    expect(fillBtn).toBeTruthy()
+    await act(async () => { fillBtn!.click() })
+    expect(setDraft).toHaveBeenCalledTimes(1)
     await act(async () => root.unmount())
   })
 })

@@ -596,7 +596,7 @@ export function CanvasToolCall(props: CanvasToolViewProps) {
     ? codingViewEnabled === true && runtimeSnap.previewMounted && runtimeSnap.hasWorkspaceFiles
     : !codingViewDisabled
   const canToggleCodingView = typeof devTools?.setValue === 'function' || typeof devTools?.set === 'function'
-  const pendingEnableOpenRef = useRef<string | undefined>()
+  const pendingEnableOpenRef = useRef<string | undefined>(undefined)
 
   // Auto-open only on a live transition to a shown result while the runnable canvas
   // renderer is active; consume the one-shot token even when disabled so later turning
