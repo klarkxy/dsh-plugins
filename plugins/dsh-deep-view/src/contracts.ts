@@ -122,6 +122,7 @@ export type CanvasProbeDescriptor = {
   path: string
   address: string
   title?: string
+  byteLength?: number
 }
 /** Single-turn first-paint health payload reported back through `canvas.report`. */
 export type CanvasHealthReport = {

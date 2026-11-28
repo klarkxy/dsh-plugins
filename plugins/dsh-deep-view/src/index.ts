@@ -61,6 +61,7 @@ export type CanvasProbeWaiter = {
   path: string
   address: string
   title?: string
+  byteLength?: number
   resolve(report: CanvasHealthReport | undefined): void
   cleanup(): void
 }
@@ -458,7 +459,7 @@ export function createAskViewTool(
 /** Host workspace-file service reached through optional injection; absent keeps the tool working. */
 export type CanvasServices = {
   workspaceFiles?: {
-    stat(scope: { sessionId: string; workspaceRoot: string }, path: string, signal: AbortSignal): Promise<{ absolutePath?: string }>
+    stat(scope: { sessionId: string; workspaceRoot: string }, path: string, signal: AbortSignal): Promise<{ absolutePath?: string; size?: number }>
     readBytes?(scope: { sessionId: string; workspaceRoot: string }, path: string, signal: AbortSignal): Promise<{ data?: Uint8Array } | Uint8Array>
   }
   sandboxPolicy?: { workspaceRoot?: string }
@@ -598,12 +599,16 @@ export function createShowCanvasTool(
       const { workspaceFiles, sandboxPolicy } = services.current
       const workspaceRoot = cwd ?? (typeof sandboxPolicy?.workspaceRoot === 'string' && sandboxPolicy.workspaceRoot !== '' ? sandboxPolicy.workspaceRoot : undefined)
       let absolutePath: string | undefined
+      let statByteLength: number | undefined
       const signal = exec.signal ? AbortSignal.any([exec.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000)
       if (workspaceFiles && workspaceRoot !== undefined) {
         const scope = { sessionId: agent.id, workspaceRoot }
         try {
           const stat = await workspaceFiles.stat(scope, path, signal)
           absolutePath = typeof stat?.absolutePath === 'string' ? stat.absolutePath : undefined
+          if (typeof stat?.size === 'number' && Number.isFinite(stat.size) && stat.size >= 0) {
+            statByteLength = Math.trunc(stat.size)
+          }
         } catch (error) {
           logger?.debug('canvas.missing', 'show_canvas stat failed.', { sessionId: agent.id, path, reason: error instanceof Error ? error.message : String(error) })
           return { owner: CANVAS_OWNER, status: 'missing', path, summary: `File "${path}" is missing or unreadable; create it with the write tool first, then call show_canvas.` }
@@ -649,6 +654,7 @@ export function createShowCanvasTool(
             path,
             address,
             ...(title !== undefined ? { title } : {}),
+            ...(statByteLength !== undefined ? { byteLength: statByteLength } : {}),
             cleanup,
             resolve: report => resolve({ kind: 'settled', report }),
           })
@@ -764,6 +770,7 @@ export function createRpc(
             path: matched.path,
             address: matched.address,
             ...(matched.title !== undefined ? { title: matched.title } : {}),
+            ...(matched.byteLength !== undefined ? { byteLength: matched.byteLength } : {}),
           }
         : null
       return ok(descriptor)

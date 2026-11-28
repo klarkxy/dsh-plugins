@@ -31,10 +31,10 @@ export type CanvasFirstPaintReport = {
 }
 
 /** Active mounted canvas settlements keyed by resourceAddress so repeat `show_canvas` probes on an already-open tab settle immediately. */
-const mountedSettlements = new Map<string, () => CanvasFirstPaintReport | undefined>()
+const mountedSettlements = new Map<string, (expectedByteLength?: number) => CanvasFirstPaintReport | undefined>()
 
-export function readMountedCanvasSettlement(address: string): CanvasFirstPaintReport | undefined {
-  return mountedSettlements.get(address)?.()
+export function readMountedCanvasSettlement(address: string, expectedByteLength?: number): CanvasFirstPaintReport | undefined {
+  return mountedSettlements.get(address)?.(expectedByteLength)
 }
 
 /** Owner share of the keyed `sidebar.right.tab.document` slot plus injected canvas props. */
@@ -76,7 +76,7 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
   const [frame, setFrame] = useState<CanvasFrame>()
   const [errors, setErrors] = useState<readonly CanvasError[]>([])
   const errorsRef = useRef<readonly CanvasError[]>([])
-  const settledRef = useRef<{ data: Uint8Array<ArrayBuffer>; collapsed: boolean; height: number } | undefined>()
+  const settledRef = useRef<{ data: Uint8Array<ArrayBuffer>; collapsed: boolean; height: number } | undefined>(undefined)
   const [copied, setCopied] = useState(false)
   const [draftChoice, setDraftChoice] = useState(false)
   const [filled, setFilled] = useState<boolean | undefined>()
@@ -84,9 +84,10 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
   const input = props.useInput?.(value => value) ?? { draft: '', phase: 'plain' as const }
 
   useEffect(() => {
-    const getter = (): CanvasFirstPaintReport | undefined => {
+    const getter = (expectedByteLength?: number): CanvasFirstPaintReport | undefined => {
       const snap = settledRef.current
       if (!snap || snap.data !== data) return undefined
+      if (expectedByteLength !== undefined && snap.data.byteLength !== expectedByteLength) return undefined
       return {
         collapsed: snap.collapsed,
         height: snap.height,
