@@ -1,18 +1,33 @@
-// Error and first-paint health capture injected at the front of the sandboxed
-// canvas document. The iframe has no allow-same-origin, so the parent can only
-// learn runtime errors and first-paint settlement through postMessage; a per-load
-// nonce keeps stale or foreign frames from feeding the error bar or probe.
+// Error capture, first-paint health probe, dual sizing regime (`content` vs
+// `viewport`), ResizeObserver height sync, broken `<img>` alt fallback, and live
+// theme-token bridge injected at the front of the sandboxed canvas document.
+// Dual sizing (`data-card-sizing="content|viewport"`) to prevent `100vh` +
+// ResizeObserver feedback loops and the passive broken-image `alt` placeholder
+// shim are inspired by liliMozi/showcard (Agent Showcard 1.0 Specification §1.4,
+// §1.7, §7.1, §7.8, https://github.com/liliMozi/showcard).
 import { isRecord } from '../contracts.ts'
 
 /** Message type posted from the canvas document to the preview owner on error. */
 export const CANVAS_ERROR_EVENT = 'dvui-canvas-error'
 /** Message type posted once after `load` + two animation frames for first-paint health probing. */
 export const CANVAS_READY_EVENT = 'dvui-canvas-ready'
+/** Message type posted when an inline (`content`-sized) card changes intrinsic height. */
+export const CANVAS_RESIZE_EVENT = 'dvui-canvas-resize'
+/** Message type posted from the host to refresh bridged theme tokens without reloading the iframe. */
+export const CANVAS_THEME_EVENT = 'dvui-canvas-theme'
 
 export const CANVAS_ERROR_MESSAGE_LIMIT = 1000
 export const CANVAS_ERROR_LIMIT = 20
+export const CANVAS_INLINE_MIN_HEIGHT = 80
+export const CANVAS_INLINE_MAX_HEIGHT = 1600
 
 export type CanvasErrorKind = 'error' | 'rejection' | 'console' | 'resource'
+export type CanvasSizingMode = 'content' | 'viewport'
+
+export type CaptureScriptOptions = {
+  readonly sizing?: CanvasSizingMode
+  readonly themeDeclarations?: string
+}
 
 /** One runtime or subresource error reported by the canvas document. */
 export type CanvasErrorReport = {
@@ -29,6 +44,12 @@ export type CanvasReadyReport = {
   readonly height: number
 }
 
+/** Intrinsic content height update reported by an inline sandboxed card. */
+export type CanvasResizeReport = {
+  readonly height: number
+  readonly overflow?: boolean
+}
+
 /** One row of the error bar: identical messages merge into a count. */
 export type CanvasError = {
   readonly message: string
@@ -38,20 +59,40 @@ export type CanvasError = {
   readonly column?: number
 }
 
+export function clampCanvasInlineHeight(value: number): number {
+  return Math.round(Math.min(CANVAS_INLINE_MAX_HEIGHT, Math.max(CANVAS_INLINE_MIN_HEIGHT, value)))
+}
+
 /**
- * Build the capture script inserted at the start of the canvas document head.
- * It runs before every author script, listens in capture phase so non-bubbling
- * subresource load failures are reported, rewrites packed `blob:` URLs back to
- * workspace relative paths, and posts one first-paint settlement receipt after
- * `load` + two `requestAnimationFrame` ticks.
+ * Build the capture and host-bridge script inserted at the start of `<head>`.
  * String lines keep `{name:` patterns out of template literals (stylesheet
- * scope guard) — the assembled text is HTML, not CSS.
+ * scope guard) — the assembled text is HTML/JS inside the sandboxed iframe.
  * @param nonce - per-load token the parent checks before accepting a report.
+ * @param options - surface sizing regime (`content` vs `viewport`) and initial theme tokens.
  * @returns the complete `<script>` element text.
  */
-export function createCaptureScript(nonce: string): string {
+export function createCaptureScript(nonce: string, options?: CaptureScriptOptions): string {
+  const sizing: CanvasSizingMode = options?.sizing === 'content' ? 'content' : 'viewport'
+  const themeDeclarations = options?.themeDeclarations ?? ''
+  const sizingCss = 'html[data-card-sizing="viewport"],html[data-card-sizing="viewport"]>body{height:100%;margin:0}'
+    + 'html[data-card-sizing="content"]{height:auto}html[data-card-sizing="content"]>body{height:auto;min-height:0;margin:0;overflow-y:hidden}'
   return [
-    '<script>(function(nonce){',
+    '<script>(function(nonce,sizing,initTheme,sizingCss){',
+    'var rootEl=document.documentElement;',
+    'if(rootEl)rootEl.setAttribute(\'data-card-sizing\',sizing);',
+    'function mountStyle(id,cssText){',
+    'if(!cssText)return;',
+    'var el=document.getElementById(id);',
+    'if(!el){el=document.createElement(\'style\');el.id=id;(document.head||rootEl).appendChild(el)}',
+    'el.textContent=cssText;',
+    '}',
+    'mountStyle(\'dvui-sizing-bridge\',sizingCss);',
+    'if(initTheme)mountStyle(\'dvui-theme-bridge\',\'html{\' + initTheme + \'}\');',
+    'addEventListener(\'message\',function(ev){',
+    'var d=ev&&ev.data;',
+    'if(!d||d.type!==' + JSON.stringify(CANVAS_THEME_EVENT) + '||d.nonce!==nonce||typeof d.declarations!==\'string\')return;',
+    'mountStyle(\'dvui-theme-bridge\',d.declarations?\'html{\' + d.declarations + \'}\':\'\');',
+    '});',
     'function rewrite(v){',
     'var s=String(v);',
     'var m=window.__dvuiAssets;',
@@ -77,6 +118,17 @@ export function createCaptureScript(nonce: string): string {
     'if(/^blob:/i.test(sRaw))sRaw=\'blob:(local)\';',
     'var ref=/^data:/i.test(sRaw)?sRaw.slice(0,48)+\'…\':sRaw.slice(0,300);',
     'send(\'resource\',\'Failed to load <\'+tag+\'>: \'+(ref||\'(empty)\'),ref&&ref!==\'blob:(local)\'?ref:undefined);',
+    'if(tag===\'img\'&&!t.getAttribute(\'data-dvui-img-fallback\')&&t.parentNode){',
+    't.setAttribute(\'data-dvui-img-fallback\',\'1\');',
+    'var alt=(t.getAttribute(\'alt\')||\'\').trim()||ref||\'Image unavailable\';',
+    'var box=document.createElement(\'span\');',
+    'box.setAttribute(\'role\',\'img\');',
+    'box.setAttribute(\'aria-label\',alt);',
+    'box.setAttribute(\'data-dvui-img-placeholder\',\'1\');',
+    'box.style.cssText=\'display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border:1px dashed currentColor;border-radius:6px;opacity:0.72;font-size:12px;line-height:1.4;max-width:100%;box-sizing:border-box\';',
+    'box.textContent=alt;',
+    't.parentNode.replaceChild(box,t);',
+    '}',
     '}',
     'return;',
     '}',
@@ -96,6 +148,29 @@ export function createCaptureScript(nonce: string): string {
     'send(\'console\',parts.join(\' \'));',
     'return orig.apply(this,arguments);',
     '};',
+    'var lastHeight=0,lastOverflow=false;',
+    'function emitResize(){',
+    'if(sizing!==\'content\')return;',
+    'var b=document.body,r=document.documentElement;',
+    'var quirks=document.compatMode===\'BackCompat\';',
+    'var raw=Math.ceil(Math.max(b?b.scrollHeight:0,b&&!quirks?b.offsetHeight:0,r&&!quirks?r.offsetHeight:0));',
+    'if(raw<=0)return;',
+    'var over=raw>' + CANVAS_INLINE_MAX_HEIGHT + ';',
+    'if(b)b.style.overflowY=over?\'auto\':\'hidden\';',
+    'var clamped=Math.min(' + CANVAS_INLINE_MAX_HEIGHT + ',Math.max(' + CANVAS_INLINE_MIN_HEIGHT + ',raw));',
+    'if(Math.abs(clamped-lastHeight)<1&&over===lastOverflow)return;',
+    'lastHeight=clamped;lastOverflow=over;',
+    'var msg={type:' + JSON.stringify(CANVAS_RESIZE_EVENT) + ',nonce:nonce,height:clamped,overflow:over};',
+    'try{parent.postMessage(msg,\'*\')}catch(e){}',
+    '}',
+    'if(sizing===\'content\'){',
+    'addEventListener(\'load\',emitResize);',
+    'if(typeof ResizeObserver===\'function\'){',
+    'var ro=new ResizeObserver(function(){emitResize()});',
+    'if(rootEl)ro.observe(rootEl);',
+    'addEventListener(\'DOMContentLoaded\',function(){if(document.body)ro.observe(document.body);emitResize()},{once:true});',
+    '}',
+    '}',
     'var readySent=false;',
     'function measureVisualHeight(){',
     'var bo=document.body,de=document.documentElement;',
@@ -114,6 +189,7 @@ export function createCaptureScript(nonce: string): string {
     'function reportReady(){',
     'if(readySent)return;',
     'readySent=true;',
+    'emitResize();',
     'var m=measureVisualHeight();',
     'var collapsed=!m.hidden&&(!m.hasBody||m.bodyH<=0);',
     'var payload={type:' + JSON.stringify(CANVAS_READY_EVENT) + ',nonce:nonce,collapsed:collapsed,height:m.h};',
@@ -126,7 +202,12 @@ export function createCaptureScript(nonce: string): string {
     '}',
     'if(document.readyState===\'complete\')afterLoad();',
     'else addEventListener(\'load\',afterLoad,{once:true});',
-    '})(', JSON.stringify(nonce), ');</script>',
+    '})(',
+    JSON.stringify(nonce), ',',
+    JSON.stringify(sizing), ',',
+    JSON.stringify(themeDeclarations), ',',
+    JSON.stringify(sizingCss),
+    ');</script>',
   ].join('')
 }
 
@@ -152,6 +233,16 @@ export function canvasReadyReportOf(data: unknown, nonce: string): CanvasReadyRe
   return {
     collapsed: data.collapsed === true,
     height,
+  }
+}
+
+/** Read one postMessage payload as an inline content-sizing height update. */
+export function canvasResizeReportOf(data: unknown, nonce: string): CanvasResizeReport | undefined {
+  if (!isRecord(data) || data.type !== CANVAS_RESIZE_EVENT || data.nonce !== nonce) return undefined
+  if (typeof data.height !== 'number' || !Number.isFinite(data.height) || data.height <= 0) return undefined
+  return {
+    height: clampCanvasInlineHeight(data.height),
+    ...(data.overflow === true ? { overflow: true } : {}),
   }
 }
 

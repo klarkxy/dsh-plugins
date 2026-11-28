@@ -3,6 +3,30 @@
 // inline and sidebar HTML/SVG cards adapt seamlessly to light and dark themes.
 import { OFFICIAL_THEME_TOKEN_NAMES } from '@klarkxy/dsh-plugin-kit/official-ui'
 
+function parseColorRgb(raw: string): [number, number, number] | undefined {
+  const value = raw.trim()
+  if (value.startsWith('#')) {
+    const hex = value.slice(1)
+    if (hex.length === 3 || hex.length === 4) {
+      const r = Number.parseInt(hex[0]! + hex[0]!, 16)
+      const g = Number.parseInt(hex[1]! + hex[1]!, 16)
+      const b = Number.parseInt(hex[2]! + hex[2]!, 16)
+      if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) return [r, g, b]
+    } else if (hex.length === 6 || hex.length === 8) {
+      const r = Number.parseInt(hex.slice(0, 2), 16)
+      const g = Number.parseInt(hex.slice(2, 4), 16)
+      const b = Number.parseInt(hex.slice(4, 6), 16)
+      if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) return [r, g, b]
+    }
+    return undefined
+  }
+  const rgbMatch = /^rgba?\(\s*(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)/iu.exec(value)
+  if (rgbMatch) {
+    return [Number(rgbMatch[1]), Number(rgbMatch[2]), Number(rgbMatch[3])]
+  }
+  return undefined
+}
+
 function inferColorScheme(doc: Document, rootStyle: CSSStyleDeclaration): 'light' | 'dark' {
   const root = doc.documentElement
   const attrTheme = (root.getAttribute('data-theme') ?? root.getAttribute('data-color-scheme') ?? '').toLowerCase()
@@ -14,10 +38,13 @@ function inferColorScheme(doc: Document, rootStyle: CSSStyleDeclaration): 'light
   if (cssScheme.includes('dark') && !cssScheme.includes('light')) return 'dark'
   if (cssScheme.includes('light') && !cssScheme.includes('dark')) return 'light'
   const bg = rootStyle.getPropertyValue('--dsw-alias-bg-base').trim()
-  const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/iu.exec(bg)
+  const rgb = parseColorRgb(bg)
   if (rgb) {
-    const lum = 0.299 * Number(rgb[1]) + 0.587 * Number(rgb[2]) + 0.114 * Number(rgb[3])
+    const lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
     return lum < 128 ? 'dark' : 'light'
+  }
+  if (typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(prefers-color-scheme: dark)').matches) {
+    return 'dark'
   }
   return 'light'
 }

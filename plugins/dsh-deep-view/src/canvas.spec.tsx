@@ -15,6 +15,9 @@ let CanvasToolCall: typeof import('./client.tsx').CanvasToolCall
 let readCanvasCall: typeof import('./client.tsx').readCanvasCall
 let recordCanvasError: typeof import('./canvas/capture.ts').recordCanvasError
 let canvasReadyReportOf: typeof import('./canvas/capture.ts').canvasReadyReportOf
+let canvasResizeReportOf: typeof import('./canvas/capture.ts').canvasResizeReportOf
+let serializeHostThemeDeclarations: typeof import('./canvas/theme-bridge.ts').serializeHostThemeDeclarations
+let notifyInlineCanvasResource: typeof import('./canvas/index.ts').notifyInlineCanvasResource
 let canvasErrorReportOf: typeof import('./canvas/capture.ts').canvasErrorReportOf
 let createCaptureScript: typeof import('./canvas/capture.ts').createCaptureScript
 let formatCanvasError: typeof import('./canvas/capture.ts').formatCanvasError
@@ -31,12 +34,13 @@ let apply: typeof import('./client.tsx').apply
 beforeAll(async () => {
   createRoot = (await import('react-dom/client')).createRoot
   ;({ CanvasToolCall, readCanvasCall, apply, mountCanvasPreview, createCanvasRuntimeStore } = await import('./client.tsx'))
-  ;({ recordCanvasError, canvasErrorReportOf, createCaptureScript, formatCanvasError, canvasReadyReportOf } = await import('./canvas/capture.ts'))
+  ;({ recordCanvasError, canvasErrorReportOf, createCaptureScript, formatCanvasError, canvasReadyReportOf, canvasResizeReportOf } = await import('./canvas/capture.ts'))
+  ;({ serializeHostThemeDeclarations } = await import('./canvas/theme-bridge.ts'))
   ;({ CanvasBody } = await import('./canvas/CanvasBody.tsx'))
   ;({ packCanvasHtml } = await import('./canvas/pack.ts'))
   ;({ createHtmlDocument, insertCaptureScript, prepareCanvasSource } = await import('./canvas/bootstrap.ts'))
   ;({ createReadCanvasRelative } = await import('./canvas/read-relative.ts'))
-  ;({ CANVAS_RENDERER_ID } = await import('./canvas/index.ts'))
+  ;({ CANVAS_RENDERER_ID, notifyInlineCanvasResource } = await import('./canvas/index.ts'))
   const w = dom.window as { URL: typeof URL }
   w.URL.createObjectURL = (blob: Blob) => {
     const url = `blob:canvas-${objectUrls.length}`
@@ -617,5 +621,146 @@ describe('canvas preview registration', () => {
     apply(ctx as never)
     expect(injected).toEqual([['sidebarRight'], ['documentPreviews', 'configForms', 'remote', 'remote.workspaceFiles']])
     expect(registrations.some(spec => spec.name === 'tool.call.toolview' && spec.key === 'show_canvas')).toBe(true)
+  })
+})
+
+describe('inline sandboxed HTML/SVG card, dual sizing and theme bridge', () => {
+  const bytes = (text: string) => new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>
+
+  it('stamps data-card-sizing, bridges #hex & rgb() theme tokens + live updates, injects inline CSP/doctype, and replaces broken <img> with alt placeholder', async () => {
+    document.documentElement.removeAttribute('data-theme')
+    document.documentElement.style.setProperty('--dsw-alias-bg-base', '#121418')
+    document.documentElement.style.setProperty('--dsw-alias-label-primary', 'rgb(240 242 245)')
+    const declarations = serializeHostThemeDeclarations(document)
+    expect(declarations).toContain('color-scheme:dark')
+    expect(declarations).toContain('--dsw-alias-bg-base:#121418')
+    expect(declarations).toContain('--dsw-alias-label-primary:rgb(240 242 245)')
+
+    const inlineDoc = createHtmlDocument(
+      { data: bytes('<div>quirks-free</div>'), assets: [] },
+      createCaptureScript('nonce-csp', { sizing: 'content' }),
+      { ensureDoctype: true, inlineCsp: true, rootPath: '.dsh/deep-view/card.html' },
+    )
+    const innerPayload = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(/JSON\.parse\(text\("([^"]+)"\)\)/.exec(inlineDoc)![1]!), c => c.charCodeAt(0))))
+    expect(innerPayload.html.startsWith('<!doctype html>')).toBe(true)
+    expect(innerPayload.html).toContain('Content-Security-Policy')
+    expect(innerPayload.html).toContain("connect-src 'none'")
+
+    const script = createCaptureScript('nonce-inline', { sizing: 'content', themeDeclarations: declarations })
+    const inlineHtml = ['<!doctype html><html><head>', script, '</head><body><img id="broken" src="404.png" alt="Optical ray diagram"></body></html>'].join('')
+    const page = new JSDOM(inlineHtml, {
+      url: 'https://canvas.test/inline',
+      runScripts: 'dangerously',
+      virtualConsole: new VirtualConsole(),
+    })
+    expect(page.window.document.documentElement.getAttribute('data-card-sizing')).toBe('content')
+    expect(page.window.document.getElementById('dvui-sizing-bridge')?.textContent).toContain('data-card-sizing="content"')
+    expect(page.window.document.getElementById('dvui-theme-bridge')?.textContent).toContain('--dsw-alias-bg-base:#121418')
+
+    page.window.dispatchEvent(new page.window.MessageEvent('message', {
+      data: { type: 'dvui-canvas-theme', nonce: 'nonce-inline', declarations: 'color-scheme:light;--dsw-alias-bg-base:rgb(255, 255, 255)' },
+    }))
+    expect(page.window.document.getElementById('dvui-theme-bridge')?.textContent).toContain('color-scheme:light')
+
+    const img = page.window.document.getElementById('broken')!
+    img.dispatchEvent(new page.window.Event('error', { bubbles: false }))
+    const placeholder = page.window.document.querySelector('[data-dvui-img-placeholder="1"]')
+    expect(placeholder).not.toBeNull()
+    expect(placeholder?.getAttribute('role')).toBe('img')
+    expect(placeholder?.textContent).toBe('Optical ray diagram')
+    expect(page.window.document.getElementById('broken')).toBeNull()
+
+    expect(canvasResizeReportOf({ type: 'dvui-canvas-resize', nonce: 'nonce-inline', height: 32 }, 'nonce-inline')).toEqual({ height: 80 })
+    expect(canvasResizeReportOf({ type: 'dvui-canvas-resize', nonce: 'nonce-inline', height: 340 }, 'nonce-inline')).toEqual({ height: 340 })
+    expect(canvasResizeReportOf({ type: 'dvui-canvas-resize', nonce: 'nonce-inline', height: 1600, overflow: true }, 'nonce-inline')).toEqual({ height: 1600, overflow: true })
+    expect(canvasResizeReportOf({ type: 'dvui-canvas-resize', nonce: 'other', height: 340 }, 'nonce-inline')).toBeUndefined()
+    page.window.close()
+    document.documentElement.style.removeProperty('--dsw-alias-bg-base')
+    document.documentElement.style.removeProperty('--dsw-alias-label-primary')
+  })
+
+  it('mounts an inline card without start->result iframe flicker, refreshes on resource updates, and exposes enable action without sidebar', async () => {
+    const openedSidebar: string[] = []
+    const inlineMeta = {
+      owner: 'deep-view/canvas',
+      path: '.dsh/deep-view/fsm.html',
+      address: 'dsh-resource://file/session/s1/.dsh/deep-view/fsm.html',
+      title: 'FSM Stepper',
+      surface: 'inline',
+      preferredWidth: 560,
+    }
+    let currentHtml = '<!doctype html><html><body><svg width="200" height="120"></svg></body></html>'
+    const readCanvasBytes = async () => ({
+      ok: true as const,
+      value: { data: bytes(currentHtml) },
+    })
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<CanvasToolCall
+      sessionId="s1"
+      callId="call-inline-1"
+      t={t}
+      call={async () => ({ ok: true, value: { probeId: 'p-in', path: inlineMeta.path, address: inlineMeta.address, surface: 'inline' } })}
+      openCanvas={addr => openedSidebar.push(addr)}
+      readCanvasBytes={readCanvasBytes}
+      phase="start"
+      block={{ callId: 'call-inline-1', args: argsView({ path: '.dsh/deep-view/fsm.html', surface: 'inline', preferred_width: 560 }) }}
+    />))
+    await act(async () => { await new Promise<void>(r => setTimeout(r, 25)) })
+    const firstSrc = document.querySelector('iframe')?.getAttribute('src')
+    expect(firstSrc).toMatch(/^blob:/)
+
+    // Settling start -> result with identical bytes preserves the exact live iframe without flickering.
+    await act(async () => root.render(<CanvasToolCall
+      sessionId="s1"
+      callId="call-inline-1"
+      t={t}
+      openCanvas={addr => openedSidebar.push(addr)}
+      readCanvasBytes={readCanvasBytes}
+      phase="result"
+      block={metaBlock('call-inline-1', inlineMeta)}
+    />))
+    await act(async () => { await new Promise<void>(r => setTimeout(r, 25)) })
+    expect(openedSidebar).toEqual([])
+    const shell = document.querySelector('[data-deep-view-inline-canvas]') as HTMLElement | null
+    expect(shell?.style.maxWidth).toBe('560px')
+    const iframe = shell?.querySelector('iframe')
+    expect(iframe?.getAttribute('src')).toBe(firstSrc)
+    expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(iframe?.getAttribute('data-card-sizing')).toBe('content')
+
+    // Editing the underlying file and notifying the resource swaps in a fresh Blob URL automatically.
+    currentHtml = '<!doctype html><html><body><svg width="300" height="180"></svg></body></html>'
+    await act(async () => {
+      notifyInlineCanvasResource(inlineMeta.address)
+      await new Promise<void>(r => setTimeout(r, 25))
+    })
+    expect(shell?.querySelector('iframe')?.getAttribute('src')).not.toBe(firstSrc)
+
+    const openBtn = [...document.querySelectorAll('button')].find(btn => btn.textContent === 'canvasOpenSidebar')
+    expect(openBtn).toBeTruthy()
+    await act(async () => openBtn!.click())
+    expect(openedSidebar).toEqual([inlineMeta.address])
+    await act(async () => root.unmount())
+
+    // Without sidebarRight (`openCanvas === undefined`), a disabled inline card still renders canvasEnableCodingView.
+    let devEnabled = false
+    const devTools = {
+      getSnapshot: () => devEnabled,
+      subscribe: () => () => {},
+      setValue(v: boolean) { devEnabled = v },
+    }
+    const noBarRoot = createRoot(document.getElementById('root')!)
+    await act(async () => noBarRoot.render(<CanvasToolCall
+      sessionId="s1"
+      callId="call-inline-nobar"
+      t={t}
+      developerTools={devTools}
+      readCanvasBytes={readCanvasBytes}
+      phase="result"
+      block={metaBlock('call-inline-nobar', inlineMeta)}
+    />))
+    const enableInlineBtn = [...document.querySelectorAll('button')].find(btn => btn.textContent === 'canvasEnableCodingView')
+    expect(enableInlineBtn).toBeTruthy()
+    await act(async () => noBarRoot.unmount())
   })
 })
