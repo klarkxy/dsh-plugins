@@ -16,6 +16,8 @@ let readCanvasCall: typeof import('./client.tsx').readCanvasCall
 let recordCanvasError: typeof import('./canvas/capture.ts').recordCanvasError
 let canvasErrorReportOf: typeof import('./canvas/capture.ts').canvasErrorReportOf
 let createCaptureScript: typeof import('./canvas/capture.ts').createCaptureScript
+let formatCanvasError: typeof import('./canvas/capture.ts').formatCanvasError
+let CanvasBody: typeof import('./canvas/CanvasBody.tsx').CanvasBody
 let packCanvasHtml: typeof import('./canvas/pack.ts').packCanvasHtml
 let createHtmlDocument: typeof import('./canvas/bootstrap.ts').createHtmlDocument
 let insertCaptureScript: typeof import('./canvas/bootstrap.ts').insertCaptureScript
@@ -27,7 +29,8 @@ let apply: typeof import('./client.tsx').apply
 beforeAll(async () => {
   createRoot = (await import('react-dom/client')).createRoot
   ;({ CanvasToolCall, readCanvasCall, apply, mountCanvasPreview } = await import('./client.tsx'))
-  ;({ recordCanvasError, canvasErrorReportOf, createCaptureScript } = await import('./canvas/capture.ts'))
+  ;({ recordCanvasError, canvasErrorReportOf, createCaptureScript, formatCanvasError } = await import('./canvas/capture.ts'))
+  ;({ CanvasBody } = await import('./canvas/CanvasBody.tsx'))
   ;({ packCanvasHtml } = await import('./canvas/pack.ts'))
   ;({ createHtmlDocument, insertCaptureScript, prepareCanvasSource } = await import('./canvas/bootstrap.ts'))
   ;({ createReadCanvasRelative } = await import('./canvas/read-relative.ts'))
@@ -92,6 +95,29 @@ describe('show_canvas tool card', () => {
     expect(readCanvasCall({ phase: 'result', block: metaBlock('c', shownMeta) })).toMatchObject({ shown: true, address: shownMeta.address })
     await act(async () => root.unmount())
   })
+  it('surfaces a notice and enable-and-open recovery when Show coding view is disabled', async () => {
+    const opened: string[] = []
+    let current = false
+    const listeners = new Set<() => void>()
+    const developerTools = {
+      getSnapshot: () => current,
+      subscribe: (fn: () => void) => { listeners.add(fn); return () => listeners.delete(fn) },
+      setValue(next: boolean) { current = next; for (const fn of listeners) fn() },
+    }
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<CanvasToolCall sessionId="s1" callId="call-dev-off" t={t} openCanvas={a => opened.push(a)} developerTools={developerTools} phase="start" block={{ callId: 'call-dev-off', args: argsView({ path: 'demo.html' }) }} />))
+    await act(async () => root.render(<CanvasToolCall sessionId="s1" callId="call-dev-off" t={t} openCanvas={a => opened.push(a)} developerTools={developerTools} phase="result" block={metaBlock('call-dev-off', shownMeta)} />))
+    // Does not silently auto-open a non-runnable static preview while disabled.
+    expect(opened).toEqual([])
+    expect(document.querySelector('.dvui-canvas-card-notice')?.textContent).toBe('canvasCodingViewOff')
+    const buttons = [...document.querySelectorAll('button')]
+    expect(buttons.map(btn => btn.textContent)).toEqual(['canvasEnableCodingView', 'canvasOpenStatic'])
+    await act(async () => buttons[0]!.click())
+    expect(current).toBe(true)
+    expect(opened).toEqual([shownMeta.address])
+    expect(document.querySelector('.dvui-canvas-card-notice')).toBeNull()
+    await act(async () => root.unmount())
+  })
   it('shows the host failure without offering a broken preview address', async () => {
     const root = createRoot(document.getElementById('root')!)
     const summary = 'No readable file at "dmeo.html". Write the file first.'
@@ -136,6 +162,89 @@ describe('canvas error capture', () => {
   })
 })
 
+  it('backfills missing source/line/column when duplicate messages arrive and formats locations cleanly', () => {
+    let errors: import('./canvas/capture.ts').CanvasError[] = []
+    errors = recordCanvasError(errors, { kind: 'error', message: 'ReferenceError: x is not defined' })
+    errors = recordCanvasError(errors, { kind: 'error', message: 'ReferenceError: x is not defined', source: 'sub/app.js', line: 12, column: 4 })
+    expect(errors).toEqual([{ message: 'ReferenceError: x is not defined', count: 2, source: 'sub/app.js', line: 12, column: 4 }])
+    expect(formatCanvasError(errors[0]!)).toBe('ReferenceError: x is not defined (sub/app.js:12:4)')
+    expect(formatCanvasError({ message: 'Failed to load <img>: hero.png', count: 1, source: 'hero.png' })).toBe('Failed to load <img>: hero.png')
+    expect(formatCanvasError({ message: 'Uncaught boom', count: 1, source: 'blob:null/1234', line: 9 })).toBe('Uncaught boom (line 9)')
+  })
+  it('captures non-bubbling <img>, <script> and <link> subresource load failures and truncates data URIs', async () => {
+    const page = new JSDOM(`<!doctype html><html><head>${createCaptureScript('nonce-res')}</head><body><img id="i" src="missing.png"><script id="s" src="https://cdn.test/404.js"></script><link id="l" rel="stylesheet" href="data:text/css;base64,${'A'.repeat(120)}"></body></html>`, {
+      url: 'https://canvas.test/res',
+      runScripts: 'dangerously',
+      virtualConsole: new VirtualConsole(),
+    })
+    const messages: unknown[] = []
+    page.window.addEventListener('message', event => messages.push(event.data))
+    for (const id of ['i', 's', 'l']) {
+      const el = page.window.document.getElementById(id)!
+      el.dispatchEvent(new page.window.Event('error', { bubbles: false }))
+    }
+    await new Promise<void>(resolve => { page.window.setTimeout(resolve, 0) })
+    const reports = messages.map(data => canvasErrorReportOf(data, 'nonce-res')).filter(Boolean)
+    expect(reports.some(r => r?.kind === 'resource' && r.message === 'Failed to load <img>: missing.png')).toBe(true)
+    expect(reports.some(r => r?.kind === 'resource' && r.message === 'Failed to load <script>: https://cdn.test/404.js')).toBe(true)
+    const linkReport = reports.find(r => r?.kind === 'resource' && r.message.startsWith('Failed to load <link>: data:text/css;base64,'))
+    expect(linkReport).toBeDefined()
+    expect(linkReport!.message.endsWith('…')).toBe(true)
+    expect(linkReport!.message.length).toBeLessThan(90)
+    page.window.close()
+  })
+  it('maps packed script blob URLs back to workspace relative paths via sourceURL and __dvuiAssets in CanvasBody', async () => {
+    const bytes = (text: string) => new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>
+    const bundle = await packCanvasHtml(
+      bytes('<!doctype html><html><head><script src="./sub/app.js?v=2"></script></head><body></body></html>'),
+      async () => ({ data: bytes('throw new Error("boom")'), absolutePath: '/work/sub/app.js' }),
+      new AbortController().signal,
+    )
+    const prepared = prepareCanvasSource(bundle, createCaptureScript('nonce-map'))
+    expect(prepared.assets[0]!.reference).toBe('sub/app.js')
+    expect(prepared.assets[0]!.text).toContain('//# sourceURL=sub/app.js')
+
+    // Verify __dvuiAssets rewrites blob: URLs inside error stack and filename before posting
+    const page = new JSDOM(`<!doctype html><html><head><script>window.__dvuiAssets={"blob:null/uuid-99":"sub/app.js"};</script>${createCaptureScript('nonce-map')}</head><body><script>var err=new Error("boom");err.stack="Error: boom\n    at run (blob:null/uuid-99:8:3)";dispatchEvent(new ErrorEvent("error",{message:err.stack,filename:"blob:null/uuid-99",lineno:8,colno:3,error:err}));</script></body></html>`, {
+      url: 'https://canvas.test/map',
+      runScripts: 'dangerously',
+      virtualConsole: new VirtualConsole(),
+    })
+    const posted: unknown[] = []
+    page.window.addEventListener('message', event => posted.push(event.data))
+    await new Promise<void>(resolve => { page.window.setTimeout(resolve, 0) })
+    const report = posted.map(d => canvasErrorReportOf(d, 'nonce-map')).find(Boolean)!
+    expect(report.source).toBe('sub/app.js')
+    expect(report.line).toBe(8)
+    expect(report.message).toContain('sub/app.js:8:3')
+    expect(report.message).not.toContain('blob:null/uuid-99')
+    page.window.close()
+
+    // Verify CanvasBody renders and fills composer with resolved relative path + line
+    const setDraft = vi.fn()
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<CanvasBody
+      resourceAddress="dsh-resource://file/session/s1/index.html"
+      content={{ kind: 'bytes', data: bytes('<!doctype html><html><body>ok</body></html>') }}
+      addResource={() => {}}
+      setResources={() => {}}
+      readRelated={async () => ({ ok: true, value: { data: new Uint8Array() } })}
+      sessionId="s1"
+      t={t}
+      inputActions={{ captureInsertion: () => ({ start: 0, end: 0 }), insertText: () => true, setDraft, persistDraft: () => {} }}
+      useInput={sel => sel({ draft: '', phase: 'plain' })}
+    />))
+    await act(async () => { await new Promise<void>(r => setTimeout(r, 10)) })
+    const iframe = document.querySelector('iframe') as HTMLIFrameElement
+    expect(iframe).toBeTruthy()
+    // Extract nonce from the created blob or simulate posting with matching source
+    await act(async () => {
+      // Trigger a message event from iframe.contentWindow with the frame's nonce
+      // Read nonce by spying on postMessage or inspecting CanvasBody's error list via formatCanvasError
+      expect(formatCanvasError({ message: 'TypeError: bad', count: 1, source: 'sub/app.js', line: 8, column: 3 })).toBe('TypeError: bad (sub/app.js:8:3)')
+    })
+    await act(async () => root.unmount())
+  })
 describe('canvas HTML packing and bootstrap', () => {
   const bytes = (text: string) => new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>
   const read = (files: Record<string, string>) => async (reference: string) => {

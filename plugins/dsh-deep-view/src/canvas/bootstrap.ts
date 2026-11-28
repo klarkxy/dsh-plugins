@@ -27,6 +27,8 @@ export interface HtmlBundle {
 /** One packed asset after source marking: the iframe swaps each marker for its fresh object URL. */
 export interface PreparedAsset {
   readonly kind: 'script' | 'stylesheet'
+  /** Normalized workspace-relative reference mapped back from runtime `blob:` URLs. */
+  readonly reference: string
   /** Random token replacing every URL attribute occurrence; unique within the source. */
   readonly marker: string
   readonly text: string
@@ -36,6 +38,16 @@ export interface PreparedAsset {
 export interface PreparedCanvasSource {
   readonly html: string
   readonly assets: readonly PreparedAsset[]
+}
+
+/** Normalize an author relative asset reference for `//# sourceURL=` and error display. */
+export function cleanCanvasSourceUrl(reference: string): string {
+  const suffix = reference.search(/[?#]/u)
+  const raw = (suffix === -1 ? reference : reference.slice(0, suffix))
+    .replace(/[\r\n]+/gu, '')
+    .replace(/^(?:\.\/)+/u, '')
+    .trim()
+  return raw || reference.replace(/[\r\n]+/gu, '')
 }
 
 /**
@@ -67,8 +79,9 @@ function freshMarker(source: string, taken: ReadonlySet<string>): string {
  * the capture script. Attribute ranges come from the same decoded source, so
  * quoting style, spacing and entity-encoded values in the author HTML never
  * matter: only the element's own attribute text is replaced, and every
- * occurrence of a deduplicated reference is marked. The insertion point is
- * located on the marked source (offsets shifted by the replacements).
+ * occurrence of a deduplicated reference is marked. Packed classic scripts
+ * receive a trailing `//# sourceURL=` directive so stack traces name the
+ * workspace relative file rather than an opaque `blob:` UUID.
  * @param bundle - complete HTML bytes and the assets packed from it.
  * @param capture - `<script>` element text inserted at the start of the author head.
  * @returns the prepared source and per-asset markers; invalid UTF-8 throws.
@@ -79,7 +92,12 @@ export function prepareCanvasSource(bundle: HtmlBundle, capture: string): Prepar
   const assets = bundle.assets.map(asset => {
     const marker = freshMarker(source, taken)
     taken.add(marker)
-    return { kind: asset.kind, marker, text: decodeText(asset.data) }
+    const reference = cleanCanvasSourceUrl(asset.reference)
+    const decoded = decodeText(asset.data)
+    const text = asset.kind === 'script'
+      ? `${decoded}\n//# sourceURL=${encodeURI(reference)}`
+      : decoded
+    return { kind: asset.kind, reference, marker, text }
   })
   const spans: { start: number; end: number; name: string; marker: string }[] = []
   bundle.assets.forEach((asset, index) => {
@@ -97,9 +115,9 @@ export function prepareCanvasSource(bundle: HtmlBundle, capture: string): Prepar
  * Build the outer iframe document. Its resource URLs are created inside the sandbox,
  * because that opaque origin cannot load resource URLs created by the parent.
  * The prepared source already carries capture and markers, so the in-iframe
- * code is one exact token substitution per asset — no source string matching.
- * `document.write` is deferred so Chromium starts a fresh parser instead of
- * ignoring a later `<head>` while still inside the bootstrap head.
+ * code is one exact token substitution per asset — no source string matching —
+ * while recording `window.__dvuiAssets[blobUrl] = asset.reference` so runtime
+ * error capture can rewrite any residual `blob:` filenames or stack frames.
  * @param bundle - complete HTML bytes and optional static dependencies.
  * @param capture - `<script>` element text inserted at the start of the author head.
  * @returns bootstrap HTML; invalid UTF-8 throws before navigation.
@@ -113,10 +131,13 @@ export function createHtmlDocument(bundle: HtmlBundle, capture: string): string 
     "const text=data=>new TextDecoder('utf-8',{fatal:true}).decode(bytes(data));",
     'const bundle=JSON.parse(text("', payload, '"));',
     'let html=bundle.html;',
+    'const assetMap={};',
     'for(const asset of bundle.assets){',
     "const url=URL.createObjectURL(new Blob([asset.text],{type:asset.kind==='script'?'application/javascript':'text/css'}));",
+    'if(asset.reference)assetMap[url]=asset.reference;',
     'html=html.split(asset.marker).join(url);',
     '}',
+    'window.__dvuiAssets=assetMap;',
     'const write=()=>{document.open();document.write(html);document.close();};',
     'setTimeout(write,0);',
     '})()</script>',

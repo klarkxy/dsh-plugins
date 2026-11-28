@@ -10,9 +10,9 @@ export const CANVAS_ERROR_EVENT = 'dvui-canvas-error'
 export const CANVAS_ERROR_MESSAGE_LIMIT = 1000
 export const CANVAS_ERROR_LIMIT = 20
 
-export type CanvasErrorKind = 'error' | 'rejection' | 'console'
+export type CanvasErrorKind = 'error' | 'rejection' | 'console' | 'resource'
 
-/** One runtime error reported by the canvas document. */
+/** One runtime or subresource error reported by the canvas document. */
 export type CanvasErrorReport = {
   readonly kind: CanvasErrorKind
   readonly message: string
@@ -32,7 +32,9 @@ export type CanvasError = {
 
 /**
  * Build the capture script inserted at the start of the canvas document head.
- * It runs before every author script.
+ * It runs before every author script and listens in capture phase so non-bubbling
+ * `<img>`, `<script>` and `<link rel="stylesheet">` load failures are reported too,
+ * while rewriting packed `blob:` asset URLs back to relative workspace paths.
  * String lines keep `{name:` patterns out of template literals (stylesheet
  * scope guard) — the assembled text is HTML, not CSS.
  * @param nonce - per-load token the parent checks before accepting a report.
@@ -41,22 +43,39 @@ export type CanvasError = {
 export function createCaptureScript(nonce: string): string {
   return [
     '<script>(function(nonce){',
+    'function rewrite(v){',
+    'var s=String(v);',
+    'var m=window.__dvuiAssets;',
+    'if(m&&typeof m===\'object\'){for(var k in m){if(Object.prototype.hasOwnProperty.call(m,k)&&k&&s.indexOf(k)!==-1)s=s.split(k).join(m[k])}}',
+    'return s;',
+    '}',
     'function send(kind,message,source,line,column){',
-    'var data={type:' + JSON.stringify(CANVAS_ERROR_EVENT) + ',nonce:nonce,kind:kind,message:String(message).slice(0,' + CANVAS_ERROR_MESSAGE_LIMIT + ')};',
-    'if(source!=null)data.source=String(source);',
-    'if(typeof line===\'number\')data.line=line;',
-    'if(typeof column===\'number\')data.column=column;',
+    'var data={type:' + JSON.stringify(CANVAS_ERROR_EVENT) + ',nonce:nonce,kind:kind,message:rewrite(message).slice(0,' + CANVAS_ERROR_MESSAGE_LIMIT + ')};',
+    'if(source!=null)data.source=rewrite(source);',
+    'if(typeof line===\'number\'&&line>0)data.line=line;',
+    'if(typeof column===\'number\'&&column>0)data.column=column;',
     'try{parent.postMessage(data,\'*\')}catch(e){}',
     '}',
     'addEventListener(\'error\',function(e){',
+    'var t=e&&e.target;',
+    'if(t&&t!==window&&t!==self&&typeof t.tagName===\'string\'){',
+    'var tag=t.tagName.toLowerCase();',
+    'if(tag===\'img\'||tag===\'script\'||tag===\'link\'){',
+    'var raw=(t.getAttribute&&(t.getAttribute(\'src\')||t.getAttribute(\'href\')))||t.src||t.href||\'\';',
+    'var sRaw=rewrite(raw);',
+    'var ref=/^data:/i.test(sRaw)?sRaw.slice(0,48)+\'…\':sRaw.slice(0,300);',
+    'send(\'resource\',\'Failed to load <\'+tag+\'>: \'+(ref||\'(empty)\'),ref||undefined);',
+    '}',
+    'return;',
+    '}',
     'var m=e.message||(e.error&&(e.error.stack||e.error.message))||\'Script error\';',
     'send(\'error\',m,e.filename||undefined,e.lineno||undefined,e.colno||undefined);',
-    'e.preventDefault();',
-    '});',
+    'if(e.preventDefault)e.preventDefault();',
+    '},true);',
     'addEventListener(\'unhandledrejection\',function(e){',
     'var r=e.reason;',
     'send(\'rejection\',r&&(r.stack||r.message)||String(r));',
-    'e.preventDefault();',
+    'if(e.preventDefault)e.preventDefault();',
     '});',
     'var orig=console.error;',
     'console.error=function(){',
@@ -78,7 +97,7 @@ export function createCaptureScript(nonce: string): string {
 export function canvasErrorReportOf(data: unknown, nonce: string): CanvasErrorReport | undefined {
   if (!isRecord(data) || data.type !== CANVAS_ERROR_EVENT || data.nonce !== nonce) return undefined
   const kind = data.kind
-  if (kind !== 'error' && kind !== 'rejection' && kind !== 'console') return undefined
+  if (kind !== 'error' && kind !== 'rejection' && kind !== 'console' && kind !== 'resource') return undefined
   if (typeof data.message !== 'string') return undefined
   return {
     kind,
@@ -90,8 +109,8 @@ export function canvasErrorReportOf(data: unknown, nonce: string): CanvasErrorRe
 }
 
 /**
- * Merge one report into the error list: identical messages raise a count, new
- * messages append until the cap, further distinct messages drop.
+ * Merge one report into the error list: identical messages raise a count and
+ * backfill missing source/line/column metadata when a later occurrence provides it.
  * @param errors - current rows.
  * @param report - accepted report.
  * @param limit - maximum distinct rows kept (default {@link CANVAS_ERROR_LIMIT}).
@@ -102,8 +121,33 @@ export function recordCanvasError(errors: readonly CanvasError[], report: Canvas
   const index = errors.findIndex(error => error.message === message)
   if (index !== -1) {
     const current = errors[index]!
-    return [...errors.slice(0, index), { ...current, count: current.count + 1 }, ...errors.slice(index + 1)]
+    const merged: CanvasError = {
+      message: current.message,
+      count: current.count + 1,
+      source: current.source ?? report.source,
+      line: current.line ?? report.line,
+      column: current.column ?? report.column,
+    }
+    return [...errors.slice(0, index), merged, ...errors.slice(index + 1)]
   }
   if (errors.length >= limit) return [...errors]
   return [...errors, { message, count: 1, source: report.source, line: report.line, column: report.column }]
+}
+
+/** Format one aggregated canvas error with its resolved workspace file/line location when available. */
+export function formatCanvasError(error: CanvasError): string {
+  const cleanSource = typeof error.source === 'string' && error.source !== '' && !/^(?:blob|data|about):/iu.test(error.source)
+    ? error.source
+    : undefined
+  const location = cleanSource !== undefined && error.line !== undefined
+    ? `${cleanSource}:${error.line}${error.column !== undefined ? `:${error.column}` : ''}`
+    : cleanSource !== undefined
+      ? cleanSource
+      : error.line !== undefined
+        ? `line ${error.line}${error.column !== undefined ? `:${error.column}` : ''}`
+        : undefined
+  if (location === undefined) return error.message
+  if (error.message.includes(location)) return error.message
+  if (error.line === undefined && cleanSource !== undefined && error.message.includes(cleanSource)) return error.message
+  return `${error.message} (${location})`
 }

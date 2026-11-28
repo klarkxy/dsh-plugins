@@ -181,6 +181,7 @@ export const viewStyles = `
 .dvui-root .dvui-canvas-card { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; padding: 10px 12px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); }
 .dvui-root .dvui-canvas-card-title { color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 500; line-height: 20px; overflow-wrap: anywhere; }
 .dvui-root .dvui-canvas-card-path { color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.dvui-root .dvui-canvas-card-notice { margin: 2px 0 0; padding: 6px 10px; border-radius: var(--dsw-radius-sm); border-left: 2px solid var(--dsw-alias-state-warn-primary); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; }
 .dvui-root.dvui-canvas { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 240px; }
 .dvui-root .dvui-canvas-frame { flex: 1 1 auto; display: block; width: 100%; min-height: 240px; border: none; background: var(--dsw-alias-bg-base); }
 .dvui-root .dvui-canvas-status { flex: 1 1 auto; margin: 0; padding: 10px; color: var(--dsw-alias-label-secondary); white-space: normal; }

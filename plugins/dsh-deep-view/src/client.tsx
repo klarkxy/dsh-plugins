@@ -509,9 +509,19 @@ export function readCanvasCall(props: Pick<ToolViewProps, 'phase' | 'block'>): {
 /** Call ids whose live result already auto-opened once; survives virtual-scroll remounts. */
 export const openedCanvasCalls = new Set<string>()
 
+/** The developer-tools preference the canvas renderer follows, structurally. */
+export type DeveloperToolsEnabled = {
+  getSnapshot(): boolean
+  subscribe(listener: () => void): () => void
+  setValue?(value: boolean): void
+  set?(value: boolean): void
+}
+
 export type CanvasToolViewProps = ToolViewProps & {
   /** Present only while the sidebar service is injected; hides the open affordance. */
   openCanvas?: (address: string) => void
+  /** Reactive handle to the host's "Show coding view" switch when available. */
+  developerTools?: DeveloperToolsEnabled
 }
 
 export function CanvasToolCall(props: CanvasToolViewProps) {
@@ -522,24 +532,41 @@ export function CanvasToolCall(props: CanvasToolViewProps) {
   const address = read.address ?? (read.phase !== 'result' && read.shown === false && typeof path === 'string' ? sessionFileAddress(props.sessionId, path) : undefined)
   const name = title ?? (path ? path.split('/').filter(Boolean).at(-1) : undefined) ?? 'canvas'
   const openCanvas = props.openCanvas
-  // Auto-open only on a live transition to a shown result; replayed history and
-  // remounts arrive with phase 'result' on the first frame and never open.
+  const devTools = props.developerTools
+  const subscribeDevTools = useCallback((listener: () => void) => devTools?.subscribe?.(listener) ?? (() => {}), [devTools])
+  const readDevTools = useCallback(() => devTools ? devTools.getSnapshot() : undefined, [devTools])
+  const codingViewEnabled = useSyncExternalStore(subscribeDevTools, readDevTools, readDevTools)
+  const codingViewDisabled = codingViewEnabled === false
+  const canToggleCodingView = typeof devTools?.setValue === 'function' || typeof devTools?.set === 'function'
+  // Auto-open only on a live transition to a shown result while coding view is
+  // not explicitly disabled; replayed history arrives with phase 'result' on frame 1.
   const firstPhase = useRef(props.phase)
   useEffect(() => {
     if (firstPhase.current === 'result' || props.phase !== 'result') return
-    if (!read.shown || address === undefined || openCanvas === undefined) return
+    if (!read.shown || address === undefined || openCanvas === undefined || codingViewDisabled) return
     if (openedCanvasCalls.has(props.callId)) return
     openedCanvasCalls.add(props.callId)
     openCanvas(address)
-  }, [props.phase, read.shown, address, openCanvas, props.callId])
+  }, [props.phase, read.shown, address, openCanvas, codingViewDisabled, props.callId])
+  const enableAndOpen = useCallback(() => {
+    if (address === undefined || openCanvas === undefined) return
+    if (typeof devTools?.setValue === 'function') devTools.setValue(true)
+    else if (typeof devTools?.set === 'function') devTools.set(true)
+    openedCanvasCalls.add(props.callId)
+    openCanvas(address)
+  }, [address, openCanvas, devTools, props.callId])
   if (read.phase === 'preparing') return <div className="dvui-root dvui-tool-loading" role="status">{t('preparing')}</div>
   return <div className="dvui-root">
     <div className="dvui-canvas-card">
       <span className="dvui-canvas-card-title">{name}</span>
       {path ? <span className="dvui-canvas-card-path">{path}</span> : null}
       {read.failure ? <p className="dvui-tool-error" role="alert">{read.failure}</p> : null}
+      {!read.failure && codingViewDisabled ? <p className="dvui-canvas-card-notice" role="status">{t('canvasCodingViewOff')}</p> : null}
       {address !== undefined && openCanvas !== undefined
-        ? <div className="dvui-actions"><Button onClick={() => openCanvas(address)}>{t('canvasOpen')}</Button></div>
+        ? <div className="dvui-actions">
+            {codingViewDisabled && canToggleCodingView ? <Button variant="primary" onClick={enableAndOpen}>{t('canvasEnableCodingView')}</Button> : null}
+            <Button onClick={() => openCanvas(address)}>{t(codingViewDisabled ? 'canvasOpenStatic' : 'canvasOpen')}</Button>
+          </div>
         : null}
     </div>
   </div>
@@ -556,8 +583,7 @@ type Client = Context & {
   sidebarRight?: { openResource(address: string, options?: { preferNewPane?: boolean }): void }
 }
 
-/** The developer-tools preference the canvas renderer follows, structurally. */
-type DeveloperToolsEnabled = { getSnapshot(): boolean; subscribe(listener: () => void): () => void }
+
 type CanvasClientScope = CanvasScope & {
   configForms: { developerTools: { enabled: DeveloperToolsEnabled } }
   remote: { workspaceFiles?: CanvasScope['remote']['workspaceFiles'] }
@@ -587,7 +613,7 @@ export function apply(ctx: Context): void {
   const call = (endpoint: string, payload: unknown) => client.connection.rpc.call(RPC_CHANNEL, endpoint, payload)
   // New canvas services arrive through their own inject scopes so a missing
   // sidebar or preview stack only disables that feature, never the bundle.
-  const canvasRuntime: { sidebarRight?: Client['sidebarRight'] } = {}
+  const canvasRuntime: { sidebarRight?: Client['sidebarRight']; developerTools?: DeveloperToolsEnabled } = {}
   ctx.inject?.(['sidebarRight'], injected => {
     const scope = injected as unknown as Client
     canvasRuntime.sidebarRight = scope.sidebarRight
@@ -595,7 +621,14 @@ export function apply(ctx: Context): void {
   })
   ctx.inject?.(['documentPreviews', 'configForms', 'remote', 'remote.workspaceFiles'], injected => {
     const scope = injected as unknown as Client & CanvasClientScope
-    scope.effect(() => mountCanvasPreview(scope, LOCALE))
+    canvasRuntime.developerTools = scope.configForms?.developerTools?.enabled
+    scope.effect(() => {
+      const dispose = mountCanvasPreview(scope, LOCALE)
+      return () => {
+        canvasRuntime.developerTools = undefined
+        dispose()
+      }
+    })
   })
   const cards = createCards(call, client.locale)
   client.provide(CARDS_SERVICE, cards)
@@ -619,6 +652,7 @@ export function apply(ctx: Context): void {
       openCanvas: canvasRuntime.sidebarRight === undefined ? undefined : (address: string) => {
         canvasRuntime.sidebarRight?.openResource(address, { preferNewPane: true })
       },
+      ...(canvasRuntime.developerTools !== undefined ? { developerTools: canvasRuntime.developerTools } : {}),
     }),
   }, CanvasToolCall)), 'deep-view.canvas-tool')
   for (const language of DEEP_VIEW_FENCE_LANGUAGES) ctx.effect(() => client.slots.inject('conversation.chat.markdown.fence', () => client.slots.register({

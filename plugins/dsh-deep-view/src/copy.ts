@@ -20,6 +20,9 @@ export const uiZh = {
   canvasTitle: 'Deep View 画布', canvasOpen: '打开预览', canvasErrors: '运行错误',
   canvasFrame: '画布预览', canvasLoading: '正在加载画布…', canvasFailed: '画布未能显示',
   canvasReport: '预览 `{path}` 运行时报错：\n{list}\n请修复这些问题。',
+  canvasCodingViewOff: '未开启「显示代码工作视图」，侧栏当前仅展示静态 HTML（不运行脚本）。开启后即可运行交互预览。',
+  canvasEnableCodingView: '开启并运行预览',
+  canvasOpenStatic: '打开静态预览',
 }
 
 export const uiEn: Record<keyof typeof uiZh, string> = {
@@ -44,4 +47,7 @@ export const uiEn: Record<keyof typeof uiZh, string> = {
   canvasTitle: 'Deep View Canvas', canvasOpen: 'Open preview', canvasErrors: 'Runtime errors',
   canvasFrame: 'Canvas preview', canvasLoading: 'Loading canvas…', canvasFailed: 'The canvas could not be shown',
   canvasReport: 'Preview `{path}` failed at runtime:\n{list}\nPlease fix these errors.',
+  canvasCodingViewOff: '"Show coding view" is off, so the sidebar only shows static HTML without running scripts. Enable it for runnable preview.',
+  canvasEnableCodingView: 'Enable & open preview',
+  canvasOpenStatic: 'Open static preview',
 }
