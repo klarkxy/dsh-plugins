@@ -41,8 +41,8 @@ Common node graphs, charts, comparison tables, steps, adjustable estimates (incl
 
 ### Canvas Preview
 
-- **Requires "Show coding view"**: The canvas only registers and runs scripts while the host's "Show coding view" switch is on; when it is off, the renderer disappears and files fall back to the builtin static HTML preview.
-- **Error bar and Fill composer**: Script exceptions, unhandled rejections, and `console.error` calls collect in an error bar below the preview (identical reports merge into a count). **Fill composer** writes the error list into the composer for the model to fix — asking whether to replace or append when a draft exists — and never sends silently; errors can also be copied.
+- **Requires "Show coding view"**: The canvas only registers and runs scripts while the host's "Show coding view" switch is on; when it is off, the tool card surfaces a notice with a one-click enable action while files fall back to the builtin static HTML preview.
+- **Error bar and Fill composer**: Script exceptions, unhandled rejections, `console.error` calls, and `<img src>` / `<script src>` / `<link rel="stylesheet">` subresource load failures collect in an error bar below the preview (identical reports merge into a count, and packed local scripts map `blob:` URLs back to workspace relative paths and line numbers). **Fill composer** writes the error list into the composer for the model to fix — asking whether to replace or append when a draft exists — and never sends silently; errors can also be copied.
 - **Automatic refresh**: Later `edit` changes to the file (including relatively referenced local scripts and styles) reload the preview and clear the error bar automatically, without calling the tool again.
 
 ### Components, Interactive Views, and Formulas

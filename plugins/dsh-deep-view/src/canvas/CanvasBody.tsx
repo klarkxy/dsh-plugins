@@ -9,7 +9,7 @@ import { fillComposerDraft, type ComposerActions, type InputSnapshot } from '../
 import { createHtmlDocument } from './bootstrap.ts'
 import { packCanvasHtml } from './pack.ts'
 import { createReadCanvasRelative, type ReadCanvasRelated } from './read-relative.ts'
-import { canvasErrorReportOf, createCaptureScript, recordCanvasError, type CanvasError } from './capture.ts'
+import { canvasErrorReportOf, createCaptureScript, formatCanvasError, recordCanvasError, type CanvasError } from './capture.ts'
 
 export type CanvasContent = {
   readonly kind: string
@@ -79,7 +79,7 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
       try {
         const bundle = await packCanvasHtml(data, readRelative, controller.signal)
         controller.signal.throwIfAborted()
-        const html = createHtmlDocument(bundle, createCaptureScript(nonce))
+        const html = createHtmlDocument(bundle, createCaptureScript(nonce), { rootPath: displayPath(resourceAddress) })
         url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
         setFrame({ data, url, nonce })
       } catch {
@@ -99,7 +99,8 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
     if (!live) return
     const nonce = frame.nonce
     const listener = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow) return
+      const sourceWindow = iframeRef.current?.contentWindow
+      if (!sourceWindow || event.source !== sourceWindow) return
       const report = canvasErrorReportOf(event.data, nonce)
       if (report !== undefined) setErrors(list => recordCanvasError(list, report))
     }
@@ -109,7 +110,7 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
 
   const path = displayPath(resourceAddress)
   const reportText = errors.map((error, index) =>
-    `${index + 1}. ${error.message}${error.count > 1 ? ` (x${error.count})` : ''}`).join('\n')
+    `${index + 1}. ${formatCanvasError(error)}${error.count > 1 ? ` (x${error.count})` : ''}`).join('\n')
   const fillText = () => t('canvasReport', { path, list: reportText })
   const fill = useCallback((replace: boolean) => {
     const accepted = fillComposerDraft(input, props.inputActions, fillText(), replace)
@@ -130,7 +131,7 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
     {errors.length > 0 ? <div className="dvui-canvas-errors" role="group" aria-label={t('canvasErrors')}>
       <ul className="dvui-canvas-errors-list">
         {errors.map((error, index) => <li key={index}>
-          {error.message}{error.count > 1 ? ` ×${error.count}` : ''}
+          {formatCanvasError(error)}{error.count > 1 ? ` ×${error.count}` : ''}
         </li>)}
       </ul>
       <div className="dvui-canvas-actions dvui-actions">
