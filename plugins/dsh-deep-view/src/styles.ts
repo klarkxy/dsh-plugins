@@ -178,12 +178,16 @@ export const viewStyles = `
 .dvui-root .dvui-fence-source > summary { cursor: pointer; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; }
 .dvui-root .dvui-fence-code { margin-top: 8px; }
 .dvui-root .dvui-tool-error, .dvui-root.dvui-tool-error { margin: 4px 0; color: var(--dsw-alias-label-error); font-size: 12px; line-height: 18px; }
-.dvui-root .dvui-canvas-card { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; padding: 10px 12px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); }
+.dvui-root .dvui-canvas-card { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; padding: 10px 12px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); }
+.dvui-root .dvui-canvas-card-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
+.dvui-root .dvui-canvas-inline-shell { width: 100%; min-width: 0; overflow: hidden; border: .5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-base); }
 .dvui-root .dvui-canvas-card-title { color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 500; line-height: 20px; overflow-wrap: anywhere; }
 .dvui-root .dvui-canvas-card-path { color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
 .dvui-root .dvui-canvas-card-notice { margin: 2px 0 0; padding: 6px 10px; border-radius: var(--dsw-radius-sm); border-left: 2px solid var(--dsw-alias-state-warn-primary); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; }
 .dvui-root.dvui-canvas { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 240px; }
+.dvui-root.dvui-canvas.dvui-canvas-inline { height: auto; min-height: 80px; }
 .dvui-root .dvui-canvas-frame { flex: 1 1 auto; display: block; width: 100%; min-height: 240px; border: none; background: var(--dsw-alias-bg-base); }
+.dvui-root .dvui-canvas-frame-inline { flex: none; min-height: 80px; max-height: 1600px; overflow: hidden; }
 .dvui-root .dvui-canvas-status { flex: 1 1 auto; margin: 0; padding: 10px; color: var(--dsw-alias-label-secondary); white-space: normal; }
 .dvui-root .dvui-canvas-errors { flex: none; max-height: 45%; overflow-y: auto; padding: 8px 10px; border-top: .5px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); }
 .dvui-root .dvui-canvas-errors-list { margin: 0; padding: 0 0 0 18px; color: var(--dsw-alias-label-error); font-size: 12px; line-height: 18px; }

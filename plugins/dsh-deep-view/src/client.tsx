@@ -4,9 +4,9 @@ import { Button, MarkdownText, type MarkdownLabels } from '@deepseek-ai/dsh-clie
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { checkShownView, validateViewAnswer } from './core/index.js'
 import { createClientPluginLogger, installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
-import { CANVAS_OWNER, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type CanvasProbeDescriptor, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation } from './contracts.ts'
+import { CANVAS_OWNER, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, clampCanvasPreferredWidth, isRecord, type CanvasProbeDescriptor, type CanvasSurface, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation } from './contracts.ts'
 import { sessionFileAddress, sessionFileOf } from './file-address.ts'
-import { readMountedCanvasSettlement, registerCanvasPreview, type CanvasFirstPaintReport, type CanvasScope } from './canvas/index.ts'
+import { InlineCanvasPreview, notifyInlineCanvasResource, notifySessionInlineCanvases, readMountedCanvasSettlement, registerCanvasPreview, type CanvasFirstPaintReport, type CanvasScope, type ReadWorkspaceCanvasBytes, type SubscribeCanvasResource } from './canvas/index.ts'
 import type { ToolViewProps, ToolArgsView, ReplyViewProps, ReplySnapshot } from './runtime.ts'
 import { WidgetCard, type Answer } from './widget.tsx'
 import { viewStyles } from './styles.ts'
@@ -372,6 +372,9 @@ export function ReplyView(props: ReplyViewProps & { store: ViewStore }) {
     return [...latest.values()]
   }, sameCards)
   const answers = props.useChat(replyAnswers, sameAnswers)
+  useEffect(() => {
+    if (props.turn.status === 'closed') notifySessionInlineCanvases(props.sessionId)
+  }, [props.sessionId, props.turn.turn, props.turn.status])
   if (props.turn.status !== 'closed' || cards.length === 0) return null
   return <div className="dvui-root" data-deep-view-reply>{cards.map(block =>
     <ToolCallView key={`${props.sessionId}:${block.callId}`} sessionId={props.sessionId} callId={block.callId}
@@ -483,30 +486,45 @@ export function DeepViewFenceSlot(props: DeepViewFenceProps) {
 }
 
 /** Read a show_canvas call: persisted meta on a settled result, live args otherwise. */
-export function readCanvasCall(props: Pick<ToolViewProps, 'phase' | 'block'>): { path?: string; title?: string; address?: string; failure?: string; shown: boolean; phase: string } {
+export function readCanvasCall(props: Pick<ToolViewProps, 'phase' | 'block'>): {
+  path?: string
+  title?: string
+  address?: string
+  surface: CanvasSurface
+  preferredWidth?: number
+  failure?: string
+  shown: boolean
+  phase: string
+} {
   const phase = props.phase ?? (props.block.kind === 'tool-result' ? 'result' : 'start')
   const meta = phase === 'result' || props.block.kind === 'tool-result' ? props.block.meta : undefined
   if (isRecord(meta) && meta.owner === CANVAS_OWNER && typeof meta.address === 'string') {
+    const preferredWidth = clampCanvasPreferredWidth(meta.preferredWidth)
     return {
       shown: true, phase, address: meta.address,
+      surface: meta.surface === 'inline' ? 'inline' : 'sidebar',
       path: typeof meta.path === 'string' ? meta.path : undefined,
       title: typeof meta.title === 'string' ? meta.title : undefined,
+      ...(preferredWidth !== undefined ? { preferredWidth } : {}),
     }
   }
   const path = argField(props.block.args, 'path')
   const title = argField(props.block.args, 'title')
+  const rawSurface = argField(props.block.args, 'surface')
+  const preferredWidth = clampCanvasPreferredWidth(argField(props.block.args, 'preferred_width'))
   const failure = phase === 'result'
     ? props.block.content?.map(item => isRecord(item) && item.type === 'text' && typeof item.text === 'string' ? item.text : '').filter(Boolean).join('\n') || props.block.error?.reason
     : undefined
   return {
     shown: false, phase,
+    surface: rawSurface === 'inline' ? 'inline' : 'sidebar',
     path: typeof path === 'string' ? path : undefined,
     title: typeof title === 'string' ? title : undefined,
+    ...(preferredWidth !== undefined ? { preferredWidth } : {}),
     ...(failure ? { failure } : {}),
   }
 }
 
-/** Call ids whose live result already auto-opened once; survives virtual-scroll remounts. */
 /** Call ids whose live result already consumed its one-shot auto-open eligibility. */
 export const openedCanvasCalls = new Set<string>()
 
@@ -521,6 +539,8 @@ export type DeveloperToolsEnabled = {
 export type CanvasRuntimeSnapshot = {
   readonly sidebarRight?: { openResource(address: string, options?: { preferNewPane?: boolean }): void }
   readonly developerTools?: DeveloperToolsEnabled
+  readonly readCanvasBytes?: ReadWorkspaceCanvasBytes
+  readonly subscribeResource?: SubscribeCanvasResource
   readonly hasWorkspaceFiles: boolean
   readonly previewMounted: boolean
 }
@@ -549,6 +569,8 @@ export function createCanvasRuntimeStore(initial?: Partial<CanvasRuntimeSnapshot
       if (
         next.sidebarRight === state.sidebarRight
         && next.developerTools === state.developerTools
+        && next.readCanvasBytes === state.readCanvasBytes
+        && next.subscribeResource === state.subscribeResource
         && next.hasWorkspaceFiles === state.hasWorkspaceFiles
         && next.previewMounted === state.previewMounted
       ) return
@@ -566,6 +588,12 @@ export type CanvasToolViewProps = ToolViewProps & {
   openCanvas?: (address: string) => void
   /** Reactive handle to the host's "Show coding view" switch when available. */
   developerTools?: DeveloperToolsEnabled
+  /** Workspace byte reader used when rendering inline sandboxed cards in the chat stream. */
+  readCanvasBytes?: ReadWorkspaceCanvasBytes
+  /** Optional resource change subscription hook for auto-refreshing inline cards after edits. */
+  subscribeResource?: SubscribeCanvasResource
+  /** First-paint health callback shared with the sidebar renderer. */
+  reportFirstPaint?: (address: string, report: CanvasFirstPaintReport) => void
   /** Reactive runtime store coordinating delayed service injection and renderer readiness. */
   runtime?: CanvasRuntimeStore
   /** Optional RPC bridge used to open and probe a live canvas call before settlement. */
@@ -577,8 +605,14 @@ export function CanvasToolCall(props: CanvasToolViewProps) {
   const read = useMemo(() => readCanvasCall(props), [props.block, props.phase])
   const path = read.path
   const title = read.title
-  const address = read.address ?? (read.phase !== 'result' && read.shown === false && typeof path === 'string' ? sessionFileAddress(props.sessionId, path) : undefined)
-  const name = title ?? (path ? path.split('/').filter(Boolean).at(-1) : undefined) ?? 'canvas'
+  const isInlineSurface = read.surface === 'inline'
+  const [probeReadyAddress, setProbeReadyAddress] = useState<string | undefined>()
+  const [inlineOpen, setInlineOpen] = useState<boolean>(() => isInlineSurface)
+  const [reloadSeq, setReloadSeq] = useState(0)
+  useEffect(() => {
+    if (isInlineSurface) setInlineOpen(true)
+  }, [isInlineSurface])
+
   const runtime = props.runtime
   const runtimeSnap = useSyncExternalStore(
     useCallback((listener: () => void) => runtime ? runtime.subscribe(listener) : NOOP_SUBSCRIBE(), [runtime]),
@@ -591,6 +625,8 @@ export function CanvasToolCall(props: CanvasToolViewProps) {
     return (target: string) => { runtimeSnap.sidebarRight?.openResource(target, { preferNewPane: true }) }
   }, [props.openCanvas, runtimeSnap.sidebarRight])
   const devTools = props.developerTools ?? runtimeSnap.developerTools
+  const readCanvasBytes = props.readCanvasBytes ?? runtimeSnap.readCanvasBytes
+  const subscribeResource = props.subscribeResource ?? runtimeSnap.subscribeResource
   const subscribeDevTools = useCallback((listener: () => void) => devTools?.subscribe?.(listener) ?? NOOP_SUBSCRIBE(), [devTools])
   const readDevTools = useCallback(() => devTools ? devTools.getSnapshot() : undefined, [devTools])
   const codingViewEnabled = useSyncExternalStore(subscribeDevTools, readDevTools, readDevTools)
@@ -601,10 +637,34 @@ export function CanvasToolCall(props: CanvasToolViewProps) {
   const canToggleCodingView = typeof devTools?.setValue === 'function' || typeof devTools?.set === 'function'
   const pendingEnableOpenRef = useRef<string | undefined>(undefined)
 
+  const address = read.address ?? probeReadyAddress ?? (read.phase !== 'result' && read.shown === false && typeof path === 'string' ? sessionFileAddress(props.sessionId, path) : undefined)
+  const name = title ?? (path ? path.split('/').filter(Boolean).at(-1) : undefined) ?? 'canvas'
+  const sessionRunning = props.useSession?.(snapshot => snapshot.running)
+  const settledToolSig = props.useChat?.(snapshot => {
+    let count = 0
+    let lastCallId = ''
+    const visit = (block: ToolViewProps['block']) => {
+      if (block.kind === 'tool-result') {
+        count += 1
+        lastCallId = block.callId
+      }
+      for (const child of block.subCalls ?? []) visit(child)
+    }
+    for (const key of snapshot.order) {
+      const node = snapshot.nodes.get(key)
+      if (node?.kind === 'tool-call' && node.data?.root) visit(node.data.root)
+    }
+    return `${count}:${lastCallId}`
+  }) ?? ''
+  const inlineRevalidateToken = `${read.phase}:${sessionRunning === true ? '1' : '0'}:${settledToolSig}`
+
+  // When a live `edit` / `write` tool call settles later in the conversation, `notifyInlineCanvasResource`
+  // or `revalidateToken` allows inline cards to check for updated bytes without flickering unchanged frames.
   const firstPhase = useRef(props.phase)
   useEffect(() => {
     if (firstPhase.current === 'result' || props.phase !== 'start') return
-    if (!props.call || openCanvas === undefined || !canRunCanvas || openedCanvasCalls.has(props.callId)) return
+    if (!props.call || !canRunCanvas || openedCanvasCalls.has(props.callId)) return
+    if (!isInlineSurface && openCanvas === undefined) return
     let active = true
     let timer: ReturnType<typeof setTimeout> | undefined
     let settleTimer: ReturnType<typeof setTimeout> | undefined
@@ -614,11 +674,14 @@ export function CanvasToolCall(props: CanvasToolViewProps) {
         if (!active || openedCanvasCalls.has(props.callId)) return
         const envelope = res as RpcResult<CanvasProbeDescriptor | null> | undefined
         if (envelope?.ok && envelope.value?.address) {
-          const { probeId, address: targetAddress, byteLength } = envelope.value
-          openedCanvasCalls.add(props.callId)
-          openCanvas(targetAddress)
-          // If the same tab was already open with unchanged bytes (or hot-reloaded before
-          // `show_canvas` polled), forward its settled first-paint snapshot after a brief grace tick.
+          const { probeId, address: targetAddress, surface, byteLength } = envelope.value
+          if (surface === 'inline' || isInlineSurface) {
+            setProbeReadyAddress(targetAddress)
+            setInlineOpen(true)
+          } else if (openCanvas !== undefined) {
+            openedCanvasCalls.add(props.callId)
+            openCanvas(targetAddress)
+          }
           settleTimer = setTimeout(() => {
             if (!active) return
             const existing = readMountedCanvasSettlement(targetAddress, byteLength)
@@ -643,16 +706,16 @@ export function CanvasToolCall(props: CanvasToolViewProps) {
       if (timer !== undefined) clearTimeout(timer)
       if (settleTimer !== undefined) clearTimeout(settleTimer)
     }
-  }, [props.phase, props.call, props.sessionId, props.callId, openCanvas, canRunCanvas])
+  }, [props.phase, props.call, props.sessionId, props.callId, openCanvas, canRunCanvas, isInlineSurface])
 
   useEffect(() => {
     if (firstPhase.current === 'result' || props.phase !== 'result') return
-    if (!read.shown || address === undefined || openCanvas === undefined) return
+    if (isInlineSurface || !read.shown || address === undefined || openCanvas === undefined) return
     if (openedCanvasCalls.has(props.callId)) return
     openedCanvasCalls.add(props.callId)
     if (!canRunCanvas) return
     openCanvas(address)
-  }, [props.phase, read.shown, address, openCanvas, canRunCanvas, props.callId])
+  }, [props.phase, read.shown, address, openCanvas, canRunCanvas, isInlineSurface, props.callId])
 
   useEffect(() => {
     const queued = pendingEnableOpenRef.current
@@ -662,32 +725,60 @@ export function CanvasToolCall(props: CanvasToolViewProps) {
     openCanvas(queued)
   }, [canRunCanvas, openCanvas, props.callId])
 
-  const enableAndOpen = useCallback(() => {
-    if (address === undefined || openCanvas === undefined) return
-    pendingEnableOpenRef.current = address
+  const enableCodingView = useCallback(() => {
+    if (!isInlineSurface && address !== undefined && openCanvas !== undefined) {
+      pendingEnableOpenRef.current = address
+    }
     if (typeof devTools?.setValue === 'function') devTools.setValue(true)
     else if (typeof devTools?.set === 'function') devTools.set(true)
+    if (isInlineSurface) {
+      setInlineOpen(true)
+      return
+    }
     const readyNow = runtime !== undefined
       ? runtime.getSnapshot().previewMounted && runtime.getSnapshot().hasWorkspaceFiles
       : (devTools ? devTools.getSnapshot() === true : true)
-    if (readyNow && pendingEnableOpenRef.current === address) {
+    if (address !== undefined && openCanvas !== undefined && readyNow && pendingEnableOpenRef.current === address) {
       pendingEnableOpenRef.current = undefined
       openedCanvasCalls.add(props.callId)
       openCanvas(address)
     }
-  }, [address, openCanvas, devTools, runtime, props.callId])
+  }, [address, openCanvas, devTools, runtime, isInlineSurface, props.callId])
 
   if (read.phase === 'preparing') return <div className="dvui-root dvui-tool-loading" role="status">{t('preparing')}</div>
+  const canRenderInline = isInlineSurface && !read.failure && canRunCanvas && readCanvasBytes !== undefined && path !== undefined && address !== undefined && (read.shown || probeReadyAddress !== undefined)
+  const showEnableInlineAction = !read.failure && codingViewDisabled && canToggleCodingView && (isInlineSurface || (address !== undefined && openCanvas !== undefined))
+  const showSidebarAction = address !== undefined && openCanvas !== undefined
   return <div className="dvui-root">
-    <div className="dvui-canvas-card">
-      <span className="dvui-canvas-card-title">{name}</span>
-      {path ? <span className="dvui-canvas-card-path">{path}</span> : null}
+    <div className="dvui-canvas-card" data-canvas-surface={read.surface}>
+      <div className="dvui-canvas-card-head">
+        <span className="dvui-canvas-card-title">{name}</span>
+        {path ? <span className="dvui-canvas-card-path">{path}</span> : null}
+      </div>
       {read.failure ? <p className="dvui-tool-error" role="alert">{read.failure}</p> : null}
       {!read.failure && codingViewDisabled ? <p className="dvui-canvas-card-notice" role="status">{t('canvasCodingViewOff')}</p> : null}
-      {address !== undefined && openCanvas !== undefined
+      {canRenderInline && inlineOpen ? <InlineCanvasPreview
+        sessionId={props.sessionId}
+        address={address}
+        path={path}
+        reloadSeq={reloadSeq}
+        revalidateToken={inlineRevalidateToken}
+        {...(read.preferredWidth !== undefined ? { preferredWidth: read.preferredWidth } : {})}
+        readBytes={readCanvasBytes}
+        {...(subscribeResource !== undefined ? { subscribeResource } : {})}
+        {...(props.reportFirstPaint !== undefined ? { reportFirstPaint: props.reportFirstPaint } : {})}
+        t={t}
+        {...(props.inputActions !== undefined ? { inputActions: props.inputActions } : {})}
+        {...(props.useInput !== undefined ? { useInput: props.useInput } : {})}
+      /> : null}
+      {showEnableInlineAction || canRenderInline || showSidebarAction
         ? <div className="dvui-actions">
-            {codingViewDisabled && canToggleCodingView ? <Button variant="primary" onClick={enableAndOpen}>{t('canvasEnableCodingView')}</Button> : null}
-            <Button onClick={() => openCanvas(address)}>{t(codingViewDisabled ? 'canvasOpenStatic' : 'canvasOpen')}</Button>
+            {showEnableInlineAction ? <Button variant="primary" onClick={enableCodingView}>{t('canvasEnableCodingView')}</Button> : null}
+            {canRenderInline ? <Button onClick={() => setInlineOpen(value => !value)}>{t(inlineOpen ? 'canvasHideInline' : 'canvasShowInline')}</Button> : null}
+            {canRenderInline && inlineOpen ? <Button onClick={() => setReloadSeq(value => value + 1)}>{t('canvasReload')}</Button> : null}
+            {showSidebarAction
+              ? <Button onClick={() => openCanvas(address)}>{t(codingViewDisabled ? 'canvasOpenStatic' : isInlineSurface ? 'canvasOpenSidebar' : 'canvasOpen')}</Button>
+              : null}
           </div>
         : null}
     </div>
@@ -707,7 +798,15 @@ type Client = Context & {
 
 type CanvasClientScope = CanvasScope & {
   configForms: { developerTools: { enabled: DeveloperToolsEnabled } }
-  remote: { workspaceFiles?: CanvasScope['remote']['workspaceFiles'] }
+  remote: {
+    workspaceFiles?: CanvasScope['remote']['workspaceFiles'] & {
+      subscribe?(address: string, listener: () => void): () => void
+      watch?(address: string, listener: () => void): () => void
+    }
+  }
+  resources?: {
+    subscribe?(address: string, listener: () => void): () => void
+  }
 }
 
 /**
@@ -778,10 +877,21 @@ export function apply(ctx: Context): void {
   }
   ctx.inject?.(['documentPreviews', 'configForms', 'remote', 'remote.workspaceFiles'], injected => {
     const scope = injected as unknown as Client & CanvasClientScope
-    const hasWorkspaceFiles = typeof scope.remote?.workspaceFiles?.readBytes === 'function'
+    const readCanvasBytes: ReadWorkspaceCanvasBytes | undefined = typeof scope.remote?.workspaceFiles?.readBytes === 'function'
+      ? (sessionId, filePath, opts, sig) => scope.remote.workspaceFiles!.readBytes(sessionId, filePath, opts, sig)
+      : undefined
+    const subscribeResource: SubscribeCanvasResource | undefined = typeof scope.resources?.subscribe === 'function'
+      ? (addr, fn) => scope.resources!.subscribe!(addr, fn)
+      : typeof scope.remote?.workspaceFiles?.subscribe === 'function'
+        ? (addr, fn) => scope.remote.workspaceFiles!.subscribe!(addr, fn)
+        : typeof scope.remote?.workspaceFiles?.watch === 'function'
+          ? (addr, fn) => scope.remote.workspaceFiles!.watch!(addr, fn)
+          : undefined
     canvasRuntime.update({
       developerTools: scope.configForms?.developerTools?.enabled,
-      hasWorkspaceFiles,
+      readCanvasBytes,
+      subscribeResource,
+      hasWorkspaceFiles: readCanvasBytes !== undefined,
     })
     scope.effect(() => {
       const dispose = mountCanvasPreview({ ...scope, reportFirstPaint }, LOCALE, mounted => {
@@ -794,9 +904,23 @@ export function apply(ctx: Context): void {
         dispose()
         canvasRuntime.update({
           developerTools: undefined,
+          readCanvasBytes: undefined,
+          subscribeResource: undefined,
           hasWorkspaceFiles: false,
           previewMounted: false,
         })
+      }
+    })
+  })
+  ctx.inject?.(['resources'], injected => {
+    const scope = injected as unknown as Client & CanvasClientScope
+    const sub: SubscribeCanvasResource | undefined = typeof scope.resources?.subscribe === 'function'
+      ? (addr, fn) => scope.resources!.subscribe!(addr, fn)
+      : undefined
+    if (sub) canvasRuntime.update({ subscribeResource: sub })
+    scope.effect(() => () => {
+      if (canvasRuntime.getSnapshot().subscribeResource === sub) {
+        canvasRuntime.update({ subscribeResource: undefined })
       }
     })
   })
@@ -818,7 +942,7 @@ export function apply(ctx: Context): void {
   }, ToolCallStatus)), `deep-view.tool.${toolName}`)
   ctx.effect(() => client.slots.inject('tool.call.toolview', () => client.slots.register({
     name: 'tool.call.toolview', key: 'show_canvas', locale: LOCALE,
-    inject: () => ({ call, runtime: canvasRuntime }),
+    inject: () => ({ call, reportFirstPaint, runtime: canvasRuntime }),
   }, CanvasToolCall)), 'deep-view.canvas-tool')
   for (const language of DEEP_VIEW_FENCE_LANGUAGES) ctx.effect(() => client.slots.inject('conversation.chat.markdown.fence', () => client.slots.register({
     name: 'conversation.chat.markdown.fence', id: 'deep-view', key: language, locale: LOCALE,
@@ -832,3 +956,4 @@ export function apply(ctx: Context): void {
     inject: () => ({ call, store }),
   }, ReplyView)), 'deep-view.reply')
 }
+export { notifyInlineCanvasResource, notifySessionInlineCanvases }

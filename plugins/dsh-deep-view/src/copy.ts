@@ -23,6 +23,10 @@ export const uiZh = {
   canvasCodingViewOff: '未开启「显示代码工作视图」，侧栏当前仅展示静态 HTML（不运行脚本）。开启后即可运行交互预览。',
   canvasEnableCodingView: '开启并运行预览',
   canvasOpenStatic: '打开静态预览',
+  canvasOpenSidebar: '在侧栏打开',
+  canvasShowInline: '内联展开',
+  canvasHideInline: '收起内联',
+  canvasReload: '重新加载',
 }
 
 export const uiEn: Record<keyof typeof uiZh, string> = {
@@ -50,4 +54,8 @@ export const uiEn: Record<keyof typeof uiZh, string> = {
   canvasCodingViewOff: '"Show coding view" is off, so the sidebar only shows static HTML without running scripts. Enable it for runnable preview.',
   canvasEnableCodingView: 'Enable & open preview',
   canvasOpenStatic: 'Open static preview',
+  canvasOpenSidebar: 'Open in sidebar',
+  canvasShowInline: 'Show inline',
+  canvasHideInline: 'Hide inline',
+  canvasReload: 'Reload',
 }
