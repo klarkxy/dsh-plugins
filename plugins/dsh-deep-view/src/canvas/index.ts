@@ -4,10 +4,10 @@ import { CANVAS_RENDERER_ID, canvasPreviewDefinition, type CanvasPreviewDefiniti
 import { sessionFileOf } from '../file-address.ts'
 import type { CanvasFileBytes } from './pack.ts'
 import type { RemoteResult, ReadCanvasRelated } from './read-relative.ts'
-import { CanvasBody } from './CanvasBody.tsx'
+import { CanvasBody, readMountedCanvasSettlement, type CanvasFirstPaintReport } from './CanvasBody.tsx'
 
-export { CANVAS_RENDERER_ID, canvasPreviewDefinition }
-export type { CanvasFileBytes, RemoteResult, ReadCanvasRelated }
+export { CANVAS_RENDERER_ID, canvasPreviewDefinition, readMountedCanvasSettlement }
+export type { CanvasFileBytes, CanvasFirstPaintReport, RemoteResult, ReadCanvasRelated }
 
 /** Services the canvas preview needs; each member is already guarded by the caller. */
 export type CanvasScope = {
@@ -22,6 +22,7 @@ export type CanvasScope = {
       readBytes(sessionId: string, path: string, options?: { baseFile?: string }, signal?: AbortSignal): Promise<RemoteResult<CanvasFileBytes>>
     }
   }
+  readonly reportFirstPaint?: (address: string, report: CanvasFirstPaintReport) => void
 }
 
 /**
@@ -44,10 +45,14 @@ export function registerCanvasPreview(scope: CanvasScope, locale: string): () =>
     }
     return scope.remote.workspaceFiles.readBytes(file.sessionId, relativePath, { baseFile: file.path }, signal)
   }
+  const reportFirstPaint = scope.reportFirstPaint
   const disposeBody = scope.slots.inject('sidebar.right.tab.document', () => scope.slots.register(
     {
       name: 'sidebar.right.tab.document', key: CANVAS_RENDERER_ID, locale,
-      inject: () => ({ readRelated }),
+      inject: () => ({
+        readRelated,
+        ...(reportFirstPaint !== undefined ? { reportFirstPaint } : {}),
+      }),
     },
     CanvasBody,
   ))

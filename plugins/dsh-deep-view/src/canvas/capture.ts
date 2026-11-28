@@ -1,11 +1,13 @@
-// Error capture injected at the front of the sandboxed canvas document. The
-// iframe has no allow-same-origin, so the parent can only learn runtime errors
-// through postMessage; a per-load nonce keeps stale or foreign frames from
-// feeding the error bar. Deep View addition — not part of the upstream preview.
+// Error and first-paint health capture injected at the front of the sandboxed
+// canvas document. The iframe has no allow-same-origin, so the parent can only
+// learn runtime errors and first-paint settlement through postMessage; a per-load
+// nonce keeps stale or foreign frames from feeding the error bar or probe.
 import { isRecord } from '../contracts.ts'
 
-/** Message type posted from the canvas document to the preview owner. */
+/** Message type posted from the canvas document to the preview owner on error. */
 export const CANVAS_ERROR_EVENT = 'dvui-canvas-error'
+/** Message type posted once after `load` + two animation frames for first-paint health probing. */
+export const CANVAS_READY_EVENT = 'dvui-canvas-ready'
 
 export const CANVAS_ERROR_MESSAGE_LIMIT = 1000
 export const CANVAS_ERROR_LIMIT = 20
@@ -21,6 +23,12 @@ export type CanvasErrorReport = {
   readonly column?: number
 }
 
+/** One-shot first-paint settlement payload posted from the canvas document. */
+export type CanvasReadyReport = {
+  readonly collapsed: boolean
+  readonly height: number
+}
+
 /** One row of the error bar: identical messages merge into a count. */
 export type CanvasError = {
   readonly message: string
@@ -32,9 +40,10 @@ export type CanvasError = {
 
 /**
  * Build the capture script inserted at the start of the canvas document head.
- * It runs before every author script and listens in capture phase so non-bubbling
- * `<img>`, `<script>` and `<link rel="stylesheet">` load failures are reported too,
- * while rewriting packed `blob:` asset URLs back to relative workspace paths.
+ * It runs before every author script, listens in capture phase so non-bubbling
+ * subresource load failures are reported, rewrites packed `blob:` URLs back to
+ * workspace relative paths, and posts one first-paint settlement receipt after
+ * `load` + two `requestAnimationFrame` ticks.
  * String lines keep `{name:` patterns out of template literals (stylesheet
  * scope guard) — the assembled text is HTML, not CSS.
  * @param nonce - per-load token the parent checks before accepting a report.
@@ -87,16 +96,41 @@ export function createCaptureScript(nonce: string): string {
     'send(\'console\',parts.join(\' \'));',
     'return orig.apply(this,arguments);',
     '};',
+    'var readySent=false;',
+    'function measureVisualHeight(){',
+    'var bo=document.body,de=document.documentElement;',
+    'var bh=bo?bo.scrollHeight:0;',
+    'var dh=de?de.scrollHeight:0;',
+    'var br=bo&&bo.getBoundingClientRect?Math.ceil(bo.getBoundingClientRect().height):0;',
+    'var h=Math.max(bh,br);',
+    'if(h<=0&&bo&&bo.children){',
+    'for(var i=0;i<bo.children.length&&i<32;i++){',
+    'var cr=bo.children[i].getBoundingClientRect&&bo.children[i].getBoundingClientRect();',
+    'if(cr&&cr.height>0)h=Math.max(h,Math.ceil(cr.height));',
+    '}',
+    '}',
+    'return {h:Math.max(h,dh),bodyH:h,hidden:innerWidth===0&&innerHeight===0,hasBody:!!bo};',
+    '}',
+    'function reportReady(){',
+    'if(readySent)return;',
+    'readySent=true;',
+    'var m=measureVisualHeight();',
+    'var collapsed=!m.hidden&&(!m.hasBody||m.bodyH<=0);',
+    'var payload={type:' + JSON.stringify(CANVAS_READY_EVENT) + ',nonce:nonce,collapsed:collapsed,height:m.h};',
+    'try{parent.postMessage(payload,\'*\')}catch(e){}',
+    '}',
+    'function afterLoad(){',
+    'var raf=typeof requestAnimationFrame===\'function\'?requestAnimationFrame:function(cb){return setTimeout(cb,16)};',
+    'raf(function(){raf(reportReady)});',
+    'setTimeout(reportReady,48);',
+    '}',
+    'if(document.readyState===\'complete\')afterLoad();',
+    'else addEventListener(\'load\',afterLoad,{once:true});',
     '})(', JSON.stringify(nonce), ');</script>',
   ].join('')
 }
 
-/**
- * Read one postMessage payload as a canvas error report.
- * @param data - `event.data` from a `message` event (source already matched by the caller).
- * @param nonce - the nonce this frame was loaded with.
- * @returns the report, or `undefined` for foreign or malformed payloads.
- */
+/** Read one postMessage payload as a canvas error report. */
 export function canvasErrorReportOf(data: unknown, nonce: string): CanvasErrorReport | undefined {
   if (!isRecord(data) || data.type !== CANVAS_ERROR_EVENT || data.nonce !== nonce) return undefined
   const kind = data.kind
@@ -111,13 +145,19 @@ export function canvasErrorReportOf(data: unknown, nonce: string): CanvasErrorRe
   }
 }
 
+/** Read one postMessage payload as a first-paint readiness receipt. */
+export function canvasReadyReportOf(data: unknown, nonce: string): CanvasReadyReport | undefined {
+  if (!isRecord(data) || data.type !== CANVAS_READY_EVENT || data.nonce !== nonce) return undefined
+  const height = typeof data.height === 'number' && Number.isFinite(data.height) ? Math.max(0, Math.round(data.height)) : 0
+  return {
+    collapsed: data.collapsed === true,
+    height,
+  }
+}
+
 /**
  * Merge one report into the error list: identical messages raise a count and
  * backfill missing source/line/column metadata when a later occurrence provides it.
- * @param errors - current rows.
- * @param report - accepted report.
- * @param limit - maximum distinct rows kept (default {@link CANVAS_ERROR_LIMIT}).
- * @returns the next rows (a new array).
  */
 export function recordCanvasError(errors: readonly CanvasError[], report: CanvasErrorReport, limit = CANVAS_ERROR_LIMIT): CanvasError[] {
   const message = report.message.slice(0, CANVAS_ERROR_MESSAGE_LIMIT)
