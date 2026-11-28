@@ -100,19 +100,20 @@ describe('settled view LRU eviction', () => {
   })
   it('makes subscribeKey unsubscribe idempotent across shared keys, evicts overflow on final unmount, and guards NaN capacity', () => {
     const store = createViewStateStore(undefined, { maxSettledViews: 1 })
-    store.setSnapshot(settled('a'))
-    store.setSnapshot(settled('b'))
     let calls = 0
     const sharedFn = () => { calls += 1 }
+    store.setSnapshot(settled('a'))
     const unsubA1 = store.subscribeKey('s:a', sharedFn)
     const unsubA2 = store.subscribeKey('s:a', sharedFn)
+    store.setSnapshot(settled('b'))
     const unsubB = store.subscribeKey('s:b', () => {})
 
     // Duplicate unsubA1 calls must not decrement unsubA2's active refcount or detach sharedFn from unsubA2.
+    calls = 0
     unsubA1()
     unsubA1()
     store.setSnapshot(settled('c'))
-    expect(calls).toBeGreaterThan(0)
+    expect(calls).toBe(1)
     expect(store.latest('s', 'a')?.id).toBe('a')
     expect(store.latest('s', 'b')?.id).toBe('b')
 
