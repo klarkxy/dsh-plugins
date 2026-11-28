@@ -42,6 +42,8 @@ beforeAll(async () => {
     return url
   }
   w.URL.revokeObjectURL = () => {}
+  URL.createObjectURL = w.URL.createObjectURL
+  URL.revokeObjectURL = w.URL.revokeObjectURL
 })
 afterEach(() => { document.body.innerHTML = '<div id="root"></div>' })
 const t = (key: string, params?: Record<string, unknown>) => key.replace(/\{(\w+)\}/g, (_, name) => String(params?.[name] ?? `{${name}}`))
@@ -107,7 +109,6 @@ describe('show_canvas tool card', () => {
     const root = createRoot(document.getElementById('root')!)
     await act(async () => root.render(<CanvasToolCall sessionId="s1" callId="call-dev-off" t={t} openCanvas={a => opened.push(a)} developerTools={developerTools} phase="start" block={{ callId: 'call-dev-off', args: argsView({ path: 'demo.html' }) }} />))
     await act(async () => root.render(<CanvasToolCall sessionId="s1" callId="call-dev-off" t={t} openCanvas={a => opened.push(a)} developerTools={developerTools} phase="result" block={metaBlock('call-dev-off', shownMeta)} />))
-    // Does not silently auto-open a non-runnable static preview while disabled.
     expect(opened).toEqual([])
     expect(document.querySelector('.dvui-canvas-card-notice')?.textContent).toBe('canvasCodingViewOff')
     const buttons = [...document.querySelectorAll('button')]
@@ -170,7 +171,14 @@ describe('canvas error capture', () => {
     expect(formatCanvasError({ message: 'Uncaught boom', count: 1, source: 'blob:null/1234', line: 9 })).toBe('Uncaught boom (line 9)')
   })
   it('captures non-bubbling <img>, <script> and <link> subresource load failures and truncates data URIs', async () => {
-    const page = new JSDOM(`<!doctype html><html><head>${createCaptureScript('nonce-res')}</head><body><img id="i" src="missing.png"><script id="s" src="https://cdn.test/404.js"></script><link id="l" rel="stylesheet" href="data:text/css;base64,${'A'.repeat(120)}"></body></html>`, {
+    const html = [
+      '<!doctype html><html><head>',
+      createCaptureScript('nonce-res'),
+      '</head><body><img id="i" src="missing.png"><script id="s" src="https://cdn.test/404.js"></script><link id="l" rel="stylesheet" href="data:text/css;base64,',
+      'A'.repeat(120),
+      '"></body></html>',
+    ].join('')
+    const page = new JSDOM(html, {
       url: 'https://canvas.test/res',
       runScripts: 'dangerously',
       virtualConsole: new VirtualConsole(),
@@ -202,12 +210,17 @@ describe('canvas error capture', () => {
     expect(prepared.assets[0]!.reference).toBe('sub/app.js')
     expect(prepared.assets[0]!.text).toContain('//# sourceURL=sub/app.js')
 
-    // Verify __dvuiAssets rewrites blob: URLs inside error stack and filename before posting
-    const page = new JSDOM(`<!doctype html><html><head><script>window.__dvuiAssets={"blob:null/uuid-99":"sub/app.js"};</script>${createCaptureScript('nonce-map')}</head><body></body></html>`, {
+    const mapHtml = [
+      '<!doctype html><html><head>',
+      createCaptureScript('nonce-map'),
+      '</head><body></body></html>',
+    ].join('')
+    const page = new JSDOM(mapHtml, {
       url: 'https://canvas.test/map',
       runScripts: 'dangerously',
       virtualConsole: new VirtualConsole(),
     })
+    ;(page.window as unknown as { __dvuiAssets: Record<string, string> }).__dvuiAssets = { 'blob:null/uuid-99': 'sub/app.js' }
     const posted: unknown[] = []
     page.window.addEventListener('message', event => posted.push(event.data))
     const err = new page.window.Error('boom')
@@ -227,7 +240,6 @@ describe('canvas error capture', () => {
     expect(report.message).not.toContain('blob:null/uuid-99')
     page.window.close()
 
-    // Verify CanvasBody renders and fills composer with resolved relative path + line
     const setDraft = vi.fn()
     const root = createRoot(document.getElementById('root')!)
     await act(async () => root.render(<CanvasBody
@@ -241,7 +253,7 @@ describe('canvas error capture', () => {
       inputActions={{ captureInsertion: () => ({ start: 0, end: 0 }), insertText: () => true, setDraft, persistDraft: () => {} }}
       useInput={sel => sel({ draft: '', phase: 'plain' })}
     />))
-    await act(async () => { await new Promise<void>(r => setTimeout(r, 10)) })
+    await act(async () => { await new Promise<void>(r => setTimeout(r, 20)) })
     const iframe = document.querySelector('iframe') as HTMLIFrameElement
     expect(iframe).toBeTruthy()
     expect(formatCanvasError({ message: 'TypeError: bad', count: 1, source: 'sub/app.js', line: 8, column: 3 })).toBe('TypeError: bad (sub/app.js:8:3)')
