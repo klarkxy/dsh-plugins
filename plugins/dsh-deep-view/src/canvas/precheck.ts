@@ -76,10 +76,19 @@ function hasExplicitStroke(element: Element): boolean {
   return style !== undefined && /(?:^|;)\s*stroke\s*:/iu.test(style)
 }
 
-function hasUngatedViewportHeightCss(cssText: string): boolean {
-  if (!/\b100d?vh\b/iu.test(cssText)) return false
-  if (/data-card-sizing\s*=\s*['"]?viewport/iu.test(cssText)) return false
-  return /(?:min-)?height\s*:[^;{}]*\b100d?vh\b/iu.test(cssText)
+function hasUngatedViewportHeightCss(cssText: string, inlineAttr = false): boolean {
+  const stripped = cssText.replace(/\/\*[\s\S]*?\*\//gu, '')
+  if (!/\b100d?vh\b/iu.test(stripped)) return false
+  if (inlineAttr) return /(?:min-)?height\s*:[^;{}]*\b100d?vh\b/iu.test(stripped)
+  for (const rawBlock of stripped.split('}')) {
+    const braceIdx = rawBlock.lastIndexOf('{')
+    if (braceIdx === -1) continue
+    const selector = rawBlock.slice(0, braceIdx)
+    const body = rawBlock.slice(braceIdx + 1)
+    if (/data-card-sizing\s*=\s*['"]?viewport/iu.test(selector)) continue
+    if (/(?:min-)?height\s*:[^;{}]*\b100d?vh\b/iu.test(body)) return true
+  }
+  return false
 }
 
 /** Scan text for common hardcoded secret shapes without ever echoing matched secret text. */
@@ -172,7 +181,7 @@ export async function precheckCanvasHtml(
 
       if (isInline && !inlineVhWarned) {
         const inlineStyle = attribute(element, 'style')
-        if (inlineStyle !== undefined && hasUngatedViewportHeightCss(inlineStyle)) {
+        if (inlineStyle !== undefined && hasUngatedViewportHeightCss(inlineStyle, true)) {
           inlineVhWarned = true
           findings.push({
             code: 'inline-viewport-unit',

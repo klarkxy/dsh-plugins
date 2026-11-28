@@ -8,6 +8,7 @@ import {
   CanvasBody,
   InlineCanvasPreview,
   notifyInlineCanvasResource,
+  notifySessionInlineCanvases,
   readMountedCanvasSettlement,
   type CanvasFirstPaintReport,
   type ReadWorkspaceCanvasBytes,
@@ -19,6 +20,7 @@ export {
   canvasPreviewDefinition,
   InlineCanvasPreview,
   notifyInlineCanvasResource,
+  notifySessionInlineCanvases,
   readMountedCanvasSettlement,
 }
 export type {

@@ -338,6 +338,14 @@ describe('show_canvas inline surface, preferred_width clamping, and 100vh preche
     )
     expect(gatedVhFindings.some(item => item.code === 'inline-viewport-unit')).toBe(false)
 
+    const mixedVhFindings = await precheckCanvasHtml(
+      '<!doctype html><html><head><style>html[data-card-sizing="viewport"] .wrap { height: 100vh; } .ungated { min-height: 100dvh; }</style></head><body>hi</body></html>',
+      '.dsh/deep-view/mixed.html',
+      undefined,
+      { surface: 'inline' },
+    )
+    expect(mixedVhFindings.some(item => item.code === 'inline-viewport-unit')).toBe(true)
+
     const { host, exec } = hostFixture({ cwd: '/work' })
     const tool = createShowCanvasTool(host, services({ workspaceFiles: statOk('/work/.dsh/deep-view/fsm.html') })) as unknown as Tool
     expect(await tool.execute({ path: '.dsh/deep-view/fsm.html', surface: 'modal' }, exec)).toMatchObject({ status: 'invalid' })
