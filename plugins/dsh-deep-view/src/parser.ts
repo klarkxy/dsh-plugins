@@ -2,6 +2,23 @@ import { jsonrepair } from 'jsonrepair'
 import { checkShownView, VIEW_BYTE_LIMIT } from './core/index.js'
 import type { ShownView } from './contracts.ts'
 
+/** Canonical Markdown fence language tags routed to Deep View in both Host/reply parsing and Web Client slots. */
+export const DEEP_VIEW_FENCE_LANGUAGES = [
+  'deepui',
+  'deep-ui',
+  'deep_ui',
+  'deepview',
+  'deep-view',
+  'deep_view',
+] as const
+
+export type DeepViewFenceLanguage = (typeof DEEP_VIEW_FENCE_LANGUAGES)[number]
+
+/** Check whether a raw Markdown fence info string names a Deep View fence. */
+export function isDeepViewFenceLanguage(language: string): boolean {
+  return /^deep[-_\s]*(?:ui|view)(?:\s|$)/i.test(language.trim())
+}
+
 export type TextPart = { kind: 'markdown' | 'view'; key: string; text: string; shown?: ShownView }
 /**
  * Single-fence-body compile result. 'partial' means strict JSON parsing failed
@@ -79,8 +96,7 @@ export function parseDeepUi(source: string): TextPart[] {
   while (offset < source.length) {
     const start = nextFence(source, offset)
     if (!start || start.at >= source.length) break
-    const language = start.language.trim().toLowerCase()
-    if (!/^deep[-_\s]*(?:ui|view)(?:\s|$)/.test(language)) {
+    if (!isDeepViewFenceLanguage(start.language)) {
       const next = plainFence(source, start)
       if (next.at >= source.length) break
       offset = next.at

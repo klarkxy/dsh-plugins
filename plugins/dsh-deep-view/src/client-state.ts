@@ -1,8 +1,16 @@
-import { useMemo, useSyncExternalStore } from 'react'
+import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import type { PendingView, ViewNode, ViewSnapshot } from './contracts.ts'
 import { uiEn, uiZh } from './copy.ts'
 
 export type LocaleSource = { getSnapshot?(): { active?: string }; subscribe?(listener: () => void): () => void }
+
+/** Default maximum settled, unsubscribed view entries kept in client memory. */
+export const DEFAULT_MAX_SETTLED_VIEWS = 200
+
+export type ViewStateStoreOptions = {
+  /** Cap on settled view entries without active subscribers or open pending state. */
+  maxSettledViews?: number
+}
 
 /** Ephemeral presentation state. Durable answers remain Session-owned; this store
  * only coordinates where an open card is being edited and local progress. */
@@ -14,16 +22,67 @@ export type ViewStatus = {
 export type ProgressRecord = { callId: string; title: string; view: ViewNode; at: number }
 export type LiveSnapshot = ViewSnapshot & { originCallId: string }
 type Store = ReturnType<typeof createViewStateStore>
-export function createViewStateStore(locale?: LocaleSource) {
+export function createViewStateStore(locale?: LocaleSource, options?: ViewStateStoreOptions) {
+  const maxSettledViews = Math.max(1, Math.trunc(options?.maxSettledViews ?? DEFAULT_MAX_SETTLED_VIEWS))
   let statuses: Record<string, ViewStatus> = {}
   let pending: Record<string, PendingView> = {}
   let progress: Record<string, ProgressRecord> = {}
   let snapshots: Record<string, LiveSnapshot> = {}
   let bindings: Record<string, Record<string, unknown>> = {}
   const listeners = new Set<() => void>()
+  const keySubscribers = new Map<string, number>()
+  const accessOrder = new Map<string, true>()
+
+  const touch = (key: string) => {
+    accessOrder.delete(key)
+    accessOrder.set(key, true)
+  }
+
+  const isProtectedKey = (key: string): boolean => {
+    if ((keySubscribers.get(key) ?? 0) > 0) return true
+    for (const item of Object.values(pending)) {
+      if (`${item.sessionId}:${item.id}` === key) return true
+      if (item.callId !== undefined && `${item.sessionId}:${item.callId}` === key) return true
+    }
+    return false
+  }
+
+  const evictSettled = (): boolean => {
+    const evictable: string[] = []
+    for (const key of [...accessOrder.keys()]) {
+      if (!(key in snapshots) && !(key in bindings)) {
+        accessOrder.delete(key)
+        continue
+      }
+      if (!isProtectedKey(key)) evictable.push(key)
+    }
+    if (evictable.length <= maxSettledViews) return false
+    const overflow = evictable.length - maxSettledViews
+    snapshots = { ...snapshots }
+    bindings = { ...bindings }
+    for (let index = 0; index < overflow; index += 1) {
+      const victim = evictable[index]!
+      accessOrder.delete(victim)
+      delete snapshots[victim]
+      delete bindings[victim]
+    }
+    return true
+  }
+
   const publish = () => { for (const fn of [...listeners]) fn() }
   return {
     subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn) } },
+    subscribeKey: (key: string, fn: () => void) => {
+      listeners.add(fn)
+      keySubscribers.set(key, (keySubscribers.get(key) ?? 0) + 1)
+      if (key in snapshots || key in bindings) touch(key)
+      return () => {
+        listeners.delete(fn)
+        const next = (keySubscribers.get(key) ?? 1) - 1
+        if (next <= 0) keySubscribers.delete(key)
+        else keySubscribers.set(key, next)
+      }
+    },
     status: (callId: string) => statuses[callId],
     setStatus: (callId: string, status: ViewStatus | undefined) => {
       statuses = { ...statuses }
@@ -40,6 +99,7 @@ export function createViewStateStore(locale?: LocaleSource) {
         for (const key of Object.keys(pending)) if (key.startsWith(`${record.sessionId}:`)) delete pending[key]
         pending[`${record.sessionId}:${record.callId ?? record.id}`] = record
       }
+      evictSettled()
       publish()
     },
     clearPending: (sessionId: string, callId: string) => {
@@ -47,6 +107,7 @@ export function createViewStateStore(locale?: LocaleSource) {
       if (!(key in pending)) return
       pending = { ...pending }
       delete pending[key]
+      evictSettled()
       publish()
     },
     setProgress: (sessionId: string, record: Omit<ProgressRecord, 'at'>) => {
@@ -62,18 +123,37 @@ export function createViewStateStore(locale?: LocaleSource) {
       publish()
     },
     progress: (sessionId: string) => progress[sessionId],
-    latest: (sessionId: string, viewId: string | undefined) => viewId ? snapshots[`${sessionId}:${viewId}`] : undefined,
+    latest: (sessionId: string, viewId: string | undefined) => {
+      if (!viewId) return undefined
+      const key = `${sessionId}:${viewId}`
+      const hit = snapshots[key]
+      if (hit !== undefined) touch(key)
+      return hit
+    },
     setSnapshot: (record: LiveSnapshot) => {
       const key = `${record.sessionId}:${record.id}`
       const current = snapshots[key]
-      if (current && current.revision >= record.revision) return
+      if (current && current.revision >= record.revision) {
+        touch(key)
+        return
+      }
       const originCallId = current?.originCallId ?? record.originCallId
       snapshots = { ...snapshots, [key]: { ...record, originCallId } }
+      touch(key)
+      evictSettled()
       publish()
     },
-    values: (sessionId: string, viewId: string) => bindings[`${sessionId}:${viewId}`],
+    values: (sessionId: string, viewId: string) => {
+      const key = `${sessionId}:${viewId}`
+      const hit = bindings[key]
+      if (hit !== undefined) touch(key)
+      return hit
+    },
     setValues: (sessionId: string, viewId: string, values: Record<string, unknown>) => {
-      bindings = { ...bindings, [`${sessionId}:${viewId}`]: values }
+      const key = `${sessionId}:${viewId}`
+      bindings = { ...bindings, [key]: values }
+      touch(key)
+      evictSettled()
       publish()
     },
     localeSnapshot: () => locale?.getSnapshot?.(),
@@ -82,10 +162,12 @@ export function createViewStateStore(locale?: LocaleSource) {
 }
 
 export function useLiveSnapshot(store: Store, sessionId: string, viewId: string | undefined) {
-  return useSyncExternalStore(store.subscribe, () => store.latest(sessionId, viewId), () => store.latest(sessionId, viewId))
+  const subscribe = useCallback((fn: () => void) => viewId ? store.subscribeKey(`${sessionId}:${viewId}`, fn) : store.subscribe(fn), [store, sessionId, viewId])
+  return useSyncExternalStore(subscribe, () => store.latest(sessionId, viewId), () => store.latest(sessionId, viewId))
 }
 export function useViewValues(store: Store, sessionId: string, viewId: string) {
-  return useSyncExternalStore(store.subscribe, () => store.values(sessionId, viewId), () => store.values(sessionId, viewId))
+  const subscribe = useCallback((fn: () => void) => store.subscribeKey(`${sessionId}:${viewId}`, fn), [store, sessionId, viewId])
+  return useSyncExternalStore(subscribe, () => store.values(sessionId, viewId), () => store.values(sessionId, viewId))
 }
 
 export function useViewLocale(store: Store) {

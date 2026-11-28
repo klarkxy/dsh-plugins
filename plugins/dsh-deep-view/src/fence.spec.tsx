@@ -2,6 +2,7 @@ import { act } from 'react'
 import { JSDOM } from 'jsdom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ComposerActions, InputSnapshot } from './draft.ts'
+import { DEEP_VIEW_FENCE_LANGUAGES } from './parser.ts'
 
 const dom = new JSDOM('<div id="root"></div>', { url: 'https://local.test' })
 vi.stubGlobal('window', dom.window)
@@ -34,6 +35,16 @@ const ask = JSON.stringify({ title: 'Pick', view: { type: 'options' as const, id
 afterEach(() => { document.body.innerHTML = '<div id="root"></div>' })
 
 describe('deepui fence layer', () => {
+  it('mounts DeepViewFence across all registered fence language aliases', async () => {
+    for (const language of DEEP_VIEW_FENCE_LANGUAGES) {
+      const root = createRoot(document.getElementById('root')!)
+      await act(async () => root.render(<DeepViewFence code={card} language={language} streaming={false} t={t} />))
+      expect(document.querySelector('.dvui-view')).toBeTruthy()
+      expect(document.querySelector('.dvui-metric-value')!.textContent).toBe('42')
+      await act(async () => root.unmount())
+      document.body.innerHTML = '<div id="root"></div>'
+    }
+  })
   it('keeps a quiet placeholder while partial JSON streams', async () => {
     const root = createRoot(document.getElementById('root')!)
     await act(async () => root.render(<DeepViewFence code='{"title":"Rep' streaming t={t} children={<pre data-raw />}/>))
