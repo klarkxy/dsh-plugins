@@ -4,9 +4,9 @@ import { CANVAS_RENDERER_ID, canvasPreviewDefinition, type CanvasPreviewDefiniti
 import { sessionFileOf } from '../file-address.ts'
 import type { CanvasFileBytes } from './pack.ts'
 import type { RemoteResult, ReadCanvasRelated } from './read-relative.ts'
-import { CanvasBody, type CanvasFirstPaintReport } from './CanvasBody.tsx'
+import { CanvasBody, readMountedCanvasSettlement, type CanvasFirstPaintReport } from './CanvasBody.tsx'
 
-export { CANVAS_RENDERER_ID, canvasPreviewDefinition }
+export { CANVAS_RENDERER_ID, canvasPreviewDefinition, readMountedCanvasSettlement }
 export type { CanvasFileBytes, CanvasFirstPaintReport, RemoteResult, ReadCanvasRelated }
 
 /** Services the canvas preview needs; each member is already guarded by the caller. */
