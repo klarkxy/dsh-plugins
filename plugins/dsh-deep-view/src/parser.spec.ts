@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compileDeepUi, parseDeepUi } from './parser.ts'
+import { DEEP_VIEW_FENCE_LANGUAGES, compileDeepUi, isDeepViewFenceLanguage, parseDeepUi } from './parser.ts'
 import { VIEW_BYTE_LIMIT } from './core/index.js'
 
 const card = JSON.stringify({ title: 'Report', view: { type: 'metric', label: 'Revenue', value: 42 } })
@@ -21,6 +21,14 @@ describe('deepui fenced parser', () => {
     const parts = parseDeepUi(source)
     expect(parts.every(part => part.kind === 'markdown')).toBe(true)
     expect(parts.map(part => part.text).join('')).toBe(source)
+  })
+  it('parses every registered DEEP_VIEW_FENCE_LANGUAGES alias symmetrically', () => {
+    for (const alias of DEEP_VIEW_FENCE_LANGUAGES) {
+      expect(isDeepViewFenceLanguage(alias)).toBe(true)
+      const parts = parseDeepUi(`\`\`\`${alias}\n${card}\n\`\`\``)
+      expect(parts).toHaveLength(1)
+      expect(parts[0]!.kind).toBe('view')
+    }
   })
   it('recognizes common casing and spelling variants of the fence language', () => {
     for (const language of ['DeepUI', 'deepview', 'deep-view', 'deep view', 'deep_ui', 'deepui 演示标题', 'deep view 演示标题']) {

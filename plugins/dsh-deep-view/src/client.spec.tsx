@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { apply, inject, readToolCall } from './client.tsx'
+import { DEEP_VIEW_FENCE_LANGUAGES } from './parser.ts'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
   Button: (props: Record<string, unknown>) => <button {...props} />,
@@ -48,7 +49,7 @@ describe('tool.call.toolview contract', () => {
     expect(readToolCall({ phase: 'preparing', block: { callId: 'c', args: { ...open, complete: () => false } } }).viewReady).toBe(false)
     expect(readToolCall({ phase: 'start', block: { callId: 'c', args: argsView({ title: 'Pick', view: interactiveView }) } }).view).toEqual(interactiveView)
   })
-  it('registers live tool cards (show_view, ask_view, show_canvas), an activity dock and the settled-reply surface', () => {
+  it('registers live tool cards, all Deep View markdown fence aliases, an activity dock and the settled-reply surface', () => {
     const registrations: Record<string, unknown>[] = []
     const slots: string[] = []
     const provided: string[] = []
@@ -60,14 +61,26 @@ describe('tool.call.toolview contract', () => {
     }
     apply(ctx as never)
     expect([...inject]).toEqual(['slots', 'connection', 'locale'])
-    expect(slots).toEqual(['tool.call.toolview', 'tool.call.toolview', 'tool.call.toolview', 'conversation.chat.markdown.fence', 'conversation.chat.markdown.fence', 'conversation.input.dock', 'conversation.chat.turnTail'])
+    expect(slots).toEqual([
+      'tool.call.toolview',
+      'tool.call.toolview',
+      'tool.call.toolview',
+      ...DEEP_VIEW_FENCE_LANGUAGES.map(() => 'conversation.chat.markdown.fence'),
+      'conversation.input.dock',
+      'conversation.chat.turnTail',
+    ])
     expect(registrations[0]).toMatchObject({ name: 'tool.call.toolview', key: 'show_view', locale: 'deep-view' })
     expect(registrations[1]).toMatchObject({ name: 'tool.call.toolview', key: 'ask_view', locale: 'deep-view' })
     expect(registrations[2]).toMatchObject({ name: 'tool.call.toolview', key: 'show_canvas', locale: 'deep-view' })
-    expect(registrations[3]).toMatchObject({ name: 'conversation.chat.markdown.fence', id: 'deep-view', key: 'deepui', locale: 'deep-view' })
-    expect(registrations[4]).toMatchObject({ name: 'conversation.chat.markdown.fence', id: 'deep-view', key: 'deep-view', locale: 'deep-view' })
-    expect(registrations[5]).toMatchObject({ name: 'conversation.input.dock', id: 'deep-view', locale: 'deep-view' })
-    expect(registrations[6]).toMatchObject({ name: 'conversation.chat.turnTail', id: 'deep-view', locale: 'deep-view' })
+    const fenceKeys = registrations
+      .filter(spec => spec.name === 'conversation.chat.markdown.fence')
+      .map(spec => spec.key)
+    expect(fenceKeys).toEqual([...DEEP_VIEW_FENCE_LANGUAGES])
+    for (const alias of ['deepui', 'deep-ui', 'deep_ui', 'deepview', 'deep-view', 'deep_view']) {
+      expect(fenceKeys).toContain(alias)
+    }
+    expect(registrations.at(-2)).toMatchObject({ name: 'conversation.input.dock', id: 'deep-view', locale: 'deep-view' })
+    expect(registrations.at(-1)).toMatchObject({ name: 'conversation.chat.turnTail', id: 'deep-view', locale: 'deep-view' })
     // Plugin-drawn chats read the same card through this client service.
     expect(provided).toEqual(['dshDeepView'])
   })

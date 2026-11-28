@@ -19,6 +19,7 @@ import { createViewStateStore, useLatestPending, useLiveSnapshot, useViewPending
 import { answerText } from './answer-text.ts'
 import { fillComposerDraft, type ComposerActions, type FillDraft, type InputSnapshot } from './draft.ts'
 import { DeepViewFence, type DeepViewFenceProps } from './fence.tsx'
+import { DEEP_VIEW_FENCE_LANGUAGES } from './parser.ts'
 
 export const name = 'dsh-deep-view-client'
 export const inject = ['slots', 'connection', 'locale'] as const
@@ -620,7 +621,7 @@ export function apply(ctx: Context): void {
       },
     }),
   }, CanvasToolCall)), 'deep-view.canvas-tool')
-  for (const language of ['deepui', 'deep-view']) ctx.effect(() => client.slots.inject('conversation.chat.markdown.fence', () => client.slots.register({
+  for (const language of DEEP_VIEW_FENCE_LANGUAGES) ctx.effect(() => client.slots.inject('conversation.chat.markdown.fence', () => client.slots.register({
     name: 'conversation.chat.markdown.fence', id: 'deep-view', key: language, locale: LOCALE,
   }, DeepViewFenceSlot)), `deep-view.fence.${language}`)
   ctx.effect(() => client.slots.inject('conversation.input.dock', () => client.slots.register({

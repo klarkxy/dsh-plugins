@@ -16,6 +16,8 @@ import { CheckIcon, type ViewT } from './ui.tsx'
 export type DeepViewFenceProps = {
   /** The fence body text, complete or still streaming. */
   code: string
+  /** Matched Markdown fence language tag when supplied by the host slot. */
+  language?: string
   /** True while the model is still writing this fence. */
   streaming: boolean
   /** Owner-rendered raw code block; kept for the final invalid fallback. */
