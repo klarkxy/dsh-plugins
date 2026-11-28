@@ -17,6 +17,7 @@ let recordCanvasError: typeof import('./canvas/capture.ts').recordCanvasError
 let canvasErrorReportOf: typeof import('./canvas/capture.ts').canvasErrorReportOf
 let createCaptureScript: typeof import('./canvas/capture.ts').createCaptureScript
 let formatCanvasError: typeof import('./canvas/capture.ts').formatCanvasError
+let canvasReadyReportOf: typeof import('./canvas/capture.ts').canvasReadyReportOf
 let CanvasBody: typeof import('./canvas/CanvasBody.tsx').CanvasBody
 let packCanvasHtml: typeof import('./canvas/pack.ts').packCanvasHtml
 let createHtmlDocument: typeof import('./canvas/bootstrap.ts').createHtmlDocument
@@ -29,7 +30,7 @@ let apply: typeof import('./client.tsx').apply
 beforeAll(async () => {
   createRoot = (await import('react-dom/client')).createRoot
   ;({ CanvasToolCall, readCanvasCall, apply, mountCanvasPreview } = await import('./client.tsx'))
-  ;({ recordCanvasError, canvasErrorReportOf, createCaptureScript, formatCanvasError } = await import('./canvas/capture.ts'))
+  ;({ recordCanvasError, canvasErrorReportOf, createCaptureScript, formatCanvasError, canvasReadyReportOf } = await import('./canvas/capture.ts'))
   ;({ CanvasBody } = await import('./canvas/CanvasBody.tsx'))
   ;({ packCanvasHtml } = await import('./canvas/pack.ts'))
   ;({ createHtmlDocument, insertCaptureScript, prepareCanvasSource } = await import('./canvas/bootstrap.ts'))
@@ -244,6 +245,21 @@ describe('canvas error capture', () => {
       expect(formatCanvasError({ message: 'TypeError: bad', count: 1, source: 'sub/app.js', line: 8, column: 3 })).toBe('TypeError: bad (sub/app.js:8:3)')
     })
     await act(async () => root.unmount())
+  })
+  it('emits one dvui-canvas-ready settlement report after load with zero-height collapse status', async () => {
+    const page = new JSDOM(`<!doctype html><html><head>${createCaptureScript('nonce-ready')}</head><body><div>hi</div></body></html>`, {
+      url: 'https://canvas.test/ready',
+      runScripts: 'dangerously',
+      virtualConsole: new VirtualConsole(),
+    })
+    const posted: unknown[] = []
+    page.window.addEventListener('message', event => posted.push(event.data))
+    await new Promise<void>(resolve => { page.window.setTimeout(resolve, 80) })
+    const readyReports = posted.map(data => canvasReadyReportOf(data, 'nonce-ready')).filter(Boolean)
+    expect(readyReports).toHaveLength(1)
+    expect(readyReports[0]).toEqual({ collapsed: true, height: 0 })
+    expect(canvasReadyReportOf({ type: 'dvui-canvas-ready', nonce: 'wrong', collapsed: false, height: 120 }, 'nonce-ready')).toBeUndefined()
+    page.window.close()
   })
 describe('canvas HTML packing and bootstrap', () => {
   const bytes = (text: string) => new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>

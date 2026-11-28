@@ -116,6 +116,18 @@ export type CanvasPresentation = {
   address: string
   title?: string
 }
+/** Active first-paint probe descriptor queried by a live client during `show_canvas`. */
+export type CanvasProbeDescriptor = {
+  probeId: string
+  path: string
+  address: string
+  title?: string
+}
+/** Single-turn first-paint health payload reported back through `canvas.report`. */
+export type CanvasHealthReport = {
+  collapsed: boolean
+  errors: readonly string[]
+}
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }

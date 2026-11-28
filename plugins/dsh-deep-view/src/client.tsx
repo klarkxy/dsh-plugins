@@ -4,9 +4,9 @@ import { Button, MarkdownText, type MarkdownLabels } from '@deepseek-ai/dsh-clie
 import { officialUiCss } from '@klarkxy/dsh-plugin-kit/official-ui'
 import { checkShownView, validateViewAnswer } from './core/index.js'
 import { createClientPluginLogger, installClientPluginLogger } from '@klarkxy/dsh-plugin-kit/client-logger'
-import { CANVAS_OWNER, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation } from './contracts.ts'
-import { sessionFileAddress } from './file-address.ts'
-import { registerCanvasPreview, type CanvasScope } from './canvas/index.ts'
+import { CANVAS_OWNER, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, isRecord, type CanvasProbeDescriptor, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation } from './contracts.ts'
+import { sessionFileAddress, sessionFileOf } from './file-address.ts'
+import { registerCanvasPreview, type CanvasFirstPaintReport, type CanvasScope } from './canvas/index.ts'
 import type { ToolViewProps, ToolArgsView, ReplyViewProps, ReplySnapshot } from './runtime.ts'
 import { WidgetCard, type Answer } from './widget.tsx'
 import { viewStyles } from './styles.ts'
@@ -522,6 +522,8 @@ export type CanvasToolViewProps = ToolViewProps & {
   openCanvas?: (address: string) => void
   /** Reactive handle to the host's "Show coding view" switch when available. */
   developerTools?: DeveloperToolsEnabled
+  /** Optional RPC bridge used to open and probe a live canvas call before settlement. */
+  call?: (endpoint: string, payload: unknown) => Promise<unknown>
 }
 
 export function CanvasToolCall(props: CanvasToolViewProps) {
@@ -541,6 +543,31 @@ export function CanvasToolCall(props: CanvasToolViewProps) {
   // Auto-open only on a live transition to a shown result while coding view is
   // not explicitly disabled; replayed history arrives with phase 'result' on frame 1.
   const firstPhase = useRef(props.phase)
+  useEffect(() => {
+    if (firstPhase.current === 'result' || props.phase !== 'start') return
+    if (!props.call || openCanvas === undefined || codingViewDisabled || openedCanvasCalls.has(props.callId)) return
+    let active = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let attempts = 0
+    const poll = () => {
+      void props.call!('canvas.probe', { sessionId: props.sessionId, callId: props.callId }).then(res => {
+        if (!active || openedCanvasCalls.has(props.callId)) return
+        const envelope = res as RpcResult<CanvasProbeDescriptor | null> | undefined
+        if (envelope?.ok && envelope.value?.address) {
+          openedCanvasCalls.add(props.callId)
+          openCanvas(envelope.value.address)
+        } else if (attempts < 3) {
+          attempts += 1
+          timer = setTimeout(poll, 60)
+        }
+      }).catch(() => {})
+    }
+    poll()
+    return () => {
+      active = false
+      if (timer !== undefined) clearTimeout(timer)
+    }
+  }, [props.phase, props.call, props.sessionId, props.callId, openCanvas, codingViewDisabled])
   useEffect(() => {
     if (firstPhase.current === 'result' || props.phase !== 'result') return
     if (!read.shown || address === undefined || openCanvas === undefined || codingViewDisabled) return
@@ -619,11 +646,26 @@ export function apply(ctx: Context): void {
     canvasRuntime.sidebarRight = scope.sidebarRight
     scope.effect(() => () => { canvasRuntime.sidebarRight = undefined })
   })
+  const reportFirstPaint = (address: string, report: CanvasFirstPaintReport) => {
+    const file = sessionFileOf(address)
+    if (!file) return
+    void call('canvas.probe', { sessionId: file.sessionId, address }).then(res => {
+      const envelope = res as RpcResult<CanvasProbeDescriptor | null> | undefined
+      if (envelope?.ok && envelope.value?.probeId) {
+        void call('canvas.report', {
+          sessionId: file.sessionId,
+          probeId: envelope.value.probeId,
+          collapsed: report.collapsed,
+          errors: report.errors,
+        }).catch(() => {})
+      }
+    }).catch(() => {})
+  }
   ctx.inject?.(['documentPreviews', 'configForms', 'remote', 'remote.workspaceFiles'], injected => {
     const scope = injected as unknown as Client & CanvasClientScope
     canvasRuntime.developerTools = scope.configForms?.developerTools?.enabled
     scope.effect(() => {
-      const dispose = mountCanvasPreview(scope, LOCALE)
+      const dispose = mountCanvasPreview({ ...scope, reportFirstPaint }, LOCALE)
       return () => {
         canvasRuntime.developerTools = undefined
         dispose()
@@ -649,6 +691,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => client.slots.inject('tool.call.toolview', () => client.slots.register({
     name: 'tool.call.toolview', key: 'show_canvas', locale: LOCALE,
     inject: () => ({
+      call,
       openCanvas: canvasRuntime.sidebarRight === undefined ? undefined : (address: string) => {
         canvasRuntime.sidebarRight?.openResource(address, { preferNewPane: true })
       },

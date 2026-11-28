@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { posix } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -9,8 +11,28 @@ import { checkShownView, validateViewAnswer, viewSummary } from './core/index.js
 import { answerText } from './answer-text.ts'
 import { DEEP_VIEW_POLICY, DEEP_VIEW_PROMPT } from './prompt.ts'
 import { DEEP_VIEW_SKILL, DEEP_VIEW_SKILL_DESCRIPTION } from './skill.ts'
-import { HOST_SERVICE, PLUGIN_NAME, RPC_CHANNEL, VIEW_OWNER, CANVAS_OWNER, isRecord, type CanvasPresentation, type DeepViewConfig, type DeepViewHost, type PendingView, type RpcResult, type ShownView, type ViewNode, type ViewPresentation, type ViewAnswerMetadata, type ViewSnapshot } from './contracts.ts'
+import {
+  HOST_SERVICE,
+  PLUGIN_NAME,
+  RPC_CHANNEL,
+  VIEW_OWNER,
+  CANVAS_OWNER,
+  isRecord,
+  type CanvasHealthReport,
+  type CanvasPresentation,
+  type CanvasProbeDescriptor,
+  type DeepViewConfig,
+  type DeepViewHost,
+  type PendingView,
+  type RpcResult,
+  type ShownView,
+  type ViewNode,
+  type ViewPresentation,
+  type ViewAnswerMetadata,
+  type ViewSnapshot,
+} from './contracts.ts'
 import { fileAddressFor } from './file-address.ts'
+import { precheckCanvasHtml, type CanvasPrecheckFinding } from './canvas/precheck.ts'
 
 export const name = 'deep-view'
 export const inject = ['tools', 'systemPrompt', 'skills', 'sessionController', 'sessions', 'agents', 'connection', 'webServer'] as const
@@ -20,6 +42,8 @@ declare module '@deepseek-ai/cordis' {
 }
 
 const MAX_REDIRECTS = 256
+const MAX_PRECHECK_BYTES = 4 * 1024 * 1024
+export const CANVAS_PROBE_TIMEOUT_MS = 1200
 
 export type PendingWaiter = {
   id: string
@@ -27,6 +51,17 @@ export type PendingWaiter = {
   callId?: string
   snapshot: ViewSnapshot
   resolve(result: Record<string, unknown>): void
+  cleanup(): void
+}
+
+export type CanvasProbeWaiter = {
+  probeId: string
+  sessionId: string
+  callId?: string
+  path: string
+  address: string
+  title?: string
+  resolve(report: CanvasHealthReport | undefined): void
   cleanup(): void
 }
 
@@ -48,6 +83,7 @@ export function handoffPendingSession(
   fromSessionId: string,
   toSessionId: string,
   waiters?: Map<string, PendingWaiter>,
+  canvasProbes?: Map<string, CanvasProbeWaiter>,
 ): boolean {
   if (!short(fromSessionId, 200) || !short(toSessionId, 200) || fromSessionId === toSessionId) return false
   const source = resolveSessionId(redirects, fromSessionId)
@@ -59,6 +95,11 @@ export function handoffPendingSession(
     const oldest = redirects.keys().next().value
     if (oldest === undefined) break
     redirects.delete(oldest)
+  }
+  if (canvasProbes) {
+    for (const probe of canvasProbes.values()) {
+      if (probe.sessionId === source) probe.sessionId = target
+    }
   }
   const record = pending.get(source)
   if (!record) return false
@@ -412,8 +453,62 @@ export function createAskViewTool(
 export type CanvasServices = {
   workspaceFiles?: {
     stat(scope: { sessionId: string; workspaceRoot: string }, path: string, signal: AbortSignal): Promise<{ absolutePath?: string }>
+    readBytes?(scope: { sessionId: string; workspaceRoot: string }, path: string, signal: AbortSignal): Promise<{ data?: Uint8Array } | Uint8Array>
   }
   sandboxPolicy?: { workspaceRoot?: string }
+}
+
+export type ShowCanvasToolOptions = {
+  makeId?: () => string
+  probeTimeoutMs?: number
+}
+
+function resolveRelativeWorkspacePath(baseFilePath: string, relativeDepPath: string): string | undefined {
+  if (relativeDepPath === '' || relativeDepPath.includes('\\') || relativeDepPath.includes('\0') || posix.isAbsolute(relativeDepPath)) {
+    return undefined
+  }
+  const normalizedBase = baseFilePath.replace(/\\/gu, '/').replace(/^(?:\.\/)+/u, '')
+  if (posix.isAbsolute(normalizedBase) || /^[A-Za-z]:/u.test(normalizedBase)) return undefined
+  const baseDir = posix.dirname(normalizedBase)
+  const joined = baseDir === '.' ? posix.normalize(relativeDepPath) : posix.normalize(posix.join(baseDir, relativeDepPath))
+  if (joined === '' || joined === '.' || joined === '..' || joined.startsWith('../') || posix.isAbsolute(joined)) {
+    return undefined
+  }
+  return joined
+}
+
+async function readWorkspaceUtf8(
+  workspaceFiles: CanvasServices['workspaceFiles'],
+  scope: { sessionId: string; workspaceRoot: string },
+  relativePath: string,
+  absolutePath: string | undefined,
+  signal: AbortSignal,
+): Promise<string | undefined> {
+  if (typeof workspaceFiles?.readBytes === 'function') {
+    try {
+      const result = await workspaceFiles.readBytes(scope, relativePath, signal)
+      const bytes = result instanceof Uint8Array
+        ? result
+        : isRecord(result) && result.data instanceof Uint8Array
+          ? result.data
+          : undefined
+      if (bytes && bytes.byteLength <= MAX_PRECHECK_BYTES) {
+        return new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+      }
+    } catch {
+      return undefined
+    }
+  }
+  if (typeof absolutePath === 'string' && absolutePath !== '') {
+    try {
+      const buf = await readFile(absolutePath)
+      if (buf.byteLength <= MAX_PRECHECK_BYTES) return buf.toString('utf8')
+    } catch {
+      // Unmocked or virtual paths after a passing `stat` skip content precheck gracefully.
+      return undefined
+    }
+  }
+  return undefined
 }
 
 /** presentationMeta only for a shown canvas: the client card keys on `owner`. */
@@ -430,10 +525,14 @@ export function createShowCanvasTool(
   host: Host,
   services: { current: CanvasServices },
   logger?: PluginLogger,
+  probes?: Map<string, CanvasProbeWaiter>,
+  options?: ShowCanvasToolOptions,
 ): Record<string, unknown> {
+  const makeId = options?.makeId ?? randomUUID
+  const probeTimeoutMs = Math.max(0, Math.trunc(options?.probeTimeoutMs ?? CANVAS_PROBE_TIMEOUT_MS))
   return {
     name: 'show_canvas',
-    description: 'Open a runnable preview of an HTML file in the right Sidebar. Write the .html file with the write tool first, then call this once; later edit tool changes refresh the preview automatically.',
+    description: 'Open a runnable preview of an HTML file in the right Sidebar with static syntax/asset prechecks and a bounded first-paint health check. Write the .html file with the write tool first, then call this once; later edit tool changes refresh the preview automatically.',
     parameters: {
       type: 'object',
       properties: {
@@ -459,29 +558,125 @@ export function createShowCanvasTool(
         logger?.debug('canvas.non-root-rejected', 'Rejected show_canvas outside a live root session.', { sessionId: id ?? null })
         return { owner: CANVAS_OWNER, status: 'invalid', summary: 'Canvas preview requires a live root session; share the file path directly in your reply.' }
       }
+      if (exec.signal?.aborted) {
+        return { owner: CANVAS_OWNER, status: 'cancelled', path, summary: 'Canvas preview was cancelled before it could be opened.' }
+      }
       const header = isRecord(agent.session) && isRecord(agent.session.header) ? agent.session.header : undefined
       const cwd = typeof header?.cwd === 'string' && header.cwd !== '' ? header.cwd : undefined
       const { workspaceFiles, sandboxPolicy } = services.current
       const workspaceRoot = cwd ?? (typeof sandboxPolicy?.workspaceRoot === 'string' && sandboxPolicy.workspaceRoot !== '' ? sandboxPolicy.workspaceRoot : undefined)
       let absolutePath: string | undefined
+      let staticFindings: CanvasPrecheckFinding[] = []
       // stat is advisory: no workspaceFiles service, or no resolvable workspace
       // root, skips existence checking; a stat failure tells the model to write first.
       if (workspaceFiles && workspaceRoot !== undefined) {
+        const scope = { sessionId: agent.id, workspaceRoot }
         const signal = exec.signal ? AbortSignal.any([exec.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000)
         try {
-          const stat = await workspaceFiles.stat({ sessionId: agent.id, workspaceRoot }, path, signal)
+          const stat = await workspaceFiles.stat(scope, path, signal)
           absolutePath = typeof stat?.absolutePath === 'string' ? stat.absolutePath : undefined
         } catch (error) {
           logger?.debug('canvas.missing', 'show_canvas stat failed.', { sessionId: agent.id, path, reason: error instanceof Error ? error.message : String(error) })
           return { owner: CANVAS_OWNER, status: 'missing', path, summary: `File "${path}" is missing or unreadable; create it with the write tool first, then call show_canvas.` }
         }
+        const htmlText = await readWorkspaceUtf8(workspaceFiles, scope, path, absolutePath, signal)
+        if (htmlText !== undefined) {
+          staticFindings = await precheckCanvasHtml(htmlText, path, async relativeDep => {
+            const depWorkspacePath = resolveRelativeWorkspacePath(path, relativeDep)
+            if (depWorkspacePath === undefined) return { exists: false }
+            try {
+              const depStat = await workspaceFiles.stat(scope, depWorkspacePath, signal)
+              const depAbs = typeof depStat?.absolutePath === 'string' ? depStat.absolutePath : undefined
+              const depText = await readWorkspaceUtf8(workspaceFiles, scope, depWorkspacePath, depAbs, signal)
+              return { exists: true, ...(depText !== undefined ? { text: depText } : {}) }
+            } catch {
+              return { exists: false }
+            }
+          })
+        }
       }
       const address = fileAddressFor(agent.id, workspaceRoot, absolutePath ?? path)
-      logger?.info('canvas.shown', 'Opened Deep View canvas preview.', { sessionId: agent.id, path })
+      const title = typeof input.title === 'string' ? input.title : undefined
+      let probeReport: CanvasHealthReport | undefined
+      if (probes !== undefined && probeTimeoutMs > 0) {
+        if (exec.signal?.aborted) {
+          return { owner: CANVAS_OWNER, status: 'cancelled', path, summary: 'Canvas preview was cancelled because the turn was aborted.' }
+        }
+        const probeId = makeId()
+        const outcome = await new Promise<{ kind: 'settled'; report: CanvasHealthReport | undefined } | { kind: 'aborted' }>(resolve => {
+          let timer: ReturnType<typeof setTimeout> | undefined
+          const cleanup = () => {
+            if (timer !== undefined) clearTimeout(timer)
+            exec.signal?.removeEventListener('abort', onAbort)
+          }
+          const onAbort = () => {
+            if (!probes.has(probeId)) return
+            probes.delete(probeId)
+            cleanup()
+            resolve({ kind: 'aborted' })
+          }
+          exec.signal?.addEventListener('abort', onAbort, { once: true })
+          timer = setTimeout(() => {
+            if (!probes.has(probeId)) return
+            probes.delete(probeId)
+            cleanup()
+            resolve({ kind: 'settled', report: undefined })
+          }, probeTimeoutMs)
+          timer.unref?.()
+          probes.set(probeId, {
+            probeId,
+            sessionId: agent.id,
+            ...(exec.callId !== undefined ? { callId: exec.callId } : {}),
+            path,
+            address,
+            ...(title !== undefined ? { title } : {}),
+            cleanup,
+            resolve: report => resolve({ kind: 'settled', report }),
+          })
+        })
+        if (outcome.kind === 'aborted') {
+          return { owner: CANVAS_OWNER, status: 'cancelled', path, summary: 'Canvas preview was cancelled because the turn was aborted.' }
+        }
+        probeReport = outcome.report
+      }
+
+      const runtimeDiagnostics: string[] = []
+      if (probeReport !== undefined) {
+        for (const err of probeReport.errors) runtimeDiagnostics.push(err)
+        if (probeReport.collapsed) {
+          runtimeDiagnostics.push('Document body rendered with 0px height (document.body.scrollHeight === 0); check missing height/content or early script failure.')
+        }
+      }
+
+      const hasDiagnostics = staticFindings.length > 0 || runtimeDiagnostics.length > 0
+      const sections: string[] = [
+        `Canvas preview opened in the right Sidebar for ${path}. Subsequent edits with the edit tool refresh the preview automatically; call show_canvas again only if the user asks to reopen it.`,
+      ]
+      if (staticFindings.length > 0) {
+        sections.push(`Static precheck diagnostics:\n${staticFindings.map((item, idx) => `${idx + 1}. [${item.severity}] ${item.message}`).join('\n')}`)
+      }
+      if (runtimeDiagnostics.length > 0) {
+        sections.push(`First-paint runtime diagnostics:\n${runtimeDiagnostics.map((line, idx) => `${idx + 1}. ${line}`).join('\n')}`)
+      }
+      sections.push(
+        hasDiagnostics
+          ? 'Fix the diagnostics above in this turn with the edit tool (the open preview refreshes automatically), then finish with a concise final answer.'
+          : 'Finish with a concise final answer.',
+      )
+
+      logger?.info('canvas.shown', 'Opened Deep View canvas preview.', {
+        sessionId: agent.id,
+        path,
+        staticIssues: staticFindings.length,
+        runtimeIssues: runtimeDiagnostics.length,
+      })
       return {
-        owner: CANVAS_OWNER, status: 'shown', path, address,
-        ...(typeof input.title === 'string' ? { title: input.title } : {}),
-        summary: `Canvas preview opened in the right Sidebar for ${path}. Subsequent edits with the edit tool refresh the preview automatically; call show_canvas again only if the user asks to reopen it. Finish with a concise final answer.`,
+        owner: CANVAS_OWNER,
+        status: 'shown',
+        path,
+        address,
+        ...(title !== undefined ? { title } : {}),
+        summary: sections.join('\n\n').replace('.\n\nFinish with a concise final answer.', '. Finish with a concise final answer.'),
       }
     },
     isConcurrencySafe: () => false,
@@ -495,11 +690,53 @@ export function createRpc(
   logger?: PluginLogger,
   waiters: Map<string, PendingWaiter> = new Map(),
   latest: Map<string, ViewSnapshot> = new Map(),
+  canvasProbes: Map<string, CanvasProbeWaiter> = new Map(),
 ) {
   const claims = new Set<string>()
   return async (endpoint: string, payload: unknown, signal: AbortSignal): Promise<RpcResult> => {
     if (!isRecord(payload) || !short(payload.sessionId, 200)) return fail('bad-request', 'A bounded sessionId is required')
     const sessionId = resolveSessionId(redirects, payload.sessionId)
+    if (endpoint === 'canvas.probe') {
+      const callId = short(payload.callId, 200) ? payload.callId : undefined
+      const address = short(payload.address, 4096) ? payload.address : undefined
+      let matched: CanvasProbeWaiter | undefined
+      for (const probe of canvasProbes.values()) {
+        if (probe.sessionId !== sessionId) continue
+        if (callId !== undefined && probe.callId === callId) { matched = probe; break }
+        if (callId === undefined && address !== undefined && probe.address === address) { matched = probe; break }
+      }
+      const descriptor: CanvasProbeDescriptor | null = matched
+        ? {
+            probeId: matched.probeId,
+            path: matched.path,
+            address: matched.address,
+            ...(matched.title !== undefined ? { title: matched.title } : {}),
+          }
+        : null
+      return ok(descriptor)
+    }
+    if (endpoint === 'canvas.report') {
+      if (!short(payload.probeId, 120)) return fail('bad-request', 'A bounded probeId is required')
+      const waiter = canvasProbes.get(payload.probeId)
+      // Single-consumer idempotency: only the first matching client report settles the probe;
+      // duplicate reports from extra tabs or late arrivals after timeout become safe no-ops.
+      if (!waiter || waiter.sessionId !== sessionId) return ok({ accepted: false })
+      canvasProbes.delete(waiter.probeId)
+      waiter.cleanup()
+      const rawErrors = Array.isArray(payload.errors) ? payload.errors : []
+      const errors = rawErrors
+        .filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+        .slice(0, 20)
+        .map(item => item.slice(0, 1000))
+      waiter.resolve({ collapsed: payload.collapsed === true, errors })
+      logger?.debug('canvas.probe-settled', 'Settled first-paint canvas health probe.', {
+        sessionId,
+        probeId: waiter.probeId,
+        collapsed: payload.collapsed === true,
+        errorCount: errors.length,
+      })
+      return ok({ accepted: true })
+    }
     const record = pending.get(sessionId)
     if (endpoint === 'pending') return ok(record?.callId === payload.callId || payload.callId === undefined ? record ?? null : null)
     if (endpoint === 'dismiss') {
@@ -650,6 +887,7 @@ export async function apply(ctx: Context, config?: DeepViewConfig): Promise<void
   const redirects = new Map<string, string>()
   const latest = new Map<string, ViewSnapshot>()
   const waiters = new Map<string, PendingWaiter>()
+  const canvasProbes = new Map<string, CanvasProbeWaiter>()
   const canvasServices: { current: CanvasServices } = { current: {} }
   // Optional host services arrive through their own inject scopes so a missing
   // workspace file service or sandbox policy never blocks this bundle loading.
@@ -673,7 +911,7 @@ export async function apply(ctx: Context, config?: DeepViewConfig): Promise<void
   }), 'deep-view.skill')
   ctx.provide(HOST_SERVICE, {
     handoffSession: (fromSessionId, toSessionId) => {
-      const moved = handoffPendingSession(pending, redirects, fromSessionId, toSessionId, waiters)
+      const moved = handoffPendingSession(pending, redirects, fromSessionId, toSessionId, waiters, canvasProbes)
       if (moved) {
         const current = pending.get(toSessionId)
         if (current) latest.set(current.id, current)
@@ -763,7 +1001,15 @@ export async function apply(ctx: Context, config?: DeepViewConfig): Promise<void
       return () => {}
     }
     try {
-      return host.tools.register(createShowCanvasTool(host, canvasServices, logger))
+      const disposeCanvas = host.tools.register(createShowCanvasTool(host, canvasServices, logger, canvasProbes))
+      return () => {
+        for (const [probeId, probe] of [...canvasProbes]) {
+          canvasProbes.delete(probeId)
+          probe.cleanup()
+          probe.resolve(undefined)
+        }
+        disposeCanvas()
+      }
     }
     catch (error) {
       logger.warn('tool.register-failed', 'show_canvas tool registration failed.', error)
@@ -778,5 +1024,5 @@ export async function apply(ctx: Context, config?: DeepViewConfig): Promise<void
     pending.delete(resolvedId)
     supersedeSessionWaiters(waiters, resolvedId, 'The question card was superseded by a new user message.')
   }), 'deep-view.close-pending')
-  ctx.effect(() => registerHostRpc(host, RPC_CHANNEL, createRpc(host, pending, redirects, logger, waiters, latest), { maxBodyBytes: 24 * 1024, logger }), 'deep-view.rpc')
+  ctx.effect(() => registerHostRpc(host, RPC_CHANNEL, createRpc(host, pending, redirects, logger, waiters, latest, canvasProbes), { maxBodyBytes: 24 * 1024, logger }), 'deep-view.rpc')
 }

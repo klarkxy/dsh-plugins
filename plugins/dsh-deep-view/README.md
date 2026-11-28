@@ -43,6 +43,7 @@ dsh plugin --profile web add @klarkxy/dsh-deep-view
 
 - **需要开启「显示代码工作视图」**：画布只在宿主的「显示代码工作视图」开关开启时注册并运行脚本；关闭时工具结果卡片会提示开启状态并提供快捷开启入口，未开启前侧栏回落为原生静态 HTML 预览。
 - **错误条与填入输入框**：预览脚本抛错、未处理的 Promise 拒绝、`console.error` 以及 `<img src>` / `<script src>` / `<link rel="stylesheet">` 子资源加载失败都会汇总在预览下方的错误条中（相同报错合并计数，打包的本地脚本自动映射回工作区相对文件名与行号）。点 **填入输入框** 会把错误列表写入草稿交给模型修复——已有草稿时先询问替换或追加，绝不自动发送；也可复制错误。
+- **前置静态预检与同轮首屏回执**：`show_canvas` 在返回前自动检查内联与打包 `.js` 语法错误、本地 `<script type="module" src>` / `<base href>` 跳过提示、缺失相对依赖、未声明 `fill` 的开放 `<svg>` 路径及 5 类常见硬编码密钥特征（仅脱敏提示行号、不回显密文，设计灵感参考 [liliMozi/showcard](https://github.com/liliMozi/showcard) Agent Showcard 1.0 规范 §7.3），并在有活跃客户端时通过短窗口首屏探针将首屏运行异常或零高度塌陷直接带回当前轮次供模型自愈；交互期报错仍仅保留在底部错误条由人工确认。
 - **自动刷新**：模型随后用 `edit` 修改文件（包括相对引用的本地脚本与样式）会自动重载预览并清空错误条，无需重新调用工具。
 
 ### 组件、互动视图与公式
@@ -79,7 +80,7 @@ dsh plugin --profile web add @klarkxy/dsh-deep-view
 
 ## 署名
 
-上游来源与第三方组件声明见 [NOTICE](NOTICE)。
+上游来源与第三方组件声明见 [NOTICE](NOTICE)。画布静态凭据脱敏预检的设计参考了 [liliMozi/showcard](https://github.com/liliMozi/showcard)（Agent Showcard 1.0 规范）。
 
 ## 许可证
 
