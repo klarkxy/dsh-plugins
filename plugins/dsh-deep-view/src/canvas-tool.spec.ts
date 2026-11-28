@@ -3,7 +3,7 @@ import { assertObjectJsonSchema, projectToolSchema, validateJsonSchemaValue, typ
 import { createRpc, createShowCanvasTool, apply, type CanvasProbeWaiter, type CanvasServices } from './index.ts'
 import { precheckCanvasHtml, scanCanvasSecrets } from './canvas/precheck.ts'
 import { fileAddressFor, sessionFileAddress, sessionFileOf, isAbsoluteWorkspacePath } from './file-address.ts'
-import { CANVAS_OWNER } from './contracts.ts'
+import { CANVAS_OWNER, clampCanvasPreferredWidth } from './contracts.ts'
 
 function hostFixture(options: { cwd?: string; roots?: boolean; existing?: string[] } = {}) {
   const agent = {
@@ -257,5 +257,44 @@ describe('show_canvas static precheck and first-paint health probe', () => {
     const cancelled = await abortPromise
     expect(cancelled).toMatchObject({ owner: CANVAS_OWNER, status: 'cancelled' })
     expect(probes.has('probe-abort')).toBe(false)
+  })
+})
+
+describe('show_canvas inline surface and preferred_width clamping', () => {
+  it('validates surface and clamps preferred_width to 240..1200 px with fallback for non-positive values', async () => {
+    expect(clampCanvasPreferredWidth(120)).toBe(240)
+    expect(clampCanvasPreferredWidth(640)).toBe(640)
+    expect(clampCanvasPreferredWidth(2400)).toBe(1200)
+    expect(clampCanvasPreferredWidth(0)).toBeUndefined()
+    expect(clampCanvasPreferredWidth(-50)).toBeUndefined()
+    expect(clampCanvasPreferredWidth(Number.NaN)).toBeUndefined()
+
+    const { host, exec } = hostFixture({ cwd: '/work' })
+    const tool = createShowCanvasTool(host, services({ workspaceFiles: statOk('/work/.dsh/deep-view/fsm.html') })) as unknown as Tool
+    expect(await tool.execute({ path: '.dsh/deep-view/fsm.html', surface: 'modal' }, exec)).toMatchObject({ status: 'invalid' })
+    expect(await tool.execute({ path: '.dsh/deep-view/fsm.html', preferred_width: 'wide' }, exec)).toMatchObject({ status: 'invalid' })
+
+    const inlineRes = await tool.execute({
+      path: '.dsh/deep-view/fsm.html',
+      title: 'FSM Stepper',
+      surface: 'inline',
+      preferred_width: 180,
+    }, exec)
+    expect(inlineRes).toMatchObject({
+      owner: CANVAS_OWNER,
+      status: 'shown',
+      path: '.dsh/deep-view/fsm.html',
+      surface: 'inline',
+      preferredWidth: 240,
+    })
+    expect(String(inlineRes.summary)).toContain('Inline sandboxed canvas card')
+    expect(tool.output.presentationMeta({}, inlineRes)).toEqual({
+      owner: CANVAS_OWNER,
+      path: '.dsh/deep-view/fsm.html',
+      address: 'dsh-resource://file/session/session-test/.dsh/deep-view/fsm.html',
+      title: 'FSM Stepper',
+      surface: 'inline',
+      preferredWidth: 240,
+    })
   })
 })

@@ -37,10 +37,11 @@ dsh plugin --profile web add @klarkxy/dsh-deep-view
 - **正文界面（`deepui` 声明）**：模型在段落之间输出 `deepui` 声明块，流式生成期间待其 JSON 完整后即在原位置替换为原生卡片，让图表、表格、指标与估算留在阅读顺序中。卡片内的回答操作通过 **填入输入框** 写入草稿，填入后卡片自动折叠为单行摘要条（可随时点击展开重调），由你确认后发送。
 - **同步阻塞提问（`ask_view` 工具）**：当模型需要你的明确决定或多题参数才能继续当前回合时调用。卡片停靠在输入框上方等待提交，提交后直接唤醒当前工具调用继续执行，无需额外插入用户消息；若不想阻塞，可点击停靠栏上的 **先让模型继续** 将卡片降级为异步待答状态，让模型先按默认假设继续工作。若希望彻底禁用宿主内置的 `ask_user_question` 并统一走 Deep View，可在插件配置中开启 `replaceNativeAskUser: true`。
 - **任务与异步界面（`show_view` 工具）**：用于在回复正文出现前展示实时进度，或在回合末尾留下不阻塞的待答卡片。进度类视图通过输入框上方一个可替换的活动槽位实时刷新；待答卡片在回合运行期间可停靠在输入框上方，回复结束后保留在正文中，同一时间每个会话仅允许一个可编辑的待答卡片。
-- **画布预览（`show_canvas` 工具）**：模型为原型、小游戏、可交互演示或完整页面写出 `.html` 文件后，可调用 `show_canvas` 在右侧 Sidebar 打开可运行预览；工具结果卡片上的 **打开预览** 按钮可随时重新打开。画布会成为 `.html` / `.htm` 文件的默认渲染器，原生 HTML 预览仍可在渲染器下拉中选择。
+- **沙箱画布卡片与侧栏预览（`show_canvas` 工具）**：支持两种挂载表面——传入 `surface: "inline"`（可选声明 `preferred_width: 240..1200` px，对话解释型可视化建议写入 `.dsh/deep-view/` 隐藏缓存目录以免污染仓库根目录）可在聊天消息流中直接挂载自适应高度的 HTML/SVG 沙箱卡片，适合状态机步进推演与自定义交互示意图，并支持一键在右侧栏展开；默认 `surface: "sidebar"` 在右侧 Sidebar 打开全高可运行预览。画布会成为 `.html` / `.htm` 文件的默认渲染器，原生 HTML 预览仍可在渲染器下拉中选择。
 
 ### 画布预览
 
+- **双尺寸体制与宿主主题桥接**：沙箱严格保持不透明源 `sandbox="allow-scripts"`（不启用 `allow-same-origin`），自动向根元素注入 `<html data-card-sizing="content|viewport">`（聊天内联为 `content` 内容定高并经 `ResizeObserver` 平滑同步高度，右侧栏为 `viewport` 视口定高，防止 `100vh` 自激死循环），同时将宿主当前生效的 `--dsw-*` 官方主题令牌与 `color-scheme`（明暗切换实时同步）只读桥接至沙箱内部；受阻或断链的 `<img>` 自动回退为 `alt` 说明占位（上述 `data-card-sizing` 双尺寸体制、宽度区间裁剪与断链图片占位设计参考了 [liliMozi/showcard](https://github.com/liliMozi/showcard) Agent Showcard 1.0 规范）。
 - **需要开启「显示代码工作视图」**：画布只在宿主的「显示代码工作视图」开关开启时注册并运行脚本；关闭时工具结果卡片会提示开启状态并提供快捷开启入口，未开启前侧栏回落为原生静态 HTML 预览。
 - **错误条与填入输入框**：预览脚本抛错、未处理的 Promise 拒绝、`console.error` 以及 `<img src>` / `<script src>` / `<link rel="stylesheet">` 子资源加载失败都会汇总在预览下方的错误条中（相同报错合并计数，打包的本地脚本自动映射回工作区相对文件名与行号）。点 **填入输入框** 会把错误列表写入草稿交给模型修复——已有草稿时先询问替换或追加，绝不自动发送；也可复制错误。
 - **前置静态预检与同轮首屏回执**：`show_canvas` 在返回前自动检查内联与打包 `.js` 语法错误、本地 `<script type="module" src>` / `<base href>` 跳过提示、缺失相对依赖、未声明 `fill` 的开放 `<svg>` 路径及 5 类常见硬编码密钥特征（仅脱敏提示行号、不回显密文，设计灵感参考 [liliMozi/showcard](https://github.com/liliMozi/showcard) Agent Showcard 1.0 规范 §7.3），并在有活跃客户端时通过短窗口首屏探针将首屏运行异常或零高度塌陷直接带回当前轮次供模型自愈；交互期报错仍仅保留在底部错误条由人工确认。
@@ -73,14 +74,14 @@ dsh plugin --profile web add @klarkxy/dsh-deep-view
 - **工具调用边界更新**：`show_view` 的活动更新以工具调用为边界，不会从其他长耗时工具内部流式推送进度，也不会改写历史工具结果。
 - **会话与生命周期边界**：仅真人顶层会话或普通会话分叉中有效的 `ask_view` / `show_view` 可直接通过 Host 提交回答（委派子代理不能收集直接回答）。插件重启会清除内存中未决的待答状态，但已保存内容仍可在会话中查看。
 - **卡片有效期与隐私**：待答卡片在提交回答或收到新的普通用户消息后关闭，已回答卡片变为只读，未提交的本地调节不会自动持久化。请勿使用界面收集密码、密钥或 token。
-- **画布预览边界**：卡片入口依旧不支持任意 JavaScript 与 HTML。画布依赖宿主文件预览管线：仅打包直接相对引用的经典 `<script src>` 与 `<link rel="stylesheet">`，不支持本地 ES module 导入、CSS `url()`/`@import` 引用本地文件或 `fetch` 本地文件；声明 `<base href>` 的页面不会打包本地依赖，请避免该元素。预览在隔离沙箱中运行脚本。关闭「显示代码工作视图」时回落为原生静态预览；`show_canvas` 仅面向用户的顶层会话可用。
+- **画布预览边界与演进方向**：声明式 `deepui` / `show_view` 卡片入口依旧不执行任意 JavaScript 与 HTML。`show_canvas`（含内联卡片与侧栏面板）复用双层不透明 `Blob` + `sandbox="allow-scripts"` 隔离管线，零同源 HTTP 暴露面：仅打包直接相对引用的经典 `<script src>` 与 `<link rel="stylesheet">`，不支持本地 ES module 导入、CSS `url()`/`@import` 引用本地文件或 `fetch` 本地文件（后续若需原生支持多文件 ES Module 与流式媒体 `Range` 请求，可进一步评估参考 [liliMozi/showcard](https://github.com/liliMozi/showcard) §1.1 的实例级 Scope-Ticket 路径前缀与 Serve-Time Injection 架构）；声明 `<base href>` 的页面不会打包本地依赖，请避免该元素。关闭「显示代码工作视图」时回落为原生静态预览；`show_canvas` 仅面向用户的顶层会话可用。
 - **地图环境依赖**：地图加载固定的公开远程示例底图，不接受其他样式源；离线、无 WebGL 或底图加载失败时，卡片会显示提示，下方的地点列表仍可正常选择。
 - **体积与数量上限**：卡片载荷大小、组件数量与层级、曲线数、节点与连线数、数据行数及地点数均受上限限制，超限会被直接拒绝而不会静默截断。
 - **外观随宿主适配**：主题配色与实际渲染取决于当前安装的 DSH Web Client。
 
 ## 署名
 
-上游来源与第三方组件声明见 [NOTICE](NOTICE)。画布静态凭据脱敏预检的设计参考了 [liliMozi/showcard](https://github.com/liliMozi/showcard)（Agent Showcard 1.0 规范）。
+上游来源与第三方组件声明见 [NOTICE](NOTICE)。画布静态凭据脱敏预检、`data-card-sizing` 双尺寸体制防自激及断链图片 `alt` 占位垫层的设计灵感参考了 [liliMozi/showcard](https://github.com/liliMozi/showcard)（Agent Showcard 1.0 规范）。
 
 ## 许可证
 

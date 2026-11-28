@@ -4,7 +4,7 @@
 // (including complete custom prompts or suppressed optional runtime contexts).
 export const DEEP_VIEW_POLICY = `## Deep View native interfaces
 
-Proactively enrich explanations with native Deep View cards (\`\`\`deepui JSON blocks in your reply, \`ask_view\` when execution must wait for a user choice or multi-field/multi-select form, or \`show_view\` for live task progress and optional non-blocking follow-ups) whenever presenting system architectures, call/data flows, numerical trends, adjustable estimates, scenario switches, or structured option comparisons. Prefer \`ask_view\` over \`ask_user_question\` whenever \`ask_view\` is available so single-select, multi-select, custom-text, and composite multi-question forms share one native interface. When the user asks for a prototype, mini-game, interactive demo, or complete page, first \`write\` a single self-contained .html file, then call \`show_canvas\` to open its runnable preview. Follow the \`deep-view:reply-interface\` runtime protocol.`
+Proactively enrich explanations with native Deep View cards (\`\`\`deepui JSON blocks in your reply, \`ask_view\` when execution must wait for a user choice or multi-field/multi-select form, or \`show_view\` for live task progress and optional non-blocking follow-ups) whenever presenting system architectures, call/data flows, numerical trends, adjustable estimates, scenario switches, or structured option comparisons. Prefer \`ask_view\` over \`ask_user_question\` whenever \`ask_view\` is available so single-select, multi-select, custom-text, and composite multi-question forms share one native interface. For bespoke interactive SVG diagrams, state-machine steppers, or custom visual simulations inside an explanation, write an \`.html\` file under \`.dsh/deep-view/<name>.html\` and call \`show_canvas\` with \`surface: \"inline\"\`; for standalone prototypes, mini-games, or complete pages, write the \`.html\` file and call \`show_canvas\` (\`surface: \"sidebar\"\`). Follow the \`deep-view:reply-interface\` runtime protocol.`
 
 export const DEEP_VIEW_PROMPT = `## Deep View reply interfaces
 
@@ -22,14 +22,16 @@ Deep View renders native interactive cards directly inside your Markdown reply. 
 
 Pair each card with concise surrounding prose that adds interpretation rather than repeating card values. Use plain prose or standard Markdown for brief single-fact replies, standalone code files, or when the user requests plain text or a specific syntax such as Mermaid. Ground every number and URL in real data or explicit assumptions.
 
-### Canvas preview: \`show_canvas\` tool (when available)
+### Sandboxed HTML/SVG canvas: \`show_canvas\` tool (when available)
 
-When the user asks for a prototype, mini-game, interactive demo, or complete page:
+Choose the lightest tier that fits:
 
-1. **\`write\` a single .html file first.** Prefer inline CSS and classic \`<script>\` JS in one self-contained file; when splitting files, link only relative-path classic \`<script src>\` and \`<link rel="stylesheet">\` (packed automatically by the preview) and omit \`<base href>\` so local dependency packing stays active. Keep all runtime code and assets inline or in those packed classic tags.
-2. **Then call \`show_canvas\`** with the file \`path\` (and an optional \`title\`). It opens a runnable preview in the right Sidebar; the user can send runtime errors from the preview's error bar back to you to fix.
-3. **Iterate with \`edit\`.** Partial edits refresh the open preview automatically — reuse that open preview unless the user asks to reopen it.
-4. Reserve \`show_canvas\` for runnable HTML pages and continue using \`\`\`deepui cards for charts, comparisons, and estimates; share the file path in your reply when \`show_canvas\` is unavailable.
+1. **Zero-script \`deepui\` / \`ask_view\` / \`show_view\` (Tier 1, default)**: always prefer declarative \`deepui\` cards for standard charts, topological flows, tables, KPI metrics, formula calculators, math planes, maps, and validated forms.
+2. **Chat-stream inline sandboxed card (\`show_canvas\` with \`surface: "inline"\`, Tier 2)**: for bespoke interactive SVG diagrams, finite-state-machine / algorithm steppers, or custom visual simulations that belong inline in the conversation:
+   - First \`write\` a self-contained \`.html\` file under \`.dsh/deep-view/<slug>.html\` (keeping the user's project root clean), then call \`show_canvas\` with \`path\`, \`surface: "inline"\`, optional \`title\`, and optional \`preferred_width\` (\`240..1200\` px).
+   - The host sets \`<html data-card-sizing="content">\` on inline cards (\`"viewport"\` in the right Sidebar) and bridges active \`--dsw-alias-bg-base\` theme tokens plus \`color-scheme\` (\`light\` / \`dark\`) onto \`html\`. Use \`var(--dsw-alias-label-primary)\`, \`var(--dsw-alias-bg-base)\`, \`var(--dsw-alias-bg-layer-1)\`, \`var(--dsw-alias-border-l2)\`, and \`var(--dsw-alias-state-business-primary)\` so colors adapt automatically, add \`fill="none"\` on open SVG \`<path>\` / \`<polyline>\` strokes, and gate any full-viewport heights under \`html[data-card-sizing="viewport"] { height: 100%; }\` (avoid bare \`100vh\` on inline cards so \`ResizeObserver\` sizes cleanly to content).
+3. **Right-Sidebar full page (\`show_canvas\` with \`surface: "sidebar"\`, Tier 3)**: for standalone prototypes, mini-games, dashboards, or complete multi-section pages, write the \`.html\` file and call \`show_canvas\` (omitting \`surface\` or setting \`surface: "sidebar"\`).
+4. **Packing & self-healing**: link only relative classic \`<script src>\` and \`<link rel="stylesheet">\` (omit \`<base href>\` and never hardcode secrets/tokens). If \`show_canvas\` reports static precheck or first-paint diagnostics, fix the file immediately in the same turn with \`edit\` — the mounted preview refreshes automatically without calling \`show_canvas\` again.
 
 ### Surface routing: \`\`\`deepui fence vs \`ask_view\` vs \`show_view\`
 
@@ -77,4 +79,3 @@ Interactive estimate example:
 \`\`\`deepui
 {"title":"资源估算","view":{"type":"stack","children":[{"type":"row","children":[{"type":"slider","id":"quantity","label":"实例数量","min":1,"max":100,"step":1,"value":2,"unit":"台"},{"type":"number","id":"price","label":"单台月费","min":0,"max":10000,"step":1,"value":10,"unit":"元"}]},{"type":"metric","label":"预计月度总计","value":{"=":"quantity * price"},"tone":"accent"}]}}
 \`\`\`
-`

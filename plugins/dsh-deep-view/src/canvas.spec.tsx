@@ -17,8 +17,10 @@ let recordCanvasError: typeof import('./canvas/capture.ts').recordCanvasError
 let canvasErrorReportOf: typeof import('./canvas/capture.ts').canvasErrorReportOf
 let createCaptureScript: typeof import('./canvas/capture.ts').createCaptureScript
 let formatCanvasError: typeof import('./canvas/capture.ts').formatCanvasError
-let canvasReadyReportOf: typeof import('./canvas/capture.ts').canvasReadyReportOf
 let CanvasBody: typeof import('./canvas/CanvasBody.tsx').CanvasBody
+let canvasReadyReportOf: typeof import('./canvas/capture.ts').canvasReadyReportOf
+let canvasResizeReportOf: typeof import('./canvas/capture.ts').canvasResizeReportOf
+let serializeHostThemeDeclarations: typeof import('./canvas/theme-bridge.ts').serializeHostThemeDeclarations
 let packCanvasHtml: typeof import('./canvas/pack.ts').packCanvasHtml
 let createHtmlDocument: typeof import('./canvas/bootstrap.ts').createHtmlDocument
 let insertCaptureScript: typeof import('./canvas/bootstrap.ts').insertCaptureScript
@@ -30,8 +32,9 @@ let apply: typeof import('./client.tsx').apply
 beforeAll(async () => {
   createRoot = (await import('react-dom/client')).createRoot
   ;({ CanvasToolCall, readCanvasCall, apply, mountCanvasPreview } = await import('./client.tsx'))
-  ;({ recordCanvasError, canvasErrorReportOf, createCaptureScript, formatCanvasError, canvasReadyReportOf } = await import('./canvas/capture.ts'))
+  ;({ recordCanvasError, canvasErrorReportOf, createCaptureScript, formatCanvasError, canvasReadyReportOf, canvasResizeReportOf } = await import('./canvas/capture.ts'))
   ;({ CanvasBody } = await import('./canvas/CanvasBody.tsx'))
+  ;({ serializeHostThemeDeclarations } = await import('./canvas/theme-bridge.ts'))
   ;({ packCanvasHtml } = await import('./canvas/pack.ts'))
   ;({ createHtmlDocument, insertCaptureScript, prepareCanvasSource } = await import('./canvas/bootstrap.ts'))
   ;({ createReadCanvasRelative } = await import('./canvas/read-relative.ts'))
@@ -43,6 +46,8 @@ beforeAll(async () => {
     return url
   }
   w.URL.revokeObjectURL = () => {}
+  URL.createObjectURL = w.URL.createObjectURL
+  URL.revokeObjectURL = w.URL.revokeObjectURL
 })
 afterEach(() => { document.body.innerHTML = '<div id="root"></div>' })
 const t = (key: string, params?: Record<string, unknown>) => key.replace(/\{(\w+)\}/g, (_, name) => String(params?.[name] ?? `{${name}}`))
@@ -108,7 +113,6 @@ describe('show_canvas tool card', () => {
     const root = createRoot(document.getElementById('root')!)
     await act(async () => root.render(<CanvasToolCall sessionId="s1" callId="call-dev-off" t={t} openCanvas={a => opened.push(a)} developerTools={developerTools} phase="start" block={{ callId: 'call-dev-off', args: argsView({ path: 'demo.html' }) }} />))
     await act(async () => root.render(<CanvasToolCall sessionId="s1" callId="call-dev-off" t={t} openCanvas={a => opened.push(a)} developerTools={developerTools} phase="result" block={metaBlock('call-dev-off', shownMeta)} />))
-    // Does not silently auto-open a non-runnable static preview while disabled.
     expect(opened).toEqual([])
     expect(document.querySelector('.dvui-canvas-card-notice')?.textContent).toBe('canvasCodingViewOff')
     const buttons = [...document.querySelectorAll('button')]
@@ -171,7 +175,14 @@ describe('canvas error capture', () => {
     expect(formatCanvasError({ message: 'Uncaught boom', count: 1, source: 'blob:null/1234', line: 9 })).toBe('Uncaught boom (line 9)')
   })
   it('captures non-bubbling <img>, <script> and <link> subresource load failures and truncates data URIs', async () => {
-    const page = new JSDOM(`<!doctype html><html><head>${createCaptureScript('nonce-res')}</head><body><img id="i" src="missing.png"><script id="s" src="https://cdn.test/404.js"></script><link id="l" rel="stylesheet" href="data:text/css;base64,${'A'.repeat(120)}"></body></html>`, {
+    const html = [
+      '<!doctype html><html><head>',
+      createCaptureScript('nonce-res'),
+      '</head><body><img id="i" src="missing.png"><script id="s" src="https://cdn.test/404.js"></script><link id="l" rel="stylesheet" href="data:text/css;base64,',
+      'A'.repeat(120),
+      '"></body></html>',
+    ].join('')
+    const page = new JSDOM(html, {
       url: 'https://canvas.test/res',
       runScripts: 'dangerously',
       virtualConsole: new VirtualConsole(),
@@ -203,12 +214,17 @@ describe('canvas error capture', () => {
     expect(prepared.assets[0]!.reference).toBe('sub/app.js')
     expect(prepared.assets[0]!.text).toContain('//# sourceURL=sub/app.js')
 
-    // Verify __dvuiAssets rewrites blob: URLs inside error stack and filename before posting
-    const page = new JSDOM(`<!doctype html><html><head><script>window.__dvuiAssets={"blob:null/uuid-99":"sub/app.js"};</script>${createCaptureScript('nonce-map')}</head><body></body></html>`, {
+    const mapHtml = [
+      '<!doctype html><html><head>',
+      createCaptureScript('nonce-map'),
+      '</head><body></body></html>',
+    ].join('')
+    const page = new JSDOM(mapHtml, {
       url: 'https://canvas.test/map',
       runScripts: 'dangerously',
       virtualConsole: new VirtualConsole(),
     })
+    ;(page.window as unknown as { __dvuiAssets: Record<string, string> }).__dvuiAssets = { 'blob:null/uuid-99': 'sub/app.js' }
     const posted: unknown[] = []
     page.window.addEventListener('message', event => posted.push(event.data))
     const err = new page.window.Error('boom')
@@ -228,7 +244,6 @@ describe('canvas error capture', () => {
     expect(report.message).not.toContain('blob:null/uuid-99')
     page.window.close()
 
-    // Verify CanvasBody renders and fills composer with resolved relative path + line
     const setDraft = vi.fn()
     const root = createRoot(document.getElementById('root')!)
     await act(async () => root.render(<CanvasBody
@@ -242,14 +257,15 @@ describe('canvas error capture', () => {
       inputActions={{ captureInsertion: () => ({ start: 0, end: 0 }), insertText: () => true, setDraft, persistDraft: () => {} }}
       useInput={sel => sel({ draft: '', phase: 'plain' })}
     />))
-    await act(async () => { await new Promise<void>(r => setTimeout(r, 10)) })
+    await act(async () => { await new Promise<void>(r => setTimeout(r, 20)) })
     const iframe = document.querySelector('iframe') as HTMLIFrameElement
     expect(iframe).toBeTruthy()
     expect(formatCanvasError({ message: 'TypeError: bad', count: 1, source: 'sub/app.js', line: 8, column: 3 })).toBe('TypeError: bad (sub/app.js:8:3)')
     await act(async () => root.unmount())
   })
   it('emits one dvui-canvas-ready settlement report after load with zero-height collapse status', async () => {
-    const page = new JSDOM(`<!doctype html><html><head>${createCaptureScript('nonce-ready')}</head><body><div>hi</div></body></html>`, {
+    const readyHtml = ['<!doctype html><html><head>', createCaptureScript('nonce-ready'), '</head><body><div>hi</div></body></html>'].join('')
+    const page = new JSDOM(readyHtml, {
       url: 'https://canvas.test/ready',
       runScripts: 'dangerously',
       virtualConsole: new VirtualConsole(),
@@ -533,5 +549,102 @@ describe('canvas preview registration', () => {
     apply(ctx as never)
     expect(injected).toEqual([['sidebarRight'], ['documentPreviews', 'configForms', 'remote', 'remote.workspaceFiles']])
     expect(registrations.some(spec => spec.name === 'tool.call.toolview' && spec.key === 'show_canvas')).toBe(true)
+  })
+})
+
+describe('inline sandboxed HTML/SVG card, dual sizing and theme bridge', () => {
+  const bytes = (text: string) => new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>
+
+  it('stamps data-card-sizing, bridges theme tokens + live updates, and replaces broken <img> with alt placeholder', async () => {
+    document.documentElement.setAttribute('data-theme', 'dark')
+    document.documentElement.style.setProperty('--dsw-alias-bg-base', 'rgb(18, 20, 24)')
+    document.documentElement.style.setProperty('--dsw-alias-label-primary', 'rgb(240, 242, 245)')
+    const declarations = serializeHostThemeDeclarations(document)
+    expect(declarations).toContain('color-scheme:dark')
+    expect(declarations).toContain('--dsw-alias-bg-base:rgb(18, 20, 24)')
+    expect(declarations).toContain('--dsw-alias-label-primary:rgb(240, 242, 245)')
+
+    const script = createCaptureScript('nonce-inline', { sizing: 'content', themeDeclarations: declarations })
+    const inlineHtml = ['<!doctype html><html><head>', script, '</head><body><img id="broken" src="404.png" alt="Optical ray diagram"></body></html>'].join('')
+    const page = new JSDOM(inlineHtml, {
+      url: 'https://canvas.test/inline',
+      runScripts: 'dangerously',
+      virtualConsole: new VirtualConsole(),
+    })
+    expect(page.window.document.documentElement.getAttribute('data-card-sizing')).toBe('content')
+    expect(page.window.document.getElementById('dvui-sizing-bridge')?.textContent).toContain('data-card-sizing="content"')
+    expect(page.window.document.getElementById('dvui-theme-bridge')?.textContent).toContain('--dsw-alias-bg-base:rgb(18, 20, 24)')
+
+    page.window.dispatchEvent(new page.window.MessageEvent('message', {
+      data: { type: 'dvui-canvas-theme', nonce: 'nonce-inline', declarations: 'color-scheme:light;--dsw-alias-bg-base:rgb(255, 255, 255)' },
+    }))
+    expect(page.window.document.getElementById('dvui-theme-bridge')?.textContent).toContain('color-scheme:light')
+
+    const img = page.window.document.getElementById('broken')!
+    img.dispatchEvent(new page.window.Event('error', { bubbles: false }))
+    const placeholder = page.window.document.querySelector('[data-dvui-img-placeholder="1"]')
+    expect(placeholder).not.toBeNull()
+    expect(placeholder?.getAttribute('role')).toBe('img')
+    expect(placeholder?.textContent).toBe('Optical ray diagram')
+    expect(page.window.document.getElementById('broken')).toBeNull()
+
+    expect(canvasResizeReportOf({ type: 'dvui-canvas-resize', nonce: 'nonce-inline', height: 32 }, 'nonce-inline')).toEqual({ height: 80 })
+    expect(canvasResizeReportOf({ type: 'dvui-canvas-resize', nonce: 'nonce-inline', height: 340 }, 'nonce-inline')).toEqual({ height: 340 })
+    expect(canvasResizeReportOf({ type: 'dvui-canvas-resize', nonce: 'other', height: 340 }, 'nonce-inline')).toBeUndefined()
+    expect(canvasResizeReportOf({ type: 'dvui-canvas-resize', nonce: 'nonce-inline', height: 4200 }, 'nonce-inline')).toEqual({ height: 1600 })
+    page.window.close()
+    document.documentElement.removeAttribute('data-theme')
+  })
+
+  it('mounts an inline sandbox="allow-scripts" card in chat stream without auto-opening the sidebar and supports sidebar handoff', async () => {
+    const openedSidebar: string[] = []
+    const inlineMeta = {
+      owner: 'deep-view/canvas',
+      path: '.dsh/deep-view/fsm.html',
+      address: 'dsh-resource://file/session/s1/.dsh/deep-view/fsm.html',
+      title: 'FSM Stepper',
+      surface: 'inline',
+      preferredWidth: 560,
+    }
+    const readCanvasBytes = async () => ({
+      ok: true as const,
+      value: { data: bytes('<!doctype html><html><body><svg width="200" height="120"></svg></body></html>') },
+    })
+    const root = createRoot(document.getElementById('root')!)
+    await act(async () => root.render(<CanvasToolCall
+      sessionId="s1"
+      callId="call-inline-1"
+      t={t}
+      openCanvas={addr => openedSidebar.push(addr)}
+      readCanvasBytes={readCanvasBytes}
+      phase="start"
+      block={{ callId: 'call-inline-1', args: argsView({ path: '.dsh/deep-view/fsm.html', surface: 'inline', preferred_width: 560 }) }}
+    />))
+    await act(async () => root.render(<CanvasToolCall
+      sessionId="s1"
+      callId="call-inline-1"
+      t={t}
+      openCanvas={addr => openedSidebar.push(addr)}
+      readCanvasBytes={readCanvasBytes}
+      phase="result"
+      block={metaBlock('call-inline-1', inlineMeta)}
+    />))
+    await act(async () => { await new Promise<void>(r => setTimeout(r, 25)) })
+
+    expect(openedSidebar).toEqual([])
+    const shell = document.querySelector('[data-deep-view-inline-canvas]') as HTMLElement | null
+    expect(shell).not.toBeNull()
+    expect(shell?.style.maxWidth).toBe('560px')
+    const iframe = shell?.querySelector('iframe')
+    expect(iframe).not.toBeNull()
+    expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(iframe?.getAttribute('sandbox')).not.toContain('allow-same-origin')
+    expect(iframe?.getAttribute('data-card-sizing')).toBe('content')
+
+    const openBtn = [...document.querySelectorAll('button')].find(btn => btn.textContent === 'canvasOpenSidebar')
+    expect(openBtn).toBeTruthy()
+    await act(async () => openBtn!.click())
+    expect(openedSidebar).toEqual([inlineMeta.address])
+    await act(async () => root.unmount())
   })
 })
