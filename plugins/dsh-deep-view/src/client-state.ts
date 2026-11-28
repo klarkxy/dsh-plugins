@@ -23,7 +23,10 @@ export type ProgressRecord = { callId: string; title: string; view: ViewNode; at
 export type LiveSnapshot = ViewSnapshot & { originCallId: string }
 type Store = ReturnType<typeof createViewStateStore>
 export function createViewStateStore(locale?: LocaleSource, options?: ViewStateStoreOptions) {
-  const maxSettledViews = Math.max(1, Math.trunc(options?.maxSettledViews ?? DEFAULT_MAX_SETTLED_VIEWS))
+  const rawMax = options?.maxSettledViews
+  const maxSettledViews = typeof rawMax === 'number' && Number.isFinite(rawMax)
+    ? Math.max(1, Math.trunc(rawMax))
+    : DEFAULT_MAX_SETTLED_VIEWS
   let statuses: Record<string, ViewStatus> = {}
   let pending: Record<string, PendingView> = {}
   let progress: Record<string, ProgressRecord> = {}
@@ -71,16 +74,33 @@ export function createViewStateStore(locale?: LocaleSource, options?: ViewStateS
 
   const publish = () => { for (const fn of [...listeners]) fn() }
   return {
-    subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn) } },
+    subscribe: (fn: () => void) => {
+      const listener = () => fn()
+      let active = true
+      listeners.add(listener)
+      return () => {
+        if (!active) return
+        active = false
+        listeners.delete(listener)
+      }
+    },
     subscribeKey: (key: string, fn: () => void) => {
-      listeners.add(fn)
+      const listener = () => fn()
+      let active = true
+      listeners.add(listener)
       keySubscribers.set(key, (keySubscribers.get(key) ?? 0) + 1)
       if (key in snapshots || key in bindings) touch(key)
       return () => {
-        listeners.delete(fn)
+        if (!active) return
+        active = false
+        listeners.delete(listener)
         const next = (keySubscribers.get(key) ?? 1) - 1
-        if (next <= 0) keySubscribers.delete(key)
-        else keySubscribers.set(key, next)
+        if (next <= 0) {
+          keySubscribers.delete(key)
+          evictSettled()
+        } else {
+          keySubscribers.set(key, next)
+        }
       }
     },
     status: (callId: string) => statuses[callId],

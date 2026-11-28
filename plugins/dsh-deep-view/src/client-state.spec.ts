@@ -98,4 +98,34 @@ describe('settled view LRU eviction', () => {
     expect(store.latest('s', 's4')?.id).toBe('s4')
     expect(store.latest('s', 's5')?.id).toBe('s5')
   })
+  it('makes subscribeKey unsubscribe idempotent across shared keys, evicts overflow on final unmount, and guards NaN capacity', () => {
+    const store = createViewStateStore(undefined, { maxSettledViews: 1 })
+    store.setSnapshot(settled('a'))
+    store.setSnapshot(settled('b'))
+    let calls = 0
+    const sharedFn = () => { calls += 1 }
+    const unsubA1 = store.subscribeKey('s:a', sharedFn)
+    const unsubA2 = store.subscribeKey('s:a', sharedFn)
+    const unsubB = store.subscribeKey('s:b', () => {})
+
+    // Duplicate unsubA1 calls must not decrement unsubA2's active refcount or detach sharedFn from unsubA2.
+    unsubA1()
+    unsubA1()
+    store.setSnapshot(settled('c'))
+    expect(calls).toBeGreaterThan(0)
+    expect(store.latest('s', 'a')?.id).toBe('a')
+    expect(store.latest('s', 'b')?.id).toBe('b')
+
+    // Releasing both remaining mounted subscribers immediately reclaims overflow without needing another write.
+    unsubA2()
+    unsubB()
+    const surviving = ['a', 'b', 'c'].filter(id => store.latest('s', id) !== undefined)
+    expect(surviving).toHaveLength(1)
+
+    // Non-finite maxSettledViews falls back to DEFAULT_MAX_SETTLED_VIEWS rather than disabling eviction.
+    const nanStore = createViewStateStore(undefined, { maxSettledViews: Number.NaN })
+    for (let i = 0; i < 205; i += 1) nanStore.setSnapshot(settled(`n${i}`))
+    expect(nanStore.latest('s', 'n0')).toBeUndefined()
+    expect(nanStore.latest('s', 'n204')?.id).toBe('n204')
+  })
 })
