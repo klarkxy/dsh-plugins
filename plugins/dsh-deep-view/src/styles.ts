@@ -196,3 +196,4 @@ export const viewStyles = `
 .dvui-root button:focus-visible,.dvui-root a:focus-visible,.dvui-root input:focus-visible,.dvui-root textarea:focus-visible,.dvui-root summary:focus-visible,.dvui-root .dvui-chart-svg:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 2px; }
 @media (hover: hover) { .dvui-root .dvui-tools:not(:focus-within):not([data-open]) { opacity: 0; } .dvui-root .dvui-view:hover .dvui-tools { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .dvui-root * { transition: none !important; } }
+`

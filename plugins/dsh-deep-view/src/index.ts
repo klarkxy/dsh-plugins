@@ -18,11 +18,9 @@ import {
   VIEW_OWNER,
   CANVAS_OWNER,
   isRecord,
-  clampCanvasPreferredWidth,
   type CanvasHealthReport,
   type CanvasPresentation,
   type CanvasProbeDescriptor,
-  type CanvasSurface,
   type DeepViewConfig,
   type DeepViewHost,
   type PendingView,
@@ -33,7 +31,7 @@ import {
   type ViewAnswerMetadata,
   type ViewSnapshot,
 } from './contracts.ts'
-import { fileAddressFor } from './file-address.ts'
+import { fileAddressFor, isAbsoluteWorkspacePath, sessionFileAddress, sessionFileOf } from './file-address.ts'
 import { precheckCanvasHtml, type CanvasPrecheckFinding } from './canvas/precheck.ts'
 
 export const name = 'deep-view'
@@ -63,8 +61,6 @@ export type CanvasProbeWaiter = {
   path: string
   address: string
   title?: string
-  surface?: CanvasSurface
-  preferredWidth?: number
   resolve(report: CanvasHealthReport | undefined): void
   cleanup(): void
 }
@@ -102,7 +98,13 @@ export function handoffPendingSession(
   }
   if (canvasProbes) {
     for (const probe of canvasProbes.values()) {
-      if (probe.sessionId === source) probe.sessionId = target
+      if (probe.sessionId === source) {
+        probe.sessionId = target
+        const parsed = sessionFileOf(probe.address)
+        if (parsed && parsed.sessionId === source) {
+          probe.address = sessionFileAddress(target, parsed.path)
+        }
+      }
     }
   }
   const record = pending.get(source)
@@ -467,12 +469,35 @@ export type ShowCanvasToolOptions = {
   probeTimeoutMs?: number
 }
 
-function resolveRelativeWorkspacePath(baseFilePath: string, relativeDepPath: string): string | undefined {
+function toWorkspaceRelativePath(workspaceRoot: string | undefined, targetPath: string): string | undefined {
+  const normalized = targetPath.replace(/\\/gu, '/')
+  if (!isAbsoluteWorkspacePath(normalized)) {
+    const stripped = normalized.replace(/^(?:\.\/)+/u, '')
+    if (stripped === '' || stripped === '.' || stripped === '..' || stripped.startsWith('../')) return undefined
+    return stripped
+  }
+  if (workspaceRoot === undefined || workspaceRoot === '') return undefined
+  const root = workspaceRoot.replace(/\\/gu, '/').replace(/\/+$/u, '')
+  if (root === '') return undefined
+  const withinRoot = /^[A-Za-z]:/u.test(root)
+    ? normalized.toLowerCase().startsWith(`${root.toLowerCase()}/`)
+    : normalized.startsWith(`${root}/`)
+  if (!withinRoot) return undefined
+  const rel = normalized.slice(root.length + 1).replace(/^(?:\.\/)+/u, '')
+  if (rel === '' || rel === '.' || rel === '..' || rel.startsWith('../')) return undefined
+  return rel
+}
+
+function resolveRelativeWorkspacePath(
+  baseFilePath: string,
+  relativeDepPath: string,
+  workspaceRoot?: string,
+): string | undefined {
   if (relativeDepPath === '' || relativeDepPath.includes('\\') || relativeDepPath.includes('\0') || posix.isAbsolute(relativeDepPath)) {
     return undefined
   }
-  const normalizedBase = baseFilePath.replace(/\\/gu, '/').replace(/^(?:\.\/)+/u, '')
-  if (posix.isAbsolute(normalizedBase) || /^[A-Za-z]:/u.test(normalizedBase)) return undefined
+  const normalizedBase = toWorkspaceRelativePath(workspaceRoot, baseFilePath)
+  if (normalizedBase === undefined) return undefined
   const baseDir = posix.dirname(normalizedBase)
   const joined = baseDir === '.' ? posix.normalize(relativeDepPath) : posix.normalize(posix.join(baseDir, relativeDepPath))
   if (joined === '' || joined === '.' || joined === '..' || joined.startsWith('../') || posix.isAbsolute(joined)) {
@@ -505,7 +530,7 @@ async function readWorkspaceUtf8(
   }
   if (typeof absolutePath === 'string' && absolutePath !== '') {
     try {
-      const buf = await readFile(absolutePath)
+      const buf = await readFile(absolutePath, { signal })
       if (buf.byteLength <= MAX_PRECHECK_BYTES) return buf.toString('utf8')
     } catch {
       // Unmocked or virtual paths after a passing `stat` skip content precheck gracefully.
@@ -519,12 +544,9 @@ async function readWorkspaceUtf8(
 function canvasPresentation(_args: unknown, value: unknown): CanvasPresentation | null {
   if (!isRecord(value) || value.owner !== CANVAS_OWNER || value.status !== 'shown') return null
   if (!short(value.path, 1024) || !short(value.address, 4096)) return null
-  const preferredWidth = clampCanvasPreferredWidth(value.preferredWidth)
   return {
     owner: CANVAS_OWNER, path: value.path, address: value.address,
     ...(short(value.title, 120) ? { title: value.title } : {}),
-    ...(value.surface === 'inline' ? { surface: 'inline' as const } : {}),
-    ...(preferredWidth !== undefined ? { preferredWidth } : {}),
   }
 }
 
@@ -536,22 +558,23 @@ export function createShowCanvasTool(
   options?: ShowCanvasToolOptions,
 ): Record<string, unknown> {
   const makeId = options?.makeId ?? randomUUID
-  const probeTimeoutMs = Math.max(0, Math.trunc(options?.probeTimeoutMs ?? CANVAS_PROBE_TIMEOUT_MS))
+  const rawProbeTimeout = options?.probeTimeoutMs
+  const probeTimeoutMs = typeof rawProbeTimeout === 'number' && Number.isFinite(rawProbeTimeout)
+    ? Math.max(0, Math.trunc(rawProbeTimeout))
+    : CANVAS_PROBE_TIMEOUT_MS
   return {
     name: 'show_canvas',
-    description: 'Render a sandboxed HTML/SVG file either inline as an auto-resizing card in the chat stream (surface: "inline") or in the right Sidebar (surface: "sidebar", default), with static syntax/asset prechecks and a bounded first-paint health check. Write the .html file with the write tool first, then call this once; later edit tool changes refresh the preview automatically.',
+    description: 'Open a runnable preview of an HTML file in the right Sidebar with static syntax/asset prechecks and a bounded first-paint health check. Write the .html file with the write tool first, then call this once; later edit tool changes refresh the preview automatically.',
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Workspace path of the .html/.htm file to preview (use .dsh/deep-view/<name>.html for conversational inline visuals to keep the project root clean).' },
+        path: { type: 'string', description: 'Workspace path of the .html/.htm file to preview.' },
         title: { type: 'string', description: 'Optional short label for the preview card.' },
-        surface: { type: 'string', enum: ['inline', 'sidebar'], description: 'Mounting surface: "inline" embeds an auto-resizing sandboxed card directly in the reply stream; "sidebar" (default) opens the full-height right Sidebar preview.' },
-        preferred_width: { type: 'number', description: 'Optional preferred inline card width in CSS pixels (clamped to 240..1200; omit to use the chat stream width).' },
       },
       required: ['path'],
     } satisfies ObjectJsonSchema,
     output: {
-      schema: { type: 'object', properties: { owner: { type: 'string', const: CANVAS_OWNER }, status: { type: 'string' }, path: { type: 'string' }, address: { type: 'string' }, title: { type: 'string' }, surface: { type: 'string', enum: ['inline', 'sidebar'] }, preferredWidth: { type: 'number' }, summary: { type: 'string' } }, required: ['owner', 'status', 'summary'], additionalProperties: false },
+      schema: { type: 'object', properties: { owner: { type: 'string', const: CANVAS_OWNER }, status: { type: 'string' }, path: { type: 'string' }, address: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' } }, required: ['owner', 'status', 'summary'], additionalProperties: false },
       render: (_args: unknown, value: { summary?: string }) => [{ type: 'text', text: String(value.summary ?? '') }],
       presentationMeta: canvasPresentation,
     },
@@ -559,10 +582,8 @@ export function createShowCanvasTool(
       const input = isRecord(args) ? args : {}
       if (!short(input.path, 1024)) return { owner: CANVAS_OWNER, status: 'invalid', summary: 'path: expected a file path of at most 1024 characters' }
       if (input.title !== undefined && !short(input.title, 120)) return { owner: CANVAS_OWNER, status: 'invalid', summary: 'title: expected a string of at most 120 characters' }
-      if (input.surface !== undefined && input.surface !== 'inline' && input.surface !== 'sidebar') return { owner: CANVAS_OWNER, status: 'invalid', summary: 'surface: expected "inline" or "sidebar"' }
-      if (input.preferred_width !== undefined && typeof input.preferred_width !== 'number') return { owner: CANVAS_OWNER, status: 'invalid', summary: 'preferred_width: expected a number' }
-      const path = input.path
-      if (!/\.html?$/iu.test(path.trim())) return { owner: CANVAS_OWNER, status: 'invalid', summary: 'path: expected an .html or .htm file' }
+      const path = input.path.trim()
+      if (path === '' || !/\.html?$/iu.test(path)) return { owner: CANVAS_OWNER, status: 'invalid', summary: 'path: expected an .html or .htm file' }
       const id = exec.agent?.id
       const agent = id === undefined ? undefined : host.agents.get(id)
       if (!isLiveRoot(host, agent)) {
@@ -577,12 +598,9 @@ export function createShowCanvasTool(
       const { workspaceFiles, sandboxPolicy } = services.current
       const workspaceRoot = cwd ?? (typeof sandboxPolicy?.workspaceRoot === 'string' && sandboxPolicy.workspaceRoot !== '' ? sandboxPolicy.workspaceRoot : undefined)
       let absolutePath: string | undefined
-      let staticFindings: CanvasPrecheckFinding[] = []
-      // stat is advisory: no workspaceFiles service, or no resolvable workspace
-      // root, skips existence checking; a stat failure tells the model to write first.
+      const signal = exec.signal ? AbortSignal.any([exec.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000)
       if (workspaceFiles && workspaceRoot !== undefined) {
         const scope = { sessionId: agent.id, workspaceRoot }
-        const signal = exec.signal ? AbortSignal.any([exec.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000)
         try {
           const stat = await workspaceFiles.stat(scope, path, signal)
           absolutePath = typeof stat?.absolutePath === 'string' ? stat.absolutePath : undefined
@@ -590,33 +608,21 @@ export function createShowCanvasTool(
           logger?.debug('canvas.missing', 'show_canvas stat failed.', { sessionId: agent.id, path, reason: error instanceof Error ? error.message : String(error) })
           return { owner: CANVAS_OWNER, status: 'missing', path, summary: `File "${path}" is missing or unreadable; create it with the write tool first, then call show_canvas.` }
         }
-        const htmlText = await readWorkspaceUtf8(workspaceFiles, scope, path, absolutePath, signal)
-        if (htmlText !== undefined) {
-          staticFindings = await precheckCanvasHtml(htmlText, path, async relativeDep => {
-            const depWorkspacePath = resolveRelativeWorkspacePath(path, relativeDep)
-            if (depWorkspacePath === undefined) return { exists: false }
-            try {
-              const depStat = await workspaceFiles.stat(scope, depWorkspacePath, signal)
-              const depAbs = typeof depStat?.absolutePath === 'string' ? depStat.absolutePath : undefined
-              const depText = await readWorkspaceUtf8(workspaceFiles, scope, depWorkspacePath, depAbs, signal)
-              return { exists: true, ...(depText !== undefined ? { text: depText } : {}) }
-            } catch {
-              return { exists: false }
-            }
-          })
-        }
       }
       const address = fileAddressFor(agent.id, workspaceRoot, absolutePath ?? path)
       const title = typeof input.title === 'string' ? input.title : undefined
-      const surface: CanvasSurface = input.surface === 'inline' ? 'inline' : 'sidebar'
-      const preferredWidth = clampCanvasPreferredWidth(input.preferred_width)
-      let probeReport: CanvasHealthReport | undefined
+      // Register the first-paint probe immediately after root stat — before multi-asset
+      // static precheck I/O — so live clients polling `canvas.probe` or hot-reloading an
+      // already-open tab never race ahead of probe registration.
+      let probePromise: Promise<{ kind: 'settled'; report: CanvasHealthReport | undefined } | { kind: 'aborted' }> | undefined
+      let activeProbeId: string | undefined
       if (probes !== undefined && probeTimeoutMs > 0) {
         if (exec.signal?.aborted) {
           return { owner: CANVAS_OWNER, status: 'cancelled', path, summary: 'Canvas preview was cancelled because the turn was aborted.' }
         }
         const probeId = makeId()
-        const outcome = await new Promise<{ kind: 'settled'; report: CanvasHealthReport | undefined } | { kind: 'aborted' }>(resolve => {
+        activeProbeId = probeId
+        probePromise = new Promise(resolve => {
           let timer: ReturnType<typeof setTimeout> | undefined
           const cleanup = () => {
             if (timer !== undefined) clearTimeout(timer)
@@ -643,13 +649,38 @@ export function createShowCanvasTool(
             path,
             address,
             ...(title !== undefined ? { title } : {}),
-            ...(surface === 'inline' ? { surface: 'inline' as const } : {}),
-            ...(preferredWidth !== undefined ? { preferredWidth } : {}),
             cleanup,
             resolve: report => resolve({ kind: 'settled', report }),
           })
         })
+      }
+
+      let staticFindings: CanvasPrecheckFinding[] = []
+      if (workspaceFiles && workspaceRoot !== undefined) {
+        const scope = { sessionId: agent.id, workspaceRoot }
+        const readKey = toWorkspaceRelativePath(workspaceRoot, absolutePath ?? path) ?? path
+        const htmlText = await readWorkspaceUtf8(workspaceFiles, scope, readKey, absolutePath, signal)
+        if (htmlText !== undefined) {
+          staticFindings = await precheckCanvasHtml(htmlText, path, async relativeDep => {
+            const depWorkspacePath = resolveRelativeWorkspacePath(absolutePath ?? path, relativeDep, workspaceRoot)
+            if (depWorkspacePath === undefined) return { exists: false }
+            try {
+              const depStat = await workspaceFiles.stat(scope, depWorkspacePath, signal)
+              const depAbs = typeof depStat?.absolutePath === 'string' ? depStat.absolutePath : undefined
+              const depText = await readWorkspaceUtf8(workspaceFiles, scope, depWorkspacePath, depAbs, signal)
+              return { exists: true, ...(depText !== undefined ? { text: depText } : {}) }
+            } catch {
+              return { exists: false }
+            }
+          })
+        }
+      }
+
+      let probeReport: CanvasHealthReport | undefined
+      if (probePromise !== undefined) {
+        const outcome = await probePromise
         if (outcome.kind === 'aborted') {
+          if (activeProbeId !== undefined) probes?.delete(activeProbeId)
           return { owner: CANVAS_OWNER, status: 'cancelled', path, summary: 'Canvas preview was cancelled because the turn was aborted.' }
         }
         probeReport = outcome.report
@@ -663,11 +694,10 @@ export function createShowCanvasTool(
         }
       }
 
-      const hasDiagnostics = staticFindings.length > 0 || runtimeDiagnostics.length > 0
+      const hasErrors = staticFindings.some(item => item.severity === 'error') || runtimeDiagnostics.length > 0
+      const hasWarnings = staticFindings.some(item => item.severity === 'warn')
       const sections: string[] = [
-        surface === 'inline'
-          ? `Inline sandboxed canvas card mounted in the reply stream for ${path}. Subsequent edits with the edit tool refresh the card automatically.`
-          : `Canvas preview opened in the right Sidebar for ${path}. Subsequent edits with the edit tool refresh the preview automatically; call show_canvas again only if the user asks to reopen it.`,
+        `Canvas preview opened in the right Sidebar for ${path}. Subsequent edits with the edit tool refresh the preview automatically; call show_canvas again only if the user asks to reopen it.`,
       ]
       if (staticFindings.length > 0) {
         sections.push(`Static precheck diagnostics:\n${staticFindings.map((item, idx) => `${idx + 1}. [${item.severity}] ${item.message}`).join('\n')}`)
@@ -676,9 +706,11 @@ export function createShowCanvasTool(
         sections.push(`First-paint runtime diagnostics:\n${runtimeDiagnostics.map((line, idx) => `${idx + 1}. ${line}`).join('\n')}`)
       }
       sections.push(
-        hasDiagnostics
-          ? 'Fix the diagnostics above in this turn with the edit tool (the open preview refreshes automatically), then finish with a concise final answer.'
-          : 'Finish with a concise final answer.',
+        hasErrors
+          ? 'Fix the errors above in this turn with the edit tool (the open preview refreshes automatically), then finish with a concise final answer.'
+          : hasWarnings
+            ? 'Review the warnings above and update the file with the edit tool if unintended, then finish with a concise final answer.'
+            : 'Finish with a concise final answer.',
       )
 
       logger?.info('canvas.shown', 'Opened Deep View canvas preview.', {
@@ -693,8 +725,6 @@ export function createShowCanvasTool(
         path,
         address,
         ...(title !== undefined ? { title } : {}),
-        ...(surface === 'inline' ? { surface: 'inline' as const } : {}),
-        ...(preferredWidth !== undefined ? { preferredWidth } : {}),
         summary: sections.join('\n\n').replace('.\n\nFinish with a concise final answer.', '. Finish with a concise final answer.'),
       }
     },
@@ -719,10 +749,14 @@ export function createRpc(
       const callId = short(payload.callId, 200) ? payload.callId : undefined
       const address = short(payload.address, 4096) ? payload.address : undefined
       let matched: CanvasProbeWaiter | undefined
+      const targetFile = address !== undefined ? sessionFileOf(address) : undefined
       for (const probe of canvasProbes.values()) {
         if (probe.sessionId !== sessionId) continue
         if (callId !== undefined && probe.callId === callId) { matched = probe; break }
-        if (callId === undefined && address !== undefined && probe.address === address) { matched = probe; break }
+        if (callId === undefined && address !== undefined) {
+          if (probe.address === address) { matched = probe; break }
+          if (targetFile !== undefined && sessionFileOf(probe.address)?.path === targetFile.path) { matched = probe; break }
+        }
       }
       const descriptor: CanvasProbeDescriptor | null = matched
         ? {
@@ -730,8 +764,6 @@ export function createRpc(
             path: matched.path,
             address: matched.address,
             ...(matched.title !== undefined ? { title: matched.title } : {}),
-            ...(matched.surface === 'inline' ? { surface: 'inline' as const } : {}),
-            ...(matched.preferredWidth !== undefined ? { preferredWidth: matched.preferredWidth } : {}),
           }
         : null
       return ok(descriptor)

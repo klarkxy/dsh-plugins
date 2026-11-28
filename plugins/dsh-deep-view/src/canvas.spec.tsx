@@ -14,27 +14,25 @@ let createRoot: typeof import('react-dom/client').createRoot
 let CanvasToolCall: typeof import('./client.tsx').CanvasToolCall
 let readCanvasCall: typeof import('./client.tsx').readCanvasCall
 let recordCanvasError: typeof import('./canvas/capture.ts').recordCanvasError
+let canvasReadyReportOf: typeof import('./canvas/capture.ts').canvasReadyReportOf
 let canvasErrorReportOf: typeof import('./canvas/capture.ts').canvasErrorReportOf
 let createCaptureScript: typeof import('./canvas/capture.ts').createCaptureScript
 let formatCanvasError: typeof import('./canvas/capture.ts').formatCanvasError
 let CanvasBody: typeof import('./canvas/CanvasBody.tsx').CanvasBody
-let canvasReadyReportOf: typeof import('./canvas/capture.ts').canvasReadyReportOf
-let canvasResizeReportOf: typeof import('./canvas/capture.ts').canvasResizeReportOf
-let serializeHostThemeDeclarations: typeof import('./canvas/theme-bridge.ts').serializeHostThemeDeclarations
 let packCanvasHtml: typeof import('./canvas/pack.ts').packCanvasHtml
 let createHtmlDocument: typeof import('./canvas/bootstrap.ts').createHtmlDocument
 let insertCaptureScript: typeof import('./canvas/bootstrap.ts').insertCaptureScript
 let prepareCanvasSource: typeof import('./canvas/bootstrap.ts').prepareCanvasSource
 let createReadCanvasRelative: typeof import('./canvas/read-relative.ts').createReadCanvasRelative
 let mountCanvasPreview: typeof import('./client.tsx').mountCanvasPreview
+let createCanvasRuntimeStore: typeof import('./client.tsx').createCanvasRuntimeStore
 let CANVAS_RENDERER_ID: typeof import('./canvas/definition.ts').CANVAS_RENDERER_ID
 let apply: typeof import('./client.tsx').apply
 beforeAll(async () => {
   createRoot = (await import('react-dom/client')).createRoot
-  ;({ CanvasToolCall, readCanvasCall, apply, mountCanvasPreview } = await import('./client.tsx'))
-  ;({ recordCanvasError, canvasErrorReportOf, createCaptureScript, formatCanvasError, canvasReadyReportOf, canvasResizeReportOf } = await import('./canvas/capture.ts'))
+  ;({ CanvasToolCall, readCanvasCall, apply, mountCanvasPreview, createCanvasRuntimeStore } = await import('./client.tsx'))
+  ;({ recordCanvasError, canvasErrorReportOf, createCaptureScript, formatCanvasError, canvasReadyReportOf } = await import('./canvas/capture.ts'))
   ;({ CanvasBody } = await import('./canvas/CanvasBody.tsx'))
-  ;({ serializeHostThemeDeclarations } = await import('./canvas/theme-bridge.ts'))
   ;({ packCanvasHtml } = await import('./canvas/pack.ts'))
   ;({ createHtmlDocument, insertCaptureScript, prepareCanvasSource } = await import('./canvas/bootstrap.ts'))
   ;({ createReadCanvasRelative } = await import('./canvas/read-relative.ts'))
@@ -122,6 +120,42 @@ describe('show_canvas tool card', () => {
     expect(opened).toEqual([shownMeta.address])
     expect(document.querySelector('.dvui-canvas-card-notice')).toBeNull()
     await act(async () => root.unmount())
+
+    // Toggling coding view on later must not batch-open older settled cards, and async runtime waits for previewMounted.
+    const batchOpened: string[] = []
+    let asyncEnabled = false
+    const runtime = createCanvasRuntimeStore({
+      sidebarRight: { openResource: addr => { batchOpened.push(addr) } },
+      hasWorkspaceFiles: true,
+      previewMounted: false,
+    })
+    const asyncDevTools = {
+      getSnapshot: () => asyncEnabled,
+      subscribe: (fn: () => void) => runtime.subscribe(fn),
+      setValue(next: boolean) {
+        asyncEnabled = next
+        setTimeout(() => { runtime.update({ previewMounted: next }) }, 10)
+      },
+    }
+    runtime.update({ developerTools: asyncDevTools })
+    const multiRoot = createRoot(document.getElementById('root')!)
+    await act(async () => multiRoot.render(<div>
+      <CanvasToolCall sessionId="s1" callId="call-old-a" t={t} runtime={runtime} phase="start" block={{ callId: 'call-old-a', args: argsView({ path: 'a.html' }) }} />
+      <CanvasToolCall sessionId="s1" callId="call-old-b" t={t} runtime={runtime} phase="start" block={{ callId: 'call-old-b', args: argsView({ path: 'b.html' }) }} />
+    </div>))
+    await act(async () => multiRoot.render(<div>
+      <CanvasToolCall sessionId="s1" callId="call-old-a" t={t} runtime={runtime} phase="result" block={metaBlock('call-old-a', { ...shownMeta, path: 'a.html', address: 'dsh-resource://file/session/s1/a.html' })} />
+      <CanvasToolCall sessionId="s1" callId="call-old-b" t={t} runtime={runtime} phase="result" block={metaBlock('call-old-b', { ...shownMeta, path: 'b.html', address: 'dsh-resource://file/session/s1/b.html' })} />
+    </div>))
+    expect(batchOpened).toEqual([])
+    const enableBtns = [...document.querySelectorAll('button')].filter(b => b.textContent === 'canvasEnableCodingView')
+    await act(async () => enableBtns[1]!.click())
+    // Before previewMounted turns true asynchronously, openResource has not fired prematurely.
+    expect(batchOpened).toEqual([])
+    await act(async () => { await new Promise<void>(r => setTimeout(r, 20)) })
+    // Only card B (the clicked one) opens once previewMounted is true; card A never batch-pops.
+    expect(batchOpened).toEqual(['dsh-resource://file/session/s1/b.html'])
+    await act(async () => multiRoot.unmount())
   })
   it('shows the host failure without offering a broken preview address', async () => {
     const root = createRoot(document.getElementById('root')!)
@@ -178,7 +212,8 @@ describe('canvas error capture', () => {
     const html = [
       '<!doctype html><html><head>',
       createCaptureScript('nonce-res'),
-      '</head><body><img id="i" src="missing.png"><script id="s" src="https://cdn.test/404.js"></script><link id="l" rel="stylesheet" href="data:text/css;base64,',
+      '<link id="icon" rel="icon" href="favicon.ico">',
+      '</head><body><img id="i" src="missing.png"><img id="empty" src=""><script id="s" src="https://cdn.test/404.js"></script><link id="l" rel="stylesheet" href="  data:text/css;base64,',
       'A'.repeat(120),
       '"></body></html>',
     ].join('')
@@ -189,13 +224,17 @@ describe('canvas error capture', () => {
     })
     const messages: unknown[] = []
     page.window.addEventListener('message', event => messages.push(event.data))
-    for (const id of ['i', 's', 'l']) {
+    for (const id of ['icon', 'i', 'empty', 's', 'l']) {
       const el = page.window.document.getElementById(id)!
       el.dispatchEvent(new page.window.Event('error', { bubbles: false }))
     }
     await new Promise<void>(resolve => { page.window.setTimeout(resolve, 0) })
     const reports = messages.map(data => canvasErrorReportOf(data, 'nonce-res')).filter(Boolean)
+    expect(reports.some(r => r?.kind === 'resource' && r.message.includes('favicon.ico'))).toBe(false)
     expect(reports.some(r => r?.kind === 'resource' && r.message === 'Failed to load <img>: missing.png')).toBe(true)
+    const emptyImg = reports.find(r => r?.kind === 'resource' && r.message === 'Failed to load <img>: (empty)')
+    expect(emptyImg).toBeDefined()
+    expect(emptyImg!.source).toBeUndefined()
     expect(reports.some(r => r?.kind === 'resource' && r.message === 'Failed to load <script>: https://cdn.test/404.js')).toBe(true)
     const linkReport = reports.find(r => r?.kind === 'resource' && r.message.startsWith('Failed to load <link>: data:text/css;base64,'))
     expect(linkReport).toBeDefined()
@@ -258,12 +297,25 @@ describe('canvas error capture', () => {
       useInput={sel => sel({ draft: '', phase: 'plain' })}
     />))
     await act(async () => { await new Promise<void>(r => setTimeout(r, 20)) })
+    const encodedBundle = await packCanvasHtml(
+      bytes('<!doctype html><html><head><script src="./sub/my%20app.js"></script><script src="./sub/pre.js"></script></head><body></body></html>'),
+      async ref => ({ data: bytes(ref.includes('pre.js') ? 'ok()\n//# sourceURL=custom.js' : 'ok()') }),
+      new AbortController().signal,
+    )
+    const encodedPrepared = prepareCanvasSource(encodedBundle, '<script></script>')
+    expect(encodedPrepared.assets[0]!.reference).toBe('sub/my app.js')
+    expect(encodedPrepared.assets[0]!.text).toContain('//# sourceURL=sub/my%20app.js')
+    expect(encodedPrepared.assets[1]!.text.match(/sourceURL=/g)).toHaveLength(1)
+
     const iframe = document.querySelector('iframe') as HTMLIFrameElement
     expect(iframe).toBeTruthy()
+    const fillDoc = createHtmlDocument({ data: bytes('<!doctype html><html><body></body></html>'), assets: [] }, '<script></script>', { rootPath: 'index.html' })
+    expect(fillDoc).toContain('rootPath')
     expect(formatCanvasError({ message: 'TypeError: bad', count: 1, source: 'sub/app.js', line: 8, column: 3 })).toBe('TypeError: bad (sub/app.js:8:3)')
+    expect(setDraft).not.toHaveBeenCalled()
     await act(async () => root.unmount())
   })
-  it('emits one dvui-canvas-ready settlement report after load with zero-height collapse status', async () => {
+  it('emits one dvui-canvas-ready settlement report after load and skips collapse false alarms when hidden', async () => {
     const readyHtml = ['<!doctype html><html><head>', createCaptureScript('nonce-ready'), '</head><body><div>hi</div></body></html>'].join('')
     const page = new JSDOM(readyHtml, {
       url: 'https://canvas.test/ready',
@@ -278,6 +330,22 @@ describe('canvas error capture', () => {
     expect(readyReports[0]).toEqual({ collapsed: true, height: 0 })
     expect(canvasReadyReportOf({ type: 'dvui-canvas-ready', nonce: 'wrong', collapsed: false, height: 120 }, 'nonce-ready')).toBeUndefined()
     page.window.close()
+
+    const hiddenPage = new JSDOM(readyHtml, {
+      url: 'https://canvas.test/hidden',
+      runScripts: 'dangerously',
+      virtualConsole: new VirtualConsole(),
+      beforeParse(win) {
+        Object.defineProperty(win, 'innerWidth', { value: 0, configurable: true })
+        Object.defineProperty(win, 'innerHeight', { value: 0, configurable: true })
+      },
+    })
+    const hiddenPosted: unknown[] = []
+    hiddenPage.window.addEventListener('message', event => hiddenPosted.push(event.data))
+    await new Promise<void>(resolve => { hiddenPage.window.setTimeout(resolve, 120) })
+    const hiddenReady = hiddenPosted.map(data => canvasReadyReportOf(data, 'nonce-ready')).filter(Boolean)
+    expect(hiddenReady).toEqual([{ collapsed: false, height: 0 }])
+    hiddenPage.window.close()
   })
 })
 
@@ -549,102 +617,5 @@ describe('canvas preview registration', () => {
     apply(ctx as never)
     expect(injected).toEqual([['sidebarRight'], ['documentPreviews', 'configForms', 'remote', 'remote.workspaceFiles']])
     expect(registrations.some(spec => spec.name === 'tool.call.toolview' && spec.key === 'show_canvas')).toBe(true)
-  })
-})
-
-describe('inline sandboxed HTML/SVG card, dual sizing and theme bridge', () => {
-  const bytes = (text: string) => new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>
-
-  it('stamps data-card-sizing, bridges theme tokens + live updates, and replaces broken <img> with alt placeholder', async () => {
-    document.documentElement.setAttribute('data-theme', 'dark')
-    document.documentElement.style.setProperty('--dsw-alias-bg-base', 'rgb(18, 20, 24)')
-    document.documentElement.style.setProperty('--dsw-alias-label-primary', 'rgb(240, 242, 245)')
-    const declarations = serializeHostThemeDeclarations(document)
-    expect(declarations).toContain('color-scheme:dark')
-    expect(declarations).toContain('--dsw-alias-bg-base:rgb(18, 20, 24)')
-    expect(declarations).toContain('--dsw-alias-label-primary:rgb(240, 242, 245)')
-
-    const script = createCaptureScript('nonce-inline', { sizing: 'content', themeDeclarations: declarations })
-    const inlineHtml = ['<!doctype html><html><head>', script, '</head><body><img id="broken" src="404.png" alt="Optical ray diagram"></body></html>'].join('')
-    const page = new JSDOM(inlineHtml, {
-      url: 'https://canvas.test/inline',
-      runScripts: 'dangerously',
-      virtualConsole: new VirtualConsole(),
-    })
-    expect(page.window.document.documentElement.getAttribute('data-card-sizing')).toBe('content')
-    expect(page.window.document.getElementById('dvui-sizing-bridge')?.textContent).toContain('data-card-sizing="content"')
-    expect(page.window.document.getElementById('dvui-theme-bridge')?.textContent).toContain('--dsw-alias-bg-base:rgb(18, 20, 24)')
-
-    page.window.dispatchEvent(new page.window.MessageEvent('message', {
-      data: { type: 'dvui-canvas-theme', nonce: 'nonce-inline', declarations: 'color-scheme:light;--dsw-alias-bg-base:rgb(255, 255, 255)' },
-    }))
-    expect(page.window.document.getElementById('dvui-theme-bridge')?.textContent).toContain('color-scheme:light')
-
-    const img = page.window.document.getElementById('broken')!
-    img.dispatchEvent(new page.window.Event('error', { bubbles: false }))
-    const placeholder = page.window.document.querySelector('[data-dvui-img-placeholder="1"]')
-    expect(placeholder).not.toBeNull()
-    expect(placeholder?.getAttribute('role')).toBe('img')
-    expect(placeholder?.textContent).toBe('Optical ray diagram')
-    expect(page.window.document.getElementById('broken')).toBeNull()
-
-    expect(canvasResizeReportOf({ type: 'dvui-canvas-resize', nonce: 'nonce-inline', height: 32 }, 'nonce-inline')).toEqual({ height: 80 })
-    expect(canvasResizeReportOf({ type: 'dvui-canvas-resize', nonce: 'nonce-inline', height: 340 }, 'nonce-inline')).toEqual({ height: 340 })
-    expect(canvasResizeReportOf({ type: 'dvui-canvas-resize', nonce: 'other', height: 340 }, 'nonce-inline')).toBeUndefined()
-    expect(canvasResizeReportOf({ type: 'dvui-canvas-resize', nonce: 'nonce-inline', height: 4200 }, 'nonce-inline')).toEqual({ height: 1600 })
-    page.window.close()
-    document.documentElement.removeAttribute('data-theme')
-  })
-
-  it('mounts an inline sandbox="allow-scripts" card in chat stream without auto-opening the sidebar and supports sidebar handoff', async () => {
-    const openedSidebar: string[] = []
-    const inlineMeta = {
-      owner: 'deep-view/canvas',
-      path: '.dsh/deep-view/fsm.html',
-      address: 'dsh-resource://file/session/s1/.dsh/deep-view/fsm.html',
-      title: 'FSM Stepper',
-      surface: 'inline',
-      preferredWidth: 560,
-    }
-    const readCanvasBytes = async () => ({
-      ok: true as const,
-      value: { data: bytes('<!doctype html><html><body><svg width="200" height="120"></svg></body></html>') },
-    })
-    const root = createRoot(document.getElementById('root')!)
-    await act(async () => root.render(<CanvasToolCall
-      sessionId="s1"
-      callId="call-inline-1"
-      t={t}
-      openCanvas={addr => openedSidebar.push(addr)}
-      readCanvasBytes={readCanvasBytes}
-      phase="start"
-      block={{ callId: 'call-inline-1', args: argsView({ path: '.dsh/deep-view/fsm.html', surface: 'inline', preferred_width: 560 }) }}
-    />))
-    await act(async () => root.render(<CanvasToolCall
-      sessionId="s1"
-      callId="call-inline-1"
-      t={t}
-      openCanvas={addr => openedSidebar.push(addr)}
-      readCanvasBytes={readCanvasBytes}
-      phase="result"
-      block={metaBlock('call-inline-1', inlineMeta)}
-    />))
-    await act(async () => { await new Promise<void>(r => setTimeout(r, 25)) })
-
-    expect(openedSidebar).toEqual([])
-    const shell = document.querySelector('[data-deep-view-inline-canvas]') as HTMLElement | null
-    expect(shell).not.toBeNull()
-    expect(shell?.style.maxWidth).toBe('560px')
-    const iframe = shell?.querySelector('iframe')
-    expect(iframe).not.toBeNull()
-    expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts')
-    expect(iframe?.getAttribute('sandbox')).not.toContain('allow-same-origin')
-    expect(iframe?.getAttribute('data-card-sizing')).toBe('content')
-
-    const openBtn = [...document.querySelectorAll('button')].find(btn => btn.textContent === 'canvasOpenSidebar')
-    expect(openBtn).toBeTruthy()
-    await act(async () => openBtn!.click())
-    expect(openedSidebar).toEqual([inlineMeta.address])
-    await act(async () => root.unmount())
   })
 })

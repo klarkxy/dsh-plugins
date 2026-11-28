@@ -57,3 +57,4 @@ A confirmation prompt with explanatory text:
 \`\`\`deepui
 {"type":"stack","children":[{"type":"text","text":"是否按这组参数继续生成迁移计划？"},{"type":"confirm","id":"plan","confirmLabel":"继续生成","cancelLabel":"暂不继续"}]}
 \`\`\`
+`

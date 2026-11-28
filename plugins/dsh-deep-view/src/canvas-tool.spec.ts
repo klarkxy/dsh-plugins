@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { assertObjectJsonSchema, projectToolSchema, validateJsonSchemaValue, type ToolDefinition } from '@deepseek-ai/dsh-tools'
-import { createRpc, createShowCanvasTool, apply, type CanvasProbeWaiter, type CanvasServices } from './index.ts'
+import { createRpc, createShowCanvasTool, handoffPendingSession, apply, type CanvasProbeWaiter, type CanvasServices } from './index.ts'
 import { precheckCanvasHtml, scanCanvasSecrets } from './canvas/precheck.ts'
 import { fileAddressFor, sessionFileAddress, sessionFileOf, isAbsoluteWorkspacePath } from './file-address.ts'
-import { CANVAS_OWNER, clampCanvasPreferredWidth } from './contracts.ts'
+import { CANVAS_OWNER } from './contracts.ts'
 
 function hostFixture(options: { cwd?: string; roots?: boolean; existing?: string[] } = {}) {
   const agent = {
@@ -258,43 +258,57 @@ describe('show_canvas static precheck and first-paint health probe', () => {
     expect(cancelled).toMatchObject({ owner: CANVAS_OWNER, status: 'cancelled' })
     expect(probes.has('probe-abort')).toBe(false)
   })
-})
-
-describe('show_canvas inline surface and preferred_width clamping', () => {
-  it('validates surface and clamps preferred_width to 240..1200 px with fallback for non-positive values', async () => {
-    expect(clampCanvasPreferredWidth(120)).toBe(240)
-    expect(clampCanvasPreferredWidth(640)).toBe(640)
-    expect(clampCanvasPreferredWidth(2400)).toBe(1200)
-    expect(clampCanvasPreferredWidth(0)).toBeUndefined()
-    expect(clampCanvasPreferredWidth(-50)).toBeUndefined()
-    expect(clampCanvasPreferredWidth(Number.NaN)).toBeUndefined()
-
+  it('resolves relative dependencies for absolute workspace paths, registers probes before slow prechecks, and updates probe addresses on session handoff', async () => {
     const { host, exec } = hostFixture({ cwd: '/work' })
-    const tool = createShowCanvasTool(host, services({ workspaceFiles: statOk('/work/.dsh/deep-view/fsm.html') })) as unknown as Tool
-    expect(await tool.execute({ path: '.dsh/deep-view/fsm.html', surface: 'modal' }, exec)).toMatchObject({ status: 'invalid' })
-    expect(await tool.execute({ path: '.dsh/deep-view/fsm.html', preferred_width: 'wide' }, exec)).toMatchObject({ status: 'invalid' })
+    const probes = new Map<string, CanvasProbeWaiter>()
+    const rpc = createRpc(host, new Map(), new Map(), undefined, new Map(), new Map(), probes)
+    let releaseRead!: () => void
+    const slowGate = new Promise<void>(resolve => { releaseRead = resolve })
+    const ws: CanvasServices['workspaceFiles'] = {
+      stat: async (_scope, p) => {
+        if (p === '/work/sub/demo.html' || p === 'sub/demo.html') return { absolutePath: '/work/sub/demo.html' }
+        if (p === 'sub/app.js') return { absolutePath: '/work/sub/app.js' }
+        throw new Error(`unexpected stat: ${p}`)
+      },
+      readBytes: async (_scope, p) => {
+        if (p === 'sub/demo.html') {
+          await slowGate
+          return { data: utf8('<!doctype html><html><head><script src="./app.js"></script></head><body>ok</body></html>') }
+        }
+        return { data: utf8('const valid = 42;') }
+      },
+    }
+    const tool = createShowCanvasTool(host, services({ workspaceFiles: ws }), undefined, probes, {
+      makeId: () => 'probe-abs',
+      probeTimeoutMs: 500,
+    }) as unknown as Tool
 
-    const inlineRes = await tool.execute({
-      path: '.dsh/deep-view/fsm.html',
-      title: 'FSM Stepper',
-      surface: 'inline',
-      preferred_width: 180,
-    }, exec)
-    expect(inlineRes).toMatchObject({
-      owner: CANVAS_OWNER,
-      status: 'shown',
-      path: '.dsh/deep-view/fsm.html',
-      surface: 'inline',
-      preferredWidth: 240,
-    })
-    expect(String(inlineRes.summary)).toContain('Inline sandboxed canvas card')
-    expect(tool.output.presentationMeta({}, inlineRes)).toEqual({
-      owner: CANVAS_OWNER,
-      path: '.dsh/deep-view/fsm.html',
-      address: 'dsh-resource://file/session/session-test/.dsh/deep-view/fsm.html',
-      title: 'FSM Stepper',
-      surface: 'inline',
-      preferredWidth: 240,
-    })
+    const running = tool.execute({ path: '  /work/sub/demo.html  ' }, exec)
+    await new Promise<void>(r => setTimeout(r, 10))
+    // Probe is already discoverable while precheck I/O is still in flight.
+    expect(probes.has('probe-abs')).toBe(true)
+    const redirects = new Map<string, string>()
+    handoffPendingSession(new Map(), redirects, 'session-test', 'session-next', undefined, probes)
+    expect(probes.get('probe-abs')?.sessionId).toBe('session-next')
+    expect(probes.get('probe-abs')?.address).toBe('dsh-resource://file/session/session-next/sub/demo.html')
+
+    await rpc('canvas.report', {
+      sessionId: 'session-next',
+      probeId: 'probe-abs',
+      collapsed: false,
+      errors: [],
+    }, new AbortController().signal)
+    releaseRead()
+    const result = await running
+    expect(result).toMatchObject({ owner: CANVAS_OWNER, status: 'shown', path: '/work/sub/demo.html' })
+    expect(String(result.summary)).not.toContain('missing-asset')
+
+    // Base href suppresses local-module-script false alarms.
+    const baseModFindings = await precheckCanvasHtml(
+      '<!doctype html><html><head><base href="https://cdn.example.com/"><script type="module" src="./mod.js"></script></head><body></body></html>',
+      'base-mod.html',
+    )
+    expect(baseModFindings.some(item => item.code === 'local-module-script')).toBe(false)
+    expect(baseModFindings.some(item => item.code === 'base-href')).toBe(true)
   })
 })

@@ -16,6 +16,7 @@ export type CanvasPrecheckCode =
   | 'missing-asset'
   | 'svg-open-path-fill'
   | 'secret-pattern'
+  | 'inline-viewport-unit'
 
 export type CanvasPrecheckFinding = {
   readonly code: CanvasPrecheckCode
@@ -30,6 +31,10 @@ export type ReadPrecheckAsset = (relativePath: string) => Promise<{
   readonly text?: string
 }>
 
+export type PrecheckCanvasOptions = {
+  readonly surface?: 'inline' | 'sidebar'
+}
+
 // 5-pattern credential floor adapted from liliMozi/showcard (Agent Showcard 1.0 §7.3).
 // Matches are strictly redacted: only the rule category and 1-based line number are reported.
 const SECRET_PATTERNS: readonly { id: string; pattern: RegExp }[] = [
@@ -42,6 +47,8 @@ const SECRET_PATTERNS: readonly { id: string; pattern: RegExp }[] = [
 
 const MAX_SECRETS_PER_FILE = 5
 const MAX_SVG_WARNINGS = 3
+const MAX_PRECHECK_ASSETS = 64
+const MAX_SECRET_LINE_SCAN_CHARS = 65_536
 
 function attribute(element: Element, name: string): string | undefined {
   return element.attrs.find(attr => attr.name === name)?.value
@@ -69,13 +76,20 @@ function hasExplicitStroke(element: Element): boolean {
   return style !== undefined && /(?:^|;)\s*stroke\s*:/iu.test(style)
 }
 
+function hasUngatedViewportHeightCss(cssText: string): boolean {
+  if (!/\b100d?vh\b/iu.test(cssText)) return false
+  if (/data-card-sizing\s*=\s*['"]?viewport/iu.test(cssText)) return false
+  return /(?:min-)?height\s*:[^;{}]*\b100d?vh\b/iu.test(cssText)
+}
+
 /** Scan text for common hardcoded secret shapes without ever echoing matched secret text. */
 export function scanCanvasSecrets(text: string, fileLabel: string): CanvasPrecheckFinding[] {
   const findings: CanvasPrecheckFinding[] = []
   const lines = text.split(/\r?\n/u)
   for (let idx = 0; idx < lines.length; idx += 1) {
-    const lineText = lines[idx]!
-    if (lineText.length === 0 || lineText.length > 16_384) continue
+    const rawLine = lines[idx]!
+    if (rawLine.length === 0) continue
+    const lineText = rawLine.length > MAX_SECRET_LINE_SCAN_CHARS ? rawLine.slice(0, MAX_SECRET_LINE_SCAN_CHARS) : rawLine
     for (const rule of SECRET_PATTERNS) {
       if (rule.pattern.test(lineText)) {
         const line = idx + 1
@@ -135,6 +149,7 @@ export async function precheckCanvasHtml(
   html: string,
   filePath: string,
   readAsset?: ReadPrecheckAsset,
+  options?: PrecheckCanvasOptions,
 ): Promise<CanvasPrecheckFinding[]> {
   const findings: CanvasPrecheckFinding[] = [...scanCanvasSecrets(html, filePath)]
   const doc = parse(html, { sourceCodeLocationInfo: true })
@@ -142,6 +157,8 @@ export async function precheckCanvasHtml(
   const seenAssets = new Set<string>()
   let hasBaseHref = false
   let svgWarnings = 0
+  let inlineVhWarned = false
+  const isInline = options?.surface === 'inline'
 
   const visit = (node: Document | Element, inSvg: boolean, inheritedFill: boolean, inheritedStroke: boolean): void => {
     for (const child of node.childNodes) {
@@ -152,6 +169,32 @@ export async function precheckCanvasHtml(
       const nextSvg = inSvg || tag === 'svg'
       const nextFill = (nextSvg && hasExplicitFill(element)) || (inSvg && inheritedFill)
       const nextStroke = (nextSvg && hasExplicitStroke(element)) || (inSvg && inheritedStroke)
+
+      if (isInline && !inlineVhWarned) {
+        const inlineStyle = attribute(element, 'style')
+        if (inlineStyle !== undefined && hasUngatedViewportHeightCss(inlineStyle)) {
+          inlineVhWarned = true
+          findings.push({
+            code: 'inline-viewport-unit',
+            severity: 'warn',
+            file: filePath,
+            ...(line !== undefined ? { line } : {}),
+            message: `Inline card uses 100vh/100dvh at ${filePath}${line !== undefined ? `:${line}` : ''}; prefer intrinsic content height or gate full-viewport rules under html[data-card-sizing="viewport"].`,
+          })
+        } else if (tag === 'style') {
+          const css = inlineTextOf(element)
+          if (hasUngatedViewportHeightCss(css)) {
+            inlineVhWarned = true
+            findings.push({
+              code: 'inline-viewport-unit',
+              severity: 'warn',
+              file: filePath,
+              ...(line !== undefined ? { line } : {}),
+              message: `Inline card <style> uses 100vh/100dvh at ${filePath}${line !== undefined ? `:${line}` : ''}; prefer intrinsic content height or gate full-viewport rules under html[data-card-sizing="viewport"].`,
+            })
+          }
+        }
+      }
 
       if (tag === 'base' && attribute(element, 'href') !== undefined) {
         if (!hasBaseHref) {
@@ -179,7 +222,7 @@ export async function precheckCanvasHtml(
             })
           } else if (isClassic && isRelativeReference(src)) {
             const cleanPath = normalizeRelativeAssetPath(src)
-            if (/\.js$/iu.test(cleanPath) && !seenAssets.has(`script:${cleanPath}`)) {
+            if (/\.js$/iu.test(cleanPath) && !seenAssets.has(`script:${cleanPath}`) && queuedAssets.length < MAX_PRECHECK_ASSETS) {
               seenAssets.add(`script:${cleanPath}`)
               queuedAssets.push({ kind: 'script', rawRef: src, cleanPath, ...(line !== undefined ? { line } : {}) })
             }
@@ -195,7 +238,7 @@ export async function precheckCanvasHtml(
         const href = attribute(element, 'href')?.trim()
         if (rel.includes('stylesheet') && href !== undefined && isRelativeReference(href)) {
           const cleanPath = normalizeRelativeAssetPath(href)
-          if (/\.css$/iu.test(cleanPath) && !seenAssets.has(`stylesheet:${cleanPath}`)) {
+          if (/\.css$/iu.test(cleanPath) && !seenAssets.has(`stylesheet:${cleanPath}`) && queuedAssets.length < MAX_PRECHECK_ASSETS) {
             seenAssets.add(`stylesheet:${cleanPath}`)
             queuedAssets.push({ kind: 'stylesheet', rawRef: href, cleanPath, ...(line !== undefined ? { line } : {}) })
           }
@@ -231,6 +274,11 @@ export async function precheckCanvasHtml(
 
   visit(doc, false, false, false)
 
+  // When <base href> is present, relative module scripts resolve against the base URL rather than local Blob packing.
+  const normalizedFindings = hasBaseHref
+    ? findings.filter(item => item.code !== 'local-module-script')
+    : findings
+
   if (!hasBaseHref && readAsset !== undefined) {
     for (const item of queuedAssets) {
       let decodedRef = item.cleanPath
@@ -241,7 +289,7 @@ export async function precheckCanvasHtml(
       }
       const dep = await readAsset(decodedRef)
       if (!dep.exists) {
-        findings.push({
+        normalizedFindings.push({
           code: 'missing-asset',
           severity: 'error',
           file: filePath,
@@ -251,14 +299,22 @@ export async function precheckCanvasHtml(
         continue
       }
       if (dep.text !== undefined) {
-        findings.push(...scanCanvasSecrets(dep.text, decodedRef))
+        normalizedFindings.push(...scanCanvasSecrets(dep.text, decodedRef))
         if (item.kind === 'script') {
           const syntaxError = checkClassicScriptSyntax(dep.text, decodedRef, 0)
-          if (syntaxError !== undefined) findings.push(syntaxError)
+          if (syntaxError !== undefined) normalizedFindings.push(syntaxError)
+        } else if (isInline && !inlineVhWarned && hasUngatedViewportHeightCss(dep.text)) {
+          inlineVhWarned = true
+          normalizedFindings.push({
+            code: 'inline-viewport-unit',
+            severity: 'warn',
+            file: decodedRef,
+            message: `Inline card stylesheet "${decodedRef}" uses 100vh/100dvh; prefer intrinsic content height or gate full-viewport rules under html[data-card-sizing="viewport"].`,
+          })
         }
       }
     }
   }
 
-  return findings
+  return normalizedFindings
 }
