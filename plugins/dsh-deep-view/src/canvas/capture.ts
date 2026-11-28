@@ -1,13 +1,11 @@
-// Error and first-paint health capture injected at the front of the sandboxed
-// canvas document. The iframe has no allow-same-origin, so the parent can only
-// learn runtime errors and first-paint settlement through postMessage; a per-load
-// nonce keeps stale or foreign frames from feeding the error bar or probe.
+// Error capture injected at the front of the sandboxed canvas document. The
+// iframe has no allow-same-origin, so the parent can only learn runtime errors
+// through postMessage; a per-load nonce keeps stale or foreign frames from
+// feeding the error bar. Deep View addition — not part of the upstream preview.
 import { isRecord } from '../contracts.ts'
 
-/** Message type posted from the canvas document to the preview owner on error. */
+/** Message type posted from the canvas document to the preview owner. */
 export const CANVAS_ERROR_EVENT = 'dvui-canvas-error'
-/** Message type posted once after `load` + two animation frames for first-paint health probing. */
-export const CANVAS_READY_EVENT = 'dvui-canvas-ready'
 
 export const CANVAS_ERROR_MESSAGE_LIMIT = 1000
 export const CANVAS_ERROR_LIMIT = 20
@@ -23,12 +21,6 @@ export type CanvasErrorReport = {
   readonly column?: number
 }
 
-/** One-shot first-paint settlement signal reported by the canvas document. */
-export type CanvasReadyReport = {
-  readonly collapsed: boolean
-  readonly height: number
-}
-
 /** One row of the error bar: identical messages merge into a count. */
 export type CanvasError = {
   readonly message: string
@@ -40,10 +32,9 @@ export type CanvasError = {
 
 /**
  * Build the capture script inserted at the start of the canvas document head.
- * It runs before every author script, listens in capture phase so non-bubbling
- * subresource load failures are reported, rewrites packed `blob:` URLs back to
- * workspace relative paths, and posts one first-paint settlement receipt after
- * `load` + two `requestAnimationFrame` ticks.
+ * It runs before every author script and listens in capture phase so non-bubbling
+ * `<img>`, `<script>` and `<link rel="stylesheet">` load failures are reported too,
+ * while rewriting packed `blob:` asset URLs back to relative workspace paths.
  * String lines keep `{name:` patterns out of template literals (stylesheet
  * scope guard) — the assembled text is HTML, not CSS.
  * @param nonce - per-load token the parent checks before accepting a report.
@@ -69,11 +60,14 @@ export function createCaptureScript(nonce: string): string {
     'var t=e&&e.target;',
     'if(t&&t!==window&&t!==self&&typeof t.tagName===\'string\'){',
     'var tag=t.tagName.toLowerCase();',
-    'if(tag===\'img\'||tag===\'script\'||tag===\'link\'){',
-    'var raw=(t.getAttribute&&(t.getAttribute(\'src\')||t.getAttribute(\'href\')))||t.src||t.href||\'\';',
-    'var sRaw=rewrite(raw);',
+    'var isStyleLink=tag===\'link\'&&/(?:^|\s)stylesheet(?:\s|$)/i.test((t.getAttribute&&t.getAttribute(\'rel\'))||\'\');',
+    'if(tag===\'img\'||tag===\'script\'||isStyleLink){',
+    'var attr=tag===\'link\'?\'href\':\'src\';',
+    'var raw=t.hasAttribute&&t.hasAttribute(attr)?(t.getAttribute(attr)||\'\'):\'\';',
+    'var sRaw=rewrite(raw).trim();',
+    'if(/^blob:/i.test(sRaw))sRaw=\'blob:(local)\';',
     'var ref=/^data:/i.test(sRaw)?sRaw.slice(0,48)+\'…\':sRaw.slice(0,300);',
-    'send(\'resource\',\'Failed to load <\'+tag+\'>: \'+(ref||\'(empty)\'),ref||undefined);',
+    'send(\'resource\',\'Failed to load <\'+tag+\'>: \'+(ref||\'(empty)\'),ref&&ref!==\'blob:(local)\'?ref:undefined);',
     '}',
     'return;',
     '}',
@@ -93,23 +87,6 @@ export function createCaptureScript(nonce: string): string {
     'send(\'console\',parts.join(\' \'));',
     'return orig.apply(this,arguments);',
     '};',
-    'var readySent=false;',
-    'function reportReady(){',
-    'if(readySent)return;',
-    'readySent=true;',
-    'var bo=document.body,de=document.documentElement;',
-    'var bh=bo?bo.scrollHeight:0;',
-    'var dh=de?de.scrollHeight:0;',
-    'var collapsed=!bo||bh===0;',
-    'var payload={type:' + JSON.stringify(CANVAS_READY_EVENT) + ',nonce:nonce,collapsed:collapsed,height:Math.max(bh,dh,0)};',
-    'try{parent.postMessage(payload,\'*\')}catch(e){}',
-    '}',
-    'function afterLoad(){',
-    'setTimeout(reportReady,48);',
-    'if(typeof requestAnimationFrame===\'function\'){requestAnimationFrame(function(){requestAnimationFrame(reportReady)})}',
-    '}',
-    'if(document.readyState===\'complete\')afterLoad();',
-    'else addEventListener(\'load\',afterLoad,{once:true});',
     '})(', JSON.stringify(nonce), ');</script>',
   ].join('')
 }
@@ -131,16 +108,6 @@ export function canvasErrorReportOf(data: unknown, nonce: string): CanvasErrorRe
     source: typeof data.source === 'string' ? data.source : undefined,
     line: typeof data.line === 'number' && Number.isFinite(data.line) ? data.line : undefined,
     column: typeof data.column === 'number' && Number.isFinite(data.column) ? data.column : undefined,
-  }
-}
-
-/** Read one postMessage payload as a first-paint canvas readiness report. */
-export function canvasReadyReportOf(data: unknown, nonce: string): CanvasReadyReport | undefined {
-  if (!isRecord(data) || data.type !== CANVAS_READY_EVENT || data.nonce !== nonce) return undefined
-  const height = typeof data.height === 'number' && Number.isFinite(data.height) && data.height >= 0 ? data.height : 0
-  return {
-    collapsed: data.collapsed === true,
-    height,
   }
 }
 

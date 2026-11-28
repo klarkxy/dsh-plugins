@@ -1,7 +1,6 @@
 // Deep View canvas body: an opaque runnable HTML iframe (same sandbox posture
 // as the host's builtin HTML preview) plus an error bar that reports runtime
-// failures back to the conversation and a one-shot first-paint health callback.
-// The packing pipeline is adapted from
+// failures back to the conversation. The packing pipeline is adapted from
 // @deepseek-ai/dsh-client-ui-sidebar-documentpreview 0.2.2-rc.5 (MIT License).
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -10,24 +9,11 @@ import { fillComposerDraft, type ComposerActions, type InputSnapshot } from '../
 import { createHtmlDocument } from './bootstrap.ts'
 import { packCanvasHtml } from './pack.ts'
 import { createReadCanvasRelative, type ReadCanvasRelated } from './read-relative.ts'
-import {
-  canvasErrorReportOf,
-  canvasReadyReportOf,
-  createCaptureScript,
-  formatCanvasError,
-  recordCanvasError,
-  type CanvasError,
-} from './capture.ts'
+import { canvasErrorReportOf, createCaptureScript, formatCanvasError, recordCanvasError, type CanvasError } from './capture.ts'
 
 export type CanvasContent = {
   readonly kind: string
   readonly data?: Uint8Array<ArrayBuffer>
-}
-
-export type CanvasFirstPaintReport = {
-  readonly collapsed: boolean
-  readonly height: number
-  readonly errors: readonly string[]
 }
 
 /** Owner share of the keyed `sidebar.right.tab.document` slot plus injected canvas props. */
@@ -37,7 +23,6 @@ export type CanvasBodyProps = {
   readonly addResource: (address: string) => void
   readonly setResources: (addresses: readonly string[]) => void
   readonly readRelated: ReadCanvasRelated
-  readonly reportFirstPaint?: (address: string, report: CanvasFirstPaintReport) => void
   readonly useTabInfo?: () => { tab: { id: string; signal: AbortSignal } }
   readonly sessionId: string
   readonly t: (key: string, params?: Record<string, unknown>) => string
@@ -63,12 +48,11 @@ function displayPath(resourceAddress: string): string {
 }
 
 export function CanvasBody(props: CanvasBodyProps): ReactNode {
-  const { resourceAddress, readRelated, addResource, setResources, reportFirstPaint, t } = props
+  const { resourceAddress, readRelated, addResource, setResources, t } = props
   const data = props.content.kind === 'bytes' && props.content.data !== undefined ? props.content.data : undefined
   const signal = props.useTabInfo?.().tab.signal ?? NEVER
   const [frame, setFrame] = useState<CanvasFrame>()
   const [errors, setErrors] = useState<readonly CanvasError[]>([])
-  const errorsRef = useRef<readonly CanvasError[]>([])
   const [copied, setCopied] = useState(false)
   const [draftChoice, setDraftChoice] = useState(false)
   const [filled, setFilled] = useState<boolean | undefined>()
@@ -79,7 +63,6 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
   // owns one opaque browsing context and one nonce.
   useEffect(() => {
     if (data === undefined) return
-    errorsRef.current = []
     setErrors([])
     setCopied(false)
     setFilled(undefined)
@@ -96,18 +79,11 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
       try {
         const bundle = await packCanvasHtml(data, readRelative, controller.signal)
         controller.signal.throwIfAborted()
-        const html = createHtmlDocument(bundle, createCaptureScript(nonce))
+        const html = createHtmlDocument(bundle, createCaptureScript(nonce), { rootPath: displayPath(resourceAddress) })
         url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
         setFrame({ data, url, nonce })
-      } catch (packError) {
-        if (!controller.signal.aborted) {
-          setFrame({ data, url: undefined, nonce })
-          reportFirstPaint?.(resourceAddress, {
-            collapsed: true,
-            height: 0,
-            errors: [packError instanceof Error ? packError.message : String(packError)],
-          })
-        }
+      } catch {
+        if (!controller.signal.aborted) setFrame({ data, url: undefined, nonce })
       } finally {
         if (!controller.signal.aborted && !signal.aborted) setResources([...resources])
       }
@@ -116,37 +92,21 @@ export function CanvasBody(props: CanvasBodyProps): ReactNode {
       controller.abort()
       if (url !== undefined) URL.revokeObjectURL(url)
     }
-  }, [data, resourceAddress, readRelated, addResource, setResources, reportFirstPaint, signal])
+  }, [data, resourceAddress, readRelated, addResource, setResources, signal])
 
   const live = frame !== undefined && frame.data === data
   useEffect(() => {
     if (!live) return
     const nonce = frame.nonce
-    let readyReported = false
     const listener = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow) return
+      const sourceWindow = iframeRef.current?.contentWindow
+      if (!sourceWindow || event.source !== sourceWindow) return
       const report = canvasErrorReportOf(event.data, nonce)
-      if (report !== undefined) {
-        const next = recordCanvasError(errorsRef.current, report)
-        errorsRef.current = next
-        setErrors(next)
-        return
-      }
-      if (!readyReported) {
-        const ready = canvasReadyReportOf(event.data, nonce)
-        if (ready !== undefined) {
-          readyReported = true
-          reportFirstPaint?.(resourceAddress, {
-            collapsed: ready.collapsed,
-            height: ready.height,
-            errors: errorsRef.current.map(formatCanvasError),
-          })
-        }
-      }
+      if (report !== undefined) setErrors(list => recordCanvasError(list, report))
     }
     window.addEventListener('message', listener)
     return () => window.removeEventListener('message', listener)
-  }, [live, frame, resourceAddress, reportFirstPaint])
+  }, [live, frame])
 
   const path = displayPath(resourceAddress)
   const reportText = errors.map((error, index) =>
