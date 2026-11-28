@@ -51,9 +51,10 @@ function isRelativeReference(reference: string): boolean {
   return reference.length > 0 && !/^(?:[a-z][a-z\d+.-]*:|[/#?\\])/iu.test(reference) && !reference.includes('\0')
 }
 
-function stripQueryAndHash(reference: string): string {
+function normalizeRelativeAssetPath(reference: string): string {
   const index = reference.search(/[?#]/u)
-  return index === -1 ? reference : reference.slice(0, index)
+  const withoutSuffix = index === -1 ? reference : reference.slice(0, index)
+  return withoutSuffix.replace(/^(?:\.\/)+/u, '')
 }
 
 function hasExplicitFill(element: Element): boolean {
@@ -177,7 +178,7 @@ export async function precheckCanvasHtml(
               message: `Local ES module script "${src}" at ${filePath}${line !== undefined ? `:${line}` : ''} is skipped by the opaque Blob sandbox; inline the script or use a classic <script src="...">.`,
             })
           } else if (isClassic && isRelativeReference(src)) {
-            const cleanPath = stripQueryAndHash(src)
+            const cleanPath = normalizeRelativeAssetPath(src)
             if (/\.js$/iu.test(cleanPath) && !seenAssets.has(`script:${cleanPath}`)) {
               seenAssets.add(`script:${cleanPath}`)
               queuedAssets.push({ kind: 'script', rawRef: src, cleanPath, ...(line !== undefined ? { line } : {}) })
@@ -193,7 +194,7 @@ export async function precheckCanvasHtml(
         const rel = attribute(element, 'rel')?.toLowerCase().split(/\s+/u) ?? []
         const href = attribute(element, 'href')?.trim()
         if (rel.includes('stylesheet') && href !== undefined && isRelativeReference(href)) {
-          const cleanPath = stripQueryAndHash(href)
+          const cleanPath = normalizeRelativeAssetPath(href)
           if (/\.css$/iu.test(cleanPath) && !seenAssets.has(`stylesheet:${cleanPath}`)) {
             seenAssets.add(`stylesheet:${cleanPath}`)
             queuedAssets.push({ kind: 'stylesheet', rawRef: href, cleanPath, ...(line !== undefined ? { line } : {}) })
@@ -245,7 +246,7 @@ export async function precheckCanvasHtml(
           severity: 'error',
           file: filePath,
           ...(item.line !== undefined ? { line: item.line } : {}),
-          message: `Relative ${item.kind} "${item.rawRef}" referenced at ${filePath}${item.line !== undefined ? `:${item.line}` : ''} is missing or unreadable.`,
+          message: `Relative ${item.kind} "${item.rawRef}" referenced at ${filePath}${item.line !== undefined ? `:${line}` : ''} is missing or unreadable.`,
         })
         continue
       }
