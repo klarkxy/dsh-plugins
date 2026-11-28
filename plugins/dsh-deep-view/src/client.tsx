@@ -643,11 +643,16 @@ export function CanvasToolCall(props: CanvasToolViewProps) {
   const settledToolSig = props.useChat?.(snapshot => {
     let count = 0
     let lastCallId = ''
-    for (const node of snapshot.nodes.values()) {
-      if (node?.kind === 'tool-call' && node.data?.root?.kind === 'tool-result') {
+    const visit = (block: ToolViewProps['block']) => {
+      if (block.kind === 'tool-result') {
         count += 1
-        lastCallId = node.data.root.callId
+        lastCallId = block.callId
       }
+      for (const child of block.subCalls ?? []) visit(child)
+    }
+    for (const key of snapshot.order) {
+      const node = snapshot.nodes.get(key)
+      if (node?.kind === 'tool-call' && node.data?.root) visit(node.data.root)
     }
     return `${count}:${lastCallId}`
   }) ?? ''

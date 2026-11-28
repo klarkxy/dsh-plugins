@@ -755,9 +755,14 @@ describe('inline sandboxed HTML/SVG card, dual sizing and theme bridge', () => {
 
     // Settling a subsequent `edit` tool call in `useChat` automatically revalidates and swaps in a fresh Blob URL.
     currentHtml = '<!doctype html><html><body><svg width="300" height="180"></svg></body></html>'
-    const settledEditChat = <T,>(selector: (snap: unknown) => T) => selector({
-      nodes: new Map([['n-edit', { kind: 'tool-call', data: { root: { callId: 'call-edit-1', kind: 'tool-result' } } }]]),
+    const settledEditChat: NonNullable<Parameters<typeof CanvasToolCall>[0]['useChat']> = selector => selector({
+      order: ['n-edit'],
       locations: { getTurn: () => [] },
+      nodes: {
+        get: key => key === 'n-edit'
+          ? { kind: 'tool-call', data: { root: { callId: 'call-edit-1', kind: 'tool-result' as const } } }
+          : undefined,
+      },
     })
     await act(async () => root.render(<CanvasToolCall
       sessionId="s1"
@@ -765,7 +770,7 @@ describe('inline sandboxed HTML/SVG card, dual sizing and theme bridge', () => {
       t={t}
       openCanvas={addr => openedSidebar.push(addr)}
       readCanvasBytes={readCanvasBytes}
-      useChat={settledEditChat as never}
+      useChat={settledEditChat}
       phase="result"
       block={metaBlock('call-inline-1', inlineMeta)}
     />))

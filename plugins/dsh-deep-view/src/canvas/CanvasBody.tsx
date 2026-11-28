@@ -7,7 +7,7 @@
 // liliMozi/showcard (Agent Showcard 1.0 Specification §1.4, §1.7).
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { sessionFileOf } from '../file-address.ts'
+import { sessionFileAddress, sessionFileOf } from '../file-address.ts'
 import { fillComposerDraft, type ComposerActions, type InputSnapshot } from '../draft.ts'
 import { createHtmlDocument } from './bootstrap.ts'
 import { packCanvasHtml, type CanvasFileBytes } from './pack.ts'
@@ -457,12 +457,8 @@ export function InlineCanvasPreview(props: InlineCanvasCardProps): ReactNode {
     const baseFile = file?.path ?? path
     const targetSession = file?.sessionId ?? sessionId
     const res = await readBytes(targetSession, relativePath, { baseFile }, signal)
-    if (res.ok && res.value.absolutePath) {
-      for (const depAddr of watchedDepsRef.current) {
-        if (depAddr.endsWith(`/${relativePath.replace(/^(?:\.\/)+/u, '')}`)) {
-          depBytesRef.current.set(depAddr, res.value.data)
-        }
-      }
+    if (res.ok && res.value.absolutePath !== undefined) {
+      depBytesRef.current.set(sessionFileAddress(targetSession, res.value.absolutePath), res.value.data)
     }
     return res
   }, [sessionId, path, readBytes])
