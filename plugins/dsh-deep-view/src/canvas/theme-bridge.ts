@@ -10,10 +10,10 @@ function inferColorScheme(doc: Document, rootStyle: CSSStyleDeclaration): 'light
   if (attrTheme.includes('light')) return 'light'
   if (root.classList.contains('dark')) return 'dark'
   if (root.classList.contains('light')) return 'light'
-  const cssScheme = (rootStyle.colorScheme ?? '').toLowerCase()
+  const cssScheme = (rootStyle.getPropertyValue('color-scheme') || rootStyle.colorScheme || '').toLowerCase()
   if (cssScheme.includes('dark') && !cssScheme.includes('light')) return 'dark'
   if (cssScheme.includes('light') && !cssScheme.includes('dark')) return 'light'
-  const bg = rootStyle.getPropertyValue(OFFICIAL_THEME_TOKEN_NAMES[0] ?? '').trim()
+  const bg = rootStyle.getPropertyValue('--dsw-alias-bg-base').trim()
   const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/iu.exec(bg)
   if (rgb) {
     const lum = 0.299 * Number(rgb[1]) + 0.587 * Number(rgb[2]) + 0.114 * Number(rgb[3])

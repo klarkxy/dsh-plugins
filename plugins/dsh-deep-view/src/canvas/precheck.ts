@@ -246,7 +246,7 @@ export async function precheckCanvasHtml(
           severity: 'error',
           file: filePath,
           ...(item.line !== undefined ? { line: item.line } : {}),
-          message: `Relative ${item.kind} "${item.rawRef}" referenced at ${filePath}${item.line !== undefined ? `:${line}` : ''} is missing or unreadable.`,
+          message: `Relative ${item.kind} "${item.rawRef}" referenced at ${filePath}${item.line !== undefined ? `:${item.line}` : ''} is missing or unreadable.`,
         })
         continue
       }
