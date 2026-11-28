@@ -14,7 +14,12 @@ export const DEEP_VIEW_FENCE_LANGUAGES = [
 
 export type DeepViewFenceLanguage = (typeof DEEP_VIEW_FENCE_LANGUAGES)[number]
 
-/** Check whether a raw Markdown fence info string names a Deep View fence. */
+/**
+ * Check whether a raw Markdown fence info string names a Deep View fence in
+ * standalone `parseDeepUi` text scanning. Host Markdown fence slots split on
+ * the first whitespace token and strictly route the 6 single-token aliases in
+ * `DEEP_VIEW_FENCE_LANGUAGES`.
+ */
 export function isDeepViewFenceLanguage(language: string): boolean {
   return /^deep[-_\s]*(?:ui|view)(?:\s|$)/i.test(language.trim())
 }
