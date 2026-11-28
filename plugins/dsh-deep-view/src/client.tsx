@@ -84,7 +84,7 @@ export function readToolCall(props: Pick<ToolViewProps, 'phase' | 'block'>): { p
           id: meta.answer.id,
           action: meta.answer.action,
           values: meta.answer.values,
-          ...(typeof meta.answer.revision === 'number' ? { revision: meta.revision } : {}),
+          ...(typeof meta.answer.revision === 'number' ? { revision: meta.answer.revision } : {}),
         }
       : undefined
     return {
